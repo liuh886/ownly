@@ -6,6 +6,7 @@ export interface WishlistItem {
   status: 'wishlist' | 'cooling' | 'purchased' | 'archived';
   date_added: string;
   cooling_days: number;
+  fileName?: string;
   [key: string]: any;
 }
 
@@ -45,6 +46,7 @@ export class ObsidianFileSystemService {
             const data = YAML.parse(match[1]) as WishlistItem;
             // Only include items that look like wishlist entries
             if (data.status && data.price_estimated !== undefined) {
+              data.fileName = entry.name;
               items.push(data);
             }
           } catch (e) {
@@ -61,7 +63,15 @@ export class ObsidianFileSystemService {
     if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
     
     const now = new Date().toISOString().split('T')[0];
-    const coolingDays = item.price_estimated && item.price_estimated > 1000 ? 7 : 1;
+    
+    // Dynamic cooling days logic based on price
+    let coolingDays = 1;
+    if (item.price_estimated) {
+      if (item.price_estimated < 100) coolingDays = 1;
+      else if (item.price_estimated < 1000) coolingDays = 3;
+      else if (item.price_estimated < 10000) coolingDays = 7;
+      else coolingDays = 30;
+    }
     
     const fullItem: WishlistItem = {
       name: item.name || 'Untitled',
@@ -80,6 +90,29 @@ export class ObsidianFileSystemService {
     const writable = await (fileHandle as any).createWritable();
     await writable.write(content);
     await writable.close();
+  }
+
+  async updateItemStatus(fileName: string, newStatus: 'purchased' | 'archived'): Promise<void> {
+    if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+
+    const fileHandle = await this.directoryHandle.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+
+    const match = text.match(/^---\n([\s\S]*?)\n---/);
+    if (match && match[1]) {
+      const data = YAML.parse(match[1]) as WishlistItem;
+      data.status = newStatus;
+      delete data.fileName; // don't write the temporary id back
+
+      const yamlStr = YAML.stringify(data);
+      const restOfContent = text.substring(match[0].length);
+      const newContent = \---\n\--- \\;
+
+      const writable = await (fileHandle as any).createWritable();
+      await writable.write(newContent);
+      await writable.close();
+    }
   }
 }
 
