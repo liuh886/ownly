@@ -84,22 +84,32 @@ export default function Home() {
     return (item.price_estimated / daysOwned).toFixed(2);
   };
 
+  const formatMoney = (val: number) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center font-mono selection:bg-black selection:text-white">
+      <div className="min-h-screen bg-[#F9F9F9] flex flex-col items-center justify-center font-mono selection:bg-black selection:text-white relative overflow-hidden">
+        {/* Decorative barcode background element */}
+        <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 10px, #000 10px, #000 12px, transparent 12px, transparent 16px, #000 16px, #000 20px)' }}></div>
+        
         <motion.div 
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          className="text-center space-y-8"
+          className="text-center space-y-8 z-10 p-12 border border-gray-200 bg-white shadow-xl"
         >
-          <h1 className="text-4xl font-bold tracking-tighter uppercase">WYQD</h1>
-          <p className="text-sm text-gray-500 max-w-xs leading-relaxed">
-            Minimalist wishlist & depreciation tracking. Connect your Obsidian Vault to continue.
+          <div className="flex flex-col items-center">
+            <h1 className="text-6xl font-bold tracking-tighter uppercase">WYQD</h1>
+            <div className="h-1 w-12 bg-black mt-4 mb-2"></div>
+            <div className="text-[10px] tracking-widest text-gray-400">TICKET NO. 0001</div>
+          </div>
+          
+          <p className="text-xs text-gray-500 max-w-xs leading-relaxed uppercase tracking-wide">
+            Minimalist wishlist & depreciation tracking. Connect your local Obsidian Vault to initialize the system.
           </p>
           <button 
             onClick={connectVault}
-            className="px-6 py-3 bg-black text-white text-sm tracking-widest uppercase hover:bg-gray-800 transition-colors"
+            className="w-full py-4 bg-black text-white text-xs tracking-widest uppercase hover:bg-gray-800 transition-colors border border-black"
           >
-            Connect Vault
+            AUTHORIZE VAULT
           </button>
         </motion.div>
       </div>
@@ -107,165 +117,255 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-black font-mono selection:bg-black selection:text-white p-8 max-w-2xl mx-auto pb-24">
-      <header className="mb-12 pb-8 border-b border-gray-200 flex justify-between items-end">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tighter uppercase mb-1">WYQD</h1>
-          <div className="text-xs text-gray-400">Vault Connected</div>
-        </div>
+    <div className="min-h-screen bg-[#F9F9F9] text-black font-mono selection:bg-black selection:text-white p-4 md:p-8 max-w-3xl mx-auto pb-24">
+      {/* Receipt styling container */}
+      <div className="bg-white border border-gray-200 shadow-sm min-h-[80vh] relative">
+        {/* Receipt jagged edge effect top/bottom could be added here, we use a simple top border */}
+        <div className="h-2 w-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwb2x5Z29uIGZpbGw9IiNGOUY5RjkiIHBvaW50cz0iMCwwIDQsNCA4LDAgOCw4IDAsOCIvPjwvc3ZnPg==')] absolute -top-2 left-0 rotate-180"></div>
         
-        <div className="flex gap-4 bg-gray-200/50 p-1 rounded-sm">
-          <button 
-            onClick={() => setView('timeline')}
-            className={\px-3 py-1.5 text-[10px] uppercase tracking-widest transition-colors \\}
-          >
-            Timeline
-          </button>
-          <button 
-            onClick={() => setView('dashboard')}
-            className={\px-3 py-1.5 text-[10px] uppercase tracking-widest transition-colors \\}
-          >
-            Dashboard
-          </button>
-        </div>
-      </header>
+        <div className="p-6 md:p-12">
+          <header className="mb-12 pb-8 border-b-2 border-dashed border-gray-300 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+            <div>
+              <div className="text-[10px] tracking-[0.3em] text-gray-400 mb-2">PERSONAL ASSET LEDGER</div>
+              <h1 className="text-4xl font-bold tracking-tighter uppercase mb-1">WYQD</h1>
+              <div className="text-xs font-bold bg-black text-white px-2 py-0.5 inline-block">VAULT SYNCED</div>
+            </div>
+            
+            <div className="w-full md:w-auto flex flex-col items-end">
+              <div className="flex gap-2 bg-gray-100 p-1 rounded-sm w-full md:w-auto mb-4">
+                <button 
+                  onClick={() => setView('timeline')}
+                  className={\lex-1 md:flex-none px-4 py-2 text-[10px] uppercase tracking-widest transition-colors \\}
+                >
+                  Timeline
+                </button>
+                <button 
+                  onClick={() => setView('dashboard')}
+                  className={\lex-1 md:flex-none px-4 py-2 text-[10px] uppercase tracking-widest transition-colors \\}
+                >
+                  Dashboard
+                </button>
+              </div>
+              <div className="text-[10px] text-gray-500 text-right uppercase tracking-wider font-bold">
+                DATE: {new Date().toISOString().split('T')[0]}
+              </div>
+            </div>
+          </header>
 
-      <AnimatePresence mode="wait">
-        {view === 'timeline' && (
-          <motion.div 
-            key="timeline"
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {/* Quick Input */}
-            <form onSubmit={handleAddItem} className="mb-16 flex gap-4">
-              <input 
-                type="text" placeholder="ITEM NAME" value={newItemName}
-                onChange={e => setNewItemName(e.target.value)}
-                className="flex-1 bg-transparent border-b border-gray-300 pb-2 text-sm focus:outline-none focus:border-black transition-colors uppercase placeholder:text-gray-300"
-              />
-              <input 
-                type="number" placeholder="PRICE" value={newItemPrice}
-                onChange={e => setNewItemPrice(e.target.value)}
-                className="w-24 bg-transparent border-b border-gray-300 pb-2 text-sm focus:outline-none focus:border-black transition-colors placeholder:text-gray-300"
-              />
-              <button type="submit" className="text-xs tracking-widest uppercase font-bold hover:text-gray-500 transition-colors">
-                Capture
-              </button>
-            </form>
-
-            {/* Timeline Feed */}
-            <div className="space-y-12 relative before:absolute before:inset-0 before:ml-2 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-200 before:to-transparent">
-              {items.map((item, i) => {
-                const { isReady, remainingDays } = getCoolingState(item);
-                const isArchived = item.status === 'archived' || item.status === 'purchased';
-
-                return (
-                  <div key={item.fileName || i} className={\elative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group \\}>
-                    <div className="flex items-center justify-center w-5 h-5 rounded-full border border-gray-50 bg-gray-200 group-[.is-active]:bg-black text-gray-500 group-[.is-active]:text-gray-50 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+          <AnimatePresence mode="wait">
+            {view === 'timeline' && (
+              <motion.div 
+                key="timeline"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {/* Quick Input Form */}
+                <form onSubmit={handleAddItem} className="mb-16 flex flex-col md:flex-row gap-4 bg-gray-50 p-4 border border-gray-200">
+                  <div className="flex-1 flex flex-col">
+                    <label className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Capture Desire</label>
+                    <input 
+                      type="text" placeholder="Item Name" value={newItemName}
+                      onChange={e => setNewItemName(e.target.value)}
+                      className="bg-transparent border-b border-gray-300 pb-2 text-sm focus:outline-none focus:border-black transition-colors uppercase placeholder:text-gray-300"
+                    />
+                  </div>
+                  <div className="w-full md:w-32 flex flex-col">
+                    <label className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Est. Price</label>
+                    <div className="flex items-end">
+                      <span className="text-gray-400 pb-2 mr-1">¥</span>
+                      <input 
+                        type="number" placeholder="0.00" value={newItemPrice}
+                        onChange={e => setNewItemPrice(e.target.value)}
+                        className="w-full bg-transparent border-b border-gray-300 pb-2 text-sm focus:outline-none focus:border-black transition-colors placeholder:text-gray-300 font-mono"
+                      />
                     </div>
-                    
-                    <div className={\w-[calc(100%-2.5rem)] md:w-[calc(50%-1.25rem)] p-5 border bg-white transition-all \\}>
-                      <div className="flex justify-between items-start mb-4">
-                        <h3 className={\	ext-sm font-bold uppercase tracking-tight \\}>{item.name}</h3>
-                        <span className="text-xs text-gray-500">¥{item.price_estimated}</span>
-                      </div>
-                      
-                      <div className="flex justify-between items-end">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] text-gray-400 uppercase tracking-widest">{item.date_added}</span>
+                  </div>
+                  <div className="flex items-end pt-4 md:pt-0">
+                    <button type="submit" className="w-full md:w-auto px-6 py-2 bg-black text-white text-xs tracking-widest uppercase font-bold hover:bg-gray-800 transition-colors border border-black">
+                      ADD +
+                    </button>
+                  </div>
+                </form>
+
+                {/* Timeline Feed */}
+                <div className="space-y-6">
+                  <div className="text-[10px] tracking-[0.3em] text-gray-400 border-b border-dashed border-gray-300 pb-2 mb-6">ITEMIZED LIST</div>
+                  
+                  {items.map((item, i) => {
+                    const { isReady, remainingDays } = getCoolingState(item);
+                    const isArchived = item.status === 'archived' || item.status === 'purchased';
+
+                    return (
+                      <motion.div 
+                        key={item.fileName || i}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className={\p-4 md:p-6 border transition-all \\}
+                      >
+                        <div className="flex flex-col md:flex-row justify-between items-start mb-4 md:mb-6 gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-1">
+                              <span className="text-[10px] bg-gray-200 px-1.5 py-0.5 uppercase tracking-wider font-bold">
+                                #{String(items.length - i).padStart(3, '0')}
+                              </span>
+                              <span className="text-[10px] text-gray-400 uppercase tracking-widest">{item.date_added}</span>
+                            </div>
+                            <h3 className={\	ext-lg font-bold uppercase tracking-tight leading-none \\}>
+                              {item.name}
+                            </h3>
+                          </div>
+                          <div className="text-right w-full md:w-auto flex flex-row md:flex-col justify-between md:justify-start items-center md:items-end border-t border-dashed border-gray-200 pt-3 md:pt-0 md:border-none">
+                            <span className="text-[10px] text-gray-400 uppercase tracking-widest block md:hidden">PRICE</span>
+                            <span className="text-xl font-bold tracking-tighter">¥{formatMoney(item.price_estimated)}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-t border-dotted border-gray-200 pt-4">
+                          <div className="w-full md:w-auto">
+                            {!isArchived && (
+                              <div className="flex items-center gap-2">
+                                <div className={\w-2 h-2 rounded-full \\}></div>
+                                <span className={\	ext-xs uppercase font-bold tracking-widest \\}>
+                                  {isReady ? 'READY FOR CLEARANCE' : \COOLING: \ DAYS LEFT\}
+                                </span>
+                              </div>
+                            )}
+                            {isArchived && (
+                              <span className="text-xs uppercase font-bold tracking-widest text-gray-500 bg-gray-200 px-2 py-1 inline-block">
+                                STATUS: {item.status} {item.status === 'purchased' ? \| COST: ¥\/DAY\ : ''}
+                              </span>
+                            )}
+                          </div>
+
                           {!isArchived && (
-                            <span className={\	ext-[10px] uppercase font-bold tracking-widest \\}>
-                              {isReady ? 'Ready to decide' : \Cooling: \ days left\}
-                            </span>
-                          )}
-                          {isArchived && (
-                            <span className="text-[10px] uppercase tracking-widest text-gray-400">
-                              {item.status} {item.status === 'purchased' ? \- ¥\/day\ : ''}
-                            </span>
+                            <div className="flex gap-2 w-full md:w-auto">
+                              <button 
+                                onClick={() => handleUpdateStatus(item.fileName!, 'archived')}
+                                className="flex-1 md:flex-none px-4 py-2 border border-gray-300 text-xs uppercase tracking-widest text-gray-500 hover:text-black hover:border-black transition-all bg-white"
+                              >
+                                DROP
+                              </button>
+                              <button 
+                                disabled={!isReady}
+                                onClick={() => handleUpdateStatus(item.fileName!, 'purchased')}
+                                className={\lex-1 md:flex-none px-4 py-2 border text-xs uppercase tracking-widest font-bold transition-all \\}
+                              >
+                                BUY
+                              </button>
+                            </div>
                           )}
                         </div>
+                      </motion.div>
+                    );
+                  })}
+                  
+                  {items.length === 0 && (
+                    <div className="text-center py-24 flex flex-col items-center justify-center opacity-50">
+                      <div className="w-16 h-16 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center mb-4">
+                        <span className="text-gray-300 text-2xl font-light">?</span>
+                      </div>
+                      <div className="text-xs text-gray-500 uppercase tracking-[0.2em]">The void is quiet.</div>
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-2">No desires captured yet.</div>
+                    </div>
+                  )}
+                  
+                  {/* Decorative end of receipt */}
+                  {items.length > 0 && (
+                    <div className="pt-8 flex flex-col items-center opacity-30">
+                      <div className="text-[10px] tracking-[0.5em] mb-2">END OF LIST</div>
+                      <div className="h-8 w-32" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #000, #000 2px, transparent 2px, transparent 4px, #000 4px, #000 5px, transparent 5px, transparent 8px)' }}></div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
 
-                        {!isArchived && (
-                          <div className="flex gap-2">
-                            <button 
-                              onClick={() => handleUpdateStatus(item.fileName!, 'archived')}
-                              className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
-                            >
-                              Drop
-                            </button>
-                            <button 
-                              disabled={!isReady}
-                              onClick={() => handleUpdateStatus(item.fileName!, 'purchased')}
-                              className={\	ext-[10px] uppercase tracking-widest px-2 py-1 transition-colors \\}
-                            >
-                              Buy
-                            </button>
-                          </div>
-                        )}
+            {view === 'dashboard' && (
+              <motion.div 
+                key="dashboard"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-6"
+              >
+                <div className="text-[10px] tracking-[0.3em] text-gray-400 border-b border-dashed border-gray-300 pb-2 mb-6">FINANCIAL SUMMARY</div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Total Expenditures - Prominent */}
+                  <div className="col-span-1 md:col-span-2 p-8 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-widest mb-1">Total Expenditures</div>
+                        <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-4">SUNK COSTS</div>
+                        <div className="text-5xl md:text-6xl font-black tracking-tighter">¥{formatMoney(totalSpent)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-3xl font-light tracking-tighter text-gray-300">{String(purchasedItems.length).padStart(2, '0')}</div>
+                        <div className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">ITEMS</div>
                       </div>
                     </div>
                   </div>
-                );
-              })}
-              
-              {items.length === 0 && (
-                <div className="text-center py-20 text-xs text-gray-400 uppercase tracking-widest">
-                  No desires captured yet.
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
 
-        {view === 'dashboard' && (
-          <motion.div 
-            key="dashboard"
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-8"
-          >
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-6 border border-gray-200 bg-white">
-                <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">Desires Defeated (Saved)</div>
-                <div className="text-3xl font-bold tracking-tighter text-green-600">¥{totalSaved}</div>
-                <div className="text-[10px] text-gray-400 mt-2">{archivedItems.length} items dropped</div>
-              </div>
-              <div className="p-6 border border-gray-200 bg-white">
-                <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">Currently Cooling (Blocked)</div>
-                <div className="text-3xl font-bold tracking-tighter text-orange-500">¥{totalBlocked}</div>
-                <div className="text-[10px] text-gray-400 mt-2">{coolingItems.length} items pending</div>
-              </div>
-            </div>
-
-            <div className="p-6 border border-gray-200 bg-white">
-              <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">Total Expenditures</div>
-              <div className="text-4xl font-bold tracking-tighter">¥{totalSpent}</div>
-              <div className="text-[10px] text-gray-400 mt-2">{purchasedItems.length} items purchased</div>
-            </div>
-
-            {purchasedItems.length > 0 && (
-              <div>
-                <h2 className="text-xs font-bold tracking-widest uppercase mb-4 mt-12 border-b border-gray-200 pb-2">Asset Depreciation (Daily Cost)</h2>
-                <div className="space-y-2">
-                  {purchasedItems.sort((a, b) => (b.date_purchased || '').localeCompare(a.date_purchased || '')).map((item, i) => (
-                    <div key={i} className="flex justify-between items-center p-3 border border-gray-100 bg-white hover:border-gray-200 transition-colors">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold uppercase tracking-tight">{item.name}</span>
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest">Bought {item.date_purchased || item.date_added}</span>
+                  <div className="p-6 border border-gray-300 bg-gray-50">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Currently Cooling</div>
+                        <div className="text-3xl font-bold tracking-tighter text-orange-600">¥{formatMoney(totalBlocked)}</div>
                       </div>
-                      <div className="text-right flex flex-col items-end">
-                        <span className="text-sm font-bold">¥{calculateDailyCost(item)}<span className="text-[10px] text-gray-400 font-normal"> / day</span></span>
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest">Total: ¥{item.price_estimated}</span>
-                      </div>
+                      <div className="text-xl font-light text-gray-400">{coolingItems.length}</div>
                     </div>
-                  ))}
+                    <div className="text-[10px] text-gray-400 uppercase mt-4 pt-4 border-t border-dashed border-gray-300">FUNDS BLOCKED FROM IMPULSE</div>
+                  </div>
+
+                  <div className="p-6 border border-gray-300 bg-green-50">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Desires Defeated</div>
+                        <div className="text-3xl font-bold tracking-tighter text-green-700">¥{formatMoney(totalSaved)}</div>
+                      </div>
+                      <div className="text-xl font-light text-gray-400">{archivedItems.length}</div>
+                    </div>
+                    <div className="text-[10px] text-green-600/60 uppercase mt-4 pt-4 border-t border-dashed border-green-200">SAVINGS THRU DISCIPLINE</div>
+                  </div>
                 </div>
-              </div>
+
+                {purchasedItems.length > 0 && (
+                  <div className="mt-12 pt-8 border-t-2 border-black">
+                    <div className="flex justify-between items-end mb-6">
+                      <h2 className="text-sm font-bold tracking-widest uppercase">Asset Depreciation Ledger</h2>
+                      <div className="text-[10px] bg-black text-white px-2 py-1 uppercase tracking-widest">Daily Cost</div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {purchasedItems.sort((a, b) => (b.date_purchased || '').localeCompare(a.date_purchased || '')).map((item, i) => (
+                        <div key={i} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border border-dashed border-gray-300 bg-white hover:bg-gray-50 transition-colors gap-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold uppercase tracking-tight">{item.name}</span>
+                            <span className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">ACQUIRED: {item.date_purchased || item.date_added}</span>
+                          </div>
+                          <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end border-t border-dotted border-gray-200 pt-3 md:pt-0 md:border-none">
+                            <div className="text-left md:text-right">
+                              <span className="text-[10px] text-gray-400 uppercase tracking-widest block">INITIAL</span>
+                              <span className="text-sm font-bold text-gray-400 line-through">¥{formatMoney(item.price_estimated)}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[10px] text-black uppercase tracking-widest font-bold block mb-0.5">COST / DAY</span>
+                              <span className="text-lg font-black bg-yellow-100 px-2 py-0.5 inline-block">¥{calculateDailyCost(item)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
             )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </div>
+        
+        {/* Bottom jagged edge */}
+        <div className="h-2 w-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwb2x5Z29uIGZpbGw9IiNGOUY5RjkiIHBvaW50cz0iMCwwIDQsNCA4LDAgOCw4IDAsOCIvPjwvc3ZnPg==')] absolute -bottom-2 left-0"></div>
+      </div>
     </div>
   );
 }
