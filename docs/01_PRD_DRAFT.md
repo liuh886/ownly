@@ -1,4 +1,4 @@
-# 物欲清单 (WYQD App) - 产品需求文档 (Draft)
+﻿# 物欲清单 (WYQD App) - 产品需求文档 (Draft)
 
 ## 1. 产品定位
 一款专注于“物欲管理”与“资产生命周期计算”的高颜值个人应用，核心数据层与用户的 Obsidian Vault 深度结合，保障数据主权与双向互通。
@@ -13,13 +13,14 @@
 - **数据可视化**：提供直观优雅的仪表盘，展示“日均使用成本”、“心愿单金额统计”、“资产折旧漏斗”等。
 - **动画与微交互**：流畅的状态切换。
 
-## 3. 待确认架构模式 (Architecture)
-为了实现“美观前端”+“Obsidian 深度结合”，我们需要确定应用的形态。目前有三种主要路径供选择（将在接下来的沟通中确认）：
-1. **纯 Web App + 现有的 Obsidian Gateway** (利用已有的 `http-to-obsidian-cli-gateway`)
-2. **本地桌面端应用 (Tauri + 前端框架)** (直接读取本地 Vault 文件系统)
-3. **Obsidian 插件 (内置 Webview/UI)** (寄生于 Obsidian 内部，开发限制较大)
+## 3. 架构模式 (Architecture)
+确认采用：**Next.js (React) 独立 Web 应用 + Obsidian 本地文件系统直连 (File System Access API)**。
+- **前端技术栈**：Next.js, TailwindCSS, Framer Motion (保障高质感与流畅动画)。
+- **数据层**：基于 File System Access API 获得用户授权后，直接读写本地 Obsidian Vault 的 Markdown 文件。
+- **优势**：兼顾了 Web 侧的灵活与美观表现，同时实现了完全的 Local-first，无中间服务器，直连 SSOT。
 
 ## 4. 核心功能拆解 (待细化)
 - **阶段一 (MVP)**：心愿单管理 (长草记录 -> 冷却期 -> 购买/放弃)
 - **阶段二**：资产管理与折旧计算 (已购物品登记、日均成本计算)
 - **阶段三**：数据统计与可视化面板
+
