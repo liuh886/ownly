@@ -6,6 +6,7 @@ export interface WishlistItem {
   status: 'wishlist' | 'cooling' | 'purchased' | 'archived';
   date_added: string;
   cooling_days: number;
+  date_purchased?: string;
   fileName?: string;
   [key: string]: any;
 }
@@ -44,7 +45,6 @@ export class ObsidianFileSystemService {
         if (match && match[1]) {
           try {
             const data = YAML.parse(match[1]) as WishlistItem;
-            // Only include items that look like wishlist entries
             if (data.status && data.price_estimated !== undefined) {
               data.fileName = entry.name;
               items.push(data);
@@ -64,7 +64,6 @@ export class ObsidianFileSystemService {
     
     const now = new Date().toISOString().split('T')[0];
     
-    // Dynamic cooling days logic based on price
     let coolingDays = 1;
     if (item.price_estimated) {
       if (item.price_estimated < 100) coolingDays = 1;
@@ -103,7 +102,12 @@ export class ObsidianFileSystemService {
     if (match && match[1]) {
       const data = YAML.parse(match[1]) as WishlistItem;
       data.status = newStatus;
-      delete data.fileName; // don't write the temporary id back
+      
+      if (newStatus === 'purchased' && !data.date_purchased) {
+        data.date_purchased = new Date().toISOString().split('T')[0];
+      }
+      
+      delete data.fileName;
 
       const yamlStr = YAML.stringify(data);
       const restOfContent = text.substring(match[0].length);
