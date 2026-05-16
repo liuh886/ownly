@@ -6,10 +6,28 @@ import { obsidianService, WishlistItem } from '@/services/ObsidianFileSystemServ
 
 export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [view, setView] = useState<'timeline' | 'dashboard'>('timeline');
+  
+  // Editing state
+  const [editingItemFile, setEditingItemFile] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+
+  useEffect(() => {
+    const tryAutoConnect = async () => {
+      const connected = await obsidianService.initAutoConnect();
+      setIsConnected(connected);
+      if (connected) {
+        await loadItems();
+      }
+      setIsInitializing(false);
+    };
+    tryAutoConnect();
+  }, []);
 
   const connectVault = async () => {
     const success = await obsidianService.requestAccess();
@@ -44,6 +62,31 @@ export default function Home() {
 
   const handleUpdateStatus = async (fileName: string, status: 'purchased' | 'archived') => {
     await obsidianService.updateItemStatus(fileName, status);
+    loadItems();
+  };
+
+  const startEditing = (item: WishlistItem) => {
+    setEditingItemFile(item.fileName!);
+    setEditName(item.name);
+    setEditPrice(item.price_estimated.toString());
+  };
+
+  const cancelEditing = () => {
+    setEditingItemFile(null);
+    setEditName('');
+    setEditPrice('');
+  };
+
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItemFile || !editName || !editPrice) return;
+    
+    await obsidianService.updateItem(editingItemFile, {
+      name: editName,
+      price_estimated: parseFloat(editPrice)
+    });
+    
+    cancelEditing();
     loadItems();
   };
 
@@ -86,10 +129,13 @@ export default function Home() {
 
   const formatMoney = (val: number) => Number(val).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+  if (isInitializing) {
+    return <div className="min-h-screen bg-[#F9F9F9]"></div>;
+  }
+
   if (!isConnected) {
     return (
       <div className="min-h-screen bg-[#F9F9F9] flex flex-col items-center justify-center font-mono selection:bg-black selection:text-white relative overflow-hidden">
-        {/* Decorative barcode background element */}
         <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 10px, #000 10px, #000 12px, transparent 12px, transparent 16px, #000 16px, #000 20px)' }}></div>
         
         <motion.div 
@@ -118,9 +164,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F9F9F9] text-black font-mono selection:bg-black selection:text-white p-4 md:p-8 max-w-3xl mx-auto pb-24">
-      {/* Receipt styling container */}
       <div className="bg-white border border-gray-200 shadow-sm min-h-[80vh] relative">
-        {/* Receipt jagged edge effect top/bottom could be added here, we use a simple top border */}
         <div className="h-2 w-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwb2x5Z29uIGZpbGw9IiNGOUY5RjkiIHBvaW50cz0iMCwwIDQsNCA4LDAgOCw4IDAsOCIvPjwvc3ZnPg==')] absolute -top-2 left-0 rotate-180"></div>
         
         <div className="p-6 md:p-12">
@@ -194,6 +238,7 @@ export default function Home() {
                   {items.map((item, i) => {
                     const { isReady, remainingDays } = getCoolingState(item);
                     const isArchived = item.status === 'archived' || item.status === 'purchased';
+                    const isEditing = editingItemFile === item.fileName;
 
                     return (
                       <motion.div 
@@ -203,59 +248,90 @@ export default function Home() {
                         transition={{ delay: i * 0.05 }}
                         className={\p-4 md:p-6 border transition-all \\}
                       >
-                        <div className="flex flex-col md:flex-row justify-between items-start mb-4 md:mb-6 gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-1">
-                              <span className="text-[10px] bg-gray-200 px-1.5 py-0.5 uppercase tracking-wider font-bold">
-                                #{String(items.length - i).padStart(3, '0')}
-                              </span>
-                              <span className="text-[10px] text-gray-400 uppercase tracking-widest">{item.date_added}</span>
+                        {isEditing ? (
+                          <form onSubmit={saveEdit} className="flex flex-col gap-4">
+                            <div className="flex flex-col md:flex-row gap-4">
+                                <input 
+                                  type="text" value={editName}
+                                  onChange={e => setEditName(e.target.value)}
+                                  className="flex-1 bg-gray-50 border border-gray-300 p-2 text-sm focus:outline-none focus:border-black transition-colors uppercase"
+                                />
+                                <div className="flex items-center gap-1 bg-gray-50 border border-gray-300 p-2">
+                                  <span className="text-gray-400">¥</span>
+                                  <input 
+                                    type="number" value={editPrice}
+                                    onChange={e => setEditPrice(e.target.value)}
+                                    className="w-24 bg-transparent text-sm focus:outline-none focus:border-black transition-colors font-mono"
+                                  />
+                                </div>
                             </div>
-                            <h3 className={\	ext-lg font-bold uppercase tracking-tight leading-none \\}>
-                              {item.name}
-                            </h3>
-                          </div>
-                          <div className="text-right w-full md:w-auto flex flex-row md:flex-col justify-between md:justify-start items-center md:items-end border-t border-dashed border-gray-200 pt-3 md:pt-0 md:border-none">
-                            <span className="text-[10px] text-gray-400 uppercase tracking-widest block md:hidden">PRICE</span>
-                            <span className="text-xl font-bold tracking-tighter">¥{formatMoney(item.price_estimated)}</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-t border-dotted border-gray-200 pt-4">
-                          <div className="w-full md:w-auto">
-                            {!isArchived && (
-                              <div className="flex items-center gap-2">
-                                <div className={\w-2 h-2 rounded-full \\}></div>
-                                <span className={\	ext-xs uppercase font-bold tracking-widest \\}>
-                                  {isReady ? 'READY FOR CLEARANCE' : \COOLING: \ DAYS LEFT\}
-                                </span>
+                            <div className="flex gap-2 justify-end">
+                                <button type="button" onClick={cancelEditing} className="px-4 py-2 border border-gray-300 text-xs uppercase tracking-widest text-gray-500 hover:text-black">CANCEL</button>
+                                <button type="submit" className="px-4 py-2 bg-black text-white text-xs uppercase tracking-widest font-bold">SAVE</button>
+                            </div>
+                          </form>
+                        ) : (
+                          <>
+                            <div className="flex flex-col md:flex-row justify-between items-start mb-4 md:mb-6 gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-1">
+                                  <span className="text-[10px] bg-gray-200 px-1.5 py-0.5 uppercase tracking-wider font-bold">
+                                    #{String(items.length - i).padStart(3, '0')}
+                                  </span>
+                                  <span className="text-[10px] text-gray-400 uppercase tracking-widest">{item.date_added}</span>
+                                </div>
+                                <h3 className={\	ext-lg font-bold uppercase tracking-tight leading-none \\}>
+                                  {item.name}
+                                </h3>
                               </div>
-                            )}
-                            {isArchived && (
-                              <span className="text-xs uppercase font-bold tracking-widest text-gray-500 bg-gray-200 px-2 py-1 inline-block">
-                                STATUS: {item.status} {item.status === 'purchased' ? \| COST: ¥\/DAY\ : ''}
-                              </span>
-                            )}
-                          </div>
-
-                          {!isArchived && (
-                            <div className="flex gap-2 w-full md:w-auto">
-                              <button 
-                                onClick={() => handleUpdateStatus(item.fileName!, 'archived')}
-                                className="flex-1 md:flex-none px-4 py-2 border border-gray-300 text-xs uppercase tracking-widest text-gray-500 hover:text-black hover:border-black transition-all bg-white"
-                              >
-                                DROP
-                              </button>
-                              <button 
-                                disabled={!isReady}
-                                onClick={() => handleUpdateStatus(item.fileName!, 'purchased')}
-                                className={\lex-1 md:flex-none px-4 py-2 border text-xs uppercase tracking-widest font-bold transition-all \\}
-                              >
-                                BUY
-                              </button>
+                              <div className="text-right w-full md:w-auto flex flex-row md:flex-col justify-between md:justify-start items-center md:items-end border-t border-dashed border-gray-200 pt-3 md:pt-0 md:border-none">
+                                <span className="text-[10px] text-gray-400 uppercase tracking-widest block md:hidden">PRICE</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl font-bold tracking-tighter">¥{formatMoney(item.price_estimated)}</span>
+                                    {!isArchived && (
+                                        <button onClick={() => startEditing(item)} className="text-[10px] text-gray-300 hover:text-black uppercase tracking-widest underline decoration-dashed">EDIT</button>
+                                    )}
+                                </div>
+                              </div>
                             </div>
-                          )}
-                        </div>
+                            
+                            <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-t border-dotted border-gray-200 pt-4">
+                              <div className="w-full md:w-auto">
+                                {!isArchived && (
+                                  <div className="flex items-center gap-2">
+                                    <div className={\w-2 h-2 rounded-full \\}></div>
+                                    <span className={\	ext-xs uppercase font-bold tracking-widest \\}>
+                                      {isReady ? 'READY FOR CLEARANCE' : \COOLING: \ DAYS LEFT\}
+                                    </span>
+                                  </div>
+                                )}
+                                {isArchived && (
+                                  <span className="text-xs uppercase font-bold tracking-widest text-gray-500 bg-gray-200 px-2 py-1 inline-block">
+                                    STATUS: {item.status} {item.status === 'purchased' ? \| COST: ¥\/DAY\ : ''}
+                                  </span>
+                                )}
+                              </div>
+
+                              {!isArchived && (
+                                <div className="flex gap-2 w-full md:w-auto">
+                                  <button 
+                                    onClick={() => handleUpdateStatus(item.fileName!, 'archived')}
+                                    className="flex-1 md:flex-none px-4 py-2 border border-gray-300 text-xs uppercase tracking-widest text-gray-500 hover:text-black hover:border-black transition-all bg-white"
+                                  >
+                                    DROP
+                                  </button>
+                                  <button 
+                                    disabled={!isReady}
+                                    onClick={() => handleUpdateStatus(item.fileName!, 'purchased')}
+                                    className={\lex-1 md:flex-none px-4 py-2 border text-xs uppercase tracking-widest font-bold transition-all \\}
+                                  >
+                                    BUY
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </motion.div>
                     );
                   })}
@@ -270,7 +346,6 @@ export default function Home() {
                     </div>
                   )}
                   
-                  {/* Decorative end of receipt */}
                   {items.length > 0 && (
                     <div className="pt-8 flex flex-col items-center opacity-30">
                       <div className="text-[10px] tracking-[0.5em] mb-2">END OF LIST</div>
@@ -291,7 +366,6 @@ export default function Home() {
                 <div className="text-[10px] tracking-[0.3em] text-gray-400 border-b border-dashed border-gray-300 pb-2 mb-6">FINANCIAL SUMMARY</div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Total Expenditures - Prominent */}
                   <div className="col-span-1 md:col-span-2 p-8 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                     <div className="flex justify-between items-start">
                       <div>
@@ -363,7 +437,6 @@ export default function Home() {
           </AnimatePresence>
         </div>
         
-        {/* Bottom jagged edge */}
         <div className="h-2 w-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwb2x5Z29uIGZpbGw9IiNGOUY5RjkiIHBvaW50cz0iMCwwIDQsNCA4LDAgOCw4IDAsOCIvPjwvc3ZnPg==')] absolute -bottom-2 left-0"></div>
       </div>
     </div>

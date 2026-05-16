@@ -1,4 +1,5 @@
 ﻿import YAML from 'yaml';
+import { get, set } from 'idb-keyval';
 
 export interface WishlistItem {
   name: string;
@@ -11,14 +12,41 @@ export interface WishlistItem {
   [key: string]: any;
 }
 
+const HANDLE_KEY = 'wyqd_obsidian_handle';
+
 export class ObsidianFileSystemService {
   private directoryHandle: FileSystemDirectoryHandle | null = null;
+
+  async initAutoConnect(): Promise<boolean> {
+    try {
+      const handle = await get(HANDLE_KEY);
+      if (handle) {
+        const options = { mode: 'readwrite' as FileSystemPermissionMode };
+        const permission = await (handle as any).queryPermission(options);
+        
+        if (permission === 'granted') {
+          this.directoryHandle = handle as FileSystemDirectoryHandle;
+          return true;
+        }
+        
+        const requestStatus = await (handle as any).requestPermission(options);
+        if (requestStatus === 'granted') {
+          this.directoryHandle = handle as FileSystemDirectoryHandle;
+          return true;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to auto-connect:', e);
+    }
+    return false;
+  }
 
   async requestAccess(): Promise<boolean> {
     try {
       this.directoryHandle = await window.showDirectoryPicker({
         mode: 'readwrite',
       });
+      await set(HANDLE_KEY, this.directoryHandle);
       return true;
     } catch (error) {
       console.error('User denied access or error occurred:', error);
@@ -40,7 +68,6 @@ export class ObsidianFileSystemService {
         const file = await entry.getFile();
         const text = await file.text();
         
-        // Parse frontmatter
         const match = text.match(/^---\n([\s\S]*?)\n---/);
         if (match && match[1]) {
           try {
@@ -107,6 +134,40 @@ export class ObsidianFileSystemService {
         data.date_purchased = new Date().toISOString().split('T')[0];
       }
       
+      delete data.fileName;
+
+      const yamlStr = YAML.stringify(data);
+      const restOfContent = text.substring(match[0].length);
+      const newContent = \---\n\--- \\;
+
+      const writable = await (fileHandle as any).createWritable();
+      await writable.write(newContent);
+      await writable.close();
+    }
+  }
+
+  async updateItem(fileName: string, updates: Partial<WishlistItem>): Promise<void> {
+    if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+
+    const fileHandle = await this.directoryHandle.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+
+    const match = text.match(/^---\n([\s\S]*?)\n---/);
+    if (match && match[1]) {
+      const data = YAML.parse(match[1]) as WishlistItem;
+      
+      if (updates.name !== undefined) data.name = updates.name;
+      if (updates.price_estimated !== undefined) {
+        data.price_estimated = updates.price_estimated;
+        if (data.status === 'cooling') {
+            if (data.price_estimated < 100) data.cooling_days = 1;
+            else if (data.price_estimated < 1000) data.cooling_days = 3;
+            else if (data.price_estimated < 10000) data.cooling_days = 7;
+            else data.cooling_days = 30;
+        }
+      }
+
       delete data.fileName;
 
       const yamlStr = YAML.stringify(data);
