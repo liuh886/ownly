@@ -37,7 +37,7 @@ export default function Home() {
     }
   };
 
-  const loadItems = async () => {
+  async function loadItems() {
     try {
       const data = await obsidianService.getItems();
       setItems(data.sort((a, b) => new Date(b.date_added).getTime() - new Date(a.date_added).getTime()));
@@ -179,13 +179,13 @@ export default function Home() {
               <div className="flex gap-2 bg-gray-100 p-1 rounded-sm w-full md:w-auto mb-4">
                 <button 
                   onClick={() => setView('timeline')}
-                  className={\lex-1 md:flex-none px-4 py-2 text-[10px] uppercase tracking-widest transition-colors \\}
+                  className={`flex-1 md:flex-none px-4 py-2 text-[10px] uppercase tracking-widest transition-colors`}
                 >
                   Timeline
                 </button>
                 <button 
                   onClick={() => setView('dashboard')}
-                  className={\lex-1 md:flex-none px-4 py-2 text-[10px] uppercase tracking-widest transition-colors \\}
+                  className={`flex-1 md:flex-none px-4 py-2 text-[10px] uppercase tracking-widest transition-colors`}
                 >
                   Dashboard
                 </button>
@@ -246,7 +246,7 @@ export default function Home() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.05 }}
-                        className={\p-4 md:p-6 border transition-all \\}
+                        className={`p-4 md:p-6 border transition-all`}
                       >
                         {isEditing ? (
                           <form onSubmit={saveEdit} className="flex flex-col gap-4">
@@ -280,7 +280,7 @@ export default function Home() {
                                   </span>
                                   <span className="text-[10px] text-gray-400 uppercase tracking-widest">{item.date_added}</span>
                                 </div>
-                                <h3 className={\	ext-lg font-bold uppercase tracking-tight leading-none \\}>
+                                <h3 className={`text-lg font-bold uppercase tracking-tight leading-none`}>
                                   {item.name}
                                 </h3>
                               </div>
@@ -299,15 +299,15 @@ export default function Home() {
                               <div className="w-full md:w-auto">
                                 {!isArchived && (
                                   <div className="flex items-center gap-2">
-                                    <div className={\w-2 h-2 rounded-full \\}></div>
-                                    <span className={\	ext-xs uppercase font-bold tracking-widest \\}>
-                                      {isReady ? 'READY FOR CLEARANCE' : \COOLING: \ DAYS LEFT\}
+                                    <div className={`w-2 h-2 rounded-full`}></div>
+                                    <span className={`text-xs uppercase font-bold tracking-widest`}>
+                                      {isReady ? 'READY FOR CLEARANCE' : `COOLING: ${remainingDays} DAYS LEFT`}
                                     </span>
                                   </div>
                                 )}
                                 {isArchived && (
                                   <span className="text-xs uppercase font-bold tracking-widest text-gray-500 bg-gray-200 px-2 py-1 inline-block">
-                                    STATUS: {item.status} {item.status === 'purchased' ? \| COST: ¥\/DAY\ : ''}
+                                    STATUS: {item.status} {item.status === 'purchased' ? ` | COST: ¥${calculateDailyCost(item)}/DAY` : ''}
                                   </span>
                                 )}
                               </div>
@@ -323,7 +323,7 @@ export default function Home() {
                                   <button 
                                     disabled={!isReady}
                                     onClick={() => handleUpdateStatus(item.fileName!, 'purchased')}
-                                    className={\lex-1 md:flex-none px-4 py-2 border text-xs uppercase tracking-widest font-bold transition-all \\}
+                                    className={`flex-1 md:flex-none px-4 py-2 border text-xs uppercase tracking-widest font-bold transition-all`}
                                   >
                                     BUY
                                   </button>

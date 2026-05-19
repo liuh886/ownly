@@ -1,4 +1,5 @@
-﻿import YAML from 'yaml';
+﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+import YAML from 'yaml';
 import { get, set } from 'idb-keyval';
 
 export interface WishlistItem {
@@ -43,7 +44,7 @@ export class ObsidianFileSystemService {
 
   async requestAccess(): Promise<boolean> {
     try {
-      this.directoryHandle = await window.showDirectoryPicker({
+      this.directoryHandle = await (window as any).showDirectoryPicker({
         mode: 'readwrite',
       });
       await set(HANDLE_KEY, this.directoryHandle);
@@ -109,9 +110,9 @@ export class ObsidianFileSystemService {
     };
 
     const yamlStr = YAML.stringify(fullItem);
-    const content = \---\n\---\n\;
+    const content = `---\n${yamlStr}---\n`;
     
-    const fileName = \WYQD-\.md\;
+    const fileName = `WYQD-${now}-${Date.now()}.md`;
     const fileHandle = await this.directoryHandle.getFileHandle(fileName, { create: true });
     const writable = await (fileHandle as any).createWritable();
     await writable.write(content);
@@ -138,7 +139,7 @@ export class ObsidianFileSystemService {
 
       const yamlStr = YAML.stringify(data);
       const restOfContent = text.substring(match[0].length);
-      const newContent = \---\n\--- \\;
+      const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
 
       const writable = await (fileHandle as any).createWritable();
       await writable.write(newContent);
@@ -172,11 +173,64 @@ export class ObsidianFileSystemService {
 
       const yamlStr = YAML.stringify(data);
       const restOfContent = text.substring(match[0].length);
-      const newContent = \---\n\--- \\;
+      const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
 
       const writable = await (fileHandle as any).createWritable();
       await writable.write(newContent);
       await writable.close();
+    }
+  }
+  private async getDirHandle(path: string, create = false): Promise<FileSystemDirectoryHandle | null> {
+    if (!this.directoryHandle) return null;
+    let current = this.directoryHandle;
+    const parts = path.split('/').filter(Boolean);
+    for (const part of parts) {
+      try {
+        current = await current.getDirectoryHandle(part, { create });
+      } catch (e) {
+        if (!create) return null;
+        throw e;
+      }
+    }
+    return current;
+  }
+
+  async readMarkdownFiles(directory: string): Promise<{fileName: string, content: string}[]> {
+    const dirHandle = await this.getDirHandle(directory);
+    if (!dirHandle) return [];
+    
+    const files: {fileName: string, content: string}[] = [];
+    for await (const entry of (dirHandle as any).values()) {
+      if (entry.kind === 'file' && entry.name.endsWith('.md')) {
+        try {
+          const file = await entry.getFile();
+          const content = await file.text();
+          files.push({ fileName: entry.name, content });
+        } catch (e) {
+          console.warn(`Failed to read file ${entry.name}`, e);
+        }
+      }
+    }
+    return files;
+  }
+
+  async writeMarkdownFile(directory: string, fileName: string, content: string): Promise<void> {
+    const dirHandle = await this.getDirHandle(directory, true);
+    if (!dirHandle) throw new Error(`Could not access or create directory: ${directory}`);
+    
+    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+    const writable = await (fileHandle as any).createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+
+  async deleteMarkdownFile(directory: string, fileName: string): Promise<void> {
+    const dirHandle = await this.getDirHandle(directory);
+    if (!dirHandle) return;
+    try {
+      await dirHandle.removeEntry(fileName);
+    } catch (e) {
+      console.warn(`Failed to delete file ${fileName} in ${directory}`, e);
     }
   }
 }
