@@ -112,21 +112,21 @@ function getCostBreakdown(objects: WYQDObject[]) {
     focus: Omit<ObjectListFocus, 'token'>;
   }> = [
     {
-      label: '服役实物',
+      label: `服役实物 (${activePhysicalObjects.length})`,
       value: activePhysicalValue,
       count: activePhysicalObjects.length,
       tone: 'bg-stone-900',
       focus: { typeFilter: 'physical', physicalFilter: 'active', statusGroupFilter: 'using' },
     },
     {
-      label: '月固定成本',
+      label: `月固定成本 (${activeRecurringCosts.length})`,
       value: monthlyFixedCost,
       count: activeRecurringCosts.length,
       tone: 'bg-sky-700',
       focus: { typeFilter: 'recurring_cost', statusGroupFilter: 'using' },
     },
     {
-      label: '一次性体验',
+      label: `一次性体验 (${experienceObjects.length})`,
       value: experienceCost,
       count: experienceObjects.length,
       tone: 'bg-emerald-700',
@@ -419,6 +419,34 @@ export function HomeDashboard({
         </div>
       </motion.section>
 
+      {/* 数据规模 (Data Scale) */}
+      <motion.section variants={itemVariants} className="space-y-4 pt-4">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-[10px] font-black tracking-[0.2em] text-stone-400 uppercase">Data Scale</h2>
+          <span className="text-[10px] font-bold text-stone-300">
+            {objects.length} Objects Total
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <div className="text-[10px] font-black tracking-widest text-stone-400 uppercase">Vault Snapshots</div>
+            <div className="mt-1 text-2xl font-black tracking-tighter text-stone-950">{snapshots.length}</div>
+          </div>
+          <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <div className="text-[10px] font-black tracking-widest text-stone-400 uppercase">Physical</div>
+            <div className="mt-1 text-2xl font-black tracking-tighter text-stone-950">{physicalCount}</div>
+          </div>
+          <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <div className="text-[10px] font-black tracking-widest text-stone-400 uppercase">Recurring</div>
+            <div className="mt-1 text-2xl font-black tracking-tighter text-stone-950">{recurringCount}</div>
+          </div>
+          <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <div className="text-[10px] font-black tracking-widest text-stone-400 uppercase">Experiences</div>
+            <div className="mt-1 text-2xl font-black tracking-tighter text-stone-950">{experienceCount}</div>
+          </div>
+        </div>
+      </motion.section>
+
       {/* 次要数据区 - 采用 Surface-less 布局 */}
       <div className="grid gap-10 lg:grid-cols-2 pt-4">
         <motion.section variants={itemVariants}>
@@ -445,7 +473,7 @@ export function HomeDashboard({
               <DataBar
                 key={item.label}
                 label={item.label}
-                value={item.count}
+                value={item.value}
                 max={maxCost}
                 tone={item.tone}
                 valueLabel={formatCompactMoney(item.value)}
