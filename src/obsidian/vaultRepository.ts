@@ -218,7 +218,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
           body: parsed.body,
         });
       } catch (error) {
-        console.warn(`WYQD: skipping invalid ${config.type} markdown file ${file.path}`, error);
+        console.warn(`Ownly: skipping invalid ${config.type} markdown file ${file.path}`, error);
       }
     }
 
@@ -254,7 +254,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     await this.ensureDataFolders();
     const file = this.getMarkdownFile(this.activeDirectory(config), fileName);
     if (!file) {
-      throw new Error(`WYQD ${config.type} file not found: ${fileName}`);
+      throw new Error(`Ownly ${config.type} file not found: ${fileName}`);
     }
 
     await this.vault.modify(file, serializeEntity(entity, body));
@@ -267,7 +267,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     await this.ensureDataFolders();
     const sourceFile = this.getMarkdownFile(this.activeDirectory(config), fileName);
     if (!sourceFile) {
-      throw new Error(`WYQD ${config.type} file not found: ${fileName}`);
+      throw new Error(`Ownly ${config.type} file not found: ${fileName}`);
     }
 
     const timestamp = new Date().toISOString();
@@ -297,7 +297,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     await this.ensureDataFolders();
     const archiveFile = this.getMarkdownFile(this.archiveDirectory(config), archiveFileName);
     if (!archiveFile) {
-      throw new Error(`Archived WYQD ${config.type} file not found: ${archiveFileName}`);
+      throw new Error(`Archived Ownly ${config.type} file not found: ${archiveFileName}`);
     }
 
     const content = await this.vault.read(archiveFile);
@@ -358,14 +358,14 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
       }
     }
 
-    throw new Error(`Could not find an available WYQD path for ${path}`);
+    throw new Error(`Could not find an available Ownly path for ${path}`);
   }
 
   private async ensureFolder(path: string): Promise<void> {
     const normalized = normalizePath(path);
     const existing = this.vault.getAbstractFileByPath(normalized);
     if (existing instanceof TFolder) return;
-    if (existing) throw new Error(`WYQD path exists but is not a folder: ${normalized}`);
+    if (existing) throw new Error(`Ownly path exists but is not a folder: ${normalized}`);
 
     const parts = normalized.split('/').filter(Boolean);
     let current = '';
@@ -373,7 +373,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
       current = current ? `${current}/${part}` : part;
       const folder = this.vault.getAbstractFileByPath(current);
       if (folder instanceof TFolder) continue;
-      if (folder) throw new Error(`WYQD path exists but is not a folder: ${current}`);
+      if (folder) throw new Error(`Ownly path exists but is not a folder: ${current}`);
       await this.vault.createFolder(current);
     }
   }
@@ -387,7 +387,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
   }
 
   private dataRoot(): string {
-    return normalizePath(this.getDataFolder()).split('/').filter(Boolean).join('/') || 'WYQD';
+    return normalizePath(this.getDataFolder()).split('/').filter(Boolean).join('/') || 'Ownly';
   }
 }
 

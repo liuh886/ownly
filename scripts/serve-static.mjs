@@ -57,5 +57,5 @@ createServer((request, response) => {
   });
   createReadStream(filePath).pipe(response);
 }).listen(port, host, () => {
-  console.log(`WYQD static server listening on http://${host}:${port}`);
+  console.log(`Ownly static server listening on http://${host}:${port}`);
 });

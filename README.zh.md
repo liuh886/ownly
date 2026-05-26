@@ -1,6 +1,6 @@
-# WYQD
+# 物欲清单 (Ownly)
 
-WYQD 是一款 Obsidian 原生、本地优先的个人决策账本，用 Markdown 管理实物、订阅与体验成本。
+Ownly 是一款 Obsidian 原生、本地优先的个人决策账本，用 Markdown 管理实物、订阅与体验成本。
 
 **Own less, Live more, Decide better.**
 
@@ -21,7 +21,7 @@ WYQD 是一款 Obsidian 原生、本地优先的个人决策账本，用 Markdow
 
 ## 国际化 (i18n)
 
-WYQD Obsidian 插件原生支持英文 (English) 与中文 (`zh`) 双语。您可以在 Obsidian 内的 WYQD 插件设置页面切换语言首选项。
+Ownly Obsidian 插件原生支持英文 (English) 与中文 (`zh`) 双语。您可以在 Obsidian 内的 Ownly 插件设置页面切换语言首选项。
 
 ## Web App
 
@@ -80,7 +80,7 @@ dist/obsidian/wyqd/
   styles.css
 ```
 
-然后在 Obsidian 社区插件选项中启用 `WYQD`。
+然后在 Obsidian 社区插件选项中启用 `Ownly`。
 
 ### 真实 Vault 安装
 
@@ -97,11 +97,9 @@ mkdir -p /path/to/vault/.obsidian/plugins
 cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 ```
 
-在 Ductor 的常规 Vault 挂载中，可将 `/path/to/vault` 替换为 `/mnt/zhihaol`。
+3. 打开 Obsidian 的 `Settings -> Community plugins`，如有需要先关闭 Restricted mode，然后启用 `Ownly`。
 
-3. 打开 Obsidian 的 `Settings -> Community plugins`，如有需要先关闭 Restricted mode，然后启用 `WYQD`。
-
-4. 从左侧 Ribbon 图标或命令面板 `Open WYQD workspace` 打开 WYQD。
+4. 从左侧 Ribbon 图标或命令面板 `Open Ownly workspace` 打开 Ownly。
 
 ### 平台依赖重置
 
@@ -157,7 +155,7 @@ Obsidian 验证流包含以下检查：
 
 Obsidian 插件当前支持以下功能：
 
-- WYQD 工作台视图
+- Ownly 工作台视图
 - 左侧边栏 (Ribbon) 入口
 - 命令面板 (Command palette) 入口
 - 设置面板
@@ -169,16 +167,24 @@ Obsidian 插件当前支持以下功能：
 - 推进对象状态 (含二次确认)
 - 对象的归档与恢复
 - 本地 Free / Pro 年度 / Lifetime 早期支持者的许可证验证机制 (Alpha)
-- WYQD Doctor 数据体检及摘要
+- Ownly Doctor 数据体检及摘要
 - Obsidian 主题适配，以及基于系统颜色偏好的 Web 深色模式
 
-## 稳定性说明
+## 数据存储
 
-仍在完善中 / 暂未稳定：
+Ownly 将所有数据以 Markdown 文件形式存储在 Obsidian Vault 的 `Ownly/` 目录下：
 
-- 除 Vault 本地原生同步以外的云同步特性
-- 真实的 Lemon Squeezy 许可证服务端验证 (当前仅支持本地 alpha 密钥测试)
-- 在各色 Obsidian 自定义主题下的全方位截图级别 QA
-- 提交至公开的 Obsidian 社区插件商店
+```text
+Ownly/
+  Objects/
+  Accounts/
+  Snapshots/
+  Reviews/
+  Archive/
+    Objects/
+    Accounts/
+    Snapshots/
+    Reviews/
+```
 
-免费版用户始终拥有对自身 Markdown 数据的完整访问权限。WYQD 绝不会因许可证状态而锁定、加密、删除或阻碍数据的导出。
+免费版用户始终拥有对自身 Markdown 数据的完整访问权限。Ownly 绝不会因许可证状态而锁定、加密、删除或阻碍数据的导出。

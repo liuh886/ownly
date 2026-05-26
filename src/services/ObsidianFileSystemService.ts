@@ -112,7 +112,7 @@ export class ObsidianFileSystemService {
     const yamlStr = YAML.stringify(fullItem);
     const content = `---\n${yamlStr}---\n`;
     
-    const fileName = `WYQD-${now}-${Date.now()}.md`;
+    const fileName = `Ownly-${now}-${Date.now()}.md`;
     const fileHandle = await this.directoryHandle.getFileHandle(fileName, { create: true });
     const writable = await (fileHandle as any).createWritable();
     await writable.write(content);

@@ -5,15 +5,15 @@ import YAML from 'yaml';
 
 const FRONTMATTER_PATTERN = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 const DIRECTORIES = {
-  object: 'WYQD/Objects',
-  snapshot: 'WYQD/Snapshots',
-  review: 'WYQD/Reviews',
+  object: 'Ownly/Objects',
+  snapshot: 'Ownly/Snapshots',
+  review: 'Ownly/Reviews',
 };
 
 const ARCHIVE_DIRECTORIES = {
-  object: 'WYQD/Archive/Objects',
-  snapshot: 'WYQD/Archive/Snapshots',
-  review: 'WYQD/Archive/Reviews',
+  object: 'Ownly/Archive/Objects',
+  snapshot: 'Ownly/Archive/Snapshots',
+  review: 'Ownly/Archive/Reviews',
 };
 
 function todayISO() {
@@ -63,7 +63,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`WYQD CLI
+  console.log(`Ownly CLI
 
 Usage:
   npm run wyqd -- --vault <vault> object list [--json] [--status idle]
@@ -86,7 +86,7 @@ Machine-readable output:
   npm run --silent wyqd -- --vault <vault> object list --json
 
 Environment:
-  WYQD_VAULT can be used instead of --vault.
+  OWNLY_VAULT can be used instead of --vault.
 `);
 }
 
@@ -110,8 +110,8 @@ function numberOption(options, key, fallback = undefined) {
 }
 
 function getVaultRoot(options) {
-  const root = options.vault || process.env.WYQD_VAULT;
-  if (!root) fail('Missing vault root. Pass --vault <path> or set WYQD_VAULT.');
+  const root = options.vault || process.env.OWNLY_VAULT || process.env.WYQD_VAULT;
+  if (!root) fail('Missing vault root. Pass --vault <path> or set OWNLY_VAULT.');
   return resolve(String(root));
 }
 
@@ -408,7 +408,7 @@ function createObject(options) {
     title,
     currency: options.currency || 'CNY',
     category: options.category || undefined,
-    tags: ['wyqd'],
+    tags: ['ownly'],
     created_at: date,
     updated_at: date,
   };
@@ -824,7 +824,7 @@ function reviewCommand(vaultRoot, command, options) {
       created_at: todayISO(),
       updated_at: todayISO(),
       currency: options.currency || 'CNY',
-      tags: ['wyqd', 'review'],
+      tags: ['ownly', 'review'],
     };
     const fileName = `review--${reviewedAt}--${slugify(review.title)}.md`;
     writeEntry(directory, fileName, review, options.body || `## Review\n\n${summary}\n`);

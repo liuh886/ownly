@@ -1,6 +1,6 @@
-# Contributing to WYQD
+# Contributing to Ownly
 
-WYQD is currently a private alpha project focused on an Obsidian-native, local-first decision ledger.
+Ownly is an Obsidian-native, local-first decision ledger for possessions, subscriptions, and experiences.
 
 ## Development
 
@@ -33,6 +33,6 @@ Shared domain logic belongs in `src/core`, `src/domain`, or shared services. Avo
 
 ## Data Safety
 
-WYQD stores user data as Markdown in the user's Vault. Contributions must not encrypt, lock, delete, or block export of user data based on license state.
+Ownly stores user data as Markdown in the user's Vault. Contributions must not encrypt, lock, delete, or block export of user data based on license state.
 
 Use recoverable archive behavior for destructive user actions whenever possible.

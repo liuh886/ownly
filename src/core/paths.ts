@@ -1,6 +1,6 @@
 import type { WYQDEntityType, WYQDObjectType } from '@/domain/types';
 
-export const WYQD_DATA_ROOT = 'WYQD' as const;
+export const WYQD_DATA_ROOT = 'Ownly' as const;
 
 export const WYQD_DATA_DIRECTORIES = {
   root: WYQD_DATA_ROOT,

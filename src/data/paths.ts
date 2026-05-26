@@ -1,4 +1,4 @@
-export const WYQD_ROOT = 'WYQD';
+export const WYQD_ROOT = 'Ownly';
 
 export const WYQD_DIRECTORIES = {
   root: WYQD_ROOT,

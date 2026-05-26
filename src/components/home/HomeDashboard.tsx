@@ -10,12 +10,14 @@ import {
 import type { AccountSnapshot, HomeMetrics, RecurringCostObject, WYQDObject } from '@/domain/types';
 import type { AppTab } from '@/components/app-shell/BottomNav';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
+import type { WYQDTranslationKey } from '@/core/i18n';
+import { useI18n } from '@/core/i18n-context';
 import { MetricCard } from './MetricCard';
 
-const springTransition = { 
-  type: 'spring' as const, 
-  stiffness: 300, 
-  damping: 30 
+const springTransition = {
+  type: 'spring' as const,
+  stiffness: 300,
+  damping: 30
 };
 
 const containerVariants: Variants = {
@@ -38,8 +40,8 @@ const itemVariants: Variants = {
 };
 
 
-function formatMoney(value: number | null): string {
-  if (value === null) return '暂无';
+function formatMoney(value: number | null, fallback = '暂无'): string {
+  if (value === null) return fallback;
   return `¥${Math.round(value).toLocaleString('zh-CN')}`;
 }
 
@@ -90,7 +92,7 @@ function getSnapshotTrend(snapshots: AccountSnapshot[]) {
     .slice(-6);
 }
 
-function getCostBreakdown(objects: WYQDObject[]) {
+function getCostBreakdown(objects: WYQDObject[], t: (key: WYQDTranslationKey) => string) {
   const activePhysicalObjects = objects
     .filter((object) => object.object_type === 'physical')
     .filter((object) => object.status === 'purchased' || object.status === 'using');
@@ -120,21 +122,21 @@ function getCostBreakdown(objects: WYQDObject[]) {
     focus: Omit<ObjectListFocus, 'token'>;
   }> = [
     {
-      label: `服役实物 (${activePhysicalObjects.length})`,
+      label: t('activePhysicalN').replace('{count}', String(activePhysicalObjects.length)),
       value: activePhysicalValue,
       count: activePhysicalObjects.length,
       tone: 'bg-stone-900',
       focus: { typeFilter: 'physical', physicalFilter: 'active', statusGroupFilter: 'using' },
     },
     {
-      label: `月固定成本 (${activeRecurringCosts.length})`,
+      label: t('monthlyFixedCostN').replace('{count}', String(activeRecurringCosts.length)),
       value: monthlyFixedCost,
       count: activeRecurringCosts.length,
       tone: 'bg-sky-700',
       focus: { typeFilter: 'recurring_cost', statusGroupFilter: 'using' },
     },
     {
-      label: `一次性体验 (${experienceObjects.length})`,
+      label: t('oneTimeExperienceN').replace('{count}', String(experienceObjects.length)),
       value: experienceCost,
       count: experienceObjects.length,
       tone: 'bg-emerald-700',
@@ -145,7 +147,7 @@ function getCostBreakdown(objects: WYQDObject[]) {
   return breakdown;
 }
 
-function getObjectStatusDistribution(objects: WYQDObject[]) {
+function getObjectStatusDistribution(objects: WYQDObject[], t: (key: WYQDTranslationKey) => string) {
   const distribution: Array<{
     label: string;
     count: number;
@@ -153,14 +155,14 @@ function getObjectStatusDistribution(objects: WYQDObject[]) {
     focus: Omit<ObjectListFocus, 'token'>;
   }> = [
     {
-      label: '观察中',
+      label: t('observing'),
       count: objects.filter((object) => object.status === 'seeded' || object.status === 'observing')
         .length,
       tone: 'bg-amber-600',
       focus: { statusGroupFilter: 'observing' },
     },
     {
-      label: '使用中',
+      label: t('inUse'),
       count: objects.filter((object) =>
         ['purchased', 'using', 'active', 'in_progress'].includes(object.status),
       ).length,
@@ -168,7 +170,7 @@ function getObjectStatusDistribution(objects: WYQDObject[]) {
       focus: { statusGroupFilter: 'using' },
     },
     {
-      label: '已退出',
+      label: t('exited'),
       count: objects.filter((object) =>
         ['idle', 'transferred', 'discarded', 'cancelled', 'completed', 'reviewed'].includes(
           object.status,
@@ -385,12 +387,14 @@ export function HomeDashboard({
   onOpenObjects: (focus: Omit<ObjectListFocus, 'token'>) => void;
   onNavigate: (tab: AppTab) => void;
 }) {
+  const { t } = useI18n();
+
   const trendSnapshots = getSnapshotTrend(snapshots);
   const trendValues = trendSnapshots.map((snapshot) => snapshot.net_worth || 0);
   const trendPoints = buildSparklinePoints(trendValues);
-  const costBreakdown = getCostBreakdown(objects);
+  const costBreakdown = getCostBreakdown(objects, t);
   const maxCost = Math.max(...costBreakdown.map((item) => item.value), 0);
-  const statusDistribution = getObjectStatusDistribution(objects);
+  const statusDistribution = getObjectStatusDistribution(objects, t);
   const maxStatusCount = Math.max(...statusDistribution.map((item) => item.count), 0);
   const upcomingRecurringCosts = getUpcomingRecurringCosts(objects);
   const pendingExperienceReviews = getPendingExperienceReviews(objects);
@@ -414,30 +418,30 @@ export function HomeDashboard({
     >
       <motion.section variants={itemVariants} className="grid gap-3 lg:grid-cols-4">
         <div className="rounded-xl border border-stone-200 bg-stone-950 p-4 text-white shadow-sm lg:col-span-1">
-          <div className="text-xs font-medium text-stone-400">今日行动</div>
+          <div className="text-xs font-medium text-stone-400">{t('todayActions')}</div>
           <div className="mt-3 font-mono text-3xl font-semibold tracking-tight">
             {actionCount}
           </div>
           <div className="mt-1 text-xs leading-5 text-stone-400">
-            需要关注的扣费与复盘事项
+            {t('todayActionsDesc')}
           </div>
         </div>
         <ActionCard
-          label="账户"
-          title="记录账户快照"
-          detail={`${snapshots.length} 次历史快照，继续补齐净资产曲线`}
+          label={t('tabAccounts')}
+          title={t('actionRecordSnapshot')}
+          detail={t('actionSnapshotHint').replace('{count}', String(snapshots.length))}
           onSelect={() => onNavigate('accounts')}
         />
         <ActionCard
-          label="物欲"
-          title="捕获新对象"
-          detail={`${objects.length} 个对象已入库，继续沉淀实物、订阅和体验`}
+          label={t('tabObjects')}
+          title={t('actionCaptureObject')}
+          detail={t('actionObjectHint').replace('{count}', String(objects.length))}
           onSelect={() => onNavigate('objects')}
         />
         <ActionCard
-          label="复盘"
-          title="整理体验排行"
-          detail={`${pendingExperienceReviews.length} 个体验待复盘，更新美食、风景、体验排位`}
+          label={t('tabReviews')}
+          title={t('actionOrganizeReviews')}
+          detail={t('actionReviewHint').replace('{count}', String(pendingExperienceReviews.length))}
           onSelect={() => onNavigate('reviews')}
         />
       </motion.section>
@@ -450,8 +454,8 @@ export function HomeDashboard({
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
           <div>
             <MetricCard
-              label="资产净值估值"
-              value={formatMoney(metrics.netWorth)}
+              label={t('assetNetWorthEstimate')}
+              value={formatMoney(metrics.netWorth, t('noData'))}
               hint={formatDelta(metrics.netWorthDeltaFromPreviousMonth)}
               featured
             />
@@ -459,9 +463,9 @@ export function HomeDashboard({
           <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-stone-950">净资产趋势</h2>
+                <h2 className="text-sm font-semibold text-stone-950">{t('netWorthTrend')}</h2>
                 <p className="mt-1 text-xs text-stone-500">
-                  最近 {trendSnapshots.length} 次快照
+                  {t('recentSnapshotsCount').replace('{count}', String(trendSnapshots.length))}
                 </p>
               </div>
               {trendSnapshots.length > 0 ? (
@@ -504,29 +508,29 @@ export function HomeDashboard({
                 </svg>
               </div>
             ) : (
-              <p className="mt-4 text-xs text-stone-400 italic">连接 Vault 后开启趋势分析。</p>
+              <p className="mt-4 text-xs text-stone-400 italic">{t('connectVaultForTrend')}</p>
             )}
           </div>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <MetricCard
-            label="月均固定成本"
-            value={formatMoney(metrics.monthlyFixedCost)}
+            label={t('monthlyFixedCostAvg')}
+            value={formatMoney(metrics.monthlyFixedCost, t('noData'))}
             hint={fixedCostHint}
           />
-          <MetricCard label="实物资产" value={`${metrics.ownedPhysicalCount} 件`} />
-          <MetricCard label="订阅服务" value={`${metrics.activeSubscriptionCount} 个`} />
-          <MetricCard label="观察金额" value={formatMoney(metrics.observingDesireAmount)} />
+          <MetricCard label={t('physicalAsset')} value={`${metrics.ownedPhysicalCount} 件`} />
+          <MetricCard label={t('subscriptionService')} value={`${metrics.activeSubscriptionCount} 个`} />
+          <MetricCard label={t('observeAmount')} value={formatMoney(metrics.observingDesireAmount, t('noData'))} />
         </div>
       </motion.section>
 
       <motion.section variants={itemVariants} className="grid gap-3 md:grid-cols-3">
         <InsightCard
-          label="最高日均成本"
-          title={highestDailyCost?.object.title || '暂无可计算实物'}
-          value={highestDailyCost ? formatMoney(highestDailyCost.dailyCost) : '暂无'}
-          detail={highestDailyCost ? '点击查看实物' : '录入购买日期后生成'}
+          label={t('highestDailyCost')}
+          title={highestDailyCost?.object.title || t('noCalculablePhysical')}
+          value={highestDailyCost ? formatMoney(highestDailyCost.dailyCost) : t('noData')}
+          detail={highestDailyCost ? t('clickToViewPhysical') : t('enterPurchaseDateHint')}
           onSelect={
             highestDailyCost
               ? () => onOpenObjects({ typeFilter: 'physical', statusGroupFilter: 'using' })
@@ -534,10 +538,10 @@ export function HomeDashboard({
           }
         />
         <InsightCard
-          label="最大月固定成本"
-          title={largestRecurringCost?.object.title || '暂无订阅成本'}
-          value={largestRecurringCost ? formatMoney(largestRecurringCost.monthlyCost) : '暂无'}
-          detail={largestRecurringCost ? '点击查看订阅' : '录入固定成本后生成'}
+          label={t('largestMonthlyFixedCost')}
+          title={largestRecurringCost?.object.title || t('noSubscriptionCost')}
+          value={largestRecurringCost ? formatMoney(largestRecurringCost.monthlyCost) : t('noData')}
+          detail={largestRecurringCost ? t('clickToViewSubscription') : t('enterFixedCostHint')}
           onSelect={
             largestRecurringCost
               ? () => onOpenObjects({ typeFilter: 'recurring_cost', statusGroupFilter: 'using' })
@@ -545,19 +549,19 @@ export function HomeDashboard({
           }
         />
         <InsightCard
-          label="最新账户快照"
-          title={latestSnapshot?.snapshot_at || '暂无账户快照'}
-          value={latestSnapshot ? formatMoney(latestSnapshot.net_worth ?? null) : '暂无'}
-          detail={latestSnapshot ? '净资产' : '到账户页记录'}
+          label={t('latestAccountSnapshot')}
+          title={latestSnapshot?.snapshot_at || t('noAccountSnapshot')}
+          value={latestSnapshot ? formatMoney(latestSnapshot.net_worth ?? null, t('noData')) : t('noData')}
+          detail={latestSnapshot ? t('netWorth') : t('goToAccountsHint')}
         />
       </motion.section>
 
       {/* 近期关注 (Action Center) - 回归克制风格 */}
       <motion.section variants={itemVariants} className="space-y-4">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-semibold text-stone-950">近期关注</h2>
+          <h2 className="text-sm font-semibold text-stone-950">{t('recentFocus')}</h2>
           <span className="text-xs text-stone-500">
-            {upcomingRecurringCosts.length + pendingExperienceReviews.length} 项
+            {t('itemsCount').replace('{count}', String(upcomingRecurringCosts.length + pendingExperienceReviews.length))}
           </span>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -594,14 +598,14 @@ export function HomeDashboard({
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   <div className="text-sm font-bold text-stone-900">{object.title}</div>
                 </div>
-                <div className="mt-1 text-xs text-stone-500">待复盘</div>
+                <div className="mt-1 text-xs text-stone-500">{t('pendingReviewBadge')}</div>
               </div>
-              <div className="shrink-0 rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-xs font-medium text-stone-600">复盘</div>
+              <div className="shrink-0 rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-xs font-medium text-stone-600">{t('reviewAction')}</div>
             </button>
           ))}
           {upcomingRecurringCosts.length === 0 && pendingExperienceReviews.length === 0 ? (
             <div className="rounded-xl border border-stone-200 bg-stone-50 py-8 text-center sm:col-span-2">
-              <p className="text-xs font-medium text-stone-500">暂无近期待处理事项</p>
+              <p className="text-xs font-medium text-stone-500">{t('noRecentItems')}</p>
             </div>
           ) : null}
         </div>
@@ -610,26 +614,26 @@ export function HomeDashboard({
       {/* 数据规模 (Data Scale) */}
       <motion.section variants={itemVariants} className="space-y-4 pt-4">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-semibold text-stone-950">数据规模</h2>
+          <h2 className="text-sm font-semibold text-stone-950">{t('dataScale')}</h2>
           <span className="text-xs text-stone-500">
-            {objects.length} 个对象
+            {t('objectsCount').replace('{count}', String(objects.length))}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="text-xs text-stone-500">账户快照</div>
+            <div className="text-xs text-stone-500">{t('accountSnapshot')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{snapshots.length}</div>
           </div>
           <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="text-xs text-stone-500">实物</div>
+            <div className="text-xs text-stone-500">{t('physical')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{physicalCount}</div>
           </div>
           <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="text-xs text-stone-500">固定成本</div>
+            <div className="text-xs text-stone-500">{t('fixedCost')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{recurringCount}</div>
           </div>
           <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="text-xs text-stone-500">体验</div>
+            <div className="text-xs text-stone-500">{t('experience')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{experienceCount}</div>
           </div>
         </div>
@@ -638,7 +642,7 @@ export function HomeDashboard({
       {/* 次要数据区 - 采用 Surface-less 布局 */}
       <div className="grid gap-10 lg:grid-cols-2 pt-4">
         <motion.section variants={itemVariants}>
-          <h2 className="px-1 text-sm font-semibold text-stone-950">状态分布</h2>
+          <h2 className="px-1 text-sm font-semibold text-stone-950">{t('statusDistribution')}</h2>
           <div className="mt-6 space-y-6 px-1">
             {statusDistribution.map((item) => (
               <DataBar
@@ -655,7 +659,7 @@ export function HomeDashboard({
         </motion.section>
 
         <motion.section variants={itemVariants}>
-          <h2 className="px-1 text-sm font-semibold text-stone-950">成本结构</h2>
+          <h2 className="px-1 text-sm font-semibold text-stone-950">{t('costStructure')}</h2>
           <div className="mt-6 space-y-6 px-1">
             {costBreakdown.map((item) => (
               <DataBar

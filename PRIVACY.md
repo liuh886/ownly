@@ -1,20 +1,21 @@
-# WYQD Privacy Policy
+# Ownly Privacy Policy
 
-WYQD is designed as a local-first personal ledger.
+Ownly is designed as a local-first personal ledger.
 
 ## Data Storage
 
-WYQD stores user data in the Obsidian Vault selected by the user. Data is written as Markdown files under:
+Ownly stores user data in the Obsidian Vault selected by the user. Data is written as Markdown files under:
 
-- `WYQD/Objects`
-- `WYQD/Snapshots`
-- `WYQD/Reviews`
+- `Ownly/Objects`
+- `Ownly/Accounts`
+- `Ownly/Snapshots`
+- `Ownly/Reviews`
 
 The app does not require a hosted account, cloud database, or server-side sync.
 
 ## Local File Permission
 
-When used in a browser, WYQD may request local folder access through the File System Access API. This permission is used only to read and write the WYQD Markdown files in the selected Vault.
+When used in a browser, Ownly may request local folder access through the File System Access API. This permission is used only to read and write the Ownly Markdown files in the selected Vault.
 
 ## Network
 

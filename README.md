@@ -1,6 +1,6 @@
-# WYQD
+# Ownly
 
-WYQD is an Obsidian-native, local-first decision ledger for possessions, subscriptions, and experiences.
+Ownly is an Obsidian-native, local-first decision ledger for possessions, subscriptions, and experiences.
 
 **Own less, Live more, Decide better.**
 
@@ -76,7 +76,7 @@ Install manually into a test Vault:
   styles.css
 ```
 
-Then enable `WYQD` from Obsidian community plugins.
+Then enable `Ownly` from Obsidian community plugins.
 
 ### Real Vault Installation
 
@@ -93,11 +93,9 @@ mkdir -p /path/to/vault/.obsidian/plugins
 cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 ```
 
-For the normal Ductor Vault mount, replace `/path/to/vault` with `/mnt/zhihaol`.
+3. In Obsidian, open `Settings -> Community plugins`, turn off Restricted mode if needed, then enable `Ownly`.
 
-3. In Obsidian, open `Settings -> Community plugins`, turn off Restricted mode if needed, then enable `WYQD`.
-
-4. Open WYQD from the ribbon icon or the command palette command `Open WYQD workspace`.
+4. Open Ownly from the ribbon icon or the command palette command `Open Ownly workspace`.
 
 ### Platform-Specific Dependency Reset
 
@@ -153,7 +151,7 @@ The Obsidian validation gate checks:
 
 The Obsidian plugin currently supports:
 
-- WYQD Workspace view
+- Ownly Workspace view
 - Ribbon entry
 - command palette entries
 - Settings tab
@@ -165,16 +163,24 @@ The Obsidian plugin currently supports:
 - advance object status with confirmation
 - archive and restore objects
 - local Free / Pro Annual / Lifetime Early Supporter license-state alpha
-- WYQD Doctor diagnostic summary
+- Ownly Doctor diagnostic summary
 - Obsidian theme-aware styling and Web dark mode via system color preference
 
-## Stability Boundary
+## Data Storage
 
-Not yet completely stabilized / Work in Progress:
+Ownly stores all data as Markdown files in your Obsidian Vault under the `Ownly/` directory:
 
-- Cloud sync features outside of Vault native sync
-- Real Lemon Squeezy license validation (currently local alpha key evaluation)
-- Obsidian screenshot-level QA across custom themes
-- Public Obsidian community plugin submission
+```text
+Ownly/
+  Objects/
+  Accounts/
+  Snapshots/
+  Reviews/
+  Archive/
+    Objects/
+    Accounts/
+    Snapshots/
+    Reviews/
+```
 
-Free users must always retain access to their Markdown data. WYQD must not lock, encrypt, delete, or block export because of license state.
+Free users must always retain access to their Markdown data. Ownly must not lock, encrypt, delete, or block export because of license state.

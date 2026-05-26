@@ -20,7 +20,7 @@ try {
   if (message.includes('another platform') || message.includes('@esbuild/')) {
     console.error(
       [
-        'WYQD Obsidian build failed because esbuild was installed for a different platform.',
+        'Ownly Obsidian build failed because esbuild was installed for a different platform.',
         'This usually happens when the same checkout is used from Docker/Linux and Windows.',
         'Run `npm run deps:reset` on the platform where you are building, then retry `npm run package:obsidian`.',
       ].join('\n'),

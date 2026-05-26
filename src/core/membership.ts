@@ -23,8 +23,8 @@ export interface ResolveWYQDMembershipInput {
 }
 
 const LOCAL_TEST_LICENSE_KEYS: Record<string, WYQDMembershipPlan> = {
-  'WYQD-PRO-ANNUAL-TEST': 'pro_annual',
-  'WYQD-LIFETIME-EARLY-SUPPORTER-TEST': 'lifetime_early_supporter',
+  'OWNLY-PRO-ANNUAL-TEST': 'pro_annual',
+  'OWNLY-LIFETIME-EARLY-SUPPORTER-TEST': 'lifetime_early_supporter',
 };
 
 const PLAN_LABELS: Record<WYQDMembershipPlan, string> = {

@@ -6,7 +6,7 @@ export default function Loading() {
           <div className="absolute h-full w-full animate-ping rounded-full bg-stone-200 opacity-75"></div>
           <div className="relative h-8 w-8 rounded-full bg-stone-900"></div>
         </div>
-        <div className="text-sm font-medium text-stone-500 animate-pulse">正在加载 WYQD 数据...</div>
+        <div className="text-sm font-medium text-stone-500 animate-pulse">正在加载物欲清单数据...</div>
       </div>
     </div>
   );

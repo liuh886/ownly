@@ -12,7 +12,7 @@ export default function NotFound() {
         <div>
           <h2 className="text-lg font-semibold text-stone-900">页面未找到</h2>
           <p className="mt-2 text-sm text-stone-500">
-            抱歉，你访问的页面或路径在 WYQD 工作台中不存在。
+            抱歉，你访问的页面或路径在物欲清单工作台中不存在。
           </p>
         </div>
         <Link

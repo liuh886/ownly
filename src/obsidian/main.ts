@@ -21,7 +21,8 @@ import { normalizeWYQDLicenseKey, resolveWYQDMembership } from '@/core/membershi
 import { createObjectConsoleModel } from '@/core/objectConsole';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { runWYQDDoctor, type WYQDDoctorReport } from '@/core/doctor';
-import type { Account, AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
+import type { Account, AccountSnapshot, PhysicalObject, RecurringCostObject, ReviewEntry, WYQDObject } from '@/domain/types';
+import { calculateNetWorth, calculateRecurringMonthlyCost, findLatestSnapshot } from '@/domain/calculations';
 import { ObsidianVaultRepository } from './vaultRepository';
 
 const WYQD_VIEW_TYPE = 'wyqd-workspace';
@@ -34,7 +35,7 @@ interface WYQDPluginSettings {
 }
 
 const DEFAULT_SETTINGS: WYQDPluginSettings = {
-  dataFolder: 'WYQD',
+  dataFolder: 'Ownly',
   licenseKey: '',
   language: 'en',
   openInRightSidebar: false,
@@ -114,7 +115,7 @@ export default class WYQDPlugin extends Plugin {
       : this.app.workspace.getLeaf(true);
 
     if (!leaf) {
-      new Notice('WYQD: Could not open workspace view.');
+      new Notice('Ownly: Could not open workspace view.');
       return;
     }
 
@@ -132,7 +133,7 @@ export default class WYQDPlugin extends Plugin {
     const path = await this.nextAvailablePath(`${folder}/${date}-${draft.id}.md`);
 
     await this.app.vault.create(path, draft.content);
-    new Notice(`WYQD: Created ${draft.title}`);
+    new Notice(`Ownly: Created ${draft.title}`);
   }
 
   async runDoctor() {
@@ -144,7 +145,7 @@ export default class WYQDPlugin extends Plugin {
       ...report.findings.slice(0, 6).map((finding) => `${finding.severity}: ${finding.message}`),
     ];
 
-    new Notice(`WYQD Doctor:\n${lines.join('\n')}`, 8000);
+    new Notice(`Ownly Doctor:\n${lines.join('\n')}`, 8000);
   }
 
   async loadSettings() {
@@ -269,7 +270,7 @@ class WYQDWorkspaceView extends ItemView {
     const header = shell.createDiv({ cls: 'wyqd-hero' });
     const heroCopy = header.createDiv({ cls: 'wyqd-hero-copy' });
     const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
-    eyebrow.createEl('span', { text: `WYQD ${WYQD_CORE_TARGET_VERSION}` });
+    eyebrow.createEl('span', { text: `Ownly ${WYQD_CORE_TARGET_VERSION}` });
     eyebrow.createEl('span', { text: t('localVaultOnly') });
     heroCopy.createEl('h2', { text: t('workspaceTitle') });
     heroCopy.createEl('p', {
@@ -284,6 +285,8 @@ class WYQDWorkspaceView extends ItemView {
     this.createStatusItem(heroMetrics, t('objects'), String(objectConsole.summary.total));
     this.createStatusItem(heroMetrics, t('active'), String(objectConsole.summary.active));
     this.createStatusItem(heroMetrics, t('review'), String(objectConsole.summary.review));
+
+    this.renderHomeDashboard(shell, objects.map((s) => s.entity), snapshots.map((s) => s.entity), reviews.map((s) => s.entity), t);
 
     const actionsPanel = shell.createDiv({ cls: 'wyqd-actions-panel' });
     const actionsHeader = actionsPanel.createDiv({ cls: 'wyqd-section-header' });
@@ -302,7 +305,7 @@ class WYQDWorkspaceView extends ItemView {
     this.createStatusItem(grid, t('license'), membership.statusLabel);
     this.createStatusItem(grid, t('schema'), `${WYQD_SCHEMA_VERSION} shared core model`);
     this.createStatusItem(grid, t('release'), `Plugin ${this.plugin.manifest.version}`);
-    this.createStatusItem(grid, t('target'), `WYQD ${WYQD_CORE_TARGET_VERSION}`);
+    this.createStatusItem(grid, t('target'), `Ownly ${WYQD_CORE_TARGET_VERSION}`);
 
     const workspaceGrid = shell.createDiv({ cls: 'wyqd-workspace-grid' });
 
@@ -360,6 +363,7 @@ class WYQDWorkspaceView extends ItemView {
     this.createStatusItem(dataPanel, t('reviews'), String(reviews.length));
 
     this.createSecondaryDataPanel(shell, accounts, snapshots, reviews);
+    this.renderReviewConsole(shell, reviews.map((s) => s.entity), objects.map((s) => s.entity), t);
     this.createDoctorPanel(shell, doctorReport);
     this.createProFeatureEntry(shell, membership);
 
@@ -376,6 +380,106 @@ class WYQDWorkspaceView extends ItemView {
     panel.createEl('h2', { text: this.plugin.t('loadErrorTitle') });
     panel.createEl('p', { text: getErrorMessage(error) });
     this.createActionButton(panel.createDiv({ cls: 'wyqd-detail-actions' }), this.plugin.t('tryAgain'), () => void this.render());
+  }
+
+  private renderHomeDashboard(
+    shell: HTMLElement,
+    objects: WYQDObject[],
+    snapshots: AccountSnapshot[],
+    reviews: ReviewEntry[],
+    t: (key: WYQDTranslationKey) => string,
+  ) {
+    const panel = shell.createDiv({ cls: 'wyqd-detail-panel' });
+    const header = panel.createDiv({ cls: 'wyqd-section-header' });
+    header.createEl('h3', { text: t('tabHome') });
+    header.createEl('p', { text: t('tabHomeDesc') });
+
+    const metricsGrid = panel.createDiv({ cls: 'wyqd-status-grid' });
+
+    const latestSnapshot = findLatestSnapshot(snapshots);
+    if (latestSnapshot) {
+      const netWorth = calculateNetWorth(latestSnapshot);
+      this.createStatusItem(metricsGrid, t('netWorth'), formatMoney(netWorth.net_worth ?? 0));
+    } else {
+      this.createStatusItem(metricsGrid, t('netWorth'), t('noData'));
+    }
+
+    const activeRecurring = objects.filter((o) => o.object_type === 'recurring_cost' && o.status === 'active');
+    const monthlyCost = activeRecurring.reduce((sum, o) => sum + calculateRecurringMonthlyCost(o as RecurringCostObject), 0);
+    this.createStatusItem(metricsGrid, t('monthlyFixedCost'), formatMoney(monthlyCost));
+
+    const observing = objects.filter((o) => o.object_type === 'physical' && o.status === 'observing');
+    const observingAmount = observing.reduce((sum, o) => sum + ((o as PhysicalObject).purchase_price || 0), 0);
+    this.createStatusItem(metricsGrid, t('observingDesire'), formatMoney(observingAmount));
+
+    const owned = objects.filter((o) => o.object_type === 'physical' && ['purchased', 'using', 'idle'].includes(o.status));
+    this.createStatusItem(metricsGrid, t('ownedPhysical'), String(owned.length));
+
+    this.createStatusItem(metricsGrid, t('activeSubscription'), String(activeRecurring.length));
+
+    const pendingReviews = objects.filter((o) => o.object_type === 'one_time_experience' && o.status === 'completed');
+    this.createStatusItem(metricsGrid, t('pendingReview'), String(pendingReviews.length));
+
+    if (snapshots.length >= 2) {
+      const sorted = [...snapshots].sort((a, b) => a.snapshot_at.localeCompare(b.snapshot_at));
+      const first = calculateNetWorth(sorted[0]);
+      const last = calculateNetWorth(sorted[sorted.length - 1]);
+      const delta = (last.net_worth ?? 0) - (first.net_worth ?? 0);
+      this.createStatusItem(metricsGrid, t('netWorthTrend'), `${delta >= 0 ? '+' : ''}${formatMoney(delta)}`);
+    }
+  }
+
+  private renderReviewConsole(
+    shell: HTMLElement,
+    reviews: ReviewEntry[],
+    objects: WYQDObject[],
+    t: (key: WYQDTranslationKey) => string,
+  ) {
+    const panel = shell.createDiv({ cls: 'wyqd-detail-panel' });
+    const header = panel.createDiv({ cls: 'wyqd-section-header' });
+    header.createEl('h3', { text: t('reviewConsole') });
+    header.createEl('p', { text: t('reviewConsoleDesc') });
+
+    const metricsGrid = panel.createDiv({ cls: 'wyqd-status-grid' });
+    this.createStatusItem(metricsGrid, t('reviewCount'), String(reviews.length));
+
+    const totalCost = reviews.reduce((sum, r) => sum + (r.realized_experience_cost || 0), 0);
+    this.createStatusItem(metricsGrid, t('experienceCost'), formatMoney(totalCost));
+
+    const pendingExperiences = objects.filter((o) => o.object_type === 'one_time_experience' && o.status === 'completed');
+    this.createStatusItem(metricsGrid, t('pendingReview'), String(pendingExperiences.length));
+
+    const crystallized = reviews.filter((r) => r.food_rank || r.scenery_rank || r.experience_rank);
+    this.createStatusItem(metricsGrid, t('crystallized'), String(crystallized.length));
+
+    if (reviews.length === 0) {
+      panel.createDiv({ cls: 'wyqd-empty-state', text: t('noPendingReviews') });
+      return;
+    }
+
+    const rankingSection = panel.createDiv({ cls: 'wyqd-priority-list' });
+    const rankingHeader = rankingSection.createDiv({ cls: 'wyqd-section-header' });
+    rankingHeader.createEl('h4', { text: t('rankings') });
+
+    const recentReviews = [...reviews]
+      .sort((a, b) => (b.reviewed_at || b.created_at).localeCompare(a.reviewed_at || a.created_at))
+      .slice(0, 5);
+
+    recentReviews.forEach((review) => {
+      const row = rankingSection.createDiv({ cls: 'wyqd-object-row' });
+      const main = row.createDiv();
+      main.createEl('strong', { text: review.title });
+      const meta = main.createEl('span');
+      if (review.food_rank) meta.createEl('span', { text: `${t('foodRank')} #${review.food_rank} ` });
+      if (review.scenery_rank) meta.createEl('span', { text: `${t('sceneryRank')} #${review.scenery_rank} ` });
+      if (review.experience_rank) meta.createEl('span', { text: `${t('experienceRank')} #${review.experience_rank}` });
+      if (!review.food_rank && !review.scenery_rank && !review.experience_rank) {
+        meta.setText(t('notRanked'));
+      }
+      if (review.realized_experience_cost) {
+        row.createEl('span', { cls: 'wyqd-bucket', text: formatMoney(review.realized_experience_cost) });
+      }
+    });
   }
 
   async onClose() {
@@ -614,7 +718,7 @@ class WYQDWorkspaceView extends ItemView {
       } as WYQDObject,
       stored.body,
     );
-    new Notice(`WYQD: Saved ${updates.title}.`);
+    new Notice(`Ownly: Saved ${updates.title}.`);
     await this.render();
   }
 
@@ -623,7 +727,7 @@ class WYQDWorkspaceView extends ItemView {
   ) {
     const nextStatus = getNextObjectStatus(stored.entity);
     if (!nextStatus) {
-      new Notice(`WYQD: ${stored.entity.title} ${this.plugin.t('alreadyTerminal')}`);
+      new Notice(`Ownly: ${stored.entity.title} ${this.plugin.t('alreadyTerminal')}`);
       return;
     }
 
@@ -641,7 +745,7 @@ class WYQDWorkspaceView extends ItemView {
           } as WYQDObject,
           stored.body,
         );
-        new Notice(`WYQD: Advanced ${stored.entity.title} to ${nextStatus}.`);
+        new Notice(`Ownly: Advanced ${stored.entity.title} to ${nextStatus}.`);
         await this.render();
       }
     ).open();
@@ -653,14 +757,14 @@ class WYQDWorkspaceView extends ItemView {
     }
 
     const archiveFileName = await this.plugin.repository.archiveObject(fileName);
-    new Notice(`WYQD: Archived object to ${archiveFileName}.`);
+    new Notice(`Ownly: Archived object to ${archiveFileName}.`);
     this.selectedObjectId = null;
     await this.render();
   }
 
   private async restoreObject(fileName: string) {
     const restoredFileName = await this.plugin.repository.restoreObject(fileName);
-    new Notice(`WYQD: Restored object to ${restoredFileName}.`);
+    new Notice(`Ownly: Restored object to ${restoredFileName}.`);
     await this.render();
   }
 
@@ -684,8 +788,8 @@ class WYQDWorkspaceView extends ItemView {
     button.addEventListener('click', () => {
       new Notice(
         membership.isPro
-          ? 'WYQD: Pro insights are not implemented in this alpha build yet.'
-          : `WYQD: ${membership.upgradeMessage}`,
+          ? 'Ownly: Pro insights are not implemented in this build yet.'
+          : `Ownly: ${membership.upgradeMessage}`,
         7000,
       );
     });
@@ -711,9 +815,9 @@ class WYQDSettingTab extends PluginSettingTab {
     const hero = shell.createDiv({ cls: 'wyqd-settings-hero' });
     const heroCopy = hero.createDiv();
     const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
-    eyebrow.createEl('span', { text: `WYQD ${WYQD_CORE_TARGET_VERSION}` });
+    eyebrow.createEl('span', { text: `Ownly ${WYQD_CORE_TARGET_VERSION}` });
     eyebrow.createEl('span', { text: t('localVaultOnly') });
-    heroCopy.createEl('h2', { text: 'WYQD' });
+    heroCopy.createEl('h2', { text: 'Ownly' });
     heroCopy.createEl('p', { text: t('workspaceSubtitle') });
     heroCopy.createEl('p', { cls: 'wyqd-slogan', text: WYQD_PRODUCT_SLOGAN });
     const membershipCard = hero.createDiv({ cls: 'wyqd-settings-membership' });
@@ -777,7 +881,7 @@ class WYQDSettingTab extends PluginSettingTab {
       .addText((text) => {
         text.inputEl.type = 'password';
         text
-          .setPlaceholder('WYQD-PRO-ANNUAL-TEST')
+          .setPlaceholder('OWNLY-PRO-ANNUAL-TEST')
           .setValue(this.wyqdPlugin.settings.licenseKey)
           .onChange((value) => {
             pendingLicenseKey = value;
@@ -824,12 +928,12 @@ function buildDraft(kind: DraftKind, now: Date): { id: string; title: string; co
       id: `obj_${toCompactTimestamp(now)}`,
       type: 'object',
       object_type: 'physical',
-      title: 'Untitled WYQD Object',
+      title: 'Untitled Ownly Object',
       status: 'seeded',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
       currency: 'CNY',
-      tags: ['wyqd', 'object'],
+      tags: ['ownly', 'object'],
       include_in_net_worth: false,
       default_depreciates_to_zero: true,
     };
@@ -847,7 +951,7 @@ function buildDraft(kind: DraftKind, now: Date): { id: string; title: string; co
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
       currency: 'CNY',
-      tags: ['wyqd', 'snapshot'],
+      tags: ['ownly', 'snapshot'],
       asset_balances: [],
       liability_balances: [],
     };
@@ -859,12 +963,12 @@ function buildDraft(kind: DraftKind, now: Date): { id: string; title: string; co
     id: `review_${toCompactTimestamp(now)}`,
     type: 'review',
     review_type: 'object_review',
-    title: `WYQD Review ${toDate(now)}`,
+    title: `Ownly Review ${toDate(now)}`,
     reviewed_at: toDate(now),
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
     currency: 'CNY',
-    tags: ['wyqd', 'review'],
+    tags: ['ownly', 'review'],
   };
   return renderDraft(entity.id, entity.title, entity, 'Summarize outcome, cost, regret score, and next action.');
 }
@@ -943,6 +1047,10 @@ function formatBucket(
   if (value === 'active') return t('active');
   if (value === 'review') return t('review');
   return t('closed');
+}
+
+function formatMoney(amount: number, currency = 'CNY'): string {
+  return `${currency} ${amount.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
 function getNextObjectStatus(object: WYQDObject): WYQDObject['status'] | null {

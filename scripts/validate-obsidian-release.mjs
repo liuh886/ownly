@@ -47,4 +47,4 @@ if (!manifestJson.name || !manifestJson.description || !manifestJson.author) {
   throw new Error('manifest.json must include name, description, and author.');
 }
 
-console.log(`WYQD Obsidian release package is valid for ${packageJson.version}.`);
+console.log(`Ownly Obsidian release package is valid for ${packageJson.version}.`);

@@ -4,8 +4,8 @@
 
 - Added Obsidian private plugin package files: `manifest.json`, `versions.json`, `main.js`, `styles.css`.
 - Added shared core modules for runtime metadata, repository contracts, object console modeling, Doctor diagnostics, and membership state.
-- Added Obsidian Vault Repository for WYQD Markdown data.
-- Added WYQD Workspace view, ribbon entry, command palette commands, and settings tab.
+- Added Obsidian Vault Repository for Ownly Markdown data.
+- Added Ownly Workspace view, ribbon entry, command palette commands, and settings tab.
 - Added object console summary inside Obsidian.
 - Added object detail preview, source Markdown opening, minimal field saving, status advancement, archive, and restore flows.
 - Added local Free / Pro Annual / Lifetime Early Supporter membership-state alpha.
@@ -20,7 +20,7 @@
 - Added visible Web Vault reconnect control.
 - Improved Obsidian workspace first-screen hierarchy with hero metrics and action cards.
 - Upgraded Obsidian workspace to a two-column console/detail layout for stronger Web parity.
-- Reworked Obsidian settings into WYQD-styled hero, grouped panels, and membership summary.
+- Reworked Obsidian settings into Ownly-styled hero, grouped panels, and membership summary.
 
 Known gaps:
 
@@ -28,4 +28,4 @@ Known gaps:
 - Account, snapshot, and review detail operation flows are not complete.
 - Doctor repair preview and rollback are not implemented.
 - Real license validation is not connected.
-- Public Obsidian community plugin submission has not started.
+- Public Obsidian community plugin submission in progress.

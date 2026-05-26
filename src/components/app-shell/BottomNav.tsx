@@ -1,14 +1,16 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { useI18n } from '@/core/i18n-context';
+import type { WYQDTranslationKey } from '@/core/i18n';
 
 export type AppTab = 'home' | 'objects' | 'accounts' | 'reviews';
 
-const tabs: { id: AppTab; label: string }[] = [
-  { id: 'home', label: '首页' },
-  { id: 'objects', label: '物欲' },
-  { id: 'accounts', label: '账户' },
-  { id: 'reviews', label: '复盘' },
+const tabs: { id: AppTab; labelKey: WYQDTranslationKey }[] = [
+  { id: 'home', labelKey: 'tabHome' },
+  { id: 'objects', labelKey: 'tabObjects' },
+  { id: 'accounts', labelKey: 'tabAccounts' },
+  { id: 'reviews', labelKey: 'tabReviews' },
 ];
 
 interface BottomNavProps {
@@ -17,6 +19,7 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ activeTab, onChange }: BottomNavProps) {
+  const { t } = useI18n();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white/90 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-8px_32px_rgba(28,25,23,0.05)] backdrop-blur-xl">
       <div className="relative mx-auto grid max-w-3xl grid-cols-4 gap-1 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-200">
@@ -41,7 +44,7 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
                   isActive ? 'text-white' : 'text-stone-500 hover:text-stone-700'
                 }`}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </span>
             </button>
           );

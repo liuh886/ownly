@@ -11,4 +11,4 @@ for (const file of releaseFiles) {
   await copyFile(file, join(outputDir, file));
 }
 
-console.log(`WYQD Obsidian plugin package written to ${outputDir}.`);
+console.log(`Ownly Obsidian plugin package written to ${outputDir}.`);

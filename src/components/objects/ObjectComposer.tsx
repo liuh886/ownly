@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useI18n } from '@/core/i18n-context';
+import type { WYQDTranslationKey } from '@/core/i18n';
 import type {
   BillingCycle,
   OneTimeExperienceStatus,
@@ -20,47 +22,57 @@ interface ObjectComposerProps {
 }
 
 const physicalCategories = ['电子产品', '摄影器材', '衣物配饰', '家居', '交通', '其他'];
-const physicalStatusOptions: Array<{ value: PhysicalStatus; label: string }> = [
-  { value: 'observing', label: '观察中' },
-  { value: 'purchased', label: '已购买' },
-  { value: 'using', label: '服役中' },
-  { value: 'idle', label: '已退役' },
-  { value: 'transferred', label: '已卖出' },
-  { value: 'discarded', label: '已丢弃' },
-];
-const recurringStatusOptions: Array<{ value: RecurringCostStatus; label: string }> = [
-  { value: 'seeded', label: '种草' },
-  { value: 'active', label: '订阅中' },
-  { value: 'paused', label: '已暂停' },
-  { value: 'cancelled', label: '已取消' },
-];
-const billingCycleOptions: Array<{ value: BillingCycle; label: string }> = [
-  { value: 'weekly', label: '每周' },
-  { value: 'monthly', label: '每月' },
-  { value: 'quarterly', label: '每季度' },
-  { value: 'annual', label: '每年' },
-  { value: 'custom', label: '自定义' },
-];
-const experienceStatusOptions: Array<{ value: OneTimeExperienceStatus; label: string }> = [
-  { value: 'planned', label: '计划中' },
-  { value: 'in_progress', label: '执行中' },
-  { value: 'completed', label: '已完成' },
-  { value: 'reviewed', label: '已复盘' },
-];
-const quickLineTemplates: Array<{ label: string; value: string }> = [
-  {
-    label: '实物模板',
-    value: '小米13U / physical / 5843 / 2023-06-07 / 2025-09-20 / 电子产品 / 已退役',
-  },
-  {
-    label: '固定成本模板',
-    value: 'ChatGPT Plus / fixed / 145 / monthly / 20 / 招行信用卡 / 2026-05-01 / 订阅中 / AI工具',
-  },
-  {
-    label: '体验模板',
-    value: '香港周末旅行 / experience / 3000 / 2680 / 2026-05-18 / 旅行 / 已完成',
-  },
-];
+function getPhysicalStatusOptions(t: (key: WYQDTranslationKey) => string): Array<{ value: PhysicalStatus; label: string }> {
+  return [
+    { value: 'observing', label: t('statusObserving') },
+    { value: 'purchased', label: t('statusPurchased') },
+    { value: 'using', label: t('statusUsing') },
+    { value: 'idle', label: t('statusIdle') },
+    { value: 'transferred', label: t('statusTransferred') },
+    { value: 'discarded', label: t('statusDiscarded') },
+  ];
+}
+function getRecurringStatusOptions(t: (key: WYQDTranslationKey) => string): Array<{ value: RecurringCostStatus; label: string }> {
+  return [
+    { value: 'seeded', label: t('statusSeeded') },
+    { value: 'active', label: t('statusActive') },
+    { value: 'paused', label: t('statusPaused') },
+    { value: 'cancelled', label: t('statusCancelled') },
+  ];
+}
+function getBillingCycleOptions(t: (key: WYQDTranslationKey) => string): Array<{ value: BillingCycle; label: string }> {
+  return [
+    { value: 'weekly', label: t('billingCycleWeekly') },
+    { value: 'monthly', label: t('billingCycleMonthly') },
+    { value: 'quarterly', label: t('billingCycleQuarterly') },
+    { value: 'annual', label: t('billingCycleAnnual') },
+    { value: 'custom', label: t('billingCycleCustom') },
+  ];
+}
+function getExperienceStatusOptions(t: (key: WYQDTranslationKey) => string): Array<{ value: OneTimeExperienceStatus; label: string }> {
+  return [
+    { value: 'planned', label: t('statusPlanned') },
+    { value: 'in_progress', label: t('statusInProgress') },
+    { value: 'completed', label: t('statusCompleted') },
+    { value: 'reviewed', label: t('statusReviewed') },
+  ];
+}
+function getQuickLineTemplates(t: (key: WYQDTranslationKey) => string): Array<{ label: string; value: string }> {
+  return [
+    {
+      label: t('physicalTemplate'),
+      value: '小米13U / physical / 5843 / 2023-06-07 / 2025-09-20 / 电子产品 / 已退役',
+    },
+    {
+      label: t('fixedCostTemplate'),
+      value: 'ChatGPT Plus / fixed / 145 / monthly / 20 / 招行信用卡 / 2026-05-01 / 订阅中 / AI工具',
+    },
+    {
+      label: t('experienceTemplate'),
+      value: '香港周末旅行 / experience / 3000 / 2680 / 2026-05-18 / 旅行 / 已完成',
+    },
+  ];
+}
 
 function todayISO() {
   return new Date().toISOString().split('T')[0];
@@ -303,7 +315,7 @@ function createObjectDraft({
     type: 'object' as const,
     title,
     currency: 'CNY',
-    tags: ['wyqd'],
+    tags: ['ownly'],
     created_at: today,
     updated_at: today,
     category: category || undefined,
@@ -379,6 +391,13 @@ export function ObjectComposer({
   onCancel,
   onSubmit,
 }: ObjectComposerProps) {
+  const { t } = useI18n();
+  const physicalStatusOptions = getPhysicalStatusOptions(t);
+  const recurringStatusOptions = getRecurringStatusOptions(t);
+  const billingCycleOptions = getBillingCycleOptions(t);
+  const experienceStatusOptions = getExperienceStatusOptions(t);
+  const quickLineTemplates = getQuickLineTemplates(t);
+
   const [title, setTitle] = useState(initialObject?.title || '');
   const [objectType, setObjectType] = useState<WYQDObjectType>(
     initialObject?.object_type || 'physical',
@@ -535,14 +554,14 @@ export function ObjectComposer({
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-stone-950">
-            {initialObject ? '编辑对象' : '快速录入'}
+            {initialObject ? t('editObject') : t('quickEntry')}
           </h2>
           <p className="mt-1 text-xs leading-5 text-stone-500">
-            {initialObject ? '只修改结构化字段，正文记录会保留。' : '捕获值得观察的成本对象，不记录日常流水。'}
+            {initialObject ? t('editObjectDesc') : t('quickEntryDesc')}
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-500">
-          {objectType === 'physical' ? '实物' : objectType === 'recurring_cost' ? '固定成本' : '体验'}
+          {objectType === 'physical' ? t('typePhysical') : objectType === 'recurring_cost' ? t('typeRecurringCost') : t('typeExperience')}
         </span>
       </div>
 
@@ -550,7 +569,7 @@ export function ObjectComposer({
         {!initialObject ? (
           <div className="space-y-2">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-stone-500">整行粘贴</span>
+              <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('pasteLine')}</span>
               <input
                 value={quickLine}
                 onChange={(event) => {
@@ -559,7 +578,7 @@ export function ObjectComposer({
                   applyQuickLineToForm(next);
                 }}
                 onFocus={(event) => event.currentTarget.select()}
-                placeholder="选择模板，或粘贴一整行对象信息"
+                placeholder={t('pasteLinePlaceholder')}
                 className={`${fieldClass} bg-stone-50 focus:bg-white`}
                 disabled={disabled || isSaving}
               />
@@ -584,11 +603,11 @@ export function ObjectComposer({
         ) : null}
 
         <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-stone-500">名称</span>
+          <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('name')}</span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="例如：小米13U"
+            placeholder={t('namePlaceholder')}
             className={fieldClass}
             disabled={disabled || isSaving}
           />
@@ -596,21 +615,21 @@ export function ObjectComposer({
 
         <div className="grid grid-cols-1 gap-3">
           <label className="block min-w-0">
-            <span className="mb-1.5 block text-xs font-medium text-stone-500">类型</span>
+            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('type')}</span>
             <select
               value={objectType}
               onChange={(event) => setObjectType(event.target.value as WYQDObjectType)}
               className={fieldClass}
               disabled={disabled || isSaving}
             >
-              <option value="physical">实物</option>
-              <option value="recurring_cost">固定成本</option>
-              <option value="one_time_experience">一次性体验</option>
+              <option value="physical">{t('typePhysical')}</option>
+              <option value="recurring_cost">{t('typeRecurringCost')}</option>
+              <option value="one_time_experience">{t('typeExperience')}</option>
             </select>
           </label>
 
           <label className="block min-w-0">
-            <span className="mb-1.5 block text-xs font-medium text-stone-500">金额</span>
+            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('amount')}</span>
             <input
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
@@ -628,23 +647,23 @@ export function ObjectComposer({
           <>
             <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">购买日</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('purchaseDate')}</span>
                 <input
                   value={purchasedAt}
                   onChange={(event) => setPurchasedAt(event.target.value)}
                   type="date"
-                  aria-label="购买日期"
+                  aria-label={t('purchaseDateAria')}
                   className={fieldClass}
                   disabled={disabled || isSaving}
                 />
               </label>
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">结束日</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('endDate')}</span>
                 <input
                   value={endedAt}
                   onChange={(event) => setEndedAt(event.target.value)}
                   type="date"
-                  aria-label="退役日期"
+                  aria-label={t('retireDateAria')}
                   className={fieldClass}
                   disabled={disabled || isSaving}
                 />
@@ -653,14 +672,14 @@ export function ObjectComposer({
 
             <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">品类</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('categoryLabel')}</span>
                 <select
                   value={category}
                   onChange={(event) => setCategory(event.target.value)}
                   className={fieldClass}
                   disabled={disabled || isSaving}
                 >
-                  <option value="">未分类</option>
+                  <option value="">{t('uncategorized')}</option>
                   {physicalCategories.map((item) => (
                     <option key={item} value={item}>
                       {item}
@@ -669,7 +688,7 @@ export function ObjectComposer({
                 </select>
               </label>
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">状态</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('status')}</span>
                 <select
                   value={physicalStatus}
                   onChange={(event) => setPhysicalStatus(event.target.value as PhysicalStatus)}
@@ -691,7 +710,7 @@ export function ObjectComposer({
           <>
             <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">周期</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('billingCycle')}</span>
                 <select
                   value={billingCycle}
                   onChange={(event) => setBillingCycle(event.target.value as BillingCycle)}
@@ -706,7 +725,7 @@ export function ObjectComposer({
                 </select>
               </label>
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">状态</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('status')}</span>
                 <select
                   value={recurringStatus}
                   onChange={(event) => setRecurringStatus(event.target.value as RecurringCostStatus)}
@@ -723,18 +742,18 @@ export function ObjectComposer({
             </div>
             <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">开始日</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('startDate')}</span>
                 <input
                   value={recurringStartedAt}
                   onChange={(event) => setRecurringStartedAt(event.target.value)}
                   type="date"
-                  aria-label="固定成本开始日期"
+                  aria-label={t('startDate')}
                   className={fieldClass}
                   disabled={disabled || isSaving}
                 />
               </label>
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">扣费日</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('billingDay')}</span>
                 <input
                   value={billingDay}
                   onChange={(event) => setBillingDay(event.target.value)}
@@ -742,17 +761,17 @@ export function ObjectComposer({
                   min="1"
                   max="31"
                   inputMode="numeric"
-                  placeholder="如 15"
+                  placeholder={t('billingDayPlaceholder')}
                   className={fieldClass}
                   disabled={disabled || isSaving}
                 />
               </label>
               <label className="block min-w-0 sm:col-span-2">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">支付账户</span>
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('paymentAccount')}</span>
                 <input
                   value={paymentAccount}
                   onChange={(event) => setPaymentAccount(event.target.value)}
-                  placeholder="如 招行信用卡"
+                  placeholder={t('paymentAccountPlaceholder')}
                   className={fieldClass}
                   disabled={disabled || isSaving}
                 />
@@ -764,31 +783,31 @@ export function ObjectComposer({
         {objectType === 'one_time_experience' ? (
           <div className="grid grid-cols-1 gap-3">
             <label className="block min-w-0">
-              <span className="mb-1.5 block text-xs font-medium text-stone-500">实际金额</span>
+              <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('actualAmount')}</span>
               <input
                 value={actualAmount}
                 onChange={(event) => setActualAmount(event.target.value)}
                 type="number"
                 min="0"
                 inputMode="decimal"
-                placeholder="可选"
+                placeholder={t('optional')}
                 className={fieldClass}
                 disabled={disabled || isSaving}
               />
             </label>
             <label className="block min-w-0">
-              <span className="mb-1.5 block text-xs font-medium text-stone-500">结束日</span>
+              <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('endDate')}</span>
               <input
                 value={endedAt}
                 onChange={(event) => setEndedAt(event.target.value)}
                 type="date"
-                aria-label="体验结束日期"
+                aria-label={t('experienceEndDateAria')}
                 className={fieldClass}
                 disabled={disabled || isSaving}
               />
             </label>
             <label className="block min-w-0">
-              <span className="mb-1.5 block text-xs font-medium text-stone-500">状态</span>
+              <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('status')}</span>
               <select
                 value={experienceStatus}
                 onChange={(event) =>
@@ -815,7 +834,7 @@ export function ObjectComposer({
               className="w-24 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:border-stone-900 disabled:cursor-not-allowed disabled:text-stone-400"
               disabled={isSaving}
             >
-              取消
+              {t('cancel')}
             </button>
           ) : null}
           <button
@@ -823,7 +842,7 @@ export function ObjectComposer({
             disabled={!canSubmit}
             className="min-w-0 flex-1 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
           >
-            {disabled ? '连接 Vault 后写入 Obsidian' : isSaving ? '保存中...' : submitLabel || '保存'}
+            {disabled ? t('connectVaultToWrite') : isSaving ? t('saving') : submitLabel || t('save')}
           </button>
         </div>
       </div>

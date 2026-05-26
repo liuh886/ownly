@@ -1,4 +1,4 @@
-# WYQD App - UI Refinement Spec
+# Ownly - UI Refinement Spec
 
 ## Core Objective
 

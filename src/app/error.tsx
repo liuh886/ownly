@@ -10,7 +10,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('WYQD Web App Error:', error);
+    console.error('Ownly Web App Error:', error);
   }, [error]);
 
   return (

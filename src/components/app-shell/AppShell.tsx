@@ -11,6 +11,7 @@ import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
 import { createWYQDRuntimeInfo, WYQD_PRODUCT_SLOGAN } from '@/core/runtime';
+import { useI18n } from '@/core/i18n-context';
 import type { AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import {
@@ -30,25 +31,6 @@ interface ReviewRankings {
 
 const runtimeInfo = createWYQDRuntimeInfo('web');
 
-const tabTitles: Record<AppTab, { title: string; description: string }> = {
-  home: {
-    title: '首页',
-    description: '资产净值、成本结构与近期待办',
-  },
-  objects: {
-    title: '物欲',
-    description: '管理实物、订阅与一次性体验',
-  },
-  accounts: {
-    title: '账户',
-    description: '记录账户快照并追踪净资产变化',
-  },
-  reviews: {
-    title: '复盘',
-    description: '沉淀体验排行榜与消费决策记录',
-  },
-};
-
 function StatusBanner({
   isConnected,
   isLoading,
@@ -60,6 +42,7 @@ function StatusBanner({
   error: string | null;
   onConnect: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <section className="mb-6 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -69,12 +52,10 @@ function StatusBanner({
               className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-stone-300'}`}
               aria-hidden="true"
             />
-            {isConnected ? 'Vault 已连接' : 'Demo 模式'}
+            {isConnected ? t('vaultConnected') : t('demoMode')}
           </div>
           <p className="mt-1 text-xs leading-relaxed text-stone-500">
-            {isConnected
-              ? '数据实时同步至您的 Obsidian Vault。'
-              : '连接 Vault 后即可开始记录您的物欲、快照与复盘。'}
+            {isConnected ? t('vaultConnectedDesc') : t('demoModeDesc')}
           </p>
         </div>
         <button
@@ -83,22 +64,22 @@ function StatusBanner({
           disabled={isLoading}
           className="min-h-10 shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
         >
-          {isLoading ? '连接中' : isConnected ? '重新连接' : '连接 Vault'}
+          {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
         </button>
       </div>
       {!isConnected ? (
         <div className="mt-4 grid gap-2 text-xs leading-5 text-stone-600 min-[420px]:grid-cols-3">
           <div className="rounded-lg bg-stone-50 px-3 py-2">
-            <span className="font-medium text-stone-900">首页</span>
-            <div className="mt-0.5">实时洞察净资产与订阅成本</div>
+            <span className="font-medium text-stone-900">{t('tabHome')}</span>
+            <div className="mt-0.5">{t('tabHomeDesc')}</div>
           </div>
           <div className="rounded-lg bg-stone-50 px-3 py-2">
-            <span className="font-medium text-stone-900">物欲</span>
-            <div className="mt-0.5">捕获值得复盘的每一笔消费</div>
+            <span className="font-medium text-stone-900">{t('tabObjects')}</span>
+            <div className="mt-0.5">{t('tabObjectsDesc')}</div>
           </div>
           <div className="rounded-lg bg-stone-50 px-3 py-2">
-            <span className="font-medium text-stone-900">复盘</span>
-            <div className="mt-0.5">在回望中建立理性的消费观</div>
+            <span className="font-medium text-stone-900">{t('tabReviews')}</span>
+            <div className="mt-0.5">{t('tabReviewsDesc')}</div>
           </div>
         </div>
       ) : null}
@@ -112,6 +93,7 @@ function StatusBanner({
 }
 
 export function AppShell() {
+  const { t, language, setLanguage } = useI18n();
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -167,7 +149,7 @@ export function AppShell() {
       setIsConnected(connected);
       if (connected) {
         await loadVaultData();
-        showNotice('Vault 已连接，WYQD 数据已同步。');
+        showNotice('Vault 已连接，物欲清单数据已同步。');
       } else {
         setError('当前浏览器不支持本地文件访问，或授权已取消。建议使用 Chromium 系浏览器。');
       }
@@ -182,7 +164,7 @@ export function AppShell() {
     try {
       await markdownEntityRepository.saveObject(object, body);
       await loadVaultData();
-      showNotice('对象已保存到 WYQD/Objects。');
+      showNotice('对象已保存到 Ownly/Objects。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '保存对象失败。');
       throw event;
@@ -243,7 +225,7 @@ export function AppShell() {
       created_at: date,
       updated_at: date,
       currency: object.currency || 'CNY',
-      tags: ['wyqd', 'review', 'experience'],
+      tags: ['ownly', 'review', 'experience'],
     };
 
     await markdownEntityRepository.saveReview(
@@ -268,7 +250,7 @@ export function AppShell() {
       body,
     );
     await loadVaultData();
-    showNotice('体验复盘已写入 WYQD/Reviews，并已关联对象。');
+    showNotice('体验复盘已写入 Ownly/Reviews，并已关联对象。');
   }
 
   async function createSnapshot(snapshot: AccountSnapshot, body: string) {
@@ -405,7 +387,7 @@ export function AppShell() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs font-medium text-stone-500">
                 <span className="text-2xl font-semibold tracking-tight text-stone-950 sm:text-3xl">
-                  WYQD
+                  Ownly
                 </span>
                 <span className="rounded-full bg-stone-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-stone-600 ring-1 ring-stone-200">
                   v{runtimeInfo.coreTargetVersion}
@@ -414,12 +396,12 @@ export function AppShell() {
                   Web
                 </span>
                 <span className="h-1 w-1 rounded-full bg-stone-300" aria-hidden="true" />
-                <span>个人资产与体验成本账本</span>
+                <span>{t('workspaceSubtitle')}</span>
               </div>
               <h1 className="mt-2 text-xl font-semibold tracking-tight text-stone-950 sm:text-2xl">
-                {tabTitles[activeTab].title}
+                {t(`tab${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}` as any)}
               </h1>
-              <p className="mt-1 text-sm text-stone-500">{tabTitles[activeTab].description}</p>
+              <p className="mt-1 text-sm text-stone-500">{t(`tab${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}Desc` as any)}</p>
               <p className="mt-2 text-xs font-medium text-stone-500">{WYQD_PRODUCT_SLOGAN}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -436,21 +418,28 @@ export function AppShell() {
                   }`}
                   aria-hidden="true"
                 />
-                {isConnected ? 'Vault 已连接' : isLoading ? '检查连接中' : 'Demo 模式'}
+                {isConnected ? t('vaultConnected') : isLoading ? t('connecting') : t('demoMode')}
               </span>
               <span className="rounded-full bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-600 ring-1 ring-stone-200">
-                {storedObjects.length} 对象
+                {storedObjects.length} {t('objects')}
               </span>
               <span className="rounded-full bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-600 ring-1 ring-stone-200">
-                {storedSnapshots.length} 快照
+                {storedSnapshots.length} {t('snapshots')}
               </span>
+              <button
+                type="button"
+                onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
+                className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950"
+              >
+                {language === 'zh' ? 'EN' : '中文'}
+              </button>
               <button
                 type="button"
                 onClick={connectVault}
                 disabled={isLoading}
                 className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
               >
-                {isLoading ? '连接中' : isConnected ? '重新连接 Vault' : '连接 Vault'}
+                {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
               </button>
             </div>
           </div>
@@ -495,7 +484,7 @@ export function AppShell() {
                 />
                 <ObjectComposer
                   disabled={!isConnected}
-                  submitLabel="保存到 WYQD"
+                  submitLabel="保存到 Ownly"
                   onSubmit={createObject}
                 />
                 <ArchivePanel

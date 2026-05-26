@@ -18,46 +18,62 @@ import {
   calculateRecurringMonthlyCost,
 } from '@/domain/calculations';
 import { ObjectComposer } from './ObjectComposer';
+import { useI18n } from '@/core/i18n-context';
+import type { WYQDTranslationKey } from '@/core/i18n';
 
-const typeLabels: Record<WYQDObject['object_type'], string> = {
-  physical: '实物',
-  recurring_cost: '固定成本',
-  one_time_experience: '一次性体验',
-};
+type TranslateFn = (key: WYQDTranslationKey) => string;
 
-const physicalStatusLabels: Record<PhysicalStatus, string> = {
-  seeded: '种草',
-  observing: '观察中',
-  purchased: '已购买',
-  using: '服役中',
-  idle: '已退役',
-  transferred: '已卖出',
-  discarded: '已丢弃',
-};
+function getTypeLabels(t: TranslateFn): Record<WYQDObject['object_type'], string> {
+  return {
+    physical: t('typePhysical'),
+    recurring_cost: t('typeRecurringCost'),
+    one_time_experience: t('typeExperience'),
+  };
+}
 
-const recurringStatusLabels: Record<string, string> = {
-  seeded: '种草',
-  active: '订阅中',
-  paused: '已暂停',
-  cancelled: '已取消',
-};
+function getPhysicalStatusLabels(t: TranslateFn): Record<PhysicalStatus, string> {
+  return {
+    seeded: t('statusSeeded'),
+    observing: t('statusObserving'),
+    purchased: t('statusPurchased'),
+    using: t('statusUsing'),
+    idle: t('statusIdle'),
+    transferred: t('statusTransferred'),
+    discarded: t('statusDiscarded'),
+  };
+}
 
-const experienceStatusLabels: Record<string, string> = {
-  planned: '计划中',
-  in_progress: '执行中',
-  completed: '已完成',
-  reviewed: '已复盘',
-};
+function getRecurringStatusLabels(t: TranslateFn): Record<string, string> {
+  return {
+    seeded: t('statusSeeded'),
+    active: t('statusActive'),
+    paused: t('statusPaused'),
+    cancelled: t('statusCancelled'),
+  };
+}
 
-const billingCycleLabels: Record<string, string> = {
-  weekly: '每周',
-  monthly: '每月',
-  quarterly: '每季度',
-  annual: '每年',
-  custom: '自定义',
-};
+function getExperienceStatusLabels(t: TranslateFn): Record<string, string> {
+  return {
+    planned: t('statusPlanned'),
+    in_progress: t('statusInProgress'),
+    completed: t('statusCompleted'),
+    reviewed: t('statusReviewed'),
+  };
+}
 
-const supportingVisuals: Record<
+function getBillingCycleLabels(t: TranslateFn): Record<string, string> {
+  return {
+    weekly: t('billingCycleWeekly'),
+    monthly: t('billingCycleMonthly'),
+    quarterly: t('billingCycleQuarterly'),
+    annual: t('billingCycleAnnual'),
+    custom: t('billingCycleCustom'),
+  };
+}
+
+function getSupportingVisuals(
+  t: TranslateFn,
+): Record<
   Exclude<WYQDObject['object_type'], 'physical'>,
   {
     label: string;
@@ -67,24 +83,26 @@ const supportingVisuals: Record<
     dotClass: string;
     amountLabel: string;
   }
-> = {
-  recurring_cost: {
-    label: '固定成本',
-    shortLabel: '订阅',
-    accentClass: 'bg-sky-500',
-    badgeClass: 'bg-sky-50 text-sky-700 ring-sky-200',
-    dotClass: 'bg-sky-500',
-    amountLabel: '周期金额',
-  },
-  one_time_experience: {
-    label: '一次性体验',
-    shortLabel: '体验',
-    accentClass: 'bg-emerald-500',
-    badgeClass: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    dotClass: 'bg-emerald-500',
-    amountLabel: '预算/实际',
-  },
-};
+> {
+  return {
+    recurring_cost: {
+      label: t('typeRecurringCost'),
+      shortLabel: t('filterRecurringCost'),
+      accentClass: 'bg-sky-500',
+      badgeClass: 'bg-sky-50 text-sky-700 ring-sky-200',
+      dotClass: 'bg-sky-500',
+      amountLabel: '周期金额',
+    },
+    one_time_experience: {
+      label: t('typeExperience'),
+      shortLabel: t('filterExperience'),
+      accentClass: 'bg-emerald-500',
+      badgeClass: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+      dotClass: 'bg-emerald-500',
+      amountLabel: '预算/实际',
+    },
+  };
+}
 
 function getPrimaryAmount(object: WYQDObject): number {
   if (object.object_type === 'physical') {
@@ -100,8 +118,8 @@ function formatMoney(value: number): string {
   return `¥${Math.round(value).toLocaleString('zh-CN')}`;
 }
 
-function formatOptional(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '未记录';
+function formatOptional(value: string | number | null | undefined, t: TranslateFn): string {
+  if (value === null || value === undefined || value === '') return t('notRecorded');
   return String(value);
 }
 
@@ -118,12 +136,12 @@ function daysUntil(date: string): number {
   return Math.round((end - start) / 86400000);
 }
 
-function formatDueLabel(date: string): string {
+function formatDueLabel(date: string, t: TranslateFn): string {
   const days = daysUntil(date);
-  if (days === 0) return '今天';
-  if (days === 1) return '明天';
-  if (days > 1) return `${days} 天后`;
-  return `已过 ${Math.abs(days)} 天`;
+  if (days === 0) return t('dueToday');
+  if (days === 1) return t('dueTomorrow');
+  if (days > 1) return t('daysLater').replace('{count}', String(days));
+  return t('daysPast').replace('{count}', String(Math.abs(days)));
 }
 
 function getDailyCost(object: WYQDObject): number | null {
@@ -171,56 +189,66 @@ export interface ObjectListFocus {
   statusGroupFilter?: ObjectStatusGroupFilter;
 }
 
-const filterLabels: Record<PhysicalFilter, string> = {
-  all: '全部',
-  active: '服役中',
-  retired: '已退役',
-  sold: '已卖出',
-};
+function getFilterLabels(t: TranslateFn): Record<PhysicalFilter, string> {
+  return {
+    all: t('filterAll'),
+    active: t('statusUsing'),
+    retired: t('statusIdle'),
+    sold: t('statusTransferred'),
+  };
+}
 
-const objectTypeFilterLabels: Record<ObjectTypeFilter, string> = {
-  all: '全部类型',
-  physical: '实物',
-  recurring_cost: '固定成本',
-  one_time_experience: '一次性体验',
-};
+function getObjectTypeFilterLabels(t: TranslateFn): Record<ObjectTypeFilter, string> {
+  return {
+    all: t('filterAllTypes'),
+    physical: t('typePhysical'),
+    recurring_cost: t('typeRecurringCost'),
+    one_time_experience: t('typeExperience'),
+  };
+}
 
-const objectStatusGroupLabels: Record<ObjectStatusGroupFilter, string> = {
-  all: '全部状态',
-  observing: '观察中',
-  using: '使用中',
-  exited: '已退出',
-};
+function getObjectStatusGroupLabels(t: TranslateFn): Record<ObjectStatusGroupFilter, string> {
+  return {
+    all: t('filterAll'),
+    observing: t('observing'),
+    using: t('inUse'),
+    exited: t('exited'),
+  };
+}
 
-const objectControlLabels: Record<
+function getObjectControlLabels(
+  t: TranslateFn,
+): Record<
   ObjectControlBucket,
   { title: string; description: string; statusGroup: ObjectStatusGroupFilter; typeFilter: ObjectTypeFilter }
-> = {
-  attention: {
-    title: '待决策',
-    description: '种草、观察、计划中的对象',
-    statusGroup: 'observing',
-    typeFilter: 'all',
-  },
-  active: {
-    title: '使用中',
-    description: '正在消耗价值或成本',
-    statusGroup: 'using',
-    typeFilter: 'all',
-  },
-  review: {
-    title: '待复盘',
-    description: '已完成但未进入排行榜',
-    statusGroup: 'exited',
-    typeFilter: 'one_time_experience',
-  },
-  closed: {
-    title: '已退出',
-    description: '已退役、取消或完成',
-    statusGroup: 'exited',
-    typeFilter: 'all',
-  },
-};
+> {
+  return {
+    attention: {
+      title: t('pendingDecisions'),
+      description: '种草、观察、计划中的对象',
+      statusGroup: 'observing',
+      typeFilter: 'all',
+    },
+    active: {
+      title: t('inUse'),
+      description: '正在消耗价值或成本',
+      statusGroup: 'using',
+      typeFilter: 'all',
+    },
+    review: {
+      title: t('pendingReview'),
+      description: '已完成但未进入排行榜',
+      statusGroup: 'exited',
+      typeFilter: 'one_time_experience',
+    },
+    closed: {
+      title: t('exited'),
+      description: '已退役、取消或完成',
+      statusGroup: 'exited',
+      typeFilter: 'all',
+    },
+  };
+}
 
 function isPhysicalObject(object: WYQDObject): object is PhysicalObject {
   return object.object_type === 'physical';
@@ -232,12 +260,12 @@ function getPhysicalBucket(status: PhysicalStatus): Exclude<PhysicalFilter, 'all
   return 'active';
 }
 
-function getStatusLabel(object: WYQDObject): string {
-  if (object.object_type === 'physical') return physicalStatusLabels[object.status];
+function getStatusLabel(object: WYQDObject, t: TranslateFn): string {
+  if (object.object_type === 'physical') return getPhysicalStatusLabels(t)[object.status];
   if (object.object_type === 'recurring_cost') {
-    return recurringStatusLabels[object.status] || String(object.status);
+    return getRecurringStatusLabels(t)[object.status] || String(object.status);
   }
-  return experienceStatusLabels[object.status] || String(object.status);
+  return getExperienceStatusLabels(t)[object.status] || String(object.status);
 }
 
 function matchesQuery(object: WYQDObject, query: string): boolean {
@@ -293,16 +321,16 @@ function getObjectStatusGroupCount(
   }).length;
 }
 
-function getSupportingActionLabel(object: WYQDObject): string | null {
+function getSupportingActionLabel(object: WYQDObject, t: TranslateFn): string | null {
   if (object.object_type === 'recurring_cost') {
-    if (object.status === 'active') return '暂停';
-    if (object.status === 'paused' || object.status === 'seeded') return '恢复';
+    if (object.status === 'active') return t('pause');
+    if (object.status === 'paused' || object.status === 'seeded') return t('resume');
     return null;
   }
   if (object.object_type === 'one_time_experience') {
-    if (object.status === 'planned') return '开始';
-    if (object.status === 'in_progress') return '完成';
-    if (object.status === 'completed') return '复盘';
+    if (object.status === 'planned') return t('start');
+    if (object.status === 'in_progress') return t('complete');
+    if (object.status === 'completed') return t('reviewAction');
   }
   return null;
 }
@@ -326,11 +354,11 @@ function canCancelRecurringCost(object: WYQDObject): object is RecurringCostObje
   );
 }
 
-function getSupportingMeta(object: WYQDObject, nextBillingDate: string | null): string {
+function getSupportingMeta(object: WYQDObject, nextBillingDate: string | null, t: TranslateFn): string {
   if (object.object_type === 'recurring_cost') {
-    const cycle = billingCycleLabels[object.billing_cycle || 'monthly'] || '每月';
+    const cycle = getBillingCycleLabels(t)[object.billing_cycle || 'monthly'] || t('billingCycleMonthly');
     const account = object.payment_account ? ` · ${object.payment_account}` : '';
-    const next = nextBillingDate ? ` · 下次 ${nextBillingDate}` : '';
+    const next = nextBillingDate ? ` · ${t('nextBilling').replace('{date}', nextBillingDate)}` : '';
     return `${cycle}${account}${next}`;
   }
 
@@ -372,13 +400,13 @@ function getObjectControlBucket(object: WYQDObject): ObjectControlBucket {
   return 'closed';
 }
 
-function getPriorityReason(object: WYQDObject): string {
+function getPriorityReason(object: WYQDObject, t: TranslateFn): string {
   if (object.object_type === 'one_time_experience' && object.status === 'completed') {
     return '待写入复盘与排行榜';
   }
   if (object.object_type === 'recurring_cost' && object.status === 'active') {
     const nextBillingDate = calculateNextBillingDate(object);
-    return nextBillingDate ? `下一笔扣费：${formatDueLabel(nextBillingDate)}` : '订阅中，建议定期复核';
+    return nextBillingDate ? `${t('nextBilling').replace('{date}', formatDueLabel(nextBillingDate, t))}` : '订阅中，建议定期复核';
   }
   if (object.object_type === 'physical' && ['seeded', 'observing'].includes(object.status)) {
     return '还在观察，等待买入/放弃决策';
@@ -389,7 +417,7 @@ function getPriorityReason(object: WYQDObject): string {
   if (object.object_type === 'recurring_cost' && object.status === 'seeded') {
     return '候选订阅，等待开通决策';
   }
-  return `${typeLabels[object.object_type]} · ${getStatusLabel(object)}`;
+  return `${getTypeLabels(t)[object.object_type]} · ${getStatusLabel(object, t)}`;
 }
 
 function getPriorityScore(object: WYQDObject): number {
@@ -439,74 +467,74 @@ function transitionSupportingObject(object: WYQDObject): WYQDObject {
   return object;
 }
 
-function getDetailRows(object: WYQDObject): Array<{ label: string; value: string }> {
+function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label: string; value: string }> {
   if (object.object_type === 'physical') {
     const dailyCost = calculatePhysicalDailyCost(object);
     return [
-      { label: '对象类型', value: typeLabels[object.object_type] },
-      { label: '状态', value: getStatusLabel(object) },
-      { label: '品类', value: formatOptional(object.category) },
-      { label: '总取得成本', value: formatMoney(calculatePhysicalAcquisitionCost(object)) },
-      { label: '日均体验成本', value: dailyCost ? `${formatMoney(dailyCost)}/天` : '未形成' },
-      { label: '购买日期', value: formatOptional(object.purchased_at) },
-      { label: '结束日期', value: formatOptional(object.ended_at) },
+      { label: t('type'), value: getTypeLabels(t)[object.object_type] },
+      { label: t('status'), value: getStatusLabel(object, t) },
+      { label: t('categoryLabel'), value: formatOptional(object.category, t) },
+      { label: t('totalAcquisitionCost'), value: formatMoney(calculatePhysicalAcquisitionCost(object)) },
+      { label: '日均体验成本', value: dailyCost ? `${formatMoney(dailyCost)}/天` : t('noFormed') },
+      { label: t('purchaseDate'), value: formatOptional(object.purchased_at, t) },
+      { label: t('endDate'), value: formatOptional(object.ended_at, t) },
       { label: '回收金额', value: formatMoney(object.recovered_amount || 0) },
     ];
   }
   if (object.object_type === 'recurring_cost') {
     const monthlyCost = calculateRecurringMonthlyCost(object);
     return [
-      { label: '对象类型', value: typeLabels[object.object_type] },
-      { label: '状态', value: getStatusLabel(object) },
-      { label: '品类', value: formatOptional(object.category) },
-      { label: '周期', value: billingCycleLabels[object.billing_cycle || 'monthly'] || '每月' },
+      { label: t('type'), value: getTypeLabels(t)[object.object_type] },
+      { label: t('status'), value: getStatusLabel(object, t) },
+      { label: t('categoryLabel'), value: formatOptional(object.category, t) },
+      { label: t('billingCycle'), value: getBillingCycleLabels(t)[object.billing_cycle || 'monthly'] || t('billingCycleMonthly') },
       { label: '周期金额', value: formatMoney(object.billing_amount || 0) },
       { label: '折算月成本', value: formatMoney(monthlyCost) },
-      { label: '年化成本', value: formatMoney(object.annualized_cost || monthlyCost * 12) },
-      { label: '开始日期', value: formatOptional(object.started_at) },
-      { label: '扣费日', value: object.billing_day ? `每期 ${object.billing_day} 日` : '未记录' },
-      { label: '支付账户', value: formatOptional(object.payment_account) },
-      { label: '暂停日期', value: formatOptional(object.paused_at) },
-      { label: '取消日期', value: formatOptional(object.cancelled_at) },
+      { label: t('annualCost'), value: formatMoney(object.annualized_cost || monthlyCost * 12) },
+      { label: t('startDate'), value: formatOptional(object.started_at, t) },
+      { label: t('billingDay'), value: object.billing_day ? `每期 ${object.billing_day} 日` : t('notRecorded') },
+      { label: t('paymentAccount'), value: formatOptional(object.payment_account, t) },
+      { label: '暂停日期', value: formatOptional(object.paused_at, t) },
+      { label: '取消日期', value: formatOptional(object.cancelled_at, t) },
     ];
   }
   return [
-    { label: '对象类型', value: typeLabels[object.object_type] },
-    { label: '状态', value: getStatusLabel(object) },
-    { label: '品类', value: formatOptional(object.category) },
+    { label: t('type'), value: getTypeLabels(t)[object.object_type] },
+    { label: t('status'), value: getStatusLabel(object, t) },
+    { label: t('categoryLabel'), value: formatOptional(object.category, t) },
     { label: '预算', value: formatMoney(object.budget_total || 0) },
-    { label: '实际金额', value: object.actual_total ? formatMoney(object.actual_total) : '未记录' },
-    { label: '计划日期', value: formatOptional(object.planned_at) },
-    { label: '开始日期', value: formatOptional(object.started_at) },
-    { label: '结束日期', value: formatOptional(object.ended_at) },
-    { label: '复盘日期', value: formatOptional(object.reviewed_at) },
+    { label: t('actualAmount'), value: object.actual_total ? formatMoney(object.actual_total) : t('notRecorded') },
+    { label: '计划日期', value: formatOptional(object.planned_at, t) },
+    { label: t('startDate'), value: formatOptional(object.started_at, t) },
+    { label: t('endDate'), value: formatOptional(object.ended_at, t) },
+    { label: '复盘日期', value: formatOptional(object.reviewed_at, t) },
   ];
 }
 
-function getTimelineRows(object: WYQDObject): Array<{ label: string; value?: string | null }> {
+function getTimelineRows(object: WYQDObject, t: TranslateFn): Array<{ label: string; value?: string | null }> {
   if (object.object_type === 'physical') {
     return [
       { label: '创建', value: object.created_at },
-      { label: '购买', value: object.purchased_at },
+      { label: t('purchaseDate'), value: object.purchased_at },
       { label: '退出', value: object.ended_at },
-      { label: '更新', value: object.updated_at },
+      { label: t('updated'), value: object.updated_at },
     ];
   }
   if (object.object_type === 'recurring_cost') {
     return [
       { label: '创建', value: object.created_at },
-      { label: '开始', value: object.started_at },
-      { label: '暂停', value: object.paused_at },
-      { label: '取消', value: object.cancelled_at },
-      { label: '更新', value: object.updated_at },
+      { label: t('startDate'), value: object.started_at },
+      { label: t('pause'), value: object.paused_at },
+      { label: t('cancel'), value: object.cancelled_at },
+      { label: t('updated'), value: object.updated_at },
     ];
   }
   return [
-    { label: '计划', value: object.planned_at },
-    { label: '开始', value: object.started_at },
-    { label: '完成', value: object.ended_at },
-    { label: '复盘', value: object.reviewed_at },
-    { label: '更新', value: object.updated_at },
+    { label: t('plan'), value: object.planned_at },
+    { label: t('startDate'), value: object.started_at },
+    { label: t('complete'), value: object.ended_at },
+    { label: t('reviewAction'), value: object.reviewed_at },
+    { label: t('updated'), value: object.updated_at },
   ];
 }
 
@@ -517,20 +545,21 @@ function ObjectDetailPanel({
   stored: StoredEntity<WYQDObject>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const object = stored.entity;
-  const detailRows = getDetailRows(object);
-  const timelineRows = getTimelineRows(object).filter((row) => row.value);
+  const detailRows = getDetailRows(object, t);
+  const timelineRows = getTimelineRows(object, t).filter((row) => row.value);
   const body = stored.body.trim();
 
   return (
-    <motion.section 
+    <motion.section
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-xs font-medium text-stone-500">{typeLabels[object.object_type]}</div>
+          <div className="text-xs font-medium text-stone-500">{getTypeLabels(t)[object.object_type]}</div>
           <h2 className="mt-1 break-words text-xl font-semibold tracking-tight text-stone-950">{object.title}</h2>
           <p className="mt-1 break-all text-xs text-stone-400">{stored.fileName}</p>
         </div>
@@ -539,7 +568,7 @@ function ObjectDetailPanel({
           onClick={onClose}
           className="h-10 shrink-0 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
         >
-          Close
+          {t('close')}
         </button>
       </div>
 
@@ -553,7 +582,7 @@ function ObjectDetailPanel({
       </div>
 
       <div className="mt-6">
-        <h3 className="text-sm font-semibold text-stone-950">生命周期</h3>
+        <h3 className="text-sm font-semibold text-stone-950">{t('lifecycle')}</h3>
         {timelineRows.length > 0 ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {timelineRows.map((row) => (
@@ -565,14 +594,14 @@ function ObjectDetailPanel({
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-stone-500">暂无可展示的记录。</p>
+          <p className="mt-3 text-sm text-stone-500">{t('noDisplayableRecords')}</p>
         )}
       </div>
 
       <div className="mt-6 border-t border-stone-100 pt-5">
-        <h3 className="text-sm font-semibold text-stone-950">Markdown 正文</h3>
+        <h3 className="text-sm font-semibold text-stone-950">{t('markdownBody')}</h3>
         <div className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-stone-50 p-4 text-sm leading-relaxed text-stone-600">
-          {body || '暂无正文内容。'}
+          {body || t('noBody')}
         </div>
       </div>
     </motion.section>
@@ -611,6 +640,7 @@ export function ObjectList({
   onDelete,
   onCreateObjectReview,
 }: ObjectListProps) {
+  const { t } = useI18n();
   const [editingFileName, setEditingFileName] = useState<string | null>(null);
   const [deletingFileName, setDeletingFileName] = useState<string | null>(null);
   const [exitingFileName, setExitingFileName] = useState<string | null>(null);
@@ -629,6 +659,13 @@ export function ObjectList({
   const [controlBucketFilter, setControlBucketFilter] = useState<ObjectControlBucket | null>(null);
   const [openActionMenuFileName, setOpenActionMenuFileName] = useState<string | null>(null);
 
+  const typeLabels = getTypeLabels(t);
+  const filterLabels = getFilterLabels(t);
+  const objectTypeFilterLabels = getObjectTypeFilterLabels(t);
+  const objectStatusGroupLabels = getObjectStatusGroupLabels(t);
+  const objectControlLabels = getObjectControlLabels(t);
+  const supportingVisuals = getSupportingVisuals(t);
+
   const visibleObjects = objects.filter((stored) => {
     const object = stored.entity;
     return (
@@ -638,11 +675,11 @@ export function ObjectList({
       matchesQuery(object, query)
     );
   });
-  
+
   const allPhysicalObjects = objects.filter(isPhysicalStoredEntity);
   const physicalObjects = visibleObjects.filter(isPhysicalStoredEntity);
   const supportingObjects = visibleObjects.filter((stored) => !isPhysicalObject(stored.entity));
-  
+
   const filteredObjects =
     filter === 'all'
       ? physicalObjects
@@ -704,8 +741,8 @@ export function ObjectList({
   if (objects.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center">
-        <h2 className="text-base font-semibold text-stone-900">还没有对象</h2>
-        <p className="mt-2 text-sm text-stone-500">连接 Vault 后，先捕获一个值得观察的物欲。</p>
+        <h2 className="text-base font-semibold text-stone-900">{t('noObjectsYet')}</h2>
+        <p className="mt-2 text-sm text-stone-500">{t('connectVaultFirst')}</p>
       </div>
     );
   }
@@ -715,13 +752,13 @@ export function ObjectList({
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">对象控制台</h2>
+            <h2 className="text-base font-semibold text-stone-950">{t('objectConsoleTitle')}</h2>
             <p className="mt-1 text-sm text-stone-500">
-              按决策状态管理物欲、订阅和体验，优先处理最该推进的对象。
+              {t('objectConsoleSubtitle')}
             </p>
           </div>
           <span className="w-fit rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-            {objects.length} 个对象
+            {t('objectsCount').replace('{count}', String(objects.length))}
           </span>
         </div>
 
@@ -760,7 +797,7 @@ export function ObjectList({
 
         <div className="mt-5 border-t border-stone-100 pt-4">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-stone-950">优先处理</h3>
+            <h3 className="text-sm font-semibold text-stone-950">{t('priorityProcess')}</h3>
             {controlBucketFilter ? (
               <button
                 type="button"
@@ -772,7 +809,7 @@ export function ObjectList({
                 }}
                 className="text-xs font-medium text-stone-500 transition hover:text-stone-950"
               >
-                查看全部
+                {t('viewAll')}
               </button>
             ) : null}
           </div>
@@ -794,13 +831,13 @@ export function ObjectList({
                           {typeLabels[object.object_type]}
                         </span>
                         <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-                          {getStatusLabel(object)}
+                          {getStatusLabel(object, t)}
                         </span>
                       </div>
                       <div className="mt-1.5 truncate text-sm font-semibold text-stone-950">
                         {object.title}
                       </div>
-                      <div className="mt-1 text-xs text-stone-500">{getPriorityReason(object)}</div>
+                      <div className="mt-1 text-xs text-stone-500">{getPriorityReason(object, t)}</div>
                     </div>
                     <div className="flex items-center justify-between gap-3 sm:justify-end">
                       <div className="font-mono text-sm font-semibold text-stone-950">
@@ -819,7 +856,7 @@ export function ObjectList({
                         }}
                         className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950"
                       >
-                        {isReviewTarget ? '复盘' : '查看'}
+                        {isReviewTarget ? t('reviewAction') : t('detail')}
                       </button>
                     </div>
                   </div>
@@ -828,7 +865,7 @@ export function ObjectList({
             </div>
           ) : (
             <p className="mt-3 rounded-lg bg-stone-50 px-3 py-3 text-sm text-stone-500">
-              当前没有高优先级对象，适合补充新对象或更新账户快照。
+              {t('noPriorityObjects')}
             </p>
           )}
         </div>
@@ -836,23 +873,23 @@ export function ObjectList({
 
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-stone-950">实物资产</h2>
+          <h2 className="text-sm font-semibold text-stone-950">{t('physicalAssets')}</h2>
           <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
             {allPhysicalObjects.length} 件
           </span>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-4">
           <div>
-            <div className="text-xs text-stone-500">总取得成本</div>
+            <div className="text-xs text-stone-500">{t('totalAcquisitionCost')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
               {formatMoney(totalCost)}
             </div>
           </div>
           <div>
-            <div className="text-xs text-stone-500">日均成本</div>
+            <div className="text-xs text-stone-500">{t('dailyCostAvg')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
               {formatMoney(averageDailyCost)}
-              <span className="ml-1 text-xs font-medium text-stone-400">/天</span>
+              <span className="ml-1 text-xs font-medium text-stone-400">{t('perDay')}</span>
             </div>
           </div>
         </div>
@@ -866,7 +903,7 @@ export function ObjectList({
               setQuery(event.target.value);
               setControlBucketFilter(null);
             }}
-            placeholder="搜索名称、品类、状态或对象类型"
+            placeholder={t('searchByNameCategoryStatus')}
             className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-500"
           />
         </label>
@@ -956,7 +993,7 @@ export function ObjectList({
 	                  <ObjectComposer
 	                    disabled={disabled}
 	                    initialObject={object}
-	                    submitLabel="保存修改"
+	                    submitLabel={t('saveChanges')}
 	                    onCancel={() => setEditingFileName(null)}
 	                    onSubmit={async (updatedObject, body) => {
 	                      await onUpdate(stored.fileName, updatedObject, stored.body || body);
@@ -972,7 +1009,7 @@ export function ObjectList({
 	                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-sm font-semibold text-stone-700 ring-1 ring-stone-200"
 	                      aria-hidden="true"
 	                    >
-	                      实物
+	                      {t('typePhysical')}
 	                    </div>
 
 	                    <div className="min-w-0 flex-1">
@@ -983,13 +1020,13 @@ export function ObjectList({
 	                        <span
 	                          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${accent.badge}`}
 	                        >
-	                          {getStatusLabel(object)}
+	                          {getStatusLabel(object, t)}
 	                        </span>
 	                      </div>
 	                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
 	                        <span className="flex items-center gap-1.5">
 	                          <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} />
-	                          {serviceDays ? `已用 ${serviceDays} 天` : '未开始'}
+	                          {serviceDays ? t('daysUsed').replace('{count}', String(serviceDays)) : t('notStarted')}
 	                        </span>
 	                        <span>{formatDateRange(object)}</span>
 	                        {object.category ? <span>{object.category}</span> : null}
@@ -998,13 +1035,13 @@ export function ObjectList({
 
 	                    <div className="flex items-center justify-between gap-3 md:w-72 md:shrink-0 md:justify-end">
 	                      <div className="min-w-[7rem] rounded-lg bg-stone-50 px-3 py-2 text-right">
-	                        <div className="text-xs text-stone-400">日均成本</div>
+	                        <div className="text-xs text-stone-400">{t('dailyCostAvg')}</div>
 	                        <div className="mt-0.5 font-mono text-base font-semibold leading-none text-stone-950">
 	                          {dailyCost ? `¥${Math.round(dailyCost)}` : '—'}
 	                        </div>
 	                      </div>
 
-	                    <div className="relative flex gap-1.5">
+	                    <div className="relative flex gap-1.5 overflow-visible pb-0.5">
 	                      <button
 	                        type="button"
 	                        onClick={() => {
@@ -1013,10 +1050,10 @@ export function ObjectList({
 	                        }}
 	                        aria-label={`查看「${object.title}」详情`}
 	                        className={iconButtonClass}
-	                        title="详情"
-                      >
-                        <span aria-hidden="true">🔎</span>
-                      </button>
+	                        title={t('detail')}
+	                      >
+	                        <span aria-hidden="true">🔎</span>
+	                      </button>
 	                      <button
 	                        type="button"
 	                        onClick={() => {
@@ -1026,10 +1063,10 @@ export function ObjectList({
 	                        aria-label={`修改「${object.title}」`}
 	                        className={iconButtonClass}
 	                        disabled={disabled}
-                        title="修改"
-                      >
-                        <span aria-hidden="true">✏️</span>
-                      </button>
+	                        title={t('edit')}
+	                      >
+	                        <span aria-hidden="true">✏️</span>
+	                      </button>
 	                      <button
 	                        type="button"
 	                        onClick={() =>
@@ -1039,7 +1076,7 @@ export function ObjectList({
 	                        }
 	                        aria-label={`更多操作「${object.title}」`}
 	                        className={iconButtonClass}
-	                        title="更多"
+	                        title={t('more')}
 	                      >
 	                        <span aria-hidden="true">⋯</span>
 	                      </button>
@@ -1067,13 +1104,13 @@ export function ObjectList({
 	                              disabled || exitingFileName === stored.fileName || bucket !== 'active'
 	                            }
 	                          >
-	                            <span>退役</span>
+	                            <span>{t('retire')}</span>
 	                            <span aria-hidden="true">📦</span>
 	                          </button>
 	                          <button
 	                            type="button"
 	                            onClick={async () => {
-	                              const confirmed = window.confirm(`删除「${object.title}」？`);
+	                              const confirmed = window.confirm(t('deleteConfirm').replace('{title}', object.title));
 	                              if (!confirmed) return;
 	                              setOpenActionMenuFileName(null);
 	                              setDeletingFileName(stored.fileName);
@@ -1086,7 +1123,7 @@ export function ObjectList({
 	                            className={`${menuItemClass} text-red-600 hover:bg-red-50`}
 	                            disabled={disabled || deletingFileName === stored.fileName}
 	                          >
-	                            <span>删除</span>
+	                            <span>{t('delete')}</span>
 	                            <span aria-hidden="true">
 	                              {deletingFileName === stored.fileName ? '…' : '🗑️'}
 	                            </span>
@@ -1114,11 +1151,11 @@ export function ObjectList({
         <section className="space-y-3 pt-2">
           <div className="flex items-center justify-between gap-3 px-1">
             <div>
-              <h2 className="text-base font-semibold text-stone-950">固定成本与体验</h2>
-              <p className="mt-0.5 text-xs text-stone-500">订阅、服务和一次性体验统一管理。</p>
+              <h2 className="text-base font-semibold text-stone-950">{t('recurringCostAndExperience')}</h2>
+              <p className="mt-0.5 text-xs text-stone-500">{t('subscriptionServiceUnified')}</p>
             </div>
             <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-              {supportingObjects.length} 项
+              {t('itemsCount').replace('{count}', String(supportingObjects.length))}
             </span>
           </div>
           <div className="space-y-2.5">
@@ -1134,7 +1171,7 @@ export function ObjectList({
                 object.object_type === 'recurring_cost' && object.status === 'active'
                   ? calculateNextBillingDate(object)
                   : null;
-              const supportingActionLabel = getSupportingActionLabel(object);
+              const supportingActionLabel = getSupportingActionLabel(object, t);
 
               return isEditing ? (
                 <div
@@ -1144,7 +1181,7 @@ export function ObjectList({
                   <ObjectComposer
                     disabled={disabled}
                     initialObject={object}
-                    submitLabel="保存修改"
+                    submitLabel={t('saveChanges')}
                     onCancel={() => setEditingFileName(null)}
                     onSubmit={async (updatedObject, body) => {
                       await onUpdate(stored.fileName, updatedObject, stored.body || body);
@@ -1176,7 +1213,7 @@ export function ObjectList({
                               <span
                                 className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${visual.badgeClass}`}
                               >
-                                {getStatusLabel(object)}
+                                {getStatusLabel(object, t)}
                               </span>
                             </div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
@@ -1184,7 +1221,7 @@ export function ObjectList({
                                 <span className={`h-1.5 w-1.5 rounded-full ${visual.dotClass}`} />
                                 {visual.label}
                               </span>
-                              <span>{getSupportingMeta(object, nextBillingDate)}</span>
+                              <span>{getSupportingMeta(object, nextBillingDate, t)}</span>
                               {object.category ? <span>{object.category}</span> : null}
                             </div>
                           </div>
@@ -1198,7 +1235,7 @@ export function ObjectList({
 	                            </div>
 	                            {nextBillingDate ? (
 	                              <div className="mt-0.5 text-[11px] text-sky-700">
-	                                {formatDueLabel(nextBillingDate)}
+	                                {formatDueLabel(nextBillingDate, t)}
 	                              </div>
 	                            ) : null}
 	                          </div>
@@ -1211,11 +1248,11 @@ export function ObjectList({
 	                                setOpenActionMenuFileName(null);
 	                              }}
 	                              aria-label={`查看「${object.title}」详情`}
-	                              title="详情"
+	                              title={t('detail')}
 	                              className={iconButtonClass}
-                            >
-                              <span aria-hidden="true">🔎</span>
-                            </button>
+	                            >
+	                              <span aria-hidden="true">🔎</span>
+	                            </button>
 	                            <button
 	                              type="button"
 	                              onClick={() => {
@@ -1223,15 +1260,15 @@ export function ObjectList({
 	                                setOpenActionMenuFileName(null);
 	                              }}
 	                              aria-label={`修改「${object.title}」`}
-	                              title="修改"
+	                              title={t('edit')}
 	                              className={iconButtonClass}
-                              disabled={disabled}
-                            >
-                              <span aria-hidden="true">✏️</span>
-                            </button>
-                            {supportingActionLabel ? (
-                              <button
-                                type="button"
+	                              disabled={disabled}
+	                            >
+	                              <span aria-hidden="true">✏️</span>
+	                            </button>
+	                            {supportingActionLabel ? (
+	                              <button
+	                                type="button"
 	                                onClick={async () => {
 	                                  if (
 	                                    object.object_type === 'one_time_experience' &&
@@ -1246,24 +1283,24 @@ export function ObjectList({
 	                                  setExitingFileName(stored.fileName);
 	                                  try {
 	                                    await onUpdate(
-                                      stored.fileName,
-                                      transitionSupportingObject(object),
-                                      stored.body,
-                                    );
-                                  } finally {
-                                    setExitingFileName(null);
-                                  }
-                                }}
-                                aria-label={`${supportingActionLabel}「${object.title}」`}
-                                title={supportingActionLabel}
-                                className={`${iconButtonClass} border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50`}
-                                disabled={disabled || exitingFileName === stored.fileName}
-                              >
-                                <span aria-hidden="true">
-                                  {exitingFileName === stored.fileName
-                                    ? '…'
-                                    : getSupportingActionIcon(object)}
-                                </span>
+	                                      stored.fileName,
+	                                      transitionSupportingObject(object),
+	                                      stored.body,
+	                                    );
+	                                  } finally {
+	                                    setExitingFileName(null);
+	                                  }
+	                                }}
+	                                aria-label={`${supportingActionLabel}「${object.title}」`}
+	                                title={supportingActionLabel}
+	                                className={`${iconButtonClass} border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50`}
+	                                disabled={disabled || exitingFileName === stored.fileName}
+	                              >
+	                                <span aria-hidden="true">
+	                                  {exitingFileName === stored.fileName
+	                                    ? '…'
+	                                    : getSupportingActionIcon(object)}
+	                                </span>
 	                              </button>
 	                            ) : null}
 	                            <button
@@ -1274,7 +1311,7 @@ export function ObjectList({
 	                                )
 	                              }
 	                              aria-label={`更多操作「${object.title}」`}
-	                              title="更多"
+	                              title={t('more')}
 	                              className={iconButtonClass}
 	                            >
 	                              <span aria-hidden="true">⋯</span>
@@ -1292,7 +1329,7 @@ export function ObjectList({
 	                                        ...object,
 	                                        status: 'cancelled',
 	                                        cancelled_at: todayISO(),
-	                                        cancel_reason: reason.trim() || '未记录',
+	                                        cancel_reason: reason.trim() || t('notRecorded'),
 	                                        updated_at: todayISO(),
 	                                      };
 	                                      setOpenActionMenuFileName(null);
@@ -1306,14 +1343,14 @@ export function ObjectList({
 	                                    className={`${menuItemClass} text-red-600 hover:bg-red-50`}
 	                                    disabled={disabled || exitingFileName === stored.fileName}
 	                                  >
-	                                    <span>取消订阅</span>
+	                                    <span>{t('cancelSubscription')}</span>
 	                                    <span aria-hidden="true">🚫</span>
 	                                  </button>
 	                                ) : null}
 	                                <button
 	                                  type="button"
 	                                  onClick={async () => {
-	                                    const confirmed = window.confirm(`删除「${object.title}」？`);
+	                                    const confirmed = window.confirm(t('deleteConfirm').replace('{title}', object.title));
 	                                    if (!confirmed) return;
 	                                    setOpenActionMenuFileName(null);
 	                                    setDeletingFileName(stored.fileName);
@@ -1326,7 +1363,7 @@ export function ObjectList({
 	                                  className={`${menuItemClass} text-red-600 hover:bg-red-50`}
 	                                  disabled={disabled || deletingFileName === stored.fileName}
 	                                >
-	                                  <span>删除</span>
+	                                  <span>{t('delete')}</span>
 	                                  <span aria-hidden="true">
 	                                    {deletingFileName === stored.fileName ? '…' : '🗑️'}
 	                                  </span>
@@ -1366,19 +1403,19 @@ export function ObjectList({
                         >
                           <div>
                             <label className="block text-xs font-medium text-stone-500">
-                              体验复盘
+                              {t('experienceReview')}
                             </label>
                             <textarea
                               value={reviewSummary}
                               onChange={(event) => setReviewSummary(event.target.value)}
                               rows={3}
-                              placeholder="这次体验留下了什么？它在同类体验里排第几？"
+                              placeholder={t('reviewSummaryPlaceholder')}
                               className="mt-1.5 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
                               disabled={disabled || exitingFileName === stored.fileName}
                             />
                           </div>
                           <div>
-                            <div className="text-xs font-medium text-stone-500">排行榜排位</div>
+                            <div className="text-xs font-medium text-stone-500">{t('rankingLabel')}</div>
                             <div className="mt-1.5 grid grid-cols-3 gap-2">
                               <input
                                 value={reviewFoodRank}
@@ -1386,8 +1423,8 @@ export function ObjectList({
                                 type="number"
                                 min="1"
                                 inputMode="numeric"
-                                placeholder="美食"
-                                aria-label="美食排位"
+                                placeholder={t('foodRank')}
+                                aria-label={t('foodRank')}
                                 className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
                                 disabled={disabled || exitingFileName === stored.fileName}
                               />
@@ -1397,8 +1434,8 @@ export function ObjectList({
                                 type="number"
                                 min="1"
                                 inputMode="numeric"
-                                placeholder="风景"
-                                aria-label="风景排位"
+                                placeholder={t('sceneryRank')}
+                                aria-label={t('sceneryRank')}
                                 className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
                                 disabled={disabled || exitingFileName === stored.fileName}
                               />
@@ -1408,8 +1445,8 @@ export function ObjectList({
                                 type="number"
                                 min="1"
                                 inputMode="numeric"
-                                placeholder="体验"
-                                aria-label="体验排位"
+                                placeholder={t('experienceRank')}
+                                aria-label={t('experienceRank')}
                                 className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
                                 disabled={disabled || exitingFileName === stored.fileName}
                               />
@@ -1422,7 +1459,7 @@ export function ObjectList({
                               className="rounded-md border border-stone-200 bg-white px-2 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
                               disabled={exitingFileName === stored.fileName}
                             >
-                              取消
+                              {t('cancel')}
                             </button>
                             <button
                               type="submit"
@@ -1433,7 +1470,7 @@ export function ObjectList({
                                 reviewSummary.trim().length === 0
                               }
                             >
-                              {exitingFileName === stored.fileName ? '写入中' : '写入复盘'}
+                              {exitingFileName === stored.fileName ? t('writing') : t('writeInReview')}
                             </button>
                           </div>
                         </form>

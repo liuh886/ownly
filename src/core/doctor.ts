@@ -73,7 +73,7 @@ function checkDuplicateIds(entities: readonly AnyStoredEntity[]): WYQDDoctorFind
     findings.push({
       id: 'entity.id.duplicate',
       severity: 'error',
-      message: `Duplicate WYQD entity id: ${stored.entity.id}`,
+      message: `Duplicate Ownly entity id: ${stored.entity.id}`,
       path: entityPath(stored),
       entityId: stored.entity.id,
       details: {
@@ -92,7 +92,7 @@ function checkSchemaVersions(entities: readonly AnyStoredEntity[]): WYQDDoctorFi
     .map((stored) => ({
       id: 'entity.schema.unsupported' as const,
       severity: 'warning' as const,
-      message: `Unsupported WYQD schema version: ${stored.entity.schema_version}`,
+      message: `Unsupported Ownly schema version: ${stored.entity.schema_version}`,
       path: entityPath(stored),
       entityId: stored.entity.id,
       details: { schemaVersion: stored.entity.schema_version },
@@ -183,7 +183,7 @@ async function checkDirectories(
     .map((directory) => ({
       id: 'directory.presence' as const,
       severity: 'info' as const,
-      message: `WYQD data directory is not present yet: ${directory}`,
+      message: `Ownly data directory is not present yet: ${directory}`,
       path: directory,
     }));
 }

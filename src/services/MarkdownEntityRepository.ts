@@ -112,7 +112,7 @@ export class MarkdownEntityRepository {
           body: parsed.body,
         });
       } catch {
-        console.warn(`Skipping invalid WYQD ${warningLabel} file:`, file.fileName);
+        console.warn(`Skipping invalid Ownly ${warningLabel} file:`, file.fileName);
       }
     }
 

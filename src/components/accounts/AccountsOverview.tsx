@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useI18n } from '@/core/i18n-context';
 import type {
   AccountBalance,
   AccountSnapshot,
@@ -19,8 +20,8 @@ function todayISO() {
   return new Date().toISOString().split('T')[0];
 }
 
-function formatMoney(value?: number): string {
-  if (value === undefined) return '暂无';
+function formatMoney(value?: number, fallback?: string): string {
+  if (value === undefined) return fallback ?? '暂无';
   return `¥${Math.round(value).toLocaleString('zh-CN')}`;
 }
 
@@ -95,11 +96,11 @@ function sumBalances(balances: AccountBalance[]): number {
   return balances.reduce((sum, balance) => sum + (balance.amount || 0), 0);
 }
 
-function getPaymentAccount(object: RecurringCostObject): string {
-  return object.payment_account?.trim() || '未指定支付账户';
+function getPaymentAccount(object: RecurringCostObject, fallback?: string): string {
+  return object.payment_account?.trim() || fallback || '未指定支付账户';
 }
 
-function groupRecurringCostsByAccount(objects: WYQDObject[]) {
+function groupRecurringCostsByAccount(objects: WYQDObject[], fallback?: string) {
   const groups = new Map<
     string,
     {
@@ -114,7 +115,7 @@ function groupRecurringCostsByAccount(objects: WYQDObject[]) {
   for (const object of objects) {
     if (object.object_type !== 'recurring_cost' || object.status !== 'active') continue;
 
-    const account = getPaymentAccount(object);
+    const account = getPaymentAccount(object, fallback);
     const current = groups.get(account) || {
       account,
       monthlyCost: 0,
@@ -189,6 +190,7 @@ export function AccountsOverview({
   onUpdateSnapshot: (fileName: string, snapshot: AccountSnapshot, body: string) => Promise<void>;
   onDeleteSnapshot: (fileName: string) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const calculatedSnapshots = snapshots.map((stored) => ({
     ...stored,
     entity: calculateNetWorth(stored.entity),
@@ -197,7 +199,7 @@ export function AccountsOverview({
   const latest = findLatestSnapshot(snapshotEntities);
   const latestAssetBalancesText = latest ? serializeBalanceLines(latest.asset_balances) : '';
   const latestLiabilityBalancesText = latest ? serializeBalanceLines(latest.liability_balances) : '';
-  const recurringAccountGroups = groupRecurringCostsByAccount(objects);
+  const recurringAccountGroups = groupRecurringCostsByAccount(objects, t('noData'));
   const totalMonthlyFixedCost = recurringAccountGroups.reduce(
     (sum, group) => sum + group.monthlyCost,
     0,
@@ -320,52 +322,52 @@ export function AccountsOverview({
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">账户控制台</h2>
+            <h2 className="text-base font-semibold text-stone-950">{t('accountConsole')}</h2>
             <p className="mt-1 text-sm text-stone-500">
-              用快照校准真实资产，用固定成本识别每月扣费压力。
+              {t('accountConsoleDesc')}
             </p>
           </div>
           <span className="w-fit rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-            {latest ? `最新 ${latest.snapshot_at}` : '等待首个快照'}
+            {latest ? t('latestSnapshot').replace('{date}', latest.snapshot_at) : t('waitingFirstSnapshot')}
           </span>
         </div>
 
         <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-stone-200 bg-stone-950 px-3 py-3 text-white">
-            <div className="text-xs font-medium text-stone-300">净资产</div>
+            <div className="text-xs font-medium text-stone-300">{t('netWorth')}</div>
             <div className="mt-2 font-mono text-xl font-semibold tracking-tight">
-              {formatMoney(latest?.net_worth)}
+              {formatMoney(latest?.net_worth, t('noData'))}
             </div>
-            <div className="mt-1 text-xs text-stone-400">最近一次账户事实</div>
+            <div className="mt-1 text-xs text-stone-400">{t('latestAccountFact')}</div>
           </div>
           <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
-            <div className="text-xs font-medium text-stone-500">账户数量</div>
+            <div className="text-xs font-medium text-stone-500">{t('accountCount')}</div>
             <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
               {accountCount}
             </div>
-            <div className="mt-1 text-xs text-stone-500">资产与负债账户</div>
+            <div className="mt-1 text-xs text-stone-500">{t('assetAndLiabilityAccounts')}</div>
           </div>
           <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
-            <div className="text-xs font-medium text-stone-500">固定成本</div>
+            <div className="text-xs font-medium text-stone-500">{t('fixedCostPressure')}</div>
             <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
               {formatMoney(totalMonthlyFixedCost)}
             </div>
-            <div className="mt-1 text-xs text-stone-500">月折算扣费压力</div>
+            <div className="mt-1 text-xs text-stone-500">{t('monthlyDeductionPressure')}</div>
           </div>
           <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
-            <div className="text-xs font-medium text-stone-500">年化承诺</div>
+            <div className="text-xs font-medium text-stone-500">{t('annualCommitment')}</div>
             <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
               {formatMoney(annualFixedCost)}
             </div>
-            <div className="mt-1 text-xs text-stone-500">订阅与固定支出的惯性</div>
+            <div className="mt-1 text-xs text-stone-500">{t('subscriptionAndFixedInertia')}</div>
           </div>
         </div>
 
         <div className="mt-5 border-t border-stone-100 pt-4">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-stone-950">账户列表</h3>
+            <h3 className="text-sm font-semibold text-stone-950">{t('accountList')}</h3>
             <span className="text-xs text-stone-400">
-              {latest ? `快照日期 ${latest.snapshot_at}` : '尚未记录'}
+              {latest ? t('snapshotDateLabel').replace('{date}', latest.snapshot_at) : t('notRecordedYet')}
             </span>
           </div>
 
@@ -373,7 +375,7 @@ export function AccountsOverview({
           <div className="mt-5 space-y-4">
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-stone-950">资产账户</h2>
+                <h2 className="text-sm font-semibold text-stone-950">{t('assetAccounts')}</h2>
                 <span className="text-xs text-stone-400">{formatMoney(latest.total_assets)}</span>
               </div>
               <div className="space-y-2">
@@ -396,7 +398,7 @@ export function AccountsOverview({
             {latest.liability_balances.length > 0 ? (
               <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-stone-950">负债账户</h2>
+                  <h2 className="text-sm font-semibold text-stone-950">{t('liabilityAccounts')}</h2>
                   <span className="text-xs text-stone-400">
                     {formatMoney(latest.total_liabilities)}
                   </span>
@@ -421,7 +423,7 @@ export function AccountsOverview({
           </div>
         ) : (
           <p className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">
-            记录第一个账户快照后，这里会显示资产账户、负债账户和净资产事实。
+            {t('recordFirstSnapshot')}
           </p>
         )}
         </div>
@@ -430,9 +432,9 @@ export function AccountsOverview({
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm shadow-stone-200/40">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">净资产历史</h2>
+            <h2 className="text-base font-semibold text-stone-950">{t('netWorthHistory')}</h2>
             <p className="mt-1 text-xs text-stone-400">
-              最近 {trendSnapshots.length} 次账户快照
+              {t('recentSnapshotsN').replace('{count}', String(trendSnapshots.length))}
             </p>
           </div>
           {trendValues.length > 0 ? (
@@ -440,7 +442,7 @@ export function AccountsOverview({
               <div className="text-sm font-semibold text-stone-950">
                 {formatCompactMoney(trendValues[trendValues.length - 1] || 0)}
               </div>
-              <div className="text-xs text-stone-400">最新净值</div>
+              <div className="text-xs text-stone-400">{t('latestNetWorth')}</div>
             </div>
           ) : null}
         </div>
@@ -477,7 +479,7 @@ export function AccountsOverview({
           </div>
         ) : (
           <p className="mt-4 rounded-lg border border-dashed border-stone-200 px-3 py-4 text-sm text-stone-500">
-            记录多个账户快照后，这里会形成净资产折线图。
+            {t('multipleSnapshotsForTrend')}
           </p>
         )}
       </div>
@@ -485,16 +487,16 @@ export function AccountsOverview({
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm shadow-stone-200/40">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">固定成本账户压力</h2>
+            <h2 className="text-base font-semibold text-stone-950">{t('fixedCostAccountPressure')}</h2>
             <p className="mt-1 text-xs leading-5 text-stone-500">
-              按支付账户聚合 active 固定成本，帮助判断每月扣费压力。
+              {t('fixedCostAccountPressureDesc')}
             </p>
           </div>
           <div className="shrink-0 text-right">
             <div className="text-sm font-semibold text-stone-950">
               {formatMoney(totalMonthlyFixedCost)}
             </div>
-            <div className="text-xs text-stone-400">月折算</div>
+            <div className="text-xs text-stone-400">{t('monthlyDeduction')}</div>
           </div>
         </div>
 
@@ -508,8 +510,8 @@ export function AccountsOverview({
                       {group.account}
                     </div>
                     <div className="mt-1 text-xs text-stone-500">
-                      {group.count} 项固定成本
-                      {group.nextBillingDate ? ` · 下一笔 ${group.nextBillingDate}` : ''}
+                      {t('countFixedCostItems').replace('{count}', String(group.count))}
+                      {group.nextBillingDate ? ` · ${t('nextPayment').replace('{date}', group.nextBillingDate)}` : ''}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
@@ -534,7 +536,7 @@ export function AccountsOverview({
           </div>
         ) : (
           <p className="mt-4 rounded-lg border border-dashed border-stone-200 px-3 py-4 text-sm text-stone-500">
-            还没有 active 固定成本，或尚未填写支付账户。
+            {t('noActiveFixedCost')}
           </p>
         )}
       </div>
@@ -546,20 +548,20 @@ export function AccountsOverview({
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold text-stone-950">
-              {editingFileName ? '编辑快照' : '记录快照'}
+              {editingFileName ? t('editSnapshot') : t('recordSnapshot')}
             </h2>
             <p className="mt-1 text-xs leading-5 text-stone-500">
-              每行一个账户，格式为“账户名 金额”。新快照默认沿用上一次账户列表。
+              {t('snapshotFormatHint')}
             </p>
           </div>
           <span className="shrink-0 rounded-full border border-stone-200 px-2.5 py-1 text-xs text-stone-500">
-            CNY
+            {t('currency')}
           </span>
         </div>
 
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-stone-500">日期</span>
+            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('date')}</span>
             <input
               type="date"
               value={snapshotAt}
@@ -570,41 +572,41 @@ export function AccountsOverview({
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-stone-500">资产账户</span>
+            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('assetAccountsLabel')}</span>
             <textarea
               value={displayedAssetBalancesText}
               onChange={(event) => {
                 setHasTouchedSnapshotForm(true);
                 setAssetBalancesText(event.target.value);
               }}
-              placeholder={'招商银行 32000\n支付宝 6800\n券商账户 92000'}
+              placeholder={t('assetAccountsPlaceholder')}
               rows={4}
               className={`${fieldClass} resize-none`}
               disabled={disabled || isSaving}
             />
             {hasInvalidAssetLines ? (
               <span className="mt-1 block text-xs text-red-600">
-                存在无法识别的资产账户行，请使用“账户名 金额”。
+                {t('invalidAssetLine')}
               </span>
             ) : null}
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-stone-500">负债账户</span>
+            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('liabilityAccountsLabel')}</span>
             <textarea
               value={displayedLiabilityBalancesText}
               onChange={(event) => {
                 setHasTouchedSnapshotForm(true);
                 setLiabilityBalancesText(event.target.value);
               }}
-              placeholder={'信用卡 4200\n花呗 800'}
+              placeholder={t('liabilityAccountsPlaceholder')}
               rows={3}
               className={`${fieldClass} resize-none`}
               disabled={disabled || isSaving}
             />
             {hasInvalidLiabilityLines ? (
               <span className="mt-1 block text-xs text-red-600">
-                存在无法识别的负债账户行，请使用“账户名 金额”。
+                {t('invalidLiabilityLine')}
               </span>
             ) : null}
           </label>
@@ -613,8 +615,8 @@ export function AccountsOverview({
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-500">
               <span>
                 {isUsingLatestSnapshotPrefill
-                  ? `已默认填入 ${latest.snapshot_at} 的账户列表`
-                  : `可重新沿用 ${latest.snapshot_at} 的账户列表`}
+                  ? t('prefilledFromSnapshot').replace('{date}', latest.snapshot_at)
+                  : t('canReuseSnapshot').replace('{date}', latest.snapshot_at)}
               </span>
               <button
                 type="button"
@@ -622,7 +624,7 @@ export function AccountsOverview({
                 className="rounded-md border border-stone-200 bg-white px-2 py-1 font-medium text-stone-700 transition hover:border-stone-900 disabled:cursor-not-allowed disabled:text-stone-300"
                 disabled={disabled || isSaving}
               >
-                沿用上次快照
+                {t('reuseLastSnapshot')}
               </button>
             </div>
           ) : null}
@@ -635,7 +637,7 @@ export function AccountsOverview({
               className="h-4 w-4 rounded border-stone-300 accent-stone-950"
               disabled={disabled || isSaving}
             />
-            月末快照
+            {t('monthEndSnapshot')}
           </label>
 
           <div className="flex gap-2">
@@ -646,7 +648,7 @@ export function AccountsOverview({
                 className="w-24 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:border-stone-900 disabled:cursor-not-allowed disabled:text-stone-400"
                 disabled={isSaving}
               >
-                取消
+                {t('cancel')}
               </button>
             ) : null}
             <button
@@ -655,12 +657,12 @@ export function AccountsOverview({
               className="min-w-0 flex-1 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
             >
               {disabled
-                ? '连接 Vault 后写入 Obsidian'
+                ? t('connectVaultToWrite')
                 : isSaving
-                  ? '保存中...'
+                  ? t('saving')
                   : editingFileName
-                    ? '保存修改'
-                    : '保存快照'}
+                    ? t('saveChanges')
+                    : t('saveSnapshot')}
             </button>
           </div>
         </div>
@@ -668,8 +670,8 @@ export function AccountsOverview({
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-stone-950">历史快照</h2>
-          <span className="text-xs text-stone-400">最近 {Math.min(sorted.length, 6)} 条</span>
+          <h2 className="text-base font-semibold text-stone-950">{t('historySnapshots')}</h2>
+          <span className="text-xs text-stone-400">{t('recentN').replace('{count}', String(Math.min(sorted.length, 6)))}</span>
         </div>
         <div className="mt-3 space-y-3">
           {sorted.slice(0, 6).map((stored) => (
@@ -683,7 +685,7 @@ export function AccountsOverview({
                     {stored.entity.snapshot_at}
                   </div>
                   <div className="text-xs text-stone-400">
-                    {stored.entity.is_month_end ? '月末快照' : '普通快照'}
+                    {stored.entity.is_month_end ? t('monthEndSnapshot') : t('normalSnapshot')}
                   </div>
                 </div>
                 <div className="shrink-0 text-sm font-semibold text-stone-950">
@@ -697,12 +699,12 @@ export function AccountsOverview({
                   className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300"
                   disabled={disabled || isSaving}
                 >
-                  修改
+                  {t('edit')}
                 </button>
                 <button
                   type="button"
                   onClick={async () => {
-                    const confirmed = window.confirm(`删除 ${stored.entity.snapshot_at} 的账户快照？`);
+                    const confirmed = window.confirm(t('deleteConfirm').replace('{title}', stored.entity.snapshot_at));
                     if (!confirmed) return;
                     setDeletingFileName(stored.fileName);
                     try {
@@ -715,12 +717,12 @@ export function AccountsOverview({
                   className="rounded-md border border-red-100 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-600 disabled:cursor-not-allowed disabled:text-stone-300"
                   disabled={disabled || deletingFileName === stored.fileName}
                 >
-                  {deletingFileName === stored.fileName ? '删除中' : '删除'}
+                  {deletingFileName === stored.fileName ? t('saving') : t('delete')}
                 </button>
               </div>
             </div>
           ))}
-          {snapshotEntities.length === 0 ? <p className="text-sm text-stone-500">还没有快照。</p> : null}
+          {snapshotEntities.length === 0 ? <p className="text-sm text-stone-500">{t('noSnapshots')}</p> : null}
         </div>
       </div>
     </section>
