@@ -103,6 +103,19 @@ cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 
 4. 从左侧 Ribbon 图标或命令面板 `Open WYQD workspace` 打开 WYQD。
 
+### 平台依赖重置
+
+`esbuild` 使用原生二进制。如果同一个 checkout 同时被 Docker/Linux 和 Windows 使用，`node_modules` 里可能留下错误平台的二进制。
+
+如果 `npm run package:obsidian` 报错说当前安装了 `@esbuild/linux-x64`，但 Windows 需要 `@esbuild/win32-x64`，请在当前要构建的平台上重装依赖：
+
+```bash
+npm run deps:reset
+npm run package:obsidian
+```
+
+之后如果切回 Docker/Linux 构建，也需要在 Docker/Linux 内再次执行同样的依赖重置。
+
 ## 验证
 
 运行全量验证与检查：

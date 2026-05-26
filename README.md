@@ -99,6 +99,19 @@ For the normal Ductor Vault mount, replace `/path/to/vault` with `/mnt/zhihaol`.
 
 4. Open WYQD from the ribbon icon or the command palette command `Open WYQD workspace`.
 
+### Platform-Specific Dependency Reset
+
+`esbuild` ships native binaries. If the same checkout is used from Docker/Linux and Windows, `node_modules` can contain the wrong platform binary.
+
+If `npm run package:obsidian` reports that `@esbuild/linux-x64` is installed but `@esbuild/win32-x64` is needed, reset dependencies on the platform where you are building:
+
+```bash
+npm run deps:reset
+npm run package:obsidian
+```
+
+Run the same reset again inside Docker/Linux before building there.
+
 ## Validation
 
 Run the full validation gate:
