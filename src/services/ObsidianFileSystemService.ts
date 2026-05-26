@@ -77,7 +77,7 @@ export class ObsidianFileSystemService {
               data.fileName = entry.name;
               items.push(data);
             }
-          } catch (e) {
+          } catch {
             console.warn('Failed to parse YAML for', entry.name);
           }
         }

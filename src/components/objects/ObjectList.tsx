@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { StoredEntity } from '@/services/MarkdownEntityRepository';
 import type {
   OneTimeExperienceObject,
@@ -18,8 +18,6 @@ import {
   calculateRecurringMonthlyCost,
 } from '@/domain/calculations';
 import { ObjectComposer } from './ObjectComposer';
-
-const springTransition = { type: 'spring' as const, stiffness: 300, damping: 30 };
 
 const typeLabels: Record<WYQDObject['object_type'], string> = {
   physical: '实物',
@@ -59,6 +57,35 @@ const billingCycleLabels: Record<string, string> = {
   custom: '自定义',
 };
 
+const supportingVisuals: Record<
+  Exclude<WYQDObject['object_type'], 'physical'>,
+  {
+    label: string;
+    shortLabel: string;
+    accentClass: string;
+    badgeClass: string;
+    dotClass: string;
+    amountLabel: string;
+  }
+> = {
+  recurring_cost: {
+    label: '固定成本',
+    shortLabel: '订阅',
+    accentClass: 'bg-sky-500',
+    badgeClass: 'bg-sky-50 text-sky-700 ring-sky-200',
+    dotClass: 'bg-sky-500',
+    amountLabel: '周期金额',
+  },
+  one_time_experience: {
+    label: '一次性体验',
+    shortLabel: '体验',
+    accentClass: 'bg-emerald-500',
+    badgeClass: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    dotClass: 'bg-emerald-500',
+    amountLabel: '预算/实际',
+  },
+};
+
 function getPrimaryAmount(object: WYQDObject): number {
   if (object.object_type === 'physical') {
     return calculatePhysicalAcquisitionCost(object);
@@ -71,13 +98,6 @@ function getPrimaryAmount(object: WYQDObject): number {
 
 function formatMoney(value: number): string {
   return `¥${Math.round(value).toLocaleString('zh-CN')}`;
-}
-
-function formatCompactMoney(value: number): string {
-  if (value >= 10000) {
-    return `¥${(value / 10000).toFixed(value >= 100000 ? 0 : 1)}万`;
-  }
-  return formatMoney(value);
 }
 
 function formatOptional(value: string | number | null | undefined): string {
@@ -141,6 +161,7 @@ function todayISO() {
 type PhysicalFilter = 'all' | 'active' | 'retired' | 'sold';
 type ObjectTypeFilter = 'all' | WYQDObject['object_type'];
 type ObjectStatusGroupFilter = 'all' | 'observing' | 'using' | 'exited';
+type ObjectControlBucket = 'attention' | 'active' | 'review' | 'closed';
 
 export interface ObjectListFocus {
   token: number;
@@ -169,6 +190,36 @@ const objectStatusGroupLabels: Record<ObjectStatusGroupFilter, string> = {
   observing: '观察中',
   using: '使用中',
   exited: '已退出',
+};
+
+const objectControlLabels: Record<
+  ObjectControlBucket,
+  { title: string; description: string; statusGroup: ObjectStatusGroupFilter; typeFilter: ObjectTypeFilter }
+> = {
+  attention: {
+    title: '待决策',
+    description: '种草、观察、计划中的对象',
+    statusGroup: 'observing',
+    typeFilter: 'all',
+  },
+  active: {
+    title: '使用中',
+    description: '正在消耗价值或成本',
+    statusGroup: 'using',
+    typeFilter: 'all',
+  },
+  review: {
+    title: '待复盘',
+    description: '已完成但未进入排行榜',
+    statusGroup: 'exited',
+    typeFilter: 'one_time_experience',
+  },
+  closed: {
+    title: '已退出',
+    description: '已退役、取消或完成',
+    statusGroup: 'exited',
+    typeFilter: 'all',
+  },
 };
 
 function isPhysicalObject(object: WYQDObject): object is PhysicalObject {
@@ -210,6 +261,38 @@ function matchesStatusGroup(object: WYQDObject, group: ObjectStatusGroupFilter):
   );
 }
 
+function getObjectTypeFilterCount(
+  objects: StoredEntity<WYQDObject>[],
+  typeFilter: ObjectTypeFilter,
+  statusGroupFilter: ObjectStatusGroupFilter,
+  query: string,
+): number {
+  return objects.filter((stored) => {
+    const object = stored.entity;
+    return (
+      (typeFilter === 'all' || object.object_type === typeFilter) &&
+      matchesStatusGroup(object, statusGroupFilter) &&
+      matchesQuery(object, query)
+    );
+  }).length;
+}
+
+function getObjectStatusGroupCount(
+  objects: StoredEntity<WYQDObject>[],
+  statusGroupFilter: ObjectStatusGroupFilter,
+  typeFilter: ObjectTypeFilter,
+  query: string,
+): number {
+  return objects.filter((stored) => {
+    const object = stored.entity;
+    return (
+      matchesStatusGroup(object, statusGroupFilter) &&
+      (typeFilter === 'all' || object.object_type === typeFilter) &&
+      matchesQuery(object, query)
+    );
+  }).length;
+}
+
 function getSupportingActionLabel(object: WYQDObject): string | null {
   if (object.object_type === 'recurring_cost') {
     if (object.status === 'active') return '暂停';
@@ -241,6 +324,87 @@ function canCancelRecurringCost(object: WYQDObject): object is RecurringCostObje
     object.object_type === 'recurring_cost' &&
     (object.status === 'active' || object.status === 'paused' || object.status === 'seeded')
   );
+}
+
+function getSupportingMeta(object: WYQDObject, nextBillingDate: string | null): string {
+  if (object.object_type === 'recurring_cost') {
+    const cycle = billingCycleLabels[object.billing_cycle || 'monthly'] || '每月';
+    const account = object.payment_account ? ` · ${object.payment_account}` : '';
+    const next = nextBillingDate ? ` · 下次 ${nextBillingDate}` : '';
+    return `${cycle}${account}${next}`;
+  }
+
+  return `${getSupportingTimeLabel(object)}：${formatDateRange(object)}`;
+}
+
+function getPhysicalAccentClasses(bucket: Exclude<PhysicalFilter, 'all'>): {
+  stripe: string;
+  badge: string;
+  dot: string;
+} {
+  if (bucket === 'active') {
+    return {
+      stripe: 'bg-emerald-500',
+      badge: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+      dot: 'bg-emerald-500',
+    };
+  }
+  if (bucket === 'retired') {
+    return {
+      stripe: 'bg-amber-500',
+      badge: 'bg-amber-50 text-amber-700 ring-amber-200',
+      dot: 'bg-amber-500',
+    };
+  }
+  return {
+    stripe: 'bg-stone-400',
+    badge: 'bg-stone-50 text-stone-600 ring-stone-200',
+    dot: 'bg-stone-400',
+  };
+}
+
+function getObjectControlBucket(object: WYQDObject): ObjectControlBucket {
+  if (object.object_type === 'one_time_experience' && object.status === 'completed') {
+    return 'review';
+  }
+  if (['seeded', 'observing', 'planned'].includes(object.status)) return 'attention';
+  if (['purchased', 'using', 'active', 'in_progress'].includes(object.status)) return 'active';
+  return 'closed';
+}
+
+function getPriorityReason(object: WYQDObject): string {
+  if (object.object_type === 'one_time_experience' && object.status === 'completed') {
+    return '待写入复盘与排行榜';
+  }
+  if (object.object_type === 'recurring_cost' && object.status === 'active') {
+    const nextBillingDate = calculateNextBillingDate(object);
+    return nextBillingDate ? `下一笔扣费：${formatDueLabel(nextBillingDate)}` : '订阅中，建议定期复核';
+  }
+  if (object.object_type === 'physical' && ['seeded', 'observing'].includes(object.status)) {
+    return '还在观察，等待买入/放弃决策';
+  }
+  if (object.object_type === 'one_time_experience' && object.status === 'planned') {
+    return '计划中，等待开始或调整';
+  }
+  if (object.object_type === 'recurring_cost' && object.status === 'seeded') {
+    return '候选订阅，等待开通决策';
+  }
+  return `${typeLabels[object.object_type]} · ${getStatusLabel(object)}`;
+}
+
+function getPriorityScore(object: WYQDObject): number {
+  if (object.object_type === 'one_time_experience' && object.status === 'completed') return 0;
+  if (object.object_type === 'recurring_cost' && object.status === 'active') {
+    const nextBillingDate = calculateNextBillingDate(object);
+    if (!nextBillingDate) return 2;
+    const days = daysUntil(nextBillingDate);
+    if (days <= 3) return 0.5;
+    if (days <= 14) return 1;
+    return 2;
+  }
+  if (['seeded', 'observing', 'planned'].includes(object.status)) return 3;
+  if (object.object_type === 'one_time_experience' && object.status === 'in_progress') return 4;
+  return 9;
 }
 
 function transitionSupportingObject(object: WYQDObject): WYQDObject {
@@ -362,52 +526,52 @@ function ObjectDetailPanel({
     <motion.section 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-3xl border border-stone-200 bg-white p-6 shadow-premium sm:p-8"
+      className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-[10px] font-black tracking-widest text-stone-400 uppercase">{typeLabels[object.object_type]}</div>
-          <h2 className="mt-2 break-words text-2xl font-black tracking-tight text-stone-950">{object.title}</h2>
-          <p className="mt-1 break-all text-[10px] font-bold text-stone-300 uppercase">{stored.fileName}</p>
+          <div className="text-xs font-medium text-stone-500">{typeLabels[object.object_type]}</div>
+          <h2 className="mt-1 break-words text-xl font-semibold tracking-tight text-stone-950">{object.title}</h2>
+          <p className="mt-1 break-all text-xs text-stone-400">{stored.fileName}</p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="h-10 shrink-0 rounded-full border border-stone-200 bg-stone-50 px-4 py-2 text-xs font-bold text-stone-600 transition hover:bg-stone-950 hover:text-white"
+          className="h-10 shrink-0 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
         >
           Close
         </button>
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {detailRows.map((row) => (
-          <div key={row.label} className="rounded-2xl bg-stone-50/50 p-4 ring-1 ring-stone-100">
-            <div className="text-[10px] font-black tracking-widest text-stone-400 uppercase">{row.label}</div>
-            <div className="mt-1 break-words text-sm font-bold text-stone-900">{row.value}</div>
+          <div key={row.label} className="rounded-lg bg-stone-50 px-3 py-2">
+            <div className="text-xs text-stone-400">{row.label}</div>
+            <div className="mt-1 break-words text-sm font-medium text-stone-900">{row.value}</div>
           </div>
         ))}
       </div>
 
-      <div className="mt-8">
-        <h3 className="text-xs font-black tracking-widest text-stone-900 uppercase">Lifecycle</h3>
+      <div className="mt-6">
+        <h3 className="text-sm font-semibold text-stone-950">生命周期</h3>
         {timelineRows.length > 0 ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {timelineRows.map((row) => (
               <div key={`${row.label}-${row.value}`} className="flex items-center gap-3 text-xs">
                 <span className="h-1.5 w-1.5 rounded-full bg-stone-300" />
-                <span className="font-bold text-stone-400 uppercase tracking-tight">{row.label}</span>
-                <span className="font-black text-stone-900">{row.value}</span>
+                <span className="text-stone-500">{row.label}</span>
+                <span className="font-medium text-stone-900">{row.value}</span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-stone-400 font-medium italic">暂无可展示的记录。</p>
+          <p className="mt-3 text-sm text-stone-500">暂无可展示的记录。</p>
         )}
       </div>
 
-      <div className="mt-8 pt-8 border-t border-stone-100">
-        <h3 className="text-xs font-black tracking-widest text-stone-900 uppercase">Notes</h3>
-        <div className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-stone-50/30 p-5 text-sm leading-relaxed text-stone-600 font-medium">
+      <div className="mt-6 border-t border-stone-100 pt-5">
+        <h3 className="text-sm font-semibold text-stone-950">Markdown 正文</h3>
+        <div className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-stone-50 p-4 text-sm leading-relaxed text-stone-600">
           {body || '暂无正文内容。'}
         </div>
       </div>
@@ -462,10 +626,13 @@ export function ObjectList({
     focus?.statusGroupFilter || 'all',
   );
   const [filter, setFilter] = useState<PhysicalFilter>(focus?.physicalFilter || 'all');
+  const [controlBucketFilter, setControlBucketFilter] = useState<ObjectControlBucket | null>(null);
+  const [openActionMenuFileName, setOpenActionMenuFileName] = useState<string | null>(null);
 
   const visibleObjects = objects.filter((stored) => {
     const object = stored.entity;
     return (
+      (controlBucketFilter === null || getObjectControlBucket(object) === controlBucketFilter) &&
       (typeFilter === 'all' || object.object_type === typeFilter) &&
       matchesStatusGroup(object, statusGroupFilter) &&
       matchesQuery(object, query)
@@ -480,6 +647,26 @@ export function ObjectList({
     filter === 'all'
       ? physicalObjects
       : physicalObjects.filter((stored) => getPhysicalBucket(stored.entity.status) === filter);
+  const visiblePhysicalFilterCounts: Record<PhysicalFilter, number> = {
+    all: physicalObjects.length,
+    active: physicalObjects.filter((stored) => getPhysicalBucket(stored.entity.status) === 'active')
+      .length,
+    retired: physicalObjects.filter((stored) => getPhysicalBucket(stored.entity.status) === 'retired')
+      .length,
+    sold: physicalObjects.filter((stored) => getPhysicalBucket(stored.entity.status) === 'sold')
+      .length,
+  };
+  const controlCounts = objects.reduce<Record<ObjectControlBucket, number>>(
+    (counts, stored) => {
+      counts[getObjectControlBucket(stored.entity)] += 1;
+      return counts;
+    },
+    { attention: 0, active: 0, review: 0, closed: 0 },
+  );
+  const priorityObjects = objects
+    .filter((stored) => getPriorityScore(stored.entity) < 5)
+    .sort((first, second) => getPriorityScore(first.entity) - getPriorityScore(second.entity))
+    .slice(0, 3);
 
   const totalCost = allPhysicalObjects.reduce((sum, stored) => sum + getPrimaryAmount(stored.entity), 0);
   const dailyCosts = allPhysicalObjects
@@ -491,6 +678,10 @@ export function ObjectList({
   const selectedStored = selectedFileName
     ? objects.find((stored) => stored.fileName === selectedFileName) || null
     : null;
+  const iconButtonClass =
+    'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-sm transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40';
+  const menuItemClass =
+    'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40';
 
   function cancelObjectReview() {
     setReviewingFileName(null);
@@ -500,61 +691,249 @@ export function ObjectList({
     setReviewExperienceRank('');
   }
 
+  function applyControlBucket(bucket: ObjectControlBucket) {
+    const target = objectControlLabels[bucket];
+    setQuery('');
+    setFilter('all');
+    setTypeFilter(target.typeFilter);
+    setStatusGroupFilter(target.statusGroup);
+    setControlBucketFilter(bucket);
+    setOpenActionMenuFileName(null);
+  }
+
   if (objects.length === 0) {
     return (
-      <div className="rounded-3xl border-2 border-dashed border-stone-200 bg-white p-12 text-center">
-        <h2 className="text-base font-bold text-stone-900 uppercase tracking-widest">No Records Found</h2>
-        <p className="mt-2 text-sm text-stone-400 font-medium italic">连接 Vault 后，先捕获一个值得观察的物欲。</p>
+      <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center">
+        <h2 className="text-base font-semibold text-stone-900">还没有对象</h2>
+        <p className="mt-2 text-sm text-stone-500">连接 Vault 后，先捕获一个值得观察的物欲。</p>
       </div>
     );
   }
 
   return (
     <section className="space-y-6">
-      {/* 资产统计卡片 - 采用首页一致的 Rounded-3xl 风格 */}
-      <div className="rounded-3xl bg-white p-6 shadow-premium ring-1 ring-stone-100">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-[10px] font-black tracking-[0.2em] text-stone-400 uppercase">Physical Assets</h2>
-          <span className="text-[10px] font-bold text-stone-300">{allPhysicalObjects.length} Total</span>
-        </div>
-        <div className="mt-6 grid grid-cols-2 gap-8">
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-[10px] font-black tracking-widest text-stone-400 uppercase">Total Value</div>
-            <div className="mt-1 text-3xl font-black tracking-tighter text-stone-950">{formatMoney(totalCost)}</div>
+            <h2 className="text-base font-semibold text-stone-950">对象控制台</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              按决策状态管理物欲、订阅和体验，优先处理最该推进的对象。
+            </p>
+          </div>
+          <span className="w-fit rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+            {objects.length} 个对象
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {(Object.keys(objectControlLabels) as ObjectControlBucket[]).map((bucket) => {
+            const item = objectControlLabels[bucket];
+            const isActive = controlBucketFilter === bucket;
+
+            return (
+              <button
+                key={bucket}
+                type="button"
+                onClick={() => applyControlBucket(bucket)}
+                aria-pressed={isActive}
+                className={`rounded-lg border px-3 py-3 text-left transition ${
+                  isActive
+                    ? 'border-stone-950 bg-stone-950 text-white'
+                    : 'border-stone-200 bg-stone-50 hover:border-stone-400'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span
+                    className={`text-xs font-medium ${isActive ? 'text-stone-300' : 'text-stone-500'}`}
+                  >
+                    {item.title}
+                  </span>
+                  <span className="font-mono text-lg font-semibold">{controlCounts[bucket]}</span>
+                </div>
+                <div className={`mt-2 text-xs ${isActive ? 'text-stone-300' : 'text-stone-500'}`}>
+                  {item.description}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 border-t border-stone-100 pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-stone-950">优先处理</h3>
+            {controlBucketFilter ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setControlBucketFilter(null);
+                  setTypeFilter('all');
+                  setStatusGroupFilter('all');
+                  setFilter('all');
+                }}
+                className="text-xs font-medium text-stone-500 transition hover:text-stone-950"
+              >
+                查看全部
+              </button>
+            ) : null}
+          </div>
+          {priorityObjects.length > 0 ? (
+            <div className="mt-3 divide-y divide-stone-100">
+              {priorityObjects.map((stored) => {
+                const object = stored.entity;
+                const isReviewTarget =
+                  object.object_type === 'one_time_experience' && object.status === 'completed';
+
+                return (
+                  <div
+                    key={stored.fileName}
+                    className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600">
+                          {typeLabels[object.object_type]}
+                        </span>
+                        <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                          {getStatusLabel(object)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 truncate text-sm font-semibold text-stone-950">
+                        {object.title}
+                      </div>
+                      <div className="mt-1 text-xs text-stone-500">{getPriorityReason(object)}</div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                      <div className="font-mono text-sm font-semibold text-stone-950">
+                        {formatMoney(getPrimaryAmount(object))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setControlBucketFilter(null);
+                          setTypeFilter('all');
+                          setStatusGroupFilter('all');
+                          setFilter('all');
+                          setSelectedFileName(stored.fileName);
+                          if (isReviewTarget) setReviewingFileName(stored.fileName);
+                          setOpenActionMenuFileName(null);
+                        }}
+                        className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950"
+                      >
+                        {isReviewTarget ? '复盘' : '查看'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-lg bg-stone-50 px-3 py-3 text-sm text-stone-500">
+              当前没有高优先级对象，适合补充新对象或更新账户快照。
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-stone-950">实物资产</h2>
+          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+            {allPhysicalObjects.length} 件
+          </span>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs text-stone-500">总取得成本</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
+              {formatMoney(totalCost)}
+            </div>
           </div>
           <div>
-            <div className="text-[10px] font-black tracking-widest text-stone-400 uppercase">Daily Weighted</div>
-            <div className="mt-1 text-3xl font-black tracking-tighter text-stone-950">{formatMoney(averageDailyCost)}<span className="text-sm font-bold text-stone-300">/D</span></div>
+            <div className="text-xs text-stone-500">日均成本</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
+              {formatMoney(averageDailyCost)}
+              <span className="ml-1 text-xs font-medium text-stone-400">/天</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 搜索与过滤区 - 去盒子化，更加轻盈 */}
-      <div className="space-y-4 px-1">
+      <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
         <label className="block">
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search name, category, or status..."
-            className="w-full rounded-2xl border border-stone-200 bg-white px-5 py-4 text-sm font-medium text-stone-950 outline-none transition-all placeholder:text-stone-300 focus:border-stone-950 focus:shadow-premium shadow-sm"
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setControlBucketFilter(null);
+            }}
+            placeholder="搜索名称、品类、状态或对象类型"
+            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-500"
           />
         </label>
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="对象类型筛选">
           {(Object.keys(objectTypeFilterLabels) as ObjectTypeFilter[]).map((item) => (
             <button
               key={item}
               type="button"
-              onClick={() => setTypeFilter(item)}
-              className={`shrink-0 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+              onClick={() => {
+                setTypeFilter(item);
+                setControlBucketFilter(null);
+              }}
+              aria-pressed={typeFilter === item}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
                 typeFilter === item
-                  ? 'bg-stone-950 text-white shadow-md'
-                  : 'bg-white text-stone-400 ring-1 ring-stone-200 hover:text-stone-900'
+                  ? 'bg-stone-950 text-white'
+                  : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
               }`}
             >
-              {objectTypeFilterLabels[item]}
+              {objectTypeFilterLabels[item]}（
+              {getObjectTypeFilterCount(objects, item, statusGroupFilter, query)}）
             </button>
           ))}
         </div>
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="对象状态筛选">
+          {(Object.keys(objectStatusGroupLabels) as ObjectStatusGroupFilter[]).map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => {
+                setStatusGroupFilter(item);
+                setControlBucketFilter(null);
+              }}
+              aria-pressed={statusGroupFilter === item}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                statusGroupFilter === item
+                  ? 'bg-stone-950 text-white'
+                  : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
+              }`}
+            >
+              {objectStatusGroupLabels[item]}（
+              {getObjectStatusGroupCount(objects, item, typeFilter, query)}）
+            </button>
+          ))}
+        </div>
+        {physicalObjects.length > 0 ? (
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="实物状态筛选">
+            {(Object.keys(filterLabels) as PhysicalFilter[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => {
+                  setFilter(item);
+                  setControlBucketFilter(null);
+                }}
+                aria-pressed={filter === item}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                  filter === item
+                    ? 'bg-stone-800 text-white'
+                    : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
+                }`}
+              >
+                {filterLabels[item]}（{visiblePhysicalFilterCounts[item]}）
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* 列表主体 */}
@@ -562,123 +941,163 @@ export function ObjectList({
         {filteredObjects.map((stored) => {
           const object = stored.entity;
           const isEditing = editingFileName === stored.fileName;
-          const dailyCost = getDailyCost(object);
-          const serviceDays = getServiceDays(object);
-          const bucket = getPhysicalBucket(object.status);
+	          const dailyCost = getDailyCost(object);
+	          const serviceDays = getServiceDays(object);
+	          const bucket = getPhysicalBucket(object.status);
+	          const accent = getPhysicalAccentClasses(bucket);
 
-          return (
-            <article
-              key={stored.fileName}
-              className="group relative rounded-3xl bg-white p-5 shadow-premium transition-all hover:shadow-active ring-1 ring-stone-100"
-            >
-              {isEditing ? (
-                <ObjectComposer
-                  disabled={disabled}
-                  initialObject={object}
-                  submitLabel="保存修改"
-                  onCancel={() => setEditingFileName(null)}
-                  onSubmit={async (updatedObject, body) => {
-                    await onUpdate(stored.fileName, updatedObject, stored.body || body);
-                    setEditingFileName(null);
-                  }}
-                />
-              ) : (
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                  <div className="flex shrink-0 items-start justify-between gap-3 sm:w-28 sm:flex-col sm:justify-start">
-                    <span className="text-[10px] font-black tracking-widest text-stone-300 uppercase">
-                      {typeLabels[object.object_type]}
-                    </span>
-                    <span
-                      className={`min-w-0 max-w-full rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tight ring-1 ${
-                        bucket === 'active' 
-                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                          : bucket === 'retired'
-                          ? 'bg-amber-50 text-amber-700 ring-amber-200'
-                          : 'bg-stone-50 text-stone-500 ring-stone-200'
-                      }`}
-                    >
-                      {getStatusLabel(object)}
-                    </span>
-                  </div>
+	          return (
+	            <article
+	              key={stored.fileName}
+	              className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
+	            >
+	              {isEditing ? (
+	                <div className="p-4">
+	                  <ObjectComposer
+	                    disabled={disabled}
+	                    initialObject={object}
+	                    submitLabel="保存修改"
+	                    onCancel={() => setEditingFileName(null)}
+	                    onSubmit={async (updatedObject, body) => {
+	                      await onUpdate(stored.fileName, updatedObject, stored.body || body);
+	                      setEditingFileName(null);
+	                    }}
+	                  />
+	                </div>
+	              ) : (
+	                <div className="flex">
+	                  <div className={`w-1.5 shrink-0 ${accent.stripe}`} aria-hidden="true" />
+	                  <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:flex-row md:items-center">
+	                    <div
+	                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-sm font-semibold text-stone-700 ring-1 ring-stone-200"
+	                      aria-hidden="true"
+	                    >
+	                      实物
+	                    </div>
 
-                  <div className="min-w-0 flex-1">
-                    <h3 className="line-clamp-2 break-words text-lg font-bold tracking-tight text-stone-950 leading-tight">
-                      {object.title}
-                    </h3>
-                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold text-stone-400 uppercase tracking-widest">
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-1 w-1 rounded-full bg-stone-300" />
-                        {serviceDays ? `${serviceDays} Days` : 'Planned'}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-1 w-1 rounded-full bg-stone-300" />
-                        {formatDateRange(object)}
-                      </div>
-                      {object.category ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-1 w-1 rounded-full bg-stone-300" />
-                          {object.category}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+	                    <div className="min-w-0 flex-1">
+	                      <div className="flex flex-wrap items-center gap-2">
+	                        <h3 className="min-w-0 break-words text-base font-semibold leading-snug text-stone-950">
+	                          {object.title}
+	                        </h3>
+	                        <span
+	                          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${accent.badge}`}
+	                        >
+	                          {getStatusLabel(object)}
+	                        </span>
+	                      </div>
+	                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
+	                        <span className="flex items-center gap-1.5">
+	                          <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} />
+	                          {serviceDays ? `已用 ${serviceDays} 天` : '未开始'}
+	                        </span>
+	                        <span>{formatDateRange(object)}</span>
+	                        {object.category ? <span>{object.category}</span> : null}
+	                      </div>
+	                    </div>
 
-                  <div className="flex items-center justify-between gap-6 sm:justify-end sm:shrink-0 sm:w-64">
-                    <div className="text-right">
-                      <div className="text-[10px] font-black tracking-widest text-stone-300 uppercase">Daily Cost</div>
-                      <div className="mt-1 text-xl font-black text-stone-950 tracking-tighter leading-none">
-                        {dailyCost ? `¥${Math.round(dailyCost)}` : '—'}
-                      </div>
-                    </div>
+	                    <div className="flex items-center justify-between gap-3 md:w-72 md:shrink-0 md:justify-end">
+	                      <div className="min-w-[7rem] rounded-lg bg-stone-50 px-3 py-2 text-right">
+	                        <div className="text-xs text-stone-400">日均成本</div>
+	                        <div className="mt-0.5 font-mono text-base font-semibold leading-none text-stone-950">
+	                          {dailyCost ? `¥${Math.round(dailyCost)}` : '—'}
+	                        </div>
+	                      </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedFileName(stored.fileName)}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-50 text-stone-600 transition hover:bg-stone-950 hover:text-white ring-1 ring-stone-200"
-                        title="详情"
+	                    <div className="relative flex gap-1.5">
+	                      <button
+	                        type="button"
+	                        onClick={() => {
+	                          setSelectedFileName(stored.fileName);
+	                          setOpenActionMenuFileName(null);
+	                        }}
+	                        aria-label={`查看「${object.title}」详情`}
+	                        className={iconButtonClass}
+	                        title="详情"
                       >
-                        <span className="text-xs">👁️</span>
+                        <span aria-hidden="true">🔎</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingFileName(stored.fileName)}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-50 text-stone-600 transition hover:bg-stone-950 hover:text-white ring-1 ring-stone-200"
-                        disabled={disabled}
+	                      <button
+	                        type="button"
+	                        onClick={() => {
+	                          setEditingFileName(stored.fileName);
+	                          setOpenActionMenuFileName(null);
+	                        }}
+	                        aria-label={`修改「${object.title}」`}
+	                        className={iconButtonClass}
+	                        disabled={disabled}
                         title="修改"
                       >
-                        <span className="text-xs">✏️</span>
+                        <span aria-hidden="true">✏️</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const next: PhysicalObject = {
-                            ...object,
-                            status: 'idle',
-                            ended_at: object.ended_at || todayISO(),
-                            updated_at: todayISO(),
-                          };
-                          setExitingFileName(stored.fileName);
-                          try {
-                            await onUpdate(stored.fileName, next, stored.body);
-                          } finally {
-                            setExitingFileName(null);
-                          }
-                        }}
-                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition ring-1 ${
-                          bucket === 'active' 
-                            ? 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-600 hover:text-white' 
-                            : 'opacity-20 grayscale cursor-not-allowed'
-                        }`}
-                        disabled={disabled || exitingFileName === stored.fileName || bucket !== 'active'}
-                        title="退役"
-                      >
-                        <span className="text-xs">📦</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+	                      <button
+	                        type="button"
+	                        onClick={() =>
+	                          setOpenActionMenuFileName((current) =>
+	                            current === stored.fileName ? null : stored.fileName,
+	                          )
+	                        }
+	                        aria-label={`更多操作「${object.title}」`}
+	                        className={iconButtonClass}
+	                        title="更多"
+	                      >
+	                        <span aria-hidden="true">⋯</span>
+	                      </button>
+	                      {openActionMenuFileName === stored.fileName ? (
+	                        <div className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+	                          <button
+	                            type="button"
+	                            onClick={async () => {
+	                              const next: PhysicalObject = {
+	                                ...object,
+	                                status: 'idle',
+	                                ended_at: object.ended_at || todayISO(),
+	                                updated_at: todayISO(),
+	                              };
+	                              setOpenActionMenuFileName(null);
+	                              setExitingFileName(stored.fileName);
+	                              try {
+	                                await onUpdate(stored.fileName, next, stored.body);
+	                              } finally {
+	                                setExitingFileName(null);
+	                              }
+	                            }}
+	                            className={menuItemClass}
+	                            disabled={
+	                              disabled || exitingFileName === stored.fileName || bucket !== 'active'
+	                            }
+	                          >
+	                            <span>退役</span>
+	                            <span aria-hidden="true">📦</span>
+	                          </button>
+	                          <button
+	                            type="button"
+	                            onClick={async () => {
+	                              const confirmed = window.confirm(`删除「${object.title}」？`);
+	                              if (!confirmed) return;
+	                              setOpenActionMenuFileName(null);
+	                              setDeletingFileName(stored.fileName);
+	                              try {
+	                                await onDelete(stored.fileName);
+	                              } finally {
+	                                setDeletingFileName(null);
+	                              }
+	                            }}
+	                            className={`${menuItemClass} text-red-600 hover:bg-red-50`}
+	                            disabled={disabled || deletingFileName === stored.fileName}
+	                          >
+	                            <span>删除</span>
+	                            <span aria-hidden="true">
+	                              {deletingFileName === stored.fileName ? '…' : '🗑️'}
+	                            </span>
+	                          </button>
+	                        </div>
+	                      ) : null}
+	                    </div>
+	                    </div>
+	                  </div>
+	                </div>
+	              )}
             </article>
           );
         })}
@@ -691,101 +1110,334 @@ export function ObjectList({
         />
       ) : null}
 
-      {/* 固定成本与体验 - 重构为更加紧凑的 Action Center 风格 */}
       {supportingObjects.length > 0 ? (
-        <section className="space-y-4 pt-4">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-[10px] font-black tracking-[0.2em] text-stone-400 uppercase">Fixed Costs & Experiences</h2>
-            <span className="text-[10px] font-bold text-stone-300">{supportingObjects.length} Active</span>
+        <section className="space-y-3 pt-2">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <div>
+              <h2 className="text-base font-semibold text-stone-950">固定成本与体验</h2>
+              <p className="mt-0.5 text-xs text-stone-500">订阅、服务和一次性体验统一管理。</p>
+            </div>
+            <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+              {supportingObjects.length} 项
+            </span>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-2.5">
             {supportingObjects.map((stored) => {
               const object = stored.entity;
               const isEditing = editingFileName === stored.fileName;
+              const isReviewing = reviewingFileName === stored.fileName;
+              const visual =
+                object.object_type === 'recurring_cost'
+                  ? supportingVisuals.recurring_cost
+                  : supportingVisuals.one_time_experience;
               const nextBillingDate =
                 object.object_type === 'recurring_cost' && object.status === 'active'
                   ? calculateNextBillingDate(object)
                   : null;
+              const supportingActionLabel = getSupportingActionLabel(object);
 
               return isEditing ? (
-                <ObjectComposer
+                <div
                   key={stored.fileName}
-                  disabled={disabled}
-                  initialObject={object}
-                  submitLabel="保存修改"
-                  onCancel={() => setEditingFileName(null)}
-                  onSubmit={async (updatedObject, body) => {
-                    await onUpdate(stored.fileName, updatedObject, stored.body || body);
-                    setEditingFileName(null);
-                  }}
-                />
+                  className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm"
+                >
+                  <ObjectComposer
+                    disabled={disabled}
+                    initialObject={object}
+                    submitLabel="保存修改"
+                    onCancel={() => setEditingFileName(null)}
+                    onSubmit={async (updatedObject, body) => {
+                      await onUpdate(stored.fileName, updatedObject, stored.body || body);
+                      setEditingFileName(null);
+                    }}
+                  />
+                </div>
               ) : (
                 <article
                   key={stored.fileName}
-                  className="group relative rounded-3xl bg-white p-5 shadow-premium transition-all hover:shadow-active ring-1 ring-stone-100"
+                  className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
                 >
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                    <div className="flex shrink-0 items-start justify-between gap-3 sm:w-28 sm:flex-col sm:justify-start">
-                      <span className="text-[10px] font-black tracking-widest text-stone-300 uppercase">
-                        {typeLabels[object.object_type]}
-                      </span>
-                      <span className="min-w-0 max-w-full rounded-full bg-stone-50 px-2 py-0.5 text-[9px] font-black text-stone-500 uppercase tracking-tight ring-1 ring-stone-200">
-                        {getStatusLabel(object)}
-                      </span>
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <h3 className="line-clamp-2 break-words text-lg font-bold tracking-tight text-stone-950 leading-tight">
-                        {object.title}
-                      </h3>
-                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold text-stone-400 uppercase tracking-widest">
-                        {nextBillingDate ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="h-1 w-1 rounded-full bg-stone-300" />
-                            Next: {nextBillingDate}
+                  <div className="flex">
+                    <div className={`w-1.5 shrink-0 ${visual.accentClass}`} aria-hidden="true" />
+                    <div className="min-w-0 flex-1 p-4">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                        <div className="flex min-w-0 flex-1 gap-3">
+                          <div
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ring-1 ${visual.badgeClass}`}
+                            aria-hidden="true"
+                          >
+                            {visual.shortLabel}
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <span className="h-1 w-1 rounded-full bg-stone-300" />
-                            {formatDateRange(object)}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="min-w-0 break-words text-base font-semibold leading-snug text-stone-950">
+                                {object.title}
+                              </h3>
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${visual.badgeClass}`}
+                              >
+                                {getStatusLabel(object)}
+                              </span>
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
+                              <span className="flex items-center gap-1.5">
+                                <span className={`h-1.5 w-1.5 rounded-full ${visual.dotClass}`} />
+                                {visual.label}
+                              </span>
+                              <span>{getSupportingMeta(object, nextBillingDate)}</span>
+                              {object.category ? <span>{object.category}</span> : null}
+                            </div>
                           </div>
-                        )}
-                        {object.category ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="h-1 w-1 rounded-full bg-stone-300" />
-                            {object.category}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-6 sm:justify-end sm:shrink-0 sm:w-64">
-                      <div className="text-right">
-                        <div className="text-[10px] font-black tracking-widest text-stone-300 uppercase">Amount</div>
-                        <div className="mt-1 text-xl font-black text-stone-950 tracking-tighter leading-none">
-                          {formatMoney(getPrimaryAmount(object))}
                         </div>
+
+	                        <div className="flex items-center justify-between gap-3 sm:w-72 sm:shrink-0 sm:justify-end">
+	                          <div className="rounded-lg bg-stone-50 px-3 py-2 sm:text-right">
+	                            <div className="text-xs text-stone-400">{visual.amountLabel}</div>
+	                            <div className="mt-0.5 font-mono text-base font-semibold text-stone-950">
+	                              {formatMoney(getPrimaryAmount(object))}
+	                            </div>
+	                            {nextBillingDate ? (
+	                              <div className="mt-0.5 text-[11px] text-sky-700">
+	                                {formatDueLabel(nextBillingDate)}
+	                              </div>
+	                            ) : null}
+	                          </div>
+
+	                          <div className="relative flex gap-1.5 overflow-visible pb-0.5">
+	                            <button
+	                              type="button"
+	                              onClick={() => {
+	                                setSelectedFileName(stored.fileName);
+	                                setOpenActionMenuFileName(null);
+	                              }}
+	                              aria-label={`查看「${object.title}」详情`}
+	                              title="详情"
+	                              className={iconButtonClass}
+                            >
+                              <span aria-hidden="true">🔎</span>
+                            </button>
+	                            <button
+	                              type="button"
+	                              onClick={() => {
+	                                setEditingFileName(stored.fileName);
+	                                setOpenActionMenuFileName(null);
+	                              }}
+	                              aria-label={`修改「${object.title}」`}
+	                              title="修改"
+	                              className={iconButtonClass}
+                              disabled={disabled}
+                            >
+                              <span aria-hidden="true">✏️</span>
+                            </button>
+                            {supportingActionLabel ? (
+                              <button
+                                type="button"
+	                                onClick={async () => {
+	                                  if (
+	                                    object.object_type === 'one_time_experience' &&
+	                                    object.status === 'completed'
+	                                  ) {
+	                                    setOpenActionMenuFileName(null);
+	                                    setReviewingFileName(stored.fileName);
+	                                    return;
+	                                  }
+
+	                                  setOpenActionMenuFileName(null);
+	                                  setExitingFileName(stored.fileName);
+	                                  try {
+	                                    await onUpdate(
+                                      stored.fileName,
+                                      transitionSupportingObject(object),
+                                      stored.body,
+                                    );
+                                  } finally {
+                                    setExitingFileName(null);
+                                  }
+                                }}
+                                aria-label={`${supportingActionLabel}「${object.title}」`}
+                                title={supportingActionLabel}
+                                className={`${iconButtonClass} border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50`}
+                                disabled={disabled || exitingFileName === stored.fileName}
+                              >
+                                <span aria-hidden="true">
+                                  {exitingFileName === stored.fileName
+                                    ? '…'
+                                    : getSupportingActionIcon(object)}
+                                </span>
+	                              </button>
+	                            ) : null}
+	                            <button
+	                              type="button"
+	                              onClick={() =>
+	                                setOpenActionMenuFileName((current) =>
+	                                  current === stored.fileName ? null : stored.fileName,
+	                                )
+	                              }
+	                              aria-label={`更多操作「${object.title}」`}
+	                              title="更多"
+	                              className={iconButtonClass}
+	                            >
+	                              <span aria-hidden="true">⋯</span>
+	                            </button>
+	                            {openActionMenuFileName === stored.fileName ? (
+	                              <div className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+	                                {canCancelRecurringCost(object) ? (
+	                                  <button
+	                                    type="button"
+	                                    onClick={async () => {
+	                                      const reason = window.prompt(`取消「${object.title}」的原因？`);
+	                                      if (reason === null) return;
+
+	                                      const next: RecurringCostObject = {
+	                                        ...object,
+	                                        status: 'cancelled',
+	                                        cancelled_at: todayISO(),
+	                                        cancel_reason: reason.trim() || '未记录',
+	                                        updated_at: todayISO(),
+	                                      };
+	                                      setOpenActionMenuFileName(null);
+	                                      setExitingFileName(stored.fileName);
+	                                      try {
+	                                        await onUpdate(stored.fileName, next, stored.body);
+	                                      } finally {
+	                                        setExitingFileName(null);
+	                                      }
+	                                    }}
+	                                    className={`${menuItemClass} text-red-600 hover:bg-red-50`}
+	                                    disabled={disabled || exitingFileName === stored.fileName}
+	                                  >
+	                                    <span>取消订阅</span>
+	                                    <span aria-hidden="true">🚫</span>
+	                                  </button>
+	                                ) : null}
+	                                <button
+	                                  type="button"
+	                                  onClick={async () => {
+	                                    const confirmed = window.confirm(`删除「${object.title}」？`);
+	                                    if (!confirmed) return;
+	                                    setOpenActionMenuFileName(null);
+	                                    setDeletingFileName(stored.fileName);
+	                                    try {
+	                                      await onDelete(stored.fileName);
+	                                    } finally {
+	                                      setDeletingFileName(null);
+	                                    }
+	                                  }}
+	                                  className={`${menuItemClass} text-red-600 hover:bg-red-50`}
+	                                  disabled={disabled || deletingFileName === stored.fileName}
+	                                >
+	                                  <span>删除</span>
+	                                  <span aria-hidden="true">
+	                                    {deletingFileName === stored.fileName ? '…' : '🗑️'}
+	                                  </span>
+	                                </button>
+	                              </div>
+	                            ) : null}
+	                          </div>
+	                        </div>
                       </div>
 
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedFileName(stored.fileName)}
-                          className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-50 text-stone-600 transition hover:bg-stone-950 hover:text-white ring-1 ring-stone-200"
-                          title="详情"
+                      {isReviewing ? (
+                        <form
+                          className="mt-4 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3"
+                          onSubmit={async (event) => {
+                            event.preventDefault();
+                            const summary = reviewSummary.trim();
+                            if (!summary) return;
+
+                            setExitingFileName(stored.fileName);
+                            try {
+                              await onCreateObjectReview(
+                                stored.fileName,
+                                object,
+                                summary,
+                                {
+                                  foodRank: parseRank(reviewFoodRank),
+                                  sceneryRank: parseRank(reviewSceneryRank),
+                                  experienceRank: parseRank(reviewExperienceRank),
+                                },
+                                stored.body,
+                              );
+                              cancelObjectReview();
+                            } finally {
+                              setExitingFileName(null);
+                            }
+                          }}
                         >
-                          <span className="text-xs">👁️</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingFileName(stored.fileName)}
-                          className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-50 text-stone-600 transition hover:bg-stone-950 hover:text-white ring-1 ring-stone-200"
-                          disabled={disabled}
-                          title="修改"
-                        >
-                          <span className="text-xs">✏️</span>
-                        </button>
-                      </div>
+                          <div>
+                            <label className="block text-xs font-medium text-stone-500">
+                              体验复盘
+                            </label>
+                            <textarea
+                              value={reviewSummary}
+                              onChange={(event) => setReviewSummary(event.target.value)}
+                              rows={3}
+                              placeholder="这次体验留下了什么？它在同类体验里排第几？"
+                              className="mt-1.5 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+                              disabled={disabled || exitingFileName === stored.fileName}
+                            />
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-stone-500">排行榜排位</div>
+                            <div className="mt-1.5 grid grid-cols-3 gap-2">
+                              <input
+                                value={reviewFoodRank}
+                                onChange={(event) => setReviewFoodRank(event.target.value)}
+                                type="number"
+                                min="1"
+                                inputMode="numeric"
+                                placeholder="美食"
+                                aria-label="美食排位"
+                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+                                disabled={disabled || exitingFileName === stored.fileName}
+                              />
+                              <input
+                                value={reviewSceneryRank}
+                                onChange={(event) => setReviewSceneryRank(event.target.value)}
+                                type="number"
+                                min="1"
+                                inputMode="numeric"
+                                placeholder="风景"
+                                aria-label="风景排位"
+                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+                                disabled={disabled || exitingFileName === stored.fileName}
+                              />
+                              <input
+                                value={reviewExperienceRank}
+                                onChange={(event) => setReviewExperienceRank(event.target.value)}
+                                type="number"
+                                min="1"
+                                inputMode="numeric"
+                                placeholder="体验"
+                                aria-label="体验排位"
+                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+                                disabled={disabled || exitingFileName === stored.fileName}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={cancelObjectReview}
+                              className="rounded-md border border-stone-200 bg-white px-2 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
+                              disabled={exitingFileName === stored.fileName}
+                            >
+                              取消
+                            </button>
+                            <button
+                              type="submit"
+                              className="rounded-md bg-stone-950 px-2 py-2 text-xs font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                              disabled={
+                                disabled ||
+                                exitingFileName === stored.fileName ||
+                                reviewSummary.trim().length === 0
+                              }
+                            >
+                              {exitingFileName === stored.fileName ? '写入中' : '写入复盘'}
+                            </button>
+                          </div>
+                        </form>
+                      ) : null}
                     </div>
                   </div>
                 </article>

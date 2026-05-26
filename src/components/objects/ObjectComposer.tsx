@@ -451,6 +451,19 @@ export function ObjectComposer({
     });
   }
 
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.key === 'Escape' && onCancel) {
+      event.preventDefault();
+      onCancel();
+    }
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      if (canSubmit) {
+        handleSubmit(event as unknown as React.FormEvent);
+      }
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!canSubmit) return;
@@ -515,6 +528,7 @@ export function ObjectComposer({
 
   return (
     <form
+      onKeyDown={handleKeyDown}
       onSubmit={handleSubmit}
       className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm shadow-stone-200/40 sm:p-5"
     >
@@ -580,7 +594,7 @@ export function ObjectComposer({
           />
         </label>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_118px]">
+        <div className="grid grid-cols-1 gap-3">
           <label className="block min-w-0">
             <span className="mb-1.5 block text-xs font-medium text-stone-500">类型</span>
             <select
@@ -612,7 +626,7 @@ export function ObjectComposer({
 
         {objectType === 'physical' ? (
           <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
                 <span className="mb-1.5 block text-xs font-medium text-stone-500">购买日</span>
                 <input
@@ -637,7 +651,7 @@ export function ObjectComposer({
               </label>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_128px]">
+            <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
                 <span className="mb-1.5 block text-xs font-medium text-stone-500">品类</span>
                 <select
@@ -675,7 +689,7 @@ export function ObjectComposer({
 
         {objectType === 'recurring_cost' ? (
           <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
                 <span className="mb-1.5 block text-xs font-medium text-stone-500">周期</span>
                 <select
@@ -707,7 +721,7 @@ export function ObjectComposer({
                 </select>
               </label>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
                 <span className="mb-1.5 block text-xs font-medium text-stone-500">开始日</span>
                 <input
@@ -748,7 +762,7 @@ export function ObjectComposer({
         ) : null}
 
         {objectType === 'one_time_experience' ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3">
             <label className="block min-w-0">
               <span className="mb-1.5 block text-xs font-medium text-stone-500">实际金额</span>
               <input

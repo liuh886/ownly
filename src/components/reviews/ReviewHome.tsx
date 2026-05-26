@@ -81,6 +81,25 @@ function hasRanking(review: ReviewEntry): boolean {
   return getRankingItems(review).length > 0;
 }
 
+const rankingDimensions: Array<{
+  key: 'food_rank' | 'scenery_rank' | 'experience_rank';
+  label: string;
+}> = [
+  { key: 'food_rank', label: '美食' },
+  { key: 'scenery_rank', label: '风景' },
+  { key: 'experience_rank', label: '体验' },
+];
+
+function buildRankingBoards(reviews: StoredEntity<ReviewEntry>[]) {
+  return rankingDimensions.map((dimension) => ({
+    ...dimension,
+    entries: reviews
+      .filter((stored) => stored.entity[dimension.key])
+      .sort((a, b) => (a.entity[dimension.key] || 9999) - (b.entity[dimension.key] || 9999))
+      .slice(0, 3),
+  }));
+}
+
 function createReviewDraft(
   summary: string,
   foodRank: string,
@@ -148,6 +167,19 @@ export function ReviewHome({
     (total, object) => total + getExperienceAmount(object),
     0,
   );
+  const reviewedTargetIds = new Set(
+    reviews
+      .map((stored) => stored.entity.target_id)
+      .filter((targetId): targetId is string => Boolean(targetId)),
+  );
+  const pendingReviewExperiences = experiences.filter(
+    (object) =>
+      object.status === 'completed' && !object.review_ref && !reviewedTargetIds.has(object.id),
+  );
+  const reviewedExperiences = experiences.filter(
+    (object) =>
+      object.status === 'reviewed' || Boolean(object.review_ref) || reviewedTargetIds.has(object.id),
+  );
   const latestReviews = useMemo(
     () =>
       [...reviews].sort((a, b) =>
@@ -156,6 +188,7 @@ export function ReviewHome({
     [reviews],
   );
   const rankedReviewCount = reviews.filter((stored) => hasRanking(stored.entity)).length;
+  const rankingBoards = useMemo(() => buildRankingBoards(reviews), [reviews]);
   const objectById = useMemo(
     () => new Map(objects.map((object) => [object.id, object])),
     [objects],
@@ -258,32 +291,120 @@ export function ReviewHome({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-xl bg-white p-5 shadow-sm shadow-stone-200/40 ring-1 ring-stone-100">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-sm text-stone-500">年度体验成本</div>
-            <div className="mt-2 break-words text-3xl font-semibold tracking-tight text-stone-950">
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-stone-950">复盘控制台</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              把一次性体验沉淀成排行榜、退出记录和下一次决策依据。
+            </p>
+          </div>
+          <span className="w-fit rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+            {reviews.length} 条复盘
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border border-stone-200 bg-stone-950 px-3 py-3 text-white">
+            <div className="text-xs font-medium text-stone-300">体验成本</div>
+            <div className="mt-2 font-mono text-xl font-semibold tracking-tight">
               {formatMoney(experienceTotal)}
             </div>
             <div className="mt-1 text-xs text-stone-400">{experiences.length} 个一次性体验</div>
           </div>
-          <span className="shrink-0 rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">
-            复盘层
-          </span>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
+            <div className="text-xs font-medium text-stone-500">待复盘</div>
+            <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
+              {pendingReviewExperiences.length}
+            </div>
+            <div className="mt-1 text-xs text-stone-500">已完成但未沉淀</div>
+          </div>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
+            <div className="text-xs font-medium text-stone-500">已沉淀</div>
+            <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
+              {reviewedExperiences.length}
+            </div>
+            <div className="mt-1 text-xs text-stone-500">已形成体验资产</div>
+          </div>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
+            <div className="text-xs font-medium text-stone-500">排行榜</div>
+            <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
+              {rankedReviewCount}
+            </div>
+            <div className="mt-1 text-xs text-stone-500">美食、风景、体验排位</div>
+          </div>
+        </div>
+
+        <div className="mt-5 border-t border-stone-100 pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-stone-950">复盘队列</h3>
+            <span className="text-xs text-stone-400">{exitedItems.length} 个退出/完成对象</span>
+          </div>
+          {pendingReviewExperiences.length > 0 ? (
+            <div className="mt-3 divide-y divide-stone-100">
+              {pendingReviewExperiences.slice(0, 4).map((experience) => (
+                <div
+                  key={experience.id}
+                  className="flex items-center justify-between gap-3 py-3"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-stone-950">
+                      {experience.title}
+                    </div>
+                    <div className="mt-1 text-xs text-stone-500">
+                      {getStatusLabel(experience)} · {formatMoney(getExperienceAmount(experience))}
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                    待复盘
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-lg bg-stone-50 px-3 py-3 text-sm text-stone-500">
+              暂无待复盘体验。下一步可以补充排行榜或整理历史复盘。
+            </p>
+          )}
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <div className="text-sm text-stone-500">排行榜记录</div>
-          <div className="mt-2 text-2xl font-semibold text-stone-950">{rankedReviewCount}</div>
-          <div className="mt-1 text-xs text-stone-400">美食、风景、体验排位</div>
-        </div>
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <div className="text-sm text-stone-500">退出记录</div>
-          <div className="mt-2 text-2xl font-semibold text-stone-950">{exitedItems.length}</div>
-          <div className="mt-1 text-xs text-stone-400">退役、卖出、取消或完成</div>
-        </div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        {rankingBoards.map((board) => (
+          <section key={board.key} className="rounded-xl border border-stone-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-stone-950">{board.label}榜</h2>
+              <span className="text-xs text-stone-400">Top {board.entries.length}</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {board.entries.map((stored) => (
+                <button
+                  key={`${board.key}-${stored.fileName}`}
+                  type="button"
+                  onClick={() => setSelectedReviewFileName(stored.fileName)}
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-stone-100 bg-stone-50 px-3 py-2 text-left transition hover:border-stone-300 hover:bg-white"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-stone-950">
+                      {stored.entity.target || stored.entity.title}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-stone-500">
+                      {stored.entity.reviewed_at || stored.entity.created_at}
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-mono text-sm font-semibold text-stone-950">
+                    #{stored.entity[board.key]}
+                  </span>
+                </button>
+              ))}
+              {board.entries.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-5 text-center text-xs text-stone-500">
+                  暂无排位
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ))}
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm shadow-stone-200/40 sm:p-5">

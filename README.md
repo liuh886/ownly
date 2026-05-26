@@ -1,11 +1,15 @@
 # WYQD
 
-WYQD is a local-first personal asset and experience-cost decision workspace. It currently ships as:
+WYQD is an Obsidian-native, local-first decision ledger for possessions, subscriptions, and experiences.
+
+**Own less, Live more, Decide better.**
+
+It currently ships as:
 
 - a Web App for browser/PM2 use
 - a private Obsidian plugin alpha for Vault-native use
 
-The product direction is Obsidian-native, but the Web App remains supported.
+The product direction is Obsidian plugin first, while the Web App remains supported as a compatible browser runtime and development surface.
 
 ## Version
 
@@ -80,6 +84,22 @@ Run the full validation gate:
 npm run validate
 ```
 
+Run the agent-friendly CLI against a Vault:
+
+```bash
+npm run wyqd -- --vault /path/to/vault object list
+```
+
+## Sample Vault
+
+A repeatable demo fixture is available at:
+
+```text
+samples/wyqd-vault/
+```
+
+Use it as a disposable Vault fixture for Web and Obsidian plugin QA.
+
 Run only the Obsidian plugin validation gate:
 
 ```bash
@@ -110,6 +130,7 @@ The Obsidian plugin currently supports:
 - archive and restore objects
 - local Free / Pro Annual / Lifetime Early Supporter license-state alpha
 - WYQD Doctor diagnostic summary
+- Obsidian theme-aware styling and Web dark mode via system color preference
 
 ## Stability Boundary
 
@@ -119,12 +140,5 @@ Not yet completely stabilized / Work in Progress:
 - Real Lemon Squeezy license validation (currently local alpha key evaluation)
 - Obsidian screenshot-level QA across custom themes
 - Public Obsidian community plugin submission
-
-Free users must always retain access to their Markdown data. WYQD must not lock, encrypt, delete, or block export because of license state.
-eration flows
-- Doctor preview repair and rollback
-- real Lemon Squeezy license validation
-- Obsidian screenshot-level QA across themes
-- public Obsidian community plugin submission
 
 Free users must always retain access to their Markdown data. WYQD must not lock, encrypt, delete, or block export because of license state.

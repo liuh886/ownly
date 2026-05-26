@@ -11,12 +11,12 @@ export function MetricCard({ label, value, hint, featured }: MetricCardProps) {
       className={
         featured
           ? 'py-2'
-          : 'group min-w-0 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-premium hover:-translate-y-0.5'
+          : 'group min-w-0 rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-stone-300'
       }
     >
-      <div className="text-[11px] font-bold tracking-wider text-stone-400 uppercase">{label}</div>
+      <div className="text-xs font-medium text-stone-500">{label}</div>
       <div
-        className={`mt-1.5 break-words font-black tracking-tighter text-stone-950 ${
+        className={`mt-1.5 break-words font-mono font-semibold tracking-tight text-stone-950 ${
           featured ? 'text-4xl' : 'text-2xl'
         }`}
       >

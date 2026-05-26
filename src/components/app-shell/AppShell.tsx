@@ -10,6 +10,7 @@ import { ObjectList, type ObjectListFocus } from '@/components/objects/ObjectLis
 import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
+import { createWYQDRuntimeInfo, WYQD_PRODUCT_SLOGAN } from '@/core/runtime';
 import type { AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import {
@@ -27,6 +28,27 @@ interface ReviewRankings {
   experienceRank: number | null;
 }
 
+const runtimeInfo = createWYQDRuntimeInfo('web');
+
+const tabTitles: Record<AppTab, { title: string; description: string }> = {
+  home: {
+    title: '首页',
+    description: '资产净值、成本结构与近期待办',
+  },
+  objects: {
+    title: '物欲',
+    description: '管理实物、订阅与一次性体验',
+  },
+  accounts: {
+    title: '账户',
+    description: '记录账户快照并追踪净资产变化',
+  },
+  reviews: {
+    title: '复盘',
+    description: '沉淀体验排行榜与消费决策记录',
+  },
+};
+
 function StatusBanner({
   isConnected,
   isLoading,
@@ -39,14 +61,12 @@ function StatusBanner({
   onConnect: () => void;
 }) {
   return (
-    <section className="mb-8 rounded-2xl border border-stone-200 bg-white p-5 shadow-premium">
+    <section className="mb-6 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
             <span
-              className={`h-2 w-2 rounded-full ${
-                isConnected ? 'bg-emerald-500 animate-pulse-soft' : 'bg-stone-300'
-              }`}
+              className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-stone-300'}`}
               aria-hidden="true"
             />
             {isConnected ? 'Vault 已连接' : 'Demo 模式'}
@@ -61,24 +81,24 @@ function StatusBanner({
           type="button"
           onClick={onConnect}
           disabled={isLoading || isConnected}
-          className="min-h-10 shrink-0 rounded-full border border-stone-200 bg-stone-50 px-4 py-2 text-xs font-semibold text-stone-700 transition active:scale-95 hover:bg-stone-950 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-10 shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
         >
           {isLoading ? '连接中' : isConnected ? '已就绪' : '连接 Vault'}
         </button>
       </div>
       {!isConnected ? (
-        <div className="mt-5 grid gap-2.5 text-[11px] leading-relaxed text-stone-500 min-[420px]:grid-cols-3">
-          <div className="rounded-xl bg-stone-50/50 px-3 py-2.5 ring-1 ring-stone-100">
-            <span className="font-bold text-stone-900 uppercase tracking-tight text-[10px]">首页</span>
-            <div className="mt-0.5 opacity-80">实时洞察净资产与订阅成本</div>
+        <div className="mt-4 grid gap-2 text-xs leading-5 text-stone-600 min-[420px]:grid-cols-3">
+          <div className="rounded-lg bg-stone-50 px-3 py-2">
+            <span className="font-medium text-stone-900">首页</span>
+            <div className="mt-0.5">实时洞察净资产与订阅成本</div>
           </div>
-          <div className="rounded-xl bg-stone-50/50 px-3 py-2.5 ring-1 ring-stone-100">
-            <span className="font-bold text-stone-900 uppercase tracking-tight text-[10px]">物欲</span>
-            <div className="mt-0.5 opacity-80">捕获值得复盘的每一笔消费</div>
+          <div className="rounded-lg bg-stone-50 px-3 py-2">
+            <span className="font-medium text-stone-900">物欲</span>
+            <div className="mt-0.5">捕获值得复盘的每一笔消费</div>
           </div>
-          <div className="rounded-xl bg-stone-50/50 px-3 py-2.5 ring-1 ring-stone-100">
-            <span className="font-bold text-stone-900 uppercase tracking-tight text-[10px]">复盘</span>
-            <div className="mt-0.5 opacity-80">在回望中建立理性的消费观</div>
+          <div className="rounded-lg bg-stone-50 px-3 py-2">
+            <span className="font-medium text-stone-900">复盘</span>
+            <div className="mt-0.5">在回望中建立理性的消费观</div>
           </div>
         </div>
       ) : null}
@@ -367,7 +387,7 @@ export function AppShell() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#faf9f5] px-4 pb-28 pt-7 text-stone-950 sm:px-5 sm:pt-9">
+    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-4 pb-28 pt-6 text-stone-950 sm:px-5 sm:pt-8">
       <div
         aria-live="polite"
         aria-atomic="true"
@@ -379,18 +399,63 @@ export function AppShell() {
           </div>
         ) : null}
       </div>
-      <div className="mx-auto max-w-2xl">
-        <header className="mb-10 text-center sm:text-left">
-          <p className="text-[10px] font-bold tracking-[0.2em] text-stone-400 uppercase">Personal Asset Ledger</p>
-          <h1 className="mt-2 text-4xl font-black tracking-tighter text-stone-950">WYQD</h1>
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-6 rounded-xl border border-stone-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs font-medium text-stone-500">
+                <span className="text-2xl font-semibold tracking-tight text-stone-950 sm:text-3xl">
+                  WYQD
+                </span>
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-stone-600 ring-1 ring-stone-200">
+                  v{runtimeInfo.coreTargetVersion}
+                </span>
+                <span className="rounded-full bg-stone-950 px-2 py-0.5 text-[11px] font-semibold text-white">
+                  Web
+                </span>
+                <span className="h-1 w-1 rounded-full bg-stone-300" aria-hidden="true" />
+                <span>个人资产与体验成本账本</span>
+              </div>
+              <h1 className="mt-2 text-xl font-semibold tracking-tight text-stone-950 sm:text-2xl">
+                {tabTitles[activeTab].title}
+              </h1>
+              <p className="mt-1 text-sm text-stone-500">{tabTitles[activeTab].description}</p>
+              <p className="mt-2 text-xs font-medium text-stone-500">{WYQD_PRODUCT_SLOGAN}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+                  isConnected
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                    : 'bg-stone-50 text-stone-600 ring-stone-200'
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isConnected ? 'bg-emerald-500' : 'bg-stone-400'
+                  }`}
+                  aria-hidden="true"
+                />
+                {isConnected ? 'Vault 已连接' : isLoading ? '检查连接中' : 'Demo 模式'}
+              </span>
+              <span className="rounded-full bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-600 ring-1 ring-stone-200">
+                {storedObjects.length} 对象
+              </span>
+              <span className="rounded-full bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-600 ring-1 ring-stone-200">
+                {storedSnapshots.length} 快照
+              </span>
+            </div>
+          </div>
         </header>
 
-        <StatusBanner
-          isConnected={isConnected}
-          isLoading={isLoading}
-          error={error}
-          onConnect={connectVault}
-        />
+        {(!isConnected || error) ? (
+          <StatusBanner
+            isConnected={isConnected}
+            isLoading={isLoading}
+            error={error}
+            onConnect={connectVault}
+          />
+        ) : null}
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -401,20 +466,16 @@ export function AppShell() {
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
           >
             {activeTab === 'home' ? (
-              <HomeDashboard
-                metrics={metrics}
-                objects={objects}
-                snapshots={snapshots}
-                onOpenObjects={openObjectsWithFocus}
-              />
+	              <HomeDashboard
+	                metrics={metrics}
+	                objects={objects}
+	                snapshots={snapshots}
+	                onOpenObjects={openObjectsWithFocus}
+	                onNavigate={setActiveTab}
+	              />
             ) : null}
             {activeTab === 'objects' ? (
               <div className="space-y-4">
-                <ObjectComposer
-                  disabled={!isConnected}
-                  submitLabel="保存到 WYQD"
-                  onSubmit={createObject}
-                />
                 <ObjectList
                   key={objectListFocus?.token || 'objects-default'}
                   disabled={!isConnected}
@@ -423,6 +484,11 @@ export function AppShell() {
                   onUpdate={updateObject}
                   onDelete={deleteObject}
                   onCreateObjectReview={createObjectReview}
+                />
+                <ObjectComposer
+                  disabled={!isConnected}
+                  submitLabel="保存到 WYQD"
+                  onSubmit={createObject}
                 />
                 <ArchivePanel
                   disabled={!isConnected}

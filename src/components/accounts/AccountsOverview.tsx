@@ -202,6 +202,10 @@ export function AccountsOverview({
     (sum, group) => sum + group.monthlyCost,
     0,
   );
+  const accountCount = latest
+    ? latest.asset_balances.length + latest.liability_balances.length
+    : 0;
+  const annualFixedCost = totalMonthlyFixedCost * 12;
   const sorted = [...calculatedSnapshots].sort((a, b) =>
     b.entity.snapshot_at.localeCompare(a.entity.snapshot_at),
   );
@@ -313,24 +317,57 @@ export function AccountsOverview({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-xl bg-white p-5 shadow-sm shadow-stone-200/40 ring-1 ring-stone-100">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-sm text-stone-500">账户列表</div>
-            <div className="mt-2 text-xl font-semibold tracking-tight text-stone-950">
-              {latest ? `${latest.asset_balances.length + latest.liability_balances.length} 个账户` : '暂无账户'}
-            </div>
-            <div className="mt-1 text-xs text-stone-400">
-              {latest ? `快照日期 ${latest.snapshot_at}` : '尚未记录账户快照'}
-            </div>
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-stone-950">账户控制台</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              用快照校准真实资产，用固定成本识别每月扣费压力。
+            </p>
           </div>
-          <div className="shrink-0 text-right">
-            <div className="text-xs text-stone-400">净资产</div>
-            <div className="mt-1 text-sm font-semibold text-stone-950">
+          <span className="w-fit rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+            {latest ? `最新 ${latest.snapshot_at}` : '等待首个快照'}
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border border-stone-200 bg-stone-950 px-3 py-3 text-white">
+            <div className="text-xs font-medium text-stone-300">净资产</div>
+            <div className="mt-2 font-mono text-xl font-semibold tracking-tight">
               {formatMoney(latest?.net_worth)}
             </div>
+            <div className="mt-1 text-xs text-stone-400">最近一次账户事实</div>
+          </div>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
+            <div className="text-xs font-medium text-stone-500">账户数量</div>
+            <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
+              {accountCount}
+            </div>
+            <div className="mt-1 text-xs text-stone-500">资产与负债账户</div>
+          </div>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
+            <div className="text-xs font-medium text-stone-500">固定成本</div>
+            <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
+              {formatMoney(totalMonthlyFixedCost)}
+            </div>
+            <div className="mt-1 text-xs text-stone-500">月折算扣费压力</div>
+          </div>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
+            <div className="text-xs font-medium text-stone-500">年化承诺</div>
+            <div className="mt-2 font-mono text-xl font-semibold text-stone-950">
+              {formatMoney(annualFixedCost)}
+            </div>
+            <div className="mt-1 text-xs text-stone-500">订阅与固定支出的惯性</div>
           </div>
         </div>
+
+        <div className="mt-5 border-t border-stone-100 pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-stone-950">账户列表</h3>
+            <span className="text-xs text-stone-400">
+              {latest ? `快照日期 ${latest.snapshot_at}` : '尚未记录'}
+            </span>
+          </div>
 
         {latest ? (
           <div className="mt-5 space-y-4">
@@ -382,7 +419,12 @@ export function AccountsOverview({
               </div>
             ) : null}
           </div>
-        ) : null}
+        ) : (
+          <p className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">
+            记录第一个账户快照后，这里会显示资产账户、负债账户和净资产事实。
+          </p>
+        )}
+        </div>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm shadow-stone-200/40">

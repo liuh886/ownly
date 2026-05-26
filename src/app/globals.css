@@ -24,3 +24,56 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@media (prefers-color-scheme: dark) {
+  .wyqd-web-shell {
+    color-scheme: dark;
+  }
+
+  .wyqd-web-shell .bg-white {
+    background-color: #18181b;
+  }
+
+  .wyqd-web-shell .bg-stone-50 {
+    background-color: #0c0a09;
+  }
+
+  .wyqd-web-shell .bg-stone-100 {
+    background-color: #27272a;
+  }
+
+  .wyqd-web-shell .border-stone-200,
+  .wyqd-web-shell .border-stone-300 {
+    border-color: #3f3f46;
+  }
+
+  .wyqd-web-shell .ring-stone-200 {
+    --tw-ring-color: #3f3f46;
+  }
+
+  .wyqd-web-shell .text-stone-950,
+  .wyqd-web-shell .text-stone-900 {
+    color: #f5f5f4;
+  }
+
+  .wyqd-web-shell .text-stone-700,
+  .wyqd-web-shell .text-stone-600 {
+    color: #d6d3d1;
+  }
+
+  .wyqd-web-shell .text-stone-500 {
+    color: #a8a29e;
+  }
+
+  .wyqd-web-shell .text-stone-400 {
+    color: #78716c;
+  }
+
+  .wyqd-web-shell input,
+  .wyqd-web-shell select,
+  .wyqd-web-shell textarea {
+    background-color: #18181b;
+    border-color: #3f3f46;
+    color: #f5f5f4;
+  }
+}

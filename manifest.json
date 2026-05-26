@@ -1,0 +1,9 @@
+{
+  "id": "wyqd",
+  "name": "WYQD",
+  "version": "0.2.0",
+  "minAppVersion": "1.5.0",
+  "description": "Track possessions, subscriptions, and experience costs in your Vault.",
+  "author": "WYQD",
+  "isDesktopOnly": false
+}

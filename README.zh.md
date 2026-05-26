@@ -1,11 +1,15 @@
 # WYQD
 
-WYQD 是一款本地优先的个人资产与体验成本决策工作台。它目前支持两种运行环境：
+WYQD 是一款 Obsidian 原生、本地优先的个人决策账本，用 Markdown 管理实物、订阅与体验成本。
+
+**Own less, Live more, Decide better.**
+
+它目前支持两种运行环境：
 
 - 作为 Web App (在浏览器或通过 PM2 部署使用)
 - 作为私有 Obsidian 插件 (在本地 Vault 内使用)
 
-产品发展方向以 Obsidian 原生为主，但 Web App 版本将持续提供支持。
+产品发展方向以 Obsidian 插件为主，Web App 版本阶段性保持兼容，作为浏览器运行时与开发验证界面。
 
 ## 版本说明
 
@@ -84,6 +88,22 @@ dist/obsidian/wyqd/
 npm run validate
 ```
 
+通过 Agent 友好的 CLI 操作 Vault 数据：
+
+```bash
+npm run wyqd -- --vault /path/to/vault object list
+```
+
+## 示例 Vault
+
+可重复使用的演示 fixture 位于：
+
+```text
+samples/wyqd-vault/
+```
+
+它可作为 Web 与 Obsidian 插件 QA 的一次性测试 Vault。
+
 仅运行 Obsidian 插件端验证：
 
 ```bash
@@ -114,6 +134,7 @@ Obsidian 插件当前支持以下功能：
 - 对象的归档与恢复
 - 本地 Free / Pro 年度 / Lifetime 早期支持者的许可证验证机制 (Alpha)
 - WYQD Doctor 数据体检及摘要
+- Obsidian 主题适配，以及基于系统颜色偏好的 Web 深色模式
 
 ## 稳定性说明
 

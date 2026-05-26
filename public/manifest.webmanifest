@@ -1,7 +1,7 @@
 {
   "name": "WYQD",
   "short_name": "WYQD",
-  "description": "个人资产与体验成本账本",
+  "description": "Own less, Live more, Decide better.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

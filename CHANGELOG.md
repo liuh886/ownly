@@ -1,0 +1,25 @@
+# Changelog
+
+## 0.2.0-alpha
+
+- Added Obsidian private plugin package files: `manifest.json`, `versions.json`, `main.js`, `styles.css`.
+- Added shared core modules for runtime metadata, repository contracts, object console modeling, Doctor diagnostics, and membership state.
+- Added Obsidian Vault Repository for WYQD Markdown data.
+- Added WYQD Workspace view, ribbon entry, command palette commands, and settings tab.
+- Added object console summary inside Obsidian.
+- Added object detail preview, source Markdown opening, minimal field saving, status advancement, archive, and restore flows.
+- Added local Free / Pro Annual / Lifetime Early Supporter membership-state alpha.
+- Added `validate:obsidian` and `validate` release checks.
+- Preserved Web App build and PM2 static serving path.
+- Added Web dark mode via system color preference and Obsidian theme-aware slogan placement.
+- Added product positioning around the slogan: "Own less, Live more, Decide better."
+- Added `npm run wyqd` as the documented Agent CLI entry.
+- Added `CONTRIBUTING.md` and a repeatable sample Vault fixture under `samples/wyqd-vault`.
+
+Known gaps:
+
+- Full object edit forms are not complete.
+- Account, snapshot, and review detail operation flows are not complete.
+- Doctor repair preview and rollback are not implemented.
+- Real license validation is not connected.
+- Public Obsidian community plugin submission has not started.

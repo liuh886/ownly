@@ -1,10 +1,17 @@
 {
-  "name": "temp-app",
-  "version": "0.1.0",
+  "name": "wyqd-app",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:obsidian": "node esbuild.obsidian.mjs --production",
+    "check:obsidian": "tsc -p tsconfig.obsidian.json --pretty false",
+    "build:all": "npm run build && npm run build:obsidian",
+    "package:obsidian": "npm run build:obsidian && node scripts/package-obsidian-plugin.mjs",
+    "validate:obsidian": "npm run check:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
+    "validate": "npm exec tsc -- --noEmit && npm run lint && npm run build && npm run validate:obsidian",
+    "wyqd": "node scripts/wyqd-cli.mjs",
     "start": "next start",
     "lint": "eslint"
   },
@@ -21,8 +28,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "obsidian": "^1.12.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

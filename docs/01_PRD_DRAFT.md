@@ -1,7 +1,11 @@
 ﻿# 物欲清单 (WYQD App) - 产品需求文档 (Draft)
 
 ## 1. 产品定位
-一款专注于“物欲管理”与“资产生命周期计算”的高颜值个人应用，核心数据层与用户的 Obsidian Vault 深度结合，保障数据主权与双向互通。
+一款 Obsidian 原生、本地优先的个人决策账本，用 Markdown 管理物欲、实物资产、订阅成本与体验复盘，帮助用户少拥有、好生活、做更清醒的消费决策。
+
+**Slogan**: Own less, Live more, Decide better.
+
+阶段性产品策略：以 Obsidian 插件发布为主线，同时保持 Web App 兼容，作为浏览器运行时、PM2 部署入口与共享数据层的开发验证界面。
 
 ## 2. 核心场景与需求
 ### 2.1 Obsidian 深度结合 (核心护城河)
@@ -14,10 +18,11 @@
 - **动画与微交互**：流畅的状态切换。
 
 ## 3. 架构模式 (Architecture)
-确认采用：**Next.js (React) 独立 Web 应用 + Obsidian 本地文件系统直连 (File System Access API)**。
-- **前端技术栈**：Next.js, TailwindCSS, Framer Motion (保障高质感与流畅动画)。
-- **数据层**：基于 File System Access API 获得用户授权后，直接读写本地 Obsidian Vault 的 Markdown 文件。
-- **优势**：兼顾了 Web 侧的灵活与美观表现，同时实现了完全的 Local-first，无中间服务器，直连 SSOT。
+确认采用：**共享 TypeScript Core + Obsidian 插件优先 + Web App 兼容运行时**。
+- **Obsidian 插件**：主发布形态，直接运行在 Vault 内，使用 Obsidian API 读写 Markdown 数据。
+- **Web App**：兼容运行时，基于 File System Access API 获得用户授权后读写本地 Vault；继续承担浏览器/PM2 使用与界面验证职责。
+- **共享核心层**：数据模型、计算逻辑、Doctor 诊断、会员状态、Repository 合约保持跨 Web 与 Obsidian 复用。
+- **优势**：保持 Local-first、Markdown-first 与 Vault-native 的数据主权，同时避免 Web 与插件两套业务逻辑分叉。
 
 ## 4. 数据结构规范 (Data Schema)
 - **纯 Frontmatter 驱动**：物品的核心属性（名称、价格、状态、购买日、折旧率等）全部强约束在 Markdown 的 YAML Properties 中。
