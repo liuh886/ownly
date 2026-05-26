@@ -159,7 +159,16 @@ export function AppShell() {
     }
 
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    // Signal to parent that we're ready to receive data
+    window.parent.postMessage({ type: 'wyqd:ready' }, '*');
+    // Retry if no data arrives within 3 seconds
+    const retryTimer = window.setTimeout(() => {
+      window.parent.postMessage({ type: 'wyqd:ready' }, '*');
+    }, 3000);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.clearTimeout(retryTimer);
+    };
   }, [isEmbedded]);
 
   const sendWriteRequest = useCallback(

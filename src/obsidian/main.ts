@@ -287,6 +287,10 @@ class WYQDWorkspaceView extends ItemView {
       const msg = event.data;
       if (!msg || typeof msg.type !== 'string') return;
 
+      if (msg.type === 'wyqd:ready') {
+        void this.pushVaultDataToIframe(webAppUrl);
+      }
+
       if (msg.type === 'wyqd:write-request') {
         void this.handleWriteRequest(msg, webAppUrl);
       }
