@@ -80,10 +80,10 @@ function StatusBanner({
         <button
           type="button"
           onClick={onConnect}
-          disabled={isLoading || isConnected}
+          disabled={isLoading}
           className="min-h-10 shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
         >
-          {isLoading ? '连接中' : isConnected ? '已就绪' : '连接 Vault'}
+          {isLoading ? '连接中' : isConnected ? '重新连接' : '连接 Vault'}
         </button>
       </div>
       {!isConnected ? (
@@ -444,6 +444,14 @@ export function AppShell() {
               <span className="rounded-full bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-600 ring-1 ring-stone-200">
                 {storedSnapshots.length} 快照
               </span>
+              <button
+                type="button"
+                onClick={connectVault}
+                disabled={isLoading}
+                className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
+              >
+                {isLoading ? '连接中' : isConnected ? '重新连接 Vault' : '连接 Vault'}
+              </button>
             </div>
           </div>
         </header>

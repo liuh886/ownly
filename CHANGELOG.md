@@ -17,6 +17,8 @@
 - Added `CONTRIBUTING.md` and a repeatable sample Vault fixture under `samples/wyqd-vault`.
 - Added MIT license metadata and real Vault installation instructions.
 - Added `npm run deps:reset` and documentation for Windows/Docker `esbuild` platform mismatch recovery.
+- Added visible Web Vault reconnect control.
+- Improved Obsidian workspace first-screen hierarchy with hero metrics and action cards.
 
 Known gaps:
 

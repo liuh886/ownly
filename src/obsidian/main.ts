@@ -266,24 +266,36 @@ class WYQDWorkspaceView extends ItemView {
     const objectConsole = createObjectConsoleModel(objects.map((stored) => stored.entity));
 
     const shell = contentEl.createDiv({ cls: 'wyqd-shell' });
-    const header = shell.createDiv({ cls: 'wyqd-header' });
-    header.createEl('h2', { text: t('workspaceTitle') });
-    header.createEl('p', {
+    const header = shell.createDiv({ cls: 'wyqd-hero' });
+    const heroCopy = header.createDiv({ cls: 'wyqd-hero-copy' });
+    const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
+    eyebrow.createEl('span', { text: `WYQD ${WYQD_CORE_TARGET_VERSION}` });
+    eyebrow.createEl('span', { text: t('localVaultOnly') });
+    heroCopy.createEl('h2', { text: t('workspaceTitle') });
+    heroCopy.createEl('p', {
       text: t('workspaceSubtitle'),
     });
-    header.createEl('p', {
+    heroCopy.createEl('p', {
       cls: 'wyqd-slogan',
       text: WYQD_PRODUCT_SLOGAN,
     });
 
-    const actions = shell.createDiv({ cls: 'wyqd-actions' });
-    this.createActionButton(actions, t('refresh'), () => void this.render());
-    this.createActionButton(actions, t('newObject'), () => void this.plugin.createDraft('object'));
-    this.createActionButton(actions, t('newSnapshot'), () => void this.plugin.createDraft('snapshot'));
-    this.createActionButton(actions, t('newReview'), () => void this.plugin.createDraft('review'));
-    this.createActionButton(actions, t('doctor'), () => void this.plugin.runDoctor());
+    const heroMetrics = header.createDiv({ cls: 'wyqd-hero-metrics' });
+    this.createStatusItem(heroMetrics, t('objects'), String(objectConsole.summary.total));
+    this.createStatusItem(heroMetrics, t('active'), String(objectConsole.summary.active));
+    this.createStatusItem(heroMetrics, t('review'), String(objectConsole.summary.review));
 
-    const grid = shell.createDiv({ cls: 'wyqd-status-grid' });
+    const actionsPanel = shell.createDiv({ cls: 'wyqd-actions-panel' });
+    const actionsHeader = actionsPanel.createDiv({ cls: 'wyqd-section-header' });
+    actionsHeader.createEl('h3', { text: t('quickActions') });
+    const actions = actionsPanel.createDiv({ cls: 'wyqd-action-grid' });
+    this.createActionCard(actions, t('refresh'), t('refreshDesc'), () => void this.render());
+    this.createActionCard(actions, t('newObject'), t('newObjectDesc'), () => void this.plugin.createDraft('object'));
+    this.createActionCard(actions, t('newSnapshot'), t('newSnapshotDesc'), () => void this.plugin.createDraft('snapshot'));
+    this.createActionCard(actions, t('newReview'), t('newReviewDesc'), () => void this.plugin.createDraft('review'));
+    this.createActionCard(actions, t('doctor'), t('doctorDesc'), () => void this.plugin.runDoctor());
+
+    const grid = shell.createDiv({ cls: 'wyqd-status-grid wyqd-runtime-grid' });
     this.createStatusItem(grid, t('storage'), this.plugin.settings.dataFolder);
     this.createStatusItem(grid, t('mode'), t('localVaultOnly'));
     this.createStatusItem(grid, t('membership'), membership.planLabel);
@@ -372,6 +384,14 @@ class WYQDWorkspaceView extends ItemView {
     const button = parent.createEl('button', { text: label, cls: 'mod-cta' });
     button.type = 'button';
     button.addEventListener('click', callback);
+  }
+
+  private createActionCard(parent: HTMLElement, label: string, detail: string, callback: () => void) {
+    const button = parent.createEl('button', { cls: 'wyqd-action-card' });
+    button.type = 'button';
+    button.addEventListener('click', callback);
+    button.createEl('strong', { text: label });
+    button.createEl('span', { text: detail });
   }
 
   private createStatusItem(parent: HTMLElement, label: string, value: string) {

@@ -10,36 +10,100 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 920px;
+  max-width: 1040px;
   padding: 20px;
 }
 
-.wyqd-header {
-  border-bottom: 1px solid var(--wyqd-border);
-  padding-bottom: 14px;
+.wyqd-hero {
+  align-items: stretch;
+  background: var(--wyqd-panel);
+  border: 1px solid var(--wyqd-border);
+  border-radius: 10px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  padding: 16px;
 }
 
-.wyqd-header h2 {
+.wyqd-hero h2 {
+  font-size: 1.6em;
+  letter-spacing: -0.02em;
   margin: 0 0 6px;
 }
 
-.wyqd-header p,
+.wyqd-hero p,
 .wyqd-note p {
   color: var(--wyqd-muted);
   margin: 0;
 }
 
-.wyqd-header .wyqd-slogan {
+.wyqd-hero .wyqd-slogan {
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   font-weight: var(--font-medium);
   margin-top: 8px;
 }
 
-.wyqd-actions {
+.wyqd-eyebrow {
   display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.wyqd-eyebrow span {
+  background: var(--wyqd-panel-alt);
+  border: 1px solid var(--wyqd-border);
+  border-radius: 999px;
+  color: var(--wyqd-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+  padding: 3px 8px;
+}
+
+.wyqd-hero-metrics {
+  display: grid;
   gap: 8px;
+  grid-template-columns: 1fr;
+}
+
+.wyqd-actions-panel {
+  background: transparent;
+}
+
+.wyqd-action-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.wyqd-action-card {
+  background: var(--background-primary);
+  border: 1px solid var(--wyqd-border);
+  border-radius: 8px;
+  color: var(--text-normal);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 74px;
+  padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.wyqd-action-card:hover,
+.wyqd-action-card:focus-visible {
+  border-color: var(--interactive-accent);
+}
+
+.wyqd-action-card strong {
+  font-size: var(--font-ui-small);
+}
+
+.wyqd-action-card span {
+  color: var(--wyqd-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.35;
 }
 
 .wyqd-status-grid {
@@ -59,6 +123,10 @@
   border: 1px solid var(--wyqd-border);
   border-radius: 8px;
   padding: 12px;
+}
+
+.wyqd-runtime-grid .wyqd-status-item {
+  background: var(--background-primary);
 }
 
 .wyqd-status-item {
@@ -318,6 +386,14 @@
 }
 
 @media (max-width: 560px) {
+  .wyqd-shell {
+    padding: 12px;
+  }
+
+  .wyqd-hero {
+    grid-template-columns: 1fr;
+  }
+
   .wyqd-pro-entry {
     align-items: stretch;
     flex-direction: column;
