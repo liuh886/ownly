@@ -3,7 +3,68 @@
   --wyqd-muted: var(--text-muted);
   --wyqd-panel: var(--background-secondary);
   --wyqd-panel-alt: var(--background-primary-alt);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   padding: 0;
+}
+
+.wyqd-bar {
+  align-items: center;
+  background: var(--wyqd-panel);
+  border-bottom: 1px solid var(--wyqd-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px 12px;
+}
+
+.wyqd-bar-brand {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+}
+
+.wyqd-bar-brand strong {
+  font-size: 1.1em;
+}
+
+.wyqd-bar-brand span {
+  color: var(--wyqd-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.wyqd-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wyqd-bar-btn {
+  background: var(--interactive-normal);
+  border: 1px solid var(--wyqd-border);
+  border-radius: 6px;
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: var(--font-ui-smaller);
+  padding: 4px 10px;
+}
+
+.wyqd-bar-btn:hover {
+  background: var(--interactive-hover);
+}
+
+.wyqd-iframe-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+.wyqd-iframe {
+  border: none;
+  display: block;
+  height: 100%;
+  width: 100%;
 }
 
 .wyqd-shell {

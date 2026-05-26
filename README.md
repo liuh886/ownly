@@ -97,6 +97,18 @@ cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 
 4. Open Ownly from the ribbon icon or the command palette command `Open Ownly workspace`.
 
+The current Obsidian workspace embeds the Web UI from the plugin setting `Web app URL`
+(default `http://localhost:8080`) while keeping native quick actions for draft creation
+and Doctor diagnostics. To use the Web-style workspace inside Obsidian during alpha,
+serve the built Web app locally:
+
+```bash
+npm run build
+node scripts/serve-static.mjs out 8080
+```
+
+You can change the embedded URL in `Settings -> Ownly -> Web app URL`.
+
 ### Platform-Specific Dependency Reset
 
 `esbuild` ships native binaries. If the same checkout is used from Docker/Linux and Windows, `node_modules` can contain the wrong platform binary.

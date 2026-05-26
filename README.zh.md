@@ -101,6 +101,17 @@ cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 
 4. 从左侧 Ribbon 图标或命令面板 `Open Ownly workspace` 打开 Ownly。
 
+当前 Obsidian 工作台会从插件设置中的 `Web 应用地址` 嵌入 Web UI
+（默认 `http://localhost:8080`），同时保留原生快速创建草稿和 Doctor 诊断入口。
+Alpha 阶段如果要在 Obsidian 内看到接近 Web 的工作台体验，请先本地启动 Web 静态服务：
+
+```bash
+npm run build
+node scripts/serve-static.mjs out 8080
+```
+
+可在 `Settings -> Ownly -> Web 应用地址` 中修改嵌入地址。
+
 ### 平台依赖重置
 
 `esbuild` 使用原生二进制。如果同一个 checkout 同时被 Docker/Linux 和 Windows 使用，`node_modules` 里可能留下错误平台的二进制。

@@ -18,7 +18,6 @@ import {
   type WYQDTranslationKey,
 } from '@/core/i18n';
 import { normalizeWYQDLicenseKey, resolveWYQDMembership } from '@/core/membership';
-import { createObjectConsoleModel } from '@/core/objectConsole';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { runWYQDDoctor, type WYQDDoctorReport } from '@/core/doctor';
 import type { Account, AccountSnapshot, PhysicalObject, RecurringCostObject, ReviewEntry, WYQDObject } from '@/domain/types';
@@ -32,6 +31,7 @@ interface WYQDPluginSettings {
   licenseKey: string;
   language: WYQDLanguage;
   openInRightSidebar: boolean;
+  webAppUrl: string;
 }
 
 const DEFAULT_SETTINGS: WYQDPluginSettings = {
@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS: WYQDPluginSettings = {
   licenseKey: '',
   language: 'en',
   openInRightSidebar: false,
+  webAppUrl: 'http://localhost:8080',
 };
 
 type DraftKind = 'object' | 'snapshot' | 'review';
@@ -255,123 +256,41 @@ class WYQDWorkspaceView extends ItemView {
 
   private async renderWorkspace(contentEl: HTMLElement) {
     const t = (key: WYQDTranslationKey) => this.plugin.t(key);
-    const membership = this.plugin.getMembership();
-    const [objects, accounts, snapshots, reviews, archivedEntities, doctorReport] = await Promise.all([
-      this.plugin.repository.listObjects(),
-      this.plugin.repository.listAccounts(),
-      this.plugin.repository.listSnapshots(),
-      this.plugin.repository.listReviews(),
-      this.plugin.repository.listArchivedEntities(),
-      runWYQDDoctor(this.plugin.repository),
-    ]);
-    const objectConsole = createObjectConsoleModel(objects.map((stored) => stored.entity));
+    const webAppUrl = this.plugin.settings.webAppUrl;
 
-    const shell = contentEl.createDiv({ cls: 'wyqd-shell' });
-    const header = shell.createDiv({ cls: 'wyqd-hero' });
-    const heroCopy = header.createDiv({ cls: 'wyqd-hero-copy' });
-    const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
-    eyebrow.createEl('span', { text: `Ownly ${WYQD_CORE_TARGET_VERSION}` });
-    eyebrow.createEl('span', { text: t('localVaultOnly') });
-    heroCopy.createEl('h2', { text: t('workspaceTitle') });
-    heroCopy.createEl('p', {
-      text: t('workspaceSubtitle'),
-    });
-    heroCopy.createEl('p', {
-      cls: 'wyqd-slogan',
-      text: WYQD_PRODUCT_SLOGAN,
-    });
+    const bar = contentEl.createDiv({ cls: 'wyqd-bar' });
+    const brand = bar.createDiv({ cls: 'wyqd-bar-brand' });
+    brand.createEl('strong', { text: 'Ownly' });
+    brand.createEl('span', { text: t('workspaceSubtitle') });
 
-    const heroMetrics = header.createDiv({ cls: 'wyqd-hero-metrics' });
-    this.createStatusItem(heroMetrics, t('objects'), String(objectConsole.summary.total));
-    this.createStatusItem(heroMetrics, t('active'), String(objectConsole.summary.active));
-    this.createStatusItem(heroMetrics, t('review'), String(objectConsole.summary.review));
+    const actions = bar.createDiv({ cls: 'wyqd-bar-actions' });
+    this.createBarButton(actions, t('refresh'), () => this.reloadIframe(contentEl));
+    this.createBarButton(actions, t('newObject'), () => void this.plugin.createDraft('object'));
+    this.createBarButton(actions, t('newSnapshot'), () => void this.plugin.createDraft('snapshot'));
+    this.createBarButton(actions, t('newReview'), () => void this.plugin.createDraft('review'));
+    this.createBarButton(actions, t('doctor'), () => void this.plugin.runDoctor());
+    this.createBarButton(actions, t('openWebApp'), () => window.open(webAppUrl, '_blank'));
 
-    this.renderHomeDashboard(shell, objects.map((s) => s.entity), snapshots.map((s) => s.entity), reviews.map((s) => s.entity), t);
+    const wrapper = contentEl.createDiv({ cls: 'wyqd-iframe-wrapper' });
+    const iframe = wrapper.createEl('iframe', { cls: 'wyqd-iframe' });
+    iframe.src = webAppUrl;
+    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-popups allow-forms');
+    iframe.setAttribute('allow', 'clipboard-write');
+  }
 
-    const actionsPanel = shell.createDiv({ cls: 'wyqd-actions-panel' });
-    const actionsHeader = actionsPanel.createDiv({ cls: 'wyqd-section-header' });
-    actionsHeader.createEl('h3', { text: t('quickActions') });
-    const actions = actionsPanel.createDiv({ cls: 'wyqd-action-grid' });
-    this.createActionCard(actions, t('refresh'), t('refreshDesc'), () => void this.render());
-    this.createActionCard(actions, t('newObject'), t('newObjectDesc'), () => void this.plugin.createDraft('object'));
-    this.createActionCard(actions, t('newSnapshot'), t('newSnapshotDesc'), () => void this.plugin.createDraft('snapshot'));
-    this.createActionCard(actions, t('newReview'), t('newReviewDesc'), () => void this.plugin.createDraft('review'));
-    this.createActionCard(actions, t('doctor'), t('doctorDesc'), () => void this.plugin.runDoctor());
-
-    const grid = shell.createDiv({ cls: 'wyqd-status-grid wyqd-runtime-grid' });
-    this.createStatusItem(grid, t('storage'), this.plugin.settings.dataFolder);
-    this.createStatusItem(grid, t('mode'), t('localVaultOnly'));
-    this.createStatusItem(grid, t('membership'), membership.planLabel);
-    this.createStatusItem(grid, t('license'), membership.statusLabel);
-    this.createStatusItem(grid, t('schema'), `${WYQD_SCHEMA_VERSION} shared core model`);
-    this.createStatusItem(grid, t('release'), `Plugin ${this.plugin.manifest.version}`);
-    this.createStatusItem(grid, t('target'), `Ownly ${WYQD_CORE_TARGET_VERSION}`);
-
-    const workspaceGrid = shell.createDiv({ cls: 'wyqd-workspace-grid' });
-
-    const consolePanel = workspaceGrid.createDiv({ cls: 'wyqd-console-panel' });
-    const consoleHeader = consolePanel.createDiv({ cls: 'wyqd-section-header' });
-    consoleHeader.createEl('h3', { text: t('objectConsole') });
-    consoleHeader.createEl('p', {
-      text: t('objectConsoleDesc'),
-    });
-
-    const consoleGrid = consolePanel.createDiv({ cls: 'wyqd-status-grid' });
-    this.createStatusItem(consoleGrid, t('objects'), String(objectConsole.summary.total));
-    this.createStatusItem(consoleGrid, t('pending'), String(objectConsole.summary.pending));
-    this.createStatusItem(consoleGrid, t('active'), String(objectConsole.summary.active));
-    this.createStatusItem(consoleGrid, t('review'), String(objectConsole.summary.review));
-    this.createStatusItem(consoleGrid, t('closed'), String(objectConsole.summary.closed));
-    this.createStatusItem(consoleGrid, t('archived'), String(archivedEntities.length));
-
-    const priorityList = consolePanel.createDiv({ cls: 'wyqd-priority-list' });
-    if (objectConsole.priorityItems.length === 0) {
-      priorityList.createDiv({
-        cls: 'wyqd-empty-state',
-        text: t('noObjects'),
-      });
-    } else {
-      objectConsole.priorityItems.forEach((item) => {
-        const row = priorityList.createEl('button', { cls: 'wyqd-object-row' });
-        row.type = 'button';
-        row.toggleClass('is-selected', item.id === this.selectedObjectId);
-        row.addEventListener('click', () => {
-          this.selectedObjectId = item.id;
-          void this.render();
-        });
-        const main = row.createDiv();
-        main.createEl('strong', { text: item.title });
-        main.createEl('span', { text: `${formatObjectType(item.objectType, t)} / ${item.status}` });
-        row.createEl('span', { cls: `wyqd-bucket wyqd-bucket-${item.bucket}`, text: formatBucket(item.bucket, t) });
-      });
+  private reloadIframe(contentEl: HTMLElement) {
+    const iframe = contentEl.querySelector<HTMLIFrameElement>('.wyqd-iframe');
+    if (iframe) {
+      const src = iframe.src;
+      iframe.src = '';
+      iframe.src = src;
     }
+  }
 
-    const selectedObject =
-      objects.find((stored) => stored.entity.id === this.selectedObjectId) ?? objects[0] ?? null;
-    if (!this.selectedObjectId && selectedObject) {
-      this.selectedObjectId = selectedObject.entity.id;
-    }
-    this.createObjectDetailPanel(workspaceGrid, selectedObject);
-    this.createArchivedObjectsPanel(
-      shell,
-      archivedEntities.filter((entry) => entry.archiveType === 'object'),
-    );
-
-    const dataPanel = shell.createDiv({ cls: 'wyqd-data-panel' });
-    this.createStatusItem(dataPanel, t('accounts'), String(accounts.length));
-    this.createStatusItem(dataPanel, t('snapshots'), String(snapshots.length));
-    this.createStatusItem(dataPanel, t('reviews'), String(reviews.length));
-
-    this.createSecondaryDataPanel(shell, accounts, snapshots, reviews);
-    this.renderReviewConsole(shell, reviews.map((s) => s.entity), objects.map((s) => s.entity), t);
-    this.createDoctorPanel(shell, doctorReport);
-    this.createProFeatureEntry(shell, membership);
-
-    const note = shell.createDiv({ cls: 'wyqd-note' });
-    note.createEl('strong', { text: t('alphaBoundary') });
-    note.createEl('p', {
-      text: t('alphaBoundaryDesc'),
-    });
+  private createBarButton(parent: HTMLElement, label: string, callback: () => void) {
+    const button = parent.createEl('button', { text: label, cls: 'wyqd-bar-btn' });
+    button.type = 'button';
+    button.addEventListener('click', callback);
   }
 
   private renderError(contentEl: HTMLElement, error: unknown) {
@@ -868,6 +787,19 @@ class WYQDSettingTab extends PluginSettingTab {
         }),
       );
 
+    new Setting(appPanel)
+      .setName(t('settingsWebAppUrl'))
+      .setDesc(t('settingsWebAppUrlDesc'))
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.webAppUrl)
+          .setValue(this.wyqdPlugin.settings.webAppUrl)
+          .onChange(async (value) => {
+            this.wyqdPlugin.settings.webAppUrl = value.trim() || DEFAULT_SETTINGS.webAppUrl;
+            await this.wyqdPlugin.saveSettings();
+          }),
+      );
+
     const membershipPanel = shell.createDiv({ cls: 'wyqd-settings-panel' });
     const membershipHeader = membershipPanel.createDiv({ cls: 'wyqd-section-header' });
     membershipHeader.createEl('h3', { text: t('membership') });
@@ -1037,16 +969,6 @@ function formatObjectType(
   if (value === 'physical') return t('physical');
   if (value === 'recurring_cost') return t('fixedCost');
   return t('experience');
-}
-
-function formatBucket(
-  value: ReturnType<typeof createObjectConsoleModel>['priorityItems'][number]['bucket'],
-  t: (key: WYQDTranslationKey) => string,
-) {
-  if (value === 'pending') return t('pending');
-  if (value === 'active') return t('active');
-  if (value === 'review') return t('review');
-  return t('closed');
 }
 
 function formatMoney(amount: number, currency = 'CNY'): string {

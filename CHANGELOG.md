@@ -18,14 +18,15 @@
 - Added MIT license metadata and real Vault installation instructions.
 - Added `npm run deps:reset` and documentation for Windows/Docker `esbuild` platform mismatch recovery.
 - Added visible Web Vault reconnect control.
-- Improved Obsidian workspace first-screen hierarchy with hero metrics and action cards.
-- Upgraded Obsidian workspace to a two-column console/detail layout for stronger Web parity.
+- Updated the Obsidian workspace alpha to embed the Web UI through a configurable Web app URL.
+- Kept native Obsidian quick actions for draft creation and Doctor diagnostics.
 - Reworked Obsidian settings into Ownly-styled hero, grouped panels, and membership summary.
 
 Known gaps:
 
-- Full object edit forms are not complete.
-- Account, snapshot, and review detail operation flows are not complete.
+- The Obsidian workspace depends on a running Web app URL for full Web-style UI parity.
+- Full native object edit forms are not complete.
+- Native account, snapshot, and review detail operation flows are not complete.
 - Doctor repair preview and rollback are not implemented.
 - Real license validation is not connected.
 - Public Obsidian community plugin submission in progress.
