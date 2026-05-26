@@ -17,6 +17,8 @@ WYQD 是一款 Obsidian 原生、本地优先的个人决策账本，用 Markdow
 
 `0.2.0` 为 Next.js 和 Obsidian 双运行环境提供了稳定的基线。目前用于追踪实物、成本和快照的核心工作流已在功能上开发完善。
 
+许可证：MIT。
+
 ## 国际化 (i18n)
 
 WYQD Obsidian 插件原生支持英文 (English) 与中文 (`zh`) 双语。您可以在 Obsidian 内的 WYQD 插件设置页面切换语言首选项。
@@ -79,6 +81,27 @@ dist/obsidian/wyqd/
 ```
 
 然后在 Obsidian 社区插件选项中启用 `WYQD`。
+
+### 真实 Vault 安装
+
+1. 构建并打包插件：
+
+```bash
+npm run package:obsidian
+```
+
+2. 将插件文件夹复制到某个 Vault：
+
+```bash
+mkdir -p /path/to/vault/.obsidian/plugins
+cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
+```
+
+在 Ductor 的常规 Vault 挂载中，可将 `/path/to/vault` 替换为 `/mnt/zhihaol`。
+
+3. 打开 Obsidian 的 `Settings -> Community plugins`，如有需要先关闭 Restricted mode，然后启用 `WYQD`。
+
+4. 从左侧 Ribbon 图标或命令面板 `Open WYQD workspace` 打开 WYQD。
 
 ## 验证
 

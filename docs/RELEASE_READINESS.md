@@ -18,7 +18,7 @@ The maturity benchmark is not mobile app-store listing. It is whether WYQD feels
 - [x] Agent CLI protocol is documented in `AGENTS.md`.
 - [x] Privacy policy exists.
 - [ ] Add screenshots or a short demo GIF.
-- [ ] Add LICENSE after the owner decides the license model.
+- [x] Add LICENSE after the owner decides the license model (MIT).
 - [x] Add CHANGELOG before the first tagged release.
 - [x] Add CONTRIBUTING if external contributions are expected.
 - [x] Add a sample Vault fixture for repeatable demo and QA (`samples/wyqd-vault`).
@@ -63,7 +63,6 @@ Verified:
 
 Remaining blockers before public Obsidian community submission:
 
-- Confirm and add a project license.
 - Perform manual Obsidian installation QA in a real Vault.
 - Add screenshots or a short demo GIF.
 - Create a GitHub release with Obsidian release artifacts.

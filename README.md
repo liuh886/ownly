@@ -17,6 +17,8 @@ Current target: `0.2.0`
 
 `0.2.0` is an alpha baseline for dual runtime support. It should not be described as a mature product yet.
 
+License: MIT.
+
 ## Web App
 
 Development:
@@ -75,6 +77,27 @@ Install manually into a test Vault:
 ```
 
 Then enable `WYQD` from Obsidian community plugins.
+
+### Real Vault Installation
+
+1. Build and package the plugin:
+
+```bash
+npm run package:obsidian
+```
+
+2. Copy the packaged plugin folder into a Vault:
+
+```bash
+mkdir -p /path/to/vault/.obsidian/plugins
+cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
+```
+
+For the normal Ductor Vault mount, replace `/path/to/vault` with `/mnt/zhihaol`.
+
+3. In Obsidian, open `Settings -> Community plugins`, turn off Restricted mode if needed, then enable `WYQD`.
+
+4. Open WYQD from the ribbon icon or the command palette command `Open WYQD workspace`.
 
 ## Validation
 

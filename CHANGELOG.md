@@ -15,6 +15,7 @@
 - Added product positioning around the slogan: "Own less, Live more, Decide better."
 - Added `npm run wyqd` as the documented Agent CLI entry.
 - Added `CONTRIBUTING.md` and a repeatable sample Vault fixture under `samples/wyqd-vault`.
+- Added MIT license metadata and real Vault installation instructions.
 
 Known gaps:
 
