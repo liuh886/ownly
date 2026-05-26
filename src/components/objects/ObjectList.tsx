@@ -986,7 +986,7 @@ export function ObjectList({
 	          return (
 	            <article
 	              key={stored.fileName}
-	              className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
+	              className="overflow-visible rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
 	            >
 	              {isEditing ? (
 	                <div className="p-4">
@@ -1190,10 +1190,10 @@ export function ObjectList({
                   />
                 </div>
               ) : (
-                <article
-                  key={stored.fileName}
-                  className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
-                >
+	                <article
+	                  key={stored.fileName}
+	                  className="overflow-visible rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
+	                >
                   <div className="flex">
                     <div className={`w-1.5 shrink-0 ${visual.accentClass}`} aria-hidden="true" />
                     <div className="min-w-0 flex-1 p-4">

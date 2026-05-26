@@ -12,6 +12,7 @@ import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
 import { createWYQDRuntimeInfo, WYQD_PRODUCT_SLOGAN } from '@/core/runtime';
 import { useI18n } from '@/core/i18n-context';
+import type { WYQDTranslationKey } from '@/core/i18n';
 import type { AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import {
@@ -30,6 +31,13 @@ interface ReviewRankings {
 }
 
 const runtimeInfo = createWYQDRuntimeInfo('web');
+
+const tabHeadingKeys: Record<AppTab, { title: WYQDTranslationKey; description: WYQDTranslationKey }> = {
+  home: { title: 'tabHome', description: 'tabHomeDesc' },
+  objects: { title: 'tabObjects', description: 'tabObjectsDesc' },
+  accounts: { title: 'tabAccounts', description: 'tabAccountsDesc' },
+  reviews: { title: 'tabReviews', description: 'tabReviewsDesc' },
+};
 
 function StatusBanner({
   isConnected,
@@ -399,9 +407,9 @@ export function AppShell() {
                 <span>{t('workspaceSubtitle')}</span>
               </div>
               <h1 className="mt-2 text-xl font-semibold tracking-tight text-stone-950 sm:text-2xl">
-                {t(`tab${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}` as any)}
+                {t(tabHeadingKeys[activeTab].title)}
               </h1>
-              <p className="mt-1 text-sm text-stone-500">{t(`tab${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}Desc` as any)}</p>
+              <p className="mt-1 text-sm text-stone-500">{t(tabHeadingKeys[activeTab].description)}</p>
               <p className="mt-2 text-xs font-medium text-stone-500">{WYQD_PRODUCT_SLOGAN}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">

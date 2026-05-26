@@ -94,6 +94,7 @@ export function ReviewHome({
   );
   const [reviewingExperienceId, setReviewingExperienceId] = useState<string | null>(null);
   const reviewFormRef = useRef<HTMLFormElement>(null);
+  const reviewDetailRef = useRef<HTMLElement>(null);
   const fieldClass =
     'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
   const exitedItems = objects.filter((object) =>
@@ -182,19 +183,19 @@ export function ReviewHome({
     ].filter((item): item is string => Boolean(item));
   }
 
-  const rankingDimensions: Array<{
-    key: 'food_rank' | 'scenery_rank' | 'experience_rank';
-    label: string;
-  }> = [
-    { key: 'food_rank', label: t('foodRank') },
-    { key: 'scenery_rank', label: t('sceneryRank') },
-    { key: 'experience_rank', label: t('experienceRank') },
-  ];
-
   const rankingBoardSuffix = t('rankingBoard').replace('{label}', '');
 
-  const rankingBoards = useMemo(
-    () =>
+  const rankingBoards = useMemo(() => {
+    const rankingDimensions: Array<{
+      key: 'food_rank' | 'scenery_rank' | 'experience_rank';
+      label: string;
+    }> = [
+      { key: 'food_rank', label: t('foodRank') },
+      { key: 'scenery_rank', label: t('sceneryRank') },
+      { key: 'experience_rank', label: t('experienceRank') },
+    ];
+
+    return (
       rankingDimensions.map((dimension) => ({
         ...dimension,
         entries: reviews
@@ -203,9 +204,9 @@ export function ReviewHome({
             (a, b) => (a.entity[dimension.key] || 9999) - (b.entity[dimension.key] || 9999),
           )
           .slice(0, 3),
-      })),
-    [reviews, rankingDimensions],
-  );
+      }))
+    );
+  }, [reviews, t]);
 
   const objectById = useMemo(
     () => new Map(objects.map((object) => [object.id, object])),
@@ -300,6 +301,7 @@ export function ReviewHome({
     setExperienceRank(
       stored.entity.experience_rank ? String(stored.entity.experience_rank) : '',
     );
+    setTimeout(() => reviewFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   }
 
   function cancelEditing() {
@@ -316,6 +318,11 @@ export function ReviewHome({
     setReviewingExperienceId(experience.id);
     setSummary(t('reviewAbout').replace('{title}', experience.title));
     setTimeout(() => reviewFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+  }
+
+  function selectReview(fileName: string) {
+    setSelectedReviewFileName(fileName);
+    setTimeout(() => reviewDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
   }
 
   return (
@@ -416,7 +423,7 @@ export function ReviewHome({
                 <button
                   key={`${board.key}-${stored.fileName}`}
                   type="button"
-                  onClick={() => setSelectedReviewFileName(stored.fileName)}
+                  onClick={() => selectReview(stored.fileName)}
                   className="flex w-full items-center justify-between gap-3 rounded-lg border border-stone-100 bg-stone-50 px-3 py-2 text-left transition hover:border-stone-300 hover:bg-white"
                 >
                   <div className="min-w-0">
@@ -647,7 +654,7 @@ export function ReviewHome({
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedReviewFileName(stored.fileName)}
+                    onClick={() => selectReview(stored.fileName)}
                     className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 active:scale-95"
                   >
                     {t('detail')}
@@ -689,7 +696,7 @@ export function ReviewHome({
             ) : null}
           </div>
 
-          <aside className="rounded-lg border border-stone-100 bg-stone-50 p-4">
+          <aside ref={reviewDetailRef} className="rounded-lg border border-stone-100 bg-stone-50 p-4">
             {selectedReview ? (
               <div className="space-y-4">
                 <div>
