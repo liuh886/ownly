@@ -19,6 +19,7 @@
 - Added `npm run deps:reset` and documentation for Windows/Docker `esbuild` platform mismatch recovery.
 - Added visible Web Vault reconnect control.
 - Updated the Obsidian workspace alpha to embed the Web UI through a configurable Web app URL.
+- Added an Obsidian `postMessage` bridge so the embedded Web UI can read and write Vault data through the plugin repository.
 - Kept native Obsidian quick actions for draft creation and Doctor diagnostics.
 - Reworked Obsidian settings into Ownly-styled hero, grouped panels, and membership summary.
 

@@ -218,6 +218,8 @@ export default class WYQDPlugin extends Plugin {
 
 class WYQDWorkspaceView extends ItemView {
   private selectedObjectId: string | null = null;
+  private messageHandler: ((event: MessageEvent) => void) | null = null;
+  private iframeEl: HTMLIFrameElement | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -273,9 +275,95 @@ class WYQDWorkspaceView extends ItemView {
 
     const wrapper = contentEl.createDiv({ cls: 'wyqd-iframe-wrapper' });
     const iframe = wrapper.createEl('iframe', { cls: 'wyqd-iframe' });
+    this.iframeEl = iframe;
     iframe.src = webAppUrl;
     iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-popups allow-forms');
     iframe.setAttribute('allow', 'clipboard-write');
+
+    iframe.addEventListener('load', () => this.pushVaultDataToIframe(webAppUrl));
+
+    this.messageHandler = (event: MessageEvent) => {
+      if (event.origin !== new URL(webAppUrl).origin) return;
+      const msg = event.data;
+      if (!msg || typeof msg.type !== 'string') return;
+
+      if (msg.type === 'wyqd:write-request') {
+        void this.handleWriteRequest(msg, webAppUrl);
+      }
+    };
+    window.addEventListener('message', this.messageHandler);
+  }
+
+  private async pushVaultDataToIframe(webAppUrl: string) {
+    if (!this.iframeEl?.contentWindow) return;
+    try {
+      const [objects, accounts, snapshots, reviews, archived] = await Promise.all([
+        this.plugin.repository.listObjects(),
+        this.plugin.repository.listAccounts(),
+        this.plugin.repository.listSnapshots(),
+        this.plugin.repository.listReviews(),
+        this.plugin.repository.listArchivedEntities(),
+      ]);
+      this.iframeEl.contentWindow.postMessage(
+        {
+          type: 'wyqd:vault-data',
+          payload: {
+            objects: objects as unknown[],
+            accounts: accounts as unknown[],
+            snapshots: snapshots as unknown[],
+            reviews: reviews as unknown[],
+            archived: archived as unknown[],
+          },
+        },
+        webAppUrl,
+      );
+    } catch (e) {
+      console.error('Ownly: failed to push vault data to iframe', e);
+    }
+  }
+
+  private async handleWriteRequest(msg: { requestId?: string; action: string; kind: string; fileName?: string; payload?: unknown; body?: string }, webAppUrl: string) {
+    const repo = this.plugin.repository;
+    let success = true;
+    let error: string | undefined;
+
+    try {
+      const { action, kind, fileName, payload, body } = msg;
+
+      if (action === 'save') {
+        if (kind === 'object') await repo.saveObject(payload as WYQDObject, body ?? '');
+        else if (kind === 'snapshot') await repo.saveSnapshot(payload as AccountSnapshot, body ?? '');
+        else if (kind === 'review') await repo.saveReview(payload as ReviewEntry, body ?? '');
+      } else if (action === 'update' && fileName) {
+        if (kind === 'object') await repo.updateObject(fileName, payload as WYQDObject, body ?? '');
+        else if (kind === 'snapshot') await repo.updateSnapshot(fileName, payload as AccountSnapshot, body ?? '');
+        else if (kind === 'review') await repo.updateReview(fileName, payload as ReviewEntry, body ?? '');
+      } else if (action === 'delete' && fileName) {
+        if (kind === 'object') await repo.archiveObject(fileName);
+        else if (kind === 'snapshot') await repo.archiveSnapshot(fileName);
+        else if (kind === 'review') await repo.archiveReview(fileName);
+      } else if (action === 'restore' && fileName) {
+        if (kind === 'object') await repo.restoreObject(fileName);
+        else if (kind === 'snapshot') await repo.restoreSnapshot(fileName);
+        else if (kind === 'review') await repo.restoreReview(fileName);
+      }
+    } catch (e) {
+      success = false;
+      error = e instanceof Error ? e.message : String(e);
+    }
+
+    // Reply with result
+    if (this.iframeEl?.contentWindow) {
+      this.iframeEl.contentWindow.postMessage(
+        { type: 'wyqd:write-result', payload: { requestId: msg.requestId, success, error } },
+        webAppUrl,
+      );
+    }
+
+    // Push fresh data after write
+    if (success) {
+      await this.pushVaultDataToIframe(webAppUrl);
+    }
   }
 
   private reloadIframe(contentEl: HTMLElement) {
@@ -402,6 +490,11 @@ class WYQDWorkspaceView extends ItemView {
   }
 
   async onClose() {
+    if (this.messageHandler) {
+      window.removeEventListener('message', this.messageHandler);
+      this.messageHandler = null;
+    }
+    this.iframeEl = null;
     this.contentEl.empty();
   }
 

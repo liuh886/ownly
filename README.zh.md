@@ -103,6 +103,8 @@ cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 
 当前 Obsidian 工作台会从插件设置中的 `Web 应用地址` 嵌入 Web UI
 （默认 `http://localhost:8080`），同时保留原生快速创建草稿和 Doctor 诊断入口。
+嵌入的 Web UI 会通过 Obsidian `postMessage` 桥接接收 Vault 数据和写入结果，因此对象、
+账户快照、复盘和归档操作由插件代理执行，而不是由浏览器文件选择器直接处理。
 Alpha 阶段如果要在 Obsidian 内看到接近 Web 的工作台体验，请先本地启动 Web 静态服务：
 
 ```bash

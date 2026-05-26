@@ -99,8 +99,10 @@ cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 
 The current Obsidian workspace embeds the Web UI from the plugin setting `Web app URL`
 (default `http://localhost:8080`) while keeping native quick actions for draft creation
-and Doctor diagnostics. To use the Web-style workspace inside Obsidian during alpha,
-serve the built Web app locally:
+and Doctor diagnostics. The embedded Web UI receives Vault data and write results through
+an Obsidian `postMessage` bridge, so object, snapshot, review, and archive operations are
+proxied by the plugin instead of by the browser file picker. To use the Web-style workspace
+inside Obsidian during alpha, serve the built Web app locally:
 
 ```bash
 npm run build

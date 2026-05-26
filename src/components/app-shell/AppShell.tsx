@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sampleObjects, sampleReviews, sampleSnapshots } from '@/data/sampleData';
 import { calculateHomeMetrics } from '@/domain/calculations';
 import { BottomNav, type AppTab } from './BottomNav';
@@ -103,8 +103,9 @@ function StatusBanner({
 export function AppShell() {
   const { t, language, setLanguage } = useI18n();
   const [activeTab, setActiveTab] = useState<AppTab>('home');
+  const [isEmbedded] = useState(() => typeof window !== 'undefined' && window.parent !== window);
   const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => !isEmbedded);
   const [storedObjects, setStoredObjects] = useState<StoredEntity<WYQDObject>[]>(
     sampleObjects.map((entity) => ({ fileName: `${entity.id}.md`, entity, body: '' })),
   );
@@ -124,6 +125,56 @@ export function AppShell() {
     [storedSnapshots],
   );
   const metrics = useMemo(() => calculateHomeMetrics(objects, snapshots), [objects, snapshots]);
+  const pendingWrites = useRef<Map<string, { resolve: () => void; reject: (e: Error) => void }>>(new Map());
+
+  // postMessage bridge: receive vault data from Obsidian parent
+  useEffect(() => {
+    if (!isEmbedded) return;
+
+    function handleMessage(event: MessageEvent) {
+      const msg = event.data;
+      if (!msg || typeof msg.type !== 'string') return;
+
+      if (msg.type === 'wyqd:vault-data' && msg.payload) {
+        const { objects: obj, snapshots: snap, reviews: rev, archived: arch } = msg.payload;
+        if (Array.isArray(obj)) setStoredObjects(obj);
+        if (Array.isArray(snap)) setStoredSnapshots(snap);
+        if (Array.isArray(rev)) setStoredReviews(rev);
+        if (Array.isArray(arch)) setArchivedEntities(arch);
+        setIsConnected(true);
+        setIsLoading(false);
+      }
+
+      if (msg.type === 'wyqd:write-result' && msg.payload?.requestId) {
+        const entry = pendingWrites.current.get(msg.payload.requestId);
+        if (entry) {
+          pendingWrites.current.delete(msg.payload.requestId);
+          if (msg.payload.success) {
+            entry.resolve();
+          } else {
+            entry.reject(new Error(msg.payload.error || 'Write failed'));
+          }
+        }
+      }
+    }
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [isEmbedded]);
+
+  const sendWriteRequest = useCallback(
+    (action: string, kind: string, fileName?: string, payload?: unknown, body?: string): Promise<void> => {
+      return new Promise<void>((resolve, reject) => {
+        const requestId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        pendingWrites.current.set(requestId, { resolve, reject });
+        window.parent.postMessage(
+          { type: 'wyqd:write-request', requestId, action, kind, fileName, payload, body },
+          '*',
+        );
+      });
+    },
+    [],
+  );
 
   function showNotice(message: string) {
     setNotice(message);
@@ -171,8 +222,12 @@ export function AppShell() {
 
   async function createObject(object: WYQDObject, body: string) {
     try {
-      await markdownEntityRepository.saveObject(object, body);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('save', 'object', undefined, object, body);
+      } else {
+        await markdownEntityRepository.saveObject(object, body);
+        await loadVaultData();
+      }
       showNotice('对象已保存到 Ownly/Objects。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '保存对象失败。');
@@ -182,8 +237,12 @@ export function AppShell() {
 
   async function updateObject(fileName: string, object: WYQDObject, body: string) {
     try {
-      await markdownEntityRepository.updateObject(fileName, object, body);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('update', 'object', fileName, object, body);
+      } else {
+        await markdownEntityRepository.updateObject(fileName, object, body);
+        await loadVaultData();
+      }
       showNotice('对象已更新。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '更新对象失败。');
@@ -193,8 +252,12 @@ export function AppShell() {
 
   async function deleteObject(fileName: string) {
     try {
-      await markdownEntityRepository.deleteObject(fileName);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('delete', 'object', fileName);
+      } else {
+        await markdownEntityRepository.deleteObject(fileName);
+        await loadVaultData();
+      }
       showNotice('对象已归档，可在归档箱恢复。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '删除对象失败。');
@@ -237,35 +300,41 @@ export function AppShell() {
       tags: ['ownly', 'review', 'experience'],
     };
 
-    await markdownEntityRepository.saveReview(
-      review,
-      `## 体验复盘\n\n${summary}\n\n## 排行榜\n\n- 美食：${
-        rankings.foodRank ? `第 ${rankings.foodRank} 名` : '未排位'
-      }\n- 风景：${
-        rankings.sceneryRank ? `第 ${rankings.sceneryRank} 名` : '未排位'
-      }\n- 体验：${
-        rankings.experienceRank ? `第 ${rankings.experienceRank} 名` : '未排位'
-      }\n\n## 关联对象\n\n- ${object.title}\n`,
-    );
-    await markdownEntityRepository.updateObject(
-      fileName,
-      {
-        ...object,
-        status: 'reviewed',
-        reviewed_at: date,
-        review_ref: review.id,
-        updated_at: date,
-      },
-      body,
-    );
-    await loadVaultData();
+    const reviewBody = `## 体验复盘\n\n${summary}\n\n## 排行榜\n\n- 美食：${
+      rankings.foodRank ? `第 ${rankings.foodRank} 名` : '未排位'
+    }\n- 风景：${
+      rankings.sceneryRank ? `第 ${rankings.sceneryRank} 名` : '未排位'
+    }\n- 体验：${
+      rankings.experienceRank ? `第 ${rankings.experienceRank} 名` : '未排位'
+    }\n\n## 关联对象\n\n- ${object.title}\n`;
+
+    const updatedObject: WYQDObject = {
+      ...object,
+      status: 'reviewed',
+      reviewed_at: date,
+      review_ref: review.id,
+      updated_at: date,
+    };
+
+    if (isEmbedded) {
+      await sendWriteRequest('save', 'review', undefined, review, reviewBody);
+      await sendWriteRequest('update', 'object', fileName, updatedObject, body);
+    } else {
+      await markdownEntityRepository.saveReview(review, reviewBody);
+      await markdownEntityRepository.updateObject(fileName, updatedObject, body);
+      await loadVaultData();
+    }
     showNotice('体验复盘已写入 Ownly/Reviews，并已关联对象。');
   }
 
   async function createSnapshot(snapshot: AccountSnapshot, body: string) {
     try {
-      await markdownEntityRepository.saveSnapshot(snapshot, body);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('save', 'snapshot', undefined, snapshot, body);
+      } else {
+        await markdownEntityRepository.saveSnapshot(snapshot, body);
+        await loadVaultData();
+      }
       showNotice('账户快照已保存。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '保存账户快照失败。');
@@ -275,8 +344,12 @@ export function AppShell() {
 
   async function updateSnapshot(fileName: string, snapshot: AccountSnapshot, body: string) {
     try {
-      await markdownEntityRepository.updateSnapshot(fileName, snapshot, body);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('update', 'snapshot', fileName, snapshot, body);
+      } else {
+        await markdownEntityRepository.updateSnapshot(fileName, snapshot, body);
+        await loadVaultData();
+      }
       showNotice('账户快照已更新。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '更新账户快照失败。');
@@ -286,8 +359,12 @@ export function AppShell() {
 
   async function deleteSnapshot(fileName: string) {
     try {
-      await markdownEntityRepository.deleteSnapshot(fileName);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('delete', 'snapshot', fileName);
+      } else {
+        await markdownEntityRepository.deleteSnapshot(fileName);
+        await loadVaultData();
+      }
       showNotice('账户快照已归档，可在归档箱恢复。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '删除账户快照失败。');
@@ -297,8 +374,12 @@ export function AppShell() {
 
   async function createReview(review: ReviewEntry, body: string) {
     try {
-      await markdownEntityRepository.saveReview(review, body);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('save', 'review', undefined, review, body);
+      } else {
+        await markdownEntityRepository.saveReview(review, body);
+        await loadVaultData();
+      }
       showNotice('复盘已保存。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '保存复盘失败。');
@@ -308,8 +389,12 @@ export function AppShell() {
 
   async function updateReview(fileName: string, review: ReviewEntry, body: string) {
     try {
-      await markdownEntityRepository.updateReview(fileName, review, body);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('update', 'review', fileName, review, body);
+      } else {
+        await markdownEntityRepository.updateReview(fileName, review, body);
+        await loadVaultData();
+      }
       showNotice('复盘已更新。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '更新复盘失败。');
@@ -319,8 +404,12 @@ export function AppShell() {
 
   async function deleteReview(fileName: string) {
     try {
-      await markdownEntityRepository.deleteReview(fileName);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('delete', 'review', fileName);
+      } else {
+        await markdownEntityRepository.deleteReview(fileName);
+        await loadVaultData();
+      }
       showNotice('复盘已归档，可在归档箱恢复。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '删除复盘失败。');
@@ -330,8 +419,12 @@ export function AppShell() {
 
   async function restoreArchivedEntity(archiveType: ArchiveEntityType, archiveFileName: string) {
     try {
-      await markdownEntityRepository.restoreArchivedEntity(archiveType, archiveFileName);
-      await loadVaultData();
+      if (isEmbedded) {
+        await sendWriteRequest('restore', archiveType, archiveFileName);
+      } else {
+        await markdownEntityRepository.restoreArchivedEntity(archiveType, archiveFileName);
+        await loadVaultData();
+      }
       showNotice('归档数据已恢复。');
     } catch (event) {
       setError(event instanceof Error ? event.message : '恢复归档数据失败。');
@@ -340,6 +433,8 @@ export function AppShell() {
   }
 
   useEffect(() => {
+    if (isEmbedded) return; // Data arrives via postMessage from Obsidian parent
+
     let isMounted = true;
 
     async function initialize() {
@@ -376,7 +471,7 @@ export function AppShell() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isEmbedded]);
 
   return (
     <main className="wyqd-web-shell min-h-screen bg-stone-50 px-4 pb-28 pt-6 text-stone-950 sm:px-5 sm:pt-8">
@@ -393,33 +488,35 @@ export function AppShell() {
       </div>
       <div className="mx-auto max-w-6xl">
         <header className="mb-6 rounded-xl border border-stone-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          {/* Row 1: brand identity */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-stone-100 pb-3 text-[11px] font-medium text-stone-500">
+            <span className="text-lg font-semibold tracking-tight text-stone-950">Ownly</span>
+            <span className="rounded-full bg-stone-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-stone-600">
+              v{runtimeInfo.coreTargetVersion}
+            </span>
+            {!isEmbedded && (
+              <span className="rounded-full bg-stone-950 px-2 py-0.5 text-[11px] font-semibold text-white">
+                Web
+              </span>
+            )}
+            <span className="h-1 w-1 rounded-full bg-stone-300" aria-hidden="true" />
+            <span>{t('workspaceSubtitle')}</span>
+          </div>
+          {/* Row 2: tab heading + controls */}
+          <div className="flex flex-col gap-3 pt-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs font-medium text-stone-500">
-                <span className="text-2xl font-semibold tracking-tight text-stone-950 sm:text-3xl">
-                  Ownly
-                </span>
-                <span className="rounded-full bg-stone-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-stone-600 ring-1 ring-stone-200">
-                  v{runtimeInfo.coreTargetVersion}
-                </span>
-                <span className="rounded-full bg-stone-950 px-2 py-0.5 text-[11px] font-semibold text-white">
-                  Web
-                </span>
-                <span className="h-1 w-1 rounded-full bg-stone-300" aria-hidden="true" />
-                <span>{t('workspaceSubtitle')}</span>
-              </div>
-              <h1 className="mt-2 text-xl font-semibold tracking-tight text-stone-950 sm:text-2xl">
+              <h1 className="text-lg font-semibold tracking-tight text-stone-950 sm:text-xl">
                 {t(tabHeadingKeys[activeTab].title)}
               </h1>
-              <p className="mt-1 text-sm text-stone-500">{t(tabHeadingKeys[activeTab].description)}</p>
-              <p className="mt-2 text-xs font-medium text-stone-500">{WYQD_PRODUCT_SLOGAN}</p>
+              <p className="mt-0.5 text-sm text-stone-500">{t(tabHeadingKeys[activeTab].description)}</p>
+              <p className="mt-1.5 text-xs font-medium text-stone-400">{WYQD_PRODUCT_SLOGAN}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span
-                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
                   isConnected
-                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                    : 'bg-stone-50 text-stone-600 ring-stone-200'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-stone-200 bg-stone-50 text-stone-500'
                 }`}
               >
                 <span
@@ -430,32 +527,34 @@ export function AppShell() {
                 />
                 {isConnected ? t('vaultConnected') : isLoading ? t('connecting') : t('demoMode')}
               </span>
-              <span className="rounded-full bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-600 ring-1 ring-stone-200">
+              <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-medium text-stone-500">
                 {storedObjects.length} {t('objects')}
               </span>
-              <span className="rounded-full bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-600 ring-1 ring-stone-200">
+              <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-medium text-stone-500">
                 {storedSnapshots.length} {t('snapshots')}
               </span>
               <button
                 type="button"
                 onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
-                className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950"
+                className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
               >
                 {language === 'zh' ? 'EN' : '中文'}
               </button>
-              <button
-                type="button"
-                onClick={connectVault}
-                disabled={isLoading}
-                className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
-              >
-                {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
-              </button>
+              {!isEmbedded && (
+                <button
+                  type="button"
+                  onClick={connectVault}
+                  disabled={isLoading}
+                  className="rounded-full bg-stone-950 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                >
+                  {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
+                </button>
+              )}
             </div>
           </div>
         </header>
 
-        {(!isConnected || error) ? (
+        {!isEmbedded && (!isConnected || error) ? (
           <StatusBanner
             isConnected={isConnected}
             isLoading={isLoading}
