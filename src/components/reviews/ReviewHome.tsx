@@ -550,15 +550,16 @@ export function ReviewHome({
             <p className="text-sm text-stone-500">{t('noExperiencesYet')}</p>
           ) : (
             experiences.map((experience) => {
-              const isCompleted = experience.status === 'completed';
-              const isAlreadyReviewed =
+              const isAlreadyReviewed = Boolean(
                 experience.review_ref ||
-                reviewedTargetIds.has(experience.id);
+                reviewedTargetIds.has(experience.id),
+              );
+              const canStartReview = !isAlreadyReviewed;
               return (
               <div
                 key={experience.id}
-                className={`flex justify-between gap-3 border-t border-stone-100 pt-3 ${isCompleted && !isAlreadyReviewed ? 'cursor-pointer rounded-lg hover:bg-stone-50 -mx-2 px-2' : ''}`}
-                onClick={isCompleted && !isAlreadyReviewed ? () => startExperienceReview(experience) : undefined}
+                className={`flex justify-between gap-3 border-t border-stone-100 pt-3 ${canStartReview ? 'cursor-pointer rounded-lg hover:bg-stone-50 -mx-2 px-2' : ''}`}
+                onClick={canStartReview ? () => startExperienceReview(experience) : undefined}
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-stone-950">
@@ -566,7 +567,7 @@ export function ReviewHome({
                   </div>
                   <div className="flex items-center gap-2 text-xs text-stone-400">
                     <span>{getStatusLabel(experience)}</span>
-                    {isCompleted && !isAlreadyReviewed ? (
+                    {canStartReview ? (
                       <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">{t('pendingReviewBadge')}</span>
                     ) : null}
                   </div>

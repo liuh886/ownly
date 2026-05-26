@@ -1,4 +1,4 @@
-# WYQD Release Readiness
+# Ownly Release Readiness
 
 This document tracks the gap between the current local-first MVP+ and a mature Obsidian-native product that is safe to share publicly, publish on GitHub, submit to the Obsidian community plugin directory, and rely on for real personal data.
 
@@ -6,9 +6,9 @@ This document tracks the gap between the current local-first MVP+ and a mature O
 
 Status: 0.2.0 Private Alpha (Obsidian plugin first, Web compatible).
 
-WYQD is no longer a throwaway prototype, but it is currently positioned as a **Private Alpha**, not a stable release. It has a working information architecture, Markdown data model, Web UI, Obsidian plugin shell, Agent CLI, PM2/static deployment path, and documented product intent. It is suitable for 1-3 internal users to evaluate the "Alpha risk" profile.
+Ownly is no longer a throwaway prototype, but it is currently positioned as a **Private Alpha**, not a stable release. It has a working information architecture, Markdown data model, Web UI, Obsidian plugin shell, Agent CLI, PM2/static deployment path, and documented product intent. It is suitable for 1-3 internal users to evaluate the "Alpha risk" profile.
 
-The maturity benchmark is not mobile app-store listing. It is whether WYQD feels dependable, understandable, recoverable, testable, and shareable as a real product.
+The maturity benchmark is not mobile app-store listing. It is whether Ownly feels dependable, understandable, recoverable, testable, and shareable as a real product.
 
 ## GitHub Public Sharing Checklist
 
@@ -58,7 +58,7 @@ Verified:
 
 - `npm run validate` passed for TypeScript, ESLint, Web static build, Obsidian plugin type check, plugin package generation, and release file validation.
 - `npm run wyqd -- --help` works as the documented Agent CLI entry.
-- `samples/wyqd-vault` can be read by the WYQD CLI for object and snapshot demo data.
+- `samples/wyqd-vault` can be read by the Ownly CLI for object and snapshot demo data.
 - `dist/obsidian/wyqd` is generated with `manifest.json`, `versions.json`, `main.js`, and `styles.css`.
 
 Remaining blockers before public Obsidian community submission:

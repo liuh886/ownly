@@ -1,10 +1,10 @@
-# WYQD Agent CLI Guide
+# Ownly Agent CLI Guide
 
-This guide is for agents that need to operate WYQD data from natural language user instructions.
+This guide is for agents that need to operate Ownly data from natural language user instructions.
 
 ## Principle
 
-WYQD has three synchronized data entry paths:
+Ownly has three synchronized data entry paths:
 
 - Web UI for manual entry.
 - Obsidian Markdown for direct human editing.
@@ -24,7 +24,7 @@ Use one of these forms:
 
 ```bash
 node scripts/wyqd-cli.mjs --vault /mnt/zhihaol object list --json
-WYQD_VAULT=/mnt/zhihaol node scripts/wyqd-cli.mjs object list --json
+OWNLY_VAULT=/mnt/zhihaol node scripts/wyqd-cli.mjs object list --json
 npm run --silent wyqd -- --vault /mnt/zhihaol object list --json
 ```
 
@@ -125,9 +125,9 @@ node scripts/wyqd-cli.mjs --vault /mnt/zhihaol object restore --id <object_id>
 ```
 
 Deletion is a recoverable archive operation. The CLI moves the original Markdown into
-`WYQD/Archive/Objects` and adds `archived_at`, `archived_from`, and `original_file_name`
+`Ownly/Archive/Objects` and adds `archived_at`, `archived_from`, and `original_file_name`
 without dropping unknown frontmatter fields or body content. Restore moves it back to
-`WYQD/Objects` and removes the archive metadata. Prefer `retire` when the user means the
+`Ownly/Objects` and removes the archive metadata. Prefer `retire` when the user means the
 asset is no longer in service.
 
 ## Snapshot Commands
@@ -156,7 +156,7 @@ node scripts/wyqd-cli.mjs --vault /mnt/zhihaol snapshot delete --id <snapshot_id
 node scripts/wyqd-cli.mjs --vault /mnt/zhihaol snapshot restore --id <snapshot_id>
 ```
 
-Snapshot deletion moves the note to `WYQD/Archive/Snapshots`.
+Snapshot deletion moves the note to `Ownly/Archive/Snapshots`.
 
 ## Review Commands
 
@@ -182,7 +182,7 @@ node scripts/wyqd-cli.mjs --vault /mnt/zhihaol review delete --id <review_id> --
 node scripts/wyqd-cli.mjs --vault /mnt/zhihaol review restore --id <review_id>
 ```
 
-Review deletion moves the note to `WYQD/Archive/Reviews`.
+Review deletion moves the note to `Ownly/Archive/Reviews`.
 
 ## Agent Workflow
 
