@@ -67,13 +67,13 @@ export default class WYQDPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'open-wyqd-workspace',
+      id: 'open-workspace',
       name: this.t('openWorkspace'),
       callback: () => void this.activateView(),
     });
 
     this.addCommand({
-      id: 'create-wyqd-object',
+      id: 'create-object',
       name: this.t('createObjectCommand'),
       callback: () => void this.createDraft('object'),
     });
@@ -91,7 +91,7 @@ export default class WYQDPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'run-wyqd-doctor',
+      id: 'run-doctor',
       name: this.t('runDoctorCommand'),
       callback: () => void this.runDoctor(),
     });
