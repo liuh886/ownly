@@ -304,7 +304,9 @@ class WYQDWorkspaceView extends ItemView {
     this.createStatusItem(grid, t('release'), `Plugin ${this.plugin.manifest.version}`);
     this.createStatusItem(grid, t('target'), `WYQD ${WYQD_CORE_TARGET_VERSION}`);
 
-    const consolePanel = shell.createDiv({ cls: 'wyqd-console-panel' });
+    const workspaceGrid = shell.createDiv({ cls: 'wyqd-workspace-grid' });
+
+    const consolePanel = workspaceGrid.createDiv({ cls: 'wyqd-console-panel' });
     const consoleHeader = consolePanel.createDiv({ cls: 'wyqd-section-header' });
     consoleHeader.createEl('h3', { text: t('objectConsole') });
     consoleHeader.createEl('p', {
@@ -346,7 +348,7 @@ class WYQDWorkspaceView extends ItemView {
     if (!this.selectedObjectId && selectedObject) {
       this.selectedObjectId = selectedObject.entity.id;
     }
-    this.createObjectDetailPanel(shell, selectedObject);
+    this.createObjectDetailPanel(workspaceGrid, selectedObject);
     this.createArchivedObjectsPanel(
       shell,
       archivedEntities.filter((entry) => entry.archiveType === 'object'),
@@ -702,10 +704,29 @@ class WYQDSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     const t = (key: WYQDTranslationKey) => this.wyqdPlugin.t(key);
     containerEl.empty();
-    containerEl.createEl('h2', { text: 'WYQD' });
+    containerEl.addClass('wyqd-settings-view');
     const membership = this.wyqdPlugin.getMembership();
 
-    new Setting(containerEl)
+    const shell = containerEl.createDiv({ cls: 'wyqd-settings-shell' });
+    const hero = shell.createDiv({ cls: 'wyqd-settings-hero' });
+    const heroCopy = hero.createDiv();
+    const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
+    eyebrow.createEl('span', { text: `WYQD ${WYQD_CORE_TARGET_VERSION}` });
+    eyebrow.createEl('span', { text: t('localVaultOnly') });
+    heroCopy.createEl('h2', { text: 'WYQD' });
+    heroCopy.createEl('p', { text: t('workspaceSubtitle') });
+    heroCopy.createEl('p', { cls: 'wyqd-slogan', text: WYQD_PRODUCT_SLOGAN });
+    const membershipCard = hero.createDiv({ cls: 'wyqd-settings-membership' });
+    membershipCard.createEl('span', { text: t('membership') });
+    membershipCard.createEl('strong', { text: membership.planLabel });
+    membershipCard.createEl('small', { text: membership.statusLabel });
+
+    const appPanel = shell.createDiv({ cls: 'wyqd-settings-panel' });
+    const appHeader = appPanel.createDiv({ cls: 'wyqd-section-header' });
+    appHeader.createEl('h3', { text: t('workspaceTitle') });
+    appHeader.createEl('p', { text: t('settingsDataFolderDesc') });
+
+    new Setting(appPanel)
       .setName(t('settingsLanguage'))
       .setDesc(t('settingsLanguageDesc'))
       .addDropdown((dropdown) => {
@@ -720,7 +741,7 @@ class WYQDSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
+    new Setting(appPanel)
       .setName(t('settingsDataFolder'))
       .setDesc(t('settingsDataFolderDesc'))
       .addText((text) =>
@@ -733,7 +754,7 @@ class WYQDSettingTab extends PluginSettingTab {
           }),
       );
 
-    new Setting(containerEl)
+    new Setting(appPanel)
       .setName(t('settingsRightSidebar'))
       .setDesc(t('settingsRightSidebarDesc'))
       .addToggle((toggle) =>
@@ -743,11 +764,14 @@ class WYQDSettingTab extends PluginSettingTab {
         }),
       );
 
-    new Setting(containerEl).setHeading().setName(t('membership'));
-    
+    const membershipPanel = shell.createDiv({ cls: 'wyqd-settings-panel' });
+    const membershipHeader = membershipPanel.createDiv({ cls: 'wyqd-section-header' });
+    membershipHeader.createEl('h3', { text: t('membership') });
+    membershipHeader.createEl('p', { text: membership.upgradeMessage });
+
     let pendingLicenseKey = this.wyqdPlugin.settings.licenseKey;
 
-    new Setting(containerEl)
+    new Setting(membershipPanel)
       .setName(t('settingsLicenseKey'))
       .setDesc(t('settingsLicenseKeyDesc'))
       .addText((text) => {
@@ -768,15 +792,15 @@ class WYQDSettingTab extends PluginSettingTab {
         }),
       );
 
-    new Setting(containerEl)
+    new Setting(membershipPanel)
       .setName(t('plan'))
       .setDesc(`${membership.planLabel} - ${membership.statusLabel}`);
 
-    new Setting(containerEl)
+    new Setting(membershipPanel)
       .setName(t('status'))
       .setDesc(membership.upgradeMessage);
 
-    new Setting(containerEl)
+    new Setting(membershipPanel)
       .setName(t('clearLicense'))
       .setDesc(t('clearLicenseDesc'))
       .addButton((button) =>

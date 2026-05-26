@@ -19,6 +19,8 @@
 - Added `npm run deps:reset` and documentation for Windows/Docker `esbuild` platform mismatch recovery.
 - Added visible Web Vault reconnect control.
 - Improved Obsidian workspace first-screen hierarchy with hero metrics and action cards.
+- Upgraded Obsidian workspace to a two-column console/detail layout for stronger Web parity.
+- Reworked Obsidian settings into WYQD-styled hero, grouped panels, and membership summary.
 
 Known gaps:
 
