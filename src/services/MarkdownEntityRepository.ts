@@ -1,5 +1,6 @@
 import {
   WYQD_DIRECTORIES,
+  createWYQDDirectories,
   createEntityFileName,
   createReviewFileName,
   createSnapshotFileName,
@@ -23,6 +24,13 @@ export type ArchivedStoredEntity =
   | (StoredEntity<ReviewEntry> & { archiveType: 'review' });
 
 export class MarkdownEntityRepository {
+  private dirs = WYQD_DIRECTORIES;
+
+  async initialize(): Promise<void> {
+    const root = await obsidianService.getDataFolder();
+    this.dirs = createWYQDDirectories(root);
+  }
+
   private async archiveEntity(
     sourceDirectory: string,
     archiveDirectory: string,
@@ -120,12 +128,12 @@ export class MarkdownEntityRepository {
   }
 
   async listObjects(): Promise<StoredEntity<WYQDObject>[]> {
-    return this.listEntities<WYQDObject>(WYQD_DIRECTORIES.objects, 'object', 'object');
+    return this.listEntities<WYQDObject>(this.dirs.objects, 'object', 'object');
   }
 
   async listArchivedObjects(): Promise<Array<StoredEntity<WYQDObject> & { archiveType: 'object' }>> {
     const entries = await this.listEntities<WYQDObject>(
-      WYQD_DIRECTORIES.objectArchive,
+      this.dirs.objectArchive,
       'object',
       'archived object',
     );
@@ -137,30 +145,30 @@ export class MarkdownEntityRepository {
     const fileName = createEntityFileName(date, slugify(object.title));
     const content = serializeMarkdownEntity(object as unknown as Record<string, unknown>, body);
 
-    await obsidianService.writeMarkdownFile(WYQD_DIRECTORIES.objects, fileName, content);
+    await obsidianService.writeMarkdownFile(this.dirs.objects, fileName, content);
     return fileName;
   }
 
   async updateObject(fileName: string, object: WYQDObject, body = ''): Promise<void> {
     const content = serializeMarkdownEntity(object as unknown as Record<string, unknown>, body);
-    await obsidianService.writeMarkdownFile(WYQD_DIRECTORIES.objects, fileName, content);
+    await obsidianService.writeMarkdownFile(this.dirs.objects, fileName, content);
   }
 
   async deleteObject(fileName: string): Promise<void> {
-    await this.archiveEntity(WYQD_DIRECTORIES.objects, WYQD_DIRECTORIES.objectArchive, fileName);
+    await this.archiveEntity(this.dirs.objects, this.dirs.objectArchive, fileName);
   }
 
   async restoreObject(archiveFileName: string): Promise<string> {
     return this.restoreEntity(
-      WYQD_DIRECTORIES.objectArchive,
-      WYQD_DIRECTORIES.objects,
+      this.dirs.objectArchive,
+      this.dirs.objects,
       archiveFileName,
     );
   }
 
   async listSnapshots(): Promise<StoredEntity<AccountSnapshot>[]> {
     return this.listEntities<AccountSnapshot>(
-      WYQD_DIRECTORIES.snapshots,
+      this.dirs.snapshots,
       'snapshot',
       'snapshot',
     );
@@ -170,7 +178,7 @@ export class MarkdownEntityRepository {
     Array<StoredEntity<AccountSnapshot> & { archiveType: 'snapshot' }>
   > {
     const entries = await this.listEntities<AccountSnapshot>(
-      WYQD_DIRECTORIES.snapshotArchive,
+      this.dirs.snapshotArchive,
       'snapshot',
       'archived snapshot',
     );
@@ -185,38 +193,38 @@ export class MarkdownEntityRepository {
     const fileName = createSnapshotFileName(date, time);
     const content = serializeMarkdownEntity(snapshot as unknown as Record<string, unknown>, body);
 
-    await obsidianService.writeMarkdownFile(WYQD_DIRECTORIES.snapshots, fileName, content);
+    await obsidianService.writeMarkdownFile(this.dirs.snapshots, fileName, content);
     return fileName;
   }
 
   async updateSnapshot(fileName: string, snapshot: AccountSnapshot, body = ''): Promise<void> {
     const content = serializeMarkdownEntity(snapshot as unknown as Record<string, unknown>, body);
-    await obsidianService.writeMarkdownFile(WYQD_DIRECTORIES.snapshots, fileName, content);
+    await obsidianService.writeMarkdownFile(this.dirs.snapshots, fileName, content);
   }
 
   async deleteSnapshot(fileName: string): Promise<void> {
     await this.archiveEntity(
-      WYQD_DIRECTORIES.snapshots,
-      WYQD_DIRECTORIES.snapshotArchive,
+      this.dirs.snapshots,
+      this.dirs.snapshotArchive,
       fileName,
     );
   }
 
   async restoreSnapshot(archiveFileName: string): Promise<string> {
     return this.restoreEntity(
-      WYQD_DIRECTORIES.snapshotArchive,
-      WYQD_DIRECTORIES.snapshots,
+      this.dirs.snapshotArchive,
+      this.dirs.snapshots,
       archiveFileName,
     );
   }
 
   async listReviews(): Promise<StoredEntity<ReviewEntry>[]> {
-    return this.listEntities<ReviewEntry>(WYQD_DIRECTORIES.reviews, 'review', 'review');
+    return this.listEntities<ReviewEntry>(this.dirs.reviews, 'review', 'review');
   }
 
   async listArchivedReviews(): Promise<Array<StoredEntity<ReviewEntry> & { archiveType: 'review' }>> {
     const entries = await this.listEntities<ReviewEntry>(
-      WYQD_DIRECTORIES.reviewArchive,
+      this.dirs.reviewArchive,
       'review',
       'archived review',
     );
@@ -228,23 +236,23 @@ export class MarkdownEntityRepository {
     const fileName = createReviewFileName(date, slugify(review.title));
     const content = serializeMarkdownEntity(review as unknown as Record<string, unknown>, body);
 
-    await obsidianService.writeMarkdownFile(WYQD_DIRECTORIES.reviews, fileName, content);
+    await obsidianService.writeMarkdownFile(this.dirs.reviews, fileName, content);
     return fileName;
   }
 
   async updateReview(fileName: string, review: ReviewEntry, body = ''): Promise<void> {
     const content = serializeMarkdownEntity(review as unknown as Record<string, unknown>, body);
-    await obsidianService.writeMarkdownFile(WYQD_DIRECTORIES.reviews, fileName, content);
+    await obsidianService.writeMarkdownFile(this.dirs.reviews, fileName, content);
   }
 
   async deleteReview(fileName: string): Promise<void> {
-    await this.archiveEntity(WYQD_DIRECTORIES.reviews, WYQD_DIRECTORIES.reviewArchive, fileName);
+    await this.archiveEntity(this.dirs.reviews, this.dirs.reviewArchive, fileName);
   }
 
   async restoreReview(archiveFileName: string): Promise<string> {
     return this.restoreEntity(
-      WYQD_DIRECTORIES.reviewArchive,
-      WYQD_DIRECTORIES.reviews,
+      this.dirs.reviewArchive,
+      this.dirs.reviews,
       archiveFileName,
     );
   }

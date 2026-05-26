@@ -1,15 +1,19 @@
 export const WYQD_ROOT = 'Ownly';
 
-export const WYQD_DIRECTORIES = {
-  root: WYQD_ROOT,
-  objects: `${WYQD_ROOT}/Objects`,
-  accounts: `${WYQD_ROOT}/Accounts`,
-  snapshots: `${WYQD_ROOT}/Snapshots`,
-  reviews: `${WYQD_ROOT}/Reviews`,
-  objectArchive: `${WYQD_ROOT}/Archive/Objects`,
-  snapshotArchive: `${WYQD_ROOT}/Archive/Snapshots`,
-  reviewArchive: `${WYQD_ROOT}/Archive/Reviews`,
-} as const;
+export function createWYQDDirectories(root: string) {
+  return {
+    root,
+    objects: `${root}/Objects`,
+    accounts: `${root}/Accounts`,
+    snapshots: `${root}/Snapshots`,
+    reviews: `${root}/Reviews`,
+    objectArchive: `${root}/Archive/Objects`,
+    snapshotArchive: `${root}/Archive/Snapshots`,
+    reviewArchive: `${root}/Archive/Reviews`,
+  };
+}
+
+export const WYQD_DIRECTORIES = createWYQDDirectories(WYQD_ROOT);
 
 export type WYQDDirectoryKey = keyof typeof WYQD_DIRECTORIES;
 

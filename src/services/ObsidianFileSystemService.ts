@@ -15,8 +15,14 @@ export interface WishlistItem {
 
 const HANDLE_KEY = 'wyqd_obsidian_handle';
 
+interface PluginSettings {
+  dataFolder?: string;
+  [key: string]: unknown;
+}
+
 export class ObsidianFileSystemService {
   private directoryHandle: FileSystemDirectoryHandle | null = null;
+  private cachedDataFolder: string | null = null;
 
   async initAutoConnect(): Promise<boolean> {
     try {
@@ -47,6 +53,7 @@ export class ObsidianFileSystemService {
       this.directoryHandle = await (window as any).showDirectoryPicker({
         mode: 'readwrite',
       });
+      this.cachedDataFolder = null;
       await set(HANDLE_KEY, this.directoryHandle);
       return true;
     } catch (error) {
@@ -57,6 +64,36 @@ export class ObsidianFileSystemService {
 
   get isConnected(): boolean {
     return this.directoryHandle !== null;
+  }
+
+  async getDataFolder(): Promise<string> {
+    if (this.cachedDataFolder) return this.cachedDataFolder;
+
+    const fallback = 'Ownly';
+    if (!this.directoryHandle) return fallback;
+
+    try {
+      const pluginDir = await this.getNestedDirectoryHandle(['.obsidian', 'plugins', 'wyqd']);
+      const dataFile = await pluginDir.getFileHandle('data.json');
+      const file = await dataFile.getFile();
+      const text = await file.text();
+      const settings = JSON.parse(text) as PluginSettings;
+      this.cachedDataFolder = settings.dataFolder || fallback;
+      return this.cachedDataFolder;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private async getNestedDirectoryHandle(parts: string[]): Promise<FileSystemDirectoryHandle> {
+    if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+
+    let current = this.directoryHandle;
+    for (const part of parts) {
+      current = await current.getDirectoryHandle(part);
+    }
+
+    return current;
   }
 
   async getItems(): Promise<WishlistItem[]> {

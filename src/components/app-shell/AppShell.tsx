@@ -156,6 +156,7 @@ export function AppShell() {
       const connected = await obsidianService.requestAccess();
       setIsConnected(connected);
       if (connected) {
+        await markdownEntityRepository.initialize();
         await loadVaultData();
         showNotice('Vault 已连接，物欲清单数据已同步。');
       } else {
@@ -349,6 +350,7 @@ export function AppShell() {
 
         setIsConnected(connected);
         if (connected) {
+          await markdownEntityRepository.initialize();
           const [objectsFromVault, snapshotsFromVault, reviewsFromVault, archivedFromVault] = await Promise.all([
             markdownEntityRepository.listObjects(),
             markdownEntityRepository.listSnapshots(),
