@@ -6,6 +6,16 @@ Build the first clearly premium Ownly Pro experience around `看世界`: when re
 
 This feature must feel native in Obsidian, remain local-first, and reuse the same data and UI contracts in the Web runtime.
 
+## Runtime Consistency Contract
+
+Web and Obsidian must share the same feature implementation:
+
+- The travel map and statistics must be rendered by shared React components.
+- Data aggregation must live in shared domain helpers, not inside a Web-only or Obsidian-only shell.
+- Web Shell and Obsidian Shell may differ only in storage adapter, theme tokens, and container sizing.
+- Functional parity is mandatory: the same Vault data should produce the same travel counts, ranking summaries, and map points in both runtimes.
+- Pixel-perfect parity is not required because Obsidian themes can override typography, colors, and UI variables.
+
 ## Product Positioning
 
 - Free: record travel experiences, review scores, and basic `看世界` list.
@@ -34,6 +44,34 @@ Rules:
 - `latitude` and `longitude` are optional; the feature must degrade gracefully without them.
 - No automatic external geocoding in the first Pro slice. Users or import tools may add coordinates later.
 - Existing `travel_worldview` objects without coordinates must still appear in statistics.
+
+## Input Extraction Requirements
+
+Travel fields should be captured from the existing object/review entry flow instead of forcing users into a separate map editor.
+
+Object entry should support these structured inputs for `one_time_experience`:
+
+- Travel subtype toggle: `travel_worldview`.
+- Country / region / city.
+- Optional country code.
+- Optional latitude / longitude.
+- Budget total and actual total.
+- Expense item lines when available.
+
+Review entry should contribute:
+
+- `food_rank`
+- `scenery_rank`
+- `experience_rank`
+- `summary`
+- `reviewed_at` / `exited_at`
+
+Extraction rules:
+
+- The form should write structured frontmatter directly.
+- Quick-line parsing may infer country, city, dates, budget, and actual spend when the user pastes a compact travel line.
+- If quick-line parsing is uncertain, keep the original text in the body or notes and leave ambiguous fields empty.
+- The map should never require a completed review; completed/planned travel objects can appear in counts, while review-derived quality charts only use available review fields.
 
 ## Pro Surface
 
@@ -75,6 +113,7 @@ Add shared domain helpers first:
 - `getTravelReviewStats(objects, reviews)`
 - `buildTravelMapPoints(experiences)`
 - `buildTravelSummary(experiences, reviews)`
+- `parseTravelQuickLine(input)`
 
 Then add shared React components:
 
