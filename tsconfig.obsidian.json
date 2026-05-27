@@ -6,11 +6,22 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "noEmit": true,
+    "jsx": "react-jsx",
     "types": [],
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/obsidian/**/*.ts", "src/core/**/*.ts", "src/domain/**/*.ts"],
-  "exclude": ["node_modules", ".next"]
+  "include": [
+    "src/obsidian/**/*.ts",
+    "src/obsidian/**/*.tsx",
+    "src/core/**/*.ts",
+    "src/core/**/*.tsx",
+    "src/domain/**/*.ts",
+    "src/components/**/*.ts",
+    "src/components/**/*.tsx",
+    "src/lib/**/*.ts",
+    "src/data/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", "src/services/ObsidianFileSystemService.ts", "src/components/shells/WebShell.tsx", "src/app/**"]
 }

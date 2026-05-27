@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { sampleObjects, sampleReviews, sampleSnapshots } from '@/data/sampleData';
 import { calculateHomeMetrics } from '@/domain/calculations';
 import { BottomNav, type AppTab } from './BottomNav';
@@ -14,23 +14,17 @@ import { createWYQDRuntimeInfo, WYQD_PRODUCT_SLOGAN } from '@/core/runtime';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
-import { obsidianService } from '@/services/ObsidianFileSystemService';
-import {
-  markdownEntityRepository,
-  type ArchivedStoredEntity,
-  type ArchiveEntityType,
-  type StoredEntity,
-} from '@/services/MarkdownEntityRepository';
+import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+import type { WYQDStoredEntity, WYQDArchivedStoredEntity, WYQDArchiveEntityType } from '@/core/repository';
 
 import { motion, AnimatePresence } from 'framer-motion';
+import { checkWYQDCapacity } from '@/core/membership';
 
 interface ReviewRankings {
   foodRank: number | null;
   sceneryRank: number | null;
   experienceRank: number | null;
 }
-
-const runtimeInfo = createWYQDRuntimeInfo('web');
 
 const tabHeadingKeys: Record<AppTab, { title: WYQDTranslationKey; description: WYQDTranslationKey }> = {
   home: { title: 'tabHome', description: 'tabHomeDesc' },
@@ -102,22 +96,32 @@ function StatusBanner({
 
 export function AppShell() {
   const { t, language, setLanguage } = useI18n();
+  const {
+    repository,
+    runtimeTarget,
+    isConnected,
+    isLoading,
+    connect,
+    error,
+    clearError,
+    notice,
+    showNotice,
+    membership,
+  } = useOwnlyWorkspace();
+
+  const runtimeInfo = useMemo(() => createWYQDRuntimeInfo(runtimeTarget), [runtimeTarget]);
+
   const [activeTab, setActiveTab] = useState<AppTab>('home');
-  const [isEmbedded] = useState(() => typeof window !== 'undefined' && window.parent !== window);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(() => !isEmbedded);
-  const [storedObjects, setStoredObjects] = useState<StoredEntity<WYQDObject>[]>(
+  const [storedObjects, setStoredObjects] = useState<WYQDStoredEntity<WYQDObject>[]>(
     sampleObjects.map((entity) => ({ fileName: `${entity.id}.md`, entity, body: '' })),
   );
-  const [storedSnapshots, setStoredSnapshots] = useState<StoredEntity<AccountSnapshot>[]>(
+  const [storedSnapshots, setStoredSnapshots] = useState<WYQDStoredEntity<AccountSnapshot>[]>(
     sampleSnapshots.map((entity) => ({ fileName: `${entity.id}.md`, entity, body: '' })),
   );
-  const [storedReviews, setStoredReviews] = useState<StoredEntity<ReviewEntry>[]>(
+  const [storedReviews, setStoredReviews] = useState<WYQDStoredEntity<ReviewEntry>[]>(
     sampleReviews.map((entity) => ({ fileName: `${entity.id}.md`, entity, body: '' })),
   );
-  const [archivedEntities, setArchivedEntities] = useState<ArchivedStoredEntity[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [archivedEntities, setArchivedEntities] = useState<WYQDArchivedStoredEntity[]>([]);
   const [objectListFocus, setObjectListFocus] = useState<ObjectListFocus | null>(null);
   const objects = useMemo(() => storedObjects.map((item) => item.entity), [storedObjects]);
   const snapshots = useMemo(
@@ -125,70 +129,6 @@ export function AppShell() {
     [storedSnapshots],
   );
   const metrics = useMemo(() => calculateHomeMetrics(objects, snapshots), [objects, snapshots]);
-  const pendingWrites = useRef<Map<string, { resolve: () => void; reject: (e: Error) => void }>>(new Map());
-
-  // postMessage bridge: receive vault data from Obsidian parent
-  useEffect(() => {
-    if (!isEmbedded) return;
-
-    function handleMessage(event: MessageEvent) {
-      const msg = event.data;
-      if (!msg || typeof msg.type !== 'string') return;
-
-      if (msg.type === 'wyqd:vault-data' && msg.payload) {
-        const { objects: obj, snapshots: snap, reviews: rev, archived: arch } = msg.payload;
-        if (Array.isArray(obj)) setStoredObjects(obj);
-        if (Array.isArray(snap)) setStoredSnapshots(snap);
-        if (Array.isArray(rev)) setStoredReviews(rev);
-        if (Array.isArray(arch)) setArchivedEntities(arch);
-        setIsConnected(true);
-        setIsLoading(false);
-      }
-
-      if (msg.type === 'wyqd:write-result' && msg.payload?.requestId) {
-        const entry = pendingWrites.current.get(msg.payload.requestId);
-        if (entry) {
-          pendingWrites.current.delete(msg.payload.requestId);
-          if (msg.payload.success) {
-            entry.resolve();
-          } else {
-            entry.reject(new Error(msg.payload.error || 'Write failed'));
-          }
-        }
-      }
-    }
-
-    window.addEventListener('message', handleMessage);
-    // Signal to parent that we're ready to receive data
-    window.parent.postMessage({ type: 'wyqd:ready' }, '*');
-    // Retry if no data arrives within 3 seconds
-    const retryTimer = window.setTimeout(() => {
-      window.parent.postMessage({ type: 'wyqd:ready' }, '*');
-    }, 3000);
-    return () => {
-      window.removeEventListener('message', handleMessage);
-      window.clearTimeout(retryTimer);
-    };
-  }, [isEmbedded]);
-
-  const sendWriteRequest = useCallback(
-    (action: string, kind: string, fileName?: string, payload?: unknown, body?: string): Promise<void> => {
-      return new Promise<void>((resolve, reject) => {
-        const requestId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        pendingWrites.current.set(requestId, { resolve, reject });
-        window.parent.postMessage(
-          { type: 'wyqd:write-request', requestId, action, kind, fileName, payload, body },
-          '*',
-        );
-      });
-    },
-    [],
-  );
-
-  function showNotice(message: string) {
-    setNotice(message);
-    window.setTimeout(() => setNotice(null), 2600);
-  }
 
   function openObjectsWithFocus(focus: Omit<ObjectListFocus, 'token'>) {
     setObjectListFocus({ ...focus, token: Date.now() });
@@ -197,79 +137,62 @@ export function AppShell() {
 
   async function loadVaultData() {
     const [nextObjects, nextSnapshots, nextReviews, nextArchivedEntities] = await Promise.all([
-      markdownEntityRepository.listObjects(),
-      markdownEntityRepository.listSnapshots(),
-      markdownEntityRepository.listReviews(),
-      markdownEntityRepository.listArchivedEntities(),
+      repository.listObjects(),
+      repository.listSnapshots(),
+      repository.listReviews(),
+      repository.listArchivedEntities(),
     ]);
 
-    setStoredObjects(nextObjects);
-    setStoredSnapshots(nextSnapshots);
-    setStoredReviews(nextReviews);
-    setArchivedEntities(nextArchivedEntities);
+    setStoredObjects([...nextObjects]);
+    setStoredSnapshots([...nextSnapshots]);
+    setStoredReviews([...nextReviews]);
+    setArchivedEntities([...nextArchivedEntities]);
   }
 
   async function connectVault() {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const connected = await obsidianService.requestAccess();
-      setIsConnected(connected);
-      if (connected) {
-        await markdownEntityRepository.initialize();
-        await loadVaultData();
-        showNotice('Vault 已连接，物欲清单数据已同步。');
-      } else {
-        setError('当前浏览器不支持本地文件访问，或授权已取消。建议使用 Chromium 系浏览器。');
-      }
-    } catch (event) {
-      setError(event instanceof Error ? event.message : '连接 Vault 失败。');
-    } finally {
-      setIsLoading(false);
+    clearError();
+    const connected = await connect();
+    if (connected) {
+      await loadVaultData();
+      showNotice(t('vaultConnected'));
     }
   }
 
   async function createObject(object: WYQDObject, body: string) {
+    const cap = checkWYQDCapacity(membership, 'objects', storedObjects.length);
+    if (!cap.allowed) {
+      const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
+      showNotice(msg);
+      return;
+    }
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('save', 'object', undefined, object, body);
-      } else {
-        await markdownEntityRepository.saveObject(object, body);
-        await loadVaultData();
-      }
-      showNotice('对象已保存到 Ownly/Objects。');
+      await repository.saveObject(object, body);
+      await loadVaultData();
+      showNotice(t('objectSaved'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '保存对象失败。');
+      showNotice(event instanceof Error ? event.message : t('objectSaveFailed'));
       throw event;
     }
   }
 
   async function updateObject(fileName: string, object: WYQDObject, body: string) {
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('update', 'object', fileName, object, body);
-      } else {
-        await markdownEntityRepository.updateObject(fileName, object, body);
-        await loadVaultData();
-      }
-      showNotice('对象已更新。');
+      await repository.updateObject(fileName, object, body);
+      await loadVaultData();
+      showNotice(t('objectUpdated'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '更新对象失败。');
+      showNotice(event instanceof Error ? event.message : t('objectUpdateFailed'));
       throw event;
     }
   }
 
-  async function deleteObject(fileName: string) {
+  async function archiveObject(fileName: string) {
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('delete', 'object', fileName);
-      } else {
-        await markdownEntityRepository.deleteObject(fileName);
-        await loadVaultData();
-      }
-      showNotice('对象已归档，可在归档箱恢复。');
+      await repository.archiveObject(fileName);
+      await loadVaultData();
+      showNotice(t('objectArchived'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '删除对象失败。');
+      showNotice(event instanceof Error ? event.message : t('objectArchiveFailed'));
       throw event;
     }
   }
@@ -325,162 +248,128 @@ export function AppShell() {
       updated_at: date,
     };
 
-    if (isEmbedded) {
-      await sendWriteRequest('save', 'review', undefined, review, reviewBody);
-      await sendWriteRequest('update', 'object', fileName, updatedObject, body);
-    } else {
-      await markdownEntityRepository.saveReview(review, reviewBody);
-      await markdownEntityRepository.updateObject(fileName, updatedObject, body);
-      await loadVaultData();
-    }
-    showNotice('体验复盘已写入 Ownly/Reviews，并已关联对象。');
+    await repository.saveReview(review, reviewBody);
+    await repository.updateObject(fileName, updatedObject, body);
+    await loadVaultData();
+    showNotice(t('reviewCreated'));
   }
 
   async function createSnapshot(snapshot: AccountSnapshot, body: string) {
+    const cap = checkWYQDCapacity(membership, 'snapshots', storedSnapshots.length);
+    if (!cap.allowed) {
+      const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
+      showNotice(msg);
+      return;
+    }
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('save', 'snapshot', undefined, snapshot, body);
-      } else {
-        await markdownEntityRepository.saveSnapshot(snapshot, body);
-        await loadVaultData();
-      }
-      showNotice('账户快照已保存。');
+      await repository.saveSnapshot(snapshot, body);
+      await loadVaultData();
+      showNotice(t('snapshotSaved'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '保存账户快照失败。');
+      showNotice(event instanceof Error ? event.message : t('snapshotSaveFailed'));
       throw event;
     }
   }
 
   async function updateSnapshot(fileName: string, snapshot: AccountSnapshot, body: string) {
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('update', 'snapshot', fileName, snapshot, body);
-      } else {
-        await markdownEntityRepository.updateSnapshot(fileName, snapshot, body);
-        await loadVaultData();
-      }
-      showNotice('账户快照已更新。');
+      await repository.updateSnapshot(fileName, snapshot, body);
+      await loadVaultData();
+      showNotice(t('snapshotUpdated'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '更新账户快照失败。');
+      showNotice(event instanceof Error ? event.message : t('snapshotUpdateFailed'));
       throw event;
     }
   }
 
   async function deleteSnapshot(fileName: string) {
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('delete', 'snapshot', fileName);
-      } else {
-        await markdownEntityRepository.deleteSnapshot(fileName);
-        await loadVaultData();
-      }
-      showNotice('账户快照已归档，可在归档箱恢复。');
+      await repository.archiveSnapshot(fileName);
+      await loadVaultData();
+      showNotice(t('snapshotArchived'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '删除账户快照失败。');
+      showNotice(event instanceof Error ? event.message : t('snapshotArchiveFailed'));
       throw event;
     }
   }
 
   async function createReview(review: ReviewEntry, body: string) {
+    const cap = checkWYQDCapacity(membership, 'reviews', storedReviews.length);
+    if (!cap.allowed) {
+      const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
+      showNotice(msg);
+      return;
+    }
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('save', 'review', undefined, review, body);
-      } else {
-        await markdownEntityRepository.saveReview(review, body);
-        await loadVaultData();
-      }
-      showNotice('复盘已保存。');
+      await repository.saveReview(review, body);
+      await loadVaultData();
+      showNotice(t('reviewSaved'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '保存复盘失败。');
+      showNotice(event instanceof Error ? event.message : t('reviewSaveFailed'));
       throw event;
     }
   }
 
   async function updateReview(fileName: string, review: ReviewEntry, body: string) {
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('update', 'review', fileName, review, body);
-      } else {
-        await markdownEntityRepository.updateReview(fileName, review, body);
-        await loadVaultData();
-      }
-      showNotice('复盘已更新。');
+      await repository.updateReview(fileName, review, body);
+      await loadVaultData();
+      showNotice(t('reviewUpdated'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '更新复盘失败。');
+      showNotice(event instanceof Error ? event.message : t('reviewUpdateFailed'));
       throw event;
     }
   }
 
   async function deleteReview(fileName: string) {
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('delete', 'review', fileName);
-      } else {
-        await markdownEntityRepository.deleteReview(fileName);
-        await loadVaultData();
-      }
-      showNotice('复盘已归档，可在归档箱恢复。');
+      await repository.archiveReview(fileName);
+      await loadVaultData();
+      showNotice(t('reviewArchived'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '删除复盘失败。');
+      showNotice(event instanceof Error ? event.message : t('reviewArchiveFailed'));
       throw event;
     }
   }
 
-  async function restoreArchivedEntity(archiveType: ArchiveEntityType, archiveFileName: string) {
+  async function restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string) {
     try {
-      if (isEmbedded) {
-        await sendWriteRequest('restore', archiveType, archiveFileName);
-      } else {
-        await markdownEntityRepository.restoreArchivedEntity(archiveType, archiveFileName);
-        await loadVaultData();
-      }
-      showNotice('归档数据已恢复。');
+      await repository.restoreArchivedEntity(archiveType, archiveFileName);
+      await loadVaultData();
+      showNotice(t('archivedRestored'));
     } catch (event) {
-      setError(event instanceof Error ? event.message : '恢复归档数据失败。');
+      showNotice(event instanceof Error ? event.message : t('archivedRestoreFailed'));
       throw event;
     }
   }
 
+  // Load vault data when connected
   useEffect(() => {
-    if (isEmbedded) return; // Data arrives via postMessage from Obsidian parent
+    if (!isConnected) return;
 
     let isMounted = true;
 
-    async function initialize() {
-      setIsLoading(true);
-      try {
-        const connected = await obsidianService.initAutoConnect();
-        if (!isMounted) return;
+    async function refreshVaultData() {
+      const [nextObjects, nextSnapshots, nextReviews, nextArchivedEntities] = await Promise.all([
+        repository.listObjects(),
+        repository.listSnapshots(),
+        repository.listReviews(),
+        repository.listArchivedEntities(),
+      ]);
 
-        setIsConnected(connected);
-        if (connected) {
-          await markdownEntityRepository.initialize();
-          const [objectsFromVault, snapshotsFromVault, reviewsFromVault, archivedFromVault] = await Promise.all([
-            markdownEntityRepository.listObjects(),
-            markdownEntityRepository.listSnapshots(),
-            markdownEntityRepository.listReviews(),
-            markdownEntityRepository.listArchivedEntities(),
-          ]);
-          if (!isMounted) return;
-          setStoredObjects(objectsFromVault);
-          setStoredSnapshots(snapshotsFromVault);
-          setStoredReviews(reviewsFromVault);
-          setArchivedEntities(archivedFromVault);
-        }
-      } catch (event) {
-        if (isMounted) {
-          setError(event instanceof Error ? event.message : '初始化 Vault 失败。');
-        }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+      if (!isMounted) return;
+      setStoredObjects([...nextObjects]);
+      setStoredSnapshots([...nextSnapshots]);
+      setStoredReviews([...nextReviews]);
+      setArchivedEntities([...nextArchivedEntities]);
     }
 
-    initialize();
+    void refreshVaultData();
+
     return () => {
       isMounted = false;
     };
-  }, [isEmbedded]);
+  }, [isConnected, repository]);
 
   return (
     <main className="wyqd-web-shell min-h-screen bg-stone-50 px-4 pb-28 pt-6 text-stone-950 sm:px-5 sm:pt-8">
@@ -496,74 +385,77 @@ export function AppShell() {
         ) : null}
       </div>
       <div className="mx-auto max-w-6xl">
-        <header className="mb-6 rounded-xl border border-stone-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-          {/* Row 1: brand identity */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-stone-100 pb-3 text-[11px] font-medium text-stone-500">
-            <span className="text-lg font-semibold tracking-tight text-stone-950">Ownly</span>
-            <span className="rounded-full bg-stone-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-stone-600">
+        <header className="mb-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+          {/* Brand bar */}
+          <div className="flex items-center gap-3 border-b border-stone-100 bg-gradient-to-r from-stone-50 to-stone-100/60 px-4 py-2.5 sm:px-5">
+            <span className="text-base font-bold tracking-tight text-stone-950">Ownly</span>
+            <span className="rounded-md bg-stone-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
               v{runtimeInfo.coreTargetVersion}
             </span>
-            {!isEmbedded && (
-              <span className="rounded-full bg-stone-950 px-2 py-0.5 text-[11px] font-semibold text-white">
-                Web
-              </span>
-            )}
-            <span className="h-1 w-1 rounded-full bg-stone-300" aria-hidden="true" />
-            <span>{t('workspaceSubtitle')}</span>
+            <span className="rounded-md bg-stone-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-600">
+              {runtimeTarget}
+            </span>
+            <span className="ml-auto text-[11px] text-stone-400">{WYQD_PRODUCT_SLOGAN}</span>
           </div>
-          {/* Row 2: tab heading + controls */}
-          <div className="flex flex-col gap-3 pt-3 sm:flex-row sm:items-start sm:justify-between">
+
+          {/* Tab heading + controls */}
+          <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <div className="min-w-0">
               <h1 className="text-lg font-semibold tracking-tight text-stone-950 sm:text-xl">
                 {t(tabHeadingKeys[activeTab].title)}
               </h1>
-              <p className="mt-0.5 text-sm text-stone-500">{t(tabHeadingKeys[activeTab].description)}</p>
-              <p className="mt-1.5 text-xs font-medium text-stone-400">{WYQD_PRODUCT_SLOGAN}</p>
+              <p className="mt-0.5 text-xs text-stone-400">{t(tabHeadingKeys[activeTab].description)}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
                   isConnected
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-stone-200 bg-stone-50 text-stone-500'
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                    : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'
                 }`}
               >
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    isConnected ? 'bg-emerald-500' : 'bg-stone-400'
-                  }`}
+                  className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-stone-400'}`}
                   aria-hidden="true"
                 />
                 {isConnected ? t('vaultConnected') : isLoading ? t('connecting') : t('demoMode')}
               </span>
-              <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-medium text-stone-500">
-                {storedObjects.length} {t('objects')}
-              </span>
-              <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-medium text-stone-500">
-                {storedSnapshots.length} {t('snapshots')}
-              </span>
+              {(() => {
+                const objCap = checkWYQDCapacity(membership, 'objects', storedObjects.length);
+                const snapCap = checkWYQDCapacity(membership, 'snapshots', storedSnapshots.length);
+                const nearLimit = (cap: { remaining: number }) => !membership.isPro && cap.remaining <= 5;
+                return (
+                  <>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${nearLimit(objCap) ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'}`}>
+                      {membership.isPro ? storedObjects.length : `${storedObjects.length}/${objCap.limit}`} {t('objects')}
+                    </span>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${nearLimit(snapCap) ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'}`}>
+                      {membership.isPro ? storedSnapshots.length : `${storedSnapshots.length}/${snapCap.limit}`} {t('snapshots')}
+                    </span>
+                  </>
+                );
+              })()}
+              <span className="mx-0.5 h-3 w-px bg-stone-200" aria-hidden="true" />
               <button
                 type="button"
                 onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
-                className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
+                className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-600 ring-1 ring-stone-200 transition hover:bg-stone-200 hover:text-stone-900"
               >
                 {language === 'zh' ? 'EN' : '中文'}
               </button>
-              {!isEmbedded && (
-                <button
-                  type="button"
-                  onClick={connectVault}
-                  disabled={isLoading}
-                  className="rounded-full bg-stone-950 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
-                >
-                  {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={connectVault}
+                disabled={isLoading}
+                className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+              >
+                {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
+              </button>
             </div>
           </div>
         </header>
 
-        {!isEmbedded && (!isConnected || error) ? (
+        {!isConnected || error ? (
           <StatusBanner
             isConnected={isConnected}
             isLoading={isLoading}
@@ -597,7 +489,7 @@ export function AppShell() {
                   objects={storedObjects}
                   focus={objectListFocus}
                   onUpdate={updateObject}
-                  onDelete={deleteObject}
+                  onDelete={archiveObject}
                   onCreateObjectReview={createObjectReview}
                 />
                 <ObjectComposer

@@ -14,39 +14,8 @@ import {
   calculateRecurringMonthlyCost,
   findLatestSnapshot,
 } from '@/domain/calculations';
-import type { StoredEntity } from '@/services/MarkdownEntityRepository';
-
-function todayISO() {
-  return new Date().toISOString().split('T')[0];
-}
-
-function formatMoney(value?: number, fallback?: string): string {
-  if (value === undefined) return fallback ?? '暂无';
-  return `¥${Math.round(value).toLocaleString('zh-CN')}`;
-}
-
-function formatCompactMoney(value: number): string {
-  const rounded = Math.round(value);
-  if (Math.abs(rounded) >= 10000) return `¥${(rounded / 10000).toFixed(1)}万`;
-  return `¥${rounded.toLocaleString('zh-CN')}`;
-}
-
-function buildSparklinePoints(values: number[]): string {
-  if (values.length === 0) return '';
-  if (values.length === 1) return '0,24 100,24';
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  return values
-    .map((value, index) => {
-      const x = (index / (values.length - 1)) * 100;
-      const y = 42 - ((value - min) / range) * 36;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
-}
+import type { WYQDStoredEntity } from '@/core/repository';
+import { formatMoney, formatCompactMoney, buildSparklinePoints, todayISO } from '@/lib/format';
 
 function slugifyAccountName(input: string): string {
   return input
@@ -184,7 +153,7 @@ export function AccountsOverview({
   onDeleteSnapshot,
 }: {
   disabled?: boolean;
-  snapshots: StoredEntity<AccountSnapshot>[];
+  snapshots: WYQDStoredEntity<AccountSnapshot>[];
   objects: WYQDObject[];
   onCreateSnapshot: (snapshot: AccountSnapshot, body: string) => Promise<void>;
   onUpdateSnapshot: (fileName: string, snapshot: AccountSnapshot, body: string) => Promise<void>;
@@ -291,7 +260,7 @@ export function AccountsOverview({
     }
   }
 
-  function startEditingSnapshot(stored: StoredEntity<AccountSnapshot>) {
+  function startEditingSnapshot(stored: WYQDStoredEntity<AccountSnapshot>) {
     const calculated = calculateNetWorth(stored.entity);
     setEditingFileName(stored.fileName);
     setSnapshotAt(calculated.snapshot_at);
@@ -554,7 +523,7 @@ export function AccountsOverview({
               {t('snapshotFormatHint')}
             </p>
           </div>
-          <span className="shrink-0 rounded-full border border-stone-200 px-2.5 py-1 text-xs text-stone-500">
+          <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
             {t('currency')}
           </span>
         </div>

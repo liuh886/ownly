@@ -62,6 +62,7 @@ export interface PhysicalObject extends BaseWYQDObject {
   shipping_fee?: number;
   accessory_cost?: number;
   total_acquisition_cost?: number;
+  sale_price?: number;
   recovered_amount?: number;
   transfer_fee?: number;
   realized_experience_cost?: number | null;

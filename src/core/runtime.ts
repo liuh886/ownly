@@ -1,4 +1,4 @@
-export const WYQD_CORE_TARGET_VERSION = '0.2.0' as const;
+export const WYQD_CORE_TARGET_VERSION = '0.2.1' as const;
 
 export const WYQD_PRODUCT_SLOGAN = 'Own less, Live more, Decide better' as const;
 

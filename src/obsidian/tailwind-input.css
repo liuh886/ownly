@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@source "../components/**/*.tsx";
+@source "../components/**/*.ts";
+@source "../core/**/*.tsx";
+@source "../core/**/*.ts";
+@source "../lib/**/*.ts";
+
+/* Override Tailwind's preflight inside Obsidian to avoid breaking Obsidian's native styles */
+.wyqd-obsidian-view {
+  /* Reset only within our React mount point */
+}

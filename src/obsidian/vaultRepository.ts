@@ -90,6 +90,14 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     this.getDataFolder = typeof dataFolder === 'function' ? dataFolder : () => dataFolder;
   }
 
+  getVault(): Vault {
+    return this.vault;
+  }
+
+  getDataFolderPath(): string {
+    return this.getDataFolder();
+  }
+
   async listObjects(): Promise<readonly WYQDStoredEntity<WYQDObject>[]> {
     return this.listEntities<WYQDObject>(ENTITY_CONFIG.object);
   }
@@ -195,6 +203,11 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
 
   async restoreReview(archiveFileName: string): Promise<string> {
     return this.restoreEntity(ENTITY_CONFIG.review, archiveFileName);
+  }
+
+  async restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<string> {
+    const config = ENTITY_CONFIG[archiveType] as EntityConfig<BaseEntity>;
+    return this.restoreEntity(config, archiveFileName);
   }
 
   private async listEntities<T extends BaseEntity>(

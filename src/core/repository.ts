@@ -51,6 +51,8 @@ export interface WYQDWritableRepositoryAdapter {
   updateReview(fileName: string, review: ReviewEntry, body?: string): Promise<void>;
   archiveReview(fileName: string): Promise<string | void>;
   restoreReview(archiveFileName: string): Promise<string>;
+
+  restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<string>;
 }
 
 export type WYQDRepositoryAdapter = WYQDReadonlyRepositoryAdapter & WYQDWritableRepositoryAdapter;

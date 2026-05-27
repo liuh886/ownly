@@ -18,16 +18,14 @@
 - Added MIT license metadata and real Vault installation instructions.
 - Added `npm run deps:reset` and documentation for Windows/Docker `esbuild` platform mismatch recovery.
 - Added visible Web Vault reconnect control.
-- Updated the Obsidian workspace alpha to embed the Web UI through a configurable Web app URL.
-- Added an Obsidian `postMessage` bridge so the embedded Web UI can read and write Vault data through the plugin repository.
+- Replaced the Obsidian iframe workspace with a native React-mounted `ItemView` that reuses the shared Ownly workspace UI.
+- Split the Web runtime into a `WebShell` and introduced a shared workspace context for Web and Obsidian adapters.
 - Kept native Obsidian quick actions for draft creation and Doctor diagnostics.
 - Reworked Obsidian settings into Ownly-styled hero, grouped panels, and membership summary.
 
 Known gaps:
 
-- The Obsidian workspace depends on a running Web app URL for full Web-style UI parity.
-- Full native object edit forms are not complete.
-- Native account, snapshot, and review detail operation flows are not complete.
+- Full mobile polish inside Obsidian still needs dedicated QA.
 - Doctor repair preview and rollback are not implemented.
 - Real license validation is not connected.
 - Public Obsidian community plugin submission in progress.

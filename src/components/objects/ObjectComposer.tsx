@@ -291,6 +291,7 @@ function createObjectDraft({
   recurringStartedAt,
   experienceStatus,
   actualAmount,
+  salePrice,
 }: {
   title: string;
   objectType: WYQDObjectType;
@@ -306,6 +307,7 @@ function createObjectDraft({
   recurringStartedAt?: string;
   experienceStatus?: OneTimeExperienceStatus;
   actualAmount?: number;
+  salePrice?: number;
 }): WYQDObject {
   const today = new Date().toISOString().split('T')[0];
   const id = `obj_${today.replaceAll('-', '')}_${Date.now()}`;
@@ -330,6 +332,7 @@ function createObjectDraft({
       ended_at: endedAt || null,
       purchase_price: amount,
       total_acquisition_cost: amount,
+      sale_price: salePrice || undefined,
       amortization_mode: 'none',
       include_in_net_worth: false,
       default_depreciates_to_zero: true,
@@ -438,6 +441,11 @@ export function ObjectComposer({
       ? String(initialObject.actual_total)
       : '',
   );
+  const [salePrice, setSalePrice] = useState(
+    initialObject?.object_type === 'physical' && initialObject.sale_price !== undefined
+      ? String(initialObject.sale_price)
+      : '',
+  );
   const [quickLine, setQuickLine] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -505,6 +513,7 @@ export function ObjectComposer({
             recurringStartedAt,
             experienceStatus,
             actualAmount: actualAmount.trim() ? Number(actualAmount) : undefined,
+            salePrice: salePrice.trim() ? Number(salePrice) : undefined,
           })
         : createObjectDraft({
             title: title.trim(),
@@ -521,6 +530,7 @@ export function ObjectComposer({
             recurringStartedAt,
             experienceStatus,
             actualAmount: actualAmount.trim() ? Number(actualAmount) : undefined,
+            salePrice: salePrice.trim() ? Number(salePrice) : undefined,
           });
       await onSubmit(object, '## 购买理由\n\n## 使用记录\n\n## 复盘与排行\n');
       if (!initialObject) {
@@ -703,6 +713,23 @@ export function ObjectComposer({
                 </select>
               </label>
             </div>
+
+            {physicalStatus === 'transferred' ? (
+              <div className="grid grid-cols-1 gap-3">
+                <label className="block min-w-0">
+                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('salePrice')}</span>
+                  <input
+                    value={salePrice}
+                    onChange={(event) => setSalePrice(event.target.value)}
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0"
+                    className={fieldClass}
+                    disabled={disabled || isSaving}
+                  />
+                </label>
+              </div>
+            ) : null}
           </>
         ) : null}
 
@@ -867,6 +894,7 @@ function updateObjectDraft(
     recurringStartedAt?: string;
     experienceStatus?: OneTimeExperienceStatus;
     actualAmount?: number;
+    salePrice?: number;
   },
 ): WYQDObject {
   const updatedAt = todayISO();
@@ -886,6 +914,7 @@ function updateObjectDraft(
       ended_at: values.endedAt || null,
       purchase_price: values.amount,
       total_acquisition_cost: values.amount,
+      sale_price: values.salePrice || existing.sale_price,
     } satisfies PhysicalObject;
   }
 

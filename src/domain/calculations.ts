@@ -49,7 +49,8 @@ export function calculatePhysicalExperienceCost(object: PhysicalObject): number 
   const total = object.total_acquisition_cost || object.purchase_price || 0;
 
   if (object.status === 'transferred') {
-    return total - (object.recovered_amount || 0) + (object.transfer_fee || 0);
+    const saleProceeds = object.sale_price ?? object.recovered_amount ?? 0;
+    return total - saleProceeds + (object.transfer_fee || 0);
   }
 
   return object.realized_experience_cost ?? total;

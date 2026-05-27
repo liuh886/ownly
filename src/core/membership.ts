@@ -34,7 +34,7 @@ const PLAN_LABELS: Record<WYQDMembershipPlan, string> = {
 };
 
 const FREE_UPGRADE_MESSAGE =
-  'Pro features are not part of the free local alpha. Markdown read/write, export, and local vault use remain available.';
+  'Free tier includes 200 objects, 30 snapshots, and 100 reviews. Upgrade to Pro for unlimited.';
 
 export function resolveWYQDMembership({
   licenseKey,
@@ -59,6 +59,22 @@ export function normalizeWYQDLicenseKey(licenseKey?: string | null) {
 
 export function canUseWYQDProFeature(membership: Pick<WYQDMembershipState, 'isPro'>) {
   return membership.isPro;
+}
+
+export const WYQD_FREE_LIMITS = {
+  objects: 200,
+  snapshots: 30,
+  reviews: 100,
+} as const;
+
+export function checkWYQDCapacity(
+  membership: Pick<WYQDMembershipState, 'isPro'>,
+  kind: keyof typeof WYQD_FREE_LIMITS,
+  currentCount: number,
+): { allowed: boolean; limit: number; remaining: number } {
+  if (membership.isPro) return { allowed: true, limit: Infinity, remaining: Infinity };
+  const limit = WYQD_FREE_LIMITS[kind];
+  return { allowed: currentCount < limit, limit, remaining: Math.max(0, limit - currentCount) };
 }
 
 function createMembershipState(

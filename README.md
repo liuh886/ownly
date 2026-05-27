@@ -97,19 +97,14 @@ cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 
 4. Open Ownly from the ribbon icon or the command palette command `Open Ownly workspace`.
 
-The current Obsidian workspace embeds the Web UI from the plugin setting `Web app URL`
-(default `http://localhost:8080`) while keeping native quick actions for draft creation
-and Doctor diagnostics. The embedded Web UI receives Vault data and write results through
-an Obsidian `postMessage` bridge, so object, snapshot, review, and archive operations are
-proxied by the plugin instead of by the browser file picker. To use the Web-style workspace
-inside Obsidian during alpha, serve the built Web app locally:
+The current Obsidian workspace runs as a native React-mounted `ItemView`.
+It uses the shared Ownly workspace UI and the Obsidian Vault repository adapter,
+so the plugin can read, write, archive, restore, and review Vault Markdown data
+without requiring a local Web server or `localhost` iframe.
 
-```bash
-npm run build
-node scripts/serve-static.mjs out 8080
-```
-
-You can change the embedded URL in `Settings -> Ownly -> Web app URL`.
+The Web App remains a compatible browser runtime and development surface. Both
+runtime shells share the same core models, repository interface, Markdown schema,
+and main workspace experience.
 
 ### Platform-Specific Dependency Reset
 

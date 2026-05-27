@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import type { StoredEntity } from '@/services/MarkdownEntityRepository';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { WYQDStoredEntity } from '@/core/repository';
 import type {
   OneTimeExperienceObject,
   PhysicalObject,
@@ -20,6 +20,7 @@ import {
 import { ObjectComposer } from './ObjectComposer';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
+import { formatMoney, formatOptional, parseRank, daysUntil, formatDueLabel, todayISO } from '@/lib/format';
 
 type TranslateFn = (key: WYQDTranslationKey) => string;
 
@@ -91,7 +92,7 @@ function getSupportingVisuals(
       accentClass: 'bg-sky-500',
       badgeClass: 'bg-sky-50 text-sky-700 ring-sky-200',
       dotClass: 'bg-sky-500',
-      amountLabel: '周期金额',
+      amountLabel: t('billingAmount'),
     },
     one_time_experience: {
       label: t('typeExperience'),
@@ -99,7 +100,7 @@ function getSupportingVisuals(
       accentClass: 'bg-emerald-500',
       badgeClass: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
       dotClass: 'bg-emerald-500',
-      amountLabel: '预算/实际',
+      amountLabel: t('budgetVsActual'),
     },
   };
 }
@@ -114,36 +115,6 @@ function getPrimaryAmount(object: WYQDObject): number {
   return object.budget_total || object.actual_total || 0;
 }
 
-function formatMoney(value: number): string {
-  return `¥${Math.round(value).toLocaleString('zh-CN')}`;
-}
-
-function formatOptional(value: string | number | null | undefined, t: TranslateFn): string {
-  if (value === null || value === undefined || value === '') return t('notRecorded');
-  return String(value);
-}
-
-function parseRank(value: string): number | null {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue < 1) return null;
-  return Math.floor(numberValue);
-}
-
-function daysUntil(date: string): number {
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const end = new Date(`${date}T00:00:00`).getTime();
-  return Math.round((end - start) / 86400000);
-}
-
-function formatDueLabel(date: string, t: TranslateFn): string {
-  const days = daysUntil(date);
-  if (days === 0) return t('dueToday');
-  if (days === 1) return t('dueTomorrow');
-  if (days > 1) return t('daysLater').replace('{count}', String(days));
-  return t('daysPast').replace('{count}', String(Math.abs(days)));
-}
-
 function getDailyCost(object: WYQDObject): number | null {
   if (object.object_type !== 'physical') return null;
   return calculatePhysicalDailyCost(object);
@@ -154,10 +125,10 @@ function getServiceDays(object: WYQDObject): number | null {
   return calculateHoldingDays(object);
 }
 
-function formatDateRange(object: WYQDObject): string {
+function formatDateRange(object: WYQDObject, t: TranslateFn): string {
   if (object.object_type === 'physical') {
     const start = object.purchased_at || object.created_at;
-    const end = object.ended_at || '至今';
+    const end = object.ended_at || t('endDateLabel');
     return `${start} - ${end}`;
   }
   if (object.object_type === 'recurring_cost') {
@@ -166,14 +137,10 @@ function formatDateRange(object: WYQDObject): string {
   return object.ended_at || object.reviewed_at || object.started_at || object.planned_at || object.created_at;
 }
 
-function getSupportingTimeLabel(object: WYQDObject): string {
-  if (object.object_type === 'recurring_cost') return '开始时间';
-  if (object.object_type === 'one_time_experience') return '完成时间';
-  return '时间';
-}
-
-function todayISO() {
-  return new Date().toISOString().split('T')[0];
+function getSupportingTimeLabel(object: WYQDObject, t: TranslateFn): string {
+  if (object.object_type === 'recurring_cost') return t('startTime');
+  if (object.object_type === 'one_time_experience') return t('completionTime');
+  return t('timeLabel');
 }
 
 type PhysicalFilter = 'all' | 'active' | 'retired' | 'sold';
@@ -225,25 +192,25 @@ function getObjectControlLabels(
   return {
     attention: {
       title: t('pendingDecisions'),
-      description: '种草、观察、计划中的对象',
+      description: t('bucketAttentionDesc'),
       statusGroup: 'observing',
       typeFilter: 'all',
     },
     active: {
       title: t('inUse'),
-      description: '正在消耗价值或成本',
+      description: t('bucketActiveDesc'),
       statusGroup: 'using',
       typeFilter: 'all',
     },
     review: {
       title: t('pendingReview'),
-      description: '已完成但未进入排行榜',
+      description: t('bucketReviewDesc'),
       statusGroup: 'exited',
       typeFilter: 'one_time_experience',
     },
     closed: {
       title: t('exited'),
-      description: '已退役、取消或完成',
+      description: t('bucketClosedDesc'),
       statusGroup: 'exited',
       typeFilter: 'all',
     },
@@ -290,7 +257,7 @@ function matchesStatusGroup(object: WYQDObject, group: ObjectStatusGroupFilter):
 }
 
 function getObjectTypeFilterCount(
-  objects: StoredEntity<WYQDObject>[],
+  objects: WYQDStoredEntity<WYQDObject>[],
   typeFilter: ObjectTypeFilter,
   statusGroupFilter: ObjectStatusGroupFilter,
   query: string,
@@ -306,7 +273,7 @@ function getObjectTypeFilterCount(
 }
 
 function getObjectStatusGroupCount(
-  objects: StoredEntity<WYQDObject>[],
+  objects: WYQDStoredEntity<WYQDObject>[],
   statusGroupFilter: ObjectStatusGroupFilter,
   typeFilter: ObjectTypeFilter,
   query: string,
@@ -362,7 +329,7 @@ function getSupportingMeta(object: WYQDObject, nextBillingDate: string | null, t
     return `${cycle}${account}${next}`;
   }
 
-  return `${getSupportingTimeLabel(object)}：${formatDateRange(object)}`;
+  return `${getSupportingTimeLabel(object, t)}：${formatDateRange(object, t)}`;
 }
 
 function getPhysicalAccentClasses(bucket: Exclude<PhysicalFilter, 'all'>): {
@@ -402,20 +369,20 @@ function getObjectControlBucket(object: WYQDObject): ObjectControlBucket {
 
 function getPriorityReason(object: WYQDObject, t: TranslateFn): string {
   if (object.object_type === 'one_time_experience' && object.status === 'completed') {
-    return '待写入复盘与排行榜';
+    return t('priorityPendingReview');
   }
   if (object.object_type === 'recurring_cost' && object.status === 'active') {
     const nextBillingDate = calculateNextBillingDate(object);
-    return nextBillingDate ? `${t('nextBilling').replace('{date}', formatDueLabel(nextBillingDate, t))}` : '订阅中，建议定期复核';
+    return nextBillingDate ? `${t('nextBilling').replace('{date}', formatDueLabel(nextBillingDate, t))}` : t('prioritySubscribing');
   }
   if (object.object_type === 'physical' && ['seeded', 'observing'].includes(object.status)) {
-    return '还在观察，等待买入/放弃决策';
+    return t('priorityPlanned');
   }
   if (object.object_type === 'one_time_experience' && object.status === 'planned') {
-    return '计划中，等待开始或调整';
+    return t('priorityPlanned');
   }
   if (object.object_type === 'recurring_cost' && object.status === 'seeded') {
-    return '候选订阅，等待开通决策';
+    return t('priorityCandidate');
   }
   return `${getTypeLabels(t)[object.object_type]} · ${getStatusLabel(object, t)}`;
 }
@@ -475,10 +442,11 @@ function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label: strin
       { label: t('status'), value: getStatusLabel(object, t) },
       { label: t('categoryLabel'), value: formatOptional(object.category, t) },
       { label: t('totalAcquisitionCost'), value: formatMoney(calculatePhysicalAcquisitionCost(object)) },
-      { label: '日均体验成本', value: dailyCost ? `${formatMoney(dailyCost)}/天` : t('noFormed') },
+      { label: t('dailyExperienceCost'), value: dailyCost ? `${formatMoney(dailyCost)}${t('perDay')}` : t('noFormed') },
       { label: t('purchaseDate'), value: formatOptional(object.purchased_at, t) },
       { label: t('endDate'), value: formatOptional(object.ended_at, t) },
-      { label: '回收金额', value: formatMoney(object.recovered_amount || 0) },
+      { label: t('salePrice'), value: formatMoney(object.sale_price || 0) },
+      { label: t('recoveredAmount'), value: formatMoney(object.recovered_amount || 0) },
     ];
   }
   if (object.object_type === 'recurring_cost') {
@@ -488,41 +456,41 @@ function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label: strin
       { label: t('status'), value: getStatusLabel(object, t) },
       { label: t('categoryLabel'), value: formatOptional(object.category, t) },
       { label: t('billingCycle'), value: getBillingCycleLabels(t)[object.billing_cycle || 'monthly'] || t('billingCycleMonthly') },
-      { label: '周期金额', value: formatMoney(object.billing_amount || 0) },
-      { label: '折算月成本', value: formatMoney(monthlyCost) },
+      { label: t('billingAmount'), value: formatMoney(object.billing_amount || 0) },
+      { label: t('monthlyEquivalent'), value: formatMoney(monthlyCost) },
       { label: t('annualCost'), value: formatMoney(object.annualized_cost || monthlyCost * 12) },
       { label: t('startDate'), value: formatOptional(object.started_at, t) },
-      { label: t('billingDay'), value: object.billing_day ? `每期 ${object.billing_day} 日` : t('notRecorded') },
+      { label: t('billingDay'), value: object.billing_day ? `${object.billing_day}` : t('notRecorded') },
       { label: t('paymentAccount'), value: formatOptional(object.payment_account, t) },
-      { label: '暂停日期', value: formatOptional(object.paused_at, t) },
-      { label: '取消日期', value: formatOptional(object.cancelled_at, t) },
+      { label: t('pausedDate'), value: formatOptional(object.paused_at, t) },
+      { label: t('cancelledDate'), value: formatOptional(object.cancelled_at, t) },
     ];
   }
   return [
     { label: t('type'), value: getTypeLabels(t)[object.object_type] },
     { label: t('status'), value: getStatusLabel(object, t) },
     { label: t('categoryLabel'), value: formatOptional(object.category, t) },
-    { label: '预算', value: formatMoney(object.budget_total || 0) },
+    { label: t('budget'), value: formatMoney(object.budget_total || 0) },
     { label: t('actualAmount'), value: object.actual_total ? formatMoney(object.actual_total) : t('notRecorded') },
-    { label: '计划日期', value: formatOptional(object.planned_at, t) },
+    { label: t('plannedDate'), value: formatOptional(object.planned_at, t) },
     { label: t('startDate'), value: formatOptional(object.started_at, t) },
     { label: t('endDate'), value: formatOptional(object.ended_at, t) },
-    { label: '复盘日期', value: formatOptional(object.reviewed_at, t) },
+    { label: t('reviewedDate'), value: formatOptional(object.reviewed_at, t) },
   ];
 }
 
 function getTimelineRows(object: WYQDObject, t: TranslateFn): Array<{ label: string; value?: string | null }> {
   if (object.object_type === 'physical') {
     return [
-      { label: '创建', value: object.created_at },
+      { label: t('createdAt'), value: object.created_at },
       { label: t('purchaseDate'), value: object.purchased_at },
-      { label: '退出', value: object.ended_at },
+      { label: t('exitedAt'), value: object.ended_at },
       { label: t('updated'), value: object.updated_at },
     ];
   }
   if (object.object_type === 'recurring_cost') {
     return [
-      { label: '创建', value: object.created_at },
+      { label: t('createdAt'), value: object.created_at },
       { label: t('startDate'), value: object.started_at },
       { label: t('pause'), value: object.paused_at },
       { label: t('cancel'), value: object.cancelled_at },
@@ -542,7 +510,7 @@ function ObjectDetailPanel({
   stored,
   onClose,
 }: {
-  stored: StoredEntity<WYQDObject>;
+  stored: WYQDStoredEntity<WYQDObject>;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -555,6 +523,8 @@ function ObjectDetailPanel({
     <motion.section
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 20 }}
+      transition={{ duration: 0.2 }}
       className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6"
     >
       <div className="flex items-start justify-between gap-4">
@@ -609,7 +579,7 @@ function ObjectDetailPanel({
 }
 
 interface ObjectListProps {
-  objects: StoredEntity<WYQDObject>[];
+  objects: WYQDStoredEntity<WYQDObject>[];
   focus?: ObjectListFocus | null;
   disabled?: boolean;
   onUpdate: (fileName: string, object: WYQDObject, body: string) => Promise<void>;
@@ -627,8 +597,8 @@ interface ObjectListProps {
   ) => Promise<void>;
 }
 
-type PhysicalStoredEntity = StoredEntity<PhysicalObject>;
-function isPhysicalStoredEntity(stored: StoredEntity<WYQDObject>): stored is PhysicalStoredEntity {
+type PhysicalStoredEntity = WYQDStoredEntity<PhysicalObject>;
+function isPhysicalStoredEntity(stored: WYQDStoredEntity<WYQDObject>): stored is PhysicalStoredEntity {
   return isPhysicalObject(stored.entity);
 }
 
@@ -875,7 +845,7 @@ export function ObjectList({
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-stone-950">{t('physicalAssets')}</h2>
           <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-            {allPhysicalObjects.length} 件
+            {t('itemCount').replace('{count}', String(allPhysicalObjects.length))}
           </span>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-4">
@@ -907,7 +877,7 @@ export function ObjectList({
             className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-500"
           />
         </label>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="对象类型筛选">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label={t('filterByType')}>
           {(Object.keys(objectTypeFilterLabels) as ObjectTypeFilter[]).map((item) => (
             <button
               key={item}
@@ -928,7 +898,7 @@ export function ObjectList({
             </button>
           ))}
         </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="对象状态筛选">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label={t('filterByStatus')}>
           {(Object.keys(objectStatusGroupLabels) as ObjectStatusGroupFilter[]).map((item) => (
             <button
               key={item}
@@ -950,7 +920,7 @@ export function ObjectList({
           ))}
         </div>
         {physicalObjects.length > 0 ? (
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="实物状态筛选">
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label={t('filterByPhysicalStatus')}>
             {(Object.keys(filterLabels) as PhysicalFilter[]).map((item) => (
               <button
                 key={item}
@@ -1028,7 +998,7 @@ export function ObjectList({
 	                          <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} />
 	                          {serviceDays ? t('daysUsed').replace('{count}', String(serviceDays)) : t('notStarted')}
 	                        </span>
-	                        <span>{formatDateRange(object)}</span>
+	                        <span>{formatDateRange(object, t)}</span>
 	                        {object.category ? <span>{object.category}</span> : null}
 	                      </div>
 	                    </div>
@@ -1048,7 +1018,7 @@ export function ObjectList({
 	                          setSelectedFileName(stored.fileName);
 	                          setOpenActionMenuFileName(null);
 	                        }}
-	                        aria-label={`查看「${object.title}」详情`}
+	                        aria-label={`${t('viewDetails')} - ${object.title}`}
 	                        className={iconButtonClass}
 	                        title={t('detail')}
 	                      >
@@ -1060,7 +1030,7 @@ export function ObjectList({
 	                          setEditingFileName(stored.fileName);
 	                          setOpenActionMenuFileName(null);
 	                        }}
-	                        aria-label={`修改「${object.title}」`}
+	                        aria-label={`${t('editObject')} - ${object.title}`}
 	                        className={iconButtonClass}
 	                        disabled={disabled}
 	                        title={t('edit')}
@@ -1074,7 +1044,7 @@ export function ObjectList({
 	                            current === stored.fileName ? null : stored.fileName,
 	                          )
 	                        }
-	                        aria-label={`更多操作「${object.title}」`}
+	                        aria-label={`${t('moreActions')} - ${object.title}`}
 	                        className={iconButtonClass}
 	                        title={t('more')}
 	                      >
@@ -1140,12 +1110,14 @@ export function ObjectList({
         })}
       </div>
 
-      {selectedStored ? (
-        <ObjectDetailPanel
-          stored={selectedStored}
-          onClose={() => setSelectedFileName(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {selectedStored ? (
+          <ObjectDetailPanel
+            stored={selectedStored}
+            onClose={() => setSelectedFileName(null)}
+          />
+        ) : null}
+      </AnimatePresence>
 
       {supportingObjects.length > 0 ? (
         <section className="space-y-3 pt-2">
@@ -1197,7 +1169,7 @@ export function ObjectList({
                   <div className="flex">
                     <div className={`w-1.5 shrink-0 ${visual.accentClass}`} aria-hidden="true" />
                     <div className="min-w-0 flex-1 p-4">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
                         <div className="flex min-w-0 flex-1 gap-3">
                           <div
                             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ring-1 ${visual.badgeClass}`}
@@ -1227,7 +1199,7 @@ export function ObjectList({
                           </div>
                         </div>
 
-	                        <div className="flex items-center justify-between gap-3 sm:w-72 sm:shrink-0 sm:justify-end">
+	                        <div className="flex items-center justify-between gap-3 md:w-72 md:shrink-0 md:justify-end">
 	                          <div className="rounded-lg bg-stone-50 px-3 py-2 sm:text-right">
 	                            <div className="text-xs text-stone-400">{visual.amountLabel}</div>
 	                            <div className="mt-0.5 font-mono text-base font-semibold text-stone-950">
@@ -1247,7 +1219,7 @@ export function ObjectList({
 	                                setSelectedFileName(stored.fileName);
 	                                setOpenActionMenuFileName(null);
 	                              }}
-	                              aria-label={`查看「${object.title}」详情`}
+	                              aria-label={`${t('viewDetails')} - ${object.title}`}
 	                              title={t('detail')}
 	                              className={iconButtonClass}
 	                            >
@@ -1259,7 +1231,7 @@ export function ObjectList({
 	                                setEditingFileName(stored.fileName);
 	                                setOpenActionMenuFileName(null);
 	                              }}
-	                              aria-label={`修改「${object.title}」`}
+	                              aria-label={`${t('editObject')} - ${object.title}`}
 	                              title={t('edit')}
 	                              className={iconButtonClass}
 	                              disabled={disabled}
@@ -1291,7 +1263,7 @@ export function ObjectList({
 	                                    setExitingFileName(null);
 	                                  }
 	                                }}
-	                                aria-label={`${supportingActionLabel}「${object.title}」`}
+	                                aria-label={`${supportingActionLabel} - ${object.title}`}
 	                                title={supportingActionLabel}
 	                                className={`${iconButtonClass} border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50`}
 	                                disabled={disabled || exitingFileName === stored.fileName}
@@ -1310,7 +1282,7 @@ export function ObjectList({
 	                                  current === stored.fileName ? null : stored.fileName,
 	                                )
 	                              }
-	                              aria-label={`更多操作「${object.title}」`}
+	                              aria-label={`${t('moreActions')} - ${object.title}`}
 	                              title={t('more')}
 	                              className={iconButtonClass}
 	                            >
@@ -1322,7 +1294,7 @@ export function ObjectList({
 	                                  <button
 	                                    type="button"
 	                                    onClick={async () => {
-	                                      const reason = window.prompt(`取消「${object.title}」的原因？`);
+	                                      const reason = window.prompt(t('cancelReasonPrompt').replace('{title}', object.title));
 	                                      if (reason === null) return;
 
 	                                      const next: RecurringCostObject = {

@@ -16,8 +16,17 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider({ children }: { children: ReactNode }) {
+export function I18nProvider({
+  children,
+  initialLanguage,
+  onLanguageChange,
+}: {
+  children: ReactNode;
+  initialLanguage?: WYQDLanguage;
+  onLanguageChange?: (lang: WYQDLanguage) => void;
+}) {
   const [language, setLanguage] = useState<WYQDLanguage>(() => {
+    if (initialLanguage) return initialLanguage;
     if (typeof window === 'undefined') return 'zh';
     const stored = localStorage.getItem('ownly_language');
     return normalizeWYQDLanguage(stored);
@@ -29,11 +38,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       language,
       setLanguage: (lang: WYQDLanguage) => {
         setLanguage(lang);
-        localStorage.setItem('ownly_language', lang);
+        if (onLanguageChange) {
+          onLanguageChange(lang);
+        } else {
+          localStorage.setItem('ownly_language', lang);
+        }
       },
       t: translator.t,
     };
-  }, [language]);
+  }, [language, onLanguageChange]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

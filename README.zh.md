@@ -101,18 +101,13 @@ cp -R dist/obsidian/wyqd /path/to/vault/.obsidian/plugins/wyqd
 
 4. 从左侧 Ribbon 图标或命令面板 `Open Ownly workspace` 打开 Ownly。
 
-当前 Obsidian 工作台会从插件设置中的 `Web 应用地址` 嵌入 Web UI
-（默认 `http://localhost:8080`），同时保留原生快速创建草稿和 Doctor 诊断入口。
-嵌入的 Web UI 会通过 Obsidian `postMessage` 桥接接收 Vault 数据和写入结果，因此对象、
-账户快照、复盘和归档操作由插件代理执行，而不是由浏览器文件选择器直接处理。
-Alpha 阶段如果要在 Obsidian 内看到接近 Web 的工作台体验，请先本地启动 Web 静态服务：
+当前 Obsidian 工作台已经改为原生 React 挂载的 `ItemView`。
+它复用 Ownly 共享工作台 UI，并通过 Obsidian Vault repository adapter
+直接读写、归档、恢复和复盘 Vault 内的 Markdown 数据，不再需要启动本地 Web server，
+也不再依赖 `localhost` iframe。
 
-```bash
-npm run build
-node scripts/serve-static.mjs out 8080
-```
-
-可在 `Settings -> Ownly -> Web 应用地址` 中修改嵌入地址。
+Web App 仍作为兼容的浏览器运行时与开发验证界面保留。两个运行壳共享核心模型、
+repository 接口、Markdown schema 和主要工作台体验。
 
 ### 平台依赖重置
 

@@ -55,18 +55,6 @@
   background: var(--interactive-hover);
 }
 
-.wyqd-iframe-wrapper {
-  flex: 1;
-  min-height: 0;
-}
-
-.wyqd-iframe {
-  border: none;
-  display: block;
-  height: 100%;
-  width: 100%;
-}
-
 .wyqd-shell {
   display: flex;
   flex-direction: column;
@@ -549,5 +537,62 @@
   .wyqd-object-row {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+/* Obsidian runtime overrides — React mount point inherits Obsidian's font stack */
+.wyqd-runtime-obsidian {
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-medium);
+  overflow-y: auto;
+}
+
+/* Ensure the React UI fills the Obsidian view */
+.wyqd-runtime-obsidian > div {
+  min-height: 100%;
+}
+
+/* Obsidian dark mode: let the React UI keep its own light styling.
+   The stone-* palette provides sufficient contrast in both themes. */
+.theme-dark .wyqd-runtime-obsidian {
+  color-scheme: light;
+}
+
+/*
+ * Obsidian sidebar is typically 300–500px wide — Tailwind's sm/md/lg breakpoints
+ * never trigger. Force multi-column grids to activate inside the Obsidian runtime.
+ * These are outside @layer so they always beat Tailwind's layered utilities.
+ *
+ * Use attribute selectors to match class names containing ":" — more reliable
+ * than escaped class selectors across Electron versions.
+ */
+
+/* 4-col: action cards, metric cards, data scale */
+.wyqd-runtime-obsidian [class*="grid-cols-4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+/* 3-col: insight cards */
+.wyqd-runtime-obsidian [class*="grid-cols-3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+/* 2-col: net worth section, bottom section, recent focus */
+.wyqd-runtime-obsidian [class*="grid-cols-2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+/* 2-col: minmax variant for net worth split */
+.wyqd-runtime-obsidian [class*="grid-cols-"][class*="minmax"][class*="1fr"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+}
+
+/* For very narrow views (< 480px), fall back to 2 columns for 4-col/3-col grids */
+@media (max-width: 480px) {
+  .wyqd-runtime-obsidian [class*="grid-cols-4"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .wyqd-runtime-obsidian [class*="grid-cols-3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }

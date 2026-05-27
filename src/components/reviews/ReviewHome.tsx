@@ -4,25 +4,12 @@ import { useMemo, useRef, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { ReviewEntry, WYQDObject, WYQDObjectType } from '@/domain/types';
-import type { StoredEntity } from '@/services/MarkdownEntityRepository';
-
-function todayISO() {
-  return new Date().toISOString().split('T')[0];
-}
-
-function formatMoney(value: number): string {
-  return `¥${Math.round(value).toLocaleString('zh-CN')}`;
-}
+import type { WYQDStoredEntity } from '@/core/repository';
+import { formatMoney, parseRank, todayISO } from '@/lib/format';
 
 function getExperienceAmount(object: WYQDObject): number {
   if (object.object_type !== 'one_time_experience') return 0;
   return object.actual_total || object.budget_total || 0;
-}
-
-function parseRank(value: string): number | null {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue < 1) return null;
-  return Math.floor(numberValue);
 }
 
 function hasRanking(review: ReviewEntry): boolean {
@@ -74,7 +61,7 @@ export function ReviewHome({
 }: {
   disabled?: boolean;
   objects: WYQDObject[];
-  reviews: StoredEntity<ReviewEntry>[];
+  reviews: WYQDStoredEntity<ReviewEntry>[];
   onCreateReview: (review: ReviewEntry, body: string) => Promise<void>;
   onUpdateReview: (fileName: string, review: ReviewEntry, body: string) => Promise<void>;
   onDeleteReview: (fileName: string) => Promise<void>;
@@ -293,7 +280,7 @@ export function ReviewHome({
     }
   }
 
-  function startEditingReview(stored: StoredEntity<ReviewEntry>) {
+  function startEditingReview(stored: WYQDStoredEntity<ReviewEntry>) {
     setEditingFileName(stored.fileName);
     setSummary(stored.entity.summary || '');
     setFoodRank(stored.entity.food_rank ? String(stored.entity.food_rank) : '');
@@ -639,7 +626,7 @@ export function ReviewHome({
                       {getRankingItems(stored.entity).map((item) => (
                         <span
                           key={item}
-                          className="rounded-full bg-stone-100 px-2 py-1 text-[11px] font-medium text-stone-600"
+                          className="rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-600"
                         >
                           {item}
                         </span>

@@ -1,30 +1,32 @@
 import {
-  WYQD_DIRECTORIES,
-  createWYQDDirectories,
-  createEntityFileName,
-  createReviewFileName,
-  createSnapshotFileName,
-  slugify,
-} from '@/data/paths';
+  WYQD_DATA_DIRECTORIES as WYQD_DIRECTORIES,
+  createWYQDEntityFileName as createEntityFileName,
+  createWYQDReviewFileName as createReviewFileName,
+  createWYQDSnapshotFileName as createSnapshotFileName,
+  slugifyWYQDTitle as slugify,
+} from '@/core/paths';
 import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
-import type { AccountSnapshot, ReviewEntry, WYQDObject, WYQDEntityType } from '@/domain/types';
+import type { Account, AccountSnapshot, ReviewEntry, WYQDObject, WYQDEntityType } from '@/domain/types';
+import type {
+  WYQDRepositoryAdapter,
+  WYQDStoredEntity,
+  WYQDArchivedStoredEntity,
+  WYQDArchiveEntityType,
+} from '@/core/repository';
 import { obsidianService } from './ObsidianFileSystemService';
+import { createWYQDDirectories } from '@/data/paths';
 
-export interface StoredEntity<T> {
-  fileName: string;
-  entity: T;
-  body: string;
-}
+/** @deprecated Use WYQDStoredEntity from @/core/repository */
+export type StoredEntity<T extends import('@/domain/types').BaseEntity> = WYQDStoredEntity<T>;
 
-export type ArchiveEntityType = 'object' | 'snapshot' | 'review';
+/** @deprecated Use WYQDArchiveEntityType from @/core/repository */
+export type ArchiveEntityType = WYQDArchiveEntityType;
 
-export type ArchivedStoredEntity =
-  | (StoredEntity<WYQDObject> & { archiveType: 'object' })
-  | (StoredEntity<AccountSnapshot> & { archiveType: 'snapshot' })
-  | (StoredEntity<ReviewEntry> & { archiveType: 'review' });
+/** @deprecated Use WYQDArchivedStoredEntity from @/core/repository */
+export type ArchivedStoredEntity = WYQDArchivedStoredEntity;
 
-export class MarkdownEntityRepository {
-  private dirs = WYQD_DIRECTORIES;
+export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
+  private dirs: ReturnType<typeof createWYQDDirectories> = WYQD_DIRECTORIES;
 
   async initialize(): Promise<void> {
     const root = await obsidianService.getDataFolder();
@@ -101,13 +103,13 @@ export class MarkdownEntityRepository {
     return fileName;
   }
 
-  private async listEntities<T>(
+  private async listEntities<T extends import('@/domain/types').BaseEntity>(
     directory: string,
     type: WYQDEntityType,
     warningLabel: string,
-  ): Promise<StoredEntity<T>[]> {
+  ): Promise<WYQDStoredEntity<T>[]> {
     const files = await obsidianService.readMarkdownFiles(directory);
-    const entities: StoredEntity<T>[] = [];
+    const entities: WYQDStoredEntity<T>[] = [];
 
     for (const file of files) {
       try {
@@ -116,6 +118,7 @@ export class MarkdownEntityRepository {
 
         entities.push({
           fileName: file.fileName,
+          path: `${directory}/${file.fileName}`,
           entity: parsed.frontmatter as unknown as T,
           body: parsed.body,
         });
@@ -127,17 +130,36 @@ export class MarkdownEntityRepository {
     return entities;
   }
 
-  async listObjects(): Promise<StoredEntity<WYQDObject>[]> {
+  async listObjects(): Promise<WYQDStoredEntity<WYQDObject>[]> {
     return this.listEntities<WYQDObject>(this.dirs.objects, 'object', 'object');
   }
 
-  async listArchivedObjects(): Promise<Array<StoredEntity<WYQDObject> & { archiveType: 'object' }>> {
-    const entries = await this.listEntities<WYQDObject>(
-      this.dirs.objectArchive,
-      'object',
-      'archived object',
+  async listAccounts(): Promise<WYQDStoredEntity<Account>[]> {
+    return [];
+  }
+
+  async listSnapshots(): Promise<WYQDStoredEntity<AccountSnapshot>[]> {
+    return this.listEntities<AccountSnapshot>(
+      this.dirs.snapshots,
+      'snapshot',
+      'snapshot',
     );
-    return entries.map((entry) => ({ ...entry, archiveType: 'object' as const }));
+  }
+
+  async listReviews(): Promise<WYQDStoredEntity<ReviewEntry>[]> {
+    return this.listEntities<ReviewEntry>(this.dirs.reviews, 'review', 'review');
+  }
+
+  async listArchivedEntities(): Promise<WYQDArchivedStoredEntity[]> {
+    const [objects, snapshots, reviews] = await Promise.all([
+      this.listEntities<WYQDObject>(this.dirs.objectArchive, 'object', 'archived object')
+        .then((entries) => entries.map((e) => ({ ...e, archiveType: 'object' as const }))),
+      this.listEntities<AccountSnapshot>(this.dirs.snapshotArchive, 'snapshot', 'archived snapshot')
+        .then((entries) => entries.map((e) => ({ ...e, archiveType: 'snapshot' as const }))),
+      this.listEntities<ReviewEntry>(this.dirs.reviewArchive, 'review', 'archived review')
+        .then((entries) => entries.map((e) => ({ ...e, archiveType: 'review' as const }))),
+    ]);
+    return [...objects, ...snapshots, ...reviews];
   }
 
   async saveObject(object: WYQDObject, body = ''): Promise<string> {
@@ -154,8 +176,8 @@ export class MarkdownEntityRepository {
     await obsidianService.writeMarkdownFile(this.dirs.objects, fileName, content);
   }
 
-  async deleteObject(fileName: string): Promise<void> {
-    await this.archiveEntity(this.dirs.objects, this.dirs.objectArchive, fileName);
+  async archiveObject(fileName: string): Promise<string> {
+    return this.archiveEntity(this.dirs.objects, this.dirs.objectArchive, fileName);
   }
 
   async restoreObject(archiveFileName: string): Promise<string> {
@@ -166,23 +188,20 @@ export class MarkdownEntityRepository {
     );
   }
 
-  async listSnapshots(): Promise<StoredEntity<AccountSnapshot>[]> {
-    return this.listEntities<AccountSnapshot>(
-      this.dirs.snapshots,
-      'snapshot',
-      'snapshot',
-    );
+  async saveAccount(): Promise<string> {
+    throw new Error('Account management is not supported in web mode');
   }
 
-  async listArchivedSnapshots(): Promise<
-    Array<StoredEntity<AccountSnapshot> & { archiveType: 'snapshot' }>
-  > {
-    const entries = await this.listEntities<AccountSnapshot>(
-      this.dirs.snapshotArchive,
-      'snapshot',
-      'archived snapshot',
-    );
-    return entries.map((entry) => ({ ...entry, archiveType: 'snapshot' as const }));
+  async updateAccount(): Promise<void> {
+    throw new Error('Account management is not supported in web mode');
+  }
+
+  async archiveAccount(): Promise<string | void> {
+    throw new Error('Account management is not supported in web mode');
+  }
+
+  async restoreAccount(): Promise<string> {
+    throw new Error('Account management is not supported in web mode');
   }
 
   async saveSnapshot(snapshot: AccountSnapshot, body = ''): Promise<string> {
@@ -202,8 +221,8 @@ export class MarkdownEntityRepository {
     await obsidianService.writeMarkdownFile(this.dirs.snapshots, fileName, content);
   }
 
-  async deleteSnapshot(fileName: string): Promise<void> {
-    await this.archiveEntity(
+  async archiveSnapshot(fileName: string): Promise<string> {
+    return this.archiveEntity(
       this.dirs.snapshots,
       this.dirs.snapshotArchive,
       fileName,
@@ -216,19 +235,6 @@ export class MarkdownEntityRepository {
       this.dirs.snapshots,
       archiveFileName,
     );
-  }
-
-  async listReviews(): Promise<StoredEntity<ReviewEntry>[]> {
-    return this.listEntities<ReviewEntry>(this.dirs.reviews, 'review', 'review');
-  }
-
-  async listArchivedReviews(): Promise<Array<StoredEntity<ReviewEntry> & { archiveType: 'review' }>> {
-    const entries = await this.listEntities<ReviewEntry>(
-      this.dirs.reviewArchive,
-      'review',
-      'archived review',
-    );
-    return entries.map((entry) => ({ ...entry, archiveType: 'review' as const }));
   }
 
   async saveReview(review: ReviewEntry, body = ''): Promise<string> {
@@ -245,8 +251,8 @@ export class MarkdownEntityRepository {
     await obsidianService.writeMarkdownFile(this.dirs.reviews, fileName, content);
   }
 
-  async deleteReview(fileName: string): Promise<void> {
-    await this.archiveEntity(this.dirs.reviews, this.dirs.reviewArchive, fileName);
+  async archiveReview(fileName: string): Promise<string> {
+    return this.archiveEntity(this.dirs.reviews, this.dirs.reviewArchive, fileName);
   }
 
   async restoreReview(archiveFileName: string): Promise<string> {
@@ -257,16 +263,7 @@ export class MarkdownEntityRepository {
     );
   }
 
-  async listArchivedEntities(): Promise<ArchivedStoredEntity[]> {
-    const [objects, snapshots, reviews] = await Promise.all([
-      this.listArchivedObjects(),
-      this.listArchivedSnapshots(),
-      this.listArchivedReviews(),
-    ]);
-    return [...objects, ...snapshots, ...reviews];
-  }
-
-  async restoreArchivedEntity(archiveType: ArchiveEntityType, archiveFileName: string): Promise<string> {
+  async restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<string> {
     if (archiveType === 'object') return this.restoreObject(archiveFileName);
     if (archiveType === 'snapshot') return this.restoreSnapshot(archiveFileName);
     return this.restoreReview(archiveFileName);

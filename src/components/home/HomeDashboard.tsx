@@ -13,6 +13,7 @@ import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { useI18n } from '@/core/i18n-context';
 import { MetricCard } from './MetricCard';
+import { formatMoney, formatDailyMoney, formatCompactMoney, formatDelta, clampPercent, buildSparklinePoints, formatDueLabel } from '@/lib/format';
 
 const springTransition = {
   type: 'spring' as const,
@@ -38,52 +39,6 @@ const itemVariants: Variants = {
     transition: springTransition,
   },
 };
-
-
-function formatMoney(value: number | null, fallback = '暂无'): string {
-  if (value === null) return fallback;
-  return `¥${Math.round(value).toLocaleString('zh-CN')}`;
-}
-
-function formatDailyMoney(value: number): string {
-  if (!Number.isFinite(value)) return '¥0/日';
-  if (value > 0 && value < 1) return `¥${value.toFixed(2)}/日`;
-  return `${formatMoney(value)}/日`;
-}
-
-function formatCompactMoney(value: number): string {
-  const rounded = Math.round(value);
-  if (Math.abs(rounded) >= 10000) return `¥${(rounded / 10000).toFixed(1)}万`;
-  return `¥${rounded.toLocaleString('zh-CN')}`;
-}
-
-function formatDelta(value: number | null): string {
-  if (value === null) return '暂无上月末对比';
-  const sign = value >= 0 ? '+' : '-';
-  return `较上月末 ${sign}¥${Math.abs(Math.round(value)).toLocaleString('zh-CN')}`;
-}
-
-function clampPercent(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, value));
-}
-
-function buildSparklinePoints(values: number[]): string {
-  if (values.length === 0) return '';
-  if (values.length === 1) return `0,24 100,24`;
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  return values
-    .map((value, index) => {
-      const x = (index / (values.length - 1)) * 100;
-      const y = 42 - ((value - min) / range) * 36;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
-}
 
 function getSnapshotTrend(snapshots: AccountSnapshot[]) {
   return snapshots
@@ -182,21 +137,6 @@ function getObjectStatusDistribution(objects: WYQDObject[], t: (key: WYQDTransla
   ];
 
   return distribution;
-}
-
-function daysUntil(date: string): number {
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const end = new Date(`${date}T00:00:00`).getTime();
-  return Math.round((end - start) / 86400000);
-}
-
-function formatDueLabel(date: string): string {
-  const days = daysUntil(date);
-  if (days === 0) return '今天';
-  if (days === 1) return '明天';
-  if (days > 1) return `${days} 天后`;
-  return `已过 ${Math.abs(days)} 天`;
 }
 
 function getUpcomingRecurringCosts(objects: WYQDObject[]) {
@@ -407,7 +347,7 @@ export function HomeDashboard({
   const actionCount = upcomingRecurringCosts.length + pendingExperienceReviews.length;
   const dailyFixedCost = metrics.monthlyFixedCost / 30.44;
   const annualFixedCost = metrics.monthlyFixedCost * 12;
-  const fixedCostHint = `${formatDailyMoney(dailyFixedCost)} · ${formatMoney(annualFixedCost)}/年`;
+  const fixedCostHint = `${formatDailyMoney(dailyFixedCost)} · ${formatMoney(annualFixedCost)}${t('perYear')}`;
 
   return (
     <motion.section
@@ -416,8 +356,8 @@ export function HomeDashboard({
       animate="visible"
       className="space-y-6"
     >
-      <motion.section variants={itemVariants} className="grid gap-3 lg:grid-cols-4">
-        <div className="rounded-xl border border-stone-200 bg-stone-950 p-4 text-white shadow-sm lg:col-span-1">
+      <motion.section variants={itemVariants} className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-xl border border-stone-200 bg-stone-950 p-4 text-white shadow-sm md:col-span-1">
           <div className="text-xs font-medium text-stone-400">{t('todayActions')}</div>
           <div className="mt-3 font-mono text-3xl font-semibold tracking-tight">
             {actionCount}
@@ -451,12 +391,12 @@ export function HomeDashboard({
         variants={itemVariants}
         className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
       >
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
+        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
           <div>
             <MetricCard
               label={t('assetNetWorthEstimate')}
               value={formatMoney(metrics.netWorth, t('noData'))}
-              hint={formatDelta(metrics.netWorthDeltaFromPreviousMonth)}
+              hint={formatDelta(metrics.netWorthDeltaFromPreviousMonth, t)}
               featured
             />
           </div>
@@ -476,7 +416,7 @@ export function HomeDashboard({
             </div>
             {trendSnapshots.length > 0 ? (
               <div className="mt-4">
-                <svg viewBox="0 0 100 48" role="img" aria-label="净资产趋势图" className="h-24 w-full overflow-visible">
+                <svg viewBox="0 0 100 48" role="img" aria-label={t('netWorthTrend')} className="h-24 w-full overflow-visible">
                   <motion.polyline
                     initial={{ pathLength: 0, opacity: 0 }}
                     animate={{ pathLength: 1, opacity: 1 }}
@@ -513,14 +453,14 @@ export function HomeDashboard({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
           <MetricCard
             label={t('monthlyFixedCostAvg')}
             value={formatMoney(metrics.monthlyFixedCost, t('noData'))}
             hint={fixedCostHint}
           />
-          <MetricCard label={t('physicalAsset')} value={`${metrics.ownedPhysicalCount} 件`} />
-          <MetricCard label={t('subscriptionService')} value={`${metrics.activeSubscriptionCount} 个`} />
+          <MetricCard label={t('physicalAsset')} value={t('itemCount').replace('{count}', String(metrics.ownedPhysicalCount))} />
+          <MetricCard label={t('subscriptionService')} value={t('serviceCount').replace('{count}', String(metrics.activeSubscriptionCount))} />
           <MetricCard label={t('observeAmount')} value={formatMoney(metrics.observingDesireAmount, t('noData'))} />
         </div>
       </motion.section>
@@ -578,7 +518,7 @@ export function HomeDashboard({
                   <div className="text-sm font-bold text-stone-900">{object.title}</div>
                 </div>
                 <div className="mt-1 text-xs text-stone-500">
-                  下次 {nextBillingDate} · {formatDueLabel(nextBillingDate)}
+                  {t('nextBilling').replace('{date}', nextBillingDate)} · {formatDueLabel(nextBillingDate, t)}
                 </div>
               </div>
               <div className="shrink-0 font-mono text-xs font-semibold text-stone-900">
@@ -640,7 +580,7 @@ export function HomeDashboard({
       </motion.section>
 
       {/* 次要数据区 - 采用 Surface-less 布局 */}
-      <div className="grid gap-10 lg:grid-cols-2 pt-4">
+      <div className="grid gap-6 md:grid-cols-2">
         <motion.section variants={itemVariants}>
           <h2 className="px-1 text-sm font-semibold text-stone-950">{t('statusDistribution')}</h2>
           <div className="mt-6 space-y-6 px-1">
@@ -651,7 +591,7 @@ export function HomeDashboard({
                 value={item.count}
                 max={maxStatusCount}
                 tone={item.tone}
-                valueLabel={`${item.count} 个`}
+                valueLabel={t('itemCount').replace('{count}', String(item.count))}
                 onSelect={() => onOpenObjects(item.focus)}
               />
             ))}
