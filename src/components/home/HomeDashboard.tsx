@@ -210,7 +210,7 @@ function DataBar({
     <>
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="min-w-0 truncate text-stone-600">{label}</span>
-        <span className="shrink-0 font-medium text-stone-900">{valueLabel}</span>
+        <span className="shrink-0 font-medium text-stone-950">{valueLabel}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-stone-100">
         <div className={`h-full rounded-full ${tone}`} style={{ width: `${width}%` }} />
@@ -252,18 +252,18 @@ function InsightCard({
 }) {
   const content = (
     <>
-      <div className="text-xs font-medium text-stone-500">{label}</div>
-      <div className="mt-2 min-h-10 text-sm font-semibold leading-snug text-stone-950">{title}</div>
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <span className="font-mono text-lg font-semibold tracking-tight text-stone-950">{value}</span>
-        <span className="text-right text-xs text-stone-500">{detail}</span>
+      <div className="wyqd-card-insight__label">{label}</div>
+      <div className="wyqd-card-insight__title">{title}</div>
+      <div className="wyqd-card-insight__footer">
+        <span className="wyqd-card-insight__value">{value}</span>
+        <span className="wyqd-card-insight__detail">{detail}</span>
       </div>
     </>
   );
 
   if (!onSelect) {
     return (
-      <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+      <div className="wyqd-card-insight">
         {content}
       </div>
     );
@@ -273,7 +273,7 @@ function InsightCard({
     <button
       type="button"
       onClick={onSelect}
-      className="rounded-xl border border-stone-200 bg-white p-4 text-left shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
+      className="wyqd-card-insight wyqd-card-insight--clickable"
     >
       {content}
     </button>
@@ -295,21 +295,21 @@ function ActionCard({
     <button
       type="button"
       onClick={onSelect}
-      className="group rounded-xl border border-stone-200 bg-white p-4 text-left shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
+      className="wyqd-card-action group"
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+      <div className="wyqd-card-action__header">
+        <span className="wyqd-card-action__badge">
           {label}
         </span>
         <span
-          className="text-sm text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-stone-700"
+          className="wyqd-card-action__arrow"
           aria-hidden="true"
         >
           →
         </span>
       </div>
-      <div className="mt-4 text-base font-semibold leading-snug text-stone-950">{title}</div>
-      <div className="mt-1 text-xs leading-5 text-stone-500">{detail}</div>
+      <div className="wyqd-card-action__title">{title}</div>
+      <div className="wyqd-card-action__desc">{detail}</div>
     </button>
   );
 }
@@ -354,15 +354,15 @@ export function HomeDashboard({
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6"
+      className="space-y-5"
     >
-      <motion.section variants={itemVariants} className="grid gap-3 md:grid-cols-4">
-        <div className="rounded-xl border border-stone-200 bg-stone-950 p-4 text-white shadow-sm md:col-span-1">
-          <div className="text-xs font-medium text-stone-400">{t('todayActions')}</div>
-          <div className="mt-3 font-mono text-3xl font-semibold tracking-tight">
+      <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+        <div className="wyqd-card-action wyqd-card-action--dark">
+          <div className="wyqd-card-action__label">{t('todayActions')}</div>
+          <div className="wyqd-card-action__count">
             {actionCount}
           </div>
-          <div className="mt-1 text-xs leading-5 text-stone-400">
+          <div className="wyqd-card-action__hint">
             {t('todayActionsDesc')}
           </div>
         </div>
@@ -391,7 +391,7 @@ export function HomeDashboard({
         variants={itemVariants}
         className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
       >
-        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-6 items-center">
           <div>
             <MetricCard
               label={t('assetNetWorthEstimate')}
@@ -400,10 +400,10 @@ export function HomeDashboard({
               featured
             />
           </div>
-          <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-stone-950">{t('netWorthTrend')}</h2>
+                <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('netWorthTrend')}</h2>
                 <p className="mt-1 text-xs text-stone-500">
                   {t('recentSnapshotsCount').replace('{count}', String(trendSnapshots.length))}
                 </p>
@@ -453,7 +453,7 @@ export function HomeDashboard({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
           <MetricCard
             label={t('monthlyFixedCostAvg')}
             value={formatMoney(metrics.monthlyFixedCost, t('noData'))}
@@ -465,7 +465,7 @@ export function HomeDashboard({
         </div>
       </motion.section>
 
-      <motion.section variants={itemVariants} className="grid gap-3 md:grid-cols-3">
+      <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
         <InsightCard
           label={t('highestDailyCost')}
           title={highestDailyCost?.object.title || t('noCalculablePhysical')}
@@ -499,29 +499,29 @@ export function HomeDashboard({
       {/* 近期关注 (Action Center) - 回归克制风格 */}
       <motion.section variants={itemVariants} className="space-y-4">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-semibold text-stone-950">{t('recentFocus')}</h2>
+          <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('recentFocus')}</h2>
           <span className="text-xs text-stone-500">
             {t('itemsCount').replace('{count}', String(upcomingRecurringCosts.length + pendingExperienceReviews.length))}
           </span>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
           {upcomingRecurringCosts.map(({ object, nextBillingDate }) => (
             <button
               key={object.id}
               type="button"
               onClick={() => onOpenObjects({ typeFilter: 'recurring_cost', statusGroupFilter: 'using' })}
-              className="group relative flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-stone-300"
+              className="wyqd-card-watchlist group"
             >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                  <div className="text-sm font-bold text-stone-900">{object.title}</div>
+              <div className="wyqd-card-watchlist__main">
+                <div className="wyqd-card-watchlist__title-row">
+                  <span className="wyqd-card-watchlist__dot wyqd-card-watchlist__dot--amber" />
+                  <div className="wyqd-card-watchlist__title">{object.title}</div>
                 </div>
-                <div className="mt-1 text-xs text-stone-500">
+                <div className="wyqd-card-watchlist__meta">
                   {t('nextBilling').replace('{date}', nextBillingDate)} · {formatDueLabel(nextBillingDate, t)}
                 </div>
               </div>
-              <div className="shrink-0 font-mono text-xs font-semibold text-stone-900">
+              <div className="wyqd-card-watchlist__amount">
                 {formatCompactMoney(object.billing_amount || 0)}
               </div>
             </button>
@@ -531,20 +531,20 @@ export function HomeDashboard({
               key={object.id}
               type="button"
               onClick={() => onOpenObjects({ typeFilter: 'one_time_experience', statusGroupFilter: 'exited' })}
-              className="group relative flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-stone-300"
+              className="wyqd-card-watchlist group"
             >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  <div className="text-sm font-bold text-stone-900">{object.title}</div>
+              <div className="wyqd-card-watchlist__main">
+                <div className="wyqd-card-watchlist__title-row">
+                  <span className="wyqd-card-watchlist__dot wyqd-card-watchlist__dot--green" />
+                  <div className="wyqd-card-watchlist__title">{object.title}</div>
                 </div>
-                <div className="mt-1 text-xs text-stone-500">{t('pendingReviewBadge')}</div>
+                <div className="wyqd-card-watchlist__meta">{t('pendingReviewBadge')}</div>
               </div>
-              <div className="shrink-0 rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-xs font-medium text-stone-600">{t('reviewAction')}</div>
+              <div className="wyqd-card-watchlist__action">{t('reviewAction')}</div>
             </button>
           ))}
           {upcomingRecurringCosts.length === 0 && pendingExperienceReviews.length === 0 ? (
-            <div className="rounded-xl border border-stone-200 bg-stone-50 py-8 text-center sm:col-span-2">
+            <div className="rounded-xl border border-stone-200 bg-stone-50 py-10 text-center sm:col-span-2">
               <p className="text-xs font-medium text-stone-500">{t('noRecentItems')}</p>
             </div>
           ) : null}
@@ -554,25 +554,25 @@ export function HomeDashboard({
       {/* 数据规模 (Data Scale) */}
       <motion.section variants={itemVariants} className="space-y-4 pt-4">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-semibold text-stone-950">{t('dataScale')}</h2>
+          <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('dataScale')}</h2>
           <span className="text-xs text-stone-500">
             {t('objectsCount').replace('{count}', String(objects.length))}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4">
+          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
             <div className="text-xs text-stone-500">{t('accountSnapshot')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{snapshots.length}</div>
           </div>
-          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
             <div className="text-xs text-stone-500">{t('physical')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{physicalCount}</div>
           </div>
-          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
             <div className="text-xs text-stone-500">{t('fixedCost')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{recurringCount}</div>
           </div>
-          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
             <div className="text-xs text-stone-500">{t('experience')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{experienceCount}</div>
           </div>
@@ -580,9 +580,9 @@ export function HomeDashboard({
       </motion.section>
 
       {/* 次要数据区 - 采用 Surface-less 布局 */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-6">
         <motion.section variants={itemVariants}>
-          <h2 className="px-1 text-sm font-semibold text-stone-950">{t('statusDistribution')}</h2>
+          <h2 className="px-1 text-sm font-semibold tracking-tight text-stone-950">{t('statusDistribution')}</h2>
           <div className="mt-6 space-y-6 px-1">
             {statusDistribution.map((item) => (
               <DataBar
@@ -599,7 +599,7 @@ export function HomeDashboard({
         </motion.section>
 
         <motion.section variants={itemVariants}>
-          <h2 className="px-1 text-sm font-semibold text-stone-950">{t('costStructure')}</h2>
+          <h2 className="px-1 text-sm font-semibold tracking-tight text-stone-950">{t('costStructure')}</h2>
           <div className="mt-6 space-y-6 px-1">
             {costBreakdown.map((item) => (
               <DataBar

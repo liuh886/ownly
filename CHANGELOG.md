@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3-alpha
+
+- Refined Ownly's visual system toward a quieter, more premium Obsidian-native workspace.
+- Softened borders, shadows, spacing, and focus states across dashboard, objects, accounts, archive, and review surfaces.
+- Added Obsidian runtime CSS primitives for action, insight, and watchlist cards so shared React components render correctly inside Obsidian.
+- Kept the shared Web/Obsidian workspace architecture intact while preparing the next Pro travel insight surface.
+
 ## 0.2.0-alpha
 
 - Added Obsidian private plugin package files: `manifest.json`, `versions.json`, `main.js`, `styles.css`.

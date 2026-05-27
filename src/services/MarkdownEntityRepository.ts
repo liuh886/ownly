@@ -266,7 +266,8 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   async restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<string> {
     if (archiveType === 'object') return this.restoreObject(archiveFileName);
     if (archiveType === 'snapshot') return this.restoreSnapshot(archiveFileName);
-    return this.restoreReview(archiveFileName);
+    if (archiveType === 'review') return this.restoreReview(archiveFileName);
+    throw new Error('Account archive restore is not supported in web mode');
   }
 }
 

@@ -1,5 +1,5 @@
 .wyqd-obsidian-view {
-  --wyqd-border: var(--background-modifier-border);
+  --wyqd-border: color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
   --wyqd-muted: var(--text-muted);
   --wyqd-panel: var(--background-secondary);
   --wyqd-panel-alt: var(--background-primary-alt);
@@ -60,7 +60,7 @@
   flex-direction: column;
   gap: 16px;
   max-width: 1040px;
-  padding: 20px;
+  padding: 24px;
 }
 
 .wyqd-hero {
@@ -547,6 +547,13 @@
   overflow-y: auto;
 }
 
+/* Ensure consistent box-sizing for all React UI elements inside Obsidian */
+.wyqd-runtime-obsidian *,
+.wyqd-runtime-obsidian *::before,
+.wyqd-runtime-obsidian *::after {
+  box-sizing: border-box;
+}
+
 /* Ensure the React UI fills the Obsidian view */
 .wyqd-runtime-obsidian > div {
   min-height: 100%;
@@ -559,40 +566,239 @@
 }
 
 /*
- * Obsidian sidebar is typically 300–500px wide — Tailwind's sm/md/lg breakpoints
- * never trigger. Force multi-column grids to activate inside the Obsidian runtime.
- * These are outside @layer so they always beat Tailwind's layered utilities.
- *
- * Use attribute selectors to match class names containing ":" — more reliable
- * than escaped class selectors across Electron versions.
+ * Interactive card resets — override Obsidian's default button styles.
+ * Obsidian flattens <button> into a compact inline row; we need !important
+ * to reclaim block layout, min-height, and padding.
  */
 
-/* 4-col: action cards, metric cards, data scale */
-.wyqd-runtime-obsidian [class*="grid-cols-4"] {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+/* ---- Action Card (top-left "today actions" + 3 white cards) ---- */
+.wyqd-card-action {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  min-height: 140px !important;
+  height: auto !important;
+  padding: 20px !important;
+  border-radius: 12px !important;
+  text-align: left !important;
+  overflow: hidden;
+  gap: 0;
+  border: 1px solid var(--wyqd-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  white-space: normal !important;
+  line-height: normal !important;
 }
 
-/* 3-col: insight cards */
-.wyqd-runtime-obsidian [class*="grid-cols-3"] {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+.wyqd-card-action:hover,
+.wyqd-card-action:focus-visible {
+  border-color: var(--interactive-accent);
 }
 
-/* 2-col: net worth section, bottom section, recent focus */
-.wyqd-runtime-obsidian [class*="grid-cols-2"] {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+.wyqd-card-action--dark {
+  background: var(--background-modifier-border) !important;
+  border-color: transparent !important;
 }
 
-/* 2-col: minmax variant for net worth split */
-.wyqd-runtime-obsidian [class*="grid-cols-"][class*="minmax"][class*="1fr"] {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+.wyqd-card-action__label {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
 }
 
-/* For very narrow views (< 480px), fall back to 2 columns for 4-col/3-col grids */
-@media (max-width: 480px) {
-  .wyqd-runtime-obsidian [class*="grid-cols-4"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-  .wyqd-runtime-obsidian [class*="grid-cols-3"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
+.wyqd-card-action__count {
+  margin-top: 12px;
+  font-family: var(--font-monospace);
+  font-size: 2em;
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+
+.wyqd-card-action__hint {
+  margin-top: 4px;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.wyqd-card-action__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wyqd-card-action__badge {
+  background: var(--background-secondary);
+  border: 1px solid var(--wyqd-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+  padding: 2px 8px;
+}
+
+.wyqd-card-action__arrow {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.wyqd-card-action:hover .wyqd-card-action__arrow {
+  color: var(--text-normal);
+}
+
+.wyqd-card-action__title {
+  margin-top: 14px;
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  line-height: 1.3;
+  color: var(--text-normal);
+}
+
+.wyqd-card-action__desc {
+  margin-top: 4px;
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ---- Insight Card ("highest daily cost", "largest monthly", etc.) ---- */
+.wyqd-card-insight {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  min-height: 120px !important;
+  height: auto !important;
+  padding: 20px !important;
+  border-radius: 12px !important;
+  text-align: left !important;
+  gap: 0;
+  border: 1px solid var(--wyqd-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  white-space: normal !important;
+  line-height: normal !important;
+}
+
+.wyqd-card-insight--clickable:hover,
+.wyqd-card-insight--clickable:focus-visible {
+  border-color: var(--interactive-accent);
+}
+
+.wyqd-card-insight__label {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+}
+
+.wyqd-card-insight__title {
+  margin-top: 8px;
+  min-height: 2.5em;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  line-height: 1.35;
+  color: var(--text-normal);
+}
+
+.wyqd-card-insight__footer {
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wyqd-card-insight__value {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-large);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+
+.wyqd-card-insight__detail {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* ---- Watchlist Card (recurring costs, pending reviews) ---- */
+.wyqd-card-watchlist {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  min-height: 72px !important;
+  height: auto !important;
+  padding: 16px 20px !important;
+  border-radius: 12px !important;
+  text-align: left !important;
+  gap: 16px;
+  border: 1px solid var(--wyqd-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  white-space: normal !important;
+  line-height: normal !important;
+}
+
+.wyqd-card-watchlist:hover {
+  border-color: var(--interactive-accent);
+}
+
+.wyqd-card-watchlist__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.wyqd-card-watchlist__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wyqd-card-watchlist__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wyqd-card-watchlist__dot--amber {
+  background: #f59e0b;
+}
+
+.wyqd-card-watchlist__dot--green {
+  background: #10b981;
+}
+
+.wyqd-card-watchlist__title {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wyqd-card-watchlist__meta {
+  margin-top: 4px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.wyqd-card-watchlist__amount {
+  flex-shrink: 0;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+
+.wyqd-card-watchlist__action {
+  flex-shrink: 0;
+  border: 1px solid var(--wyqd-border);
+  border-radius: 999px;
+  background: var(--background-secondary);
+  padding: 2px 10px;
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
 }

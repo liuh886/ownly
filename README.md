@@ -13,9 +13,9 @@ The product direction is Obsidian plugin first, while the Web App remains suppor
 
 ## Version
 
-Current target: `0.2.0`
+Current target: `0.2.3`
 
-`0.2.0` is an alpha baseline for dual runtime support. It should not be described as a mature product yet.
+`0.2.3` is an alpha refinement line for the native Obsidian workspace, shared Web-compatible runtime, and premium visual polish. It should not be described as a mature product yet.
 
 License: MIT.
 

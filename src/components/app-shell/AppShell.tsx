@@ -46,10 +46,10 @@ function StatusBanner({
 }) {
   const { t } = useI18n();
   return (
-    <section className="mb-6 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+    <section className="mb-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
+          <div className="flex items-center gap-2 text-sm font-semibold text-stone-950">
             <span
               className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-stone-300'}`}
               aria-hidden="true"
@@ -372,7 +372,7 @@ export function AppShell() {
   }, [isConnected, repository]);
 
   return (
-    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-4 pb-28 pt-6 text-stone-950 sm:px-5 sm:pt-8">
+    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-28 pt-8 text-stone-950 sm:px-6 sm:pt-10">
       <div
         aria-live="polite"
         aria-atomic="true"
@@ -385,9 +385,9 @@ export function AppShell() {
         ) : null}
       </div>
       <div className="mx-auto max-w-6xl">
-        <header className="mb-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+        <header className="mb-8 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
           {/* Brand bar */}
-          <div className="flex items-center gap-3 border-b border-stone-100 bg-gradient-to-r from-stone-50 to-stone-100/60 px-4 py-2.5 sm:px-5">
+          <div className="flex items-center gap-3 border-b border-stone-100 bg-gradient-to-r from-stone-50/80 to-stone-100/40 px-4 py-2.5 sm:px-5">
             <span className="text-base font-bold tracking-tight text-stone-950">Ownly</span>
             <span className="rounded-md bg-stone-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
               v{runtimeInfo.coreTargetVersion}
@@ -482,7 +482,7 @@ export function AppShell() {
 	              />
             ) : null}
             {activeTab === 'objects' ? (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <ObjectList
                   key={objectListFocus?.token || 'objects-default'}
                   disabled={!isConnected}

@@ -53,6 +53,7 @@ const WYQD_ENTITY_SUBFOLDERS: Record<DraftKind | 'account', string> = {
 export default class WYQDPlugin extends Plugin {
   settings: WYQDPluginSettings = DEFAULT_SETTINGS;
   repository!: ObsidianVaultRepository;
+  private workspaceRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -114,6 +115,10 @@ export default class WYQDPlugin extends Plugin {
   }
 
   onunload() {
+    if (this.workspaceRefreshTimer) {
+      clearTimeout(this.workspaceRefreshTimer);
+      this.workspaceRefreshTimer = null;
+    }
     this.app.workspace.getLeavesOfType(WYQD_VIEW_TYPE).forEach((leaf) => leaf.detach());
   }
 
@@ -192,9 +197,20 @@ export default class WYQDPlugin extends Plugin {
   }
 
   private onVaultFileChange(filePath: string) {
-    const dataFolder = this.settings.dataFolder;
-    if (!filePath.startsWith(dataFolder + '/')) return;
-    this.refreshWorkspaceViews();
+    const dataFolder = normalizeFolder(this.settings.dataFolder) || DEFAULT_SETTINGS.dataFolder;
+    if (filePath !== dataFolder && !filePath.startsWith(`${dataFolder}/`)) return;
+    this.scheduleWorkspaceRefresh();
+  }
+
+  private scheduleWorkspaceRefresh() {
+    if (this.workspaceRefreshTimer) {
+      clearTimeout(this.workspaceRefreshTimer);
+    }
+
+    this.workspaceRefreshTimer = setTimeout(() => {
+      this.workspaceRefreshTimer = null;
+      this.refreshWorkspaceViews();
+    }, 200);
   }
 
   private getEntityFolder(kind: DraftKind) {

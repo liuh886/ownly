@@ -525,7 +525,7 @@ function ObjectDetailPanel({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
       transition={{ duration: 0.2 }}
-      className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6"
+      className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -568,7 +568,7 @@ function ObjectDetailPanel({
         )}
       </div>
 
-      <div className="mt-6 border-t border-stone-100 pt-5">
+      <div className="mt-6 border-t border-stone-100 pt-6">
         <h3 className="text-sm font-semibold text-stone-950">{t('markdownBody')}</h3>
         <div className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-stone-50 p-4 text-sm leading-relaxed text-stone-600">
           {body || t('noBody')}
@@ -710,19 +710,19 @@ export function ObjectList({
 
   if (objects.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center">
-        <h2 className="text-base font-semibold text-stone-900">{t('noObjectsYet')}</h2>
+      <div className="rounded-xl border border-dashed border-stone-200 bg-white p-8 text-center">
+        <h2 className="text-base font-semibold text-stone-950">{t('noObjectsYet')}</h2>
         <p className="mt-2 text-sm text-stone-500">{t('connectVaultFirst')}</p>
       </div>
     );
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">{t('objectConsoleTitle')}</h2>
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('objectConsoleTitle')}</h2>
             <p className="mt-1 text-sm text-stone-500">
               {t('objectConsoleSubtitle')}
             </p>
@@ -765,7 +765,7 @@ export function ObjectList({
           })}
         </div>
 
-        <div className="mt-5 border-t border-stone-100 pt-4">
+        <div className="mt-5 border-t border-stone-100 pt-5">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-stone-950">{t('priorityProcess')}</h3>
             {controlBucketFilter ? (
@@ -843,7 +843,7 @@ export function ObjectList({
 
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-stone-950">{t('physicalAssets')}</h2>
+          <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('physicalAssets')}</h2>
           <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
             {t('itemCount').replace('{count}', String(allPhysicalObjects.length))}
           </span>
@@ -874,7 +874,7 @@ export function ObjectList({
               setControlBucketFilter(null);
             }}
             placeholder={t('searchByNameCategoryStatus')}
-            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-500"
+            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
           />
         </label>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label={t('filterByType')}>
@@ -932,7 +932,7 @@ export function ObjectList({
                 aria-pressed={filter === item}
                 className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
                   filter === item
-                    ? 'bg-stone-800 text-white'
+                    ? 'bg-stone-950 text-white'
                     : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
                 }`}
               >
@@ -959,7 +959,7 @@ export function ObjectList({
 	              className="overflow-visible rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
 	            >
 	              {isEditing ? (
-	                <div className="p-4">
+	                <div className="p-5">
 	                  <ObjectComposer
 	                    disabled={disabled}
 	                    initialObject={object}
@@ -974,7 +974,7 @@ export function ObjectList({
 	              ) : (
 	                <div className="flex">
 	                  <div className={`w-1.5 shrink-0 ${accent.stripe}`} aria-hidden="true" />
-	                  <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:flex-row md:items-center">
+	                  <div className="flex min-w-0 flex-1 flex-col gap-4 p-5 md:flex-row md:items-center">
 	                    <div
 	                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-sm font-semibold text-stone-700 ring-1 ring-stone-200"
 	                      aria-hidden="true"
@@ -1123,7 +1123,7 @@ export function ObjectList({
         <section className="space-y-3 pt-2">
           <div className="flex items-center justify-between gap-3 px-1">
             <div>
-              <h2 className="text-base font-semibold text-stone-950">{t('recurringCostAndExperience')}</h2>
+              <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('recurringCostAndExperience')}</h2>
               <p className="mt-0.5 text-xs text-stone-500">{t('subscriptionServiceUnified')}</p>
             </div>
             <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
@@ -1148,7 +1148,7 @@ export function ObjectList({
               return isEditing ? (
                 <div
                   key={stored.fileName}
-                  className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm"
+                  className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
                 >
                   <ObjectComposer
                     disabled={disabled}
@@ -1168,7 +1168,7 @@ export function ObjectList({
 	                >
                   <div className="flex">
                     <div className={`w-1.5 shrink-0 ${visual.accentClass}`} aria-hidden="true" />
-                    <div className="min-w-0 flex-1 p-4">
+                    <div className="min-w-0 flex-1 p-5">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center">
                         <div className="flex min-w-0 flex-1 gap-3">
                           <div
@@ -1382,7 +1382,7 @@ export function ObjectList({
                               onChange={(event) => setReviewSummary(event.target.value)}
                               rows={3}
                               placeholder={t('reviewSummaryPlaceholder')}
-                              className="mt-1.5 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+                              className="mt-1.5 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
                               disabled={disabled || exitingFileName === stored.fileName}
                             />
                           </div>
@@ -1397,7 +1397,7 @@ export function ObjectList({
                                 inputMode="numeric"
                                 placeholder={t('foodRank')}
                                 aria-label={t('foodRank')}
-                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
                                 disabled={disabled || exitingFileName === stored.fileName}
                               />
                               <input
@@ -1408,7 +1408,7 @@ export function ObjectList({
                                 inputMode="numeric"
                                 placeholder={t('sceneryRank')}
                                 aria-label={t('sceneryRank')}
-                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
                                 disabled={disabled || exitingFileName === stored.fileName}
                               />
                               <input
@@ -1419,7 +1419,7 @@ export function ObjectList({
                                 inputMode="numeric"
                                 placeholder={t('experienceRank')}
                                 aria-label={t('experienceRank')}
-                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+                                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
                                 disabled={disabled || exitingFileName === stored.fileName}
                               />
                             </div>
@@ -1435,7 +1435,7 @@ export function ObjectList({
                             </button>
                             <button
                               type="submit"
-                              className="rounded-md bg-stone-950 px-2 py-2 text-xs font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                              className="rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
                               disabled={
                                 disabled ||
                                 exitingFileName === stored.fileName ||

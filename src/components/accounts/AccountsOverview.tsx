@@ -213,7 +213,7 @@ export function AccountsOverview({
     !hasInvalidLiabilityLines &&
     !isSaving;
   const fieldClass =
-    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
+    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -287,11 +287,11 @@ export function AccountsOverview({
   }
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-5">
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">{t('accountConsole')}</h2>
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('accountConsole')}</h2>
             <p className="mt-1 text-sm text-stone-500">
               {t('accountConsoleDesc')}
             </p>
@@ -332,9 +332,9 @@ export function AccountsOverview({
           </div>
         </div>
 
-        <div className="mt-5 border-t border-stone-100 pt-4">
+        <div className="mt-5 border-t border-stone-100 pt-5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-stone-950">{t('accountList')}</h3>
+            <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('accountList')}</h3>
             <span className="text-xs text-stone-400">
               {latest ? t('snapshotDateLabel').replace('{date}', latest.snapshot_at) : t('notRecordedYet')}
             </span>
@@ -344,7 +344,7 @@ export function AccountsOverview({
           <div className="mt-5 space-y-4">
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-stone-950">{t('assetAccounts')}</h2>
+                <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('assetAccounts')}</h2>
                 <span className="text-xs text-stone-400">{formatMoney(latest.total_assets)}</span>
               </div>
               <div className="space-y-2">
@@ -367,7 +367,7 @@ export function AccountsOverview({
             {latest.liability_balances.length > 0 ? (
               <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-stone-950">{t('liabilityAccounts')}</h2>
+                  <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('liabilityAccounts')}</h2>
                   <span className="text-xs text-stone-400">
                     {formatMoney(latest.total_liabilities)}
                   </span>
@@ -398,10 +398,10 @@ export function AccountsOverview({
         </div>
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm shadow-stone-200/40">
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">{t('netWorthHistory')}</h2>
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('netWorthHistory')}</h2>
             <p className="mt-1 text-xs text-stone-400">
               {t('recentSnapshotsN').replace('{count}', String(trendSnapshots.length))}
             </p>
@@ -453,10 +453,10 @@ export function AccountsOverview({
         )}
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm shadow-stone-200/40">
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">{t('fixedCostAccountPressure')}</h2>
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('fixedCostAccountPressure')}</h2>
             <p className="mt-1 text-xs leading-5 text-stone-500">
               {t('fixedCostAccountPressureDesc')}
             </p>
@@ -512,11 +512,11 @@ export function AccountsOverview({
 
       <form
         onSubmit={handleSubmit}
-        className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm shadow-stone-200/40 sm:p-5"
+        className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">
               {editingFileName ? t('editSnapshot') : t('recordSnapshot')}
             </h2>
             <p className="mt-1 text-xs leading-5 text-stone-500">
@@ -639,7 +639,7 @@ export function AccountsOverview({
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-stone-950">{t('historySnapshots')}</h2>
+          <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('historySnapshots')}</h2>
           <span className="text-xs text-stone-400">{t('recentN').replace('{count}', String(Math.min(sorted.length, 6)))}</span>
         </div>
         <div className="mt-3 space-y-3">
@@ -683,7 +683,7 @@ export function AccountsOverview({
                       setDeletingFileName(null);
                     }
                   }}
-                  className="rounded-md border border-red-100 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-600 disabled:cursor-not-allowed disabled:text-stone-300"
+                  className="rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300 disabled:hover:border-stone-100 disabled:hover:bg-white"
                   disabled={disabled || deletingFileName === stored.fileName}
                 >
                   {deletingFileName === stored.fileName ? t('saving') : t('delete')}

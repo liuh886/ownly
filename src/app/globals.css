@@ -3,6 +3,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Shadow tokens — warm, lightweight */
+  --shadow-card: 0 1px 2px 0 rgb(28 25 23 / 0.04);
+  --shadow-elevated: 0 1px 3px 0 rgb(28 25 23 / 0.06), 0 1px 2px -1px rgb(28 25 23 / 0.04);
+  --shadow-dropdown: 0 4px 24px -4px rgb(28 25 23 / 0.12), 0 2px 8px -2px rgb(28 25 23 / 0.06);
 }
 
 @theme inline {
@@ -23,6 +28,14 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgb(28 25 23 / 0.08);
+  color: inherit;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -76,4 +89,22 @@ body {
     border-color: #3f3f46;
     color: #f5f5f4;
   }
+}
+
+/* Premium border softening — cards feel less "outlined", more "carved" */
+.wyqd-web-shell .border-stone-200 {
+  border-color: rgb(214 211 208 / 0.55);
+}
+
+.wyqd-web-shell .border-stone-300 {
+  border-color: rgb(214 211 208 / 0.8);
+}
+
+/* Premium shadow upgrade — warmer, lighter */
+.wyqd-web-shell .shadow-sm {
+  box-shadow: var(--shadow-card);
+}
+
+.wyqd-web-shell .shadow-lg {
+  box-shadow: var(--shadow-dropdown);
 }

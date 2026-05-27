@@ -83,7 +83,7 @@ export function ReviewHome({
   const reviewFormRef = useRef<HTMLFormElement>(null);
   const reviewDetailRef = useRef<HTMLElement>(null);
   const fieldClass =
-    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
+    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
   const exitedItems = objects.filter((object) =>
     ['idle', 'transferred', 'discarded', 'paused', 'cancelled', 'completed', 'reviewed'].includes(
       object.status,
@@ -313,11 +313,11 @@ export function ReviewHome({
   }
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-5">
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold text-stone-950">{t('reviewConsole')}</h2>
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('reviewConsole')}</h2>
             <p className="mt-1 text-sm text-stone-500">
               {t('reviewConsoleDesc')}
             </p>
@@ -360,9 +360,9 @@ export function ReviewHome({
           </div>
         </div>
 
-        <div className="mt-5 border-t border-stone-100 pt-4">
+        <div className="mt-5 border-t border-stone-100 pt-5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-stone-950">{t('reviewQueue')}</h3>
+            <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('reviewQueue')}</h3>
             <span className="text-xs text-stone-400">
               {t('exitedCompletedObjects').replace('{count}', String(exitedItems.length))}
             </span>
@@ -398,9 +398,9 @@ export function ReviewHome({
 
       <div className="grid gap-3 lg:grid-cols-3">
         {rankingBoards.map((board) => (
-          <section key={board.key} className="rounded-xl border border-stone-200 bg-white p-4">
+          <section key={board.key} className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-stone-950">
+              <h2 className="text-sm font-semibold tracking-tight text-stone-950">
                 {board.label}{rankingBoardSuffix}
               </h2>
               <span className="text-xs text-stone-400">Top {board.entries.length}</span>
@@ -436,9 +436,9 @@ export function ReviewHome({
         ))}
       </div>
 
-      <form ref={reviewFormRef} onSubmit={handleSubmit} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm shadow-stone-200/40 sm:p-5">
+      <form ref={reviewFormRef} onSubmit={handleSubmit} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="mb-4">
-          <h2 className="text-base font-semibold text-stone-950">
+          <h2 className="text-base font-semibold tracking-tight text-stone-950">
             {editingFileName ? t('editReview') : reviewingExperienceId ? t('experienceReview') : t('reviewShorthand')}
           </h2>
           <p className="mt-1 text-xs leading-5 text-stone-500">
@@ -529,7 +529,7 @@ export function ReviewHome({
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-stone-950">{t('seeWorld')}</h2>
+          <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('seeWorld')}</h2>
           <span className="text-xs text-stone-400">{t('seeWorldDesc')}</span>
         </div>
         <div className="mt-3 space-y-3">
@@ -571,7 +571,7 @@ export function ReviewHome({
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-stone-950">{t('reviewHistory')}</h2>
+          <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('reviewHistory')}</h2>
           <span className="text-xs text-stone-400">
             {filteredReviews.length}/{latestReviews.length}
           </span>
@@ -671,7 +671,7 @@ export function ReviewHome({
                         setDeletingFileName(null);
                       }
                     }}
-                    className="rounded-md border border-red-100 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-600 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300 disabled:hover:border-stone-100"
+                    className="rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300 disabled:hover:border-stone-100 disabled:hover:bg-white"
                     disabled={disabled || deletingFileName === stored.fileName}
                   >
                     {deletingFileName === stored.fileName ? t('saving') : t('delete')}
@@ -684,7 +684,7 @@ export function ReviewHome({
             ) : null}
           </div>
 
-          <aside ref={reviewDetailRef} className="rounded-lg border border-stone-100 bg-stone-50 p-4">
+          <aside ref={reviewDetailRef} className="rounded-xl border border-stone-200 bg-stone-50/50 p-5">
             {selectedReview ? (
               <div className="space-y-4">
                 <div>

@@ -457,7 +457,7 @@ export function ObjectComposer({
   const canSubmit =
     !disabled && title.trim() && amount.trim() && Number(amount) >= 0 && isBillingDayValid && !isSaving;
   const fieldClass =
-    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
+    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
 
   function applyQuickLineToForm(next: string) {
     applyQuickLine(next, {
@@ -559,7 +559,7 @@ export function ObjectComposer({
     <form
       onKeyDown={handleKeyDown}
       onSubmit={handleSubmit}
-      className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm shadow-stone-200/40 sm:p-5"
+      className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="min-w-0">
