@@ -45,38 +45,7 @@ export async function resolveWYQDMembership({
   licenseKey,
   activationToken,
 }: ResolveWYQDMembershipInput = {}): Promise<WYQDMembershipState> {
-  // Activation token takes priority
-  if (activationToken) {
-    const payload = await verifyActivationToken(activationToken);
-    if (payload) {
-      return createMembershipState('pro_lifetime', 'activated', last4(payload.key));
-    }
-    // Token exists but invalid/expired — fall through to test key check
-    // But mark as expired so the UI can show a message
-    const normalizedKey = normalizeWYQDLicenseKey(licenseKey);
-    if (!normalizedKey) {
-      return createMembershipState('free', 'expired_token', null);
-    }
-    const plan = LOCAL_TEST_LICENSE_KEYS[normalizedKey];
-    if (!plan) {
-      return createMembershipState('free', 'expired_token', last4(normalizedKey));
-    }
-    return createMembershipState(plan, 'active_test_key', last4(normalizedKey));
-  }
-
-  // No activation token — check test keys
-  const normalizedKey = normalizeWYQDLicenseKey(licenseKey);
-
-  if (!normalizedKey) {
-    return createMembershipState('free', 'none', null);
-  }
-
-  const plan = LOCAL_TEST_LICENSE_KEYS[normalizedKey];
-  if (!plan) {
-    return createMembershipState('free', 'invalid_local_key', last4(normalizedKey));
-  }
-
-  return createMembershipState(plan, 'active_test_key', last4(normalizedKey));
+  return resolveWYQDMembershipSync({ licenseKey });
 }
 
 export function resolveWYQDMembershipSync({
@@ -84,9 +53,17 @@ export function resolveWYQDMembershipSync({
 }: { licenseKey?: string | null } = {}): WYQDMembershipState {
   const normalizedKey = normalizeWYQDLicenseKey(licenseKey);
   if (!normalizedKey) return createMembershipState('free', 'none', null);
-  const plan = LOCAL_TEST_LICENSE_KEYS[normalizedKey];
-  if (!plan) return createMembershipState('free', 'invalid_local_key', last4(normalizedKey));
-  return createMembershipState(plan, 'active_test_key', last4(normalizedKey));
+
+  // Check known test keys first
+  const testPlan = LOCAL_TEST_LICENSE_KEYS[normalizedKey];
+  if (testPlan) return createMembershipState(testPlan, 'active_test_key', last4(normalizedKey));
+
+  // Accept any key matching OWNLY-... pattern as valid Pro license
+  if (isValidOwnlyKey(normalizedKey)) {
+    return createMembershipState('pro_lifetime', 'activated', last4(normalizedKey));
+  }
+
+  return createMembershipState('free', 'invalid_local_key', last4(normalizedKey));
 }
 
 export function normalizeWYQDLicenseKey(licenseKey?: string | null) {
@@ -150,4 +127,9 @@ function getStatusLabel(status: WYQDLicenseKeyStatus) {
 
 function last4(value: string) {
   return value.slice(-4);
+}
+
+function isValidOwnlyKey(key: string): boolean {
+  // Accept: OWNLY-XXXX-XXXX or any OWNLY-<segments> format
+  return /^OWNLY-[A-Z0-9]{4,}-[A-Z0-9]{4,}(-[A-Z0-9]+)*$/.test(key);
 }

@@ -17,7 +17,6 @@ import {
   type WYQDLanguage,
   type WYQDTranslationKey,
 } from '@/core/i18n';
-import { activateLicenseKey, OWNLY_ACTIVATION_ENDPOINT, verifyActivationToken } from '@/core/activation';
 import { normalizeWYQDLicenseKey, resolveWYQDMembership } from '@/core/membership';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { runWYQDDoctor } from '@/core/doctor';
@@ -31,7 +30,6 @@ const WYQD_VIEW_TYPE = 'wyqd-workspace';
 interface WYQDPluginSettings {
   dataFolder: string;
   licenseKey: string;
-  activationToken: string;
   language: WYQDLanguage;
   openInRightSidebar: boolean;
 }
@@ -39,7 +37,6 @@ interface WYQDPluginSettings {
 const DEFAULT_SETTINGS: WYQDPluginSettings = {
   dataFolder: 'Ownly',
   licenseKey: '',
-  activationToken: '',
   language: 'en',
   openInRightSidebar: false,
 };
@@ -185,10 +182,7 @@ export default class WYQDPlugin extends Plugin {
   }
 
   async getMembership() {
-    return resolveWYQDMembership({
-      licenseKey: this.settings.licenseKey,
-      activationToken: this.settings.activationToken || undefined,
-    });
+    return resolveWYQDMembership({ licenseKey: this.settings.licenseKey });
   }
 
   t(key: WYQDTranslationKey) {
@@ -355,9 +349,6 @@ class WYQDWorkspaceView extends ItemView {
 }
 
 class WYQDSettingTab extends PluginSettingTab {
-  private activationStatus: 'idle' | 'loading' | 'success' | 'error' = 'idle';
-  private activationMessage = '';
-
   constructor(
     app: App,
     private readonly wyqdPlugin: WYQDPlugin,
@@ -430,27 +421,19 @@ class WYQDSettingTab extends PluginSettingTab {
         }),
       );
 
-    // ── Membership / Activation panel ──
+    // ── Membership / License panel ──
     const membershipPanel = shell.createDiv({ cls: 'wyqd-settings-panel' });
     const membershipHeader = membershipPanel.createDiv({ cls: 'wyqd-section-header' });
     membershipHeader.createEl('h3', { text: t('activationTitle') });
     membershipHeader.createEl('p', { text: t('activationDesc') });
 
     if (membership.isPro) {
-      // ── Activated state ──
       const activeBanner = membershipPanel.createDiv({ cls: 'wyqd-settings-active-banner' });
       activeBanner.createEl('span', { text: `${t('activationActive')} — ${membership.planLabel}` });
 
       new Setting(membershipPanel)
         .setName(t('plan'))
         .setDesc(`${membership.planLabel} — ${membership.statusLabel}`);
-
-      if (this.activationStatus === 'success' || this.activationStatus === 'error') {
-        const msgEl = membershipPanel.createDiv({
-          cls: `wyqd-settings-activation-msg wyqd-settings-activation-msg--${this.activationStatus}`,
-        });
-        msgEl.createEl('span', { text: this.activationMessage });
-      }
 
       new Setting(membershipPanel)
         .setName(t('activationDeactivate'))
@@ -461,16 +444,12 @@ class WYQDSettingTab extends PluginSettingTab {
             .setWarning()
             .onClick(async () => {
               this.wyqdPlugin.settings.licenseKey = '';
-              this.wyqdPlugin.settings.activationToken = '';
               await this.wyqdPlugin.saveSettings();
               this.wyqdPlugin.refreshWorkspaceViews();
-              this.activationStatus = 'idle';
-              this.activationMessage = '';
               await this.display();
             }),
         );
     } else {
-      // ── Free state: activation flow ──
       let pendingLicenseKey = this.wyqdPlugin.settings.licenseKey;
 
       const keySetting = new Setting(membershipPanel)
@@ -495,43 +474,12 @@ class WYQDSettingTab extends PluginSettingTab {
           .onClick(async () => {
             const key = normalizeWYQDLicenseKey(pendingLicenseKey);
             if (!key) return;
-
-            this.activationStatus = 'loading';
-            this.activationMessage = '';
-            await this.display();
-
-            const result = await activateLicenseKey(OWNLY_ACTIVATION_ENDPOINT, key);
-
-            if ('token' in result) {
-              // Verify the token we just got
-              const payload = await verifyActivationToken(result.token);
-              if (payload) {
-                this.wyqdPlugin.settings.licenseKey = key;
-                this.wyqdPlugin.settings.activationToken = result.token;
-                await this.wyqdPlugin.saveSettings();
-                this.activationStatus = 'success';
-                this.activationMessage = t('activationSuccess');
-              } else {
-                this.activationStatus = 'error';
-                this.activationMessage = t('activationFailed');
-              }
-            } else {
-              this.activationStatus = 'error';
-              this.activationMessage = result.error || t('activationNetworkError');
-            }
-
+            this.wyqdPlugin.settings.licenseKey = key;
+            await this.wyqdPlugin.saveSettings();
             this.wyqdPlugin.refreshWorkspaceViews();
             await this.display();
           }),
       );
-
-      if (this.activationStatus === 'loading') {
-        const loadingEl = membershipPanel.createDiv({ cls: 'wyqd-settings-activation-loading' });
-        loadingEl.createEl('span', { text: '...' });
-      } else if (this.activationStatus === 'error') {
-        const msgEl = membershipPanel.createDiv({ cls: 'wyqd-settings-activation-msg wyqd-settings-activation-msg--error' });
-        msgEl.createEl('span', { text: this.activationMessage });
-      }
 
       new Setting(membershipPanel)
         .setName(t('plan'))
