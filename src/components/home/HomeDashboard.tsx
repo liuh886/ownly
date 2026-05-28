@@ -252,18 +252,18 @@ function InsightCard({
 }) {
   const content = (
     <>
-      <div className="wyqd-card-insight__label">{label}</div>
-      <div className="wyqd-card-insight__title">{title}</div>
-      <div className="wyqd-card-insight__footer">
-        <span className="wyqd-card-insight__value">{value}</span>
-        <span className="wyqd-card-insight__detail">{detail}</span>
+      <div className="text-xs font-medium text-stone-500">{label}</div>
+      <div className="mt-2 min-h-10 text-sm font-semibold leading-snug text-stone-950">{title}</div>
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <span className="font-mono text-lg font-semibold tracking-tight text-stone-950">{value}</span>
+        <span className="text-right text-xs text-stone-500">{detail}</span>
       </div>
     </>
   );
 
   if (!onSelect) {
     return (
-      <div className="wyqd-card-insight">
+      <div className="wyqd-card-insight rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         {content}
       </div>
     );
@@ -273,7 +273,7 @@ function InsightCard({
     <button
       type="button"
       onClick={onSelect}
-      className="wyqd-card-insight wyqd-card-insight--clickable"
+      className="wyqd-card-insight wyqd-card-insight--clickable rounded-xl border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-stone-300/70 hover:bg-stone-50/60"
     >
       {content}
     </button>
@@ -295,21 +295,21 @@ function ActionCard({
     <button
       type="button"
       onClick={onSelect}
-      className="wyqd-card-action group"
+      className="wyqd-card-action group rounded-xl border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-stone-300/70 hover:bg-stone-50/60"
     >
-      <div className="wyqd-card-action__header">
-        <span className="wyqd-card-action__badge">
+      <div className="flex items-center justify-between gap-3">
+        <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
           {label}
         </span>
         <span
-          className="wyqd-card-action__arrow"
+          className="text-sm text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-stone-700"
           aria-hidden="true"
         >
           →
         </span>
       </div>
-      <div className="wyqd-card-action__title">{title}</div>
-      <div className="wyqd-card-action__desc">{detail}</div>
+      <div className="mt-4 text-base font-semibold leading-snug text-stone-950">{title}</div>
+      <div className="mt-1 text-xs leading-5 text-stone-500">{detail}</div>
     </button>
   );
 }
@@ -357,12 +357,12 @@ export function HomeDashboard({
       className="space-y-5"
     >
       <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
-        <div className="wyqd-card-action wyqd-card-action--dark">
-          <div className="wyqd-card-action__label">{t('todayActions')}</div>
-          <div className="wyqd-card-action__count">
+        <div className="wyqd-card-action wyqd-card-action--dark rounded-xl bg-stone-200 p-5 text-left">
+          <div className="wyqd-card-action__label text-xs font-medium text-stone-500">{t('todayActions')}</div>
+          <div className="wyqd-card-action__count mt-3 font-mono text-3xl font-semibold text-stone-950">
             {actionCount}
           </div>
-          <div className="wyqd-card-action__hint">
+          <div className="wyqd-card-action__hint mt-1 text-xs text-stone-500">
             {t('todayActionsDesc')}
           </div>
         </div>
@@ -510,18 +510,18 @@ export function HomeDashboard({
               key={object.id}
               type="button"
               onClick={() => onOpenObjects({ typeFilter: 'recurring_cost', statusGroupFilter: 'using' })}
-              className="wyqd-card-watchlist group"
+              className="wyqd-card-watchlist group relative flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition hover:border-stone-300"
             >
-              <div className="wyqd-card-watchlist__main">
-                <div className="wyqd-card-watchlist__title-row">
-                  <span className="wyqd-card-watchlist__dot wyqd-card-watchlist__dot--amber" />
-                  <div className="wyqd-card-watchlist__title">{object.title}</div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  <div className="text-sm font-semibold text-stone-950">{object.title}</div>
                 </div>
-                <div className="wyqd-card-watchlist__meta">
+                <div className="mt-1 text-xs text-stone-500">
                   {t('nextBilling').replace('{date}', nextBillingDate)} · {formatDueLabel(nextBillingDate, t)}
                 </div>
               </div>
-              <div className="wyqd-card-watchlist__amount">
+              <div className="shrink-0 font-mono text-xs font-semibold text-stone-950">
                 {formatCompactMoney(object.billing_amount || 0)}
               </div>
             </button>
@@ -531,16 +531,16 @@ export function HomeDashboard({
               key={object.id}
               type="button"
               onClick={() => onOpenObjects({ typeFilter: 'one_time_experience', statusGroupFilter: 'exited' })}
-              className="wyqd-card-watchlist group"
+              className="wyqd-card-watchlist group relative flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition hover:border-stone-300"
             >
-              <div className="wyqd-card-watchlist__main">
-                <div className="wyqd-card-watchlist__title-row">
-                  <span className="wyqd-card-watchlist__dot wyqd-card-watchlist__dot--green" />
-                  <div className="wyqd-card-watchlist__title">{object.title}</div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <div className="text-sm font-semibold text-stone-950">{object.title}</div>
                 </div>
-                <div className="wyqd-card-watchlist__meta">{t('pendingReviewBadge')}</div>
+                <div className="mt-1 text-xs text-stone-500">{t('pendingReviewBadge')}</div>
               </div>
-              <div className="wyqd-card-watchlist__action">{t('reviewAction')}</div>
+              <div className="shrink-0 rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-xs font-medium text-stone-600">{t('reviewAction')}</div>
             </button>
           ))}
           {upcomingRecurringCosts.length === 0 && pendingExperienceReviews.length === 0 ? (

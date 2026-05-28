@@ -420,6 +420,11 @@ export function AppShell() {
                 />
                 {isConnected ? t('vaultConnected') : isLoading ? t('connecting') : t('demoMode')}
               </span>
+              {membership.isPro ? (
+                <span className="rounded-full bg-stone-950 px-2.5 py-1 text-[11px] font-semibold text-white">
+                  PRO
+                </span>
+              ) : null}
               {(() => {
                 const objCap = checkWYQDCapacity(membership, 'objects', storedObjects.length);
                 const snapCap = checkWYQDCapacity(membership, 'snapshots', storedSnapshots.length);
@@ -519,6 +524,7 @@ export function AppShell() {
                 disabled={!isConnected}
                 objects={objects}
                 reviews={storedReviews}
+                membership={membership}
                 onCreateReview={createReview}
                 onUpdateReview={updateReview}
                 onDeleteReview={deleteReview}

@@ -13,9 +13,9 @@ The product direction is Obsidian plugin first, while the Web App remains suppor
 
 ## Version
 
-Current target: `0.2.3`
+Current target: `0.2.4`
 
-`0.2.3` is an alpha refinement line for the native Obsidian workspace, shared Web-compatible runtime, and premium visual polish. It should not be described as a mature product yet.
+`0.2.4` is an alpha refinement line for the native Obsidian workspace, shared Web-compatible runtime, premium visual polish, and the first Pro travel insight surface. It should not be described as a mature product yet.
 
 License: MIT.
 

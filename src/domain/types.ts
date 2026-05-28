@@ -106,6 +106,9 @@ export interface OneTimeExperienceObject extends BaseWYQDObject {
     country?: string;
     region?: string;
     city?: string;
+    country_code?: string;
+    latitude?: number;
+    longitude?: number;
   };
   budget_total?: number;
   actual_total?: number;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4-alpha
+
+- Added the first Pro travel insight surface with shared Web/Obsidian React components.
+- Added structured travel location fields, sample travel data, lightweight local map rendering, travel statistics, and timeline.
+- Kept the Pro gate local-first through the existing membership state while preserving Free access to base travel records.
+
 ## 0.2.3-alpha
 
 - Refined Ownly's visual system toward a quieter, more premium Obsidian-native workspace.

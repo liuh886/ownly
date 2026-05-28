@@ -4,7 +4,7 @@ This document tracks the gap between the current local-first MVP+ and a mature O
 
 ## Current Release Stage
 
-Status: 0.2.3 Private Alpha (Obsidian plugin first, Web compatible).
+Status: 0.2.4 Private Alpha (Obsidian plugin first, Web compatible).
 
 Ownly is no longer a throwaway prototype, but it is currently positioned as a **Private Alpha**, not a stable release. It has a working information architecture, Markdown data model, Web UI, Obsidian plugin shell, Agent CLI, PM2/static deployment path, and documented product intent. It is suitable for 1-3 internal users to evaluate the "Alpha risk" profile.
 

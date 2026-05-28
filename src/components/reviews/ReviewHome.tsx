@@ -5,7 +5,9 @@ import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { ReviewEntry, WYQDObject, WYQDObjectType } from '@/domain/types';
 import type { WYQDStoredEntity } from '@/core/repository';
+import type { WYQDMembershipState } from '@/core/membership';
 import { formatMoney, parseRank, todayISO } from '@/lib/format';
+import { TravelInsightsPanel } from '@/components/travel/TravelInsightsPanel';
 
 function getExperienceAmount(object: WYQDObject): number {
   if (object.object_type !== 'one_time_experience') return 0;
@@ -55,6 +57,7 @@ export function ReviewHome({
   disabled,
   objects,
   reviews,
+  membership,
   onCreateReview,
   onUpdateReview,
   onDeleteReview,
@@ -62,6 +65,7 @@ export function ReviewHome({
   disabled?: boolean;
   objects: WYQDObject[];
   reviews: WYQDStoredEntity<ReviewEntry>[];
+  membership: WYQDMembershipState;
   onCreateReview: (review: ReviewEntry, body: string) => Promise<void>;
   onUpdateReview: (fileName: string, review: ReviewEntry, body: string) => Promise<void>;
   onDeleteReview: (fileName: string) => Promise<void>;
@@ -526,6 +530,12 @@ export function ReviewHome({
           </div>
         </div>
       </form>
+
+      <TravelInsightsPanel
+        objects={objects}
+        reviews={reviews.map((r) => r.entity)}
+        membership={membership}
+      />
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">

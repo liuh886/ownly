@@ -71,6 +71,10 @@ function getQuickLineTemplates(t: (key: WYQDTranslationKey) => string): Array<{ 
       label: t('experienceTemplate'),
       value: '香港周末旅行 / experience / 3000 / 2680 / 2026-05-18 / 旅行 / 已完成',
     },
+    {
+      label: t('travelSubtype'),
+      value: '东京 / travel / 18000 / 16500 / 2026-05-10 / 旅行 / 已完成 / JP / 35.6762 / 139.6503',
+    },
   ];
 }
 
@@ -217,6 +221,10 @@ function applyQuickLine(
     setExperienceStatus: (next: OneTimeExperienceStatus) => void;
     setActualAmount: (next: string) => void;
     setObjectType: (next: WYQDObjectType) => void;
+    setExperienceSubtype?: (next: string) => void;
+    setLocationCountryCode?: (next: string) => void;
+    setLocationLatitude?: (next: string) => void;
+    setLocationLongitude?: (next: string) => void;
   },
 ) {
   const parts = value
@@ -245,7 +253,7 @@ function applyQuickLine(
   }
 
   if (parsedType === 'one_time_experience') {
-    const [name, , budget, actual, endedAt, maybeCategory, status] = parts;
+    const [name, typeOrSubtype, budget, actual, endedAt, maybeCategory, status, countryCode, lat, lng] = parts;
     setters.setObjectType('one_time_experience');
     if (name) setters.setTitle(name);
     if (budget && /^\d+(\.\d+)?$/.test(budget)) setters.setAmount(budget);
@@ -254,6 +262,16 @@ function applyQuickLine(
     if (maybeCategory) setters.setCategory(maybeCategory);
     const parsedStatus = parseExperienceStatus(status || '');
     if (parsedStatus) setters.setExperienceStatus(parsedStatus);
+    const subtypeKeywords = ['travel', '旅行', '旅行体验', 'travel_worldview'];
+    if (
+      subtypeKeywords.includes((typeOrSubtype || '').toLowerCase()) ||
+      subtypeKeywords.includes((maybeCategory || '').toLowerCase())
+    ) {
+      setters.setExperienceSubtype?.('travel_worldview');
+    }
+    if (countryCode) setters.setLocationCountryCode?.(countryCode);
+    if (lat && /^-?\d+(\.\d+)?$/.test(lat)) setters.setLocationLatitude?.(lat);
+    if (lng && /^-?\d+(\.\d+)?$/.test(lng)) setters.setLocationLongitude?.(lng);
     return;
   }
 
@@ -292,6 +310,8 @@ function createObjectDraft({
   experienceStatus,
   actualAmount,
   salePrice,
+  experienceSubtype,
+  location,
 }: {
   title: string;
   objectType: WYQDObjectType;
@@ -308,6 +328,8 @@ function createObjectDraft({
   experienceStatus?: OneTimeExperienceStatus;
   actualAmount?: number;
   salePrice?: number;
+  experienceSubtype?: string;
+  location?: { country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number };
 }): WYQDObject {
   const today = new Date().toISOString().split('T')[0];
   const id = `obj_${today.replaceAll('-', '')}_${Date.now()}`;
@@ -370,9 +392,18 @@ function createObjectDraft({
     ...base,
     object_type: 'one_time_experience',
     status: experienceStatus || 'planned',
+    experience_subtype: experienceSubtype || undefined,
     budget_total: amount,
     actual_total: actualAmount,
     ended_at: endedAt || undefined,
+    location: location && (
+      location.country ||
+      location.region ||
+      location.city ||
+      location.country_code ||
+      location.latitude != null ||
+      location.longitude != null
+    ) ? location : undefined,
   };
 }
 
@@ -448,6 +479,29 @@ export function ObjectComposer({
   );
   const [quickLine, setQuickLine] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [experienceSubtype, setExperienceSubtype] = useState(
+    initialObject?.object_type === 'one_time_experience' ? initialObject.experience_subtype || '' : '',
+  );
+  const [locationCountry, setLocationCountry] = useState(
+    initialObject?.object_type === 'one_time_experience' ? initialObject.location?.country || '' : '',
+  );
+  const [locationRegion, setLocationRegion] = useState(
+    initialObject?.object_type === 'one_time_experience' ? initialObject.location?.region || '' : '',
+  );
+  const [locationCity, setLocationCity] = useState(
+    initialObject?.object_type === 'one_time_experience' ? initialObject.location?.city || '' : '',
+  );
+  const [locationCountryCode, setLocationCountryCode] = useState(
+    initialObject?.object_type === 'one_time_experience' ? initialObject.location?.country_code || '' : '',
+  );
+  const [locationLatitude, setLocationLatitude] = useState(
+    initialObject?.object_type === 'one_time_experience' && initialObject.location?.latitude != null
+      ? String(initialObject.location.latitude) : '',
+  );
+  const [locationLongitude, setLocationLongitude] = useState(
+    initialObject?.object_type === 'one_time_experience' && initialObject.location?.longitude != null
+      ? String(initialObject.location.longitude) : '',
+  );
 
   const parsedBillingDay = Number(billingDay);
   const isBillingDayValid =
@@ -475,6 +529,10 @@ export function ObjectComposer({
       setExperienceStatus,
       setActualAmount,
       setObjectType,
+      setExperienceSubtype,
+      setLocationCountryCode,
+      setLocationLatitude,
+      setLocationLongitude,
     });
   }
 
@@ -497,6 +555,16 @@ export function ObjectComposer({
 
     setIsSaving(true);
     try {
+      const travelLocation = (locationCountry || locationRegion || locationCity || locationCountryCode || locationLatitude || locationLongitude)
+        ? {
+            country: locationCountry || undefined,
+            region: locationRegion || undefined,
+            city: locationCity || undefined,
+            country_code: locationCountryCode || undefined,
+            latitude: locationLatitude ? Number(locationLatitude) : undefined,
+            longitude: locationLongitude ? Number(locationLongitude) : undefined,
+          }
+        : undefined;
       const object = initialObject
         ? updateObjectDraft(initialObject, {
             title: title.trim(),
@@ -514,6 +582,8 @@ export function ObjectComposer({
             experienceStatus,
             actualAmount: actualAmount.trim() ? Number(actualAmount) : undefined,
             salePrice: salePrice.trim() ? Number(salePrice) : undefined,
+            experienceSubtype: experienceSubtype || undefined,
+            location: travelLocation,
           })
         : createObjectDraft({
             title: title.trim(),
@@ -531,6 +601,8 @@ export function ObjectComposer({
             experienceStatus,
             actualAmount: actualAmount.trim() ? Number(actualAmount) : undefined,
             salePrice: salePrice.trim() ? Number(salePrice) : undefined,
+            experienceSubtype: experienceSubtype || undefined,
+            location: travelLocation,
           });
       await onSubmit(object, '## 购买理由\n\n## 使用记录\n\n## 复盘与排行\n');
       if (!initialObject) {
@@ -548,6 +620,13 @@ export function ObjectComposer({
         setExperienceStatus('planned');
         setActualAmount('');
         setObjectType('physical');
+        setExperienceSubtype('');
+        setLocationCountry('');
+        setLocationRegion('');
+        setLocationCity('');
+        setLocationCountryCode('');
+        setLocationLatitude('');
+        setLocationLongitude('');
         setQuickLine('');
       }
     } finally {
@@ -850,6 +929,87 @@ export function ObjectComposer({
                 ))}
               </select>
             </label>
+            <label className="block min-w-0">
+              <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelSubtype')}</span>
+              <select
+                value={experienceSubtype}
+                onChange={(event) => setExperienceSubtype(event.target.value)}
+                className={fieldClass}
+                disabled={disabled || isSaving}
+              >
+                <option value="">{t('typeExperience')}</option>
+                <option value="travel_worldview">{t('travelSubtype')}</option>
+              </select>
+            </label>
+            {experienceSubtype === 'travel_worldview' ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block min-w-0">
+                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelCountry')}</span>
+                  <input
+                    value={locationCountry}
+                    onChange={(event) => setLocationCountry(event.target.value)}
+                    placeholder="Japan"
+                    className={fieldClass}
+                    disabled={disabled || isSaving}
+                  />
+                </label>
+                <label className="block min-w-0">
+                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelCity')}</span>
+                  <input
+                    value={locationCity}
+                    onChange={(event) => setLocationCity(event.target.value)}
+                    placeholder="Tokyo"
+                    className={fieldClass}
+                    disabled={disabled || isSaving}
+                  />
+                </label>
+                <label className="block min-w-0">
+                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelRegion')}</span>
+                  <input
+                    value={locationRegion}
+                    onChange={(event) => setLocationRegion(event.target.value)}
+                    placeholder={t('optional')}
+                    className={fieldClass}
+                    disabled={disabled || isSaving}
+                  />
+                </label>
+                <label className="block min-w-0">
+                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelCountryCode')}</span>
+                  <input
+                    value={locationCountryCode}
+                    onChange={(event) => setLocationCountryCode(event.target.value.toUpperCase())}
+                    placeholder="JP"
+                    maxLength={2}
+                    className={fieldClass}
+                    disabled={disabled || isSaving}
+                  />
+                </label>
+                <label className="block min-w-0">
+                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelLatitude')}</span>
+                  <input
+                    value={locationLatitude}
+                    onChange={(event) => setLocationLatitude(event.target.value)}
+                    type="number"
+                    step="any"
+                    placeholder="35.6762"
+                    className={fieldClass}
+                    disabled={disabled || isSaving}
+                  />
+                </label>
+                <label className="block min-w-0">
+                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelLongitude')}</span>
+                  <input
+                    value={locationLongitude}
+                    onChange={(event) => setLocationLongitude(event.target.value)}
+                    type="number"
+                    step="any"
+                    placeholder="139.6503"
+                    className={fieldClass}
+                    disabled={disabled || isSaving}
+                  />
+                </label>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -895,6 +1055,8 @@ function updateObjectDraft(
     experienceStatus?: OneTimeExperienceStatus;
     actualAmount?: number;
     salePrice?: number;
+    experienceSubtype?: string;
+    location?: { country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number };
   },
 ): WYQDObject {
   const updatedAt = todayISO();
@@ -947,8 +1109,10 @@ function updateObjectDraft(
     updated_at: updatedAt,
     category: values.category || undefined,
     status: values.experienceStatus || existing.status,
+    experience_subtype: values.experienceSubtype || (existing as { experience_subtype?: string }).experience_subtype,
     budget_total: values.amount,
     actual_total: values.actualAmount,
     ended_at: values.endedAt || existing.ended_at,
+    location: values.location || (existing as { location?: typeof values.location }).location,
   };
 }
