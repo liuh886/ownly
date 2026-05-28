@@ -1,8 +1,24 @@
 'use client';
 
 import { useI18n } from '@/core/i18n-context';
-import { formatMoney } from '@/lib/format';
+import type { WYQDTranslationKey } from '@/core/i18n';
+import { useFormatMoney } from '@/lib/use-format';
 import type { OneTimeExperienceObject, ReviewEntry } from '@/domain/types';
+
+function getStatusBadge(status: string, t: (key: WYQDTranslationKey) => string): { label: string; className: string } {
+  switch (status) {
+    case 'planned':
+      return { label: t('statusPlanned'), className: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' };
+    case 'in_progress':
+      return { label: t('statusInProgress'), className: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' };
+    case 'completed':
+      return { label: t('statusCompleted'), className: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' };
+    case 'reviewed':
+      return { label: t('statusReviewed'), className: 'bg-stone-100 text-stone-600 ring-1 ring-stone-200' };
+    default:
+      return { label: status, className: 'bg-stone-100 text-stone-500 ring-1 ring-stone-200' };
+  }
+}
 
 export function TravelTimeline({
   experiences,
@@ -12,6 +28,7 @@ export function TravelTimeline({
   reviews: ReviewEntry[];
 }) {
   const { t } = useI18n();
+  const { formatMoney } = useFormatMoney();
 
   const sorted = [...experiences].sort((a, b) => {
     const dateA = a.ended_at || a.started_at || a.created_at || '';
@@ -33,6 +50,7 @@ export function TravelTimeline({
           const location = [exp.location?.city, exp.location?.country].filter(Boolean).join(', ');
           const date = exp.ended_at || exp.started_at || '';
           const amount = exp.actual_total || exp.budget_total || 0;
+          const badge = getStatusBadge(exp.status, t);
 
           return (
             <div
@@ -40,7 +58,12 @@ export function TravelTimeline({
               className="wyqd-travel-timeline-entry flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white px-3 py-3"
             >
               <div className="min-w-0">
-                <div className="text-sm font-medium text-stone-950 truncate">{exp.title}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-stone-950 truncate">{exp.title}</span>
+                  <span className={`wyqd-status-badge wyqd-status-badge--${exp.status} shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                </div>
                 <div className="flex items-center gap-2 text-xs text-stone-400">
                   {location ? <span>{location}</span> : null}
                   {date ? <span>{date}</span> : null}

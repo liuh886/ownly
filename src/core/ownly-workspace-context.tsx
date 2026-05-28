@@ -16,6 +16,11 @@ export interface OwnlyWorkspaceContextValue {
   notice: string | null;
   showNotice: (msg: string) => void;
   membership: WYQDMembershipState;
+  activateLicenseKey: (key: string) => void;
+  clearLicenseKey: () => void;
+  openLicenseModal: () => void;
+  closeLicenseModal: () => void;
+  licenseModalOpen: boolean;
 }
 
 const OwnlyWorkspaceContext = createContext<OwnlyWorkspaceContextValue | null>(null);

@@ -28,9 +28,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/obsidian/wyqd/main.js
-            dist/obsidian/wyqd/styles.css
-            dist/obsidian/wyqd/manifest.json
-            dist/obsidian/wyqd/versions.json
+            dist/obsidian/ownly/main.js
+            dist/obsidian/ownly/styles.css
+            dist/obsidian/ownly/manifest.json
+            dist/obsidian/ownly/versions.json
           draft: false
           generate_release_notes: true

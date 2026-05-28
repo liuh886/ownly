@@ -1,11 +1,12 @@
 'use client';
 
 import { useI18n } from '@/core/i18n-context';
-import { formatMoney } from '@/lib/format';
+import { useFormatMoney } from '@/lib/use-format';
 import type { TravelSummary } from '@/domain/travel';
 
 export function TravelStatsStrip({ summary }: { summary: TravelSummary }) {
   const { t } = useI18n();
+  const { formatMoney } = useFormatMoney();
 
   const stats = [
     { label: t('travelCountriesVisited'), value: String(summary.countriesVisited) },
@@ -15,6 +16,7 @@ export function TravelStatsStrip({ summary }: { summary: TravelSummary }) {
     { label: t('travelAvgFood'), value: formatRank(summary.avgFoodRank) },
     { label: t('travelAvgScenery'), value: formatRank(summary.avgSceneryRank) },
     { label: t('travelAvgExperience'), value: formatRank(summary.avgExperienceRank) },
+    { label: t('travelReviewed'), value: String(summary.reviewedCount) },
   ];
 
   return (

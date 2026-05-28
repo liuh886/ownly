@@ -35,6 +35,11 @@ export function ObsidianWorkspaceProvider({
             new Notice(msg);
           },
           membership,
+          activateLicenseKey: () => {},
+          clearLicenseKey: () => {},
+          openLicenseModal: () => {},
+          closeLicenseModal: () => {},
+          licenseModalOpen: false,
         }}
       >
         {children}

@@ -13,7 +13,8 @@ import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { useI18n } from '@/core/i18n-context';
 import { MetricCard } from './MetricCard';
-import { formatMoney, formatDailyMoney, formatCompactMoney, formatDelta, clampPercent, buildSparklinePoints, formatDueLabel } from '@/lib/format';
+import { clampPercent, buildSparklinePoints, formatDueLabel } from '@/lib/format';
+import { useFormatMoney } from '@/lib/use-format';
 
 const springTransition = {
   type: 'spring' as const,
@@ -263,7 +264,7 @@ function InsightCard({
 
   if (!onSelect) {
     return (
-      <div className="wyqd-card-insight rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+      <div className="wyqd-card-insight flex flex-col rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         {content}
       </div>
     );
@@ -273,7 +274,7 @@ function InsightCard({
     <button
       type="button"
       onClick={onSelect}
-      className="wyqd-card-insight wyqd-card-insight--clickable rounded-xl border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-stone-300/70 hover:bg-stone-50/60"
+      className="wyqd-card-insight wyqd-card-insight--clickable flex flex-col rounded-xl border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-stone-300/70 hover:bg-stone-50/60"
     >
       {content}
     </button>
@@ -295,7 +296,7 @@ function ActionCard({
     <button
       type="button"
       onClick={onSelect}
-      className="wyqd-card-action group rounded-xl border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-stone-300/70 hover:bg-stone-50/60"
+      className="wyqd-card-action group flex flex-col rounded-xl border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-stone-300/70 hover:bg-stone-50/60"
     >
       <div className="flex items-center justify-between gap-3">
         <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
@@ -309,7 +310,7 @@ function ActionCard({
         </span>
       </div>
       <div className="mt-4 text-base font-semibold leading-snug text-stone-950">{title}</div>
-      <div className="mt-1 text-xs leading-5 text-stone-500">{detail}</div>
+      <div className="mt-1 flex-1 text-xs leading-5 text-stone-500">{detail}</div>
     </button>
   );
 }
@@ -328,6 +329,7 @@ export function HomeDashboard({
   onNavigate: (tab: AppTab) => void;
 }) {
   const { t } = useI18n();
+  const { formatMoney, formatDailyMoney, formatCompactMoney, formatDelta } = useFormatMoney();
 
   const trendSnapshots = getSnapshotTrend(snapshots);
   const trendValues = trendSnapshots.map((snapshot) => snapshot.net_worth || 0);
@@ -356,8 +358,8 @@ export function HomeDashboard({
       animate="visible"
       className="space-y-5"
     >
-      <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
-        <div className="wyqd-card-action wyqd-card-action--dark rounded-xl bg-stone-200 p-5 text-left">
+      <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3 items-stretch">
+        <div className="wyqd-card-action wyqd-card-action--dark flex flex-col rounded-xl bg-stone-200 p-5 text-left">
           <div className="wyqd-card-action__label text-xs font-medium text-stone-500">{t('todayActions')}</div>
           <div className="wyqd-card-action__count mt-3 font-mono text-3xl font-semibold text-stone-950">
             {actionCount}
@@ -453,7 +455,7 @@ export function HomeDashboard({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
+        <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 items-start">
           <MetricCard
             label={t('monthlyFixedCostAvg')}
             value={formatMoney(metrics.monthlyFixedCost, t('noData'))}
@@ -465,7 +467,7 @@ export function HomeDashboard({
         </div>
       </motion.section>
 
-      <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
+      <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3 items-stretch">
         <InsightCard
           label={t('highestDailyCost')}
           title={highestDailyCost?.object.title || t('noCalculablePhysical')}
@@ -559,7 +561,7 @@ export function HomeDashboard({
             {t('objectsCount').replace('{count}', String(objects.length))}
           </span>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4 items-start">
           <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
             <div className="text-xs text-stone-500">{t('accountSnapshot')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{snapshots.length}</div>

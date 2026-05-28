@@ -107,6 +107,7 @@ export function AppShell() {
     notice,
     showNotice,
     membership,
+    openLicenseModal,
   } = useOwnlyWorkspace();
 
   const runtimeInfo = useMemo(() => createWYQDRuntimeInfo(runtimeTarget), [runtimeTarget]);
@@ -163,6 +164,7 @@ export function AppShell() {
     if (!cap.allowed) {
       const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
       showNotice(msg);
+      openLicenseModal();
       return;
     }
     try {
@@ -259,6 +261,7 @@ export function AppShell() {
     if (!cap.allowed) {
       const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
       showNotice(msg);
+      openLicenseModal();
       return;
     }
     try {
@@ -298,6 +301,7 @@ export function AppShell() {
     if (!cap.allowed) {
       const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
       showNotice(msg);
+      openLicenseModal();
       return;
     }
     try {
@@ -388,7 +392,16 @@ export function AppShell() {
         <header className="mb-8 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
           {/* Brand bar */}
           <div className="flex items-center gap-3 border-b border-stone-100 bg-gradient-to-r from-stone-50/80 to-stone-100/40 px-4 py-2.5 sm:px-5">
-            <span className="text-base font-bold tracking-tight text-stone-950">Ownly</span>
+            <span className="text-lg font-bold tracking-tight text-stone-950">Ownly</span>
+            {membership.isPro ? (
+              <button
+                type="button"
+                onClick={openLicenseModal}
+                className="rounded-full bg-stone-950 px-2 py-0.5 text-[10px] font-bold text-white transition hover:bg-stone-800"
+              >
+                PRO
+              </button>
+            ) : null}
             <span className="rounded-md bg-stone-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
               v{runtimeInfo.coreTargetVersion}
             </span>
@@ -420,11 +433,6 @@ export function AppShell() {
                 />
                 {isConnected ? t('vaultConnected') : isLoading ? t('connecting') : t('demoMode')}
               </span>
-              {membership.isPro ? (
-                <span className="rounded-full bg-stone-950 px-2.5 py-1 text-[11px] font-semibold text-white">
-                  PRO
-                </span>
-              ) : null}
               {(() => {
                 const objCap = checkWYQDCapacity(membership, 'objects', storedObjects.length);
                 const snapCap = checkWYQDCapacity(membership, 'snapshots', storedSnapshots.length);

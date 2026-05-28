@@ -2,20 +2,29 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { OwnlyWorkspaceProvider } from '@/core/ownly-workspace-context';
-import { resolveWYQDMembership, type WYQDMembershipState } from '@/core/membership';
+import { type WYQDMembershipState } from '@/core/membership';
 import { markdownEntityRepository } from '@/services/MarkdownEntityRepository';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
+
+const WEB_PRO_MEMBERSHIP: WYQDMembershipState = {
+  plan: 'pro_lifetime',
+  status: 'activated',
+  isPro: true,
+  licenseKeyLast4: null,
+  planLabel: 'Pro Lifetime',
+  statusLabel: 'Web always Pro',
+  upgradeMessage: 'Web runtime is always Pro.',
+};
 
 export function WebShell() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [membership] = useState<WYQDMembershipState>(() => {
-    if (typeof window === 'undefined') return resolveWYQDMembership();
-    return resolveWYQDMembership({ licenseKey: localStorage.getItem('wyqd_license_key') });
-  });
+  const [licenseModalOpen, setLicenseModalOpen] = useState(false);
+  const [membership] = useState<WYQDMembershipState>(WEB_PRO_MEMBERSHIP);
 
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
@@ -23,6 +32,17 @@ export function WebShell() {
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
+
+  const activateLicenseKey = useCallback(() => {
+    setLicenseModalOpen(false);
+  }, []);
+
+  const clearLicenseKey = useCallback(() => {
+    setLicenseModalOpen(false);
+  }, []);
+
+  const openLicenseModal = useCallback(() => setLicenseModalOpen(true), []);
+  const closeLicenseModal = useCallback(() => setLicenseModalOpen(false), []);
 
   const connect = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
@@ -83,9 +103,21 @@ export function WebShell() {
         notice,
         showNotice,
         membership,
+        activateLicenseKey,
+        clearLicenseKey,
+        openLicenseModal,
+        closeLicenseModal,
+        licenseModalOpen,
       }}
     >
       <AppShell />
+      <LicenseKeyModal
+        open={licenseModalOpen}
+        onClose={closeLicenseModal}
+        onActivate={activateLicenseKey}
+        onClear={clearLicenseKey}
+        currentPlan={membership.plan}
+      />
     </OwnlyWorkspaceProvider>
   );
 }

@@ -15,7 +15,8 @@ import {
   findLatestSnapshot,
 } from '@/domain/calculations';
 import type { WYQDStoredEntity } from '@/core/repository';
-import { formatMoney, formatCompactMoney, buildSparklinePoints, todayISO } from '@/lib/format';
+import { buildSparklinePoints, todayISO } from '@/lib/format';
+import { useFormatMoney } from '@/lib/use-format';
 
 function slugifyAccountName(input: string): string {
   return input
@@ -160,6 +161,7 @@ export function AccountsOverview({
   onDeleteSnapshot: (fileName: string) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const { formatMoney, formatCompactMoney } = useFormatMoney();
   const calculatedSnapshots = snapshots.map((stored) => ({
     ...stored,
     entity: calculateNetWorth(stored.entity),

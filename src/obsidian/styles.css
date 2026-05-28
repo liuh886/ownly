@@ -514,6 +514,42 @@
   border-bottom: 0;
 }
 
+.wyqd-settings-active-banner {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 8px;
+  color: #059669;
+  font-size: var(--font-ui-small);
+  font-weight: 500;
+  padding: 10px 14px;
+}
+
+.wyqd-settings-activation-loading {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  padding: 8px 0;
+}
+
+.wyqd-settings-activation-msg {
+  border-radius: 8px;
+  font-size: var(--font-ui-small);
+  font-weight: 500;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+}
+
+.wyqd-settings-activation-msg--success {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #059669;
+}
+
+.wyqd-settings-activation-msg--error {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #dc2626;
+}
+
 @media (max-width: 560px) {
   .wyqd-shell {
     padding: 12px;
@@ -579,6 +615,50 @@
   gap: 10px;
   justify-content: space-between;
   padding: 10px 12px;
+}
+
+/* License modal (web-only, styles for completeness) */
+.wyqd-license-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wyqd-license-modal-panel {
+  background: var(--background-primary);
+  border: 1px solid var(--wyqd-border);
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 400px;
+  width: 90%;
+}
+
+/* Status badges for travel timeline */
+.wyqd-status-badge {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  display: inline-block;
+}
+
+.wyqd-status-badge--planned {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+
+.wyqd-status-badge--completed {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.wyqd-status-badge--reviewed {
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
 }
 
 /* Obsidian runtime overrides — React mount point inherits Obsidian's font stack */

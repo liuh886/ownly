@@ -50,9 +50,7 @@ createServer((request, response) => {
   }
 
   response.writeHead(200, {
-    'Cache-Control': filePath.includes(`${sep}_next${sep}`)
-      ? 'public, max-age=31536000, immutable'
-      : 'no-cache',
+    'Cache-Control': 'no-cache',
     'Content-Type': mimeTypes[extname(filePath)] || 'application/octet-stream',
   });
   createReadStream(filePath).pipe(response);

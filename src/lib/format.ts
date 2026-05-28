@@ -2,27 +2,40 @@ import type { WYQDTranslationKey } from '@/core/i18n';
 
 type TranslateFn = (key: WYQDTranslationKey) => string;
 
-export function formatMoney(value: number | null | undefined, fallback?: string): string {
+export type WYQDCurrencyLocale = 'zh' | 'en';
+
+const CURRENCY_SYMBOLS: Record<WYQDCurrencyLocale, string> = {
+  zh: '¥',
+  en: '$',
+};
+
+const NUMBER_LOCALE: Record<WYQDCurrencyLocale, string> = {
+  zh: 'zh-CN',
+  en: 'en-US',
+};
+
+export function formatMoney(value: number | null | undefined, fallback?: string, locale: WYQDCurrencyLocale = 'zh'): string {
   if (value === null || value === undefined) return fallback ?? '—';
-  return `¥${Math.round(value).toLocaleString('zh-CN')}`;
+  return `${CURRENCY_SYMBOLS[locale]}${Math.round(value).toLocaleString(NUMBER_LOCALE[locale])}`;
 }
 
-export function formatDailyMoney(value: number): string {
-  if (!Number.isFinite(value)) return '¥0/日';
-  if (value > 0 && value < 1) return `¥${value.toFixed(2)}/日`;
-  return `${formatMoney(value)}/日`;
+export function formatDailyMoney(value: number, locale: WYQDCurrencyLocale = 'zh'): string {
+  if (!Number.isFinite(value)) return `${CURRENCY_SYMBOLS[locale]}0/日`;
+  if (value > 0 && value < 1) return `${CURRENCY_SYMBOLS[locale]}${value.toFixed(2)}/日`;
+  return `${formatMoney(value, undefined, locale)}/日`;
 }
 
-export function formatCompactMoney(value: number): string {
+export function formatCompactMoney(value: number, locale: WYQDCurrencyLocale = 'zh'): string {
   const rounded = Math.round(value);
-  if (Math.abs(rounded) >= 10000) return `¥${(rounded / 10000).toFixed(1)}万`;
-  return `¥${rounded.toLocaleString('zh-CN')}`;
+  const sym = CURRENCY_SYMBOLS[locale];
+  if (Math.abs(rounded) >= 10000) return `${sym}${(rounded / 10000).toFixed(1)}万`;
+  return `${sym}${rounded.toLocaleString(NUMBER_LOCALE[locale])}`;
 }
 
-export function formatDelta(value: number | null, t: TranslateFn): string {
+export function formatDelta(value: number | null, t: (key: WYQDTranslationKey) => string, locale: WYQDCurrencyLocale = 'zh'): string {
   if (value === null) return t('noNetWorthComparison');
   const sign = value >= 0 ? '+' : '-';
-  return `较上月末 ${sign}¥${Math.abs(Math.round(value)).toLocaleString('zh-CN')}`;
+  return `较上月末 ${sign}${CURRENCY_SYMBOLS[locale]}${Math.abs(Math.round(value)).toLocaleString(NUMBER_LOCALE[locale])}`;
 }
 
 export function formatOptional(value: string | number | null | undefined, t: TranslateFn): string {

@@ -6,7 +6,8 @@ import type { WYQDTranslationKey } from '@/core/i18n';
 import type { ReviewEntry, WYQDObject, WYQDObjectType } from '@/domain/types';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { WYQDMembershipState } from '@/core/membership';
-import { formatMoney, parseRank, todayISO } from '@/lib/format';
+import { parseRank, todayISO } from '@/lib/format';
+import { useFormatMoney } from '@/lib/use-format';
 import { TravelInsightsPanel } from '@/components/travel/TravelInsightsPanel';
 
 function getExperienceAmount(object: WYQDObject): number {
@@ -71,6 +72,7 @@ export function ReviewHome({
   onDeleteReview: (fileName: string) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const { formatMoney } = useFormatMoney();
   const [summary, setSummary] = useState('');
   const [foodRank, setFoodRank] = useState('');
   const [sceneryRank, setSceneryRank] = useState('');
@@ -400,46 +402,6 @@ export function ReviewHome({
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
-        {rankingBoards.map((board) => (
-          <section key={board.key} className="rounded-xl border border-stone-200 bg-white p-5">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold tracking-tight text-stone-950">
-                {board.label}{rankingBoardSuffix}
-              </h2>
-              <span className="text-xs text-stone-400">Top {board.entries.length}</span>
-            </div>
-            <div className="mt-3 space-y-2">
-              {board.entries.map((stored) => (
-                <button
-                  key={`${board.key}-${stored.fileName}`}
-                  type="button"
-                  onClick={() => selectReview(stored.fileName)}
-                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-stone-100 bg-stone-50 px-3 py-2 text-left transition hover:border-stone-300 hover:bg-white"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-stone-950">
-                      {stored.entity.target || stored.entity.title}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-stone-500">
-                      {stored.entity.reviewed_at || stored.entity.created_at}
-                    </div>
-                  </div>
-                  <span className="shrink-0 font-mono text-sm font-semibold text-stone-950">
-                    #{stored.entity[board.key]}
-                  </span>
-                </button>
-              ))}
-              {board.entries.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-5 text-center text-xs text-stone-500">
-                  {t('noRankings')}
-                </div>
-              ) : null}
-            </div>
-          </section>
-        ))}
-      </div>
-
       <form ref={reviewFormRef} onSubmit={handleSubmit} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="mb-4">
           <h2 className="text-base font-semibold tracking-tight text-stone-950">
@@ -531,11 +493,45 @@ export function ReviewHome({
         </div>
       </form>
 
-      <TravelInsightsPanel
-        objects={objects}
-        reviews={reviews.map((r) => r.entity)}
-        membership={membership}
-      />
+      <div className="grid gap-3 lg:grid-cols-3">
+        {rankingBoards.map((board) => (
+          <section key={board.key} className="rounded-xl border border-stone-200 bg-white p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold tracking-tight text-stone-950">
+                {board.label}{rankingBoardSuffix}
+              </h2>
+              <span className="text-xs text-stone-400">Top {board.entries.length}</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {board.entries.map((stored) => (
+                <button
+                  key={`${board.key}-${stored.fileName}`}
+                  type="button"
+                  onClick={() => selectReview(stored.fileName)}
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-stone-100 bg-stone-50 px-3 py-2 text-left transition hover:border-stone-300 hover:bg-white"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-stone-950">
+                      {stored.entity.target || stored.entity.title}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-stone-500">
+                      {stored.entity.reviewed_at || stored.entity.created_at}
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-mono text-sm font-semibold text-stone-950">
+                    #{stored.entity[board.key]}
+                  </span>
+                </button>
+              ))}
+              {board.entries.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-5 text-center text-xs text-stone-500">
+                  {t('noRankings')}
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ))}
+      </div>
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
@@ -578,6 +574,12 @@ export function ReviewHome({
           )}
         </div>
       </div>
+
+      <TravelInsightsPanel
+        objects={objects}
+        reviews={reviews.map((r) => r.entity)}
+        membership={membership}
+      />
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">

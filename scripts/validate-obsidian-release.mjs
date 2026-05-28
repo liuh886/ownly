@@ -23,8 +23,8 @@ for (const path of REQUIRED_RELEASE_FILES) {
   await assertFileExists(path);
 }
 
-if (manifestJson.id !== 'wyqd') {
-  throw new Error(`manifest.json id must be "wyqd"; received "${manifestJson.id}".`);
+if (manifestJson.id !== 'ownly') {
+  throw new Error(`manifest.json id must be "ownly"; received "${manifestJson.id}".`);
 }
 
 if (manifestJson.version !== packageJson.version) {

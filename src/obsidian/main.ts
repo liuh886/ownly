@@ -17,6 +17,7 @@ import {
   type WYQDLanguage,
   type WYQDTranslationKey,
 } from '@/core/i18n';
+import { activateLicenseKey, OWNLY_ACTIVATION_ENDPOINT, verifyActivationToken } from '@/core/activation';
 import { normalizeWYQDLicenseKey, resolveWYQDMembership } from '@/core/membership';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { runWYQDDoctor } from '@/core/doctor';
@@ -30,6 +31,7 @@ const WYQD_VIEW_TYPE = 'wyqd-workspace';
 interface WYQDPluginSettings {
   dataFolder: string;
   licenseKey: string;
+  activationToken: string;
   language: WYQDLanguage;
   openInRightSidebar: boolean;
 }
@@ -37,6 +39,7 @@ interface WYQDPluginSettings {
 const DEFAULT_SETTINGS: WYQDPluginSettings = {
   dataFolder: 'Ownly',
   licenseKey: '',
+  activationToken: '',
   language: 'en',
   openInRightSidebar: false,
 };
@@ -54,6 +57,7 @@ export default class WYQDPlugin extends Plugin {
   settings: WYQDPluginSettings = DEFAULT_SETTINGS;
   repository!: ObsidianVaultRepository;
   private workspaceRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private commands: Record<string, { name: string }> = {};
 
   async onload() {
     await this.loadSettings();
@@ -81,31 +85,31 @@ export default class WYQDPlugin extends Plugin {
       void this.activateView();
     });
 
-    this.addCommand({
+    this.commands['open-workspace'] = this.addCommand({
       id: 'open-workspace',
       name: this.t('openWorkspace'),
       callback: () => void this.activateView(),
     });
 
-    this.addCommand({
+    this.commands['create-object'] = this.addCommand({
       id: 'create-object',
       name: this.t('createObjectCommand'),
       callback: () => void this.createDraft('object'),
     });
 
-    this.addCommand({
+    this.commands['create-account-snapshot'] = this.addCommand({
       id: 'create-account-snapshot',
       name: this.t('createSnapshotCommand'),
       callback: () => void this.createDraft('snapshot'),
     });
 
-    this.addCommand({
+    this.commands['create-review'] = this.addCommand({
       id: 'create-review',
       name: this.t('createReviewCommand'),
       callback: () => void this.createDraft('review'),
     });
 
-    this.addCommand({
+    this.commands['run-doctor'] = this.addCommand({
       id: 'run-doctor',
       name: this.t('runDoctorCommand'),
       callback: () => void this.runDoctor(),
@@ -180,8 +184,11 @@ export default class WYQDPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  getMembership() {
-    return resolveWYQDMembership({ licenseKey: this.settings.licenseKey });
+  async getMembership() {
+    return resolveWYQDMembership({
+      licenseKey: this.settings.licenseKey,
+      activationToken: this.settings.activationToken || undefined,
+    });
   }
 
   t(key: WYQDTranslationKey) {
@@ -194,6 +201,21 @@ export default class WYQDPlugin extends Plugin {
         leaf.view.refresh();
       }
     });
+  }
+
+  refreshCommands() {
+    const nameMap: Record<string, WYQDTranslationKey> = {
+      'open-workspace': 'openWorkspace',
+      'create-object': 'createObjectCommand',
+      'create-account-snapshot': 'createSnapshotCommand',
+      'create-review': 'createReviewCommand',
+      'run-doctor': 'runDoctorCommand',
+    };
+    for (const [id, key] of Object.entries(nameMap)) {
+      if (this.commands[id]) {
+        this.commands[id].name = this.t(key);
+      }
+    }
   }
 
   private onVaultFileChange(filePath: string) {
@@ -277,18 +299,19 @@ class WYQDWorkspaceView extends ItemView {
     this.contentEl.empty();
     this.contentEl.addClass('wyqd-obsidian-view');
     this.contentEl.addClass('wyqd-runtime-obsidian');
-    this.mountReact();
+    await this.mountReact();
   }
 
-  mountReact() {
+  async mountReact() {
     try {
+      const membership = await this.plugin.getMembership();
       this.root = createRoot(this.contentEl);
       this.root.render(
         createElement(
           ObsidianWorkspaceProvider,
           {
             repository: this.plugin.repository,
-            membership: this.plugin.getMembership(),
+            membership,
             language: this.plugin.settings.language,
             onLanguageChange: (lang: WYQDLanguage) => {
               this.plugin.settings.language = lang;
@@ -322,7 +345,7 @@ class WYQDWorkspaceView extends ItemView {
     this.root = null;
     this.contentEl.empty();
     this.contentEl.addClass('wyqd-obsidian-view');
-    this.mountReact();
+    void this.mountReact();
   }
 
   async onClose() {
@@ -332,6 +355,9 @@ class WYQDWorkspaceView extends ItemView {
 }
 
 class WYQDSettingTab extends PluginSettingTab {
+  private activationStatus: 'idle' | 'loading' | 'success' | 'error' = 'idle';
+  private activationMessage = '';
+
   constructor(
     app: App,
     private readonly wyqdPlugin: WYQDPlugin,
@@ -339,12 +365,12 @@ class WYQDSettingTab extends PluginSettingTab {
     super(app, wyqdPlugin);
   }
 
-  display() {
+  async display() {
     const { containerEl } = this;
     const t = (key: WYQDTranslationKey) => this.wyqdPlugin.t(key);
     containerEl.empty();
     containerEl.addClass('wyqd-settings-view');
-    const membership = this.wyqdPlugin.getMembership();
+    const membership = await this.wyqdPlugin.getMembership();
 
     const shell = containerEl.createDiv({ cls: 'wyqd-settings-shell' });
     const hero = shell.createDiv({ cls: 'wyqd-settings-hero' });
@@ -376,7 +402,8 @@ class WYQDSettingTab extends PluginSettingTab {
           this.wyqdPlugin.settings.language = normalizeWYQDLanguage(value);
           await this.wyqdPlugin.saveSettings();
           this.wyqdPlugin.refreshWorkspaceViews();
-          this.display();
+          this.wyqdPlugin.refreshCommands();
+          await this.display();
         });
       });
 
@@ -403,56 +430,113 @@ class WYQDSettingTab extends PluginSettingTab {
         }),
       );
 
+    // ── Membership / Activation panel ──
     const membershipPanel = shell.createDiv({ cls: 'wyqd-settings-panel' });
     const membershipHeader = membershipPanel.createDiv({ cls: 'wyqd-section-header' });
-    membershipHeader.createEl('h3', { text: t('membership') });
-    membershipHeader.createEl('p', { text: membership.upgradeMessage });
+    membershipHeader.createEl('h3', { text: t('activationTitle') });
+    membershipHeader.createEl('p', { text: t('activationDesc') });
 
-    let pendingLicenseKey = this.wyqdPlugin.settings.licenseKey;
+    if (membership.isPro) {
+      // ── Activated state ──
+      const activeBanner = membershipPanel.createDiv({ cls: 'wyqd-settings-active-banner' });
+      activeBanner.createEl('span', { text: `${t('activationActive')} — ${membership.planLabel}` });
 
-    new Setting(membershipPanel)
-      .setName(t('settingsLicenseKey'))
-      .setDesc(t('settingsLicenseKeyDesc'))
-      .addText((text) => {
+      new Setting(membershipPanel)
+        .setName(t('plan'))
+        .setDesc(`${membership.planLabel} — ${membership.statusLabel}`);
+
+      if (this.activationStatus === 'success' || this.activationStatus === 'error') {
+        const msgEl = membershipPanel.createDiv({
+          cls: `wyqd-settings-activation-msg wyqd-settings-activation-msg--${this.activationStatus}`,
+        });
+        msgEl.createEl('span', { text: this.activationMessage });
+      }
+
+      new Setting(membershipPanel)
+        .setName(t('activationDeactivate'))
+        .setDesc(t('licenseModalClearDesc'))
+        .addButton((button) =>
+          button
+            .setButtonText(t('activationDeactivate'))
+            .setWarning()
+            .onClick(async () => {
+              this.wyqdPlugin.settings.licenseKey = '';
+              this.wyqdPlugin.settings.activationToken = '';
+              await this.wyqdPlugin.saveSettings();
+              this.wyqdPlugin.refreshWorkspaceViews();
+              this.activationStatus = 'idle';
+              this.activationMessage = '';
+              await this.display();
+            }),
+        );
+    } else {
+      // ── Free state: activation flow ──
+      let pendingLicenseKey = this.wyqdPlugin.settings.licenseKey;
+
+      const keySetting = new Setting(membershipPanel)
+        .setName(t('settingsLicenseKey'))
+        .setDesc(t('settingsLicenseKeyDesc'));
+
+      keySetting.addText((text) => {
         text.inputEl.type = 'password';
+        text.inputEl.style.flex = '1';
         text
-          .setPlaceholder('OWNLY-PRO-ANNUAL-TEST')
+          .setPlaceholder('OWNLY-XXXX-XXXX')
           .setValue(this.wyqdPlugin.settings.licenseKey)
           .onChange((value) => {
             pendingLicenseKey = value;
           });
-      })
-      .addButton((button) =>
-        button.setButtonText(t('save')).onClick(async () => {
-          this.wyqdPlugin.settings.licenseKey = normalizeWYQDLicenseKey(pendingLicenseKey);
-          await this.wyqdPlugin.saveSettings();
-          this.wyqdPlugin.refreshWorkspaceViews();
-          this.display();
-        }),
-      );
+      });
 
-    new Setting(membershipPanel)
-      .setName(t('plan'))
-      .setDesc(`${membership.planLabel} - ${membership.statusLabel}`);
-
-    new Setting(membershipPanel)
-      .setName(t('status'))
-      .setDesc(membership.upgradeMessage);
-
-    new Setting(membershipPanel)
-      .setName(t('clearLicense'))
-      .setDesc(t('clearLicenseDesc'))
-      .addButton((button) =>
+      keySetting.addButton((button) =>
         button
-          .setButtonText(t('clear'))
-          .setWarning()
+          .setButtonText(t('licenseModalActivate'))
+          .setCta()
           .onClick(async () => {
-            this.wyqdPlugin.settings.licenseKey = '';
-            await this.wyqdPlugin.saveSettings();
+            const key = normalizeWYQDLicenseKey(pendingLicenseKey);
+            if (!key) return;
+
+            this.activationStatus = 'loading';
+            this.activationMessage = '';
+            await this.display();
+
+            const result = await activateLicenseKey(OWNLY_ACTIVATION_ENDPOINT, key);
+
+            if ('token' in result) {
+              // Verify the token we just got
+              const payload = await verifyActivationToken(result.token);
+              if (payload) {
+                this.wyqdPlugin.settings.licenseKey = key;
+                this.wyqdPlugin.settings.activationToken = result.token;
+                await this.wyqdPlugin.saveSettings();
+                this.activationStatus = 'success';
+                this.activationMessage = t('activationSuccess');
+              } else {
+                this.activationStatus = 'error';
+                this.activationMessage = t('activationFailed');
+              }
+            } else {
+              this.activationStatus = 'error';
+              this.activationMessage = result.error || t('activationNetworkError');
+            }
+
             this.wyqdPlugin.refreshWorkspaceViews();
-            this.display();
+            await this.display();
           }),
       );
+
+      if (this.activationStatus === 'loading') {
+        const loadingEl = membershipPanel.createDiv({ cls: 'wyqd-settings-activation-loading' });
+        loadingEl.createEl('span', { text: '...' });
+      } else if (this.activationStatus === 'error') {
+        const msgEl = membershipPanel.createDiv({ cls: 'wyqd-settings-activation-msg wyqd-settings-activation-msg--error' });
+        msgEl.createEl('span', { text: this.activationMessage });
+      }
+
+      new Setting(membershipPanel)
+        .setName(t('plan'))
+        .setDesc(`${membership.planLabel} — ${membership.statusLabel}`);
+    }
   }
 }
 
