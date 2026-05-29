@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import {
   calculateNextBillingDate,
@@ -331,21 +332,21 @@ export function HomeDashboard({
   const { t } = useI18n();
   const { formatMoney, formatDailyMoney, formatCompactMoney, formatDelta } = useFormatMoney();
 
-  const trendSnapshots = getSnapshotTrend(snapshots);
-  const trendValues = trendSnapshots.map((snapshot) => snapshot.net_worth || 0);
-  const trendPoints = buildSparklinePoints(trendValues);
-  const costBreakdown = getCostBreakdown(objects, t);
-  const maxCost = Math.max(...costBreakdown.map((item) => item.value), 0);
-  const statusDistribution = getObjectStatusDistribution(objects, t);
-  const maxStatusCount = Math.max(...statusDistribution.map((item) => item.count), 0);
-  const upcomingRecurringCosts = getUpcomingRecurringCosts(objects);
-  const pendingExperienceReviews = getPendingExperienceReviews(objects);
-  const highestDailyCost = getHighestDailyCostObject(objects);
-  const largestRecurringCost = getLargestActiveRecurringCost(objects);
-  const latestSnapshot = getLatestSnapshot(snapshots);
-  const physicalCount = objects.filter((object) => object.object_type === 'physical').length;
-  const recurringCount = objects.filter((object) => object.object_type === 'recurring_cost').length;
-  const experienceCount = objects.filter((object) => object.object_type === 'one_time_experience').length;
+  const trendSnapshots = useMemo(() => getSnapshotTrend(snapshots), [snapshots]);
+  const trendValues = useMemo(() => trendSnapshots.map((snapshot) => snapshot.net_worth || 0), [trendSnapshots]);
+  const trendPoints = useMemo(() => buildSparklinePoints(trendValues), [trendValues]);
+  const costBreakdown = useMemo(() => getCostBreakdown(objects, t), [objects, t]);
+  const maxCost = useMemo(() => Math.max(...costBreakdown.map((item) => item.value), 0), [costBreakdown]);
+  const statusDistribution = useMemo(() => getObjectStatusDistribution(objects, t), [objects, t]);
+  const maxStatusCount = useMemo(() => Math.max(...statusDistribution.map((item) => item.count), 0), [statusDistribution]);
+  const upcomingRecurringCosts = useMemo(() => getUpcomingRecurringCosts(objects), [objects]);
+  const pendingExperienceReviews = useMemo(() => getPendingExperienceReviews(objects), [objects]);
+  const highestDailyCost = useMemo(() => getHighestDailyCostObject(objects), [objects]);
+  const largestRecurringCost = useMemo(() => getLargestActiveRecurringCost(objects), [objects]);
+  const latestSnapshot = useMemo(() => getLatestSnapshot(snapshots), [snapshots]);
+  const physicalCount = useMemo(() => objects.filter((object) => object.object_type === 'physical').length, [objects]);
+  const recurringCount = useMemo(() => objects.filter((object) => object.object_type === 'recurring_cost').length, [objects]);
+  const experienceCount = useMemo(() => objects.filter((object) => object.object_type === 'one_time_experience').length, [objects]);
   const actionCount = upcomingRecurringCosts.length + pendingExperienceReviews.length;
   const dailyFixedCost = metrics.monthlyFixedCost / 30.44;
   const annualFixedCost = metrics.monthlyFixedCost * 12;

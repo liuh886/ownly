@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { OwnlyWorkspaceProvider } from '@/core/ownly-workspace-context';
 import { type WYQDMembershipState } from '@/core/membership';
 import { markdownEntityRepository } from '@/services/MarkdownEntityRepository';
@@ -90,26 +90,26 @@ export function WebShell() {
     return () => { isMounted = false; };
   }, []);
 
+  const contextValue = useMemo(() => ({
+    repository: markdownEntityRepository,
+    runtimeTarget: 'web' as const,
+    isConnected,
+    isLoading,
+    connect,
+    error,
+    clearError,
+    notice,
+    showNotice,
+    membership,
+    activateLicenseKey,
+    clearLicenseKey,
+    openLicenseModal,
+    closeLicenseModal,
+    licenseModalOpen,
+  }), [isConnected, isLoading, connect, error, clearError, notice, showNotice, membership, activateLicenseKey, clearLicenseKey, openLicenseModal, closeLicenseModal, licenseModalOpen]);
+
   return (
-    <OwnlyWorkspaceProvider
-      value={{
-        repository: markdownEntityRepository,
-        runtimeTarget: 'web',
-        isConnected,
-        isLoading,
-        connect,
-        error,
-        clearError,
-        notice,
-        showNotice,
-        membership,
-        activateLicenseKey,
-        clearLicenseKey,
-        openLicenseModal,
-        closeLicenseModal,
-        licenseModalOpen,
-      }}
-    >
+    <OwnlyWorkspaceProvider value={contextValue}>
       <AppShell />
       <LicenseKeyModal
         open={licenseModalOpen}

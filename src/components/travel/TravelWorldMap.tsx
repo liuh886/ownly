@@ -29,9 +29,9 @@ export function TravelWorldMap({
     return topojson.feature(topology, topology.objects.countries) as unknown as GeoJSON.FeatureCollection;
   }, []);
 
-  const points = buildTravelMapPoints(experiences);
-  const pointIds = new Set(points.map((p) => p.id));
-  const fallbackExperiences = experiences.filter((exp) => !pointIds.has(exp.id));
+  const points = useMemo(() => buildTravelMapPoints(experiences), [experiences]);
+  const pointIds = useMemo(() => new Set(points.map((p) => p.id)), [points]);
+  const fallbackExperiences = useMemo(() => experiences.filter((exp) => !pointIds.has(exp.id)), [experiences, pointIds]);
 
   const projectedPoints = useMemo(() => {
     return points.map((point) => {

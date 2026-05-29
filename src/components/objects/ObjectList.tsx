@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type {
@@ -654,7 +654,7 @@ export function ObjectList({
   const objectControlLabels = getObjectControlLabels(t);
   const supportingVisuals = getSupportingVisuals(t);
 
-  const visibleObjects = objects.filter((stored) => {
+  const visibleObjects = useMemo(() => objects.filter((stored) => {
     const object = stored.entity;
     return (
       (controlBucketFilter === null || getObjectControlBucket(object) === controlBucketFilter) &&
@@ -662,11 +662,11 @@ export function ObjectList({
       matchesStatusGroup(object, statusGroupFilter) &&
       matchesQuery(object, query)
     );
-  });
+  }), [objects, controlBucketFilter, typeFilter, statusGroupFilter, query]);
 
-  const allPhysicalObjects = objects.filter(isPhysicalStoredEntity);
-  const physicalObjects = visibleObjects.filter(isPhysicalStoredEntity);
-  const supportingObjects = visibleObjects.filter((stored) => !isPhysicalObject(stored.entity));
+  const allPhysicalObjects = useMemo(() => objects.filter(isPhysicalStoredEntity), [objects]);
+  const physicalObjects = useMemo(() => visibleObjects.filter(isPhysicalStoredEntity), [visibleObjects]);
+  const supportingObjects = useMemo(() => visibleObjects.filter((stored) => !isPhysicalObject(stored.entity)), [visibleObjects]);
 
   const filteredObjects =
     filter === 'all'
