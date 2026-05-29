@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
+import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { ReviewEntry, WYQDObject, WYQDObjectType } from '@/domain/types';
@@ -89,6 +90,7 @@ export function ReviewHome({
   const [reviewingExperienceId, setReviewingExperienceId] = useState<string | null>(null);
   const reviewFormRef = useRef<HTMLFormElement>(null);
   const reviewDetailRef = useRef<HTMLElement>(null);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const fieldClass =
     'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
   const exitedItems = objects.filter((object) =>
@@ -320,6 +322,7 @@ export function ReviewHome({
   }
 
   return (
+    <>
     <section className="space-y-5">
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -396,7 +399,7 @@ export function ReviewHome({
               ))}
             </div>
           ) : (
-            <p className="mt-3 rounded-lg bg-stone-50 px-3 py-3 text-sm text-stone-500">
+            <p className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-500">
               {t('noPendingReviews')}
             </p>
           )}
@@ -525,7 +528,7 @@ export function ReviewHome({
                 </button>
               ))}
               {board.entries.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-5 text-center text-xs text-stone-500">
+                <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-5 text-center text-sm text-stone-500">
                   {t('noRankings')}
                 </div>
               ) : null}
@@ -541,7 +544,7 @@ export function ReviewHome({
         </div>
         <div className="mt-3 space-y-3">
           {experiences.length === 0 ? (
-            <p className="text-sm text-stone-500">{t('noExperiencesYet')}</p>
+            <p className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-500">{t('noExperiencesYet')}</p>
           ) : (
             experiences.map((experience) => {
               const isAlreadyReviewed = Boolean(
@@ -672,7 +675,11 @@ export function ReviewHome({
                   <button
                     type="button"
                     onClick={async () => {
-                      const confirmed = window.confirm(t('deleteConfirm').replace('{title}', stored.entity.title));
+                      const confirmed = await confirm({
+                            title: t('delete'),
+                            message: t('deleteConfirm').replace('{title}', stored.entity.title),
+                            destructive: true,
+                          });
                       if (!confirmed) return;
                       setDeletingFileName(stored.fileName);
                       try {
@@ -795,5 +802,7 @@ export function ReviewHome({
         </div>
       </div>
     </section>
+    {confirmDialog}
+    </>
   );
 }

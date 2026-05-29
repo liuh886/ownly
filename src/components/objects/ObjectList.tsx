@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type {
   OneTimeExperienceObject,
@@ -628,6 +629,7 @@ export function ObjectList({
   const [filter, setFilter] = useState<PhysicalFilter>(focus?.physicalFilter || 'all');
   const [controlBucketFilter, setControlBucketFilter] = useState<ObjectControlBucket | null>(null);
   const [openActionMenuFileName, setOpenActionMenuFileName] = useState<string | null>(null);
+  const { confirm, prompt, dialog: confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     if (openActionMenuFileName === null) return;
@@ -728,7 +730,7 @@ export function ObjectList({
 
   if (objects.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-stone-200 bg-white p-8 text-center">
+      <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center">
         <h2 className="text-base font-semibold text-stone-950">{t('noObjectsYet')}</h2>
         <p className="mt-2 text-sm text-stone-500">{t('connectVaultFirst')}</p>
       </div>
@@ -736,6 +738,7 @@ export function ObjectList({
   }
 
   return (
+    <>
     <section className="space-y-5">
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -852,7 +855,7 @@ export function ObjectList({
               })}
             </div>
           ) : (
-            <p className="mt-3 rounded-lg bg-stone-50 px-3 py-3 text-sm text-stone-500">
+            <p className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-500">
               {t('noPriorityObjects')}
             </p>
           )}
@@ -1098,7 +1101,11 @@ export function ObjectList({
 	                          <button
 	                            type="button" role="menuitem"
 	                            onClick={async () => {
-	                              const confirmed = window.confirm(t('deleteConfirm').replace('{title}', object.title));
+	                              const confirmed = await confirm({
+                                title: t('delete'),
+                                message: t('deleteConfirm').replace('{title}', object.title),
+                                destructive: true,
+                              });
 	                              if (!confirmed) return;
 	                              setOpenActionMenuFileName(null);
 	                              setDeletingFileName(stored.fileName);
@@ -1312,7 +1319,12 @@ export function ObjectList({
 	                                  <button
 	                                    type="button" role="menuitem"
 	                                    onClick={async () => {
-	                                      const reason = window.prompt(t('cancelReasonPrompt').replace('{title}', object.title));
+	                                      const reason = await prompt({
+                                        title: t('cancelSubscription'),
+                                        message: t('cancelReasonPrompt').replace('{title}', object.title),
+                                        inputLabel: t('cancelReasonPrompt').replace('{title}', ''),
+                                        destructive: true,
+                                      });
 	                                      if (reason === null) return;
 
 	                                      const next: RecurringCostObject = {
@@ -1340,7 +1352,11 @@ export function ObjectList({
 	                                <button
 	                                  type="button" role="menuitem"
 	                                  onClick={async () => {
-	                                    const confirmed = window.confirm(t('deleteConfirm').replace('{title}', object.title));
+	                                    const confirmed = await confirm({
+                                title: t('delete'),
+                                message: t('deleteConfirm').replace('{title}', object.title),
+                                destructive: true,
+                              });
 	                                    if (!confirmed) return;
 	                                    setOpenActionMenuFileName(null);
 	                                    setDeletingFileName(stored.fileName);
@@ -1474,5 +1490,7 @@ export function ObjectList({
         </section>
       ) : null}
     </section>
+    {confirmDialog}
+    </>
   );
 }

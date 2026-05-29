@@ -62,7 +62,7 @@ export function LicenseKeyModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm font-medium text-stone-700 transition hover:border-stone-900"
+                className="flex-1 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:border-stone-900"
               >
                 {t('cancel')}
               </button>
@@ -75,7 +75,7 @@ export function LicenseKeyModal({
                   }
                 }}
                 disabled={!key.trim()}
-                className="flex-1 rounded-lg bg-stone-950 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                className="flex-1 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
               >
                 {t('licenseModalActivate')}
               </button>

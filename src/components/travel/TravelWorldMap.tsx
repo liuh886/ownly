@@ -82,7 +82,7 @@ export function TravelWorldMap({
           ))}
         </svg>
         {points.length === 0 ? (
-          <p className="mt-2 text-center text-xs text-stone-400">
+          <p className="mt-2 text-center text-sm text-stone-500">
             {t('travelNoMapPoints')}
           </p>
         ) : null}

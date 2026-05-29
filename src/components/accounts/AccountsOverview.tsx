@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
+import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type {
   AccountBalance,
@@ -166,6 +167,7 @@ export function AccountsOverview({
 }) {
   const { t } = useI18n();
   const { formatMoney, formatCompactMoney } = useFormatMoney();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const calculatedSnapshots = snapshots.map((stored) => ({
     ...stored,
     entity: calculateNetWorth(stored.entity),
@@ -294,6 +296,7 @@ export function AccountsOverview({
   }
 
   return (
+    <>
     <section className="space-y-5">
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -454,7 +457,7 @@ export function AccountsOverview({
             </div>
           </div>
         ) : (
-          <p className="mt-4 rounded-lg border border-dashed border-stone-200 px-3 py-4 text-sm text-stone-500">
+          <p className="mt-4 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">
             {t('multipleSnapshotsForTrend')}
           </p>
         )}
@@ -511,7 +514,7 @@ export function AccountsOverview({
             ))}
           </div>
         ) : (
-          <p className="mt-4 rounded-lg border border-dashed border-stone-200 px-3 py-4 text-sm text-stone-500">
+          <p className="mt-4 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">
             {t('noActiveFixedCost')}
           </p>
         )}
@@ -680,7 +683,11 @@ export function AccountsOverview({
                 <button
                   type="button"
                   onClick={async () => {
-                    const confirmed = window.confirm(t('deleteConfirm').replace('{title}', stored.entity.snapshot_at));
+                    const confirmed = await confirm({
+                            title: t('delete'),
+                            message: t('deleteConfirm').replace('{title}', stored.entity.snapshot_at),
+                            destructive: true,
+                          });
                     if (!confirmed) return;
                     setDeletingFileName(stored.fileName);
                     try {
@@ -698,9 +705,11 @@ export function AccountsOverview({
               </div>
             </div>
           ))}
-          {snapshotEntities.length === 0 ? <p className="text-sm text-stone-500">{t('noSnapshots')}</p> : null}
+          {snapshotEntities.length === 0 ? <p className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">{t('noSnapshots')}</p> : null}
         </div>
       </div>
     </section>
+    {confirmDialog}
+    </>
   );
 }

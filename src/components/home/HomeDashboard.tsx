@@ -211,7 +211,7 @@ function DataBar({
   const content = (
     <>
       <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="min-w-0 truncate text-stone-600">{label}</span>
+        <span className="min-w-0 truncate font-medium text-stone-500">{label}</span>
         <span className="shrink-0 font-medium text-stone-950">{valueLabel}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-stone-100">
@@ -451,7 +451,7 @@ export function HomeDashboard({
                 </svg>
               </div>
             ) : (
-              <p className="mt-4 text-xs text-stone-400 italic">{t('connectVaultForTrend')}</p>
+              <p className="mt-4 text-xs text-stone-500">{t('connectVaultForTrend')}</p>
             )}
           </div>
         </div>
@@ -547,8 +547,8 @@ export function HomeDashboard({
             </button>
           ))}
           {upcomingRecurringCosts.length === 0 && pendingExperienceReviews.length === 0 ? (
-            <div className="rounded-xl border border-stone-200 bg-stone-50 py-10 text-center sm:col-span-2">
-              <p className="text-xs font-medium text-stone-500">{t('noRecentItems')}</p>
+            <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center sm:col-span-2">
+              <p className="text-sm text-stone-500">{t('noRecentItems')}</p>
             </div>
           ) : null}
         </div>
@@ -564,19 +564,19 @@ export function HomeDashboard({
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4 items-start">
           <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="text-xs text-stone-500">{t('accountSnapshot')}</div>
+            <div className="text-xs font-medium text-stone-500">{t('accountSnapshot')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{snapshots.length}</div>
           </div>
           <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="text-xs text-stone-500">{t('physical')}</div>
+            <div className="text-xs font-medium text-stone-500">{t('physical')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{physicalCount}</div>
           </div>
           <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="text-xs text-stone-500">{t('fixedCost')}</div>
+            <div className="text-xs font-medium text-stone-500">{t('fixedCost')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{recurringCount}</div>
           </div>
           <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="text-xs text-stone-500">{t('experience')}</div>
+            <div className="text-xs font-medium text-stone-500">{t('experience')}</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{experienceCount}</div>
           </div>
         </div>

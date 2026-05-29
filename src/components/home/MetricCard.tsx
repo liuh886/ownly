@@ -14,7 +14,7 @@ export function MetricCard({ label, value, hint, featured }: MetricCardProps) {
           : 'group min-w-0 rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition-all duration-200 hover:border-stone-300'
       }
     >
-      <div className="text-[11px] font-medium uppercase tracking-[0.04em] text-stone-500">{label}</div>
+      <div className="text-xs font-medium text-stone-500">{label}</div>
       <div
         className={`mt-2 break-words font-mono font-semibold tracking-tighter text-stone-950 ${
           featured ? 'text-4xl' : 'text-2xl'
