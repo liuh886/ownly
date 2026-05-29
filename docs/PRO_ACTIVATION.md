@@ -41,10 +41,11 @@ A special license key can be configured via SHA-256 hash in `src/core/activation
 
 ```ts
 // Generate hash: echo -n "YOUR-KEY" | sha256sum
-const SPECIAL_LICENSE_KEY_SHA256 = 'PLACEHOLDER_HASH_replace_with_real_sha256';
+// See src/core/activation.ts for the active hash value.
+const SPECIAL_LICENSE_KEY_SHA256 = '<sha256-hash>';
 ```
 
-If the placeholder is unchanged, special key matching is disabled.
+Special key matching is enabled when the hash in `activation.ts` is set to a real value.
 
 ---
 

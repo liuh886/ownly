@@ -42,11 +42,3 @@ export function serializeMarkdownEntity<T extends Record<string, unknown>>(
 
   return `---\n${yaml}\n---\n${normalizedBody}`;
 }
-
-export function updateMarkdownFrontmatter<T extends Record<string, unknown>>(
-  existingContent: string,
-  updates: Partial<T>,
-): string {
-  const { frontmatter, body } = parseMarkdownEntity<T>(existingContent);
-  return serializeMarkdownEntity({ ...frontmatter, ...updates }, body);
-}

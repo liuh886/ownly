@@ -122,40 +122,6 @@ export function buildTravelSummary(
   };
 }
 
-export function parseTravelQuickLine(
-  input: string,
-): {
-  title: string;
-  budget?: number;
-  actual?: number;
-  endedAt?: string;
-  countryCode?: string;
-  latitude?: number;
-  longitude?: number;
-} | null {
-  const parts = input
-    .split(/[/，,|]/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (parts.length < 2) return null;
-
-  const typeKeyword = (parts[1] || '').toLowerCase();
-  const isTravel = ['travel', '旅行', '旅行体验', 'travel_worldview'].includes(typeKeyword);
-  if (!isTravel) return null;
-
-  const [name, , budget, actual, endedAt, , , countryCode, lat, lng] = parts;
-
-  return {
-    title: name || '',
-    budget: budget && /^\d+(\.\d+)?$/.test(budget) ? Number(budget) : undefined,
-    actual: actual && /^\d+(\.\d+)?$/.test(actual) ? Number(actual) : undefined,
-    endedAt: endedAt && /^\d{4}-\d{2}-\d{2}$/.test(endedAt) ? endedAt : undefined,
-    countryCode: countryCode || undefined,
-    latitude: lat && /^-?\d+(\.\d+)?$/.test(lat) ? Number(lat) : undefined,
-    longitude: lng && /^-?\d+(\.\d+)?$/.test(lng) ? Number(lng) : undefined,
-  };
-}
-
 // ── City Search ─────────────────────────────────────────
 
 interface CityEntry {

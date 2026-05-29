@@ -62,8 +62,3 @@ export interface WYQDMarkdownFile {
   path: string;
   content: string;
 }
-
-export interface WYQDReadonlyMarkdownStorageAdapter {
-  listDirectories(): Promise<readonly string[]>;
-  readMarkdownFiles(directory: string): Promise<readonly WYQDMarkdownFile[]>;
-}

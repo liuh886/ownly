@@ -7,7 +7,7 @@ export const WYQD_MEMBERSHIP_PLANS = [
 
 export type WYQDMembershipPlan = (typeof WYQD_MEMBERSHIP_PLANS)[number];
 
-export type WYQDLicenseKeyStatus = 'none' | 'dev_test' | 'activated' | 'invalid';
+export type WYQDLicenseKeyStatus = 'none' | 'dev_test' | 'activated';
 
 export interface WYQDMembershipState {
   plan: WYQDMembershipPlan;
@@ -49,14 +49,12 @@ const PLAN_LABELS_EN: Record<WYQDMembershipPlan, string> = {
 const STATUS_LABEL_KEYS: Record<WYQDLicenseKeyStatus, string> = {
   activated: 'statusActivated',
   dev_test: 'statusDevTest',
-  invalid: 'statusInvalid',
   none: 'statusNoLicense',
 };
 
 const STATUS_LABELS_EN: Record<WYQDLicenseKeyStatus, string> = {
   activated: 'Activated',
   dev_test: 'Dev test key',
-  invalid: 'Invalid key',
   none: 'No license key',
 };
 

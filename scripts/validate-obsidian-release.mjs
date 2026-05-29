@@ -47,4 +47,13 @@ if (!manifestJson.name || !manifestJson.description || !manifestJson.author) {
   throw new Error('manifest.json must include name, description, and author.');
 }
 
+// Check runtime.ts version matches package.json
+const runtimeTs = await readFile('src/core/runtime.ts', 'utf8');
+const runtimeVersionMatch = runtimeTs.match(/WYQD_CORE_TARGET_VERSION\s*=\s*'([^']+)'/);
+if (runtimeVersionMatch && runtimeVersionMatch[1] !== packageJson.version) {
+  throw new Error(
+    `Version mismatch: package.json=${packageJson.version}, runtime.ts=${runtimeVersionMatch[1]}.`,
+  );
+}
+
 console.log(`Ownly Obsidian release package is valid for ${packageJson.version}.`);
