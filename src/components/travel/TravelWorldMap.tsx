@@ -46,6 +46,7 @@ export function TravelWorldMap({
         <svg
           viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
           className="w-full"
+          style={{ minHeight: 200 }}
           role="img"
           aria-label={t('travelInsights')}
         >
