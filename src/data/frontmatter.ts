@@ -14,8 +14,21 @@ export function parseMarkdownEntity<T extends Record<string, unknown>>(content: 
     throw new Error('Markdown file does not contain YAML frontmatter.');
   }
 
-  const frontmatter = YAML.parse(match[1] || '{}') as T;
+  const parsed = YAML.parse(match[1] || '{}');
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('YAML frontmatter is not a valid object.');
+  }
+
+  const frontmatter = parsed as T;
   const body = content.slice(match[0].length);
+
+  // Validate required fields
+  const requiredFields = ['schema_version', 'id', 'type'] as const;
+  const missing = requiredFields.filter((field) => !(field in frontmatter));
+  if (missing.length > 0) {
+    console.warn(`[Ownly] Frontmatter missing required fields: ${missing.join(', ')}`);
+  }
 
   return { frontmatter, body };
 }

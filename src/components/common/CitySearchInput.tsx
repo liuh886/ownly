@@ -44,7 +44,7 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
     setResults([]);
     onSelect({
       name: city.name,
-      country: city.countryCode,
+      country: city.country,
       countryCode: city.countryCode,
       latitude: city.latitude,
       longitude: city.longitude,

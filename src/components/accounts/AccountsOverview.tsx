@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
+import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type {
   AccountBalance,
   AccountSnapshot,
@@ -127,7 +128,7 @@ function createSnapshotDraft({
   const totalLiabilities = sumBalances(liabilityBalances);
 
   return {
-    schema_version: '0.1',
+    schema_version: WYQD_SCHEMA_VERSION,
     id: `snap_${snapshotAt.replaceAll('-', '')}_${Date.now()}`,
     type: 'snapshot',
     snapshot_type: 'net_worth',

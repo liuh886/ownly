@@ -36,6 +36,7 @@ interface WYQDPluginSettings {
   licenseSource: 'gumroad' | 'special' | 'test' | '';
   licenseKeyLast4: string;
   activatedAt: string;
+  lastVerifiedVersion: string;
   language: WYQDLanguage;
   openInRightSidebar: boolean;
 }
@@ -47,6 +48,7 @@ const DEFAULT_SETTINGS: WYQDPluginSettings = {
   licenseSource: '',
   licenseKeyLast4: '',
   activatedAt: '',
+  lastVerifiedVersion: '',
   language: 'en',
   openInRightSidebar: false,
 };
@@ -68,6 +70,15 @@ export default class WYQDPlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
+
+    // Re-verify license on plugin version change to catch refunded/disputed licenses
+    if (this.settings.proUnlocked && this.settings.licenseSource === 'gumroad' && this.settings.licenseKey) {
+      const currentVersion = this.manifest.version;
+      if (this.settings.lastVerifiedVersion !== currentVersion) {
+        this.reverifyLicenseOnUpdate(currentVersion);
+      }
+    }
+
     this.repository = new ObsidianVaultRepository(this.app, {
       dataFolder: () => this.settings.dataFolder,
     });
@@ -171,6 +182,43 @@ export default class WYQDPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  private async reverifyLicenseOnUpdate(currentVersion: string) {
+    try {
+      const params = new URLSearchParams();
+      params.set('product_id', GUMROAD_PRODUCT_ID);
+      params.set('license_key', this.settings.licenseKey);
+      params.set('increment_uses_count', 'false');
+
+      const response = await requestUrl({
+        url: 'https://api.gumroad.com/v2/licenses/verify',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+
+      const data = response.json;
+      const isValid = data.success && !(data.purchase?.refunded || data.purchase?.chargebacked || data.purchase?.disputed);
+
+      if (isValid) {
+        this.settings.lastVerifiedVersion = currentVersion;
+        await this.saveSettings();
+      } else {
+        // License is no longer valid — deactivate Pro
+        this.settings.proUnlocked = false;
+        this.settings.licenseSource = '';
+        this.settings.licenseKey = '';
+        this.settings.licenseKeyLast4 = '';
+        this.settings.activatedAt = '';
+        this.settings.lastVerifiedVersion = '';
+        await this.saveSettings();
+        new Notice(this.t('activationDeactivated'));
+        this.refreshWorkspaceViews();
+      }
+    } catch {
+      // Network error during re-verification — don't deactivate, retry on next update
+    }
   }
 
   async getMembership() {
@@ -517,7 +565,7 @@ class WYQDSettingTab extends PluginSettingTab {
       const params = new URLSearchParams();
       params.set('product_id', GUMROAD_PRODUCT_ID);
       params.set('license_key', key);
-      params.set('increment_uses_count', 'true');
+      params.set('increment_uses_count', 'false');
 
       const response = await requestUrl({
         url: 'https://api.gumroad.com/v2/licenses/verify',
@@ -563,6 +611,7 @@ class WYQDSettingTab extends PluginSettingTab {
     this.wyqdPlugin.settings.licenseSource = source;
     this.wyqdPlugin.settings.licenseKeyLast4 = key.slice(-4);
     this.wyqdPlugin.settings.activatedAt = new Date().toISOString();
+    this.wyqdPlugin.settings.lastVerifiedVersion = this.wyqdPlugin.manifest.version;
     void this.wyqdPlugin.saveSettings();
   }
 }

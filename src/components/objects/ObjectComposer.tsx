@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
+import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { CitySearchInput } from '@/components/common/CitySearchInput';
+import { COUNTRY_NAMES } from '@/domain/travel';
 import type {
   BillingCycle,
   OneTimeExperienceStatus,
@@ -223,7 +225,9 @@ function applyQuickLine(
     setActualAmount: (next: string) => void;
     setObjectType: (next: WYQDObjectType) => void;
     setExperienceSubtype?: (next: string) => void;
+    setLocationCountry?: (next: string) => void;
     setLocationCountryCode?: (next: string) => void;
+    setLocationCity?: (next: string) => void;
     setLocationLatitude?: (next: string) => void;
     setLocationLongitude?: (next: string) => void;
   },
@@ -270,7 +274,10 @@ function applyQuickLine(
     ) {
       setters.setExperienceSubtype?.('travel_worldview');
     }
-    if (countryCode) setters.setLocationCountryCode?.(countryCode);
+    if (countryCode) {
+      setters.setLocationCountryCode?.(countryCode);
+      setters.setLocationCountry?.(COUNTRY_NAMES[countryCode.toUpperCase()] || countryCode);
+    }
     if (lat && /^-?\d+(\.\d+)?$/.test(lat)) setters.setLocationLatitude?.(lat);
     if (lng && /^-?\d+(\.\d+)?$/.test(lng)) setters.setLocationLongitude?.(lng);
     return;
@@ -335,7 +342,7 @@ function createObjectDraft({
   const today = new Date().toISOString().split('T')[0];
   const id = `obj_${today.replaceAll('-', '')}_${Date.now()}`;
   const base = {
-    schema_version: '0.1' as const,
+    schema_version: WYQD_SCHEMA_VERSION,
     id,
     type: 'object' as const,
     title,
@@ -531,7 +538,9 @@ export function ObjectComposer({
       setActualAmount,
       setObjectType,
       setExperienceSubtype,
+      setLocationCountry,
       setLocationCountryCode,
+      setLocationCity,
       setLocationLatitude,
       setLocationLongitude,
     });

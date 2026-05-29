@@ -299,7 +299,16 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     );
 
     await this.vault.create(archivePath, archiveContent);
-    await this.vault.delete(sourceFile);
+    try {
+      await this.vault.delete(sourceFile);
+    } catch (deleteError) {
+      // Cleanup: remove the archive copy if source delete fails to avoid duplicates
+      const archiveFile = this.getMarkdownFile(this.archiveDirectory(config), basename(archivePath));
+      if (archiveFile) {
+        try { await this.vault.delete(archiveFile); } catch { /* best effort cleanup */ }
+      }
+      throw deleteError;
+    }
     return basename(archivePath);
   }
 

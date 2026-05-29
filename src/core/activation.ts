@@ -22,7 +22,7 @@ export async function verifyGumroadLicense(licenseKey: string): Promise<GumroadV
     const params = new URLSearchParams();
     params.set('product_id', GUMROAD_PRODUCT_ID);
     params.set('license_key', licenseKey);
-    params.set('increment_uses_count', 'true');
+    params.set('increment_uses_count', 'false');
 
     const response = await fetch('https://api.gumroad.com/v2/licenses/verify', {
       method: 'POST',

@@ -10,7 +10,7 @@ import { ObjectList, type ObjectListFocus } from '@/components/objects/ObjectLis
 import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
-import { createWYQDRuntimeInfo, WYQD_PRODUCT_SLOGAN } from '@/core/runtime';
+import { createWYQDRuntimeInfo, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
@@ -210,7 +210,7 @@ export function AppShell() {
 
     const date = new Date().toISOString().split('T')[0];
     const review: ReviewEntry = {
-      schema_version: '0.1',
+      schema_version: WYQD_SCHEMA_VERSION,
       id: `review_${date.replaceAll('-', '')}_${Date.now()}`,
       type: 'review',
       review_type: 'object_review',

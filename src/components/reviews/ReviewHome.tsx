@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
+import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { ReviewEntry, WYQDObject, WYQDObjectType } from '@/domain/types';
 import type { WYQDStoredEntity } from '@/core/repository';
@@ -30,7 +31,7 @@ function createReviewDraft(
   const date = todayISO();
 
   return {
-    schema_version: '0.1',
+    schema_version: WYQD_SCHEMA_VERSION,
     id: `review_${date.replaceAll('-', '')}_${Date.now()}`,
     type: 'review',
     review_type: target ? 'object_review' : 'monthly',
