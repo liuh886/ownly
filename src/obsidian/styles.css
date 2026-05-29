@@ -530,6 +530,20 @@
   padding: 8px 0;
 }
 
+.wyqd-settings-cta-row {
+  margin-top: 8px;
+}
+
+.wyqd-settings-cta-row a {
+  color: var(--text-accent);
+  font-size: var(--font-ui-small);
+  text-decoration: none;
+}
+
+.wyqd-settings-cta-row a:hover {
+  text-decoration: underline;
+}
+
 .wyqd-settings-activation-msg {
   border-radius: 8px;
   font-size: var(--font-ui-small);

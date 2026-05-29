@@ -6,6 +6,7 @@ import {
   PluginSettingTab,
   Setting,
   WorkspaceLeaf,
+  requestUrl,
 } from 'obsidian';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -17,7 +18,8 @@ import {
   type WYQDLanguage,
   type WYQDTranslationKey,
 } from '@/core/i18n';
-import { normalizeWYQDLicenseKey, resolveWYQDMembership } from '@/core/membership';
+import { checkSpecialKey, GUMROAD_PRODUCT_ID } from '@/core/activation';
+import { resolveWYQDMembership } from '@/core/membership';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { runWYQDDoctor } from '@/core/doctor';
 import type { AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
@@ -30,6 +32,10 @@ const WYQD_VIEW_TYPE = 'wyqd-workspace';
 interface WYQDPluginSettings {
   dataFolder: string;
   licenseKey: string;
+  proUnlocked: boolean;
+  licenseSource: 'gumroad' | 'special' | 'test' | '';
+  licenseKeyLast4: string;
+  activatedAt: string;
   language: WYQDLanguage;
   openInRightSidebar: boolean;
 }
@@ -37,6 +43,10 @@ interface WYQDPluginSettings {
 const DEFAULT_SETTINGS: WYQDPluginSettings = {
   dataFolder: 'Ownly',
   licenseKey: '',
+  proUnlocked: false,
+  licenseSource: '',
+  licenseKeyLast4: '',
+  activatedAt: '',
   language: 'en',
   openInRightSidebar: false,
 };
@@ -54,7 +64,7 @@ export default class WYQDPlugin extends Plugin {
   settings: WYQDPluginSettings = DEFAULT_SETTINGS;
   repository!: ObsidianVaultRepository;
   private workspaceRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-  private commands: Record<string, { name: string }> = {};
+  private commandDefs: Record<string, { key: WYQDTranslationKey; callback: () => void }> = {};
 
   async onload() {
     await this.loadSettings();
@@ -82,35 +92,17 @@ export default class WYQDPlugin extends Plugin {
       void this.activateView();
     });
 
-    this.commands['open-workspace'] = this.addCommand({
-      id: 'open-workspace',
-      name: this.t('openWorkspace'),
-      callback: () => void this.activateView(),
-    });
+    this.commandDefs = {
+      'open-workspace': { key: 'openWorkspace', callback: () => void this.activateView() },
+      'create-object': { key: 'createObjectCommand', callback: () => void this.createDraft('object') },
+      'create-account-snapshot': { key: 'createSnapshotCommand', callback: () => void this.createDraft('snapshot') },
+      'create-review': { key: 'createReviewCommand', callback: () => void this.createDraft('review') },
+      'run-doctor': { key: 'runDoctorCommand', callback: () => void this.runDoctor() },
+    };
 
-    this.commands['create-object'] = this.addCommand({
-      id: 'create-object',
-      name: this.t('createObjectCommand'),
-      callback: () => void this.createDraft('object'),
-    });
-
-    this.commands['create-account-snapshot'] = this.addCommand({
-      id: 'create-account-snapshot',
-      name: this.t('createSnapshotCommand'),
-      callback: () => void this.createDraft('snapshot'),
-    });
-
-    this.commands['create-review'] = this.addCommand({
-      id: 'create-review',
-      name: this.t('createReviewCommand'),
-      callback: () => void this.createDraft('review'),
-    });
-
-    this.commands['run-doctor'] = this.addCommand({
-      id: 'run-doctor',
-      name: this.t('runDoctorCommand'),
-      callback: () => void this.runDoctor(),
-    });
+    for (const [id, def] of Object.entries(this.commandDefs)) {
+      this.addCommand({ id, name: this.t(def.key), callback: def.callback });
+    }
 
     this.addSettingTab(new WYQDSettingTab(this.app, this));
   }
@@ -182,7 +174,11 @@ export default class WYQDPlugin extends Plugin {
   }
 
   async getMembership() {
-    return resolveWYQDMembership({ licenseKey: this.settings.licenseKey });
+    return resolveWYQDMembership({
+      licenseKey: this.settings.licenseKey,
+      proUnlocked: this.settings.proUnlocked,
+      licenseSource: this.settings.licenseSource,
+    });
   }
 
   t(key: WYQDTranslationKey) {
@@ -198,17 +194,11 @@ export default class WYQDPlugin extends Plugin {
   }
 
   refreshCommands() {
-    const nameMap: Record<string, WYQDTranslationKey> = {
-      'open-workspace': 'openWorkspace',
-      'create-object': 'createObjectCommand',
-      'create-account-snapshot': 'createSnapshotCommand',
-      'create-review': 'createReviewCommand',
-      'run-doctor': 'runDoctorCommand',
-    };
-    for (const [id, key] of Object.entries(nameMap)) {
-      if (this.commands[id]) {
-        this.commands[id].name = this.t(key);
-      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registry = (this.app as any).commands?.commands;
+    for (const [id, def] of Object.entries(this.commandDefs)) {
+      if (registry) delete registry[id];
+      this.addCommand({ id, name: this.t(def.key), callback: def.callback });
     }
   }
 
@@ -349,6 +339,8 @@ class WYQDWorkspaceView extends ItemView {
 }
 
 class WYQDSettingTab extends PluginSettingTab {
+  private activating = false;
+
   constructor(
     app: App,
     private readonly wyqdPlugin: WYQDPlugin,
@@ -427,6 +419,16 @@ class WYQDSettingTab extends PluginSettingTab {
     membershipHeader.createEl('h3', { text: t('activationTitle') });
     membershipHeader.createEl('p', { text: t('activationDesc') });
 
+    if (!membership.isPro) {
+      const ctaRow = membershipHeader.createDiv({ cls: 'wyqd-settings-cta-row' });
+      const ctaLink = ctaRow.createEl('a', {
+        text: t('activationGetKey'),
+        href: 'https://liuh886.gumroad.com/l/ownly',
+      });
+      ctaLink.setAttr('target', '_blank');
+      ctaLink.setAttr('rel', 'noopener noreferrer');
+    }
+
     if (membership.isPro) {
       const activeBanner = membershipPanel.createDiv({ cls: 'wyqd-settings-active-banner' });
       activeBanner.createEl('span', { text: `${t('activationActive')} — ${membership.planLabel}` });
@@ -444,8 +446,13 @@ class WYQDSettingTab extends PluginSettingTab {
             .setWarning()
             .onClick(async () => {
               this.wyqdPlugin.settings.licenseKey = '';
+              this.wyqdPlugin.settings.proUnlocked = false;
+              this.wyqdPlugin.settings.licenseSource = '';
+              this.wyqdPlugin.settings.licenseKeyLast4 = '';
+              this.wyqdPlugin.settings.activatedAt = '';
               await this.wyqdPlugin.saveSettings();
               this.wyqdPlugin.refreshWorkspaceViews();
+              new Notice(t('activationDeactivated'));
               await this.display();
             }),
         );
@@ -460,7 +467,7 @@ class WYQDSettingTab extends PluginSettingTab {
         text.inputEl.type = 'password';
         text.inputEl.style.flex = '1';
         text
-          .setPlaceholder('OWNLY-XXXX-XXXX')
+          .setPlaceholder(t('licenseModalInputPlaceholder'))
           .setValue(this.wyqdPlugin.settings.licenseKey)
           .onChange((value) => {
             pendingLicenseKey = value;
@@ -471,20 +478,92 @@ class WYQDSettingTab extends PluginSettingTab {
         button
           .setButtonText(t('licenseModalActivate'))
           .setCta()
+          .setDisabled(this.activating)
           .onClick(async () => {
-            const key = normalizeWYQDLicenseKey(pendingLicenseKey);
+            const key = pendingLicenseKey.trim();
             if (!key) return;
-            this.wyqdPlugin.settings.licenseKey = key;
-            await this.wyqdPlugin.saveSettings();
-            this.wyqdPlugin.refreshWorkspaceViews();
-            await this.display();
+            await this.activateKey(key, t);
           }),
       );
+
+      if (this.activating) {
+        const loadingEl = membershipPanel.createDiv({ cls: 'wyqd-settings-activation-loading' });
+        loadingEl.createEl('span', { text: t('activationVerifying') });
+      }
 
       new Setting(membershipPanel)
         .setName(t('plan'))
         .setDesc(`${membership.planLabel} — ${membership.statusLabel}`);
     }
+  }
+
+  private async activateKey(key: string, t: (key: WYQDTranslationKey) => string) {
+    this.activating = true;
+    await this.display();
+
+    try {
+      // 1. Check special key (local hash match, no network)
+      const isSpecial = await checkSpecialKey(key);
+      if (isSpecial) {
+        this.saveProState(key, 'special');
+        new Notice(t('activationSuccess'));
+        this.wyqdPlugin.refreshWorkspaceViews();
+        this.activating = false;
+        await this.display();
+        return;
+      }
+
+      // 2. Verify with Gumroad API
+      const params = new URLSearchParams();
+      params.set('product_id', GUMROAD_PRODUCT_ID);
+      params.set('license_key', key);
+      params.set('increment_uses_count', 'true');
+
+      const response = await requestUrl({
+        url: 'https://api.gumroad.com/v2/licenses/verify',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+
+      const data = response.json;
+
+      if (!data.success) {
+        new Notice(`${t('activationFailed')} ${data.message || ''}`);
+        this.activating = false;
+        await this.display();
+        return;
+      }
+
+      // Check for abnormal purchase states
+      if (data.purchase) {
+        if (data.purchase.refunded || data.purchase.chargebacked || data.purchase.disputed) {
+          new Notice(t('activationFailed'));
+          this.activating = false;
+          await this.display();
+          return;
+        }
+      }
+
+      // Success
+      this.saveProState(key, 'gumroad');
+      new Notice(t('activationSuccess'));
+      this.wyqdPlugin.refreshWorkspaceViews();
+    } catch {
+      new Notice(`${t('activationNetworkError')}`);
+    }
+
+    this.activating = false;
+    await this.display();
+  }
+
+  private saveProState(key: string, source: 'gumroad' | 'special') {
+    this.wyqdPlugin.settings.licenseKey = key;
+    this.wyqdPlugin.settings.proUnlocked = true;
+    this.wyqdPlugin.settings.licenseSource = source;
+    this.wyqdPlugin.settings.licenseKeyLast4 = key.slice(-4);
+    this.wyqdPlugin.settings.activatedAt = new Date().toISOString();
+    void this.wyqdPlugin.saveSettings();
   }
 }
 

@@ -1,111 +1,71 @@
-import type { WYQDActivationHeader, WYQDActivationPayload, WYQDActivationTokenParts } from './activation-types';
+// Gumroad License Verify — client-side first-activation check.
+// No Activation Service, no token signing, no private keys.
 
-export const OWNLY_ACTIVATION_ENDPOINT = 'https://activate.ownly.app/api/activate';
+export const GUMROAD_PRODUCT_ID = 'PoPpMpnKR1EcYsy_wqBb1Q==';
 
-const WYQD_ACTIVATION_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPkpAyyt86gdhy0LICl41m5xx8SeE
-7ckN5/pAZ241lCeKKXoYOtvQh5BZg4cHLy8niUmLnIgKwq1ezw4XkdlB5g==
------END PUBLIC KEY-----`;
+// SHA-256 hash of the special license key.
+// Generate: echo -n "YOUR-KEY" | sha256sum
+const SPECIAL_LICENSE_KEY_SHA256 = '728782f74b24dd3526f9941ad99d6237a46e58017d7e1001055435e6c0222af0';
 
-function pemToSpkiBytes(pem: string): Uint8Array {
-  const base64 = pem
-    .replace('-----BEGIN PUBLIC KEY-----', '')
-    .replace('-----END PUBLIC KEY-----', '')
-    .replace(/\s+/g, '');
-  const raw = atob(base64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes;
+export interface GumroadVerifyResult {
+  success: boolean;
+  error?: string;
 }
 
-function base64ToBytes(b64: string): Uint8Array {
-  const raw = atob(b64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes;
-}
-
-export function parseActivationToken(token: string): WYQDActivationTokenParts | null {
+/**
+ * Verify a license key against the Gumroad License Verify API.
+ * Uses application/x-www-form-urlencoded as required by Gumroad.
+ * Returns { success: true } on valid license, or { success: false, error } on failure.
+ */
+export async function verifyGumroadLicense(licenseKey: string): Promise<GumroadVerifyResult> {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
+    const params = new URLSearchParams();
+    params.set('product_id', GUMROAD_PRODUCT_ID);
+    params.set('license_key', licenseKey);
+    params.set('increment_uses_count', 'true');
 
-    const headerJson = JSON.parse(atob(parts[0]));
-    const payloadJson = JSON.parse(atob(parts[1]));
-    const signatureBytes = base64ToBytes(parts[2]);
-
-    const signedText = `${parts[0]}.${parts[1]}`;
-    const encoder = new TextEncoder();
-    const signedBytes = encoder.encode(signedText);
-
-    if (headerJson.alg !== 'ES256' || headerJson.typ !== 'OWNLY-ACT') return null;
-
-    return {
-      header: headerJson as WYQDActivationHeader,
-      payload: payloadJson as WYQDActivationPayload,
-      signatureBytes,
-      signedBytes,
-    };
-  } catch {
-    return null;
-  }
-}
-
-export async function verifyActivationToken(token: string): Promise<WYQDActivationPayload | null> {
-  try {
-    const parts = parseActivationToken(token);
-    if (!parts) return null;
-
-    // Check expiry
-    if (parts.payload.exp !== null && parts.payload.exp !== undefined) {
-      const now = Math.floor(Date.now() / 1000);
-      if (now > parts.payload.exp) return null;
-    }
-
-    // Verify signature
-    const spkiBytes = pemToSpkiBytes(WYQD_ACTIVATION_PUBLIC_KEY_PEM);
-    const publicKey = await crypto.subtle.importKey(
-      'spki',
-      spkiBytes as unknown as ArrayBuffer,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false,
-      ['verify'],
-    );
-
-    const valid = await crypto.subtle.verify(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      publicKey,
-      parts.signatureBytes as unknown as ArrayBuffer,
-      parts.signedBytes as unknown as ArrayBuffer,
-    );
-
-    return valid ? parts.payload : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function activateLicenseKey(
-  endpoint: string,
-  licenseKey: string,
-): Promise<{ token: string } | { error: string }> {
-  try {
-    const response = await fetch(endpoint, {
+    const response = await fetch('https://api.gumroad.com/v2/licenses/verify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ licenseKey }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
     });
 
     if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      return { error: body?.error || `HTTP ${response.status}` };
+      return { success: false, error: `HTTP ${response.status}` };
     }
 
-    const body = await response.json();
-    if (!body.token) return { error: 'No token in response' };
+    const data = await response.json();
 
-    return { token: body.token };
+    if (!data.success) {
+      return { success: false, error: data.message || 'Invalid license key' };
+    }
+
+    // Check for abnormal purchase states
+    if (data.purchase) {
+      if (data.purchase.refunded || data.purchase.chargebacked || data.purchase.disputed) {
+        return { success: false, error: 'This license has been refunded or disputed.' };
+      }
+    }
+
+    return { success: true };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Network error' };
+    return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+/**
+ * Check if a key matches the special license key via SHA-256 hash comparison.
+ * The real key is never stored in code — only its hash.
+ */
+export async function checkSpecialKey(key: string): Promise<boolean> {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(key);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = new Uint8Array(hashBuffer);
+    const hashHex = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex === SPECIAL_LICENSE_KEY_SHA256;
+  } catch {
+    return false;
   }
 }

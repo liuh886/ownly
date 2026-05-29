@@ -5,9 +5,9 @@
 Ownly uses a **first-activation + local permanent unlock** model for PRO membership:
 
 - **Web runtime**: Always PRO. No activation needed.
-- **Obsidian runtime**: Defaults to Free. Activate once with a license key; the token is stored locally and verified offline on every restart.
+- **Obsidian runtime**: Defaults to Free. Activate once with a license key; the unlock state is stored locally and read on every restart — fully offline after first activation.
 
-No vault data is ever sent to any server. Only the license key leaves the device during the one-time activation request.
+No vault data is ever sent to any server. Only the license key leaves the device during the one-time Gumroad verification request.
 
 ---
 
@@ -16,39 +16,35 @@ No vault data is ever sent to any server. Only the license key leaves the device
 ### First Activation (Obsidian)
 
 1. Open **Settings → Ownly → Activate Pro**.
-2. Enter your license key (e.g. `OWNLY-ABCD-EFGH`).
+2. Paste your Gumroad license key.
 3. Click **Activate**.
-4. The plugin sends `{ licenseKey }` to the activation endpoint (`https://activate.ownly.app/api/activate`).
-5. The endpoint validates the key against Gumroad / 爱发电, and returns a signed activation token.
-6. The plugin verifies the token signature locally using the embedded public key.
-7. If valid, the token is saved to plugin settings. PRO is unlocked.
+4. The plugin first checks if the key matches a special key (local SHA-256 hash comparison — no network).
+5. If not a special key, the plugin sends the key to the **Gumroad License Verify API** (`https://api.gumroad.com/v2/licenses/verify`) via Obsidian's `requestUrl` (no CORS issues).
+6. If Gumroad returns `success: true` and the purchase is not refunded/chargebacked/disputed, PRO is unlocked.
+7. The `proUnlocked` flag is saved to plugin settings. Done.
 
 ### Subsequent Starts (Offline)
 
-1. On plugin load, the saved token is verified offline using the embedded ECDSA public key.
-2. No network request is made. No telemetry. No phoning home.
-3. If the token is valid and not expired → `membership = pro_lifetime`.
-4. If the token is missing, invalid, or expired → `membership = free`.
+1. On plugin load, `proUnlocked` is read from settings.
+2. If `true` → `membership = pro_lifetime`. No network request. No telemetry.
+3. If `false` or missing → `membership = free`.
 
 ### Deactivation
 
-In **Settings → Ownly**, click **Deactivate** to clear the saved token and return to Free.
+In **Settings → Ownly**, click **Deactivate** to clear all activation state and return to Free.
 
 ---
 
-## Token Format
+## Special Key
 
-A custom base64-encoded token (not JWT):
+A special license key can be configured via SHA-256 hash in `src/core/activation.ts`. The real key is never stored in code — only its hash. This enables offline testing or special promotions without a network round-trip.
 
+```ts
+// Generate hash: echo -n "YOUR-KEY" | sha256sum
+const SPECIAL_LICENSE_KEY_SHA256 = 'PLACEHOLDER_HASH_replace_with_real_sha256';
 ```
-base64(header) . base64(payload) . base64(signature)
-```
 
-- **Header**: `{ "alg": "ES256", "typ": "OWNLY-ACT" }`
-- **Payload**: `{ "key": "OWNLY-XXXX", "plan": "pro_lifetime", "iat": 1717000000, "exp": null }`
-- **Signature**: ECDSA P-256 SHA-256 over `header.payload`
-- `exp: null` = lifetime (never expires)
-- `exp: <timestamp>` = time-limited plan
+If the placeholder is unchanged, special key matching is disabled.
 
 ---
 
@@ -56,45 +52,42 @@ base64(header) . base64(payload) . base64(signature)
 
 | What | Where | Public? |
 |---|---|---|
-| Public key (PEM) | `src/core/activation.ts` | Yes |
-| Token verification logic | `src/core/activation.ts` | Yes |
-| Token types | `src/core/activation-types.ts` | Yes |
-| Activation endpoint URL | `src/core/activation.ts` | Yes |
-| Private key | Activation service only | No |
-| Payment validation (Gumroad/爱发电) | Activation service only | No |
-| License key database | Activation service only | No |
+| Gumroad product ID | `src/core/activation.ts` | Yes |
+| Special key SHA-256 hash | `src/core/activation.ts` | Yes |
+| Verification logic | `src/core/activation.ts` | Yes |
+| Membership resolution | `src/core/membership.ts` | Yes |
+| Gumroad access token | Not in this repo | No |
+| License key database | Gumroad only | No |
 
-The activation service is a private, separately hosted API. The Obsidian plugin only contains the public key and verification logic.
+The plugin calls Gumroad directly. There is no separate activation service.
 
 ---
 
 ## Security Considerations
 
-- **Public key is embedded by design.** Anyone can verify tokens; only the activation service can create them.
-- **If the private key leaks**, tokens can be forged. This is an accepted risk for a small indie product. The key can be rotated by shipping a plugin update with a new public key.
-- **No vault data is transmitted.** Only the license key is sent during activation.
-- **Tokens are self-contained.** No server lookup needed for verification.
-- **Endpoint URL is a constant.** It can be changed by forking, but the signed token remains valid only for keys the service knows about.
+- **No vault data is transmitted.** Only the license key is sent during the one-time activation.
+- **No token signing.** No private keys, no ECDSA, no JWT. Just a boolean flag.
+- **Gumroad product ID is public.** This is by design — the product ID alone cannot grant access.
+- **`proUnlocked` is a local flag.** It is stored in Obsidian's plugin data (not encrypted). This is acceptable for a small indie product.
+- **License key is stored in settings** for reference (last 4 chars displayed). The full key persists locally to allow re-verification if needed.
 
 ---
 
-## Setting Up the Activation Service
+## Settings Fields
 
-The activation service is **not included** in this repository. It needs to:
-
-1. Accept `POST /api/activate` with `{ licenseKey: string }`.
-2. Validate the license key against your payment provider (Gumroad, 爱发电, etc.).
-3. Generate a signed token using the ECDSA P-256 private key.
-4. Return `{ token: string }` on success, or `{ error: string }` on failure.
-
-The private key must stay outside this repository and should be provided to the private activation service via a secret or environment variable, for example `OWNLY_ACTIVATION_PRIVATE_KEY_PATH`.
+| Field | Type | Purpose |
+|---|---|---|
+| `licenseKey` | `string` | Full license key (stored locally) |
+| `proUnlocked` | `boolean` | Whether PRO is active |
+| `licenseSource` | `'gumroad' \| 'special' \| 'test' \| ''` | How activation happened |
+| `licenseKeyLast4` | `string` | Last 4 chars for display |
+| `activatedAt` | `string` | ISO timestamp of activation |
 
 ---
 
 ## Files
 
-- `src/core/activation-types.ts` — Token type definitions
-- `src/core/activation.ts` — Token verification, public key, activation endpoint
-- `src/core/membership.ts` — Membership resolution (token-aware, async)
-- `src/components/common/LicenseKeyModal.tsx` — Runtime-aware activation UI
+- `src/core/activation.ts` — Gumroad verify, special key check, product ID
+- `src/core/membership.ts` — Membership resolution (reads `proUnlocked`, synchronous)
 - `src/obsidian/main.ts` — Obsidian settings activation flow
+- `src/components/shells/WebShell.tsx` — Web always PRO (hardcoded)

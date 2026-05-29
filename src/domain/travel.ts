@@ -1,4 +1,5 @@
 import type { OneTimeExperienceObject, ReviewEntry, WYQDObject } from './types';
+import citiesData from '@/data/cities.json';
 
 export function getTravelExperiences(objects: WYQDObject[]): OneTimeExperienceObject[] {
   return objects.filter(
@@ -153,4 +154,67 @@ export function parseTravelQuickLine(
     latitude: lat && /^-?\d+(\.\d+)?$/.test(lat) ? Number(lat) : undefined,
     longitude: lng && /^-?\d+(\.\d+)?$/.test(lng) ? Number(lng) : undefined,
   };
+}
+
+// ── City Search ─────────────────────────────────────────
+
+interface CityEntry {
+  n: string;
+  c: string;
+  la: number;
+  lo: number;
+  cn?: string;
+}
+
+const cityDatabase: CityEntry[] = citiesData as CityEntry[];
+
+export interface CitySearchResult {
+  name: string;
+  countryCode: string;
+  latitude: number;
+  longitude: number;
+  displayName: string;
+}
+
+export function searchCities(query: string, limit = 10): CitySearchResult[] {
+  if (!query.trim()) return [];
+  const q = query.trim().toLowerCase();
+
+  const matches: Array<{ entry: CityEntry; score: number }> = [];
+
+  for (const entry of cityDatabase) {
+    let score = 0;
+    const nameLower = entry.n.toLowerCase();
+    const cnLower = entry.cn?.toLowerCase();
+
+    if (nameLower === q || cnLower === q) {
+      score = 100;
+    } else if (nameLower.startsWith(q) || cnLower?.startsWith(q)) {
+      score = 80;
+    } else if (nameLower.includes(q) || cnLower?.includes(q)) {
+      score = 50;
+    }
+
+    if (score > 0) {
+      matches.push({ entry, score });
+    }
+  }
+
+  matches.sort((a, b) => b.score - a.score || cityDatabase.indexOf(a.entry) - cityDatabase.indexOf(b.entry));
+
+  const hasCJKQuery = /[一-鿿぀-ゟ゠-ヿ가-힯]/.test(query);
+
+  return matches.slice(0, limit).map(({ entry }) => {
+    const displayName = hasCJKQuery && entry.cn
+      ? `${entry.cn} (${entry.n}), ${entry.c}`
+      : `${entry.n}, ${entry.c}`;
+
+    return {
+      name: entry.n,
+      countryCode: entry.c,
+      latitude: entry.la,
+      longitude: entry.lo,
+      displayName,
+    };
+  });
 }

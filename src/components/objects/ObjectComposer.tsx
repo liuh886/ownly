@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
+import { CitySearchInput } from '@/components/common/CitySearchInput';
 import type {
   BillingCycle,
   OneTimeExperienceStatus,
@@ -942,68 +943,35 @@ export function ObjectComposer({
               </select>
             </label>
             {experienceSubtype === 'travel_worldview' ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="block min-w-0">
-                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelCountry')}</span>
-                  <input
-                    value={locationCountry}
-                    onChange={(event) => setLocationCountry(event.target.value)}
-                    placeholder="Japan"
-                    className={fieldClass}
-                    disabled={disabled || isSaving}
-                  />
-                </label>
-                <label className="block min-w-0">
+              <div className="space-y-3">
+                <div>
                   <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelCity')}</span>
-                  <input
-                    value={locationCity}
-                    onChange={(event) => setLocationCity(event.target.value)}
-                    placeholder="Tokyo"
-                    className={fieldClass}
+                  <CitySearchInput
+                    initialValue={locationCity || undefined}
+                    onSelect={(city) => {
+                      setLocationCity(city.name);
+                      setLocationCountry(city.country);
+                      setLocationCountryCode(city.countryCode);
+                      setLocationLatitude(String(city.latitude));
+                      setLocationLongitude(String(city.longitude));
+                    }}
                     disabled={disabled || isSaving}
                   />
-                </label>
+                </div>
+                {locationCity ? (
+                  <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600">
+                    {[locationCity, locationCountry, locationCountryCode].filter(Boolean).join(', ')}
+                    {locationLatitude && locationLongitude
+                      ? ` (${locationLatitude}, ${locationLongitude})`
+                      : ''}
+                  </div>
+                ) : null}
                 <label className="block min-w-0">
                   <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelRegion')}</span>
                   <input
                     value={locationRegion}
                     onChange={(event) => setLocationRegion(event.target.value)}
                     placeholder={t('optional')}
-                    className={fieldClass}
-                    disabled={disabled || isSaving}
-                  />
-                </label>
-                <label className="block min-w-0">
-                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelCountryCode')}</span>
-                  <input
-                    value={locationCountryCode}
-                    onChange={(event) => setLocationCountryCode(event.target.value.toUpperCase())}
-                    placeholder="JP"
-                    maxLength={2}
-                    className={fieldClass}
-                    disabled={disabled || isSaving}
-                  />
-                </label>
-                <label className="block min-w-0">
-                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelLatitude')}</span>
-                  <input
-                    value={locationLatitude}
-                    onChange={(event) => setLocationLatitude(event.target.value)}
-                    type="number"
-                    step="any"
-                    placeholder="35.6762"
-                    className={fieldClass}
-                    disabled={disabled || isSaving}
-                  />
-                </label>
-                <label className="block min-w-0">
-                  <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelLongitude')}</span>
-                  <input
-                    value={locationLongitude}
-                    onChange={(event) => setLocationLongitude(event.target.value)}
-                    type="number"
-                    step="any"
-                    placeholder="139.6503"
                     className={fieldClass}
                     disabled={disabled || isSaving}
                   />

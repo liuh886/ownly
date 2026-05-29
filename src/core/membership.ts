@@ -1,5 +1,3 @@
-import { verifyActivationToken } from './activation';
-
 export const WYQD_MEMBERSHIP_PLANS = [
   'free',
   'pro_annual',
@@ -9,7 +7,7 @@ export const WYQD_MEMBERSHIP_PLANS = [
 
 export type WYQDMembershipPlan = (typeof WYQD_MEMBERSHIP_PLANS)[number];
 
-export type WYQDLicenseKeyStatus = 'none' | 'active_test_key' | 'invalid_local_key' | 'activated' | 'expired_token';
+export type WYQDLicenseKeyStatus = 'none' | 'dev_test' | 'activated' | 'invalid';
 
 export interface WYQDMembershipState {
   plan: WYQDMembershipPlan;
@@ -23,10 +21,12 @@ export interface WYQDMembershipState {
 
 export interface ResolveWYQDMembershipInput {
   licenseKey?: string | null;
-  activationToken?: string | null;
+  proUnlocked?: boolean;
+  licenseSource?: string;
 }
 
-const LOCAL_TEST_LICENSE_KEYS: Record<string, WYQDMembershipPlan> = {
+// Dev/test keys — never shown in production UI
+const DEV_TEST_KEYS: Record<string, WYQDMembershipPlan> = {
   'OWNLY-PRO-ANNUAL-TEST': 'pro_annual',
   'OWNLY-LIFETIME-EARLY-SUPPORTER-TEST': 'lifetime_early_supporter',
 };
@@ -41,33 +41,27 @@ const PLAN_LABELS: Record<WYQDMembershipPlan, string> = {
 const FREE_UPGRADE_MESSAGE =
   'Free tier includes 200 objects, 30 snapshots, and 100 reviews. Upgrade to Pro for unlimited.';
 
-export async function resolveWYQDMembership({
+export function resolveWYQDMembership({
   licenseKey,
-  activationToken,
-}: ResolveWYQDMembershipInput = {}): Promise<WYQDMembershipState> {
-  return resolveWYQDMembershipSync({ licenseKey });
-}
-
-export function resolveWYQDMembershipSync({
-  licenseKey,
-}: { licenseKey?: string | null } = {}): WYQDMembershipState {
-  const normalizedKey = normalizeWYQDLicenseKey(licenseKey);
-  if (!normalizedKey) return createMembershipState('free', 'none', null);
-
-  // Check known test keys first
-  const testPlan = LOCAL_TEST_LICENSE_KEYS[normalizedKey];
-  if (testPlan) return createMembershipState(testPlan, 'active_test_key', last4(normalizedKey));
-
-  // Accept any key matching OWNLY-... pattern as valid Pro license
-  if (isValidOwnlyKey(normalizedKey)) {
-    return createMembershipState('pro_lifetime', 'activated', last4(normalizedKey));
+  proUnlocked,
+}: ResolveWYQDMembershipInput = {}): WYQDMembershipState {
+  // 1. proUnlocked flag — set after successful Gumroad verify or special key
+  if (proUnlocked) {
+    return createMembershipState('pro_lifetime', 'activated', licenseKey ? last4(licenseKey) : null);
   }
 
-  return createMembershipState('free', 'invalid_local_key', last4(normalizedKey));
+  // 2. Dev/test keys (only for local testing)
+  const normalizedKey = normalizeWYQDLicenseKey(licenseKey);
+  if (normalizedKey) {
+    const testPlan = DEV_TEST_KEYS[normalizedKey];
+    if (testPlan) return createMembershipState(testPlan, 'dev_test', last4(normalizedKey));
+  }
+
+  return createMembershipState('free', 'none', null);
 }
 
 export function normalizeWYQDLicenseKey(licenseKey?: string | null) {
-  return (licenseKey ?? '').trim().toUpperCase();
+  return (licenseKey ?? '').trim();
 }
 
 export function canUseWYQDProFeature(membership: Pick<WYQDMembershipState, 'isPro'>) {
@@ -105,7 +99,7 @@ function createMembershipState(
     planLabel: PLAN_LABELS[plan],
     statusLabel: getStatusLabel(status),
     upgradeMessage: isPro
-      ? 'Pro membership is active for local alpha testing.'
+      ? 'Pro membership is active.'
       : FREE_UPGRADE_MESSAGE,
   };
 }
@@ -114,12 +108,10 @@ function getStatusLabel(status: WYQDLicenseKeyStatus) {
   switch (status) {
     case 'activated':
       return 'Activated';
-    case 'active_test_key':
-      return 'Active local test key';
-    case 'invalid_local_key':
-      return 'Invalid local test key';
-    case 'expired_token':
-      return 'Activation expired';
+    case 'dev_test':
+      return 'Dev test key';
+    case 'invalid':
+      return 'Invalid key';
     default:
       return 'No license key';
   }
@@ -127,9 +119,4 @@ function getStatusLabel(status: WYQDLicenseKeyStatus) {
 
 function last4(value: string) {
   return value.slice(-4);
-}
-
-function isValidOwnlyKey(key: string): boolean {
-  // Accept: OWNLY-XXXX-XXXX or any OWNLY-<segments> format
-  return /^OWNLY-[A-Z0-9]{4,}-[A-Z0-9]{4,}(-[A-Z0-9]+)*$/.test(key);
 }
