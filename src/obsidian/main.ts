@@ -226,6 +226,7 @@ export default class WYQDPlugin extends Plugin {
       licenseKey: this.settings.licenseKey,
       proUnlocked: this.settings.proUnlocked,
       licenseSource: this.settings.licenseSource,
+      t: (key: string) => this.t(key as WYQDTranslationKey),
     });
   }
 

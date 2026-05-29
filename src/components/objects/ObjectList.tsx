@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type {
@@ -629,6 +629,24 @@ export function ObjectList({
   const [controlBucketFilter, setControlBucketFilter] = useState<ObjectControlBucket | null>(null);
   const [openActionMenuFileName, setOpenActionMenuFileName] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (openActionMenuFileName === null) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (!(event.target as HTMLElement).closest('[role="menu"]')) {
+        setOpenActionMenuFileName(null);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpenActionMenuFileName(null);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openActionMenuFileName]);
+
   const typeLabels = getTypeLabels(t);
   const filterLabels = getFilterLabels(t);
   const objectTypeFilterLabels = getObjectTypeFilterLabels(t);
@@ -1051,9 +1069,9 @@ export function ObjectList({
 	                        <span aria-hidden="true">⋯</span>
 	                      </button>
 	                      {openActionMenuFileName === stored.fileName ? (
-	                        <div className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+	                        <div role="menu" className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
 	                          <button
-	                            type="button"
+	                            type="button" role="menuitem"
 	                            onClick={async () => {
 	                              const next: PhysicalObject = {
 	                                ...object,
@@ -1078,7 +1096,7 @@ export function ObjectList({
 	                            <span aria-hidden="true">📦</span>
 	                          </button>
 	                          <button
-	                            type="button"
+	                            type="button" role="menuitem"
 	                            onClick={async () => {
 	                              const confirmed = window.confirm(t('deleteConfirm').replace('{title}', object.title));
 	                              if (!confirmed) return;
@@ -1289,10 +1307,10 @@ export function ObjectList({
 	                              <span aria-hidden="true">⋯</span>
 	                            </button>
 	                            {openActionMenuFileName === stored.fileName ? (
-	                              <div className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+	                              <div role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
 	                                {canCancelRecurringCost(object) ? (
 	                                  <button
-	                                    type="button"
+	                                    type="button" role="menuitem"
 	                                    onClick={async () => {
 	                                      const reason = window.prompt(t('cancelReasonPrompt').replace('{title}', object.title));
 	                                      if (reason === null) return;
@@ -1320,7 +1338,7 @@ export function ObjectList({
 	                                  </button>
 	                                ) : null}
 	                                <button
-	                                  type="button"
+	                                  type="button" role="menuitem"
 	                                  onClick={async () => {
 	                                    const confirmed = window.confirm(t('deleteConfirm').replace('{title}', object.title));
 	                                    if (!confirmed) return;

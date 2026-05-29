@@ -532,6 +532,50 @@ const translations = {
 
     // Home dashboard extras
     noNetWorthComparison: 'No prior month comparison',
+
+    // Physical categories
+    categoryElectronics: 'Electronics',
+    categoryCamera: 'Camera gear',
+    categoryClothing: 'Clothing & accessories',
+    categoryHome: 'Home',
+    categoryTransport: 'Transport',
+    categoryOther: 'Other',
+
+    // ObjectComposer body template
+    purchaseReason: 'Purchase reason',
+    usageLog: 'Usage log',
+    reviewAndRanking: 'Review & ranking',
+
+    // Review template
+    reviewTitlePrefix: 'Review',
+    reviewExperienceSection: 'Experience review',
+    reviewRankingSection: 'Rankings',
+    reviewFoodRank: 'Food',
+    reviewSceneryRank: 'Scenery',
+    reviewExperienceRank: 'Experience',
+    reviewRankedAt: 'Ranked #{rank}',
+    reviewUnranked: 'Not ranked',
+    reviewRelatedObjects: 'Related objects',
+
+    // Account snapshot template
+    snapshotTitlePrefix: 'Account snapshot',
+    snapshotNoteSection: 'Snapshot notes',
+    snapshotNoteBody: 'Only records periodic valuations of financial assets and liabilities, not daily transactions.',
+    netWorthChartAriaLabel: 'Account net worth historical line chart',
+    perMonth: '/month',
+    unspecifiedAccount: 'Unspecified account',
+
+    // Membership labels
+    planFree: 'Free',
+    planProAnnual: 'Pro Annual',
+    planProLifetime: 'Pro Lifetime',
+    planLifetimeEarlySupporter: 'Lifetime Early Supporter',
+    statusActivated: 'Activated',
+    statusDevTest: 'Dev test key',
+    statusInvalid: 'Invalid key',
+    statusNoLicense: 'No license key',
+    proMembershipActive: 'Pro membership is active.',
+    freeUpgradeMessage: 'Free tier includes 200 objects, 30 snapshots, and 100 reviews. Upgrade to Pro for unlimited.',
   },
   zh: {
     workspaceTitle: '物欲清单工作台',
@@ -1057,6 +1101,50 @@ const translations = {
 
     // Home dashboard extras
     noNetWorthComparison: '暂无上月末对比',
+
+    // Physical categories
+    categoryElectronics: '电子产品',
+    categoryCamera: '摄影器材',
+    categoryClothing: '衣物配饰',
+    categoryHome: '家居',
+    categoryTransport: '交通',
+    categoryOther: '其他',
+
+    // ObjectComposer body template
+    purchaseReason: '购买理由',
+    usageLog: '使用记录',
+    reviewAndRanking: '复盘与排行',
+
+    // Review template
+    reviewTitlePrefix: '复盘',
+    reviewExperienceSection: '体验复盘',
+    reviewRankingSection: '排行榜',
+    reviewFoodRank: '美食',
+    reviewSceneryRank: '风景',
+    reviewExperienceRank: '体验',
+    reviewRankedAt: '第 {rank} 名',
+    reviewUnranked: '未排位',
+    reviewRelatedObjects: '关联对象',
+
+    // Account snapshot template
+    snapshotTitlePrefix: '账户快照',
+    snapshotNoteSection: '快照说明',
+    snapshotNoteBody: '只记录金融资产与负债的阶段性估值，不记录日常流水。',
+    netWorthChartAriaLabel: '账户净资产历史折线图',
+    perMonth: '/月',
+    unspecifiedAccount: '未指定支付账户',
+
+    // Membership labels
+    planFree: '免费版',
+    planProAnnual: 'Pro 年度版',
+    planProLifetime: 'Pro 终身版',
+    planLifetimeEarlySupporter: '终身早期支持者',
+    statusActivated: '已激活',
+    statusDevTest: '开发测试密钥',
+    statusInvalid: '无效密钥',
+    statusNoLicense: '无许可证密钥',
+    proMembershipActive: 'Pro 会员已激活。',
+    freeUpgradeMessage: '免费版包含 200 个对象、30 个快照和 100 条复盘。升级 Pro 享受无限额度。',
   },
 } as const;
 

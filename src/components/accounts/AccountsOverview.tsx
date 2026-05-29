@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
+import type { WYQDTranslationKey } from '@/core/i18n';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type {
   AccountBalance,
@@ -67,11 +68,11 @@ function sumBalances(balances: AccountBalance[]): number {
   return balances.reduce((sum, balance) => sum + (balance.amount || 0), 0);
 }
 
-function getPaymentAccount(object: RecurringCostObject, fallback?: string): string {
-  return object.payment_account?.trim() || fallback || '未指定支付账户';
+function getPaymentAccount(object: RecurringCostObject, fallback?: string, t?: (key: WYQDTranslationKey) => string): string {
+  return object.payment_account?.trim() || fallback || (t ? t('unspecifiedAccount') : 'Unspecified account');
 }
 
-function groupRecurringCostsByAccount(objects: WYQDObject[], fallback?: string) {
+function groupRecurringCostsByAccount(objects: WYQDObject[], fallback?: string, t?: (key: WYQDTranslationKey) => string) {
   const groups = new Map<
     string,
     {
@@ -86,7 +87,7 @@ function groupRecurringCostsByAccount(objects: WYQDObject[], fallback?: string) 
   for (const object of objects) {
     if (object.object_type !== 'recurring_cost' || object.status !== 'active') continue;
 
-    const account = getPaymentAccount(object, fallback);
+    const account = getPaymentAccount(object, fallback, t);
     const current = groups.get(account) || {
       account,
       monthlyCost: 0,
@@ -117,11 +118,13 @@ function createSnapshotDraft({
   assetBalances,
   liabilityBalances,
   isMonthEnd,
+  t,
 }: {
   snapshotAt: string;
   assetBalances: AccountBalance[];
   liabilityBalances: AccountBalance[];
   isMonthEnd: boolean;
+  t?: (key: WYQDTranslationKey) => string;
 }): AccountSnapshot {
   const now = new Date().toISOString();
   const totalAssets = sumBalances(assetBalances);
@@ -132,7 +135,7 @@ function createSnapshotDraft({
     id: `snap_${snapshotAt.replaceAll('-', '')}_${Date.now()}`,
     type: 'snapshot',
     snapshot_type: 'net_worth',
-    title: `账户快照 ${snapshotAt}`,
+    title: `${t ? t('snapshotTitlePrefix') : 'Account snapshot'} ${snapshotAt}`,
     snapshot_at: snapshotAt,
     is_month_end: isMonthEnd,
     currency: 'CNY',
@@ -171,7 +174,7 @@ export function AccountsOverview({
   const latest = findLatestSnapshot(snapshotEntities);
   const latestAssetBalancesText = latest ? serializeBalanceLines(latest.asset_balances) : '';
   const latestLiabilityBalancesText = latest ? serializeBalanceLines(latest.liability_balances) : '';
-  const recurringAccountGroups = groupRecurringCostsByAccount(objects, t('noData'));
+  const recurringAccountGroups = groupRecurringCostsByAccount(objects, t('noData'), t);
   const totalMonthlyFixedCost = recurringAccountGroups.reduce(
     (sum, group) => sum + group.monthlyCost,
     0,
@@ -232,6 +235,7 @@ export function AccountsOverview({
         assetBalances: parsedAssetBalances,
         liabilityBalances: parsedLiabilityBalances,
         isMonthEnd,
+        t,
       });
       const snapshot = editing
         ? {
@@ -249,7 +253,7 @@ export function AccountsOverview({
       } else {
         await onCreateSnapshot(
           snapshot,
-          '## 快照说明\n\n只记录金融资产与负债的阶段性估值，不记录日常流水。\n',
+          `## ${t('snapshotNoteSection')}\n\n${t('snapshotNoteBody')}\n`,
         );
       }
       setAssetBalancesText('');
@@ -420,7 +424,7 @@ export function AccountsOverview({
         </div>
         {trendSnapshots.length > 0 ? (
           <div className="mt-4">
-            <svg viewBox="0 0 100 48" role="img" aria-label="账户净资产历史折线图" className="h-28 w-full">
+            <svg viewBox="0 0 100 48" role="img" aria-label={t('netWorthChartAriaLabel')} className="h-28 w-full">
               <polyline
                 fill="none"
                 points={trendPoints}
@@ -490,7 +494,7 @@ export function AccountsOverview({
                     <div className="text-sm font-semibold text-stone-950">
                       {formatMoney(group.monthlyCost)}
                     </div>
-                    <div className="text-xs text-stone-400">/月</div>
+                    <div className="text-xs text-stone-400">{t('perMonth')}</div>
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">

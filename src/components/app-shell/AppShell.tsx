@@ -214,7 +214,7 @@ export function AppShell() {
       id: `review_${date.replaceAll('-', '')}_${Date.now()}`,
       type: 'review',
       review_type: 'object_review',
-      title: `复盘 ${object.title}`,
+      title: `${t('reviewTitlePrefix')} ${object.title}`,
       target: object.title,
       target_id: object.id,
       target_type: object.object_type,
@@ -234,13 +234,9 @@ export function AppShell() {
       tags: ['ownly', 'review', 'experience'],
     };
 
-    const reviewBody = `## 体验复盘\n\n${summary}\n\n## 排行榜\n\n- 美食：${
-      rankings.foodRank ? `第 ${rankings.foodRank} 名` : '未排位'
-    }\n- 风景：${
-      rankings.sceneryRank ? `第 ${rankings.sceneryRank} 名` : '未排位'
-    }\n- 体验：${
-      rankings.experienceRank ? `第 ${rankings.experienceRank} 名` : '未排位'
-    }\n\n## 关联对象\n\n- ${object.title}\n`;
+    const rankedLabel = (rank: number | null | undefined) =>
+      rank ? t('reviewRankedAt').replace('{rank}', String(rank)) : t('reviewUnranked');
+    const reviewBody = `## ${t('reviewExperienceSection')}\n\n${summary}\n\n## ${t('reviewRankingSection')}\n\n- ${t('reviewFoodRank')}：${rankedLabel(rankings.foodRank)}\n- ${t('reviewSceneryRank')}：${rankedLabel(rankings.sceneryRank)}\n- ${t('reviewExperienceRank')}：${rankedLabel(rankings.experienceRank)}\n\n## ${t('reviewRelatedObjects')}\n\n- ${object.title}\n`;
 
     const updatedObject: WYQDObject = {
       ...object,
@@ -507,7 +503,7 @@ export function AppShell() {
                 />
                 <ObjectComposer
                   disabled={!isConnected}
-                  submitLabel="保存到 Ownly"
+                  submitLabel={t('saveToOwnly')}
                   onSubmit={createObject}
                 />
                 <ArchivePanel

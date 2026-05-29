@@ -23,6 +23,7 @@ export interface ResolveWYQDMembershipInput {
   licenseKey?: string | null;
   proUnlocked?: boolean;
   licenseSource?: string;
+  t?: (key: string) => string;
 }
 
 // Dev/test keys — never shown in production UI
@@ -31,33 +32,52 @@ const DEV_TEST_KEYS: Record<string, WYQDMembershipPlan> = {
   'OWNLY-LIFETIME-EARLY-SUPPORTER-TEST': 'lifetime_early_supporter',
 };
 
-const PLAN_LABELS: Record<WYQDMembershipPlan, string> = {
+const PLAN_LABEL_KEYS: Record<WYQDMembershipPlan, string> = {
+  free: 'planFree',
+  pro_annual: 'planProAnnual',
+  pro_lifetime: 'planProLifetime',
+  lifetime_early_supporter: 'planLifetimeEarlySupporter',
+};
+
+const PLAN_LABELS_EN: Record<WYQDMembershipPlan, string> = {
   free: 'Free',
   pro_annual: 'Pro Annual',
   pro_lifetime: 'Pro Lifetime',
   lifetime_early_supporter: 'Lifetime Early Supporter',
 };
 
-const FREE_UPGRADE_MESSAGE =
-  'Free tier includes 200 objects, 30 snapshots, and 100 reviews. Upgrade to Pro for unlimited.';
+const STATUS_LABEL_KEYS: Record<WYQDLicenseKeyStatus, string> = {
+  activated: 'statusActivated',
+  dev_test: 'statusDevTest',
+  invalid: 'statusInvalid',
+  none: 'statusNoLicense',
+};
+
+const STATUS_LABELS_EN: Record<WYQDLicenseKeyStatus, string> = {
+  activated: 'Activated',
+  dev_test: 'Dev test key',
+  invalid: 'Invalid key',
+  none: 'No license key',
+};
 
 export function resolveWYQDMembership({
   licenseKey,
   proUnlocked,
+  t,
 }: ResolveWYQDMembershipInput = {}): WYQDMembershipState {
   // 1. proUnlocked flag — set after successful Gumroad verify or special key
   if (proUnlocked) {
-    return createMembershipState('pro_lifetime', 'activated', licenseKey ? last4(licenseKey) : null);
+    return createMembershipState('pro_lifetime', 'activated', licenseKey ? last4(licenseKey) : null, t);
   }
 
   // 2. Dev/test keys (only for local testing)
   const normalizedKey = normalizeWYQDLicenseKey(licenseKey);
   if (normalizedKey) {
     const testPlan = DEV_TEST_KEYS[normalizedKey];
-    if (testPlan) return createMembershipState(testPlan, 'dev_test', last4(normalizedKey));
+    if (testPlan) return createMembershipState(testPlan, 'dev_test', last4(normalizedKey), t);
   }
 
-  return createMembershipState('free', 'none', null);
+  return createMembershipState('free', 'none', null, t);
 }
 
 export function normalizeWYQDLicenseKey(licenseKey?: string | null) {
@@ -88,6 +108,7 @@ function createMembershipState(
   plan: WYQDMembershipPlan,
   status: WYQDLicenseKeyStatus,
   licenseKeyLast4: string | null,
+  t?: (key: string) => string,
 ): WYQDMembershipState {
   const isPro = plan !== 'free';
 
@@ -96,25 +117,12 @@ function createMembershipState(
     status,
     isPro,
     licenseKeyLast4,
-    planLabel: PLAN_LABELS[plan],
-    statusLabel: getStatusLabel(status),
+    planLabel: t ? t(PLAN_LABEL_KEYS[plan]) : PLAN_LABELS_EN[plan],
+    statusLabel: t ? t(STATUS_LABEL_KEYS[status]) : STATUS_LABELS_EN[status],
     upgradeMessage: isPro
-      ? 'Pro membership is active.'
-      : FREE_UPGRADE_MESSAGE,
+      ? (t ? t('proMembershipActive') : 'Pro membership is active.')
+      : (t ? t('freeUpgradeMessage') : 'Free tier includes 200 objects, 30 snapshots, and 100 reviews. Upgrade to Pro for unlimited.'),
   };
-}
-
-function getStatusLabel(status: WYQDLicenseKeyStatus) {
-  switch (status) {
-    case 'activated':
-      return 'Activated';
-    case 'dev_test':
-      return 'Dev test key';
-    case 'invalid':
-      return 'Invalid key';
-    default:
-      return 'No license key';
-  }
 }
 
 function last4(value: string) {

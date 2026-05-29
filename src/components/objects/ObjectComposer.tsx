@@ -614,7 +614,7 @@ export function ObjectComposer({
             experienceSubtype: experienceSubtype || undefined,
             location: travelLocation,
           });
-      await onSubmit(object, '## 购买理由\n\n## 使用记录\n\n## 复盘与排行\n');
+      await onSubmit(object, `## ${t('purchaseReason')}\n\n## ${t('usageLog')}\n\n## ${t('reviewAndRanking')}\n`);
       if (!initialObject) {
         setTitle('');
         setAmount('');

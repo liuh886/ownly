@@ -554,6 +554,7 @@ export function ReviewHome({
                 key={experience.id}
                 className={`flex justify-between gap-3 border-t border-stone-100 pt-3 ${canStartReview ? 'cursor-pointer rounded-lg hover:bg-stone-50 -mx-2 px-2' : ''}`}
                 onClick={canStartReview ? () => startExperienceReview(experience) : undefined}
+                {...(canStartReview ? { role: 'button', tabIndex: 0, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startExperienceReview(experience); } } } : {})}
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-stone-950">
