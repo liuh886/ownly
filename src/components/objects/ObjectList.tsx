@@ -206,7 +206,7 @@ function getSupportingTimeLabel(object: WYQDObject, t: TranslateFn): string {
 
 type PhysicalFilter = 'all' | 'active' | 'retired' | 'sold';
 type ObjectTypeFilter = 'all' | WYQDObject['object_type'];
-type ObjectStatusGroupFilter = 'all' | 'observing' | 'using' | 'exited';
+type ObjectStatusGroupFilter = 'all' | 'observing' | 'using' | 'pendingReview' | 'exited';
 type ObjectControlBucket = 'attention' | 'active' | 'review' | 'closed';
 type SortOption = 'date_desc' | 'date_asc' | 'price_desc' | 'price_asc' | 'title_asc';
 
@@ -282,6 +282,7 @@ function getObjectStatusGroupLabels(t: TranslateFn): Record<ObjectStatusGroupFil
     all: t('filterAll'),
     observing: t('observing'),
     using: t('inUse'),
+    pendingReview: t('pendingReview'),
     exited: t('exited'),
   };
 }
@@ -308,8 +309,8 @@ function getObjectControlLabels(
     review: {
       title: t('pendingReview'),
       description: t('bucketReviewDesc'),
-      statusGroup: 'exited',
-      typeFilter: 'one_time_experience',
+      statusGroup: 'pendingReview',
+      typeFilter: 'all',
     },
     closed: {
       title: t('exited'),
@@ -354,9 +355,17 @@ function matchesStatusGroup(object: WYQDObject, group: ObjectStatusGroupFilter):
   if (group === 'using') {
     return ['purchased', 'using', 'active', 'in_progress'].includes(object.status);
   }
-  return ['idle', 'transferred', 'discarded', 'cancelled', 'completed', 'reviewed'].includes(
-    object.status,
-  );
+  if (group === 'pendingReview') {
+    // Items that are completed/idle but not yet reviewed
+    if (object.object_type === 'one_time_experience') {
+      return object.status === 'completed';
+    }
+    if (object.object_type === 'physical') {
+      return object.status === 'idle';
+    }
+    return object.status === 'cancelled';
+  }
+  return ['transferred', 'discarded', 'reviewed'].includes(object.status);
 }
 
 function getObjectTypeFilterCount(
