@@ -84,7 +84,7 @@ export function ReviewHome({
   const [editingFileName, setEditingFileName] = useState<string | null>(null);
   const [deletingFileName, setDeletingFileName] = useState<string | null>(null);
   const [selectedReviewFileName, setSelectedReviewFileName] = useState<string | null>(null);
-  const [showAllExperiences, setShowAllExperiences] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'reviewed'>('all');
   const [reviewQuery, setReviewQuery] = useState('');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'all' | ReviewEntry['review_type']>(
     'all',
@@ -120,6 +120,54 @@ export function ReviewHome({
     [reviews],
   );
   const rankedReviewCount = reviews.filter((stored) => hasScore(stored.entity)).length;
+
+  // Unified list: pending experiences + reviewed items
+  type UnifiedItem =
+    | { kind: 'pending'; experience: WYQDObject; date: string; amount: number }
+    | { kind: 'reviewed'; stored: WYQDStoredEntity<ReviewEntry>; date: string };
+
+  const unifiedItems = useMemo(() => {
+    const pending: UnifiedItem[] = pendingReviewExperiences.map((exp) => ({
+      kind: 'pending' as const,
+      experience: exp,
+      date: exp.updated_at || exp.created_at || '',
+      amount: getExperienceAmount(exp),
+    }));
+    const reviewed: UnifiedItem[] = latestReviews.map((stored) => ({
+      kind: 'reviewed' as const,
+      stored,
+      date: stored.entity.reviewed_at || stored.entity.created_at || '',
+    }));
+    return [...pending, ...reviewed].sort((a, b) => b.date.localeCompare(a.date));
+  }, [pendingReviewExperiences, latestReviews]);
+
+  const filteredUnifiedItems = useMemo(() => {
+    const query = reviewQuery.trim().toLowerCase();
+
+    return unifiedItems.filter((item) => {
+      // Status filter
+      if (statusFilter === 'pending' && item.kind !== 'pending') return false;
+      if (statusFilter === 'reviewed' && item.kind !== 'reviewed') return false;
+
+      // Type filter only applies to reviewed items
+      if (item.kind === 'reviewed' && reviewTypeFilter !== 'all') {
+        if (item.stored.entity.review_type !== reviewTypeFilter) return false;
+      }
+
+      // Search
+      if (!query) return true;
+      if (item.kind === 'pending') {
+        const haystack = [item.experience.title, item.experience.status].join(' ').toLowerCase();
+        return haystack.includes(query);
+      }
+      const e = item.stored.entity;
+      const haystack = [e.title, e.target, e.summary, e.review_type, e.exit_type, e.period, item.stored.body]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [unifiedItems, statusFilter, reviewQuery, reviewTypeFilter]);
 
   function getStatusLabel(object: WYQDObject): string {
     const labels: Record<string, string> = {
@@ -368,103 +416,6 @@ export function ReviewHome({
 
       </div>
 
-      {/* Experiences — merged view with inline review trigger */}
-      <div className="rounded-xl border border-stone-200 bg-white p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('seeWorld')}</h2>
-          <span className="text-xs text-stone-400">{experiences.length}</span>
-        </div>
-        <div className="mt-3 space-y-2">
-          {experiences.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">{t('noExperiencesYet')}</div>
-          ) : (
-            (showAllExperiences ? experiences : experiences.slice(0, 6)).map((experience) => {
-              const isAlreadyReviewed = Boolean(
-                experience.review_ref || reviewedTargetIds.has(experience.id),
-              );
-              const canStartReview = !isAlreadyReviewed;
-              const isReviewingThis = reviewingExperienceId === experience.id;
-
-              return (
-                <div key={experience.id}>
-                  <div
-                    className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 ${canStartReview ? 'cursor-pointer hover:bg-stone-50' : ''} ${isReviewingThis ? 'bg-stone-50 ring-1 ring-stone-200' : ''}`}
-                    onClick={canStartReview ? () => startExperienceReview(experience) : undefined}
-                    {...(canStartReview ? { role: 'button', tabIndex: 0, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startExperienceReview(experience); } } } : {})}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-stone-950">{experience.title}</span>
-                        {canStartReview ? (
-                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">{t('pendingReviewBadge')}</span>
-                        ) : null}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
-                        <span>{getStatusLabel(experience)}</span>
-                        <span>·</span>
-                        <span>{formatMoney(getExperienceAmount(experience))}</span>
-                      </div>
-                    </div>
-                    {canStartReview ? (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); startExperienceReview(experience); }}
-                        className="shrink-0 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
-                      >
-                        {t('reviewAction')}
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {/* Inline review form */}
-                  {isReviewingThis ? (
-                    <form ref={reviewFormRef} onSubmit={handleSubmit} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
-                      <textarea
-                        value={summary}
-                        onChange={(event) => setSummary(event.target.value)}
-                        placeholder={t('reviewSummaryPlaceholder')}
-                        rows={3}
-                        aria-label={t('summary')}
-                        className={`${fieldClass} resize-none`}
-                        disabled={disabled || isSaving}
-                      />
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
-                        <input value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
-                        <input value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
-                      </div>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={cancelEditing} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSaving}>{t('cancel')}</button>
-                        <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
-                          {isSaving ? t('saving') : t('saveReview')}
-                        </button>
-                      </div>
-                    </form>
-                  ) : null}
-                </div>
-              );
-            })
-          )}
-          {experiences.length > 6 && !showAllExperiences ? (
-            <button
-              type="button"
-              onClick={() => setShowAllExperiences(true)}
-              className="w-full rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-500 transition hover:border-stone-400 hover:text-stone-900"
-            >
-              {t('showMore')} ({experiences.length - 6})
-            </button>
-          ) : experiences.length > 6 && showAllExperiences ? (
-            <button
-              type="button"
-              onClick={() => setShowAllExperiences(false)}
-              className="w-full rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-500 transition hover:border-stone-400 hover:text-stone-900"
-            >
-              {t('showLess')}
-            </button>
-          ) : null}
-        </div>
-      </div>
-
       {/* Ranking Boards */}
       <div className="grid gap-3 lg:grid-cols-3">
         {rankingBoards.map((board) => (
@@ -506,14 +457,34 @@ export function ReviewHome({
         ))}
       </div>
 
-      {/* Review History */}
+      {/* Unified Review List */}
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('reviewHistory')}</h2>
           <span className="text-xs text-stone-400">
-            {filteredReviews.length}/{latestReviews.length}
+            {filteredUnifiedItems.length}/{unifiedItems.length}
           </span>
         </div>
+
+        {/* Status filter tabs */}
+        <div className="mt-3 flex gap-1">
+          {(['all', 'pending', 'reviewed'] as const).map((sf) => (
+            <button
+              key={sf}
+              type="button"
+              onClick={() => setStatusFilter(sf)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                statusFilter === sf
+                  ? 'bg-stone-950 text-white'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              {t(sf === 'all' ? 'filterAll' : sf === 'pending' ? 'filterPending' : 'filterReviewed')}
+            </button>
+          ))}
+        </div>
+
+        {/* Search + type filter */}
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
           <input
             value={reviewQuery}
@@ -537,93 +508,140 @@ export function ReviewHome({
             <option value="annual">{t('filterAnnual')}</option>
           </select>
         </div>
+
+        {/* Unified list + detail sidebar */}
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-          <div className="space-y-3">
-            {filteredReviews.map((stored) => (
-              <div
-                key={stored.entity.id}
-                className={`border-t pt-3 ${
-                  selectedReview?.fileName === stored.fileName
-                    ? 'border-stone-300'
-                    : 'border-stone-100'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-stone-950">
-                      {stored.entity.title}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-stone-400">
-                      <span>{stored.entity.reviewed_at || stored.entity.created_at}</span>
-                      <span>{getReviewTypeLabel(stored.entity.review_type)}</span>
-                      {stored.entity.target ? <span>{stored.entity.target}</span> : null}
-                    </div>
-                  </div>
-                  {getScoreItems(stored.entity).length > 0 ? (
-                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                      {getScoreItems(stored.entity).map((item) => (
-                        <span
-                          key={item}
-                          className="rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-600"
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                {stored.entity.summary ? (
-                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-500">
-                    {stored.entity.summary}
-                  </p>
-                ) : null}
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => selectReview(stored.fileName)}
-                    className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 active:scale-95"
-                  >
-                    {t('detail')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startEditingReview(stored)}
-                    className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300 disabled:hover:border-stone-100 disabled:hover:text-stone-300"
-                    disabled={disabled || isSaving}
-                  >
-                    {t('edit')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const confirmed = await confirm({
-                            title: t('delete'),
-                            message: t('deleteConfirm').replace('{title}', stored.entity.title),
-                            destructive: true,
-                          });
-                      if (!confirmed) return;
-                      setDeletingFileName(stored.fileName);
-                      try {
-                        await onDeleteReview(stored.fileName);
-                        if (editingFileName === stored.fileName) cancelEditing();
-                        if (selectedReviewFileName === stored.fileName) {
-                          setSelectedReviewFileName(null);
-                        }
-                      } finally {
-                        setDeletingFileName(null);
-                      }
-                    }}
-                    className="rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300 disabled:hover:border-stone-100 disabled:hover:bg-white"
-                    disabled={disabled || deletingFileName === stored.fileName}
-                  >
-                    {deletingFileName === stored.fileName ? t('saving') : t('delete')}
-                  </button>
-                </div>
-              </div>
-            ))}
-            {filteredReviews.length === 0 ? (
+          <div className="space-y-2">
+            {filteredUnifiedItems.length === 0 ? (
               <p className="text-sm text-stone-500">{t('noMatchingReviews')}</p>
             ) : null}
+
+            {filteredUnifiedItems.map((item) => {
+              if (item.kind === 'pending') {
+                const exp = item.experience;
+                const isReviewingThis = reviewingExperienceId === exp.id;
+                return (
+                  <div key={`pending-${exp.id}`}>
+                    <div
+                      className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-stone-50 ${isReviewingThis ? 'bg-stone-50 ring-1 ring-stone-200' : ''}`}
+                      onClick={() => startExperienceReview(exp)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startExperienceReview(exp); } }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-stone-950">{exp.title}</span>
+                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">{t('pendingReviewBadge')}</span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
+                          <span>{getStatusLabel(exp)}</span>
+                          <span>·</span>
+                          <span>{formatMoney(item.amount)}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); startExperienceReview(exp); }}
+                        className="shrink-0 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
+                      >
+                        {t('reviewAction')}
+                      </button>
+                    </div>
+                    {isReviewingThis ? (
+                      <form ref={reviewFormRef} onSubmit={handleSubmit} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+                        <textarea value={summary} onChange={(event) => setSummary(event.target.value)} placeholder={t('reviewSummaryPlaceholder')} rows={3} aria-label={t('summary')} className={`${fieldClass} resize-none`} disabled={disabled || isSaving} />
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
+                          <input value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
+                          <input value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={cancelEditing} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSaving}>{t('cancel')}</button>
+                          <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
+                            {isSaving ? t('saving') : t('saveReview')}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                  </div>
+                );
+              }
+
+              // Reviewed item
+              const stored = item.stored;
+              return (
+                <div
+                  key={stored.entity.id}
+                  className={`border-t pt-3 ${
+                    selectedReview?.fileName === stored.fileName ? 'border-stone-300' : 'border-stone-100'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-stone-950">
+                        {stored.entity.title}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-stone-400">
+                        <span>{stored.entity.reviewed_at || stored.entity.created_at}</span>
+                        <span>{getReviewTypeLabel(stored.entity.review_type)}</span>
+                        {stored.entity.target ? <span>{stored.entity.target}</span> : null}
+                      </div>
+                    </div>
+                    {getScoreItems(stored.entity).length > 0 ? (
+                      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                        {getScoreItems(stored.entity).map((scoreItem) => (
+                          <span key={scoreItem} className="rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-600">
+                            {scoreItem}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  {stored.entity.summary ? (
+                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-500">
+                      {stored.entity.summary}
+                    </p>
+                  ) : null}
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => selectReview(stored.fileName)}
+                      className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 active:scale-95"
+                    >
+                      {t('detail')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startEditingReview(stored)}
+                      className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300"
+                      disabled={disabled || isSaving}
+                    >
+                      {t('edit')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const confirmed = await confirm({ title: t('delete'), message: t('deleteConfirm').replace('{title}', stored.entity.title), destructive: true });
+                        if (!confirmed) return;
+                        setDeletingFileName(stored.fileName);
+                        try {
+                          await onDeleteReview(stored.fileName);
+                          if (editingFileName === stored.fileName) cancelEditing();
+                          if (selectedReviewFileName === stored.fileName) setSelectedReviewFileName(null);
+                        } finally {
+                          setDeletingFileName(null);
+                        }
+                      }}
+                      className="rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300"
+                      disabled={disabled || deletingFileName === stored.fileName}
+                    >
+                      {deletingFileName === stored.fileName ? t('saving') : t('delete')}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <aside ref={reviewDetailRef} className="rounded-xl border border-stone-200 bg-stone-50/50 p-5">
@@ -634,35 +652,25 @@ export function ReviewHome({
                   <h3 className="mt-1 break-words text-base font-semibold text-stone-950">
                     {selectedReview.entity.title}
                   </h3>
-                  <p className="mt-1 break-all text-xs text-stone-400">
-                    {selectedReview.fileName}
-                  </p>
+                  <p className="mt-1 break-all text-xs text-stone-400">{selectedReview.fileName}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <div className="text-stone-400">{t('type')}</div>
-                    <div className="mt-1 font-medium text-stone-800">
-                      {getReviewTypeLabel(selectedReview.entity.review_type)}
-                    </div>
+                    <div className="mt-1 font-medium text-stone-800">{getReviewTypeLabel(selectedReview.entity.review_type)}</div>
                   </div>
                   <div>
                     <div className="text-stone-400">{t('date')}</div>
-                    <div className="mt-1 font-medium text-stone-800">
-                      {selectedReview.entity.reviewed_at || selectedReview.entity.created_at}
-                    </div>
+                    <div className="mt-1 font-medium text-stone-800">{selectedReview.entity.reviewed_at || selectedReview.entity.created_at}</div>
                   </div>
                   <div>
                     <div className="text-stone-400">{t('exitType')}</div>
-                    <div className="mt-1 font-medium text-stone-800">
-                      {getExitTypeLabel(selectedReview.entity.exit_type)}
-                    </div>
+                    <div className="mt-1 font-medium text-stone-800">{getExitTypeLabel(selectedReview.entity.exit_type)}</div>
                   </div>
                   <div>
                     <div className="text-stone-400">{t('experienceCost')}</div>
                     <div className="mt-1 font-medium text-stone-800">
-                      {selectedReview.entity.realized_experience_cost
-                        ? formatMoney(selectedReview.entity.realized_experience_cost)
-                        : t('notRecorded')}
+                      {selectedReview.entity.realized_experience_cost ? formatMoney(selectedReview.entity.realized_experience_cost) : t('notRecorded')}
                     </div>
                   </div>
                 </div>
@@ -670,13 +678,8 @@ export function ReviewHome({
                   <div className="rounded-md bg-white p-3 text-xs">
                     <div className="text-stone-400">{t('rankings')}</div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {getScoreItems(selectedReview.entity).map((item) => (
-                        <span
-                          key={item}
-                          className="rounded-full bg-stone-100 px-2 py-1 font-medium text-stone-700"
-                        >
-                          {item}
-                        </span>
+                      {getScoreItems(selectedReview.entity).map((scoreItem) => (
+                        <span key={scoreItem} className="rounded-full bg-stone-100 px-2 py-1 font-medium text-stone-700">{scoreItem}</span>
                       ))}
                     </div>
                   </div>
@@ -684,35 +687,27 @@ export function ReviewHome({
                 {selectedReview.entity.target ? (
                   <div className="rounded-md bg-white p-3 text-xs">
                     <div className="text-stone-400">{t('relatedObject')}</div>
-                    <div className="mt-1 font-medium text-stone-900">
-                      {selectedReview.entity.target}
-                    </div>
+                    <div className="mt-1 font-medium text-stone-900">{selectedReview.entity.target}</div>
                     {selectedReviewTarget ? (
                       <div className="mt-1 text-stone-500">
                         {getStatusLabel(selectedReviewTarget)}
                         {selectedReviewTarget.object_type ? ` · ${selectedReviewTarget.object_type}` : ''}
                       </div>
                     ) : selectedReview.entity.target_id ? (
-                      <div className="mt-1 break-all text-stone-400">
-                        {selectedReview.entity.target_id}
-                      </div>
+                      <div className="mt-1 break-all text-stone-400">{selectedReview.entity.target_id}</div>
                     ) : null}
                   </div>
                 ) : null}
                 {selectedReview.entity.summary ? (
                   <div>
                     <div className="text-xs text-stone-400">{t('summary')}</div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-700">
-                      {selectedReview.entity.summary}
-                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-700">{selectedReview.entity.summary}</p>
                   </div>
                 ) : null}
                 {selectedReview.body.trim() ? (
                   <div>
                     <div className="text-xs text-stone-400">{t('markdownBodyLabel')}</div>
-                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-stone-600">
-                      {selectedReview.body.trim()}
-                    </pre>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-stone-600">{selectedReview.body.trim()}</pre>
                   </div>
                 ) : null}
               </div>
