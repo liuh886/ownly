@@ -13,13 +13,13 @@ import type {
   WYQDObject,
 } from '@/domain/types';
 import {
-  calculateHoldingDays,
   calculatePhysicalAcquisitionCost,
   calculatePhysicalDailyCost,
   calculateNextBillingDate,
   calculateRecurringMonthlyCost,
   calculateDesireAmount,
 } from '@/domain/calculations';
+import { calculateInclusiveDays, todayLocalDate } from '@/domain/date';
 import { ObjectComposer } from './ObjectComposer';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
@@ -175,9 +175,13 @@ function getDailyCost(object: WYQDObject): number | null {
   return calculatePhysicalDailyCost(object);
 }
 
-function getServiceDays(object: WYQDObject): number | null {
+function getServiceDaysInfo(object: WYQDObject): { elapsed: number; total: number | null } | null {
   if (object.object_type !== 'physical') return null;
-  return calculateHoldingDays(object);
+  const today = todayLocalDate();
+  const elapsed = calculateInclusiveDays(object.purchased_at, undefined, today);
+  if (!elapsed) return null;
+  const total = object.ended_at ? calculateInclusiveDays(object.purchased_at, object.ended_at, today) : null;
+  return { elapsed, total };
 }
 
 function formatDateRange(object: WYQDObject, t: TranslateFn): string {
@@ -1024,7 +1028,7 @@ export function ObjectList({
           const object = stored.entity;
           const isEditing = editingFileName === stored.fileName;
 	          const dailyCost = getDailyCost(object);
-	          const serviceDays = getServiceDays(object);
+	          const serviceDaysInfo = getServiceDaysInfo(object);
 	          const bucket = getPhysicalBucket(object.status);
 	          const accent = getPhysicalAccentClasses(bucket);
 
@@ -1071,7 +1075,11 @@ export function ObjectList({
 	                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
 	                        <span className="flex items-center gap-1.5">
 	                          <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} />
-	                          {serviceDays ? t('daysUsed').replace('{count}', String(serviceDays)) : t('notStarted')}
+	                          {serviceDaysInfo
+                            ? serviceDaysInfo.total
+                              ? t('daysUsedOf').replace('{elapsed}', String(serviceDaysInfo.elapsed)).replace('{total}', String(serviceDaysInfo.total))
+                              : t('daysUsed').replace('{count}', String(serviceDaysInfo.elapsed))
+                            : t('notStarted')}
 	                        </span>
 	                        <span>{formatDateRange(object, t)}</span>
 	                        {object.category ? <span>{translateCategory(object.category, t)}</span> : null}
