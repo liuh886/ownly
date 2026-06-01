@@ -35,11 +35,18 @@ The design philosophy behind Ownly is not to encourage owning more, but to help 
 | Archive & restore | ✅ | ✅ |
 | Markdown data export | ✅ Always | ✅ Always |
 
-**Pro** is available via a one-time Gumroad purchase (Annual, Lifetime, or Early Supporter tiers). Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
+**Pro** is unlocked when you support the project via [Ko-fi](https://ko-fi.com/F1F7WYJ6B) or [Gumroad](https://liuh886.gumroad.com/l/ownly). Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
 
 ## Network Calls
 
 Ownly is local-first. The **only** network call is the Gumroad License Verify API, used once when activating a Pro license key in the Obsidian plugin settings. After activation, the license state is stored locally and no further network calls are made. No telemetry, no analytics, no tracking.
+
+## Support
+
+If Ownly has been useful to you, consider supporting the project:
+
+- [Ko-fi](https://ko-fi.com/F1F7WYJ6B) — One-time donation
+- [Gumroad](https://liuh886.gumroad.com/l/ownly) — Support with Pro unlock
 
 ## Installation
 
@@ -120,11 +127,18 @@ Ownly 的设计哲学是 **Own less, Live more, Decide better** —— 它不是
 | 归档与恢复 | ✅ | ✅ |
 | Markdown 数据导出 | ✅ 始终可用 | ✅ 始终可用 |
 
-**Pro 版** 通过 Gumroad 一次性购买（年度订阅 / 终身买断 / 早期支持者）。免费用户始终拥有完整的 Markdown 数据访问权限 —— Ownly 永远不会因许可状态而锁定、加密、删除或阻止导出数据。
+**Pro 版** 通过 [Ko-fi](https://ko-fi.com/F1F7WYJ6B) 或 [Gumroad](https://liuh886.gumroad.com/l/ownly) 捐助解锁。免费用户始终拥有完整的 Markdown 数据访问权限 —— Ownly 永远不会因许可状态而锁定、加密、删除或阻止导出数据。
 
 ### 网络调用
 
 Ownly 以本地优先为原则。**唯一的网络调用**是 Gumroad License Verify API，仅在 Obsidian 插件设置中激活 Pro 许可证时使用一次。激活后，许可证状态存储在本地，不再进行任何网络调用。无遥测，无分析，无追踪。
+
+### 支持
+
+如果 Ownly 对你有帮助，欢迎支持：
+
+- [Ko-fi](https://ko-fi.com/F1F7WYJ6B) — 一次性捐助
+- [Gumroad](https://liuh886.gumroad.com/l/ownly) — 捐助并解锁 Pro
 
 ### 安装
 
