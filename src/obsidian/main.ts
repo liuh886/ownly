@@ -66,6 +66,7 @@ export default class WYQDPlugin extends Plugin {
   repository!: ObsidianVaultRepository;
   private workspaceRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private commandDefs: Record<string, { key: WYQDTranslationKey; callback: () => void }> = {};
+  private suppressVaultRefresh = false;
 
   async onload() {
     await this.loadSettings();
@@ -201,6 +202,14 @@ export default class WYQDPlugin extends Plugin {
     });
   }
 
+  /** Suppress vault change listener during programmatic writes to avoid redundant remounts. */
+  withSuppressedRefresh<T>(fn: () => Promise<T>): Promise<T> {
+    this.suppressVaultRefresh = true;
+    return fn().finally(() => {
+      this.suppressVaultRefresh = false;
+    });
+  }
+
   refreshCommands() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const registry = (this.app as any).commands?.commands;
@@ -211,6 +220,7 @@ export default class WYQDPlugin extends Plugin {
   }
 
   private onVaultFileChange(filePath: string) {
+    if (this.suppressVaultRefresh) return;
     const dataFolder = normalizeFolder(this.settings.dataFolder) || DEFAULT_SETTINGS.dataFolder;
     if (filePath !== dataFolder && !filePath.startsWith(`${dataFolder}/`)) return;
     this.scheduleWorkspaceRefresh();
@@ -312,6 +322,7 @@ class WYQDWorkspaceView extends ItemView {
             onRefresh: () => {
               this.plugin.refreshWorkspaceViews();
             },
+            withSuppressedRefresh: this.plugin.withSuppressedRefresh.bind(this.plugin),
           },
           createElement(AppShell),
         ),
