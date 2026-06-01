@@ -15,6 +15,7 @@ import type {
 import {
   calculatePhysicalAcquisitionCost,
   calculatePhysicalDailyCost,
+  calculateResidualValue,
   calculateNextBillingDate,
   calculateRecurringMonthlyCost,
   calculateDesireAmount,
@@ -791,6 +792,10 @@ export function ObjectList({
     () => allPhysicalObjects.filter((stored) => stored.entity.status === 'purchased' || stored.entity.status === 'using'),
     [allPhysicalObjects],
   );
+  const totalResidualValue = useMemo(
+    () => ownedPhysicalObjects.reduce((sum, stored) => sum + calculateResidualValue(stored.entity as PhysicalObject), 0),
+    [ownedPhysicalObjects],
+  );
   const dailyCosts = ownedPhysicalObjects
     .map((stored) => getDailyCost(stored.entity))
     .filter((value): value is number => value !== null);
@@ -856,6 +861,12 @@ export function ObjectList({
             <div className="text-xs text-stone-500">{t('totalAcquisitionCost')}（{allPhysicalObjects.length}）</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
               {formatMoney(totalCost)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500">{t('physicalAssetValue')}（{ownedPhysicalObjects.length}）</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
+              {formatMoney(totalResidualValue)}
             </div>
           </div>
           <div>
