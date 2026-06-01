@@ -26,12 +26,6 @@ export interface ResolveWYQDMembershipInput {
   t?: (key: string) => string;
 }
 
-// Dev/test keys — never shown in production UI
-const DEV_TEST_KEYS: Record<string, WYQDMembershipPlan> = {
-  'OWNLY-PRO-ANNUAL-TEST': 'pro_annual',
-  'OWNLY-LIFETIME-EARLY-SUPPORTER-TEST': 'lifetime_early_supporter',
-};
-
 const PLAN_LABEL_KEYS: Record<WYQDMembershipPlan, string> = {
   free: 'planFree',
   pro_annual: 'planProAnnual',
@@ -59,27 +53,14 @@ const STATUS_LABELS_EN: Record<WYQDLicenseKeyStatus, string> = {
 };
 
 export function resolveWYQDMembership({
-  licenseKey,
   proUnlocked,
   t,
 }: ResolveWYQDMembershipInput = {}): WYQDMembershipState {
-  // 1. proUnlocked flag — set after successful Gumroad verify or special key
+  // Sponsorship model — click to unlock, no license key required.
   if (proUnlocked) {
-    return createMembershipState('pro_lifetime', 'activated', licenseKey ? last4(licenseKey) : null, t);
+    return createMembershipState('pro_lifetime', 'activated', null, t);
   }
-
-  // 2. Dev/test keys (only for local testing)
-  const normalizedKey = normalizeWYQDLicenseKey(licenseKey);
-  if (normalizedKey) {
-    const testPlan = DEV_TEST_KEYS[normalizedKey];
-    if (testPlan) return createMembershipState(testPlan, 'dev_test', last4(normalizedKey), t);
-  }
-
   return createMembershipState('free', 'none', null, t);
-}
-
-export function normalizeWYQDLicenseKey(licenseKey?: string | null) {
-  return (licenseKey ?? '').trim();
 }
 
 export function canUseWYQDProFeature(membership: Pick<WYQDMembershipState, 'isPro'>) {
@@ -87,19 +68,18 @@ export function canUseWYQDProFeature(membership: Pick<WYQDMembershipState, 'isPr
 }
 
 export const WYQD_FREE_LIMITS = {
-  objects: 200,
-  snapshots: 30,
-  reviews: 100,
+  objects: Infinity,
+  snapshots: Infinity,
+  reviews: Infinity,
 } as const;
 
+// Everyone is Pro — capacity is always unlimited.
 export function checkWYQDCapacity(
-  membership: Pick<WYQDMembershipState, 'isPro'>,
-  kind: keyof typeof WYQD_FREE_LIMITS,
-  currentCount: number,
+  _membership: Pick<WYQDMembershipState, 'isPro'>,
+  _kind: keyof typeof WYQD_FREE_LIMITS,
+  _currentCount: number,
 ): { allowed: boolean; limit: number; remaining: number } {
-  if (membership.isPro) return { allowed: true, limit: Infinity, remaining: Infinity };
-  const limit = WYQD_FREE_LIMITS[kind];
-  return { allowed: currentCount < limit, limit, remaining: Math.max(0, limit - currentCount) };
+  return { allowed: true, limit: Infinity, remaining: Infinity };
 }
 
 function createMembershipState(
@@ -123,6 +103,3 @@ function createMembershipState(
   };
 }
 
-function last4(value: string) {
-  return value.slice(-4);
-}

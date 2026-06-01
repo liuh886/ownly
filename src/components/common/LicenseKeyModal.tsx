@@ -1,32 +1,23 @@
 'use client';
 
-import { useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+
+const GUMROAD_STORE_URL = 'https://liuh886.gumroad.com/l/ownly';
 
 export function LicenseKeyModal({
   open,
   onClose,
-  onActivate,
-  onClear,
-  currentPlan,
 }: {
   open: boolean;
   onClose: () => void;
-  onActivate: (key: string) => void;
-  onClear: () => void;
-  currentPlan: string;
+  onActivate?: (key: string) => void;
+  onClear?: () => void;
+  currentPlan?: string;
 }) {
   const { t } = useI18n();
   const { runtimeTarget } = useOwnlyWorkspace();
-  const [key, setKey] = useState('');
-  const isActive = currentPlan !== 'free';
   const isWeb = runtimeTarget === 'web';
-  const planLabels: Record<string, string> = {
-    pro_annual: t('planProAnnual'),
-    pro_lifetime: t('planProLifetime'),
-  };
-  const displayPlan = planLabels[currentPlan] || currentPlan.replace(/_/g, ' ');
 
   if (!open) return null;
 
@@ -45,64 +36,22 @@ export function LicenseKeyModal({
           {isWeb ? t('activationWebAlwaysPro') : t('activationDesc')}
         </p>
 
-        {isActive ? (
-          <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
-            {t('activationActive')} — {displayPlan}
-          </div>
-        ) : null}
+        <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+          {t('activationActive')} — {t('planProLifetime')}
+        </div>
 
         {isWeb ? null : (
-          <>
-            <div className="mt-4">
-              <input
-                type="text"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder={t('licenseModalInputPlaceholder')}
-                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
-              />
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:border-stone-900"
-              >
-                {t('cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (key.trim()) {
-                    onActivate(key.trim());
-                    setKey('');
-                  }
-                }}
-                disabled={!key.trim()}
-                className="flex-1 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
-              >
-                {t('licenseModalActivate')}
-              </button>
-            </div>
-          </>
-        )}
-
-        {isActive && !isWeb ? (
-          <div className="mt-3 border-t border-stone-100 pt-3">
-            <p className="text-xs text-stone-400">{t('licenseModalClearDesc')}</p>
-            <button
-              type="button"
-              onClick={() => {
-                onClear();
-                setKey('');
-              }}
-              className="mt-2 w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50"
+          <div className="mt-4">
+            <a
+              href={GUMROAD_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center justify-center rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800"
             >
-              {t('activationDeactivate')}
-            </button>
+              {t('sponsorButton')}
+            </a>
           </div>
-        ) : null}
+        )}
 
         <div className="mt-4 flex justify-end">
           <button

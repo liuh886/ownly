@@ -19,7 +19,6 @@ import type { WYQDStoredEntity, WYQDArchivedStoredEntity, WYQDArchiveEntityType 
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { WYQD_CURRENCIES, WYQD_CURRENCY_LABELS } from '@/lib/format';
-import { checkWYQDCapacity } from '@/core/membership';
 
 interface ReviewRankings {
   foodScore: number | null;
@@ -176,13 +175,6 @@ export function AppShell() {
   }
 
   async function createObject(object: WYQDObject, body: string) {
-    const cap = checkWYQDCapacity(membership, 'objects', storedObjects.length);
-    if (!cap.allowed) {
-      const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
-      showNotice(msg);
-      openLicenseModal();
-      return;
-    }
     try {
       await repository.saveObject(object, body);
       await loadVaultData();
@@ -269,13 +261,6 @@ export function AppShell() {
   }
 
   async function createSnapshot(snapshot: AccountSnapshot, body: string) {
-    const cap = checkWYQDCapacity(membership, 'snapshots', storedSnapshots.length);
-    if (!cap.allowed) {
-      const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
-      showNotice(msg);
-      openLicenseModal();
-      return;
-    }
     try {
       await repository.saveSnapshot(snapshot, body);
       await loadVaultData();
@@ -309,13 +294,6 @@ export function AppShell() {
   }
 
   async function createReview(review: ReviewEntry, body: string) {
-    const cap = checkWYQDCapacity(membership, 'reviews', storedReviews.length);
-    if (!cap.allowed) {
-      const msg = t('capacityReachedDesc').replace('{limit}', String(cap.limit));
-      showNotice(msg);
-      openLicenseModal();
-      return;
-    }
     try {
       await repository.saveReview(review, body);
 
@@ -501,21 +479,12 @@ export function AppShell() {
                 />
                 {isConnected ? t('vaultConnected') : isLoading ? t('connecting') : t('demoMode')}
               </span>
-              {(() => {
-                const objCap = checkWYQDCapacity(membership, 'objects', storedObjects.length);
-                const snapCap = checkWYQDCapacity(membership, 'snapshots', storedSnapshots.length);
-                const nearLimit = (cap: { remaining: number }) => !membership.isPro && cap.remaining <= 5;
-                return (
-                  <>
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${nearLimit(objCap) ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'}`}>
-                      {membership.isPro ? storedObjects.length : `${storedObjects.length}/${objCap.limit}`} {t('objects')}
-                    </span>
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${nearLimit(snapCap) ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'}`}>
-                      {membership.isPro ? storedSnapshots.length : `${storedSnapshots.length}/${snapCap.limit}`} {t('snapshots')}
-                    </span>
-                  </>
-                );
-              })()}
+              <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500 ring-1 ring-stone-200">
+                {storedObjects.length} {t('objects')}
+              </span>
+              <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500 ring-1 ring-stone-200">
+                {storedSnapshots.length} {t('snapshots')}
+              </span>
               <span className="mx-0.5 h-3 w-px bg-stone-200" aria-hidden="true" />
               <button
                 type="button"

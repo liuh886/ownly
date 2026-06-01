@@ -17,7 +17,7 @@ import {
   type WYQDLanguage,
   type WYQDTranslationKey,
 } from '@/core/i18n';
-import { activateLicense, type ActivationSource } from '@/core/activation';
+import { GUMROAD_STORE_URL } from '@/core/activation';
 import { resolveWYQDMembership } from '@/core/membership';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { runWYQDDoctor } from '@/core/doctor';
@@ -184,9 +184,7 @@ export default class WYQDPlugin extends Plugin {
 
   async getMembership() {
     return resolveWYQDMembership({
-      licenseKey: this.settings.licenseKey,
       proUnlocked: this.settings.proUnlocked,
-      licenseSource: this.settings.licenseSource,
       t: (key: string) => this.t(key as WYQDTranslationKey),
     });
   }
@@ -201,42 +199,6 @@ export default class WYQDPlugin extends Plugin {
         leaf.view.refresh();
       }
     });
-  }
-
-  async activateLicenseFromReact(key: string) {
-    const result = await activateLicense(key);
-    if (!result.success) {
-      throw new Error(result.error || this.t('activationFailed'));
-    }
-    this.saveProState(key, result.source);
-    new Notice(this.t('activationSuccess'));
-    this.refreshWorkspaceViews();
-  }
-
-  async clearLicenseFromReact() {
-    this.clearProState();
-    new Notice(this.t('activationDeactivated'));
-    this.refreshWorkspaceViews();
-  }
-
-  saveProState(key: string, source: ActivationSource) {
-    this.settings.licenseKey = key;
-    this.settings.proUnlocked = true;
-    this.settings.licenseSource = source;
-    this.settings.licenseKeyLast4 = key.slice(-4);
-    this.settings.activatedAt = new Date().toISOString();
-    this.settings.lastVerifiedVersion = this.manifest.version;
-    void this.saveSettings();
-  }
-
-  private clearProState() {
-    this.settings.proUnlocked = false;
-    this.settings.licenseSource = '';
-    this.settings.licenseKey = '';
-    this.settings.licenseKeyLast4 = '';
-    this.settings.activatedAt = '';
-    this.settings.lastVerifiedVersion = '';
-    void this.saveSettings();
   }
 
   refreshCommands() {
@@ -347,12 +309,6 @@ class WYQDWorkspaceView extends ItemView {
               this.plugin.settings.language = lang;
               void this.plugin.saveSettings();
             },
-            onActivateLicense: async (key: string) => {
-              await this.plugin.activateLicenseFromReact(key);
-            },
-            onClearLicense: async () => {
-              await this.plugin.clearLicenseFromReact();
-            },
             onRefresh: () => {
               this.plugin.refreshWorkspaceViews();
             },
@@ -394,8 +350,6 @@ class WYQDWorkspaceView extends ItemView {
 }
 
 class WYQDSettingTab extends PluginSettingTab {
-  private activating = false;
-
   constructor(
     app: App,
     private readonly wyqdPlugin: WYQDPlugin,
@@ -468,23 +422,14 @@ class WYQDSettingTab extends PluginSettingTab {
         }),
       );
 
-    // ── Membership / License panel ──
+    // ── Membership panel ──
     const membershipPanel = shell.createDiv({ cls: 'wyqd-settings-panel' });
     const membershipHeader = membershipPanel.createDiv({ cls: 'wyqd-section-header' });
     membershipHeader.createEl('h3', { text: t('activationTitle') });
     membershipHeader.createEl('p', { text: t('activationDesc') });
 
-    if (!membership.isPro) {
-      const ctaRow = membershipHeader.createDiv({ cls: 'wyqd-settings-cta-row' });
-      const ctaLink = ctaRow.createEl('a', {
-        text: t('activationGetKey'),
-        href: 'https://liuh886.gumroad.com/l/ownly',
-      });
-      ctaLink.setAttr('target', '_blank');
-      ctaLink.setAttr('rel', 'noopener noreferrer');
-    }
-
     if (membership.isPro) {
+      // Pro unlocked — show status + sponsor link
       const activeBanner = membershipPanel.createDiv({ cls: 'wyqd-settings-active-banner' });
       activeBanner.createEl('span', { text: `${t('activationActive')} — ${membership.planLabel}` });
 
@@ -492,6 +437,16 @@ class WYQDSettingTab extends PluginSettingTab {
         .setName(t('plan'))
         .setDesc(`${membership.planLabel} — ${membership.statusLabel}`);
 
+      // Sponsor link
+      const sponsorRow = membershipHeader.createDiv({ cls: 'wyqd-settings-cta-row' });
+      const sponsorLink = sponsorRow.createEl('a', {
+        text: t('sponsorButton'),
+        href: GUMROAD_STORE_URL,
+      });
+      sponsorLink.setAttr('target', '_blank');
+      sponsorLink.setAttr('rel', 'noopener noreferrer');
+
+      // Return to Free
       new Setting(membershipPanel)
         .setName(t('activationDeactivate'))
         .setDesc(t('licenseModalClearDesc'))
@@ -500,11 +455,7 @@ class WYQDSettingTab extends PluginSettingTab {
             .setButtonText(t('activationDeactivate'))
             .setWarning()
             .onClick(async () => {
-              this.wyqdPlugin.settings.licenseKey = '';
               this.wyqdPlugin.settings.proUnlocked = false;
-              this.wyqdPlugin.settings.licenseSource = '';
-              this.wyqdPlugin.settings.licenseKeyLast4 = '';
-              this.wyqdPlugin.settings.activatedAt = '';
               await this.wyqdPlugin.saveSettings();
               this.wyqdPlugin.refreshWorkspaceViews();
               new Notice(t('activationDeactivated'));
@@ -512,65 +463,27 @@ class WYQDSettingTab extends PluginSettingTab {
             }),
         );
     } else {
-      let pendingLicenseKey = this.wyqdPlugin.settings.licenseKey;
-
-      const keySetting = new Setting(membershipPanel)
-        .setName(t('settingsLicenseKey'))
-        .setDesc(t('settingsLicenseKeyDesc'));
-
-      keySetting.addText((text) => {
-        text.inputEl.type = 'password';
-        text.inputEl.style.flex = '1';
-        text
-          .setPlaceholder(t('licenseModalInputPlaceholder'))
-          .setValue(this.wyqdPlugin.settings.licenseKey)
-          .onChange((value) => {
-            pendingLicenseKey = value;
-          });
-      });
-
-      keySetting.addButton((button) =>
-        button
-          .setButtonText(t('licenseModalActivate'))
-          .setCta()
-          .setDisabled(this.activating)
-          .onClick(async () => {
-            const key = pendingLicenseKey.trim();
-            if (!key) return;
-            await this.activateKey(key, t);
-          }),
-      );
-
-      if (this.activating) {
-        const loadingEl = membershipPanel.createDiv({ cls: 'wyqd-settings-activation-loading' });
-        loadingEl.createEl('span', { text: t('activationVerifying') });
-      }
+      // Not yet unlocked — show unlock button
+      new Setting(membershipPanel)
+        .setName(t('unlockPro'))
+        .setDesc(t('unlockProDesc'))
+        .addButton((button) =>
+          button
+            .setButtonText(t('unlockPro'))
+            .setCta()
+            .onClick(async () => {
+              this.wyqdPlugin.settings.proUnlocked = true;
+              await this.wyqdPlugin.saveSettings();
+              this.wyqdPlugin.refreshWorkspaceViews();
+              new Notice(t('activationSuccess'));
+              await this.display();
+            }),
+        );
 
       new Setting(membershipPanel)
         .setName(t('plan'))
         .setDesc(`${membership.planLabel} — ${membership.statusLabel}`);
     }
-  }
-
-  private async activateKey(key: string, t: (key: WYQDTranslationKey) => string) {
-    this.activating = true;
-    await this.display();
-
-    try {
-      const result = await activateLicense(key);
-      if (result.success) {
-        this.wyqdPlugin.saveProState(key, result.source);
-        new Notice(t('activationSuccess'));
-        this.wyqdPlugin.refreshWorkspaceViews();
-      } else {
-        new Notice(`${t('activationFailed')} ${result.error || ''}`);
-      }
-    } catch {
-      new Notice(t('activationNetworkError'));
-    }
-
-    this.activating = false;
-    await this.display();
   }
 }
 

@@ -10,8 +10,6 @@ export function ObsidianWorkspaceProvider({
   membership,
   language,
   onLanguageChange,
-  onActivateLicense,
-  onClearLicense,
   onRefresh,
   children,
 }: {
@@ -19,8 +17,6 @@ export function ObsidianWorkspaceProvider({
   membership: WYQDMembershipState;
   language: WYQDLanguage;
   onLanguageChange?: (lang: WYQDLanguage) => void;
-  onActivateLicense?: (key: string) => Promise<void>;
-  onClearLicense?: () => Promise<void>;
   onRefresh?: () => void;
   children?: ReactNode;
 }) {
@@ -50,18 +46,10 @@ export function ObsidianWorkspaceProvider({
           notice,
           showNotice,
           membership,
-          activateLicenseKey: async (key: string) => {
-            if (onActivateLicense) {
-              await onActivateLicense(key);
-              onRefresh?.();
-            }
+          activateLicenseKey: async () => {
             setLicenseModalOpen(false);
           },
           clearLicenseKey: async () => {
-            if (onClearLicense) {
-              await onClearLicense();
-              onRefresh?.();
-            }
             setLicenseModalOpen(false);
           },
           openLicenseModal: () => setLicenseModalOpen(true),
