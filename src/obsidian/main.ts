@@ -464,16 +464,18 @@ class WYQDSettingTab extends PluginSettingTab {
         );
     } else {
       // Not yet unlocked — show activation input + button
-      let pendingLicenseKey = this.wyqdPlugin.settings.licenseKey || 'OWNLY-PRO';
+      const DEFAULT_ACTIVATION_CODE = 'OWNLY-PRO-2024-FREE-X8K2';
+      let pendingLicenseKey = this.wyqdPlugin.settings.licenseKey || DEFAULT_ACTIVATION_CODE;
 
       const keySetting = new Setting(membershipPanel)
         .setName(t('settingsLicenseKey'))
-        .setDesc(t('settingsLicenseKeyDesc'));
+        .setDesc(t('settingsActivationHint'));
 
       keySetting.addText((text) => {
         text.inputEl.style.flex = '1';
+        text.inputEl.style.fontFamily = 'monospace';
         text
-          .setPlaceholder('OWNLY-PRO')
+          .setPlaceholder(DEFAULT_ACTIVATION_CODE)
           .setValue(pendingLicenseKey)
           .onChange((value) => {
             pendingLicenseKey = value;
