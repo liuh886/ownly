@@ -463,22 +463,42 @@ class WYQDSettingTab extends PluginSettingTab {
             }),
         );
     } else {
-      // Not yet unlocked — show unlock button
-      new Setting(membershipPanel)
-        .setName(t('unlockPro'))
-        .setDesc(t('unlockProDesc'))
-        .addButton((button) =>
-          button
-            .setButtonText(t('unlockPro'))
-            .setCta()
-            .onClick(async () => {
-              this.wyqdPlugin.settings.proUnlocked = true;
-              await this.wyqdPlugin.saveSettings();
-              this.wyqdPlugin.refreshWorkspaceViews();
-              new Notice(t('activationSuccess'));
-              await this.display();
-            }),
-        );
+      // Not yet unlocked — show activation input + button
+      let pendingLicenseKey = this.wyqdPlugin.settings.licenseKey || 'OWNLY-PRO';
+
+      const keySetting = new Setting(membershipPanel)
+        .setName(t('settingsLicenseKey'))
+        .setDesc(t('settingsLicenseKeyDesc'));
+
+      keySetting.addText((text) => {
+        text.inputEl.style.flex = '1';
+        text
+          .setPlaceholder('OWNLY-PRO')
+          .setValue(pendingLicenseKey)
+          .onChange((value) => {
+            pendingLicenseKey = value;
+          });
+      });
+
+      keySetting.addButton((button) =>
+        button
+          .setButtonText(t('licenseModalActivate'))
+          .setCta()
+          .onClick(async () => {
+            // No verification — just unlock
+            this.wyqdPlugin.settings.licenseKey = pendingLicenseKey.trim() || 'OWNLY-PRO';
+            this.wyqdPlugin.settings.proUnlocked = true;
+            this.wyqdPlugin.settings.licenseSource = 'gumroad';
+            this.wyqdPlugin.settings.licenseKeyLast4 = this.wyqdPlugin.settings.licenseKey.slice(-4);
+            this.wyqdPlugin.settings.activatedAt = new Date().toISOString();
+            await this.wyqdPlugin.saveSettings();
+            this.wyqdPlugin.refreshWorkspaceViews();
+            new Notice(t('activationSuccess'));
+            // Open Gumroad sponsor link after activation
+            window.open(GUMROAD_STORE_URL, '_blank');
+            await this.display();
+          }),
+      );
 
       new Setting(membershipPanel)
         .setName(t('plan'))
