@@ -334,6 +334,7 @@ export function ReviewHome({
   }
 
   function startEditingReview(stored: WYQDStoredEntity<ReviewEntry>) {
+    setSelectedReviewFileName(stored.fileName);
     setEditingFileName(stored.fileName);
     setSummary(stored.entity.summary || '');
     setFoodScore(stored.entity.food_score ? String(stored.entity.food_score) : '');
@@ -341,7 +342,6 @@ export function ReviewHome({
     setExperienceScore(
       stored.entity.experience_score ? String(stored.entity.experience_score) : '',
     );
-    setTimeout(() => reviewFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   }
 
   function cancelEditing() {
@@ -645,7 +645,43 @@ export function ReviewHome({
           </div>
 
           <aside ref={reviewDetailRef} className="rounded-xl border border-stone-200 bg-stone-50/50 p-5">
-            {selectedReview ? (
+            {editingFileName && selectedReview ? (
+              /* Edit mode — inline form in sidebar */
+              <form ref={reviewFormRef} onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <div className="text-xs text-stone-400">{t('editReview')}</div>
+                  <h3 className="mt-1 break-words text-base font-semibold text-stone-950">
+                    {selectedReview.entity.title}
+                  </h3>
+                </div>
+                <div>
+                  <label className="text-xs text-stone-400">{t('summary')}</label>
+                  <textarea
+                    value={summary}
+                    onChange={(e) => setSummary(e.target.value)}
+                    placeholder={t('reviewSummaryPlaceholder')}
+                    rows={4}
+                    className={`${fieldClass} mt-1 resize-none`}
+                    disabled={disabled || isSaving}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-400">{t('rankings')}</label>
+                  <div className="mt-1 grid grid-cols-3 gap-2">
+                    <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
+                    <input value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
+                    <input value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={cancelEditing} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSaving}>{t('cancel')}</button>
+                  <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
+                    {isSaving ? t('saving') : t('saveChanges')}
+                  </button>
+                </div>
+              </form>
+            ) : selectedReview ? (
+              /* Detail mode — read-only view */
               <div className="space-y-4">
                 <div>
                   <div className="text-xs text-stone-400">{t('reviewDetail')}</div>
@@ -717,29 +753,6 @@ export function ReviewHome({
           </aside>
         </div>
       </div>
-
-      {/* Edit review form — shown only when editing an existing review */}
-      {editingFileName ? (
-        <form ref={reviewFormRef} onSubmit={handleSubmit} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('editReview')}</h2>
-          </div>
-          <div className="space-y-3">
-            <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t('reviewSummaryPlaceholder')} rows={4} aria-label={t('summary')} className={`${fieldClass} resize-none`} disabled={disabled || isSaving} />
-            <div className="grid gap-2 sm:grid-cols-3">
-              <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
-              <input value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
-              <input value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
-            </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={cancelEditing} className="w-24 rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm font-medium text-stone-600 transition hover:border-stone-400" disabled={isSaving}>{t('cancel')}</button>
-              <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
-                {isSaving ? t('saving') : t('saveChanges')}
-              </button>
-            </div>
-          </div>
-        </form>
-      ) : null}
 
       {/* Travel Insights — Pro feature, at bottom */}
       <TravelInsightsPanel

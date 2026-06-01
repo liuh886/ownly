@@ -1,8 +1,13 @@
 @import "tailwindcss";
+/* stylelint-disable-next-line at-rule-no-unknown */
 @source "../components/**/*.tsx";
+/* stylelint-disable-next-line at-rule-no-unknown */
 @source "../components/**/*.ts";
+/* stylelint-disable-next-line at-rule-no-unknown */
 @source "../core/**/*.tsx";
+/* stylelint-disable-next-line at-rule-no-unknown */
 @source "../core/**/*.ts";
+/* stylelint-disable-next-line at-rule-no-unknown */
 @source "../lib/**/*.ts";
 
 /* Override Tailwind's preflight inside Obsidian to avoid breaking Obsidian's native styles */
