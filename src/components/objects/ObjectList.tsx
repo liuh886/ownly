@@ -756,7 +756,7 @@ export function ObjectList({
       matchesStatusGroup(object, statusGroupFilter) &&
       matchesQuery(object, query)
     );
-  }), [objects, controlBucketFilter, typeFilter, statusGroupFilter, query]);
+  }), [objects, controlBucketFilter, typeFilter, statusGroupFilter, query, reviewedObjectIds]);
 
   const allPhysicalObjects = useMemo(() => objects.filter(isPhysicalStoredEntity), [objects]);
   const physicalObjects = useMemo(() => visibleObjects.filter(isPhysicalStoredEntity), [visibleObjects]);

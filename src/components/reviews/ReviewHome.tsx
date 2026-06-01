@@ -94,19 +94,30 @@ export function ReviewHome({
   const reviewDetailRef = useRef<HTMLElement>(null);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const fieldClass = FIELD_CLASS;
-  const experiences = objects.filter((object) => object.object_type === 'one_time_experience');
+  const experiences = useMemo(
+    () => objects.filter((object) => object.object_type === 'one_time_experience'),
+    [objects],
+  );
   const experienceTotal = experiences.reduce(
     (total, object) => total + getExperienceAmount(object),
     0,
   );
-  const reviewedTargetIds = new Set(
-    reviews
-      .map((stored) => stored.entity.target_id)
-      .filter((targetId): targetId is string => Boolean(targetId)),
+  const reviewedTargetIds = useMemo(
+    () =>
+      new Set(
+        reviews
+          .map((stored) => stored.entity.target_id)
+          .filter((targetId): targetId is string => Boolean(targetId)),
+      ),
+    [reviews],
   );
-  const pendingReviewExperiences = experiences.filter(
-    (object) =>
-      object.status === 'completed' && !object.review_ref && !reviewedTargetIds.has(object.id),
+  const pendingReviewExperiences = useMemo(
+    () =>
+      experiences.filter(
+        (object) =>
+          object.status === 'completed' && !object.review_ref && !reviewedTargetIds.has(object.id),
+      ),
+    [experiences, reviewedTargetIds],
   );
   const reviewedExperiences = experiences.filter(
     (object) =>

@@ -48,3 +48,4 @@ next-env.d.ts
 # local tool configs
 .antigravitycli/
 .claude/
+.vscode/

@@ -10,7 +10,7 @@ export function ObsidianWorkspaceProvider({
   membership,
   language,
   onLanguageChange,
-  onRefresh,
+  onRefresh, // eslint-disable-line @typescript-eslint/no-unused-vars
   children,
 }: {
   repository: WYQDRepositoryAdapter;

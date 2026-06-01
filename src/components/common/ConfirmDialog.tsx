@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import { useI18n } from '@/core/i18n-context';
-import type { WYQDTranslationKey } from '@/core/i18n';
 
 interface ConfirmDialogProps {
   open: boolean;

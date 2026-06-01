@@ -75,8 +75,11 @@ export const WYQD_FREE_LIMITS = {
 
 // Everyone is Pro — capacity is always unlimited.
 export function checkWYQDCapacity(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _membership: Pick<WYQDMembershipState, 'isPro'>,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _kind: keyof typeof WYQD_FREE_LIMITS,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _currentCount: number,
 ): { allowed: boolean; limit: number; remaining: number } {
   return { allowed: true, limit: Infinity, remaining: Infinity };

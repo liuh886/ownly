@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { sampleObjects, sampleReviews, sampleSnapshots } from '@/data/sampleData';
 import { calculateHomeMetrics } from '@/domain/calculations';
 import { BottomNav, type AppTab } from './BottomNav';
@@ -136,7 +136,7 @@ export function AppShell() {
     setActiveTab('objects');
   }
 
-  async function seedDemoDataToVault() {
+  const seedDemoDataToVault = useCallback(async () => {
     for (const obj of sampleObjects) {
       await repository.saveObject(obj, '');
     }
@@ -151,7 +151,7 @@ export function AppShell() {
     }
     localStorage.setItem('ownly_demo_seeded', 'true');
     showNotice(t('demoDataSeeded'));
-  }
+  }, [repository, t, showNotice]);
 
   async function loadVaultData() {
     const [nextObjects, nextSnapshots, nextReviews, nextArchivedEntities] = await Promise.all([
@@ -419,7 +419,7 @@ export function AppShell() {
     return () => {
       isMounted = false;
     };
-  }, [isConnected, repository]);
+  }, [isConnected, repository, seedDemoDataToVault]);
 
   return (
     <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-24 pt-8 text-stone-950 sm:px-6 sm:pt-10">
