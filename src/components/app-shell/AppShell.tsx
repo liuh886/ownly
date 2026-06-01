@@ -457,12 +457,6 @@ export function AppShell() {
             >
               ❤ {t('sponsor')}
             </a>
-            <span className="rounded-md bg-stone-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
-              v{runtimeInfo.coreTargetVersion}
-            </span>
-            <span className="rounded-md bg-stone-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-600">
-              {runtimeTarget}
-            </span>
             <span className="ml-auto text-[11px] text-stone-400">{WYQD_PRODUCT_SLOGAN}</span>
           </div>
 
@@ -617,6 +611,11 @@ export function AppShell() {
       </div>
 
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
+
+      {/* Footer */}
+      <footer className="mt-4 pb-20 text-center">
+        <span className="text-[10px] text-stone-300">Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget}</span>
+      </footer>
     </main>
   );
 }
