@@ -573,8 +573,7 @@ const translations = {
     // Web app - Object detail labels
     billingAmount: 'Billing amount',
     budgetVsActual: 'Budget / Actual',
-    recoveredAmount: 'Recovered amount',
-    salePrice: 'Sale price',
+    salePrice: 'Sale / Recovered price',
     dailyExperienceCost: 'Daily experience cost',
     monthlyEquivalent: 'Monthly equivalent',
     pausedDate: 'Paused date',
@@ -1213,8 +1212,7 @@ const translations = {
     // Web app - Object detail labels
     billingAmount: '周期金额',
     budgetVsActual: '预算/实际',
-    recoveredAmount: '回收金额',
-    salePrice: '卖出价格',
+    salePrice: '卖出/回收价格',
     dailyExperienceCost: '日均体验成本',
     monthlyEquivalent: '折算月成本',
     pausedDate: '暂停日期',

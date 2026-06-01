@@ -63,7 +63,6 @@ export interface PhysicalObject extends BaseWYQDObject {
   accessory_cost?: number;
   total_acquisition_cost?: number;
   sale_price?: number;
-  recovered_amount?: number;
   transfer_fee?: number;
   realized_experience_cost?: number | null;
   amortization_mode?: AmortizationMode;
@@ -177,7 +176,7 @@ export interface ReviewEntry extends BaseEntity {
   reviewed_at?: string;
   exited_at?: string;
   exit_type?: ExitType;
-  recovered_amount?: number;
+  sale_price?: number;
   transfer_fee?: number;
   realized_experience_cost?: number;
   food_rank?: number | null;

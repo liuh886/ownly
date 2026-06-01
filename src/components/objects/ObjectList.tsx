@@ -515,7 +515,6 @@ function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label: strin
       { label: t('purchaseDate'), value: formatOptional(object.purchased_at, t) },
       { label: t('endDate'), value: formatOptional(object.ended_at, t) },
       { label: t('salePrice'), value: formatMoney(object.sale_price || 0) },
-      { label: t('recoveredAmount'), value: formatMoney(object.recovered_amount || 0) },
     ];
   }
   if (object.object_type === 'recurring_cost') {
