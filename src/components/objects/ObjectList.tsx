@@ -179,9 +179,10 @@ function getDailyCost(object: WYQDObject): number | null {
 function getServiceDaysInfo(object: WYQDObject): { elapsed: number; total: number | null } | null {
   if (object.object_type !== 'physical') return null;
   const today = todayLocalDate();
-  const elapsed = calculateInclusiveDays(object.purchased_at, undefined, today);
+  const endDate = object.ended_at ? object.ended_at : undefined;
+  const elapsed = calculateInclusiveDays(object.purchased_at, endDate, today);
   if (!elapsed) return null;
-  const total = object.ended_at ? calculateInclusiveDays(object.purchased_at, object.ended_at, today) : null;
+  const total = endDate ? calculateInclusiveDays(object.purchased_at, endDate, today) : null;
   return { elapsed, total };
 }
 
