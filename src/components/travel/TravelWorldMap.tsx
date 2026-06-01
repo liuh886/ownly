@@ -38,8 +38,8 @@ export function TravelWorldMap({
   }, []);
 
   const points = useMemo(() => buildTravelMapPoints(experiences), [experiences]);
-  const pointIds = useMemo(() => new Set(points.map((p) => p.id)), [points]);
-  const fallbackExperiences = useMemo(() => experiences.filter((exp) => !pointIds.has(exp.id)), [experiences, pointIds]);
+  const pointExpIds = useMemo(() => new Set(points.map((p) => p.id.split('#')[0])), [points]);
+  const fallbackExperiences = useMemo(() => experiences.filter((exp) => !pointExpIds.has(exp.id)), [experiences, pointExpIds]);
 
   const projectedPoints = useMemo(() => {
     return points.map((point) => {
