@@ -196,6 +196,7 @@ export interface HomeMetrics {
   netWorthDeltaFromPreviousMonth: number | null;
   monthlyFixedCost: number;
   ownedPhysicalCount: number;
+  physicalResidualValue: number;
   activeSubscriptionCount: number;
   observingDesireAmount: number;
 }

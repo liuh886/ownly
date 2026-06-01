@@ -67,6 +67,18 @@ export function calculatePhysicalDailyCost(object: PhysicalObject, today = new D
   return calculatePhysicalExperienceCost(object) / holdingDays;
 }
 
+export function calculateResidualValue(object: PhysicalObject, today = new Date()): number {
+  const price = object.total_acquisition_cost || object.purchase_price || 0;
+  if (!object.ended_at || !object.purchased_at) return 0;
+
+  const totalDays = calculateInclusiveDays(object.purchased_at, object.ended_at, today);
+  const elapsedDays = calculateInclusiveDays(object.purchased_at, undefined, today);
+  if (!totalDays || !elapsedDays || totalDays <= 0) return 0;
+
+  const remainingDays = Math.max(0, totalDays - elapsedDays);
+  return price * remainingDays / totalDays;
+}
+
 export function calculateRecurringMonthlyCost(object: RecurringCostObject): number {
   const amount = object.billing_amount || 0;
 
@@ -202,7 +214,12 @@ export function calculateHomeMetrics(
     0,
   );
 
-  const ownedPhysicalCount = objects.filter(isOwnedPhysicalObject).length;
+  const ownedPhysicalObjects = objects.filter(isOwnedPhysicalObject);
+  const ownedPhysicalCount = ownedPhysicalObjects.length;
+  const physicalResidualValue = ownedPhysicalObjects.reduce(
+    (total, object) => total + calculateResidualValue(object),
+    0,
+  );
 
   const observingDesireAmount = objects
     .filter((object) => object.status === 'seeded' || object.status === 'observing' || object.status === 'planned')
@@ -216,6 +233,7 @@ export function calculateHomeMetrics(
         : null,
     monthlyFixedCost,
     ownedPhysicalCount,
+    physicalResidualValue,
     activeSubscriptionCount: activeRecurringCosts.length,
     observingDesireAmount,
   };
