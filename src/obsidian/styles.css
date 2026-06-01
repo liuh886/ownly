@@ -772,28 +772,29 @@
 
 /*
  * Interactive card resets — override Obsidian's default button styles.
- * Obsidian flattens <button> into a compact inline row; we need !important
- * to reclaim block layout, min-height, and padding.
+ * Obsidian flattens <button> into a compact inline row; we use higher
+ * specificity (.wyqd-runtime-obsidian) to reclaim block layout, min-height,
+ * and padding.
  */
 
 /* ---- Action Card (top-left "today actions" + 3 white cards) ---- */
-.wyqd-card-action {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: stretch !important;
-  justify-content: flex-start !important;
-  min-height: 140px !important;
-  height: auto !important;
-  padding: 20px !important;
-  border-radius: 12px !important;
-  text-align: left !important;
+.wyqd-runtime-obsidian .wyqd-card-action {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 140px;
+  height: auto;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: left;
   overflow: hidden;
   gap: 0;
   border: 1px solid var(--wyqd-border);
   background: var(--background-primary);
   color: var(--text-normal);
-  white-space: normal !important;
-  line-height: normal !important;
+  white-space: normal;
+  line-height: normal;
 }
 
 .wyqd-card-action:hover,
@@ -801,9 +802,9 @@
   border-color: var(--interactive-accent);
 }
 
-.wyqd-card-action--dark {
-  background: var(--background-modifier-border) !important;
-  border-color: transparent !important;
+.wyqd-runtime-obsidian .wyqd-card-action--dark {
+  background: var(--background-modifier-border);
+  border-color: transparent;
 }
 
 .wyqd-card-action__label {
@@ -867,22 +868,22 @@
 }
 
 /* ---- Insight Card ("highest daily cost", "largest monthly", etc.) ---- */
-.wyqd-card-insight {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: stretch !important;
-  justify-content: flex-start !important;
-  min-height: 120px !important;
-  height: auto !important;
-  padding: 20px !important;
-  border-radius: 12px !important;
-  text-align: left !important;
+.wyqd-runtime-obsidian .wyqd-card-insight {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 120px;
+  height: auto;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: left;
   gap: 0;
   border: 1px solid var(--wyqd-border);
   background: var(--background-primary);
   color: var(--text-normal);
-  white-space: normal !important;
-  line-height: normal !important;
+  white-space: normal;
+  line-height: normal;
 }
 
 .wyqd-card-insight--clickable:hover,
@@ -927,21 +928,21 @@
 }
 
 /* ---- Watchlist Card (recurring costs, pending reviews) ---- */
-.wyqd-card-watchlist {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  min-height: 72px !important;
-  height: auto !important;
-  padding: 16px 20px !important;
-  border-radius: 12px !important;
-  text-align: left !important;
+.wyqd-runtime-obsidian .wyqd-card-watchlist {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 72px;
+  height: auto;
+  padding: 16px 20px;
+  border-radius: 12px;
+  text-align: left;
   gap: 16px;
   border: 1px solid var(--wyqd-border);
   background: var(--background-primary);
   color: var(--text-normal);
-  white-space: normal !important;
-  line-height: normal !important;
+  white-space: normal;
+  line-height: normal;
 }
 
 .wyqd-card-watchlist:hover {
