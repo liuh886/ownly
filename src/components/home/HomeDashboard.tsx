@@ -1,21 +1,34 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import {
   calculateNextBillingDate,
   calculateNetWorth,
-  calculatePhysicalAcquisitionCost,
   calculatePhysicalDailyCost,
   calculateRecurringMonthlyCost,
   isActiveRecurringCost,
 } from '@/domain/calculations';
-import type { AccountSnapshot, HomeMetrics, RecurringCostObject, WYQDObject } from '@/domain/types';
-import type { AppTab } from '@/components/app-shell/BottomNav';
+import type { AccountSnapshot, HomeMetrics, PhysicalObject, RecurringCostObject, WYQDObject } from '@/domain/types';
+import type { WYQDDoctorReport } from '@/core/doctor';
+import { runWYQDDoctor } from '@/core/doctor';
+import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
-import type { WYQDTranslationKey } from '@/core/i18n';
 import { useI18n } from '@/core/i18n-context';
 import { MetricCard } from './MetricCard';
-import { clampPercent, buildSparklinePoints, formatDueLabel } from '@/lib/format';
 import { useFormatMoney } from '@/lib/use-format';
+import { CARD_CLASS } from '@/lib/ui-constants';
+
+function buildDualLinePoints(values: number[], max: number, offsetX = 0, min = 0): string {
+  if (values.length === 0) return '';
+  if (values.length === 1) return `${offsetX},24 ${offsetX + 100},24`;
+  const range = max - min || 1;
+  return values
+    .map((v, i) => {
+      const x = offsetX + (i / (values.length - 1)) * 100;
+      const y = 44 - ((v - min) / range) * 40;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+}
 
 const springTransition = {
   type: 'spring' as const,
@@ -41,105 +54,6 @@ const itemVariants: Variants = {
     transition: springTransition,
   },
 };
-
-function getSnapshotTrend(snapshots: AccountSnapshot[]) {
-  return snapshots
-    .map(calculateNetWorth)
-    .sort((a, b) => a.snapshot_at.localeCompare(b.snapshot_at))
-    .slice(-6);
-}
-
-function getCostBreakdown(objects: WYQDObject[], t: (key: WYQDTranslationKey) => string) {
-  const activePhysicalObjects = objects
-    .filter((object) => object.object_type === 'physical')
-    .filter((object) => object.status === 'purchased' || object.status === 'using');
-
-  const activePhysicalValue = activePhysicalObjects.reduce(
-    (total, object) => total + calculatePhysicalAcquisitionCost(object),
-    0,
-  );
-
-  const activeRecurringCosts = objects.filter(isActiveRecurringCost);
-
-  const monthlyFixedCost = activeRecurringCosts
-    .reduce((total, object) => total + calculateRecurringMonthlyCost(object), 0);
-
-  const experienceObjects = objects.filter((object) => object.object_type === 'one_time_experience');
-  const experienceCost = experienceObjects
-    .reduce((total, object) => {
-      if (object.object_type !== 'one_time_experience') return total;
-      return total + (object.actual_total || object.budget_total || 0);
-    }, 0);
-
-  const breakdown: Array<{
-    label: string;
-    value: number;
-    count: number;
-    tone: string;
-    focus: Omit<ObjectListFocus, 'token'>;
-  }> = [
-    {
-      label: t('activePhysicalN').replace('{count}', String(activePhysicalObjects.length)),
-      value: activePhysicalValue,
-      count: activePhysicalObjects.length,
-      tone: 'bg-stone-900',
-      focus: { typeFilter: 'physical', physicalFilter: 'active', statusGroupFilter: 'using' },
-    },
-    {
-      label: t('monthlyFixedCostN').replace('{count}', String(activeRecurringCosts.length)),
-      value: monthlyFixedCost,
-      count: activeRecurringCosts.length,
-      tone: 'bg-sky-700',
-      focus: { typeFilter: 'recurring_cost', statusGroupFilter: 'using' },
-    },
-    {
-      label: t('oneTimeExperienceN').replace('{count}', String(experienceObjects.length)),
-      value: experienceCost,
-      count: experienceObjects.length,
-      tone: 'bg-emerald-700',
-      focus: { typeFilter: 'one_time_experience' },
-    },
-  ];
-
-  return breakdown;
-}
-
-function getObjectStatusDistribution(objects: WYQDObject[], t: (key: WYQDTranslationKey) => string) {
-  const distribution: Array<{
-    label: string;
-    count: number;
-    tone: string;
-    focus: Omit<ObjectListFocus, 'token'>;
-  }> = [
-    {
-      label: t('observing'),
-      count: objects.filter((object) => object.status === 'seeded' || object.status === 'observing')
-        .length,
-      tone: 'bg-amber-600',
-      focus: { statusGroupFilter: 'observing' },
-    },
-    {
-      label: t('inUse'),
-      count: objects.filter((object) =>
-        ['purchased', 'using', 'active', 'in_progress'].includes(object.status),
-      ).length,
-      tone: 'bg-stone-900',
-      focus: { statusGroupFilter: 'using' },
-    },
-    {
-      label: t('exited'),
-      count: objects.filter((object) =>
-        ['idle', 'transferred', 'discarded', 'cancelled', 'completed', 'reviewed'].includes(
-          object.status,
-        ),
-      ).length,
-      tone: 'bg-zinc-500',
-      focus: { statusGroupFilter: 'exited' },
-    },
-  ];
-
-  return distribution;
-}
 
 function getUpcomingRecurringCosts(objects: WYQDObject[]) {
   return objects
@@ -192,53 +106,6 @@ function getLatestSnapshot(snapshots: AccountSnapshot[]) {
     .sort((a, b) => b.snapshot_at.localeCompare(a.snapshot_at))[0] || null;
 }
 
-function DataBar({
-  label,
-  value,
-  max,
-  tone,
-  valueLabel,
-  onSelect,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  tone: string;
-  valueLabel: string;
-  onSelect?: () => void;
-}) {
-  const width = max > 0 ? clampPercent((value / max) * 100) : 0;
-  const content = (
-    <>
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="min-w-0 truncate font-medium text-stone-500">{label}</span>
-        <span className="shrink-0 font-medium text-stone-950">{valueLabel}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-stone-100">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${width}%` }} />
-      </div>
-    </>
-  );
-
-  if (onSelect) {
-    return (
-      <button
-        type="button"
-        onClick={onSelect}
-        className="block w-full space-y-1.5 rounded-lg p-1 text-left transition hover:bg-stone-50"
-      >
-        {content}
-      </button>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5">
-      {content}
-    </div>
-  );
-}
-
 function InsightCard({
   label,
   title,
@@ -282,75 +149,120 @@ function InsightCard({
   );
 }
 
-function ActionCard({
-  label,
-  title,
-  detail,
-  onSelect,
-}: {
-  label: string;
-  title: string;
-  detail: string;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="wyqd-card-action group flex flex-col rounded-xl border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-stone-300/70 hover:bg-stone-50/60"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-          {label}
-        </span>
-        <span
-          className="text-sm text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-stone-700"
-          aria-hidden="true"
-        >
-          →
-        </span>
-      </div>
-      <div className="mt-4 text-base font-semibold leading-snug text-stone-950">{title}</div>
-      <div className="mt-1 flex-1 text-xs leading-5 text-stone-500">{detail}</div>
-    </button>
-  );
-}
-
 export function HomeDashboard({
   metrics,
   objects,
   snapshots,
   onOpenObjects,
-  onNavigate,
 }: {
   metrics: HomeMetrics;
   objects: WYQDObject[];
   snapshots: AccountSnapshot[];
   onOpenObjects: (focus: Omit<ObjectListFocus, 'token'>) => void;
-  onNavigate: (tab: AppTab) => void;
 }) {
   const { t } = useI18n();
   const { formatMoney, formatDailyMoney, formatCompactMoney, formatDelta } = useFormatMoney();
+  const { repository } = useOwnlyWorkspace();
+  const [doctorReport, setDoctorReport] = useState<WYQDDoctorReport | null>(null);
+  const [doctorLoading, setDoctorLoading] = useState(false);
 
-  const trendSnapshots = useMemo(() => getSnapshotTrend(snapshots), [snapshots]);
-  const trendValues = useMemo(() => trendSnapshots.map((snapshot) => snapshot.net_worth || 0), [trendSnapshots]);
-  const trendPoints = useMemo(() => buildSparklinePoints(trendValues), [trendValues]);
-  const costBreakdown = useMemo(() => getCostBreakdown(objects, t), [objects, t]);
-  const maxCost = useMemo(() => Math.max(...costBreakdown.map((item) => item.value), 0), [costBreakdown]);
-  const statusDistribution = useMemo(() => getObjectStatusDistribution(objects, t), [objects, t]);
-  const maxStatusCount = useMemo(() => Math.max(...statusDistribution.map((item) => item.count), 0), [statusDistribution]);
+  const runDoctor = useCallback(async () => {
+    setDoctorLoading(true);
+    try {
+      const report = await runWYQDDoctor(repository, undefined, t);
+      setDoctorReport(report);
+    } catch {
+      setDoctorReport(null);
+    } finally {
+      setDoctorLoading(false);
+    }
+  }, [repository, t]);
+
   const upcomingRecurringCosts = useMemo(() => getUpcomingRecurringCosts(objects), [objects]);
   const pendingExperienceReviews = useMemo(() => getPendingExperienceReviews(objects), [objects]);
   const highestDailyCost = useMemo(() => getHighestDailyCostObject(objects), [objects]);
   const largestRecurringCost = useMemo(() => getLargestActiveRecurringCost(objects), [objects]);
   const latestSnapshot = useMemo(() => getLatestSnapshot(snapshots), [snapshots]);
+
+  const trendSnapshots = useMemo(() =>
+    [...snapshots]
+      .map(calculateNetWorth)
+      .sort((a, b) => a.snapshot_at.localeCompare(b.snapshot_at))
+      .slice(-12),
+    [snapshots],
+  );
+  const netWorthTrendValues = useMemo(
+    () => trendSnapshots.map((s) => s.net_worth ?? 0),
+    [trendSnapshots],
+  );
+  const fixedCostTrendValues = useMemo(
+    () => trendSnapshots.map((s) => s.monthly_fixed_cost ?? metrics.monthlyFixedCost),
+    [trendSnapshots, metrics.monthlyFixedCost],
+  );
+  const netWorthMin = useMemo(
+    () => Math.min(...netWorthTrendValues),
+    [netWorthTrendValues],
+  );
+  const netWorthMax = useMemo(
+    () => Math.max(...netWorthTrendValues),
+    [netWorthTrendValues],
+  );
+  const fixedCostMin = useMemo(
+    () => Math.min(...fixedCostTrendValues),
+    [fixedCostTrendValues],
+  );
+  const fixedCostMax = useMemo(
+    () => Math.max(...fixedCostTrendValues),
+    [fixedCostTrendValues],
+  );
+  const netWorthPoints = useMemo(
+    () => buildDualLinePoints(netWorthTrendValues, netWorthMax, 10, netWorthMin),
+    [netWorthTrendValues, netWorthMax, netWorthMin],
+  );
+  const fixedCostPoints = useMemo(
+    () => buildDualLinePoints(fixedCostTrendValues, fixedCostMax, 10, fixedCostMin),
+    [fixedCostTrendValues, fixedCostMax, fixedCostMin],
+  );
   const physicalCount = useMemo(() => objects.filter((object) => object.object_type === 'physical').length, [objects]);
   const recurringCount = useMemo(() => objects.filter((object) => object.object_type === 'recurring_cost').length, [objects]);
+  const avgDailyCost = useMemo(() => {
+    const ownedPhysicals = objects.filter((o): o is PhysicalObject => o.object_type === 'physical' && (o.status === 'purchased' || o.status === 'using'));
+    const costs = ownedPhysicals.map((o) => calculatePhysicalDailyCost(o)).filter((c): c is number => c !== null && c > 0);
+    return costs.length > 0 ? costs.reduce((s, c) => s + c, 0) : 0;
+  }, [objects]);
   const experienceCount = useMemo(() => objects.filter((object) => object.object_type === 'one_time_experience').length, [objects]);
   const actionCount = upcomingRecurringCosts.length + pendingExperienceReviews.length;
-  const dailyFixedCost = metrics.monthlyFixedCost / 30.44;
-  const annualFixedCost = metrics.monthlyFixedCost * 12;
-  const fixedCostHint = `${formatDailyMoney(dailyFixedCost)} · ${formatMoney(annualFixedCost)}${t('perYear')}`;
+
+  const pendingDecisionCount = useMemo(
+    () => objects.filter((o) => ['seeded', 'observing', 'planned'].includes(o.status)).length,
+    [objects],
+  );
+  const exitedNotReviewedCount = useMemo(
+    () => objects.filter(
+      (o) => o.object_type === 'one_time_experience' && o.status === 'completed' && !o.review_ref,
+    ).length,
+    [objects],
+  );
+  const totalAcquisitionCost = useMemo(
+    () => objects
+      .filter((o) => o.object_type === 'physical')
+      .reduce((sum, o) => sum + (o.purchase_price || 0), 0),
+    [objects],
+  );
+  const totalExperienceCost = useMemo(
+    () => objects
+      .filter((o) => o.object_type === 'one_time_experience')
+      .reduce((sum, o) => sum + (o.actual_total || o.budget_total || 0), 0),
+    [objects],
+  );
+  const fixedCostCoverage = useMemo(
+    () => metrics.netWorth && metrics.monthlyFixedCost > 0
+      ? Math.floor(metrics.netWorth / metrics.monthlyFixedCost)
+      : null,
+    [metrics.netWorth, metrics.monthlyFixedCost],
+  );
+
+  const cardClass = CARD_CLASS;
 
   return (
     <motion.section
@@ -359,265 +271,312 @@ export function HomeDashboard({
       animate="visible"
       className="space-y-5"
     >
-      <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3 items-stretch">
-        <div className="wyqd-card-action wyqd-card-action--dark flex flex-col rounded-xl bg-stone-200 p-5 text-left">
-          <div className="wyqd-card-action__label text-xs font-medium text-stone-500">{t('todayActions')}</div>
-          <div className="wyqd-card-action__count mt-3 font-mono text-3xl font-semibold text-stone-950">
-            {actionCount}
-          </div>
-          <div className="wyqd-card-action__hint mt-1 text-xs text-stone-500">
-            {t('todayActionsDesc')}
-          </div>
+      {/* A. Own */}
+      <motion.section variants={itemVariants}>
+        <div className="mb-3 flex items-center justify-between px-1">
+          <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('ownGroup')}</h3>
         </div>
-        <ActionCard
-          label={t('tabAccounts')}
-          title={t('actionRecordSnapshot')}
-          detail={t('actionSnapshotHint').replace('{count}', String(snapshots.length))}
-          onSelect={() => onNavigate('accounts')}
-        />
-        <ActionCard
-          label={t('tabObjects')}
-          title={t('actionCaptureObject')}
-          detail={t('actionObjectHint').replace('{count}', String(objects.length))}
-          onSelect={() => onNavigate('objects')}
-        />
-        <ActionCard
-          label={t('tabReviews')}
-          title={t('actionOrganizeReviews')}
-          detail={t('actionReviewHint').replace('{count}', String(pendingExperienceReviews.length))}
-          onSelect={() => onNavigate('reviews')}
-        />
-      </motion.section>
 
-      {/* 核心指标区块 */}
-      <motion.section
-        variants={itemVariants}
-        className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
-      >
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-6 items-center">
-          <div>
+        {/* Hero row: Net worth left + Chart right */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className={cardClass}>
             <MetricCard
               label={t('assetNetWorthEstimate')}
               value={formatMoney(metrics.netWorth, t('noData'))}
-              hint={formatDelta(metrics.netWorthDeltaFromPreviousMonth, t)}
+              hint={formatDelta(metrics.netWorthDeltaFromPreviousMonth)}
               featured
             />
           </div>
-          <div className="rounded-xl border border-stone-200 bg-stone-50 p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('netWorthTrend')}</h2>
-                <p className="mt-1 text-xs text-stone-500">
-                  {t('recentSnapshotsCount').replace('{count}', String(trendSnapshots.length))}
-                </p>
-              </div>
-              {trendSnapshots.length > 0 ? (
-                <span className="shrink-0 font-mono text-xs font-semibold text-stone-900">
-                  {formatCompactMoney(trendValues[trendValues.length - 1] || 0)}
-                </span>
-              ) : null}
+
+          {trendSnapshots.length > 1 ? (
+            <div className={cardClass}>
+              <svg viewBox="-2 0 124 52" role="img" aria-label={`${t('netWorthTrend')} / ${t('fixedCostTrend')}`} className="h-24 w-full overflow-visible">
+                {/* Left Y-axis labels (net worth) */}
+                <text x="7" y="7" textAnchor="end" fontSize="5" fill="#a8a29e" fontFamily="ui-monospace, monospace">
+                  {formatCompactMoney(netWorthMax)}
+                </text>
+                <text x="7" y="46" textAnchor="end" fontSize="5" fill="#a8a29e" fontFamily="ui-monospace, monospace">
+                  {formatCompactMoney(netWorthMin)}
+                </text>
+                {/* Right Y-axis labels (fixed cost) */}
+                <text x="115" y="7" textAnchor="start" fontSize="5" fill="#f59e0b" fontFamily="ui-monospace, monospace">
+                  {formatMoney(fixedCostMax)}
+                </text>
+                <text x="115" y="46" textAnchor="start" fontSize="5" fill="#f59e0b" fontFamily="ui-monospace, monospace">
+                  {formatMoney(fixedCostMin)}
+                </text>
+                {/* Grid lines */}
+                <line x1="10" y1="4" x2="110" y2="4" stroke="#e7e5e4" strokeWidth="0.3" />
+                <line x1="10" y1="24" x2="110" y2="24" stroke="#e7e5e4" strokeWidth="0.3" />
+                {/* Net worth line — black */}
+                <motion.polyline
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  transition={{ duration: 1.5, ease: 'easeInOut' }}
+                  fill="none"
+                  points={netWorthPoints}
+                  stroke="#1c1917"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                />
+                {/* Fixed cost line — orange */}
+                <motion.polyline
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  transition={{ duration: 1.5, ease: 'easeInOut', delay: 0.3 }}
+                  fill="none"
+                  points={fixedCostPoints}
+                  stroke="#f59e0b"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+                {/* Net worth markers with tooltip */}
+                {netWorthPoints.split(' ').map((point, i) => {
+                  const [cx, cy] = point.split(',').map(Number);
+                  const date = trendSnapshots[i]?.snapshot_at || '';
+                  const value = formatCompactMoney(netWorthTrendValues[i] || 0);
+                  return (
+                    <motion.circle
+                      key={`nw-${i}`}
+                      cx={cx}
+                      cy={cy}
+                      r="3"
+                      fill="white"
+                      stroke="#1c1917"
+                      strokeWidth="1.5"
+                      className="cursor-pointer"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.6 + i * 0.06 }}
+                    >
+                      <title>{`${date} · ${t('netWorthTrend')}: ${value}`}</title>
+                    </motion.circle>
+                  );
+                })}
+                {/* Fixed cost markers with tooltip */}
+                {fixedCostPoints.split(' ').map((point, i) => {
+                  const [cx, cy] = point.split(',').map(Number);
+                  const date = trendSnapshots[i]?.snapshot_at || '';
+                  const value = formatMoney(fixedCostTrendValues[i] || 0);
+                  return (
+                    <motion.circle
+                      key={`fc-${i}`}
+                      cx={cx}
+                      cy={cy}
+                      r="2.5"
+                      fill="white"
+                      stroke="#f59e0b"
+                      strokeWidth="1.5"
+                      className="cursor-pointer"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.9 + i * 0.06 }}
+                    >
+                      <title>{`${date} · ${t('fixedCostTrend')}: ${value}`}</title>
+                    </motion.circle>
+                  );
+                })}
+              </svg>
             </div>
-            {trendSnapshots.length > 0 ? (
-              <div className="mt-4">
-                <svg viewBox="0 0 100 48" role="img" aria-label={t('netWorthTrend')} className="h-24 w-full overflow-visible">
-                  <motion.polyline
-                    initial={{ pathLength: 0, opacity: 0 }}
-                    animate={{ pathLength: 1, opacity: 1 }}
-                    transition={{ duration: 1.5, ease: "easeInOut" }}
-                    fill="none"
-                    points={trendPoints}
-                    stroke="#1c1917"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2.5"
-                  />
-                  {trendValues.map((value, index) => {
-                    const [x, y] = trendPoints.split(' ')[index].split(',').map(Number);
-                    return (
-                      <motion.circle
-                        key={`${trendSnapshots[index].id}-${value}`}
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ delay: 0.6 + index * 0.08 }}
-                        cx={x}
-                        cy={y}
-                        fill="white"
-                        r="3"
-                        stroke="#1c1917"
-                        strokeWidth="2"
-                      />
-                    );
-                  })}
-                </svg>
-              </div>
-            ) : (
-              <p className="mt-4 text-xs text-stone-500">{t('connectVaultForTrend')}</p>
-            )}
+          ) : null}
+        </div>
+
+        {/* Metric grid */}
+        <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 items-stretch">
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('physicalAsset')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{metrics.ownedPhysicalCount}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('subscriptionService')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{metrics.activeSubscriptionCount}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('latestAccountSnapshot')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">
+              {latestSnapshot ? formatCompactMoney(latestSnapshot.net_worth ?? 0) : '—'}
+            </div>
+            {latestSnapshot?.snapshot_at ? (
+              <div className="mt-0.5 text-[11px] text-stone-400">{latestSnapshot.snapshot_at}</div>
+            ) : null}
           </div>
         </div>
+      </motion.section>
 
-        <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 items-start">
-          <MetricCard
-            label={t('monthlyFixedCostAvg')}
-            value={formatMoney(metrics.monthlyFixedCost, t('noData'))}
-            hint={fixedCostHint}
+      {/* B. Cost + Quick Entry */}
+      <motion.section variants={itemVariants}>
+        <div className="mb-3 flex items-center justify-between px-1">
+          <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('costGroup')}</h3>
+        </div>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 items-stretch">
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('dailyCostAvg')}（{metrics.ownedPhysicalCount}）</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{avgDailyCost > 0 ? formatDailyMoney(avgDailyCost) : t('noData')}</div>
+            <div className="mt-0.5 text-[11px] text-stone-400">{t('physicalAsset')}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('monthlyFixedCostAvg')}（{metrics.activeSubscriptionCount}）</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{formatMoney(metrics.monthlyFixedCost, t('noData'))}</div>
+            <div className="mt-0.5 text-[11px] text-stone-400">{t('subscriptionService')}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('observeAmount')}（{pendingDecisionCount}）</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{formatMoney(metrics.observingDesireAmount, t('noData'))}</div>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3 items-stretch">
+          <InsightCard
+            label={t('highestDailyCost')}
+            title={highestDailyCost?.object.title || t('noCalculablePhysical')}
+            value={highestDailyCost ? formatMoney(highestDailyCost.dailyCost) : t('noData')}
+            detail={highestDailyCost ? t('clickToViewPhysical') : t('enterPurchaseDateHint')}
+            onSelect={highestDailyCost ? () => onOpenObjects({ typeFilter: 'physical', statusGroupFilter: 'using' }) : undefined}
           />
-          <MetricCard label={t('physicalAsset')} value={t('itemCount').replace('{count}', String(metrics.ownedPhysicalCount))} />
-          <MetricCard label={t('subscriptionService')} value={t('serviceCount').replace('{count}', String(metrics.activeSubscriptionCount))} />
-          <MetricCard label={t('observeAmount')} value={formatMoney(metrics.observingDesireAmount, t('noData'))} />
+          <InsightCard
+            label={t('largestMonthlyFixedCost')}
+            title={largestRecurringCost?.object.title || t('noSubscriptionCost')}
+            value={largestRecurringCost ? formatMoney(largestRecurringCost.monthlyCost) : t('noData')}
+            detail={largestRecurringCost ? t('clickToViewSubscription') : t('enterFixedCostHint')}
+            onSelect={largestRecurringCost ? () => onOpenObjects({ typeFilter: 'recurring_cost', statusGroupFilter: 'using' }) : undefined}
+          />
+          <div className="flex flex-col rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+            <div className="text-xs font-medium text-stone-500">{t('quickEntry')}</div>
+            <div className="mt-2 flex-1 text-xs text-stone-500">{t('quickEntryDesc')}</div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => onOpenObjects({ typeFilter: 'physical' })}
+                className="rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:bg-white"
+              >
+                {t('physicalTemplate')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenObjects({ typeFilter: 'recurring_cost' })}
+                className="rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:bg-white"
+              >
+                {t('fixedCostTemplate')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenObjects({ typeFilter: 'one_time_experience' })}
+                className="rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:bg-white"
+              >
+                {t('experienceTemplate')}
+              </button>
+            </div>
+          </div>
         </div>
       </motion.section>
 
-      <motion.section variants={itemVariants} className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3 items-stretch">
-        <InsightCard
-          label={t('highestDailyCost')}
-          title={highestDailyCost?.object.title || t('noCalculablePhysical')}
-          value={highestDailyCost ? formatMoney(highestDailyCost.dailyCost) : t('noData')}
-          detail={highestDailyCost ? t('clickToViewPhysical') : t('enterPurchaseDateHint')}
-          onSelect={
-            highestDailyCost
-              ? () => onOpenObjects({ typeFilter: 'physical', statusGroupFilter: 'using' })
-              : undefined
-          }
-        />
-        <InsightCard
-          label={t('largestMonthlyFixedCost')}
-          title={largestRecurringCost?.object.title || t('noSubscriptionCost')}
-          value={largestRecurringCost ? formatMoney(largestRecurringCost.monthlyCost) : t('noData')}
-          detail={largestRecurringCost ? t('clickToViewSubscription') : t('enterFixedCostHint')}
-          onSelect={
-            largestRecurringCost
-              ? () => onOpenObjects({ typeFilter: 'recurring_cost', statusGroupFilter: 'using' })
-              : undefined
-          }
-        />
-        <InsightCard
-          label={t('latestAccountSnapshot')}
-          title={latestSnapshot?.snapshot_at || t('noAccountSnapshot')}
-          value={latestSnapshot ? formatMoney(latestSnapshot.net_worth ?? null, t('noData')) : t('noData')}
-          detail={latestSnapshot ? t('netWorth') : t('goToAccountsHint')}
-        />
+      {/* C. Review */}
+      <motion.section variants={itemVariants}>
+        <div className="mb-3 flex items-center justify-between px-1">
+          <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('reviewGroup')}</h3>
+        </div>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 items-stretch">
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('todayActions')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{actionCount}</div>
+            <div className="mt-0.5 text-[11px] text-stone-400">{t('todayActionsDesc')}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('pendingReviews')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{pendingExperienceReviews.length}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('pendingDecisions')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{pendingDecisionCount}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('exitedNotReviewed')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{exitedNotReviewedCount}</div>
+          </div>
+        </div>
       </motion.section>
 
-      {/* 近期关注 (Action Center) - 回归克制风格 */}
-      <motion.section variants={itemVariants} className="space-y-4">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('recentFocus')}</h2>
+      {/* Data Scale */}
+      <motion.section variants={itemVariants}>
+        <div className="mb-3 flex items-center justify-between px-1">
+          <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('dataScale')}</h3>
           <span className="text-xs text-stone-500">
-            {t('itemsCount').replace('{count}', String(upcomingRecurringCosts.length + pendingExperienceReviews.length))}
+            {t('objectsCount').replace('{count}', String(objects.length))}
           </span>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
-          {upcomingRecurringCosts.map(({ object, nextBillingDate }) => (
-            <button
-              key={object.id}
-              type="button"
-              onClick={() => onOpenObjects({ typeFilter: 'recurring_cost', statusGroupFilter: 'using' })}
-              className="wyqd-card-watchlist group relative flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition hover:border-stone-300"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                  <div className="text-sm font-semibold text-stone-950">{object.title}</div>
-                </div>
-                <div className="mt-1 text-xs text-stone-500">
-                  {t('nextBilling').replace('{date}', nextBillingDate)} · {formatDueLabel(nextBillingDate, t)}
-                </div>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 items-stretch">
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('physical')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{physicalCount}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('fixedCost')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{recurringCount}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('experience')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{experienceCount}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('accountSnapshot')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{snapshots.length}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('totalAcquisitionCost')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{formatCompactMoney(totalAcquisitionCost)}</div>
+          </div>
+          <div className={cardClass}>
+            <div className="text-xs font-medium text-stone-500">{t('totalExperienceCost')}</div>
+            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{formatCompactMoney(totalExperienceCost)}</div>
+          </div>
+          {fixedCostCoverage !== null ? (
+            <div className={cardClass}>
+              <div className="text-xs font-medium text-stone-500">{t('fixedCostCoverage')}</div>
+              <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">
+                {fixedCostCoverage} <span className="text-xs font-medium text-stone-400">{t('monthsUnit')}</span>
               </div>
-              <div className="shrink-0 font-mono text-xs font-semibold text-stone-950">
-                {formatCompactMoney(object.billing_amount || 0)}
-              </div>
-            </button>
-          ))}
-          {pendingExperienceReviews.map((object) => (
-            <button
-              key={object.id}
-              type="button"
-              onClick={() => onOpenObjects({ typeFilter: 'one_time_experience', statusGroupFilter: 'exited' })}
-              className="wyqd-card-watchlist group relative flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition hover:border-stone-300"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  <div className="text-sm font-semibold text-stone-950">{object.title}</div>
-                </div>
-                <div className="mt-1 text-xs text-stone-500">{t('pendingReviewBadge')}</div>
-              </div>
-              <div className="shrink-0 rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-xs font-medium text-stone-600">{t('reviewAction')}</div>
-            </button>
-          ))}
-          {upcomingRecurringCosts.length === 0 && pendingExperienceReviews.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center sm:col-span-2">
-              <p className="text-sm text-stone-500">{t('noRecentItems')}</p>
             </div>
           ) : null}
         </div>
       </motion.section>
 
-      {/* 数据规模 (Data Scale) */}
-      <motion.section variants={itemVariants} className="space-y-4 pt-4">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('dataScale')}</h2>
-          <span className="text-xs text-stone-500">
-            {t('objectsCount').replace('{count}', String(objects.length))}
-          </span>
+      {/* Doctor */}
+      <motion.section variants={itemVariants}>
+        <div className="mb-3 flex items-center justify-between px-1">
+          <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('doctor')}</h3>
+          <button
+            type="button"
+            onClick={runDoctor}
+            disabled={doctorLoading}
+            className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition hover:border-stone-400 hover:text-stone-950 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {doctorLoading ? t('doctorRunning') : t('runDoctor')}
+          </button>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4 items-start">
-          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-medium text-stone-500">{t('accountSnapshot')}</div>
-            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{snapshots.length}</div>
+        {doctorReport ? (
+          <div className={cardClass}>
+            <div className="flex items-center gap-3">
+              <span className={`h-2 w-2 rounded-full ${doctorReport.summary.error > 0 ? 'bg-red-500' : doctorReport.summary.warning > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span className="text-sm font-medium text-stone-950">
+                {doctorReport.summary.error === 0 && doctorReport.summary.warning === 0
+                  ? t('doctorPassed')
+                  : `${doctorReport.summary.error} ${t('errors')}, ${doctorReport.summary.warning} ${t('warnings')}, ${doctorReport.summary.info} ${t('info')}`}
+              </span>
+            </div>
+            {doctorReport.findings.length > 0 ? (
+              <div className="mt-3 space-y-1.5">
+                {doctorReport.findings.map((finding, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs">
+                    <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${finding.severity === 'error' ? 'bg-red-500' : finding.severity === 'warning' ? 'bg-amber-500' : 'bg-stone-300'}`} />
+                    <span className="text-stone-600">{finding.message}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
-          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-medium text-stone-500">{t('physical')}</div>
-            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{physicalCount}</div>
-          </div>
-          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-medium text-stone-500">{t('fixedCost')}</div>
-            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{recurringCount}</div>
-          </div>
-          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-medium text-stone-500">{t('experience')}</div>
-            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">{experienceCount}</div>
-          </div>
-        </div>
+        ) : null}
       </motion.section>
-
-      {/* 次要数据区 - 采用 Surface-less 布局 */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-6">
-        <motion.section variants={itemVariants}>
-          <h2 className="px-1 text-sm font-semibold tracking-tight text-stone-950">{t('statusDistribution')}</h2>
-          <div className="mt-6 space-y-6 px-1">
-            {statusDistribution.map((item) => (
-              <DataBar
-                key={item.label}
-                label={item.label}
-                value={item.count}
-                max={maxStatusCount}
-                tone={item.tone}
-                valueLabel={t('itemCount').replace('{count}', String(item.count))}
-                onSelect={() => onOpenObjects(item.focus)}
-              />
-            ))}
-          </div>
-        </motion.section>
-
-        <motion.section variants={itemVariants}>
-          <h2 className="px-1 text-sm font-semibold tracking-tight text-stone-950">{t('costStructure')}</h2>
-          <div className="mt-6 space-y-6 px-1">
-            {costBreakdown.map((item) => (
-              <DataBar
-                key={item.label}
-                label={item.label}
-                value={item.value}
-                max={maxCost}
-                tone={item.tone}
-                valueLabel={formatCompactMoney(item.value)}
-                onSelect={() => onOpenObjects(item.focus)}
-              />
-            ))}
-          </div>
-        </motion.section>
-      </div>
     </motion.section>
   );
 }

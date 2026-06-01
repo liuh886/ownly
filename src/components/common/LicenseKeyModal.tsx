@@ -22,6 +22,11 @@ export function LicenseKeyModal({
   const [key, setKey] = useState('');
   const isActive = currentPlan !== 'free';
   const isWeb = runtimeTarget === 'web';
+  const planLabels: Record<string, string> = {
+    pro_annual: t('planProAnnual'),
+    pro_lifetime: t('planProLifetime'),
+  };
+  const displayPlan = planLabels[currentPlan] || currentPlan.replace(/_/g, ' ');
 
   if (!open) return null;
 
@@ -42,7 +47,7 @@ export function LicenseKeyModal({
 
         {isActive ? (
           <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
-            {t('activationActive')} — {currentPlan.replace(/_/g, ' ')}
+            {t('activationActive')} — {displayPlan}
           </div>
         ) : null}
 

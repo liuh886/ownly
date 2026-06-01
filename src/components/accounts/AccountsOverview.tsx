@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
@@ -20,6 +21,7 @@ import {
 import type { WYQDStoredEntity } from '@/core/repository';
 import { buildSparklinePoints, todayISO } from '@/lib/format';
 import { useFormatMoney } from '@/lib/use-format';
+import { FIELD_CLASS } from '@/lib/ui-constants';
 
 function slugifyAccountName(input: string): string {
   return input
@@ -119,17 +121,22 @@ function createSnapshotDraft({
   assetBalances,
   liabilityBalances,
   isMonthEnd,
+  objects,
   t,
 }: {
   snapshotAt: string;
   assetBalances: AccountBalance[];
   liabilityBalances: AccountBalance[];
   isMonthEnd: boolean;
+  objects: WYQDObject[];
   t?: (key: WYQDTranslationKey) => string;
 }): AccountSnapshot {
   const now = new Date().toISOString();
   const totalAssets = sumBalances(assetBalances);
   const totalLiabilities = sumBalances(liabilityBalances);
+  const monthlyFixedCost = objects
+    .filter((o) => o.object_type === 'recurring_cost' && o.status === 'active')
+    .reduce((sum, o) => sum + calculateRecurringMonthlyCost(o as RecurringCostObject), 0);
 
   return {
     schema_version: WYQD_SCHEMA_VERSION,
@@ -145,6 +152,7 @@ function createSnapshotDraft({
     total_assets: totalAssets,
     total_liabilities: totalLiabilities,
     net_worth: totalAssets - totalLiabilities,
+    monthly_fixed_cost: monthlyFixedCost,
     created_at: now,
     updated_at: now,
   };
@@ -214,14 +222,19 @@ export function AccountsOverview({
     .map((stored) => stored.entity);
   const trendValues = trendSnapshots.map((snapshot) => snapshot.net_worth || 0);
   const trendPoints = buildSparklinePoints(trendValues);
+
+  const fixedCostTrendValues = trendSnapshots.map(
+    (snapshot) => snapshot.monthly_fixed_cost ?? totalMonthlyFixedCost,
+  );
+  const fixedCostTrendPoints = buildSparklinePoints(fixedCostTrendValues);
+  const latestFixedCost = fixedCostTrendValues[fixedCostTrendValues.length - 1] ?? totalMonthlyFixedCost;
   const canSubmit =
     !disabled &&
     parsedAssetBalances.length > 0 &&
     !hasInvalidAssetLines &&
     !hasInvalidLiabilityLines &&
     !isSaving;
-  const fieldClass =
-    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
+  const fieldClass = FIELD_CLASS;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -237,6 +250,7 @@ export function AccountsOverview({
         assetBalances: parsedAssetBalances,
         liabilityBalances: parsedLiabilityBalances,
         isMonthEnd,
+        objects,
         t,
       });
       const snapshot = editing
@@ -428,26 +442,37 @@ export function AccountsOverview({
         {trendSnapshots.length > 0 ? (
           <div className="mt-4">
             <svg viewBox="0 0 100 48" role="img" aria-label={t('netWorthChartAriaLabel')} className="h-28 w-full">
-              <polyline
+              <motion.polyline
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                transition={{ duration: 1.5, ease: 'easeInOut' }}
                 fill="none"
                 points={trendPoints}
                 stroke="rgb(28 25 23)"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth="3"
+                strokeWidth="2.5"
               />
               {trendValues.map((value, index) => {
                 const [x, y] = trendPoints.split(' ')[index].split(',').map(Number);
+                const date = trendSnapshots[index]?.snapshot_at || '';
+                const formattedValue = formatCompactMoney(value);
                 return (
-                  <circle
+                  <motion.circle
                     key={`${trendSnapshots[index].id}-${value}`}
                     cx={x}
                     cy={y}
                     fill="white"
-                    r="2.8"
+                    r="2.5"
                     stroke="rgb(28 25 23)"
-                    strokeWidth="1.6"
-                  />
+                    strokeWidth="1.5"
+                    className="cursor-pointer"
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.6 + index * 0.06 }}
+                  >
+                    <title>{`${date} · ${formattedValue}`}</title>
+                  </motion.circle>
                 );
               })}
             </svg>
@@ -466,56 +491,69 @@ export function AccountsOverview({
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('fixedCostAccountPressure')}</h2>
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('fixedCostHistory')}</h2>
             <p className="mt-1 text-xs leading-5 text-stone-500">
               {t('fixedCostAccountPressureDesc')}
             </p>
           </div>
           <div className="shrink-0 text-right">
             <div className="text-sm font-semibold text-stone-950">
-              {formatMoney(totalMonthlyFixedCost)}
+              {formatMoney(latestFixedCost)}
             </div>
             <div className="text-xs text-stone-400">{t('monthlyDeduction')}</div>
           </div>
         </div>
 
-        {recurringAccountGroups.length > 0 ? (
-          <div className="mt-4 space-y-2">
-            {recurringAccountGroups.map((group) => (
-              <div key={group.account} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-stone-950">
-                      {group.account}
-                    </div>
-                    <div className="mt-1 text-xs text-stone-500">
-                      {t('countFixedCostItems').replace('{count}', String(group.count))}
-                      {group.nextBillingDate ? ` · ${t('nextPayment').replace('{date}', group.nextBillingDate)}` : ''}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-sm font-semibold text-stone-950">
-                      {formatMoney(group.monthlyCost)}
-                    </div>
-                    <div className="text-xs text-stone-400">{t('perMonth')}</div>
-                  </div>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {group.items.slice(0, 4).map((item) => (
-                    <span
-                      key={item.id}
-                      className="rounded-full bg-white px-2 py-1 text-[11px] text-stone-500 ring-1 ring-stone-200"
-                    >
-                      {item.title}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
+        {trendSnapshots.length > 1 ? (
+          <div className="mt-4">
+            <svg
+              viewBox="0 0 100 48"
+              role="img"
+              aria-label={t('fixedCostHistory')}
+              className="h-28 w-full"
+            >
+              <motion.polyline
+                points={fixedCostTrendPoints}
+                fill="none"
+                stroke="rgb(28 25 23)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                transition={{ duration: 1.5, ease: 'easeInOut' }}
+              />
+              {fixedCostTrendPoints.split(' ').map((point, index) => {
+                const [cx, cy] = point.split(',').map(Number);
+                const date = trendSnapshots[index]?.snapshot_at || '';
+                const value = formatMoney(fixedCostTrendValues[index] || 0);
+                return (
+                  <motion.circle
+                    key={index}
+                    cx={cx}
+                    cy={cy}
+                    r="2.5"
+                    fill="white"
+                    stroke="rgb(28 25 23)"
+                    strokeWidth="1.5"
+                    className="cursor-pointer"
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.6 + index * 0.08 }}
+                  >
+                    <title>{`${date} · ${value}`}</title>
+                  </motion.circle>
+                );
+              })}
+            </svg>
+            <div className="mt-2 flex justify-between text-[11px] text-stone-400">
+              <span>{trendSnapshots[0]?.snapshot_at}</span>
+              <span>{trendSnapshots[trendSnapshots.length - 1]?.snapshot_at}</span>
+            </div>
           </div>
         ) : (
           <p className="mt-4 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">
-            {t('noActiveFixedCost')}
+            {t('multipleSnapshotsForTrend')}
           </p>
         )}
       </div>
@@ -648,65 +686,80 @@ export function AccountsOverview({
       </form>
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('historySnapshots')}</h2>
-          <span className="text-xs text-stone-400">{t('recentN').replace('{count}', String(Math.min(sorted.length, 6)))}</span>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('historySnapshots')}</h2>
+            <p className="mt-1 text-xs leading-5 text-stone-500">
+              {t('recentN').replace('{count}', String(Math.min(sorted.length, 6)))}
+            </p>
+          </div>
+          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+            {sorted.length}
+          </span>
         </div>
-        <div className="mt-3 space-y-3">
-          {sorted.slice(0, 6).map((stored) => (
-            <div
-              key={stored.entity.id}
-              className="border-t border-stone-100 pt-3"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-stone-950">
-                    {stored.entity.snapshot_at}
+
+        {sorted.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">
+            {t('noSnapshots')}
+          </div>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {sorted.slice(0, 6).map((stored) => (
+              <article
+                key={stored.entity.id}
+                className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-stone-600">
+                        {stored.entity.is_month_end ? t('monthEndSnapshot') : t('normalSnapshot')}
+                      </span>
+                      <p className="truncate text-sm font-semibold text-stone-950">
+                        {stored.entity.snapshot_at}
+                      </p>
+                    </div>
+                    <p className="mt-1 font-mono text-xs font-medium text-stone-500">
+                      {formatMoney(stored.entity.net_worth)}
+                    </p>
                   </div>
-                  <div className="text-xs text-stone-400">
-                    {stored.entity.is_month_end ? t('monthEndSnapshot') : t('normalSnapshot')}
+                  <div className="flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      disabled={disabled || isSaving}
+                      onClick={() => startEditingSnapshot(stored)}
+                      className="min-h-10 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                    >
+                      {t('edit')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={disabled || deletingFileName === stored.fileName}
+                      onClick={async () => {
+                        const confirmed = await confirm({
+                          title: t('delete'),
+                          message: t('deleteConfirm').replace('{title}', stored.entity.snapshot_at),
+                          destructive: true,
+                        });
+                        if (!confirmed) return;
+                        setDeletingFileName(stored.fileName);
+                        try {
+                          await onDeleteSnapshot(stored.fileName);
+                          if (editingFileName === stored.fileName) cancelEditing();
+                        } finally {
+                          setDeletingFileName(null);
+                        }
+                      }}
+                      className="min-h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {deletingFileName === stored.fileName ? '…' : t('delete')}
+                    </button>
                   </div>
                 </div>
-                <div className="shrink-0 text-sm font-semibold text-stone-950">
-                  {formatMoney(stored.entity.net_worth)}
-                </div>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => startEditingSnapshot(stored)}
-                  className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:text-stone-300"
-                  disabled={disabled || isSaving}
-                >
-                  {t('edit')}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const confirmed = await confirm({
-                            title: t('delete'),
-                            message: t('deleteConfirm').replace('{title}', stored.entity.snapshot_at),
-                            destructive: true,
-                          });
-                    if (!confirmed) return;
-                    setDeletingFileName(stored.fileName);
-                    try {
-                      await onDeleteSnapshot(stored.fileName);
-                      if (editingFileName === stored.fileName) cancelEditing();
-                    } finally {
-                      setDeletingFileName(null);
-                    }
-                  }}
-                  className="rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300 disabled:hover:border-stone-100 disabled:hover:bg-white"
-                  disabled={disabled || deletingFileName === stored.fileName}
-                >
-                  {deletingFileName === stored.fileName ? t('saving') : t('delete')}
-                </button>
-              </div>
-            </div>
-          ))}
-          {snapshotEntities.length === 0 ? <p className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">{t('noSnapshots')}</p> : null}
-        </div>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
     </section>
     {confirmDialog}

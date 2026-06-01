@@ -22,16 +22,16 @@ export default function Error({
           </svg>
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-stone-900">出了点问题</h2>
+          <h2 className="text-lg font-semibold text-stone-900">Something went wrong</h2>
           <p className="mt-2 text-sm text-stone-500">
-            抱歉，工作台在加载时遇到了意外错误。这可能是由于本地数据解析异常或浏览器环境问题。
+            An unexpected error occurred while loading the workspace. This may be due to a local data parsing issue or a browser environment problem.
           </p>
         </div>
         <button
           onClick={() => reset()}
           className="w-full rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-stone-800"
         >
-          重试加载
+          Retry
         </button>
       </div>
     </div>

@@ -4,11 +4,9 @@ This document tracks the gap between the current local-first MVP+ and a mature O
 
 ## Current Release Stage
 
-Status: 0.2.4 Private Alpha (Obsidian plugin first, Web compatible).
+Status: 1.0.0 Stable Release (Obsidian plugin first, Web compatible).
 
-Ownly is no longer a throwaway prototype, but it is currently positioned as a **Private Alpha**, not a stable release. It has a working information architecture, Markdown data model, Web UI, Obsidian plugin shell, Agent CLI, PM2/static deployment path, and documented product intent. It is suitable for 1-3 internal users to evaluate the "Alpha risk" profile.
-
-The maturity benchmark is not mobile app-store listing. It is whether Ownly feels dependable, understandable, recoverable, testable, and shareable as a real product.
+Ownly v1.0.0 is the first stable public release of the Obsidian plugin. It has a working information architecture, Markdown data model, Web UI, Obsidian plugin shell, Agent CLI, PM2/static deployment path, object list sorting and pagination, demo data auto-seeding, and documented product intent.
 
 ## GitHub Public Sharing Checklist
 
@@ -17,12 +15,12 @@ The maturity benchmark is not mobile app-store listing. It is whether Ownly feel
 - [x] Build does not depend on Google Fonts network access.
 - [x] Agent CLI protocol is documented in `AGENTS.md`.
 - [x] Privacy policy exists.
-- [ ] Add screenshots or a short demo GIF.
+- [ ] Add screenshots or a short demo GIF (user to provide).
 - [x] Add LICENSE after the owner decides the license model (MIT).
 - [x] Add CHANGELOG before the first tagged release.
 - [x] Add CONTRIBUTING if external contributions are expected.
 - [x] Add a sample Vault fixture for repeatable demo and QA (`samples/wyqd-vault`).
-- [ ] Create a GitHub release containing Obsidian release artifacts.
+- [ ] Create a GitHub release containing Obsidian release artifacts (ready — push `v1.0.0` tag).
 - [ ] Submit to the Obsidian community plugin directory after plugin QA.
 
 ## Mature Product Readiness Checklist
@@ -33,8 +31,8 @@ The maturity benchmark is not mobile app-store listing. It is whether Ownly feel
 - [x] Add recoverable archive behavior for delete actions.
 - [x] Add restore flow for archived data.
 - [x] Add sample Vault fixture for repeatable demos and QA (`samples/wyqd-vault`).
-- [ ] Add screenshots or a short demo GIF for GitHub sharing.
-- [ ] Add release notes and versioning policy.
+- [ ] Add screenshots or a short demo GIF for GitHub sharing (user to provide).
+- [x] Add release notes and versioning policy (`docs/VERSIONING.md`).
 - [ ] Validate accessibility and responsive layout on real devices.
 - [x] Document known browser limitations for File System Access API.
 
@@ -44,25 +42,32 @@ The maturity benchmark is not mobile app-store listing. It is whether Ownly feel
 - The suggested `npm audit fix --force` is not acceptable because it would install an old, breaking Next version.
 - Track this through Next upgrades instead of force-fixing blindly.
 
+## New User Experience
+
+As of v0.2.6, the web runtime auto-seeds demo data into an empty Vault on first connect. New users see 11 sample objects (physical items, subscriptions, travel experiences), 2 net worth snapshots, and 5 reviews immediately. The seeded data persists as real Markdown files in the Vault and can be freely edited or deleted. A `localStorage` flag (`ownly_demo_seeded`) prevents re-seeding users who intentionally clear their data.
+
 ## Release Decision
 
-Public GitHub sharing is realistic after screenshots, license, sample data, and one more QA pass.
+v1.0.0 is ready for GitHub release and Obsidian community plugin submission once screenshots are added. Push the `v1.0.0` tag to trigger the CI release workflow.
 
-The next maturity jump should focus on E2E coverage, Obsidian installation QA, release artifacts, screenshots, and clearer plugin-first user-facing documentation.
+Remaining items for future releases: E2E tests, responsive layout validation on real devices.
 
-## 2026-05-26 Release Closure Check
+## 2026-05-31 Release Closure Check
 
-Status: local `0.2.0-alpha` release closure passed.
+Status: `1.0.0` release closure passed.
 
 Verified:
 
 - `npm run validate` passed for TypeScript, ESLint, Web static build, Obsidian plugin type check, plugin package generation, and release file validation.
 - `npm run wyqd -- --help` works as the documented Agent CLI entry.
 - `samples/wyqd-vault` can be read by the Ownly CLI for object and snapshot demo data.
-- `dist/obsidian/wyqd` is generated with `manifest.json`, `versions.json`, `main.js`, and `styles.css`.
+- `dist/obsidian/ownly` is generated with `manifest.json`, `versions.json`, `main.js`, and `styles.css`.
+- Manual Obsidian installation QA completed in a real Vault.
+- Object list sorting (date, price, title) and pagination (show more/less) verified.
+- Version consistency across `package.json`, `manifest.json`, and `runtime.ts` at `1.0.0`.
 
-Remaining blockers before public Obsidian community submission:
+Remaining items:
 
-- Perform manual Obsidian installation QA in a real Vault.
-- Add screenshots or a short demo GIF.
-- Create a GitHub release with Obsidian release artifacts.
+- Add screenshots to README.
+- Push `v1.0.0` tag to create GitHub release.
+- Submit to Obsidian community plugin directory.

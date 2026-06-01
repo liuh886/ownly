@@ -9,6 +9,7 @@ import type {
   PhysicalObject,
   PhysicalStatus,
   RecurringCostObject,
+  ReviewEntry,
   WYQDObject,
 } from '@/domain/types';
 import {
@@ -17,11 +18,12 @@ import {
   calculatePhysicalDailyCost,
   calculateNextBillingDate,
   calculateRecurringMonthlyCost,
+  calculateDesireAmount,
 } from '@/domain/calculations';
 import { ObjectComposer } from './ObjectComposer';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
-import { formatMoney, formatOptional, parseRank, daysUntil, formatDueLabel, todayISO } from '@/lib/format';
+import { formatMoney, formatOptional, parseScore, formatDueLabel, todayISO } from '@/lib/format';
 
 type TranslateFn = (key: WYQDTranslationKey) => string;
 
@@ -73,13 +75,67 @@ function getBillingCycleLabels(t: TranslateFn): Record<string, string> {
   };
 }
 
+/** Map an object to a display emoji icon based on category, title, or location. */
+function getObjectIcon(object: WYQDObject): string {
+  if (object.object_type === 'physical') {
+    const cat = (object.category || '').toLowerCase();
+    if (cat.includes('电子') || cat.includes('electronics') || cat.includes('tech')) return '💻';
+    if (cat.includes('摄影') || cat.includes('camera') || cat.includes('photo')) return '📷';
+    if (cat.includes('衣') || cat.includes('cloth') || cat.includes('fashion')) return '👔';
+    if (cat.includes('家居') || cat.includes('home') || cat.includes('house')) return '🏠';
+    if (cat.includes('交通') || cat.includes('transport') || cat.includes('car') || cat.includes('auto')) return '🚗';
+    if (cat.includes('运动') || cat.includes('sport') || cat.includes('fitness')) return '⚽';
+    if (cat.includes('书') || cat.includes('book')) return '📚';
+    if (cat.includes('food') || cat.includes('厨房') || cat.includes('kitchen')) return '🍳';
+    return '📦';
+  }
+
+  if (object.object_type === 'recurring_cost') {
+    const title = (object.title || '').toLowerCase();
+    if (title.includes('chatgpt') || title.includes('openai') || title.includes('claude') || title.includes('ai')) return '🤖';
+    if (title.includes('netflix') || title.includes('disney') || title.includes('hbo') || title.includes('video')) return '🎬';
+    if (title.includes('spotify') || title.includes('music') || title.includes('apple music')) return '🎵';
+    if (title.includes('icloud') || title.includes('google') || title.includes('dropbox') || title.includes('storage')) return '☁️';
+    if (title.includes('github') || title.includes('code') || title.includes('dev')) return '⌨️';
+    if (title.includes('gym') || title.includes('fitness') || title.includes('sport')) return '💪';
+    if (title.includes('insurance') || title.includes('保险')) return '🛡️';
+    if (title.includes('rent') || title.includes('房租') || title.includes('mortgage')) return '🏡';
+    if (title.includes('phone') || title.includes('mobile') || title.includes('phone') || title.includes('手机')) return '📱';
+    if (title.includes('internet') || title.includes('broadband') || title.includes('宽带')) return '🌐';
+    return '🔄';
+  }
+
+  // one_time_experience
+  const title = (object.title || '').toLowerCase();
+  if (title.includes('trip') || title.includes('travel') || title.includes('旅行') || title.includes('tour')) return '✈️';
+  if (title.includes('food') || title.includes('restaurant') || title.includes('美食') || title.includes('餐')) return '🍽️';
+  if (title.includes('concert') || title.includes('show') || title.includes('演出') || title.includes('音乐')) return '🎵';
+  if (title.includes('museum') || title.includes('gallery') || title.includes('博物馆') || title.includes('展览')) return '🏛️';
+  if (title.includes('hiking') || title.includes('camp') || title.includes('户外') || title.includes('徒步')) return '🥾';
+  if (title.includes('beach') || title.includes('sea') || title.includes('海') || title.includes('beach')) return '🏖️';
+  if (title.includes('ski') || title.includes('snow') || title.includes('滑雪')) return '⛷️';
+  return '🌍';
+}
+
+/** Translate a category string to the current language. Falls back to the original string. */
+function translateCategory(category: string | undefined, t: TranslateFn): string {
+  if (!category) return '';
+  const cat = category.toLowerCase();
+  if (cat.includes('电子') || cat.includes('electronics')) return t('categoryElectronics');
+  if (cat.includes('摄影') || cat.includes('camera')) return t('categoryCamera');
+  if (cat.includes('衣') || cat.includes('cloth')) return t('categoryClothing');
+  if (cat.includes('家居') || cat.includes('home')) return t('categoryHome');
+  if (cat.includes('交通') || cat.includes('transport')) return t('categoryTransport');
+  if (cat.includes('其他') || cat.includes('other')) return t('categoryOther');
+  return category;
+}
+
 function getSupportingVisuals(
   t: TranslateFn,
 ): Record<
   Exclude<WYQDObject['object_type'], 'physical'>,
   {
     label: string;
-    shortLabel: string;
     accentClass: string;
     badgeClass: string;
     dotClass: string;
@@ -89,7 +145,6 @@ function getSupportingVisuals(
   return {
     recurring_cost: {
       label: t('typeRecurringCost'),
-      shortLabel: t('filterRecurringCost'),
       accentClass: 'bg-sky-500',
       badgeClass: 'bg-sky-50 text-sky-700 ring-sky-200',
       dotClass: 'bg-sky-500',
@@ -97,7 +152,6 @@ function getSupportingVisuals(
     },
     one_time_experience: {
       label: t('typeExperience'),
-      shortLabel: t('filterExperience'),
       accentClass: 'bg-emerald-500',
       badgeClass: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
       dotClass: 'bg-emerald-500',
@@ -148,6 +202,9 @@ type PhysicalFilter = 'all' | 'active' | 'retired' | 'sold';
 type ObjectTypeFilter = 'all' | WYQDObject['object_type'];
 type ObjectStatusGroupFilter = 'all' | 'observing' | 'using' | 'exited';
 type ObjectControlBucket = 'attention' | 'active' | 'review' | 'closed';
+type SortOption = 'date_desc' | 'date_asc' | 'price_desc' | 'price_asc' | 'title_asc';
+
+const PAGE_SIZE = 10;
 
 export interface ObjectListFocus {
   token: number;
@@ -173,6 +230,45 @@ function getObjectTypeFilterLabels(t: TranslateFn): Record<ObjectTypeFilter, str
     recurring_cost: t('typeRecurringCost'),
     one_time_experience: t('typeExperience'),
   };
+}
+
+function getSortLabels(t: TranslateFn): Record<SortOption, string> {
+  return {
+    date_desc: t('sortDateDesc'),
+    date_asc: t('sortDateAsc'),
+    price_desc: t('sortPriceDesc'),
+    price_asc: t('sortPriceAsc'),
+    title_asc: t('sortTitleAsc'),
+  };
+}
+
+function getSortDate(object: WYQDObject): number {
+  let dateStr = '';
+  if (object.object_type === 'physical') {
+    dateStr = object.purchased_at || object.created_at || '';
+  } else if (object.object_type === 'recurring_cost') {
+    dateStr = object.started_at || object.created_at || '';
+  } else {
+    dateStr = object.planned_at || object.started_at || object.created_at || '';
+  }
+  return dateStr ? new Date(dateStr).getTime() : 0;
+}
+
+function compareObjects(a: WYQDObject, b: WYQDObject, sort: SortOption): number {
+  switch (sort) {
+    case 'date_desc':
+      return getSortDate(b) - getSortDate(a);
+    case 'date_asc':
+      return getSortDate(a) - getSortDate(b);
+    case 'price_desc':
+      return getPrimaryAmount(b) - getPrimaryAmount(a);
+    case 'price_asc':
+      return getPrimaryAmount(a) - getPrimaryAmount(b);
+    case 'title_asc':
+      return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+    default:
+      return 0;
+  }
 }
 
 function getObjectStatusGroupLabels(t: TranslateFn): Record<ObjectStatusGroupFilter, string> {
@@ -299,6 +395,7 @@ function getSupportingActionLabel(object: WYQDObject, t: TranslateFn): string | 
     if (object.status === 'planned') return t('start');
     if (object.status === 'in_progress') return t('complete');
     if (object.status === 'completed') return t('reviewAction');
+    if (object.status === 'reviewed') return t('reviewAction');
   }
   return null;
 }
@@ -359,48 +456,15 @@ function getPhysicalAccentClasses(bucket: Exclude<PhysicalFilter, 'all'>): {
   };
 }
 
-function getObjectControlBucket(object: WYQDObject): ObjectControlBucket {
+function getObjectControlBucket(object: WYQDObject, reviewedIds?: Set<string>): ObjectControlBucket {
   if (object.object_type === 'one_time_experience' && object.status === 'completed') {
-    return 'review';
+    // Check both review_ref on the object AND existence of a review document
+    const hasReview = object.review_ref || (reviewedIds?.has(object.id) ?? false);
+    if (!hasReview) return 'review';
   }
   if (['seeded', 'observing', 'planned'].includes(object.status)) return 'attention';
   if (['purchased', 'using', 'active', 'in_progress'].includes(object.status)) return 'active';
   return 'closed';
-}
-
-function getPriorityReason(object: WYQDObject, t: TranslateFn): string {
-  if (object.object_type === 'one_time_experience' && object.status === 'completed') {
-    return t('priorityPendingReview');
-  }
-  if (object.object_type === 'recurring_cost' && object.status === 'active') {
-    const nextBillingDate = calculateNextBillingDate(object);
-    return nextBillingDate ? `${t('nextBilling').replace('{date}', formatDueLabel(nextBillingDate, t))}` : t('prioritySubscribing');
-  }
-  if (object.object_type === 'physical' && ['seeded', 'observing'].includes(object.status)) {
-    return t('priorityPlanned');
-  }
-  if (object.object_type === 'one_time_experience' && object.status === 'planned') {
-    return t('priorityPlanned');
-  }
-  if (object.object_type === 'recurring_cost' && object.status === 'seeded') {
-    return t('priorityCandidate');
-  }
-  return `${getTypeLabels(t)[object.object_type]} · ${getStatusLabel(object, t)}`;
-}
-
-function getPriorityScore(object: WYQDObject): number {
-  if (object.object_type === 'one_time_experience' && object.status === 'completed') return 0;
-  if (object.object_type === 'recurring_cost' && object.status === 'active') {
-    const nextBillingDate = calculateNextBillingDate(object);
-    if (!nextBillingDate) return 2;
-    const days = daysUntil(nextBillingDate);
-    if (days <= 3) return 0.5;
-    if (days <= 14) return 1;
-    return 2;
-  }
-  if (['seeded', 'observing', 'planned'].includes(object.status)) return 3;
-  if (object.object_type === 'one_time_experience' && object.status === 'in_progress') return 4;
-  return 9;
 }
 
 function transitionSupportingObject(object: WYQDObject): WYQDObject {
@@ -441,7 +505,7 @@ function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label: strin
     return [
       { label: t('type'), value: getTypeLabels(t)[object.object_type] },
       { label: t('status'), value: getStatusLabel(object, t) },
-      { label: t('categoryLabel'), value: formatOptional(object.category, t) },
+      { label: t('categoryLabel'), value: object.category ? translateCategory(object.category, t) : formatOptional(object.category, t) },
       { label: t('totalAcquisitionCost'), value: formatMoney(calculatePhysicalAcquisitionCost(object)) },
       { label: t('dailyExperienceCost'), value: dailyCost ? `${formatMoney(dailyCost)}${t('perDay')}` : t('noFormed') },
       { label: t('purchaseDate'), value: formatOptional(object.purchased_at, t) },
@@ -455,7 +519,7 @@ function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label: strin
     return [
       { label: t('type'), value: getTypeLabels(t)[object.object_type] },
       { label: t('status'), value: getStatusLabel(object, t) },
-      { label: t('categoryLabel'), value: formatOptional(object.category, t) },
+      { label: t('categoryLabel'), value: object.category ? translateCategory(object.category, t) : formatOptional(object.category, t) },
       { label: t('billingCycle'), value: getBillingCycleLabels(t)[object.billing_cycle || 'monthly'] || t('billingCycleMonthly') },
       { label: t('billingAmount'), value: formatMoney(object.billing_amount || 0) },
       { label: t('monthlyEquivalent'), value: formatMoney(monthlyCost) },
@@ -470,7 +534,7 @@ function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label: strin
   return [
     { label: t('type'), value: getTypeLabels(t)[object.object_type] },
     { label: t('status'), value: getStatusLabel(object, t) },
-    { label: t('categoryLabel'), value: formatOptional(object.category, t) },
+    { label: t('categoryLabel'), value: object.category ? translateCategory(object.category, t) : formatOptional(object.category, t) },
     { label: t('budget'), value: formatMoney(object.budget_total || 0) },
     { label: t('actualAmount'), value: object.actual_total ? formatMoney(object.actual_total) : t('notRecorded') },
     { label: t('plannedDate'), value: formatOptional(object.planned_at, t) },
@@ -581,6 +645,7 @@ function ObjectDetailPanel({
 
 interface ObjectListProps {
   objects: WYQDStoredEntity<WYQDObject>[];
+  reviews?: WYQDStoredEntity<ReviewEntry>[];
   focus?: ObjectListFocus | null;
   disabled?: boolean;
   onUpdate: (fileName: string, object: WYQDObject, body: string) => Promise<void>;
@@ -590,9 +655,9 @@ interface ObjectListProps {
     object: WYQDObject,
     summary: string,
     rankings: {
-      foodRank: number | null;
-      sceneryRank: number | null;
-      experienceRank: number | null;
+      foodScore: number | null;
+      sceneryScore: number | null;
+      experienceScore: number | null;
     },
     body: string,
   ) => Promise<void>;
@@ -605,6 +670,7 @@ function isPhysicalStoredEntity(stored: WYQDStoredEntity<WYQDObject>): stored is
 
 export function ObjectList({
   objects,
+  reviews = [],
   focus,
   disabled,
   onUpdate,
@@ -618,9 +684,9 @@ export function ObjectList({
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [reviewingFileName, setReviewingFileName] = useState<string | null>(null);
   const [reviewSummary, setReviewSummary] = useState('');
-  const [reviewFoodRank, setReviewFoodRank] = useState('');
-  const [reviewSceneryRank, setReviewSceneryRank] = useState('');
-  const [reviewExperienceRank, setReviewExperienceRank] = useState('');
+  const [reviewFoodScore, setReviewFoodScore] = useState('');
+  const [reviewSceneryScore, setReviewSceneryScore] = useState('');
+  const [reviewExperienceScore, setReviewExperienceScore] = useState('');
   const [query, setQuery] = useState(focus?.query || '');
   const [typeFilter, setTypeFilter] = useState<ObjectTypeFilter>(focus?.typeFilter || 'all');
   const [statusGroupFilter, setStatusGroupFilter] = useState<ObjectStatusGroupFilter>(
@@ -628,6 +694,9 @@ export function ObjectList({
   );
   const [filter, setFilter] = useState<PhysicalFilter>(focus?.physicalFilter || 'all');
   const [controlBucketFilter, setControlBucketFilter] = useState<ObjectControlBucket | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>('date_desc');
+  const [showAllPhysical, setShowAllPhysical] = useState(false);
+  const [showAllSupporting, setShowAllSupporting] = useState(false);
   const [openActionMenuFileName, setOpenActionMenuFileName] = useState<string | null>(null);
   const { confirm, prompt, dialog: confirmDialog } = useConfirmDialog();
 
@@ -649,17 +718,26 @@ export function ObjectList({
     };
   }, [openActionMenuFileName]);
 
-  const typeLabels = getTypeLabels(t);
+
   const filterLabels = getFilterLabels(t);
   const objectTypeFilterLabels = getObjectTypeFilterLabels(t);
   const objectStatusGroupLabels = getObjectStatusGroupLabels(t);
   const objectControlLabels = getObjectControlLabels(t);
   const supportingVisuals = getSupportingVisuals(t);
 
+  // Pre-compute set of object IDs that have reviews (for accurate bucket counting)
+  const reviewedObjectIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of reviews) {
+      if (r.entity.target_id) ids.add(r.entity.target_id);
+    }
+    return ids;
+  }, [reviews]);
+
   const visibleObjects = useMemo(() => objects.filter((stored) => {
     const object = stored.entity;
     return (
-      (controlBucketFilter === null || getObjectControlBucket(object) === controlBucketFilter) &&
+      (controlBucketFilter === null || getObjectControlBucket(object, reviewedObjectIds) === controlBucketFilter) &&
       (typeFilter === 'all' || object.object_type === typeFilter) &&
       matchesStatusGroup(object, statusGroupFilter) &&
       matchesQuery(object, query)
@@ -668,12 +746,26 @@ export function ObjectList({
 
   const allPhysicalObjects = useMemo(() => objects.filter(isPhysicalStoredEntity), [objects]);
   const physicalObjects = useMemo(() => visibleObjects.filter(isPhysicalStoredEntity), [visibleObjects]);
-  const supportingObjects = useMemo(() => visibleObjects.filter((stored) => !isPhysicalObject(stored.entity)), [visibleObjects]);
+  const supportingObjects = useMemo(
+    () =>
+      [...visibleObjects.filter((stored) => !isPhysicalObject(stored.entity))].sort((a, b) =>
+        compareObjects(a.entity, b.entity, sortBy),
+      ),
+    [visibleObjects, sortBy],
+  );
 
-  const filteredObjects =
-    filter === 'all'
+  const visibleSupportingObjects = showAllSupporting ? supportingObjects : supportingObjects.slice(0, PAGE_SIZE);
+  const hiddenSupportingCount = supportingObjects.length - visibleSupportingObjects.length;
+
+  const filteredObjects = useMemo(() => {
+    const base = filter === 'all'
       ? physicalObjects
       : physicalObjects.filter((stored) => getPhysicalBucket(stored.entity.status) === filter);
+    return [...base].sort((a, b) => compareObjects(a.entity, b.entity, sortBy));
+  }, [physicalObjects, filter, sortBy]);
+
+  const visibleFilteredObjects = showAllPhysical ? filteredObjects : filteredObjects.slice(0, PAGE_SIZE);
+  const hiddenPhysicalCount = filteredObjects.length - visibleFilteredObjects.length;
   const visiblePhysicalFilterCounts: Record<PhysicalFilter, number> = {
     all: physicalObjects.length,
     active: physicalObjects.filter((stored) => getPhysicalBucket(stored.entity.status) === 'active')
@@ -685,22 +777,34 @@ export function ObjectList({
   };
   const controlCounts = objects.reduce<Record<ObjectControlBucket, number>>(
     (counts, stored) => {
-      counts[getObjectControlBucket(stored.entity)] += 1;
+      counts[getObjectControlBucket(stored.entity, reviewedObjectIds)] += 1;
       return counts;
     },
     { attention: 0, active: 0, review: 0, closed: 0 },
   );
-  const priorityObjects = objects
-    .filter((stored) => getPriorityScore(stored.entity) < 5)
-    .sort((first, second) => getPriorityScore(first.entity) - getPriorityScore(second.entity))
-    .slice(0, 3);
 
   const totalCost = allPhysicalObjects.reduce((sum, stored) => sum + getPrimaryAmount(stored.entity), 0);
-  const dailyCosts = allPhysicalObjects
+  const ownedPhysicalObjects = useMemo(
+    () => allPhysicalObjects.filter((stored) => stored.entity.status === 'purchased' || stored.entity.status === 'using'),
+    [allPhysicalObjects],
+  );
+  const dailyCosts = ownedPhysicalObjects
     .map((stored) => getDailyCost(stored.entity))
     .filter((value): value is number => value !== null);
   const averageDailyCost =
     dailyCosts.length > 0 ? dailyCosts.reduce((sum, value) => sum + value, 0) : 0;
+
+  const observingObjects = useMemo(
+    () => objects.filter((stored) => {
+      const s = stored.entity.status;
+      return s === 'seeded' || s === 'observing' || s === 'planned';
+    }),
+    [objects],
+  );
+  const observingAmount = useMemo(
+    () => observingObjects.reduce((sum, stored) => sum + calculateDesireAmount(stored.entity), 0),
+    [observingObjects],
+  );
 
   const selectedStored = selectedFileName
     ? objects.find((stored) => stored.fileName === selectedFileName) || null
@@ -713,9 +817,9 @@ export function ObjectList({
   function cancelObjectReview() {
     setReviewingFileName(null);
     setReviewSummary('');
-    setReviewFoodRank('');
-    setReviewSceneryRank('');
-    setReviewExperienceRank('');
+    setReviewFoodScore('');
+    setReviewSceneryScore('');
+    setReviewExperienceScore('');
   }
 
   function applyControlBucket(bucket: ObjectControlBucket) {
@@ -726,11 +830,13 @@ export function ObjectList({
     setStatusGroupFilter(target.statusGroup);
     setControlBucketFilter(bucket);
     setOpenActionMenuFileName(null);
+    setShowAllPhysical(false);
+    setShowAllSupporting(false);
   }
 
   if (objects.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center">
+      <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-center">
         <h2 className="text-base font-semibold text-stone-950">{t('noObjectsYet')}</h2>
         <p className="mt-2 text-sm text-stone-500">{t('connectVaultFirst')}</p>
       </div>
@@ -740,6 +846,31 @@ export function ObjectList({
   return (
     <>
     <section className="space-y-5">
+      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('physicalAssets')}</h2>
+        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div>
+            <div className="text-xs text-stone-500">{t('totalAcquisitionCost')}（{allPhysicalObjects.length}）</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
+              {formatMoney(totalCost)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500">{t('dailyCostAvg')}（{ownedPhysicalObjects.length}）</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
+              {formatMoney(averageDailyCost)}
+              <span className="ml-1 text-xs font-medium text-stone-400">{t('perDay')}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500">{t('observeAmount')}（{observingObjects.length}）</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
+              {formatMoney(observingAmount)}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -785,119 +916,38 @@ export function ObjectList({
             );
           })}
         </div>
-
-        <div className="mt-5 border-t border-stone-100 pt-5">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-stone-950">{t('priorityProcess')}</h3>
-            {controlBucketFilter ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setControlBucketFilter(null);
-                  setTypeFilter('all');
-                  setStatusGroupFilter('all');
-                  setFilter('all');
-                }}
-                className="text-xs font-medium text-stone-500 transition hover:text-stone-950"
-              >
-                {t('viewAll')}
-              </button>
-            ) : null}
-          </div>
-          {priorityObjects.length > 0 ? (
-            <div className="mt-3 divide-y divide-stone-100">
-              {priorityObjects.map((stored) => {
-                const object = stored.entity;
-                const isReviewTarget =
-                  object.object_type === 'one_time_experience' && object.status === 'completed';
-
-                return (
-                  <div
-                    key={stored.fileName}
-                    className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-md bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600">
-                          {typeLabels[object.object_type]}
-                        </span>
-                        <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-                          {getStatusLabel(object, t)}
-                        </span>
-                      </div>
-                      <div className="mt-1.5 truncate text-sm font-semibold text-stone-950">
-                        {object.title}
-                      </div>
-                      <div className="mt-1 text-xs text-stone-500">{getPriorityReason(object, t)}</div>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:justify-end">
-                      <div className="font-mono text-sm font-semibold text-stone-950">
-                        {formatMoney(getPrimaryAmount(object))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setControlBucketFilter(null);
-                          setTypeFilter('all');
-                          setStatusGroupFilter('all');
-                          setFilter('all');
-                          setSelectedFileName(stored.fileName);
-                          if (isReviewTarget) setReviewingFileName(stored.fileName);
-                          setOpenActionMenuFileName(null);
-                        }}
-                        className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950"
-                      >
-                        {isReviewTarget ? t('reviewAction') : t('detail')}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-500">
-              {t('noPriorityObjects')}
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('physicalAssets')}</h2>
-          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-            {t('itemCount').replace('{count}', String(allPhysicalObjects.length))}
-          </span>
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-4">
-          <div>
-            <div className="text-xs text-stone-500">{t('totalAcquisitionCost')}</div>
-            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
-              {formatMoney(totalCost)}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-stone-500">{t('dailyCostAvg')}</div>
-            <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
-              {formatMoney(averageDailyCost)}
-              <span className="ml-1 text-xs font-medium text-stone-400">{t('perDay')}</span>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
-        <label className="block">
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setControlBucketFilter(null);
-            }}
-            placeholder={t('searchByNameCategoryStatus')}
-            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
-          />
-        </label>
+        <div className="flex gap-2">
+          <label className="min-w-0 flex-1">
+            <input
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setControlBucketFilter(null);
+                setShowAllPhysical(false);
+                setShowAllSupporting(false);
+              }}
+              placeholder={t('searchByNameCategoryStatus')}
+              className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
+            />
+          </label>
+          <label className="shrink-0">
+            <span className="sr-only">{t('sortBy')}</span>
+            <select
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as SortOption)}
+              className="h-full cursor-pointer rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-700 outline-none transition hover:border-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
+            >
+              {(Object.keys(getSortLabels(t)) as SortOption[]).map((option) => (
+                <option key={option} value={option}>
+                  {getSortLabels(t)[option]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label={t('filterByType')}>
           {(Object.keys(objectTypeFilterLabels) as ObjectTypeFilter[]).map((item) => (
             <button
@@ -906,6 +956,8 @@ export function ObjectList({
               onClick={() => {
                 setTypeFilter(item);
                 setControlBucketFilter(null);
+                setShowAllPhysical(false);
+                setShowAllSupporting(false);
               }}
               aria-pressed={typeFilter === item}
               className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
@@ -914,8 +966,7 @@ export function ObjectList({
                   : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
               }`}
             >
-              {objectTypeFilterLabels[item]}（
-              {getObjectTypeFilterCount(objects, item, statusGroupFilter, query)}）
+              {objectTypeFilterLabels[item]} ({getObjectTypeFilterCount(objects, item, statusGroupFilter, query)})
             </button>
           ))}
         </div>
@@ -927,6 +978,8 @@ export function ObjectList({
               onClick={() => {
                 setStatusGroupFilter(item);
                 setControlBucketFilter(null);
+                setShowAllPhysical(false);
+                setShowAllSupporting(false);
               }}
               aria-pressed={statusGroupFilter === item}
               className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
@@ -935,8 +988,7 @@ export function ObjectList({
                   : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
               }`}
             >
-              {objectStatusGroupLabels[item]}（
-              {getObjectStatusGroupCount(objects, item, typeFilter, query)}）
+              {objectStatusGroupLabels[item]} ({getObjectStatusGroupCount(objects, item, typeFilter, query)})
             </button>
           ))}
         </div>
@@ -949,6 +1001,8 @@ export function ObjectList({
                 onClick={() => {
                   setFilter(item);
                   setControlBucketFilter(null);
+                  setShowAllPhysical(false);
+                  setShowAllSupporting(false);
                 }}
                 aria-pressed={filter === item}
                 className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
@@ -957,7 +1011,7 @@ export function ObjectList({
                     : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
                 }`}
               >
-                {filterLabels[item]}（{visiblePhysicalFilterCounts[item]}）
+                {filterLabels[item]} ({visiblePhysicalFilterCounts[item]})
               </button>
             ))}
           </div>
@@ -966,7 +1020,7 @@ export function ObjectList({
 
       {/* 列表主体 */}
       <div className="space-y-4">
-        {filteredObjects.map((stored) => {
+        {visibleFilteredObjects.map((stored) => {
           const object = stored.entity;
           const isEditing = editingFileName === stored.fileName;
 	          const dailyCost = getDailyCost(object);
@@ -997,10 +1051,10 @@ export function ObjectList({
 	                  <div className={`w-1.5 shrink-0 ${accent.stripe}`} aria-hidden="true" />
 	                  <div className="flex min-w-0 flex-1 flex-col gap-4 p-5 md:flex-row md:items-center">
 	                    <div
-	                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-sm font-semibold text-stone-700 ring-1 ring-stone-200"
+	                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-lg ring-1 ring-stone-200"
 	                      aria-hidden="true"
 	                    >
-	                      {t('typePhysical')}
+	                      {getObjectIcon(object)}
 	                    </div>
 
 	                    <div className="min-w-0 flex-1">
@@ -1020,7 +1074,7 @@ export function ObjectList({
 	                          {serviceDays ? t('daysUsed').replace('{count}', String(serviceDays)) : t('notStarted')}
 	                        </span>
 	                        <span>{formatDateRange(object, t)}</span>
-	                        {object.category ? <span>{object.category}</span> : null}
+	                        {object.category ? <span>{translateCategory(object.category, t)}</span> : null}
 	                      </div>
 	                    </div>
 
@@ -1028,7 +1082,7 @@ export function ObjectList({
 	                      <div className="min-w-[7rem] rounded-lg bg-stone-50 px-3 py-2 text-right">
 	                        <div className="text-xs text-stone-400">{t('dailyCostAvg')}</div>
 	                        <div className="mt-0.5 font-mono text-base font-semibold leading-none text-stone-950">
-	                          {dailyCost ? `¥${Math.round(dailyCost)}` : '—'}
+	                          {dailyCost ? formatMoney(dailyCost) : '—'}
 	                        </div>
 	                      </div>
 
@@ -1133,6 +1187,25 @@ export function ObjectList({
             </article>
           );
         })}
+        {hiddenPhysicalCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowAllPhysical(true)}
+            className="w-full rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-500 transition hover:border-stone-400 hover:text-stone-900"
+          >
+            {t('showMore')} ({t('remainingItems').replace('{count}', String(hiddenPhysicalCount))})
+          </button>
+        ) : filteredObjects.length > PAGE_SIZE ? (
+          <button
+            type="button"
+            onClick={() => {
+              setShowAllPhysical(false);
+            }}
+            className="w-full rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-500 transition hover:border-stone-400 hover:text-stone-900"
+          >
+            {t('showLess')}
+          </button>
+        ) : null}
       </div>
 
       <AnimatePresence>
@@ -1156,7 +1229,7 @@ export function ObjectList({
             </span>
           </div>
           <div className="space-y-2.5">
-            {supportingObjects.map((stored) => {
+            {visibleSupportingObjects.map((stored) => {
               const object = stored.entity;
               const isEditing = editingFileName === stored.fileName;
               const isReviewing = reviewingFileName === stored.fileName;
@@ -1197,10 +1270,10 @@ export function ObjectList({
                       <div className="flex flex-col gap-3 md:flex-row md:items-center">
                         <div className="flex min-w-0 flex-1 gap-3">
                           <div
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ring-1 ${visual.badgeClass}`}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-lg ring-1 ring-stone-200"
                             aria-hidden="true"
                           >
-                            {visual.shortLabel}
+                            {getObjectIcon(object)}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
@@ -1219,7 +1292,7 @@ export function ObjectList({
                                 {visual.label}
                               </span>
                               <span>{getSupportingMeta(object, nextBillingDate, t)}</span>
-                              {object.category ? <span>{object.category}</span> : null}
+                              {object.category ? <span>{translateCategory(object.category, t)}</span> : null}
                             </div>
                           </div>
                         </div>
@@ -1269,9 +1342,24 @@ export function ObjectList({
 	                                onClick={async () => {
 	                                  if (
 	                                    object.object_type === 'one_time_experience' &&
-	                                    object.status === 'completed'
+	                                    (object.status === 'completed' || object.status === 'reviewed')
 	                                  ) {
 	                                    setOpenActionMenuFileName(null);
+	                                    // Find existing review for this experience
+	                                    const existingReview = reviews.find(
+	                                      (r) => r.entity.target_id === object.id,
+	                                    );
+	                                    if (existingReview) {
+	                                      setReviewSummary(existingReview.entity.summary || '');
+	                                      setReviewFoodScore(existingReview.entity.food_score ? String(existingReview.entity.food_score) : '');
+	                                      setReviewSceneryScore(existingReview.entity.scenery_score ? String(existingReview.entity.scenery_score) : '');
+	                                      setReviewExperienceScore(existingReview.entity.experience_score ? String(existingReview.entity.experience_score) : '');
+	                                    } else {
+	                                      setReviewSummary('');
+	                                      setReviewFoodScore('');
+	                                      setReviewSceneryScore('');
+	                                      setReviewExperienceScore('');
+	                                    }
 	                                    setReviewingFileName(stored.fileName);
 	                                    return;
 	                                  }
@@ -1395,9 +1483,9 @@ export function ObjectList({
                                 object,
                                 summary,
                                 {
-                                  foodRank: parseRank(reviewFoodRank),
-                                  sceneryRank: parseRank(reviewSceneryRank),
-                                  experienceRank: parseRank(reviewExperienceRank),
+                                  foodScore: parseScore(reviewFoodScore),
+                                  sceneryScore: parseScore(reviewSceneryScore),
+                                  experienceScore: parseScore(reviewExperienceScore),
                                 },
                                 stored.body,
                               );
@@ -1424,10 +1512,11 @@ export function ObjectList({
                             <div className="text-xs font-medium text-stone-500">{t('rankingLabel')}</div>
                             <div className="mt-1.5 grid grid-cols-3 gap-2">
                               <input
-                                value={reviewFoodRank}
-                                onChange={(event) => setReviewFoodRank(event.target.value)}
+                                value={reviewFoodScore}
+                                onChange={(event) => setReviewFoodScore(event.target.value)}
                                 type="number"
-                                min="1"
+                                min="0"
+                                max="100"
                                 inputMode="numeric"
                                 placeholder={t('foodRank')}
                                 aria-label={t('foodRank')}
@@ -1435,10 +1524,11 @@ export function ObjectList({
                                 disabled={disabled || exitingFileName === stored.fileName}
                               />
                               <input
-                                value={reviewSceneryRank}
-                                onChange={(event) => setReviewSceneryRank(event.target.value)}
+                                value={reviewSceneryScore}
+                                onChange={(event) => setReviewSceneryScore(event.target.value)}
                                 type="number"
-                                min="1"
+                                min="0"
+                                max="100"
                                 inputMode="numeric"
                                 placeholder={t('sceneryRank')}
                                 aria-label={t('sceneryRank')}
@@ -1446,10 +1536,11 @@ export function ObjectList({
                                 disabled={disabled || exitingFileName === stored.fileName}
                               />
                               <input
-                                value={reviewExperienceRank}
-                                onChange={(event) => setReviewExperienceRank(event.target.value)}
+                                value={reviewExperienceScore}
+                                onChange={(event) => setReviewExperienceScore(event.target.value)}
                                 type="number"
-                                min="1"
+                                min="0"
+                                max="100"
                                 inputMode="numeric"
                                 placeholder={t('experienceRank')}
                                 aria-label={t('experienceRank')}
@@ -1486,6 +1577,23 @@ export function ObjectList({
                 </article>
               );
             })}
+            {hiddenSupportingCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllSupporting(true)}
+                className="w-full rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-500 transition hover:border-stone-400 hover:text-stone-900"
+              >
+                {t('showMore')} ({t('remainingItems').replace('{count}', String(hiddenSupportingCount))})
+              </button>
+            ) : supportingObjects.length > PAGE_SIZE ? (
+              <button
+                type="button"
+                onClick={() => setShowAllSupporting(false)}
+                className="w-full rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-500 transition hover:border-stone-400 hover:text-stone-900"
+              >
+                {t('showLess')}
+              </button>
+            ) : null}
           </div>
         </section>
       ) : null}

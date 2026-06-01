@@ -7,11 +7,18 @@ import {
   type WYQDLanguage,
   type WYQDTranslationKey,
 } from './i18n';
+import type { WYQDCurrency } from '@/lib/format';
+
+function defaultCurrency(language: WYQDLanguage): WYQDCurrency {
+  return language === 'zh' ? 'CNY' : 'USD';
+}
 
 interface I18nContextValue {
   language: WYQDLanguage;
   setLanguage: (lang: WYQDLanguage) => void;
   t: (key: WYQDTranslationKey) => string;
+  currency: WYQDCurrency;
+  setCurrency: (currency: WYQDCurrency) => void;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -32,6 +39,13 @@ export function I18nProvider({
     return normalizeWYQDLanguage(stored);
   });
 
+  const [currency, setCurrency] = useState<WYQDCurrency>(() => {
+    if (typeof window === 'undefined') return 'CNY';
+    const stored = localStorage.getItem('ownly_currency') as WYQDCurrency | null;
+    if (stored && ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'].includes(stored)) return stored;
+    return defaultCurrency(language);
+  });
+
   const value = useMemo(() => {
     const translator = createWYQDTranslator(language);
     return {
@@ -43,10 +57,20 @@ export function I18nProvider({
         } else {
           localStorage.setItem('ownly_language', lang);
         }
+        // Auto-switch currency when language changes (only if user hasn't manually set it)
+        const stored = localStorage.getItem('ownly_currency');
+        if (!stored) {
+          setCurrency(defaultCurrency(lang));
+        }
       },
       t: translator.t,
+      currency,
+      setCurrency: (cur: WYQDCurrency) => {
+        setCurrency(cur);
+        localStorage.setItem('ownly_currency', cur);
+      },
     };
-  }, [language, onLanguageChange]);
+  }, [language, currency, onLanguageChange]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

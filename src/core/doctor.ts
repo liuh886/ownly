@@ -6,6 +6,9 @@ import {
 import type { Account, AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
 import { WYQD_DATA_DIRECTORIES } from './paths';
 import type { WYQDReadonlyRepositoryAdapter, WYQDStoredEntity } from './repository';
+import type { WYQDTranslationKey } from './i18n';
+
+type TranslateFn = (key: WYQDTranslationKey) => string;
 
 export type WYQDDoctorSeverity = 'info' | 'warning' | 'error';
 
@@ -59,7 +62,7 @@ function entityPath(stored: { fileName: string; path?: string }): string | undef
   return stored.path ?? stored.fileName;
 }
 
-function checkDuplicateIds(entities: readonly AnyStoredEntity[]): WYQDDoctorFinding[] {
+function checkDuplicateIds(entities: readonly AnyStoredEntity[], t?: TranslateFn): WYQDDoctorFinding[] {
   const seen = new Map<string, AnyStoredEntity>();
   const findings: WYQDDoctorFinding[] = [];
 
@@ -70,10 +73,13 @@ function checkDuplicateIds(entities: readonly AnyStoredEntity[]): WYQDDoctorFind
       continue;
     }
 
+    const msg = t
+      ? t('doctorDuplicateId').replace('{id}', stored.entity.id)
+      : `Duplicate Ownly entity id: ${stored.entity.id}`;
     findings.push({
       id: 'entity.id.duplicate',
       severity: 'error',
-      message: `Duplicate Ownly entity id: ${stored.entity.id}`,
+      message: msg,
       path: entityPath(stored),
       entityId: stored.entity.id,
       details: {
@@ -86,20 +92,22 @@ function checkDuplicateIds(entities: readonly AnyStoredEntity[]): WYQDDoctorFind
   return findings;
 }
 
-function checkSchemaVersions(entities: readonly AnyStoredEntity[]): WYQDDoctorFinding[] {
+function checkSchemaVersions(entities: readonly AnyStoredEntity[], t?: TranslateFn): WYQDDoctorFinding[] {
   return entities
     .filter((stored) => stored.entity.schema_version !== '0.1')
     .map((stored) => ({
       id: 'entity.schema.unsupported' as const,
       severity: 'warning' as const,
-      message: `Unsupported Ownly schema version: ${stored.entity.schema_version}`,
+      message: t
+        ? t('doctorUnsupportedSchema').replace('{version}', String(stored.entity.schema_version))
+        : `Unsupported Ownly schema version: ${stored.entity.schema_version}`,
       path: entityPath(stored),
       entityId: stored.entity.id,
       details: { schemaVersion: stored.entity.schema_version },
     }));
 }
 
-function checkObjectCosts(objects: readonly WYQDStoredEntity<WYQDObject>[]): WYQDDoctorFinding[] {
+function checkObjectCosts(objects: readonly WYQDStoredEntity<WYQDObject>[], t?: TranslateFn): WYQDDoctorFinding[] {
   const findings: WYQDDoctorFinding[] = [];
 
   for (const stored of objects) {
@@ -115,7 +123,9 @@ function checkObjectCosts(objects: readonly WYQDStoredEntity<WYQDObject>[]): WYQ
       findings.push({
         id: 'object.cost.negative',
         severity: 'warning',
-        message: `Object has negative calculated cost: ${object.title}`,
+        message: t
+          ? t('doctorNegativeCost').replace('{title}', object.title)
+          : `Object has negative calculated cost: ${object.title}`,
         path: entityPath(stored),
         entityId: object.id,
         details: { cost },
@@ -128,6 +138,7 @@ function checkObjectCosts(objects: readonly WYQDStoredEntity<WYQDObject>[]): WYQ
 
 function checkSnapshotTotals(
   snapshots: readonly WYQDStoredEntity<AccountSnapshot>[],
+  t?: TranslateFn,
 ): WYQDDoctorFinding[] {
   const findings: WYQDDoctorFinding[] = [];
 
@@ -140,7 +151,9 @@ function checkSnapshotTotals(
       findings.push({
         id: 'snapshot.net_worth.mismatch',
         severity: 'warning',
-        message: `Snapshot net worth does not match balances: ${stored.entity.title}`,
+        message: t
+          ? t('doctorNetWorthMismatch').replace('{title}', stored.entity.title)
+          : `Snapshot net worth does not match balances: ${stored.entity.title}`,
         path: entityPath(stored),
         entityId: stored.entity.id,
         details: {
@@ -157,6 +170,7 @@ function checkSnapshotTotals(
 function checkReviewTargets(
   reviews: readonly WYQDStoredEntity<ReviewEntry>[],
   objects: readonly WYQDStoredEntity<WYQDObject>[],
+  t?: TranslateFn,
 ): WYQDDoctorFinding[] {
   const objectIds = new Set(objects.map((stored) => stored.entity.id));
 
@@ -165,7 +179,9 @@ function checkReviewTargets(
     .map((stored) => ({
       id: 'review.target.missing' as const,
       severity: 'warning' as const,
-      message: `Review target is missing: ${stored.entity.title}`,
+      message: t
+        ? t('doctorReviewTargetMissing').replace('{title}', stored.entity.title)
+        : `Review target is missing: ${stored.entity.title}`,
       path: entityPath(stored),
       entityId: stored.entity.id,
       details: { targetId: stored.entity.target_id },
@@ -174,6 +190,7 @@ function checkReviewTargets(
 
 async function checkDirectories(
   adapter: WYQDDoctorRepositoryAdapter,
+  t?: TranslateFn,
 ): Promise<WYQDDoctorFinding[]> {
   if (!adapter.listDataDirectories) return [];
 
@@ -183,7 +200,9 @@ async function checkDirectories(
     .map((directory) => ({
       id: 'directory.presence' as const,
       severity: 'info' as const,
-      message: `Ownly data directory is not present yet: ${directory}`,
+      message: t
+        ? t('doctorDirectoryMissing').replace('{path}', directory)
+        : `Ownly data directory is not present yet: ${directory}`,
       path: directory,
     }));
 }
@@ -191,23 +210,24 @@ async function checkDirectories(
 export async function runWYQDDoctor(
   adapter: WYQDDoctorRepositoryAdapter,
   checkedAt = new Date().toISOString(),
+  t?: TranslateFn,
 ): Promise<WYQDDoctorReport> {
   const [objects, accounts, snapshots, reviews, directoryFindings] = await Promise.all([
     adapter.listObjects?.() ?? Promise.resolve([]),
     adapter.listAccounts?.() ?? Promise.resolve([]),
     adapter.listSnapshots?.() ?? Promise.resolve([]),
     adapter.listReviews?.() ?? Promise.resolve([]),
-    checkDirectories(adapter),
+    checkDirectories(adapter, t),
   ]);
 
   const entities: AnyStoredEntity[] = [...objects, ...accounts, ...snapshots, ...reviews];
   const findings = [
     ...directoryFindings,
-    ...checkDuplicateIds(entities),
-    ...checkSchemaVersions(entities),
-    ...checkObjectCosts(objects),
-    ...checkSnapshotTotals(snapshots),
-    ...checkReviewTargets(reviews, objects),
+    ...checkDuplicateIds(entities, t),
+    ...checkSchemaVersions(entities, t),
+    ...checkObjectCosts(objects, t),
+    ...checkSnapshotTotals(snapshots, t),
+    ...checkReviewTargets(reviews, objects, t),
   ];
 
   return createReport(findings, checkedAt);

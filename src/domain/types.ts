@@ -94,6 +94,15 @@ export interface RecurringCostObject extends BaseWYQDObject {
   cancel_reason?: string | null;
 }
 
+export interface TravelLocation {
+  country?: string;
+  region?: string;
+  city?: string;
+  country_code?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 export interface OneTimeExperienceObject extends BaseWYQDObject {
   object_type: 'one_time_experience';
   status: OneTimeExperienceStatus;
@@ -102,14 +111,8 @@ export interface OneTimeExperienceObject extends BaseWYQDObject {
   started_at?: string;
   ended_at?: string;
   reviewed_at?: string | null;
-  location?: {
-    country?: string;
-    region?: string;
-    city?: string;
-    country_code?: string;
-    latitude?: number;
-    longitude?: number;
-  };
+  location?: TravelLocation;
+  locations?: TravelLocation[];
   budget_total?: number;
   actual_total?: number;
   expense_items?: ExperienceExpenseItem[];
@@ -159,6 +162,7 @@ export interface AccountSnapshot extends BaseEntity {
   total_assets?: number;
   total_liabilities?: number;
   net_worth?: number;
+  monthly_fixed_cost?: number;
 }
 
 export type ReviewType = 'object_review' | 'exit_record' | 'monthly' | 'annual';
@@ -179,6 +183,9 @@ export interface ReviewEntry extends BaseEntity {
   food_rank?: number | null;
   scenery_rank?: number | null;
   experience_rank?: number | null;
+  food_score?: number | null;
+  scenery_score?: number | null;
+  experience_score?: number | null;
   regret_score?: number | null;
   summary?: string;
   period?: string;

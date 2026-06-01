@@ -1,9 +1,11 @@
 {
   "id": "ownly",
   "name": "Ownly",
-  "version": "0.2.6",
+  "version": "1.0.0",
   "minAppVersion": "1.5.0",
   "description": "Track possessions, subscriptions, and experience costs in your Vault.",
   "author": "Zhihao Liu",
-  "isDesktopOnly": false
+  "authorUrl": "https://github.com/liuh886",
+  "fundingUrl": "https://liuh886.gumroad.com/l/ownly",
+  "isDesktopOnly": true
 }

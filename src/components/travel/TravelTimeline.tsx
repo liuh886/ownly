@@ -70,9 +70,9 @@ export function TravelTimeline({
                 </div>
                 {review ? (
                   <div className="mt-1 flex gap-2 text-[11px] text-stone-500">
-                    {review.food_rank != null ? <span>{t('travelAvgFood')} {review.food_rank}</span> : null}
-                    {review.scenery_rank != null ? <span>{t('travelAvgScenery')} {review.scenery_rank}</span> : null}
-                    {review.experience_rank != null ? <span>{t('travelAvgExperience')} {review.experience_rank}</span> : null}
+                    {review.food_score != null ? <span>{t('travelAvgFood')} {review.food_score}分</span> : null}
+                    {review.scenery_score != null ? <span>{t('travelAvgScenery')} {review.scenery_score}分</span> : null}
+                    {review.experience_score != null ? <span>{t('travelAvgExperience')} {review.experience_score}分</span> : null}
                   </div>
                 ) : null}
               </div>

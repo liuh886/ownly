@@ -10,16 +10,16 @@ export default function NotFound() {
           </svg>
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-stone-900">页面未找到</h2>
+          <h2 className="text-lg font-semibold text-stone-900">Page not found</h2>
           <p className="mt-2 text-sm text-stone-500">
-            抱歉，你访问的页面或路径在物欲清单工作台中不存在。
+            The page or path you requested does not exist in the Ownly workspace.
           </p>
         </div>
         <Link
           href="/"
           className="inline-flex w-full items-center justify-center rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-stone-800"
         >
-          返回仪表盘
+          Back to dashboard
         </Link>
       </div>
     </div>

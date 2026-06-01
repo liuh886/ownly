@@ -7,18 +7,20 @@ import { markdownEntityRepository } from '@/services/MarkdownEntityRepository';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
-
-const WEB_PRO_MEMBERSHIP: WYQDMembershipState = {
-  plan: 'pro_lifetime',
-  status: 'activated',
-  isPro: true,
-  licenseKeyLast4: null,
-  planLabel: 'Pro Lifetime',
-  statusLabel: 'Web always Pro',
-  upgradeMessage: 'Web runtime is always Pro.',
-};
+import { useI18n } from '@/core/i18n-context';
 
 export function WebShell() {
+  const { t } = useI18n();
+
+  const WEB_PRO_MEMBERSHIP: WYQDMembershipState = useMemo(() => ({
+    plan: 'pro_lifetime',
+    status: 'activated',
+    isPro: true,
+    licenseKeyLast4: null,
+    planLabel: t('planProLifetime'),
+    statusLabel: t('webAlwaysPro'),
+    upgradeMessage: t('webAlwaysProDesc'),
+  }), [t]);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,20 +51,20 @@ export function WebShell() {
     setError(null);
     try {
       const connected = await obsidianService.requestAccess();
-      setIsConnected(connected);
       if (connected) {
         await markdownEntityRepository.initialize();
+        setIsConnected(true);
         return true;
       }
-      setError('当前浏览器不支持本地文件访问，或授权已取消。建议使用 Chromium 系浏览器。');
+      setError(t('browserNotSupported'));
       return false;
     } catch (event) {
-      setError(event instanceof Error ? event.message : '连接 Vault 失败。');
+      setError(event instanceof Error ? event.message : t('connectVaultFailed'));
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Auto-connect on mount
   useEffect(() => {
@@ -73,13 +75,15 @@ export function WebShell() {
       try {
         const connected = await obsidianService.initAutoConnect();
         if (!isMounted) return;
-        setIsConnected(connected);
         if (connected) {
           await markdownEntityRepository.initialize();
         }
+        if (isMounted) {
+          setIsConnected(connected);
+        }
       } catch (event) {
         if (isMounted) {
-          setError(event instanceof Error ? event.message : '初始化 Vault 失败。');
+          setError(event instanceof Error ? event.message : t('initVaultFailed'));
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -88,7 +92,7 @@ export function WebShell() {
 
     init();
     return () => { isMounted = false; };
-  }, []);
+  }, [t]);
 
   const contextValue = useMemo(() => ({
     repository: markdownEntityRepository,

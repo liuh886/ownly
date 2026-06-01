@@ -694,10 +694,80 @@
   min-height: 100%;
 }
 
-/* Obsidian dark mode: let the React UI keep its own light styling.
-   The stone-* palette provides sufficient contrast in both themes. */
+/* Obsidian dark mode: use the same design tokens as the web shell.
+   The CSS variables in globals.css handle the color mapping. */
 .theme-dark .wyqd-runtime-obsidian {
-  color-scheme: light;
+  --background: #0c0a09;
+  --foreground: #fafaf9;
+  --surface-card: #1c1917;
+  --surface-secondary: #292524;
+  --surface-tertiary: #44403c;
+  --border-default: #44403c;
+  --border-subtle: #292524;
+  --text-primary: #fafaf9;
+  --text-secondary: #a8a29e;
+  --text-tertiary: #78716c;
+  --text-inverse: #1c1917;
+  --accent-positive: #34d399;
+  --accent-pending: #fbbf24;
+  --accent-negative: #f87171;
+  --accent-info: #38bdf8;
+}
+
+/* Obsidian dark mode surface overrides */
+.theme-dark .wyqd-runtime-obsidian .bg-white {
+  background-color: var(--surface-card);
+}
+.theme-dark .wyqd-runtime-obsidian .bg-stone-50 {
+  background-color: var(--surface-secondary);
+}
+.theme-dark .wyqd-runtime-obsidian .bg-stone-100,
+.theme-dark .wyqd-runtime-obsidian .bg-stone-200 {
+  background-color: var(--surface-tertiary);
+}
+.theme-dark .wyqd-runtime-obsidian .bg-stone-950 {
+  background-color: var(--surface-card);
+  color: var(--text-primary);
+}
+.theme-dark .wyqd-runtime-obsidian .border-stone-200,
+.theme-dark .wyqd-runtime-obsidian .border-stone-300 {
+  border-color: var(--border-default);
+}
+.theme-dark .wyqd-runtime-obsidian .border-stone-100 {
+  border-color: var(--border-subtle);
+}
+.theme-dark .wyqd-runtime-obsidian .ring-stone-200 {
+  --tw-ring-color: var(--border-default);
+}
+.theme-dark .wyqd-runtime-obsidian .text-stone-950,
+.theme-dark .wyqd-runtime-obsidian .text-stone-900 {
+  color: var(--text-primary);
+}
+.theme-dark .wyqd-runtime-obsidian .text-stone-700,
+.theme-dark .wyqd-runtime-obsidian .text-stone-600,
+.theme-dark .wyqd-runtime-obsidian .text-stone-500 {
+  color: var(--text-secondary);
+}
+.theme-dark .wyqd-runtime-obsidian .text-stone-400 {
+  color: var(--text-tertiary);
+}
+.theme-dark .wyqd-runtime-obsidian .text-white {
+  color: var(--text-primary);
+}
+.theme-dark .wyqd-runtime-obsidian input,
+.theme-dark .wyqd-runtime-obsidian select,
+.theme-dark .wyqd-runtime-obsidian textarea {
+  background-color: var(--surface-secondary);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+.theme-dark .wyqd-runtime-obsidian input::placeholder,
+.theme-dark .wyqd-runtime-obsidian textarea::placeholder {
+  color: var(--text-tertiary);
+}
+.theme-dark .wyqd-runtime-obsidian .border-dashed {
+  border-color: var(--border-default);
+  background-color: var(--surface-secondary);
 }
 
 /*

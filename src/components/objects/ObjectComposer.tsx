@@ -6,6 +6,7 @@ import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { CitySearchInput } from '@/components/common/CitySearchInput';
 import { COUNTRY_NAMES } from '@/domain/travel';
+import { FIELD_CLASS } from '@/lib/ui-constants';
 import type {
   BillingCycle,
   OneTimeExperienceStatus,
@@ -24,7 +25,16 @@ interface ObjectComposerProps {
   onSubmit: (object: WYQDObject, body: string) => Promise<void>;
 }
 
-const physicalCategories = ['电子产品', '摄影器材', '衣物配饰', '家居', '交通', '其他'];
+function getPhysicalCategories(t: (key: WYQDTranslationKey) => string): string[] {
+  return [
+    t('categoryElectronics'),
+    t('categoryCamera'),
+    t('categoryClothing'),
+    t('categoryHome'),
+    t('categoryTransport'),
+    t('categoryOther'),
+  ];
+}
 function getPhysicalStatusOptions(t: (key: WYQDTranslationKey) => string): Array<{ value: PhysicalStatus; label: string }> {
   return [
     { value: 'observing', label: t('statusObserving') },
@@ -60,23 +70,28 @@ function getExperienceStatusOptions(t: (key: WYQDTranslationKey) => string): Arr
     { value: 'reviewed', label: t('statusReviewed') },
   ];
 }
-function getQuickLineTemplates(t: (key: WYQDTranslationKey) => string): Array<{ label: string; value: string }> {
+function getQuickLineTemplates(t: (key: WYQDTranslationKey) => string, lang: string): Array<{ label: string; value: string }> {
+  const isZh = lang !== 'en';
+  const travelCategory = isZh ? '旅行体验' : 'Travel experience';
+  const aiCategory = isZh ? 'AI工具' : 'AI Tools';
   return [
     {
       label: t('physicalTemplate'),
-      value: '小米13U / physical / 5843 / 2023-06-07 / 2025-09-20 / 电子产品 / 已退役',
+      value: isZh
+        ? `Sony A7C / physical / 12000 / 2026-05-01 / 2026-05-17 / ${t('categoryElectronics')} / 使用中`
+        : `Sony A7C / physical / 12000 / 2026-05-01 / 2026-05-17 / ${t('categoryElectronics')} / using`,
     },
     {
       label: t('fixedCostTemplate'),
-      value: 'ChatGPT Plus / fixed / 145 / monthly / 20 / 招行信用卡 / 2026-05-01 / 订阅中 / AI工具',
+      value: isZh
+        ? `ChatGPT Plus / fixed / 145 / monthly / 20 / 招行信用卡 / 2026-05-01 / 订阅中 / ${aiCategory}`
+        : `ChatGPT Plus / fixed / 20 / monthly / 1 / Credit Card / 2026-01-01 / active / ${aiCategory}`,
     },
     {
       label: t('experienceTemplate'),
-      value: '香港周末旅行 / experience / 3000 / 2680 / 2026-05-18 / 旅行 / 已完成',
-    },
-    {
-      label: t('travelSubtype'),
-      value: '东京 / travel / 18000 / 16500 / 2026-05-10 / 旅行 / 已完成 / JP / 35.6762 / 139.6503',
+      value: isZh
+        ? `东京 / travel / 18000 / 16500 / 2026-05-04 / ${travelCategory} / 已完成 / JP / 35.6762 / 139.6503`
+        : `Tokyo / travel / 18000 / 16500 / 2026-05-04 / ${travelCategory} / completed / JP / 35.6762 / 139.6503`,
     },
   ];
 }
@@ -198,6 +213,8 @@ function parseObjectType(value: string): WYQDObjectType | null {
     一次性体验: 'one_time_experience',
     experience: 'one_time_experience',
     one_time_experience: 'one_time_experience',
+    travel: 'one_time_experience',
+    旅行: 'one_time_experience',
   };
 
   return typeMap[normalized] || null;
@@ -320,6 +337,7 @@ function createObjectDraft({
   salePrice,
   experienceSubtype,
   location,
+  locations,
 }: {
   title: string;
   objectType: WYQDObjectType;
@@ -338,6 +356,7 @@ function createObjectDraft({
   salePrice?: number;
   experienceSubtype?: string;
   location?: { country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number };
+  locations?: Array<{ country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number }>;
 }): WYQDObject {
   const today = new Date().toISOString().split('T')[0];
   const id = `obj_${today.replaceAll('-', '')}_${Date.now()}`;
@@ -412,6 +431,7 @@ function createObjectDraft({
       location.latitude != null ||
       location.longitude != null
     ) ? location : undefined,
+    locations: locations && locations.length > 0 ? locations : undefined,
   };
 }
 
@@ -433,12 +453,13 @@ export function ObjectComposer({
   onCancel,
   onSubmit,
 }: ObjectComposerProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const physicalCategories = getPhysicalCategories(t);
   const physicalStatusOptions = getPhysicalStatusOptions(t);
   const recurringStatusOptions = getRecurringStatusOptions(t);
   const billingCycleOptions = getBillingCycleOptions(t);
   const experienceStatusOptions = getExperienceStatusOptions(t);
-  const quickLineTemplates = getQuickLineTemplates(t);
+  const quickLineTemplates = getQuickLineTemplates(t, language);
 
   const [title, setTitle] = useState(initialObject?.title || '');
   const [objectType, setObjectType] = useState<WYQDObjectType>(
@@ -510,6 +531,19 @@ export function ObjectComposer({
     initialObject?.object_type === 'one_time_experience' && initialObject.location?.longitude != null
       ? String(initialObject.location.longitude) : '',
   );
+  const [extraLocations, setExtraLocations] = useState<Array<{
+    city: string; country: string; countryCode: string; lat: string; lng: string;
+  }>>(
+    initialObject?.object_type === 'one_time_experience' && initialObject.locations
+      ? initialObject.locations.map((loc) => ({
+          city: loc.city || '',
+          country: loc.country || '',
+          countryCode: loc.country_code || '',
+          lat: loc.latitude != null ? String(loc.latitude) : '',
+          lng: loc.longitude != null ? String(loc.longitude) : '',
+        }))
+      : [],
+  );
 
   const parsedBillingDay = Number(billingDay);
   const isBillingDayValid =
@@ -518,8 +552,7 @@ export function ObjectComposer({
     (Number.isInteger(parsedBillingDay) && parsedBillingDay >= 1 && parsedBillingDay <= 31);
   const canSubmit =
     !disabled && title.trim() && amount.trim() && Number(amount) >= 0 && isBillingDayValid && !isSaving;
-  const fieldClass =
-    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
+  const fieldClass = FIELD_CLASS;
 
   function applyQuickLineToForm(next: string) {
     applyQuickLine(next, {
@@ -575,6 +608,16 @@ export function ObjectComposer({
             longitude: locationLongitude ? Number(locationLongitude) : undefined,
           }
         : undefined;
+      const parsedExtraLocations = extraLocations
+        .filter((loc) => loc.city || loc.lat || loc.lng)
+        .map((loc) => ({
+          city: loc.city || undefined,
+          country: loc.country || undefined,
+          country_code: loc.countryCode || undefined,
+          latitude: loc.lat ? Number(loc.lat) : undefined,
+          longitude: loc.lng ? Number(loc.lng) : undefined,
+        }));
+
       const object = initialObject
         ? updateObjectDraft(initialObject, {
             title: title.trim(),
@@ -594,6 +637,7 @@ export function ObjectComposer({
             salePrice: salePrice.trim() ? Number(salePrice) : undefined,
             experienceSubtype: experienceSubtype || undefined,
             location: travelLocation,
+            locations: parsedExtraLocations.length > 0 ? parsedExtraLocations : undefined,
           })
         : createObjectDraft({
             title: title.trim(),
@@ -613,6 +657,7 @@ export function ObjectComposer({
             salePrice: salePrice.trim() ? Number(salePrice) : undefined,
             experienceSubtype: experienceSubtype || undefined,
             location: travelLocation,
+            locations: parsedExtraLocations.length > 0 ? parsedExtraLocations : undefined,
           });
       await onSubmit(object, `## ${t('purchaseReason')}\n\n## ${t('usageLog')}\n\n## ${t('reviewAndRanking')}\n`);
       if (!initialObject) {
@@ -985,6 +1030,57 @@ export function ObjectComposer({
                     disabled={disabled || isSaving}
                   />
                 </label>
+
+                {/* Additional stops */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-medium text-stone-500">{t('additionalStops')}</span>
+                    <button
+                      type="button"
+                      onClick={() => setExtraLocations([...extraLocations, { city: '', country: '', countryCode: '', lat: '', lng: '' }])}
+                      className="rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
+                      disabled={disabled || isSaving}
+                    >
+                      + {t('addStop')}
+                    </button>
+                  </div>
+                  {extraLocations.map((loc, idx) => (
+                    <div key={idx} className="mb-2 rounded-lg border border-stone-200 bg-stone-50 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-medium text-stone-400">{t('stopN').replace('{n}', String(idx + 2))}</span>
+                        <button
+                          type="button"
+                          onClick={() => setExtraLocations(extraLocations.filter((_, i) => i !== idx))}
+                          className="text-[11px] text-stone-400 hover:text-red-600 transition"
+                          disabled={disabled || isSaving}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <CitySearchInput
+                        initialValue={loc.city || undefined}
+                        onSelect={(city) => {
+                          const updated = [...extraLocations];
+                          updated[idx] = {
+                            city: city.name,
+                            country: city.country,
+                            countryCode: city.countryCode,
+                            lat: String(city.latitude),
+                            lng: String(city.longitude),
+                          };
+                          setExtraLocations(updated);
+                        }}
+                        disabled={disabled || isSaving}
+                      />
+                      {loc.city ? (
+                        <div className="rounded-md bg-white px-2 py-1 text-[11px] text-stone-500">
+                          {[loc.city, loc.country, loc.countryCode].filter(Boolean).join(', ')}
+                          {loc.lat && loc.lng ? ` (${loc.lat}, ${loc.lng})` : ''}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>
@@ -1034,6 +1130,7 @@ function updateObjectDraft(
     salePrice?: number;
     experienceSubtype?: string;
     location?: { country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number };
+    locations?: Array<{ country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number }>;
   },
 ): WYQDObject {
   const updatedAt = todayISO();
@@ -1091,5 +1188,8 @@ function updateObjectDraft(
     actual_total: values.actualAmount,
     ended_at: values.endedAt || existing.ended_at,
     location: values.location || (existing as { location?: typeof values.location }).location,
+    locations: values.locations !== undefined
+      ? values.locations
+      : (existing as { locations?: typeof values.locations }).locations,
   };
 }

@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ownly (物欲清单)",
+  title: "Ownly",
   description: `${WYQD_PRODUCT_POSITIONING} ${WYQD_PRODUCT_SLOGAN}.`,
 };
 
@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased">
       <body className="font-sans min-h-full flex flex-col">
         <Providers>{children}</Providers>
       </body>

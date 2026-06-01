@@ -8,24 +8,25 @@ import type { WYQDTranslationKey } from '@/core/i18n';
 import type { ReviewEntry, WYQDObject, WYQDObjectType } from '@/domain/types';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { WYQDMembershipState } from '@/core/membership';
-import { parseRank, todayISO } from '@/lib/format';
+import { parseScore, todayISO } from '@/lib/format';
 import { useFormatMoney } from '@/lib/use-format';
 import { TravelInsightsPanel } from '@/components/travel/TravelInsightsPanel';
+import { FIELD_CLASS } from '@/lib/ui-constants';
 
 function getExperienceAmount(object: WYQDObject): number {
   if (object.object_type !== 'one_time_experience') return 0;
   return object.actual_total || object.budget_total || 0;
 }
 
-function hasRanking(review: ReviewEntry): boolean {
-  return Boolean(review.food_rank || review.scenery_rank || review.experience_rank);
+function hasScore(review: ReviewEntry): boolean {
+  return Boolean(review.food_score || review.scenery_score || review.experience_score);
 }
 
 function createReviewDraft(
   summary: string,
-  foodRank: string,
-  sceneryRank: string,
-  experienceRank: string,
+  foodScore: string,
+  sceneryScore: string,
+  experienceScore: string,
   target?: { id: string; title: string; type?: WYQDObjectType },
   t?: (key: WYQDTranslationKey) => string,
 ): ReviewEntry {
@@ -44,9 +45,9 @@ function createReviewDraft(
     target: target?.title,
     target_id: target?.id,
     target_type: target?.type,
-    food_rank: parseRank(foodRank),
-    scenery_rank: parseRank(sceneryRank),
-    experience_rank: parseRank(experienceRank),
+    food_score: parseScore(foodScore),
+    scenery_score: parseScore(sceneryScore),
+    experience_score: parseScore(experienceScore),
     period: date.slice(0, 7),
     year: Number(date.slice(0, 4)),
     created_at: date,
@@ -76,13 +77,14 @@ export function ReviewHome({
   const { t } = useI18n();
   const { formatMoney } = useFormatMoney();
   const [summary, setSummary] = useState('');
-  const [foodRank, setFoodRank] = useState('');
-  const [sceneryRank, setSceneryRank] = useState('');
-  const [experienceRank, setExperienceRank] = useState('');
+  const [foodScore, setFoodScore] = useState('');
+  const [sceneryScore, setSceneryScore] = useState('');
+  const [experienceScore, setExperienceScore] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [editingFileName, setEditingFileName] = useState<string | null>(null);
   const [deletingFileName, setDeletingFileName] = useState<string | null>(null);
   const [selectedReviewFileName, setSelectedReviewFileName] = useState<string | null>(null);
+  const [showAllExperiences, setShowAllExperiences] = useState(false);
   const [reviewQuery, setReviewQuery] = useState('');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'all' | ReviewEntry['review_type']>(
     'all',
@@ -91,13 +93,7 @@ export function ReviewHome({
   const reviewFormRef = useRef<HTMLFormElement>(null);
   const reviewDetailRef = useRef<HTMLElement>(null);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const fieldClass =
-    'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
-  const exitedItems = objects.filter((object) =>
-    ['idle', 'transferred', 'discarded', 'paused', 'cancelled', 'completed', 'reviewed'].includes(
-      object.status,
-    ),
-  );
+  const fieldClass = FIELD_CLASS;
   const experiences = objects.filter((object) => object.object_type === 'one_time_experience');
   const experienceTotal = experiences.reduce(
     (total, object) => total + getExperienceAmount(object),
@@ -123,7 +119,7 @@ export function ReviewHome({
       ),
     [reviews],
   );
-  const rankedReviewCount = reviews.filter((stored) => hasRanking(stored.entity)).length;
+  const rankedReviewCount = reviews.filter((stored) => hasScore(stored.entity)).length;
 
   function getStatusLabel(object: WYQDObject): string {
     const labels: Record<string, string> = {
@@ -171,35 +167,35 @@ export function ReviewHome({
     return labels[type] || type;
   }
 
-  function getRankingItems(review: ReviewEntry): string[] {
+  function getScoreItems(review: ReviewEntry): string[] {
     return [
-      review.food_rank ? `${t('foodRank')} #${review.food_rank}` : null,
-      review.scenery_rank ? `${t('sceneryRank')} #${review.scenery_rank}` : null,
-      review.experience_rank ? `${t('experienceRank')} #${review.experience_rank}` : null,
+      review.food_score ? `${t('foodRank')} ${review.food_score}分` : null,
+      review.scenery_score ? `${t('sceneryRank')} ${review.scenery_score}分` : null,
+      review.experience_score ? `${t('experienceRank')} ${review.experience_score}分` : null,
     ].filter((item): item is string => Boolean(item));
   }
 
   const rankingBoardSuffix = t('rankingBoard').replace('{label}', '');
 
   const rankingBoards = useMemo(() => {
-    const rankingDimensions: Array<{
-      key: 'food_rank' | 'scenery_rank' | 'experience_rank';
+    const scoreDimensions: Array<{
+      key: 'food_score' | 'scenery_score' | 'experience_score';
       label: string;
     }> = [
-      { key: 'food_rank', label: t('foodRank') },
-      { key: 'scenery_rank', label: t('sceneryRank') },
-      { key: 'experience_rank', label: t('experienceRank') },
+      { key: 'food_score', label: t('foodRank') },
+      { key: 'scenery_score', label: t('sceneryRank') },
+      { key: 'experience_score', label: t('experienceRank') },
     ];
 
     return (
-      rankingDimensions.map((dimension) => ({
+      scoreDimensions.map((dimension) => ({
         ...dimension,
         entries: reviews
           .filter((stored) => stored.entity[dimension.key])
           .sort(
-            (a, b) => (a.entity[dimension.key] || 9999) - (b.entity[dimension.key] || 9999),
+            (a, b) => (b.entity[dimension.key] || 0) - (a.entity[dimension.key] || 0),
           )
-          .slice(0, 3),
+          .slice(0, 6),
       }))
     );
   }, [reviews, t]);
@@ -256,14 +252,14 @@ export function ReviewHome({
             return exp ? { id: exp.id, title: exp.title, type: exp.object_type } : undefined;
           })()
         : undefined;
-      const draft = createReviewDraft(summary.trim(), foodRank, sceneryRank, experienceRank, reviewTarget, t);
+      const draft = createReviewDraft(summary.trim(), foodScore, sceneryScore, experienceScore, reviewTarget, t);
       const review = editing
         ? {
             ...editing.entity,
             summary: draft.summary,
-            food_rank: draft.food_rank,
-            scenery_rank: draft.scenery_rank,
-            experience_rank: draft.experience_rank,
+            food_score: draft.food_score,
+            scenery_score: draft.scenery_score,
+            experience_score: draft.experience_score,
             updated_at: todayISO(),
           }
         : draft;
@@ -271,17 +267,17 @@ export function ReviewHome({
       if (editing) {
         await onUpdateReview(editing.fileName, review, editing.body);
       } else {
-        const rankLabel = (rank: number | null | undefined) =>
-          rank ? t('rankPosition').replace('{rank}', String(rank)) : t('notRanked');
+        const scoreLabel = (score: number | null | undefined) =>
+          score ? t('rankPosition').replace('{rank}', String(score)) : t('notRanked');
         await onCreateReview(
           review,
-          `## ${t('reviewAction')}\n\n${summary.trim()}\n\n## ${t('rankings')}\n\n- ${t('foodRank')}：${rankLabel(review.food_rank)}\n- ${t('sceneryRank')}：${rankLabel(review.scenery_rank)}\n- ${t('experienceRank')}：${rankLabel(review.experience_rank)}\n\n## ${t('nextSteps')}\n\n`,
+          `## ${t('reviewAction')}\n\n${summary.trim()}\n\n## ${t('rankings')}\n\n- ${t('foodRank')}：${scoreLabel(review.food_score)}\n- ${t('sceneryRank')}：${scoreLabel(review.scenery_score)}\n- ${t('experienceRank')}：${scoreLabel(review.experience_score)}\n\n## ${t('nextSteps')}\n\n`,
         );
       }
       setSummary('');
-      setFoodRank('');
-      setSceneryRank('');
-      setExperienceRank('');
+      setFoodScore('');
+      setSceneryScore('');
+      setExperienceScore('');
       setEditingFileName(null);
       setReviewingExperienceId(null);
     } finally {
@@ -292,10 +288,10 @@ export function ReviewHome({
   function startEditingReview(stored: WYQDStoredEntity<ReviewEntry>) {
     setEditingFileName(stored.fileName);
     setSummary(stored.entity.summary || '');
-    setFoodRank(stored.entity.food_rank ? String(stored.entity.food_rank) : '');
-    setSceneryRank(stored.entity.scenery_rank ? String(stored.entity.scenery_rank) : '');
-    setExperienceRank(
-      stored.entity.experience_rank ? String(stored.entity.experience_rank) : '',
+    setFoodScore(stored.entity.food_score ? String(stored.entity.food_score) : '');
+    setSceneryScore(stored.entity.scenery_score ? String(stored.entity.scenery_score) : '');
+    setExperienceScore(
+      stored.entity.experience_score ? String(stored.entity.experience_score) : '',
     );
     setTimeout(() => reviewFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   }
@@ -303,9 +299,9 @@ export function ReviewHome({
   function cancelEditing() {
     setEditingFileName(null);
     setSummary('');
-    setFoodRank('');
-    setSceneryRank('');
-    setExperienceRank('');
+    setFoodScore('');
+    setSceneryScore('');
+    setExperienceScore('');
     setReviewingExperienceId(null);
   }
 
@@ -370,133 +366,106 @@ export function ReviewHome({
           </div>
         </div>
 
-        <div className="mt-5 border-t border-stone-100 pt-5">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('reviewQueue')}</h3>
-            <span className="text-xs text-stone-400">
-              {t('exitedCompletedObjects').replace('{count}', String(exitedItems.length))}
-            </span>
-          </div>
-          {pendingReviewExperiences.length > 0 ? (
-            <div className="mt-3 divide-y divide-stone-100">
-              {pendingReviewExperiences.slice(0, 4).map((experience) => (
-                <div
-                  key={experience.id}
-                  className="flex items-center justify-between gap-3 py-3"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-stone-950">
-                      {experience.title}
-                    </div>
-                    <div className="mt-1 text-xs text-stone-500">
-                      {getStatusLabel(experience)} · {formatMoney(getExperienceAmount(experience))}
-                    </div>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-                    {t('pendingReviewBadge')}
-                  </span>
-                </div>
-              ))}
-            </div>
+      </div>
+
+      {/* Experiences — merged view with inline review trigger */}
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('seeWorld')}</h2>
+          <span className="text-xs text-stone-400">{experiences.length}</span>
+        </div>
+        <div className="mt-3 space-y-2">
+          {experiences.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">{t('noExperiencesYet')}</div>
           ) : (
-            <p className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-500">
-              {t('noPendingReviews')}
-            </p>
+            (showAllExperiences ? experiences : experiences.slice(0, 6)).map((experience) => {
+              const isAlreadyReviewed = Boolean(
+                experience.review_ref || reviewedTargetIds.has(experience.id),
+              );
+              const canStartReview = !isAlreadyReviewed;
+              const isReviewingThis = reviewingExperienceId === experience.id;
+
+              return (
+                <div key={experience.id}>
+                  <div
+                    className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 ${canStartReview ? 'cursor-pointer hover:bg-stone-50' : ''} ${isReviewingThis ? 'bg-stone-50 ring-1 ring-stone-200' : ''}`}
+                    onClick={canStartReview ? () => startExperienceReview(experience) : undefined}
+                    {...(canStartReview ? { role: 'button', tabIndex: 0, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startExperienceReview(experience); } } } : {})}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium text-stone-950">{experience.title}</span>
+                        {canStartReview ? (
+                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">{t('pendingReviewBadge')}</span>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
+                        <span>{getStatusLabel(experience)}</span>
+                        <span>·</span>
+                        <span>{formatMoney(getExperienceAmount(experience))}</span>
+                      </div>
+                    </div>
+                    {canStartReview ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); startExperienceReview(experience); }}
+                        className="shrink-0 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
+                      >
+                        {t('reviewAction')}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {/* Inline review form */}
+                  {isReviewingThis ? (
+                    <form ref={reviewFormRef} onSubmit={handleSubmit} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+                      <textarea
+                        value={summary}
+                        onChange={(event) => setSummary(event.target.value)}
+                        placeholder={t('reviewSummaryPlaceholder')}
+                        rows={3}
+                        aria-label={t('summary')}
+                        className={`${fieldClass} resize-none`}
+                        disabled={disabled || isSaving}
+                      />
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
+                        <input value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
+                        <input value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={cancelEditing} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSaving}>{t('cancel')}</button>
+                        <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
+                          {isSaving ? t('saving') : t('saveReview')}
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+                </div>
+              );
+            })
           )}
+          {experiences.length > 6 && !showAllExperiences ? (
+            <button
+              type="button"
+              onClick={() => setShowAllExperiences(true)}
+              className="w-full rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-500 transition hover:border-stone-400 hover:text-stone-900"
+            >
+              {t('showMore')} ({experiences.length - 6})
+            </button>
+          ) : experiences.length > 6 && showAllExperiences ? (
+            <button
+              type="button"
+              onClick={() => setShowAllExperiences(false)}
+              className="w-full rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-500 transition hover:border-stone-400 hover:text-stone-900"
+            >
+              {t('showLess')}
+            </button>
+          ) : null}
         </div>
       </div>
 
-      <form ref={reviewFormRef} onSubmit={handleSubmit} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div className="mb-4">
-          <h2 className="text-base font-semibold tracking-tight text-stone-950">
-            {editingFileName ? t('editReview') : reviewingExperienceId ? t('experienceReview') : t('reviewShorthand')}
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-stone-500">
-            {t('reviewShorthandDesc')}
-          </p>
-        </div>
-        <div className="space-y-3">
-          <textarea
-            value={summary}
-            onChange={(event) => setSummary(event.target.value)}
-            placeholder={t('reviewSummaryPlaceholder')}
-            rows={4}
-            aria-label={t('summary')}
-            className={`${fieldClass} resize-none`}
-            disabled={disabled || isSaving}
-          />
-          <div>
-            <div className="mb-1.5 text-xs font-medium text-stone-500">{t('rankingLabel')}</div>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <label className="block">
-                <span className="sr-only">{t('foodRank')}</span>
-                <input
-                  value={foodRank}
-                  onChange={(event) => setFoodRank(event.target.value)}
-                  type="number"
-                  min="1"
-                  inputMode="numeric"
-                  placeholder={`${t('foodRank')}, 1`}
-                  className={fieldClass}
-                  disabled={disabled || isSaving}
-                />
-              </label>
-              <label className="block">
-                <span className="sr-only">{t('sceneryRank')}</span>
-                <input
-                  value={sceneryRank}
-                  onChange={(event) => setSceneryRank(event.target.value)}
-                  type="number"
-                  min="1"
-                  inputMode="numeric"
-                  placeholder={`${t('sceneryRank')}, 3`}
-                  className={fieldClass}
-                  disabled={disabled || isSaving}
-                />
-              </label>
-              <label className="block">
-                <span className="sr-only">{t('experienceRank')}</span>
-                <input
-                  value={experienceRank}
-                  onChange={(event) => setExperienceRank(event.target.value)}
-                  type="number"
-                  min="1"
-                  inputMode="numeric"
-                  placeholder={`${t('experienceRank')}, 2`}
-                  className={fieldClass}
-                  disabled={disabled || isSaving}
-                />
-              </label>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {editingFileName || reviewingExperienceId ? (
-              <button
-                type="button"
-                onClick={cancelEditing}
-                className="w-24 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:border-stone-900 disabled:cursor-not-allowed disabled:text-stone-400"
-                disabled={isSaving}
-              >
-                {t('cancel')}
-              </button>
-            ) : null}
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="min-w-0 flex-1 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
-            >
-              {disabled
-                ? t('connectVaultToWrite')
-                : isSaving
-                  ? t('saving')
-                  : editingFileName
-                    ? t('saveChanges')
-                    : t('saveReview')}
-            </button>
-          </div>
-        </div>
-      </form>
-
+      {/* Ranking Boards */}
       <div className="grid gap-3 lg:grid-cols-3">
         {rankingBoards.map((board) => (
           <section key={board.key} className="rounded-xl border border-stone-200 bg-white p-5">
@@ -504,7 +473,7 @@ export function ReviewHome({
               <h2 className="text-sm font-semibold tracking-tight text-stone-950">
                 {board.label}{rankingBoardSuffix}
               </h2>
-              <span className="text-xs text-stone-400">Top {board.entries.length}</span>
+              <span className="text-xs text-stone-400">{t('topRanking').replace('{count}', String(board.entries.length))}</span>
             </div>
             <div className="mt-3 space-y-2">
               {board.entries.map((stored) => (
@@ -523,7 +492,7 @@ export function ReviewHome({
                     </div>
                   </div>
                   <span className="shrink-0 font-mono text-sm font-semibold text-stone-950">
-                    #{stored.entity[board.key]}
+                    {stored.entity[board.key]}分
                   </span>
                 </button>
               ))}
@@ -537,55 +506,7 @@ export function ReviewHome({
         ))}
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('seeWorld')}</h2>
-          <span className="text-xs text-stone-400">{t('seeWorldDesc')}</span>
-        </div>
-        <div className="mt-3 space-y-3">
-          {experiences.length === 0 ? (
-            <p className="mt-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-500">{t('noExperiencesYet')}</p>
-          ) : (
-            experiences.map((experience) => {
-              const isAlreadyReviewed = Boolean(
-                experience.review_ref ||
-                reviewedTargetIds.has(experience.id),
-              );
-              const canStartReview = !isAlreadyReviewed;
-              return (
-              <div
-                key={experience.id}
-                className={`flex justify-between gap-3 border-t border-stone-100 pt-3 ${canStartReview ? 'cursor-pointer rounded-lg hover:bg-stone-50 -mx-2 px-2' : ''}`}
-                onClick={canStartReview ? () => startExperienceReview(experience) : undefined}
-                {...(canStartReview ? { role: 'button', tabIndex: 0, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startExperienceReview(experience); } } } : {})}
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-stone-950">
-                    {experience.title}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-stone-400">
-                    <span>{getStatusLabel(experience)}</span>
-                    {canStartReview ? (
-                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">{t('pendingReviewBadge')}</span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="shrink-0 text-sm font-semibold text-stone-950">
-                  {formatMoney(getExperienceAmount(experience))}
-                </div>
-              </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      <TravelInsightsPanel
-        objects={objects}
-        reviews={reviews.map((r) => r.entity)}
-        membership={membership}
-      />
-
+      {/* Review History */}
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('reviewHistory')}</h2>
@@ -638,9 +559,9 @@ export function ReviewHome({
                       {stored.entity.target ? <span>{stored.entity.target}</span> : null}
                     </div>
                   </div>
-                  {getRankingItems(stored.entity).length > 0 ? (
+                  {getScoreItems(stored.entity).length > 0 ? (
                     <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                      {getRankingItems(stored.entity).map((item) => (
+                      {getScoreItems(stored.entity).map((item) => (
                         <span
                           key={item}
                           className="rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-600"
@@ -745,11 +666,11 @@ export function ReviewHome({
                     </div>
                   </div>
                 </div>
-                {getRankingItems(selectedReview.entity).length > 0 ? (
+                {getScoreItems(selectedReview.entity).length > 0 ? (
                   <div className="rounded-md bg-white p-3 text-xs">
                     <div className="text-stone-400">{t('rankings')}</div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {getRankingItems(selectedReview.entity).map((item) => (
+                      {getScoreItems(selectedReview.entity).map((item) => (
                         <span
                           key={item}
                           className="rounded-full bg-stone-100 px-2 py-1 font-medium text-stone-700"
@@ -801,6 +722,36 @@ export function ReviewHome({
           </aside>
         </div>
       </div>
+
+      {/* Edit review form — shown only when editing an existing review */}
+      {editingFileName ? (
+        <form ref={reviewFormRef} onSubmit={handleSubmit} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('editReview')}</h2>
+          </div>
+          <div className="space-y-3">
+            <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t('reviewSummaryPlaceholder')} rows={4} aria-label={t('summary')} className={`${fieldClass} resize-none`} disabled={disabled || isSaving} />
+            <div className="grid gap-2 sm:grid-cols-3">
+              <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
+              <input value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
+              <input value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={cancelEditing} className="w-24 rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm font-medium text-stone-600 transition hover:border-stone-400" disabled={isSaving}>{t('cancel')}</button>
+              <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
+                {isSaving ? t('saving') : t('saveChanges')}
+              </button>
+            </div>
+          </div>
+        </form>
+      ) : null}
+
+      {/* Travel Insights — Pro feature, at bottom */}
+      <TravelInsightsPanel
+        objects={objects}
+        reviews={reviews.map((r) => r.entity)}
+        membership={membership}
+      />
     </section>
     {confirmDialog}
     </>

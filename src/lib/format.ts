@@ -2,40 +2,106 @@ import type { WYQDTranslationKey } from '@/core/i18n';
 
 type TranslateFn = (key: WYQDTranslationKey) => string;
 
+/** Supported currencies */
+export type WYQDCurrency = 'CNY' | 'USD' | 'EUR' | 'GBP' | 'JPY' | 'KRW';
+
+/** Legacy locale type — kept for backward compatibility */
 export type WYQDCurrencyLocale = 'zh' | 'en';
 
-const CURRENCY_SYMBOLS: Record<WYQDCurrencyLocale, string> = {
-  zh: '¥',
-  en: '$',
+interface CurrencyConfig {
+  symbol: string;
+  locale: string;       // Intl.NumberFormat locale
+  compactUnit?: string; // e.g. '万' for CNY
+  compactThreshold?: number; // e.g. 10000 for 万
+}
+
+const CURRENCY_CONFIG: Record<WYQDCurrency, CurrencyConfig> = {
+  CNY: { symbol: '¥', locale: 'zh-CN', compactUnit: '万', compactThreshold: 10000 },
+  USD: { symbol: '$', locale: 'en-US' },
+  EUR: { symbol: '€', locale: 'de-DE' },
+  GBP: { symbol: '£', locale: 'en-GB' },
+  JPY: { symbol: '¥', locale: 'ja-JP' },
+  KRW: { symbol: '₩', locale: 'ko-KR' },
 };
 
-const NUMBER_LOCALE: Record<WYQDCurrencyLocale, string> = {
-  zh: 'zh-CN',
-  en: 'en-US',
+export const WYQD_CURRENCIES: WYQDCurrency[] = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'];
+
+export const WYQD_CURRENCY_LABELS: Record<WYQDCurrency, string> = {
+  CNY: 'CNY ¥',
+  USD: 'USD $',
+  EUR: 'EUR €',
+  GBP: 'GBP £',
+  JPY: 'JPY ¥',
+  KRW: 'KRW ₩',
 };
 
-export function formatMoney(value: number | null | undefined, fallback?: string, locale: WYQDCurrencyLocale = 'zh'): string {
+/** Map legacy locale to default currency */
+function localeToCurrency(locale: WYQDCurrencyLocale): WYQDCurrency {
+  return locale === 'zh' ? 'CNY' : 'USD';
+}
+
+function getConfig(currency: WYQDCurrency): CurrencyConfig {
+  return CURRENCY_CONFIG[currency] || CURRENCY_CONFIG.USD;
+}
+
+// ===== Exported format functions =====
+
+export function formatMoney(
+  value: number | null | undefined,
+  fallback?: string,
+  locale: WYQDCurrencyLocale = 'zh',
+  currency?: WYQDCurrency,
+): string {
   if (value === null || value === undefined) return fallback ?? '—';
-  return `${CURRENCY_SYMBOLS[locale]}${Math.round(value).toLocaleString(NUMBER_LOCALE[locale])}`;
+  const cur = currency || localeToCurrency(locale);
+  const cfg = getConfig(cur);
+  return `${cfg.symbol}${Math.round(value).toLocaleString(cfg.locale)}`;
 }
 
-export function formatDailyMoney(value: number, locale: WYQDCurrencyLocale = 'zh'): string {
-  if (!Number.isFinite(value)) return `${CURRENCY_SYMBOLS[locale]}0/日`;
-  if (value > 0 && value < 1) return `${CURRENCY_SYMBOLS[locale]}${value.toFixed(2)}/日`;
-  return `${formatMoney(value, undefined, locale)}/日`;
+export function formatDailyMoney(
+  value: number,
+  locale: WYQDCurrencyLocale = 'zh',
+  t?: TranslateFn,
+  currency?: WYQDCurrency,
+): string {
+  const cur = currency || localeToCurrency(locale);
+  const cfg = getConfig(cur);
+  const suffix = t ? t('perDay') : locale === 'zh' ? '/天' : '/day';
+  if (!Number.isFinite(value)) return `${cfg.symbol}0${suffix}`;
+  if (value > 0 && value < 1) return `${cfg.symbol}${value.toFixed(2)}${suffix}`;
+  return `${formatMoney(value, undefined, locale, cur)}${suffix}`;
 }
 
-export function formatCompactMoney(value: number, locale: WYQDCurrencyLocale = 'zh'): string {
+export function formatCompactMoney(
+  value: number,
+  locale: WYQDCurrencyLocale = 'zh',
+  t?: TranslateFn,
+  currency?: WYQDCurrency,
+): string {
+  const cur = currency || localeToCurrency(locale);
+  const cfg = getConfig(cur);
   const rounded = Math.round(value);
-  const sym = CURRENCY_SYMBOLS[locale];
-  if (Math.abs(rounded) >= 10000) return `${sym}${(rounded / 10000).toFixed(1)}万`;
-  return `${sym}${rounded.toLocaleString(NUMBER_LOCALE[locale])}`;
+
+  // CNY uses 万 compact format
+  if (cfg.compactUnit && cfg.compactThreshold && Math.abs(rounded) >= cfg.compactThreshold) {
+    const unit = t ? t('unitWan') : cfg.compactUnit;
+    return `${cfg.symbol}${(rounded / cfg.compactThreshold).toFixed(1)}${unit}`;
+  }
+
+  return `${cfg.symbol}${rounded.toLocaleString(cfg.locale)}`;
 }
 
-export function formatDelta(value: number | null, t: (key: WYQDTranslationKey) => string, locale: WYQDCurrencyLocale = 'zh'): string {
+export function formatDelta(
+  value: number | null,
+  t: TranslateFn,
+  locale: WYQDCurrencyLocale = 'zh',
+  currency?: WYQDCurrency,
+): string {
   if (value === null) return t('noNetWorthComparison');
+  const cur = currency || localeToCurrency(locale);
+  const cfg = getConfig(cur);
   const sign = value >= 0 ? '+' : '-';
-  return `较上月末 ${sign}${CURRENCY_SYMBOLS[locale]}${Math.abs(Math.round(value)).toLocaleString(NUMBER_LOCALE[locale])}`;
+  return `${t('comparedToMonthEnd')} ${sign}${cfg.symbol}${Math.abs(Math.round(value)).toLocaleString(cfg.locale)}`;
 }
 
 export function formatOptional(value: string | number | null | undefined, t: TranslateFn): string {
@@ -47,6 +113,35 @@ export function parseRank(value: string): number | null {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue) || numberValue < 1) return null;
   return Math.floor(numberValue);
+}
+
+export function parseScore(value: string): number | null {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue < 0 || numberValue > 100) return null;
+  return Math.floor(numberValue);
+}
+
+export function rankToScore(rank: number | null | undefined): number | null {
+  if (!rank || rank < 1) return null;
+  // 排名越小越好，转换为分数：第1名=100分，第2名=90分，第3名=80分...
+  return Math.max(0, 100 - (rank - 1) * 10);
+}
+
+export function migrateReviewEntry(review: Record<string, unknown>): Record<string, unknown> {
+  // 如果有旧的 rank 字段，转换为 score
+  if (review.food_rank && !review.food_score) {
+    review.food_score = rankToScore(review.food_rank as number);
+    delete review.food_rank;
+  }
+  if (review.scenery_rank && !review.scenery_score) {
+    review.scenery_score = rankToScore(review.scenery_rank as number);
+    delete review.scenery_rank;
+  }
+  if (review.experience_rank && !review.experience_score) {
+    review.experience_score = rankToScore(review.experience_rank as number);
+    delete review.experience_rank;
+  }
+  return review;
 }
 
 export function daysUntil(date: string): number {

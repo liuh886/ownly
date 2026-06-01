@@ -1,4 +1,4 @@
-import type { OneTimeExperienceObject, ReviewEntry, WYQDObject } from './types';
+import type { OneTimeExperienceObject, ReviewEntry, TravelLocation, WYQDObject } from './types';
 import citiesData from '@/data/cities.json';
 
 export function getTravelExperiences(objects: WYQDObject[]): OneTimeExperienceObject[] {
@@ -16,19 +16,51 @@ export interface TravelMapPoint {
   country_code?: string;
   latitude: number;
   longitude: number;
+  status: 'planned' | 'in_progress' | 'completed' | 'reviewed';
+  stopIndex?: number;
 }
 
+function isValidLocation(loc?: TravelLocation): loc is TravelLocation & { latitude: number; longitude: number } {
+  return loc != null && loc.latitude != null && loc.longitude != null;
+}
+
+/**
+ * Merge primary location + additional locations into a flat list of map points.
+ * Each location becomes a separate point linked to the same experience.
+ */
 export function buildTravelMapPoints(experiences: OneTimeExperienceObject[]): TravelMapPoint[] {
-  return experiences
-    .filter((exp) => exp.location?.latitude != null && exp.location?.longitude != null)
-    .map((exp) => ({
-      id: exp.id,
-      title: exp.title,
-      city: exp.location?.city,
-      country_code: exp.location?.country_code,
-      latitude: exp.location!.latitude!,
-      longitude: exp.location!.longitude!,
-    }));
+  const points: TravelMapPoint[] = [];
+
+  for (const exp of experiences) {
+    const allLocations: TravelLocation[] = [];
+    if (isValidLocation(exp.location)) allLocations.push(exp.location);
+    if (exp.locations) {
+      for (const loc of exp.locations) {
+        if (isValidLocation(loc)) allLocations.push(loc);
+      }
+    }
+
+    // Deduplicate by lat/lng
+    const seen = new Set<string>();
+    for (let i = 0; i < allLocations.length; i++) {
+      const loc = allLocations[i];
+      const key = `${loc.latitude!.toFixed(4)},${loc.longitude!.toFixed(4)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      points.push({
+        id: allLocations.length === 1 ? exp.id : `${exp.id}#${i}`,
+        title: exp.title,
+        city: loc.city,
+        country_code: loc.country_code,
+        latitude: loc.latitude!,
+        longitude: loc.longitude!,
+        status: exp.status,
+        stopIndex: allLocations.length > 1 ? i : undefined,
+      });
+    }
+  }
+
+  return points;
 }
 
 export interface TravelReviewStats {
@@ -50,14 +82,14 @@ export function getTravelReviewStats(
     (r) => r.target_id && travelIds.has(r.target_id),
   );
 
-  const foodRanks = travelReviews
-    .map((r) => r.food_rank)
+  const foodScores = travelReviews
+    .map((r) => r.food_score)
     .filter((r): r is number => r != null);
-  const sceneryRanks = travelReviews
-    .map((r) => r.scenery_rank)
+  const sceneryScores = travelReviews
+    .map((r) => r.scenery_score)
     .filter((r): r is number => r != null);
-  const expRanks = travelReviews
-    .map((r) => r.experience_rank)
+  const expScores = travelReviews
+    .map((r) => r.experience_score)
     .filter((r): r is number => r != null);
 
   const totalSpend = travelExps.reduce(
@@ -66,14 +98,14 @@ export function getTravelReviewStats(
   );
 
   return {
-    avgFoodRank: foodRanks.length
-      ? foodRanks.reduce((a, b) => a + b, 0) / foodRanks.length
+    avgFoodRank: foodScores.length
+      ? foodScores.reduce((a, b) => a + b, 0) / foodScores.length
       : null,
-    avgSceneryRank: sceneryRanks.length
-      ? sceneryRanks.reduce((a, b) => a + b, 0) / sceneryRanks.length
+    avgSceneryRank: sceneryScores.length
+      ? sceneryScores.reduce((a, b) => a + b, 0) / sceneryScores.length
       : null,
-    avgExperienceRank: expRanks.length
-      ? expRanks.reduce((a, b) => a + b, 0) / expRanks.length
+    avgExperienceRank: expScores.length
+      ? expScores.reduce((a, b) => a + b, 0) / expScores.length
       : null,
     totalSpend,
     avgSpend: travelExps.length ? totalSpend / travelExps.length : 0,

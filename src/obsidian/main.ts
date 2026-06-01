@@ -6,7 +6,6 @@ import {
   PluginSettingTab,
   Setting,
   WorkspaceLeaf,
-  requestUrl,
 } from 'obsidian';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -18,7 +17,7 @@ import {
   type WYQDLanguage,
   type WYQDTranslationKey,
 } from '@/core/i18n';
-import { checkSpecialKey, GUMROAD_PRODUCT_ID } from '@/core/activation';
+import { activateLicense, type ActivationSource } from '@/core/activation';
 import { resolveWYQDMembership } from '@/core/membership';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { runWYQDDoctor } from '@/core/doctor';
@@ -70,14 +69,6 @@ export default class WYQDPlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
-
-    // Re-verify license on plugin version change to catch refunded/disputed licenses
-    if (this.settings.proUnlocked && this.settings.licenseSource === 'gumroad' && this.settings.licenseKey) {
-      const currentVersion = this.manifest.version;
-      if (this.settings.lastVerifiedVersion !== currentVersion) {
-        this.reverifyLicenseOnUpdate(currentVersion);
-      }
-    }
 
     this.repository = new ObsidianVaultRepository(this.app, {
       dataFolder: () => this.settings.dataFolder,
@@ -138,7 +129,7 @@ export default class WYQDPlugin extends Plugin {
       : this.app.workspace.getLeaf(true);
 
     if (!leaf) {
-      new Notice('Ownly: Could not open workspace view.');
+      new Notice(this.t('couldNotOpenWorkspace'));
       return;
     }
 
@@ -151,21 +142,28 @@ export default class WYQDPlugin extends Plugin {
 
     const now = new Date();
     const date = toDate(now);
-    const draft = buildDraft(kind, now);
+    const t = (key: WYQDTranslationKey) => this.t(key);
+    const draft = buildDraft(kind, now, t);
     const folder = this.getEntityFolder(kind);
     const path = await this.nextAvailablePath(`${folder}/${date}-${draft.id}.md`);
 
     await this.app.vault.create(path, draft.content);
-    new Notice(`Ownly: Created ${draft.title}`);
+    new Notice(this.t('objectCreated').replace('{title}', draft.title));
   }
 
   async runDoctor() {
-    const report = await runWYQDDoctor(this.repository);
+    const report = await runWYQDDoctor(this.repository, undefined, (key) => this.t(key as WYQDTranslationKey));
+    const findingsSummary = this.t('doctorFindings')
+      .replace('{errors}', String(report.summary.error))
+      .replace('{warnings}', String(report.summary.warning))
+      .replace('{info}', String(report.summary.info));
     const lines = [
-      `Plugin version ${this.manifest.version}`,
-      `Doctor run ${toTimestamp(new Date(report.checkedAt))}`,
-      `Findings: ${report.summary.error} error, ${report.summary.warning} warning, ${report.summary.info} info`,
-      ...report.findings.slice(0, 6).map((finding) => `${finding.severity}: ${finding.message}`),
+      `${this.t('doctorPluginVersion')} ${this.manifest.version}`,
+      `${this.t('doctorRunAt')} ${toTimestamp(new Date(report.checkedAt))}`,
+      findingsSummary,
+      ...(report.findings.length === 0
+        ? [this.t('doctorNoFindings')]
+        : report.findings.slice(0, 6).map((finding) => `${finding.severity}: ${finding.message}`)),
     ];
 
     new Notice(`Ownly Doctor:\n${lines.join('\n')}`, 8000);
@@ -182,43 +180,6 @@ export default class WYQDPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
-  }
-
-  private async reverifyLicenseOnUpdate(currentVersion: string) {
-    try {
-      const params = new URLSearchParams();
-      params.set('product_id', GUMROAD_PRODUCT_ID);
-      params.set('license_key', this.settings.licenseKey);
-      params.set('increment_uses_count', 'false');
-
-      const response = await requestUrl({
-        url: 'https://api.gumroad.com/v2/licenses/verify',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-      });
-
-      const data = response.json;
-      const isValid = data.success && !(data.purchase?.refunded || data.purchase?.chargebacked || data.purchase?.disputed);
-
-      if (isValid) {
-        this.settings.lastVerifiedVersion = currentVersion;
-        await this.saveSettings();
-      } else {
-        // License is no longer valid — deactivate Pro
-        this.settings.proUnlocked = false;
-        this.settings.licenseSource = '';
-        this.settings.licenseKey = '';
-        this.settings.licenseKeyLast4 = '';
-        this.settings.activatedAt = '';
-        this.settings.lastVerifiedVersion = '';
-        await this.saveSettings();
-        new Notice(this.t('activationDeactivated'));
-        this.refreshWorkspaceViews();
-      }
-    } catch {
-      // Network error during re-verification — don't deactivate, retry on next update
-    }
   }
 
   async getMembership() {
@@ -240,6 +201,42 @@ export default class WYQDPlugin extends Plugin {
         leaf.view.refresh();
       }
     });
+  }
+
+  async activateLicenseFromReact(key: string) {
+    const result = await activateLicense(key);
+    if (!result.success) {
+      throw new Error(result.error || this.t('activationFailed'));
+    }
+    this.saveProState(key, result.source);
+    new Notice(this.t('activationSuccess'));
+    this.refreshWorkspaceViews();
+  }
+
+  async clearLicenseFromReact() {
+    this.clearProState();
+    new Notice(this.t('activationDeactivated'));
+    this.refreshWorkspaceViews();
+  }
+
+  saveProState(key: string, source: ActivationSource) {
+    this.settings.licenseKey = key;
+    this.settings.proUnlocked = true;
+    this.settings.licenseSource = source;
+    this.settings.licenseKeyLast4 = key.slice(-4);
+    this.settings.activatedAt = new Date().toISOString();
+    this.settings.lastVerifiedVersion = this.manifest.version;
+    void this.saveSettings();
+  }
+
+  private clearProState() {
+    this.settings.proUnlocked = false;
+    this.settings.licenseSource = '';
+    this.settings.licenseKey = '';
+    this.settings.licenseKeyLast4 = '';
+    this.settings.activatedAt = '';
+    this.settings.lastVerifiedVersion = '';
+    void this.saveSettings();
   }
 
   refreshCommands() {
@@ -349,6 +346,15 @@ class WYQDWorkspaceView extends ItemView {
             onLanguageChange: (lang: WYQDLanguage) => {
               this.plugin.settings.language = lang;
               void this.plugin.saveSettings();
+            },
+            onActivateLicense: async (key: string) => {
+              await this.plugin.activateLicenseFromReact(key);
+            },
+            onClearLicense: async () => {
+              await this.plugin.clearLicenseFromReact();
+            },
+            onRefresh: () => {
+              this.plugin.refreshWorkspaceViews();
             },
           },
           createElement(AppShell),
@@ -551,80 +557,31 @@ class WYQDSettingTab extends PluginSettingTab {
     await this.display();
 
     try {
-      // 1. Check special key (local hash match, no network)
-      const isSpecial = await checkSpecialKey(key);
-      if (isSpecial) {
-        this.saveProState(key, 'special');
+      const result = await activateLicense(key);
+      if (result.success) {
+        this.wyqdPlugin.saveProState(key, result.source);
         new Notice(t('activationSuccess'));
         this.wyqdPlugin.refreshWorkspaceViews();
-        this.activating = false;
-        await this.display();
-        return;
+      } else {
+        new Notice(`${t('activationFailed')} ${result.error || ''}`);
       }
-
-      // 2. Verify with Gumroad API
-      const params = new URLSearchParams();
-      params.set('product_id', GUMROAD_PRODUCT_ID);
-      params.set('license_key', key);
-      params.set('increment_uses_count', 'false');
-
-      const response = await requestUrl({
-        url: 'https://api.gumroad.com/v2/licenses/verify',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-      });
-
-      const data = response.json;
-
-      if (!data.success) {
-        new Notice(`${t('activationFailed')} ${data.message || ''}`);
-        this.activating = false;
-        await this.display();
-        return;
-      }
-
-      // Check for abnormal purchase states
-      if (data.purchase) {
-        if (data.purchase.refunded || data.purchase.chargebacked || data.purchase.disputed) {
-          new Notice(t('activationFailed'));
-          this.activating = false;
-          await this.display();
-          return;
-        }
-      }
-
-      // Success
-      this.saveProState(key, 'gumroad');
-      new Notice(t('activationSuccess'));
-      this.wyqdPlugin.refreshWorkspaceViews();
     } catch {
-      new Notice(`${t('activationNetworkError')}`);
+      new Notice(t('activationNetworkError'));
     }
 
     this.activating = false;
     await this.display();
   }
-
-  private saveProState(key: string, source: 'gumroad' | 'special') {
-    this.wyqdPlugin.settings.licenseKey = key;
-    this.wyqdPlugin.settings.proUnlocked = true;
-    this.wyqdPlugin.settings.licenseSource = source;
-    this.wyqdPlugin.settings.licenseKeyLast4 = key.slice(-4);
-    this.wyqdPlugin.settings.activatedAt = new Date().toISOString();
-    this.wyqdPlugin.settings.lastVerifiedVersion = this.wyqdPlugin.manifest.version;
-    void this.wyqdPlugin.saveSettings();
-  }
 }
 
-function buildDraft(kind: DraftKind, now: Date): { id: string; title: string; content: string } {
+function buildDraft(kind: DraftKind, now: Date, t: (key: WYQDTranslationKey) => string): { id: string; title: string; content: string } {
   if (kind === 'object') {
     const entity: WYQDObject = {
       schema_version: WYQD_SCHEMA_VERSION,
       id: `obj_${toCompactTimestamp(now)}`,
       type: 'object',
       object_type: 'physical',
-      title: 'Untitled Ownly Object',
+      title: t('untitledObject'),
       status: 'seeded',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
@@ -633,16 +590,17 @@ function buildDraft(kind: DraftKind, now: Date): { id: string; title: string; co
       include_in_net_worth: false,
       default_depreciates_to_zero: true,
     };
-    return renderDraft(entity.id, entity.title, entity, 'Describe the object, decision context, and expected use.');
+    return renderDraft(entity.id, entity.title, entity, t('objectDraftBody'));
   }
 
   if (kind === 'snapshot') {
+    const snapshotTitle = t('snapshotDraftTitle').replace('{date}', toDate(now));
     const entity: AccountSnapshot = {
       schema_version: WYQD_SCHEMA_VERSION,
       id: `snap_${toCompactTimestamp(now)}`,
       type: 'snapshot',
       snapshot_type: 'net_worth',
-      title: `Net Worth Snapshot ${toDate(now)}`,
+      title: snapshotTitle,
       snapshot_at: toDate(now),
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
@@ -651,22 +609,23 @@ function buildDraft(kind: DraftKind, now: Date): { id: string; title: string; co
       asset_balances: [],
       liability_balances: [],
     };
-    return renderDraft(entity.id, entity.title, entity, 'Record account balances and source notes.');
+    return renderDraft(entity.id, entity.title, entity, t('snapshotDraftBody'));
   }
 
+  const reviewTitle = t('reviewDraftTitle').replace('{date}', toDate(now));
   const entity: ReviewEntry = {
     schema_version: WYQD_SCHEMA_VERSION,
     id: `review_${toCompactTimestamp(now)}`,
     type: 'review',
     review_type: 'object_review',
-    title: `Ownly Review ${toDate(now)}`,
+    title: reviewTitle,
     reviewed_at: toDate(now),
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
     currency: 'CNY',
     tags: ['ownly', 'review'],
   };
-  return renderDraft(entity.id, entity.title, entity, 'Summarize outcome, cost, regret score, and next action.');
+  return renderDraft(entity.id, entity.title, entity, t('reviewDraftBody'));
 }
 
 function renderDraft(

@@ -1,6 +1,44 @@
 # Changelog
 
-## 0.2.4-alpha
+## 1.0.0 (2026-05-31)
+
+### Highlights
+
+First stable public release of the Ownly Obsidian plugin.
+
+### Features
+
+- Object list sorting: by date (default), price, and title.
+- Object list pagination: "Show more" button when list exceeds 10 items.
+- Auto-seed demo data into empty Vault on first connect (web runtime).
+- Gumroad license activation for Obsidian Pro (first-activation + local permanent unlock).
+- Real travel world map with d3-geo + topojson rendering and city search.
+- 11 sample objects, 2 snapshots, 5 reviews with travel experiences.
+
+### Fixes
+
+- P0-P5 audit fixes: accessibility, i18n, memoization, code quality, design consistency.
+- Fixed README version references and plugin output paths.
+
+## 0.2.6 (2026-05-29)
+
+- Added Gumroad license activation system for Obsidian Pro (first-activation + local permanent unlock).
+- Added real travel world map with d3-geo + topojson rendering and city search input.
+- Added richer demo data: 11 sample objects, 2 snapshots, 5 reviews with travel experiences.
+- Added auto-seed demo data into Vault on first connect for new users (web runtime).
+- P0+P1 audit fixes for release readiness.
+- P2 i18n and accessibility improvements.
+- P3 memoize expensive derived calculations.
+- P4 code quality improvements.
+- P5 design consistency improvements.
+- Fixed travel map stability and label accuracy.
+
+## 0.2.5 (2026-05-28)
+
+- Added PRO activation system with local key format validation.
+- Added Ownly plugin identity and branding.
+
+## 0.2.4-alpha (2026-05-27)
 
 - Added the first Pro travel insight surface with shared Web/Obsidian React components.
 - Added structured travel location fields, sample travel data, lightweight local map rendering, travel statistics, and timeline.

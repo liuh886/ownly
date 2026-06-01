@@ -169,13 +169,20 @@ export function isActiveRecurringCost(object: WYQDObject): object is RecurringCo
 }
 
 export function calculateDesireAmount(object: WYQDObject): number {
-  if (object.status !== 'seeded' && object.status !== 'observing') return 0;
+  const isObserving =
+    object.status === 'seeded' ||
+    object.status === 'observing' ||
+    object.status === 'planned';
+  if (!isObserving) return 0;
 
   if (object.object_type === 'physical') {
     return calculatePhysicalAcquisitionCost(object);
   }
   if (object.object_type === 'recurring_cost') {
     return calculateRecurringMonthlyCost(object);
+  }
+  if (object.object_type === 'one_time_experience') {
+    return object.budget_total || 0;
   }
   return 0;
 }
@@ -198,7 +205,7 @@ export function calculateHomeMetrics(
   const ownedPhysicalCount = objects.filter(isOwnedPhysicalObject).length;
 
   const observingDesireAmount = objects
-    .filter((object) => object.status === 'seeded' || object.status === 'observing')
+    .filter((object) => object.status === 'seeded' || object.status === 'observing' || object.status === 'planned')
     .reduce((total, object) => total + calculateDesireAmount(object), 0);
 
   return {

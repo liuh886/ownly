@@ -60,9 +60,9 @@ Object entry should support these structured inputs for `one_time_experience`:
 
 Review entry should contribute:
 
-- `food_rank`
-- `scenery_rank`
-- `experience_rank`
+- `food_score`
+- `scenery_score`
+- `experience_score`
 - `summary`
 - `reviewed_at` / `exited_at`
 

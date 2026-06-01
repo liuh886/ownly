@@ -18,12 +18,13 @@ import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import type { WYQDStoredEntity, WYQDArchivedStoredEntity, WYQDArchiveEntityType } from '@/core/repository';
 
 import { motion, AnimatePresence } from 'framer-motion';
+import { WYQD_CURRENCIES, WYQD_CURRENCY_LABELS } from '@/lib/format';
 import { checkWYQDCapacity } from '@/core/membership';
 
 interface ReviewRankings {
-  foodRank: number | null;
-  sceneryRank: number | null;
-  experienceRank: number | null;
+  foodScore: number | null;
+  sceneryScore: number | null;
+  experienceScore: number | null;
 }
 
 const tabHeadingKeys: Record<AppTab, { title: WYQDTranslationKey; description: WYQDTranslationKey }> = {
@@ -95,7 +96,7 @@ function StatusBanner({
 }
 
 export function AppShell() {
-  const { t, language, setLanguage } = useI18n();
+  const { t, language, setLanguage, currency, setCurrency } = useI18n();
   const {
     repository,
     runtimeTarget,
@@ -136,6 +137,23 @@ export function AppShell() {
     setActiveTab('objects');
   }
 
+  async function seedDemoDataToVault() {
+    for (const obj of sampleObjects) {
+      await repository.saveObject(obj, '');
+    }
+    for (const snap of sampleSnapshots) {
+      await repository.saveSnapshot(snap, '');
+    }
+    for (const review of sampleReviews) {
+      const body = review.summary
+        ? `## ${t('reviewExperienceSection')}\n\n${review.summary}\n`
+        : '';
+      await repository.saveReview(review, body);
+    }
+    localStorage.setItem('ownly_demo_seeded', 'true');
+    showNotice(t('demoDataSeeded'));
+  }
+
   async function loadVaultData() {
     const [nextObjects, nextSnapshots, nextReviews, nextArchivedEntities] = await Promise.all([
       repository.listObjects(),
@@ -143,7 +161,6 @@ export function AppShell() {
       repository.listReviews(),
       repository.listArchivedEntities(),
     ]);
-
     setStoredObjects([...nextObjects]);
     setStoredSnapshots([...nextSnapshots]);
     setStoredReviews([...nextReviews]);
@@ -154,7 +171,6 @@ export function AppShell() {
     clearError();
     const connected = await connect();
     if (connected) {
-      await loadVaultData();
       showNotice(t('vaultConnected'));
     }
   }
@@ -222,9 +238,9 @@ export function AppShell() {
       exited_at: object.ended_at || date,
       exit_type: 'completed',
       realized_experience_cost: object.actual_total || object.budget_total || 0,
-      food_rank: rankings.foodRank,
-      scenery_rank: rankings.sceneryRank,
-      experience_rank: rankings.experienceRank,
+      food_score: rankings.foodScore,
+      scenery_score: rankings.sceneryScore,
+      experience_score: rankings.experienceScore,
       summary,
       period: date.slice(0, 7),
       year: Number(date.slice(0, 4)),
@@ -234,9 +250,9 @@ export function AppShell() {
       tags: ['ownly', 'review', 'experience'],
     };
 
-    const rankedLabel = (rank: number | null | undefined) =>
-      rank ? t('reviewRankedAt').replace('{rank}', String(rank)) : t('reviewUnranked');
-    const reviewBody = `## ${t('reviewExperienceSection')}\n\n${summary}\n\n## ${t('reviewRankingSection')}\n\n- ${t('reviewFoodRank')}：${rankedLabel(rankings.foodRank)}\n- ${t('reviewSceneryRank')}：${rankedLabel(rankings.sceneryRank)}\n- ${t('reviewExperienceRank')}：${rankedLabel(rankings.experienceRank)}\n\n## ${t('reviewRelatedObjects')}\n\n- ${object.title}\n`;
+    const scoredLabel = (score: number | null | undefined) =>
+      score ? t('reviewRankedAt').replace('{rank}', String(score)) : t('reviewUnranked');
+    const reviewBody = `## ${t('reviewExperienceSection')}\n\n${summary}\n\n## ${t('reviewRankingSection')}\n\n- ${t('reviewFoodRank')}：${scoredLabel(rankings.foodScore)}\n- ${t('reviewSceneryRank')}：${scoredLabel(rankings.sceneryScore)}\n- ${t('reviewExperienceRank')}：${scoredLabel(rankings.experienceScore)}\n\n## ${t('reviewRelatedObjects')}\n\n- ${object.title}\n`;
 
     const updatedObject: WYQDObject = {
       ...object,
@@ -302,6 +318,22 @@ export function AppShell() {
     }
     try {
       await repository.saveReview(review, body);
+
+      // If review targets an object, update that object's status to 'reviewed'
+      if (review.target_id) {
+        const targetStored = storedObjects.find((stored) => stored.entity.id === review.target_id);
+        if (targetStored && targetStored.entity.status === 'completed') {
+          const updatedObject: WYQDObject = {
+            ...targetStored.entity,
+            status: 'reviewed',
+            reviewed_at: review.reviewed_at || new Date().toISOString().split('T')[0],
+            review_ref: review.id,
+            updated_at: new Date().toISOString().split('T')[0],
+          };
+          await repository.updateObject(targetStored.fileName, updatedObject, targetStored.body);
+        }
+      }
+
       await loadVaultData();
       showNotice(t('reviewSaved'));
     } catch (event) {
@@ -343,6 +375,17 @@ export function AppShell() {
     }
   }
 
+  async function permanentlyDeleteArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string) {
+    try {
+      await repository.permanentlyDeleteArchivedEntity(archiveType, archiveFileName);
+      await loadVaultData();
+      showNotice(t('permanentlyDeleted'));
+    } catch (event) {
+      showNotice(event instanceof Error ? event.message : t('permanentlyDeleteFailed'));
+      throw event;
+    }
+  }
+
   // Load vault data when connected
   useEffect(() => {
     if (!isConnected) return;
@@ -350,18 +393,47 @@ export function AppShell() {
     let isMounted = true;
 
     async function refreshVaultData() {
-      const [nextObjects, nextSnapshots, nextReviews, nextArchivedEntities] = await Promise.all([
-        repository.listObjects(),
-        repository.listSnapshots(),
-        repository.listReviews(),
-        repository.listArchivedEntities(),
-      ]);
+      try {
+        const [nextObjects, nextSnapshots, nextReviews, nextArchivedEntities] = await Promise.all([
+          repository.listObjects(),
+          repository.listSnapshots(),
+          repository.listReviews(),
+          repository.listArchivedEntities(),
+        ]);
 
-      if (!isMounted) return;
-      setStoredObjects([...nextObjects]);
-      setStoredSnapshots([...nextSnapshots]);
-      setStoredReviews([...nextReviews]);
-      setArchivedEntities([...nextArchivedEntities]);
+        if (!isMounted) return;
+
+        // Auto-seed demo data on first connect if vault is empty
+        const isEmpty = nextObjects.length === 0 && nextSnapshots.length === 0 && nextReviews.length === 0;
+        const alreadySeeded = localStorage.getItem('ownly_demo_seeded') === 'true';
+
+        if (isEmpty && !alreadySeeded) {
+          try {
+            await seedDemoDataToVault();
+            const [seededObjects, seededSnapshots, seededReviews, seededArchived] = await Promise.all([
+              repository.listObjects(),
+              repository.listSnapshots(),
+              repository.listReviews(),
+              repository.listArchivedEntities(),
+            ]);
+            if (!isMounted) return;
+            setStoredObjects([...seededObjects]);
+            setStoredSnapshots([...seededSnapshots]);
+            setStoredReviews([...seededReviews]);
+            setArchivedEntities([...seededArchived]);
+            return;
+          } catch (e) {
+            console.warn('Failed to seed demo data:', e);
+          }
+        }
+
+        setStoredObjects([...nextObjects]);
+        setStoredSnapshots([...nextSnapshots]);
+        setStoredReviews([...nextReviews]);
+        setArchivedEntities([...nextArchivedEntities]);
+      } catch (e) {
+        console.warn('Failed to refresh vault data:', e);
+      }
     }
 
     void refreshVaultData();
@@ -372,7 +444,7 @@ export function AppShell() {
   }, [isConnected, repository]);
 
   return (
-    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-28 pt-8 text-stone-950 sm:px-6 sm:pt-10">
+    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-24 pt-8 text-stone-950 sm:px-6 sm:pt-10">
       <div
         aria-live="polite"
         aria-atomic="true"
@@ -452,14 +524,25 @@ export function AppShell() {
               >
                 {language === 'zh' ? 'EN' : '中文'}
               </button>
-              <button
-                type="button"
-                onClick={connectVault}
-                disabled={isLoading}
-                className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as typeof currency)}
+                className="cursor-pointer rounded-full bg-stone-100 px-2 py-1 text-[11px] font-medium text-stone-600 ring-1 ring-stone-200 outline-none transition hover:bg-stone-200 hover:text-stone-900"
               >
-                {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
-              </button>
+                {WYQD_CURRENCIES.map((cur) => (
+                  <option key={cur} value={cur}>{WYQD_CURRENCY_LABELS[cur]}</option>
+                ))}
+              </select>
+              {runtimeTarget === 'web' ? (
+                <button
+                  type="button"
+                  onClick={connectVault}
+                  disabled={isLoading}
+                  className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                >
+                  {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
+                </button>
+              ) : null}
             </div>
           </div>
         </header>
@@ -487,7 +570,6 @@ export function AppShell() {
 	                objects={objects}
 	                snapshots={snapshots}
 	                onOpenObjects={openObjectsWithFocus}
-	                onNavigate={setActiveTab}
 	              />
             ) : null}
             {activeTab === 'objects' ? (
@@ -496,6 +578,7 @@ export function AppShell() {
                   key={objectListFocus?.token || 'objects-default'}
                   disabled={!isConnected}
                   objects={storedObjects}
+                  reviews={storedReviews}
                   focus={objectListFocus}
                   onUpdate={updateObject}
                   onDelete={archiveObject}
@@ -510,29 +593,46 @@ export function AppShell() {
                   disabled={!isConnected}
                   archivedEntities={archivedEntities}
                   onRestore={restoreArchivedEntity}
+                  onDelete={permanentlyDeleteArchivedEntity}
                 />
               </div>
             ) : null}
             {activeTab === 'accounts' ? (
-              <AccountsOverview
-                disabled={!isConnected}
-                snapshots={storedSnapshots}
-                objects={objects}
-                onCreateSnapshot={createSnapshot}
-                onUpdateSnapshot={updateSnapshot}
-                onDeleteSnapshot={deleteSnapshot}
-              />
+              <div className="space-y-5">
+                <AccountsOverview
+                  disabled={!isConnected}
+                  snapshots={storedSnapshots}
+                  objects={objects}
+                  onCreateSnapshot={createSnapshot}
+                  onUpdateSnapshot={updateSnapshot}
+                  onDeleteSnapshot={deleteSnapshot}
+                />
+                <ArchivePanel
+                  disabled={!isConnected}
+                  archivedEntities={archivedEntities}
+                  onRestore={restoreArchivedEntity}
+                  onDelete={permanentlyDeleteArchivedEntity}
+                />
+              </div>
             ) : null}
             {activeTab === 'reviews' ? (
-              <ReviewHome
-                disabled={!isConnected}
-                objects={objects}
-                reviews={storedReviews}
-                membership={membership}
-                onCreateReview={createReview}
-                onUpdateReview={updateReview}
-                onDeleteReview={deleteReview}
-              />
+              <div className="space-y-5">
+                <ReviewHome
+                  disabled={!isConnected}
+                  objects={objects}
+                  reviews={storedReviews}
+                  membership={membership}
+                  onCreateReview={createReview}
+                  onUpdateReview={updateReview}
+                  onDeleteReview={deleteReview}
+                />
+                <ArchivePanel
+                  disabled={!isConnected}
+                  archivedEntities={archivedEntities}
+                  onRestore={restoreArchivedEntity}
+                  onDelete={permanentlyDeleteArchivedEntity}
+                />
+              </div>
             ) : null}
           </motion.div>
         </AnimatePresence>

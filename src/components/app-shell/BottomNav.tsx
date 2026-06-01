@@ -21,7 +21,7 @@ interface BottomNavProps {
 export function BottomNav({ activeTab, onChange }: BottomNavProps) {
   const { t } = useI18n();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white/90 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl">
+    <nav className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/90 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl">
       <div className="relative mx-auto grid max-w-3xl grid-cols-4 gap-1 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-200">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;

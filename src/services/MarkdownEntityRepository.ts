@@ -6,6 +6,7 @@ import {
   slugifyWYQDTitle as slugify,
 } from '@/core/paths';
 import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
+import { migrateReviewEntry } from '@/lib/format';
 import type { Account, AccountSnapshot, ReviewEntry, WYQDObject, WYQDEntityType } from '@/domain/types';
 import type {
   WYQDRepositoryAdapter,
@@ -29,8 +30,24 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   private dirs: ReturnType<typeof createWYQDDirectories> = WYQD_DIRECTORIES;
 
   async initialize(): Promise<void> {
-    const root = await obsidianService.getDataFolder();
-    this.dirs = createWYQDDirectories(root);
+    const dataFolder = await obsidianService.getDataFolder();
+    if (dataFolder === '') {
+      // Selected folder IS the data root — use relative paths
+      this.dirs = {
+        root: '',
+        objects: 'Objects',
+        accounts: 'Accounts',
+        snapshots: 'Snapshots',
+        reviews: 'Reviews',
+        archive: 'Archive',
+        objectArchive: 'Archive/Objects',
+        accountArchive: 'Archive/Accounts',
+        snapshotArchive: 'Archive/Snapshots',
+        reviewArchive: 'Archive/Reviews',
+      };
+    } else {
+      this.dirs = createWYQDDirectories(dataFolder);
+    }
   }
 
   private async archiveEntity(
@@ -116,10 +133,16 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
         const parsed = parseMarkdownEntity<Record<string, unknown>>(file.content);
         if (parsed.frontmatter.type !== type) continue;
 
+        // 对 review 类型进行数据迁移
+        let frontmatter = parsed.frontmatter;
+        if (type === 'review') {
+          frontmatter = migrateReviewEntry(frontmatter);
+        }
+
         entities.push({
           fileName: file.fileName,
           path: `${directory}/${file.fileName}`,
-          entity: parsed.frontmatter as unknown as T,
+          entity: frontmatter as unknown as T,
           body: parsed.body,
         });
       } catch {
@@ -268,6 +291,16 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
     if (archiveType === 'snapshot') return this.restoreSnapshot(archiveFileName);
     if (archiveType === 'review') return this.restoreReview(archiveFileName);
     throw new Error('Account archive restore is not supported in web mode');
+  }
+
+  async permanentlyDeleteArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<void> {
+    const dirMap: Record<WYQDArchiveEntityType, string> = {
+      object: this.dirs.objectArchive,
+      account: this.dirs.accountArchive,
+      snapshot: this.dirs.snapshotArchive,
+      review: this.dirs.reviewArchive,
+    };
+    await obsidianService.deleteMarkdownFile(dirMap[archiveType], archiveFileName);
   }
 }
 

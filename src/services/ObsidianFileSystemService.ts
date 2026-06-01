@@ -72,6 +72,26 @@ export class ObsidianFileSystemService {
     const fallback = 'Ownly';
     if (!this.directoryHandle) return fallback;
 
+    // 1. Check if selected folder IS the data root (has Objects/ directly)
+    try {
+      await this.directoryHandle.getDirectoryHandle('Objects');
+      this.cachedDataFolder = '';
+      return this.cachedDataFolder;
+    } catch {
+      // Not a direct data folder, continue
+    }
+
+    // 2. Check if selected folder contains Ownly/ subfolder with data
+    try {
+      const ownlyDir = await this.directoryHandle.getDirectoryHandle('Ownly');
+      await ownlyDir.getDirectoryHandle('Objects');
+      this.cachedDataFolder = 'Ownly';
+      return this.cachedDataFolder;
+    } catch {
+      // Not here either, continue
+    }
+
+    // 3. Try Obsidian plugin settings lookup
     try {
       const pluginDir = await this.getNestedDirectoryHandle(['.obsidian', 'plugins', 'wyqd']);
       const dataFile = await pluginDir.getFileHandle('data.json');
@@ -81,7 +101,8 @@ export class ObsidianFileSystemService {
       this.cachedDataFolder = settings.dataFolder || fallback;
       return this.cachedDataFolder;
     } catch {
-      return fallback;
+      this.cachedDataFolder = fallback;
+      return this.cachedDataFolder;
     }
   }
 

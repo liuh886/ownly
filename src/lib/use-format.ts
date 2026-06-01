@@ -1,8 +1,13 @@
 'use client';
 
 import { useI18n } from '@/core/i18n-context';
-import { formatMoney, formatDailyMoney, formatCompactMoney, formatDelta, type WYQDCurrencyLocale } from './format';
-import type { WYQDTranslationKey } from '@/core/i18n';
+import {
+  formatMoney,
+  formatDailyMoney,
+  formatCompactMoney,
+  formatDelta,
+  type WYQDCurrencyLocale,
+} from './format';
 
 function toCurrencyLocale(language: string): WYQDCurrencyLocale {
   return language === 'en' ? 'en' : 'zh';
@@ -14,12 +19,14 @@ export function useCurrencyLocale(): WYQDCurrencyLocale {
 }
 
 export function useFormatMoney() {
-  const locale = useCurrencyLocale();
+  const { t, language, currency } = useI18n();
+  const locale = toCurrencyLocale(language);
   return {
-    formatMoney: (value: number | null | undefined, fallback?: string) => formatMoney(value, fallback, locale),
-    formatDailyMoney: (value: number) => formatDailyMoney(value, locale),
-    formatCompactMoney: (value: number) => formatCompactMoney(value, locale),
-    formatDelta: (value: number | null, t: (key: WYQDTranslationKey) => string) => formatDelta(value, t, locale),
+    formatMoney: (value: number | null | undefined, fallback?: string) => formatMoney(value, fallback, locale, currency),
+    formatDailyMoney: (value: number) => formatDailyMoney(value, locale, t, currency),
+    formatCompactMoney: (value: number) => formatCompactMoney(value, locale, t, currency),
+    formatDelta: (value: number | null) => formatDelta(value, t, locale, currency),
     locale,
+    currency,
   };
 }

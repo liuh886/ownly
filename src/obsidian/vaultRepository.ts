@@ -24,6 +24,7 @@ import type {
 
 interface ObsidianVaultRepositoryOptions {
   dataFolder: string | (() => string);
+  t?: (key: string) => string;
 }
 
 type EntityFolderKey = WYQDArchiveEntityType;
@@ -83,11 +84,13 @@ const ENTITY_CONFIG = {
 export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
   private readonly vault: Vault;
   private readonly getDataFolder: () => string;
+  private readonly t: (key: string) => string;
 
   constructor(appOrVault: App | Vault, options: ObsidianVaultRepositoryOptions) {
     this.vault = 'vault' in appOrVault ? appOrVault.vault : appOrVault;
     const dataFolder = options.dataFolder;
     this.getDataFolder = typeof dataFolder === 'function' ? dataFolder : () => dataFolder;
+    this.t = options.t || ((key: string) => key);
   }
 
   getVault(): Vault {
@@ -210,6 +213,13 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     return this.restoreEntity(config, archiveFileName);
   }
 
+  async permanentlyDeleteArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<void> {
+    const config = ENTITY_CONFIG[archiveType] as EntityConfig<BaseEntity>;
+    const directory = this.archiveDirectory(config);
+    const filePath = normalizePath([directory, archiveFileName].join('/'));
+    await this.vault.adapter.remove(filePath);
+  }
+
   private async listEntities<T extends BaseEntity>(
     config: EntityConfig<T>,
     mode: 'active' | 'archive' = 'active',
@@ -267,7 +277,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     await this.ensureDataFolders();
     const file = this.getMarkdownFile(this.activeDirectory(config), fileName);
     if (!file) {
-      throw new Error(`Ownly ${config.type} file not found: ${fileName}`);
+      throw new Error(this.t('entityFileNotFound').replace('{type}', config.type).replace('{name}', fileName));
     }
 
     await this.vault.modify(file, serializeEntity(entity, body));
@@ -280,7 +290,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     await this.ensureDataFolders();
     const sourceFile = this.getMarkdownFile(this.activeDirectory(config), fileName);
     if (!sourceFile) {
-      throw new Error(`Ownly ${config.type} file not found: ${fileName}`);
+      throw new Error(this.t('entityFileNotFound').replace('{type}', config.type).replace('{name}', fileName));
     }
 
     const timestamp = new Date().toISOString();
@@ -319,7 +329,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     await this.ensureDataFolders();
     const archiveFile = this.getMarkdownFile(this.archiveDirectory(config), archiveFileName);
     if (!archiveFile) {
-      throw new Error(`Archived Ownly ${config.type} file not found: ${archiveFileName}`);
+      throw new Error(this.t('archivedFileNotFound').replace('{type}', config.type).replace('{name}', archiveFileName));
     }
 
     const content = await this.vault.read(archiveFile);
@@ -380,14 +390,14 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
       }
     }
 
-    throw new Error(`Could not find an available Ownly path for ${path}`);
+    throw new Error(this.t('pathNotFound').replace('{path}', path));
   }
 
   private async ensureFolder(path: string): Promise<void> {
     const normalized = normalizePath(path);
     const existing = this.vault.getAbstractFileByPath(normalized);
     if (existing instanceof TFolder) return;
-    if (existing) throw new Error(`Ownly path exists but is not a folder: ${normalized}`);
+    if (existing) throw new Error(this.t('pathNotFolder').replace('{path}', normalized));
 
     const parts = normalized.split('/').filter(Boolean);
     let current = '';
@@ -395,7 +405,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
       current = current ? `${current}/${part}` : part;
       const folder = this.vault.getAbstractFileByPath(current);
       if (folder instanceof TFolder) continue;
-      if (folder) throw new Error(`Ownly path exists but is not a folder: ${current}`);
+      if (folder) throw new Error(this.t('pathNotFolder').replace('{path}', current));
       await this.vault.createFolder(current);
     }
   }

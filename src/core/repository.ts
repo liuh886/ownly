@@ -53,6 +53,7 @@ export interface WYQDWritableRepositoryAdapter {
   restoreReview(archiveFileName: string): Promise<string>;
 
   restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<string>;
+  permanentlyDeleteArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<void>;
 }
 
 export type WYQDRepositoryAdapter = WYQDReadonlyRepositoryAdapter & WYQDWritableRepositoryAdapter;
