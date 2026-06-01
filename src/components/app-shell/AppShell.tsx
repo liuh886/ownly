@@ -448,6 +448,15 @@ export function AppShell() {
                 PRO
               </button>
             ) : null}
+            <a
+              href="https://liuh886.gumroad.com/l/ownly"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 ring-1 ring-rose-200 transition hover:bg-rose-100 hover:text-rose-700"
+              title={t('sponsor')}
+            >
+              ❤ {t('sponsor')}
+            </a>
             <span className="rounded-md bg-stone-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
               v{runtimeInfo.coreTargetVersion}
             </span>
