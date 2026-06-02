@@ -159,16 +159,29 @@ export default class WYQDPlugin extends Plugin {
       .replace('{errors}', String(report.summary.error))
       .replace('{warnings}', String(report.summary.warning))
       .replace('{info}', String(report.summary.info));
+
+    // Get data folder path info from first finding
+    const pathFinding = report.findings.find((f) => f.message.startsWith('Data folder:'));
+    const dataFolder = pathFinding?.message || `Data folder: ${this.settings.dataFolder}`;
+    const counts = pathFinding?.details as Record<string, number> | undefined;
+
     const lines = [
       `${en.t('doctorPluginVersion')} ${this.manifest.version}`,
       `${en.t('doctorRunAt')} ${toTimestamp(new Date(report.checkedAt))}`,
+      '',
+      dataFolder,
+      counts ? `Objects: ${counts.objects} | Snapshots: ${counts.snapshots} | Reviews: ${counts.reviews}` : '',
+      '',
       findingsSummary,
       ...(report.findings.length === 0
         ? [en.t('doctorNoFindings')]
-        : report.findings.slice(0, 6).map((finding) => `${finding.severity}: ${finding.message}`)),
-    ];
+        : report.findings
+            .filter((f) => !f.message.startsWith('Data folder:'))
+            .slice(0, 6)
+            .map((finding) => `${finding.severity}: ${finding.message}`)),
+    ].filter(Boolean);
 
-    new Notice(`Ownly Doctor:\n${lines.join('\n')}`, 8000);
+    new Notice(`Ownly Doctor:\n${lines.join('\n')}`, 10000);
   }
 
   async loadSettings() {

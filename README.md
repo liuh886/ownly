@@ -165,14 +165,6 @@ Nothing. Your data is plain Markdown files in your Vault. Uninstalling the plugi
 **Can I use Ownly without Obsidian?**
 Yes. The Web runtime runs in supported desktop browsers and connects to a local folder. See the [Web Runtime installation](#web-runtime-local-browser--developers) section.
 
-## Roadmap
-
-- Add more release screenshots and short demo media.
-- Expand automated E2E coverage beyond smoke tests.
-- Improve account entity management parity between Obsidian and Web runtimes.
-- Add Doctor repair preview and rollback flows.
-- Continue polishing responsive layouts on narrow panes and real devices.
-
 ## Known Limitations
 
 - The Obsidian plugin is desktop-only.

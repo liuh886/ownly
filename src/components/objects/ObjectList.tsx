@@ -410,7 +410,7 @@ function getSupportingActionLabel(object: WYQDObject, t: TranslateFn): string | 
     if (object.status === 'planned') return t('start');
     if (object.status === 'in_progress') return t('complete');
     if (object.status === 'completed') return t('reviewAction');
-    if (object.status === 'reviewed') return t('reviewAction');
+    // reviewed: no action button, review already exists
   }
   return null;
 }

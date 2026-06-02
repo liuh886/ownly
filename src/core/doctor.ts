@@ -382,6 +382,10 @@ export async function runWYQDDoctor(
   checkedAt = new Date().toISOString(),
   t?: TranslateFn,
 ): Promise<WYQDDoctorReport> {
+  const dataFolderPath = adapter.getDataFolderPath?.() || WYQD_DATA_ROOT;
+  console.log('Ownly Doctor: getDataFolderPath =', adapter.getDataFolderPath?.());
+  console.log('Ownly Doctor: dataFolderPath =', dataFolderPath);
+
   const [objects, accounts, snapshots, reviews, directoryFindings] = await Promise.all([
     adapter.listObjects?.() ?? Promise.resolve([]),
     adapter.listAccounts?.() ?? Promise.resolve([]),
@@ -391,7 +395,24 @@ export async function runWYQDDoctor(
   ]);
 
   const entities: AnyStoredEntity[] = [...objects, ...accounts, ...snapshots, ...reviews];
+
+  // Add data folder path info as first finding
+  const pathInfo: WYQDDoctorFinding = {
+    id: 'directory.presence',
+    severity: 'info',
+    message: `Data folder: ${dataFolderPath}`,
+    path: dataFolderPath,
+    details: {
+      objects: objects.length,
+      accounts: accounts.length,
+      snapshots: snapshots.length,
+      reviews: reviews.length,
+      total: entities.length,
+    },
+  };
+
   const findings = [
+    pathInfo,
     ...directoryFindings,
     ...checkDuplicateIds(entities, t),
     ...checkSchemaVersions(entities, t),
