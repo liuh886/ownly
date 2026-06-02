@@ -157,7 +157,7 @@ Ownly does not perform paid license verification or make network calls for activ
 ## FAQ
 
 **Does Ownly work on mobile?**
-The Obsidian plugin is desktop-only (`isDesktopOnly: true`).
+The Obsidian plugin is marked as desktop-only (`isDesktopOnly: true`) because it has not been tested on mobile. It may work, but mobile support is not guaranteed.
 
 **What happens to my data if I uninstall Ownly?**
 Nothing. Your data is plain Markdown files in your Vault. Uninstalling the plugin does not delete your files. You can read, edit, and move them with any text editor.
