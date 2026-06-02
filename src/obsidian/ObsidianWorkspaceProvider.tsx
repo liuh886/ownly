@@ -25,8 +25,9 @@ export function ObsidianWorkspaceProvider({
   // Wrap repository write methods to suppress vault change listener during writes
   const wrappedRepository = useMemo(() => {
     if (!withSuppressedRefresh) return repository;
-    const wrap = <T extends (...args: unknown[]) => Promise<unknown>>(fn: T): T =>
-      ((...args: Parameters<T>) => withSuppressedRefresh(() => fn(...args))) as T;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wrap = <T extends (...args: any[]) => any>(fn: T): T =>
+      ((...args: Parameters<T>) => withSuppressedRefresh(() => fn(...args))) as unknown as T;
     return {
       ...repository,
       saveObject: wrap(repository.saveObject.bind(repository)),

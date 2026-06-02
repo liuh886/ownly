@@ -1,5 +1,7 @@
 # Ownly
 
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)
+
 > **Own less, Live more, Decide better.**
 
 **English** · [中文](#中文)

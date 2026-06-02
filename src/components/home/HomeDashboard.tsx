@@ -196,7 +196,11 @@ export function HomeDashboard({
     [trendSnapshots],
   );
   const fixedCostTrendValues = useMemo(
-    () => trendSnapshots.map((s) => s.monthly_fixed_cost ?? metrics.monthlyFixedCost),
+    () => trendSnapshots.map((s, i) =>
+      i === trendSnapshots.length - 1
+        ? metrics.monthlyFixedCost
+        : (s.monthly_fixed_cost ?? metrics.monthlyFixedCost)
+    ),
     [trendSnapshots, metrics.monthlyFixedCost],
   );
   const netWorthMin = useMemo(
