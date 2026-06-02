@@ -1,54 +1,76 @@
 # Ownly
 
+[![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)](https://obsidian.md/plugins?id=ownly)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)
 
 > **Own less, Live more, Decide better.**
 
-**English** · [中文](#中文)
+[中文文档](README.zh.md)
 
-Ownly is an Obsidian-native, local-first decision ledger for tracking possessions, subscriptions, and experiences. All your data stays in your Vault as plain Markdown files. No cloud, no account required.
-
-The design philosophy behind Ownly is not to encourage owning more, but to help you see clearly what you already own, what costs keep recurring, and which experiences are truly worth keeping — reducing decision noise through structured reviews.
-
-## Screenshots
+Ownly is a local-first decision ledger for tracking possessions, subscriptions, and experiences — built as an Obsidian plugin and a standalone web app. All your data stays in your Vault as plain Markdown files. No cloud, no account, zero network calls.
 
 ![Ownly Homepage](docs/screenshot-homepage.jpg)
 
+## Why Ownly?
+
+Most tracking tools focus on **how much you spend**. Ownly focuses on **whether you should**.
+
+It's not a budgeting app. It's not a wishlist. It's a structured system for making and reviewing consumption decisions:
+
+- **Seed** a desire → **Observe** it over time → **Decide** to buy or pass → **Use** → **Review** after retirement
+- Every object has a lifecycle. Every experience gets a review. The data informs your next decision.
+
+Your data lives as plain Markdown in your Obsidian Vault. You can edit, version-control, or move files freely. Ownly reads and writes frontmatter — it never locks, encrypts, or deletes your data.
+
+## Quick Start
+
+1. **Install** — Open Obsidian → Settings → Community plugins → Browse → search "Ownly" → Install & Enable.
+2. **Open** — Click the Ownly icon in the left ribbon or run `Open Ownly workspace` from the command palette.
+3. **Explore** — Demo data is auto-seeded on first connect. You'll see sample objects, snapshots, and reviews ready to explore.
+
+That's it. No account, no configuration, no cloud sync.
+
 ## Features
 
-- **Object tracking** — Log physical items, subscriptions, and one-time experiences with lifecycle status (seeded → observing → purchased → using → idle → discarded).
-- **Net worth snapshots** — Record asset and liability balances over time.
-- **Reviews & rankings** — Write exit records, experience reviews, and rank food, scenery, and experience.
-- **Travel insights** (Pro) — World map with visited cities, timeline, and travel statistics.
+### Object Tracking
+
+Track three types of objects with full lifecycle management:
+
+| Type | Lifecycle |
+|---|---|
+| **Physical items** | Seeded → Observing → Purchased → Using → Idle → Transferred / Discarded |
+| **Subscriptions** | Active → Paused → Cancelled |
+| **Experiences** | Planned → In Progress → Completed → Reviewed |
+
+### Financial Tracking
+
+- **Net worth snapshots** — Record asset and liability balances over time with trend charts.
 - **Cost analysis** — Daily cost, monthly fixed cost, annual subscription cost, and acquisition cost breakdowns.
-- **Archive & restore** — Soft-delete with full recovery. Your Markdown data is never locked or lost.
-- **Doctor diagnostics** — Local data quality checks for your Vault.
+- **Payment account aggregation** — See fixed cost pressure by payment account.
+
+### Reviews & Rankings
+
+- Write exit records for physical items and experience reviews.
+- Score food, scenery, and experience on a 1-10 scale.
+- Rank and compare experiences across categories.
+
+### Travel Insights
+
+- World map with visited countries and cities.
+- Travel timeline and statistics.
+- Travel-specific experience reviews.
+
+### Data Health
+
+- **Doctor diagnostics** — Local data quality checks: duplicate IDs, schema validation, negative costs, missing references.
+- **Archive & restore** — Soft-delete with full recovery. Your Markdown data is never lost.
+
+### More
+
 - **Bilingual UI** — English and Chinese, with auto-detection.
-
-## Free vs Pro
-
-| Feature | Free | Pro |
-|---|---|---|
-| Object tracking | ✅ Up to 200 | ✅ Unlimited |
-| Net worth snapshots | ✅ Up to 30 | ✅ Unlimited |
-| Reviews | ✅ Up to 100 | ✅ Unlimited |
-| Travel insights & world map | ❌ | ✅ |
-| Doctor diagnostics | ✅ | ✅ |
-| Archive & restore | ✅ | ✅ |
-| Markdown data export | ✅ Always | ✅ Always |
-
-**Pro** is unlocked when you support the project via [Ko-fi](https://ko-fi.com/F1F7WYJ6B) or [Gumroad](https://liuh886.gumroad.com/l/ownly). Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
-
-## Network Calls
-
-Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
-
-## Support
-
-If Ownly has been useful to you, consider supporting the project:
-
-- [Ko-fi](https://ko-fi.com/F1F7WYJ6B) — One-time donation
-- [Gumroad](https://liuh886.gumroad.com/l/ownly) — Support with Pro unlock
+- **Quick entry** — Templates for physical items, subscriptions, and experiences. Paste-line parsing for fast input.
+- **Dashboard** — Net worth trends, action center, priority queue, status distribution.
 
 ## Installation
 
@@ -63,18 +85,6 @@ Or manually in Obsidian:
 2. Search for **Ownly**.
 3. Install and enable.
 
-### Manual Installation (Obsidian)
-
-```bash
-# Build and package
-npm run package:obsidian
-
-# Copy to your Vault
-cp -R dist/obsidian/ownly /path/to/vault/.obsidian/plugins/ownly
-```
-
-Then enable `Ownly` from Obsidian → Settings → Community plugins.
-
 ### Web App
 
 The Web App is a separate deployment — it runs in the browser and connects to a local folder via the File System Access API.
@@ -84,13 +94,13 @@ npm run dev        # Development server at localhost:3000
 npm run build      # Static export to out/
 ```
 
-You can deploy `out/` to any static hosting (Vercel, Netlify, GitHub Pages, etc.) or serve it locally with PM2:
+Deploy `out/` to any static hosting (Vercel, Netlify, GitHub Pages) or serve locally:
 
 ```bash
 npx pm2 start ecosystem.config.cjs
 ```
 
-The Web App always has all features enabled — no license gating.
+The Web App has all features enabled — no license gating.
 
 ## Data Storage
 
@@ -105,89 +115,51 @@ Ownly/
   Archive/         # Soft-deleted items (recoverable)
 ```
 
-Each entity is a standalone `.md` file with YAML frontmatter. You can edit, version-control, or move these files freely.
+Each entity is a standalone `.md` file with YAML frontmatter. You can edit, version-control, or move these files freely. Ownly reads and writes standard Markdown — no proprietary format, no vendor lock-in.
 
----
+## Network Calls
 
-## 中文
+Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
 
-> **拥有更少，生活更好，决策更优。**
+## Free vs Pro
 
-Ownly 是一个帮助你追踪物品、订阅、资产与体验，并通过评分、回顾和排名做出更好生活决策的「意图生活」系统。
-
-Ownly 的设计哲学是 **Own less, Live more, Decide better** —— 它不是鼓励你拥有更多，而是帮助你看清已经拥有的东西、持续消耗的成本和真正值得保留的体验，用结构化回顾降低决策噪音。
-
-所有数据以 Markdown 文件存储在你的 Obsidian Vault 中，无需云端，无需账号。
-
-### 功能
-
-- **物品追踪** — 记录实物、订阅和一次性体验，支持完整生命周期（种草 → 观望 → 购入 → 使用 → 闲置 → 转让/丢弃）。
-- **净资产快照** — 定期记录资产与负债余额，追踪净值变化。
-- **复盘与排名** — 撰写退役复盘、体验复盘，对美食、风景和综合体验进行排名。
-- **旅行洞察**（Pro）— 世界地图标记、时间线和旅行统计。
-- **成本分析** — 日均成本、月固定成本、年化订阅成本、取得成本明细。
-- **归档与恢复** — 软删除，随时恢复。Markdown 数据永远不会被锁定或丢失。
-- **Doctor 诊断** — 本地数据质量检查。
-- **双语界面** — 中英文自动检测。
-
-### 免费版 vs Pro 版
-
-| 功能 | 免费版 | Pro 版 |
+| Feature | Free | Pro |
 |---|---|---|
-| 物品追踪 | ✅ 最多 200 件 | ✅ 无限制 |
-| 净资产快照 | ✅ 最多 30 次 | ✅ 无限制 |
-| 复盘记录 | ✅ 最多 100 条 | ✅ 无限制 |
-| 旅行洞察与世界地图 | ❌ | ✅ |
-| Doctor 诊断 | ✅ | ✅ |
-| 归档与恢复 | ✅ | ✅ |
-| Markdown 数据导出 | ✅ 始终可用 | ✅ 始终可用 |
+| Object tracking | ✅ Up to 200 | ✅ Unlimited |
+| Net worth snapshots | ✅ Up to 30 | ✅ Unlimited |
+| Reviews | ✅ Up to 100 | ✅ Unlimited |
+| Travel insights & world map | ❌ | ✅ |
+| Doctor diagnostics | ✅ | ✅ |
+| Archive & restore | ✅ | ✅ |
+| Markdown data export | ✅ Always | ✅ Always |
 
-**Pro 版** 通过 [Ko-fi](https://ko-fi.com/F1F7WYJ6B) 或 [Gumroad](https://liuh886.gumroad.com/l/ownly) 捐助解锁。免费用户始终拥有完整的 Markdown 数据访问权限 —— Ownly 永远不会因许可状态而锁定、加密、删除或阻止导出数据。
+> **Note:** The current version (1.0.0) includes all features for free. Pro tier may be introduced in a future release.
 
-### 网络调用
+**Pro** is unlocked when you support the project via [Ko-fi](https://ko-fi.com/F1F7WYJ6B) or [Gumroad](https://liuh886.gumroad.com/l/ownly). Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
 
-Ownly 以本地优先为原则。**唯一的网络调用**是 Gumroad License Verify API，仅在 Obsidian 插件设置中激活 Pro 许可证时使用一次。激活后，许可证状态存储在本地，不再进行任何网络调用。无遥测，无分析，无追踪。
+## FAQ
 
-### 支持
+**Does Ownly work on mobile?**
+The Obsidian plugin is desktop-only (`isDesktopOnly: true`). The Web App works on any modern browser.
 
-如果 Ownly 对你有帮助，欢迎支持：
+**What happens to my data if I uninstall Ownly?**
+Nothing. Your data is plain Markdown files in your Vault. Uninstalling the plugin does not delete your files. You can read, edit, and move them with any text editor.
 
-- [Ko-fi](https://ko-fi.com/F1F7WYJ6B) — 一次性捐助
-- [Gumroad](https://liuh886.gumroad.com/l/ownly) — 捐助并解锁 Pro
+**Can I use Ownly without Obsidian?**
+Yes. The Web App runs in any modern browser and connects to a local folder via the File System Access API. It has all features enabled.
 
-### 安装
+**Does Ownly work offline?**
+Yes. Both the Obsidian plugin and Web App are fully offline. No internet connection required.
 
-**从 Obsidian 社区插件安装：**
+**How is my data stored?**
+Each entity is a standalone `.md` file with YAML frontmatter. No database, no proprietary format. You own your data.
 
-1. 打开 Obsidian → 设置 → 社区插件 → 浏览。
-2. 搜索 **Ownly**。
-3. 安装并启用。
+## Support
 
-**手动安装：**
+If Ownly has been useful to you, consider supporting the project:
 
-```bash
-npm run package:obsidian
-cp -R dist/obsidian/ownly /path/to/vault/.obsidian/plugins/ownly
-```
-
-然后在 Obsidian → 设置 → 社区插件中启用 `Ownly`。
-
-### 数据存储
-
-所有数据以 Markdown 文件存储在 Vault 的 `Ownly/` 目录下：
-
-```text
-Ownly/
-  Objects/         # 实物、订阅、体验
-  Accounts/        # 金融账户
-  Snapshots/       # 净资产快照
-  Reviews/         # 退役复盘、体验复盘
-  Archive/         # 已归档（可恢复）
-```
-
-每个实体是一个独立的 `.md` 文件，使用 YAML frontmatter。你可以自由编辑、版本控制或移动这些文件。
-
----
+- [Ko-fi](https://ko-fi.com/F1F7WYJ6B) — One-time donation
+- [Gumroad](https://liuh886.gumroad.com/l/ownly) — Support with Pro unlock
 
 ## Developer Documentation
 
@@ -203,6 +175,8 @@ npm run validate:obsidian  # Obsidian plugin only
 ```bash
 npm run wyqd -- --vault /path/to/vault object list
 ```
+
+See [AGENT_CLI_GUIDE.md](docs/AGENT_CLI_GUIDE.md) for full documentation.
 
 ### Sample Vault
 
