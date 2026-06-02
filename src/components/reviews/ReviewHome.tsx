@@ -106,38 +106,43 @@ function ReviewDetailSidebar({
   getScoreItems: (review: ReviewEntry) => string[];
   getStatusLabel: (obj: WYQDObject) => string;
 }) {
-  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const review = stored.entity;
-  const [isEditingBody, setIsEditingBody] = useState(false);
   const [bodyDraft, setBodyDraft] = useState('');
-  const [isSavingBody, setIsSavingBody] = useState(false);
-  const [onDeleteReview, setOnDeleteReview] = useState<((fn: string) => Promise<void>) | null>(null);
+  const [isSavingAll, setIsSavingAll] = useState(false);
 
-  const handleDelete = async () => {
-    const confirmed = await confirm({
-      title: t('delete'),
-      message: t('deleteConfirm').replace('{title}', review.title),
-      destructive: true,
-    });
-    if (confirmed && onDeleteReview) {
-      await onDeleteReview(stored.fileName);
+  // Enter edit mode: initialize body draft
+  const handleStartEdit = () => {
+    setBodyDraft(stored.body.trim());
+    onStartEdit();
+  };
+
+  // Save both structured fields and body
+  const handleSaveAll = async (e: React.FormEvent) => {
+    setIsSavingAll(true);
+    try {
+      await onSaveEdit(e);
+      await onUpdateBody(stored.fileName, review, bodyDraft);
+    } finally {
+      setIsSavingAll(false);
     }
   };
 
   if (isEditing) {
     return (
-      <form onSubmit={onSaveEdit} className="space-y-4">
+      <div className="space-y-4">
         <div>
           <div className="text-xs text-stone-400">{t('editReview')}</div>
           <h3 className="mt-1 break-words text-base font-semibold text-stone-950">{review.title}</h3>
         </div>
+
+        {/* Structured fields */}
         <div>
           <label className="text-xs text-stone-400">{t('summary')}</label>
           <textarea
             value={editSummary}
             onChange={(e) => onEditSummaryChange(e.target.value)}
             placeholder={t('reviewSummaryPlaceholder')}
-            rows={4}
+            rows={3}
             className="mt-1 w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 resize-none"
             disabled={disabled}
           />
@@ -150,18 +155,31 @@ function ReviewDetailSidebar({
             <input value={editExperienceScore} onChange={(e) => onEditExperienceScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
           </div>
         </div>
+
+        {/* Markdown body */}
+        <div className="border-t border-stone-200 pt-4">
+          <label className="text-xs text-stone-400">{t('markdownBodyLabel')}</label>
+          <textarea
+            value={bodyDraft}
+            onChange={(e) => setBodyDraft(e.target.value)}
+            rows={8}
+            className="mt-1 w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-xs leading-5 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 resize-none font-mono"
+            disabled={disabled || isSavingAll}
+          />
+        </div>
+
+        {/* Save / Cancel */}
         <div className="flex gap-2">
-          <button type="button" onClick={onCancelEdit} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={disabled}>{t('cancel')}</button>
-          <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
-            {t('saveChanges')}
+          <button type="button" onClick={onCancelEdit} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSavingAll}>{t('cancel')}</button>
+          <button type="button" onClick={handleSaveAll} disabled={!canSubmit || isSavingAll} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
+            {isSavingAll ? t('saving') : t('saveChanges')}
           </button>
         </div>
-      </form>
+      </div>
     );
   }
 
   return (
-    <>
     <div className="space-y-4">
       {/* Header with Edit button */}
       <div className="flex items-start justify-between gap-3">
@@ -170,16 +188,14 @@ function ReviewDetailSidebar({
           <h3 className="mt-1 break-words text-base font-semibold text-stone-950">{review.title}</h3>
           <p className="mt-1 break-all text-xs text-stone-400">{stored.fileName}</p>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={onStartEdit}
-            className="h-9 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800"
-            disabled={disabled}
-          >
-            {t('edit')}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleStartEdit}
+          className="h-9 shrink-0 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800"
+          disabled={disabled}
+        >
+          {t('edit')}
+        </button>
       </div>
 
       {/* Structured fields */}
@@ -240,69 +256,14 @@ function ReviewDetailSidebar({
         </div>
       ) : null}
 
-      {/* Markdown body — editable inline */}
+      {/* Markdown body — read only */}
       <div className="border-t border-stone-200 pt-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-xs text-stone-400">{t('markdownBodyLabel')}</div>
-          {!isEditingBody ? (
-            <button
-              type="button"
-              onClick={() => {
-                setBodyDraft(stored.body.trim());
-                setIsEditingBody(true);
-              }}
-              className="rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
-              disabled={disabled}
-            >
-              {t('edit')}
-            </button>
-          ) : null}
-        </div>
-        {isEditingBody ? (
-          <div className="mt-2 space-y-2">
-            <textarea
-              value={bodyDraft}
-              onChange={(e) => setBodyDraft(e.target.value)}
-              rows={8}
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-xs leading-5 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 resize-none font-mono"
-              disabled={disabled || isSavingBody}
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIsEditingBody(false)}
-                className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-400"
-                disabled={isSavingBody}
-              >
-                {t('cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setIsSavingBody(true);
-                  try {
-                    await onUpdateBody(stored.fileName, review, bodyDraft);
-                    setIsEditingBody(false);
-                  } finally {
-                    setIsSavingBody(false);
-                  }
-                }}
-                className="rounded-lg bg-stone-950 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
-                disabled={disabled || isSavingBody}
-              >
-                {isSavingBody ? t('saving') : t('save')}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-stone-600">
-            {stored.body.trim() || t('noBody')}
-          </pre>
-        )}
+        <div className="text-xs text-stone-400">{t('markdownBodyLabel')}</div>
+        <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-stone-600">
+          {stored.body.trim() || t('noBody')}
+        </pre>
       </div>
     </div>
-    {confirmDialog}
-    </>
   );
 }
 
