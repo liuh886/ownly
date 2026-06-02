@@ -153,17 +153,18 @@ export default class WYQDPlugin extends Plugin {
   }
 
   async runDoctor() {
-    const report = await runWYQDDoctor(this.repository, undefined, (key) => this.t(key as WYQDTranslationKey));
-    const findingsSummary = this.t('doctorFindings')
+    const en = createWYQDTranslator('en');
+    const report = await runWYQDDoctor(this.repository, undefined, (key) => en.t(key as WYQDTranslationKey));
+    const findingsSummary = en.t('doctorFindings')
       .replace('{errors}', String(report.summary.error))
       .replace('{warnings}', String(report.summary.warning))
       .replace('{info}', String(report.summary.info));
     const lines = [
-      `${this.t('doctorPluginVersion')} ${this.manifest.version}`,
-      `${this.t('doctorRunAt')} ${toTimestamp(new Date(report.checkedAt))}`,
+      `${en.t('doctorPluginVersion')} ${this.manifest.version}`,
+      `${en.t('doctorRunAt')} ${toTimestamp(new Date(report.checkedAt))}`,
       findingsSummary,
       ...(report.findings.length === 0
-        ? [this.t('doctorNoFindings')]
+        ? [en.t('doctorNoFindings')]
         : report.findings.slice(0, 6).map((finding) => `${finding.severity}: ${finding.message}`)),
     ];
 
@@ -376,6 +377,19 @@ class WYQDSettingTab extends PluginSettingTab {
     const membership = await this.wyqdPlugin.getMembership();
 
     const shell = containerEl.createDiv({ cls: 'wyqd-settings-shell' });
+
+    // ── Save button at top ──
+    const saveBar = shell.createDiv({ cls: 'wyqd-settings-save-bar' });
+    const saveButton = saveBar.createEl('button', {
+      text: t('settingsSave'),
+      cls: 'mod-cta wyqd-settings-save-btn',
+    });
+    saveButton.addEventListener('click', async () => {
+      await this.wyqdPlugin.saveSettings();
+      this.wyqdPlugin.refreshWorkspaceViews();
+      new Notice(t('settingsSaved'));
+    });
+
     const hero = shell.createDiv({ cls: 'wyqd-settings-hero' });
     const heroCopy = hero.createDiv();
     const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
@@ -410,18 +424,63 @@ class WYQDSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(appPanel)
+    // Data folder with path suggestions
+    const folderSetting = new Setting(appPanel)
       .setName(t('settingsDataFolder'))
-      .setDesc(t('settingsDataFolderDesc'))
-      .addText((text) =>
-        text
-          .setPlaceholder(DEFAULT_SETTINGS.dataFolder)
-          .setValue(this.wyqdPlugin.settings.dataFolder)
-          .onChange(async (value) => {
-            this.wyqdPlugin.settings.dataFolder = normalizeFolder(value) || DEFAULT_SETTINGS.dataFolder;
-            await this.wyqdPlugin.saveSettings();
-          }),
-      );
+      .setDesc(t('settingsDataFolderDesc'));
+
+    const folderInput = folderSetting.addText((text) =>
+      text
+        .setPlaceholder(DEFAULT_SETTINGS.dataFolder)
+        .setValue(this.wyqdPlugin.settings.dataFolder)
+        .onChange((value) => {
+          this.wyqdPlugin.settings.dataFolder = normalizeFolder(value) || DEFAULT_SETTINGS.dataFolder;
+        }),
+    );
+
+    // Add folder suggestions
+    const suggestionsEl = appPanel.createDiv({ cls: 'wyqd-folder-suggestions' });
+    suggestionsEl.style.display = 'none';
+
+    const updateSuggestions = (query: string) => {
+      suggestionsEl.empty();
+      const folders = this.app.vault.getAllFolders(false);
+      const filtered = folders
+        .filter((f) => f.path.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, 8);
+
+      if (filtered.length === 0 || query === '') {
+        suggestionsEl.style.display = 'none';
+        return;
+      }
+
+      suggestionsEl.style.display = 'block';
+      for (const folder of filtered) {
+        const item = suggestionsEl.createDiv({ cls: 'wyqd-folder-suggestion-item' });
+        item.textContent = folder.path;
+        item.addEventListener('click', () => {
+          this.wyqdPlugin.settings.dataFolder = folder.path;
+          folderInput.inputEl.value = folder.path;
+          suggestionsEl.style.display = 'none';
+        });
+      }
+    };
+
+    folderInput.inputEl.addEventListener('input', (e) => {
+      const target = e.target as HTMLInputElement;
+      updateSuggestions(target.value);
+    });
+
+    folderInput.inputEl.addEventListener('focus', () => {
+      updateSuggestions(folderInput.inputEl.value);
+    });
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!suggestionsEl.contains(e.target as Node) && e.target !== folderInput.inputEl) {
+        suggestionsEl.style.display = 'none';
+      }
+    });
 
     new Setting(appPanel)
       .setName(t('settingsRightSidebar'))

@@ -530,6 +530,40 @@
   padding: 8px 0;
 }
 
+/* Settings save bar */
+.wyqd-settings-save-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 8px;
+}
+
+.wyqd-settings-save-btn {
+  padding: 6px 16px;
+  font-size: var(--font-ui-small);
+}
+
+/* Folder suggestions */
+.wyqd-folder-suggestions {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-dropdown);
+}
+
+.wyqd-folder-suggestion-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+.wyqd-folder-suggestion-item:hover {
+  background: var(--background-modifier-hover);
+}
+
 .wyqd-settings-cta-row {
   margin-top: 8px;
 }
