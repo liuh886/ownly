@@ -395,11 +395,10 @@ export function HomeDashboard({
         {/* Metric grid */}
         <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 items-stretch">
           <div className={cardClass}>
-            <div className="text-xs font-medium text-stone-500">{t('physicalAsset')}</div>
+            <div className="text-xs font-medium text-stone-500">{t('physicalAsset')}（{metrics.ownedPhysicalCount}）</div>
             <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">
               {formatMoney(metrics.physicalResidualValue)}
             </div>
-            <div className="mt-0.5 text-[11px] text-stone-400">{metrics.ownedPhysicalCount} {t('items')}</div>
           </div>
           <div className={cardClass}>
             <div className="text-xs font-medium text-stone-500">{t('subscriptionService')}</div>
