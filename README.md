@@ -29,8 +29,6 @@ Your data lives as plain Markdown in your Obsidian Vault. You can edit, version-
 2. **Open** — Click the Ownly icon in the left ribbon or run `Open Ownly workspace` from the command palette.
 3. **Explore** — Demo data is auto-seeded on first connect. You'll see sample objects, snapshots, and reviews ready to explore.
 
-That's it. No account, no configuration, no cloud sync.
-
 ## Features
 
 ### Object Tracking
@@ -80,11 +78,6 @@ Install directly from the Obsidian Community Plugins directory:
 
 👉 **[Install Ownly](https://obsidian.md/plugins?id=ownly)**
 
-Or manually in Obsidian:
-1. Open Obsidian → Settings → Community plugins → Browse.
-2. Search for **Ownly**.
-3. Install and enable.
-
 ### Web App
 
 The Web App is a separate deployment — it runs in the browser and connects to a local folder via the File System Access API.
@@ -100,8 +93,6 @@ Deploy `out/` to any static hosting (Vercel, Netlify, GitHub Pages) or serve loc
 npx pm2 start ecosystem.config.cjs
 ```
 
-The Web App has all features enabled — no license gating.
-
 ## Data Storage
 
 All data is stored as Markdown files in your Vault under the `Ownly/` directory:
@@ -115,7 +106,7 @@ Ownly/
   Archive/         # Soft-deleted items (recoverable)
 ```
 
-Each entity is a standalone `.md` file with YAML frontmatter. You can edit, version-control, or move these files freely. Ownly reads and writes standard Markdown — no proprietary format, no vendor lock-in.
+Each entity is a standalone `.md` file with YAML frontmatter. You can edit, version-control, or move these files freely.
 
 ## Network Calls
 
@@ -147,12 +138,6 @@ Nothing. Your data is plain Markdown files in your Vault. Uninstalling the plugi
 
 **Can I use Ownly without Obsidian?**
 Yes. The Web App runs in any modern browser and connects to a local folder via the File System Access API. It has all features enabled.
-
-**Does Ownly work offline?**
-Yes. Both the Obsidian plugin and Web App are fully offline. No internet connection required.
-
-**How is my data stored?**
-Each entity is a standalone `.md` file with YAML frontmatter. No database, no proprietary format. You own your data.
 
 ## Support
 
