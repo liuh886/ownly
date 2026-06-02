@@ -588,9 +588,11 @@ function getTimelineRows(object: WYQDObject, t: TranslateFn): Array<{ label: str
 function ObjectDetailPanel({
   stored,
   onClose,
+  onEdit,
 }: {
   stored: WYQDStoredEntity<WYQDObject>;
   onClose: () => void;
+  onEdit?: () => void;
 }) {
   const { t } = useI18n();
   const object = stored.entity;
@@ -612,13 +614,24 @@ function ObjectDetailPanel({
           <h2 className="mt-1 break-words text-xl font-semibold tracking-tight text-stone-950">{object.title}</h2>
           <p className="mt-1 break-all text-xs text-stone-400">{stored.fileName}</p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-10 shrink-0 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
-        >
-          {t('close')}
-        </button>
+        <div className="flex shrink-0 gap-2">
+          {onEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="h-10 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800"
+            >
+              {t('edit')}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
+          >
+            {t('close')}
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -1241,6 +1254,10 @@ export function ObjectList({
           <ObjectDetailPanel
             stored={selectedStored}
             onClose={() => setSelectedFileName(null)}
+            onEdit={() => {
+              setEditingFileName(selectedStored.fileName);
+              setSelectedFileName(null);
+            }}
           />
         ) : null}
       </AnimatePresence>
