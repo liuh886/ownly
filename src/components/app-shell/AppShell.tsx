@@ -113,16 +113,11 @@ export function AppShell() {
   const runtimeInfo = useMemo(() => createWYQDRuntimeInfo(runtimeTarget), [runtimeTarget]);
 
   const [activeTab, setActiveTab] = useState<AppTab>('home');
-  const [storedObjects, setStoredObjects] = useState<WYQDStoredEntity<WYQDObject>[]>(
-    sampleObjects.map((entity) => ({ fileName: `${entity.id}.md`, entity, body: '' })),
-  );
-  const [storedSnapshots, setStoredSnapshots] = useState<WYQDStoredEntity<AccountSnapshot>[]>(
-    sampleSnapshots.map((entity) => ({ fileName: `${entity.id}.md`, entity, body: '' })),
-  );
-  const [storedReviews, setStoredReviews] = useState<WYQDStoredEntity<ReviewEntry>[]>(
-    sampleReviews.map((entity) => ({ fileName: `${entity.id}.md`, entity, body: '' })),
-  );
+  const [storedObjects, setStoredObjects] = useState<WYQDStoredEntity<WYQDObject>[]>([]);
+  const [storedSnapshots, setStoredSnapshots] = useState<WYQDStoredEntity<AccountSnapshot>[]>([]);
+  const [storedReviews, setStoredReviews] = useState<WYQDStoredEntity<ReviewEntry>[]>([]);
   const [archivedEntities, setArchivedEntities] = useState<WYQDArchivedStoredEntity[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [objectListFocus, setObjectListFocus] = useState<ObjectListFocus | null>(null);
   const objects = useMemo(() => storedObjects.map((item) => item.entity), [storedObjects]);
   const snapshots = useMemo(
@@ -399,9 +394,11 @@ export function AppShell() {
             setStoredSnapshots([...seededSnapshots]);
             setStoredReviews([...seededReviews]);
             setArchivedEntities([...seededArchived]);
+            setDataLoaded(true);
             return;
           } catch (e) {
-            console.warn('Failed to seed demo data:', e);
+            console.warn('Ownly: Failed to seed demo data:', e);
+            // Fall through to load whatever the vault has
           }
         }
 
@@ -409,8 +406,17 @@ export function AppShell() {
         setStoredSnapshots([...nextSnapshots]);
         setStoredReviews([...nextReviews]);
         setArchivedEntities([...nextArchivedEntities]);
+        setDataLoaded(true);
       } catch (e) {
-        console.warn('Failed to refresh vault data:', e);
+        console.warn('Ownly: Failed to load vault data:', e);
+        // Clear stale state so the UI doesn't show misleading data
+        if (isMounted) {
+          setStoredObjects([]);
+          setStoredSnapshots([]);
+          setStoredReviews([]);
+          setArchivedEntities([]);
+          setDataLoaded(true);
+        }
       }
     }
 
@@ -528,6 +534,19 @@ export function AppShell() {
           />
         ) : null}
 
+        {isConnected && !dataLoaded ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="flex items-center gap-3 text-sm text-stone-400">
+              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              {t('loading')}
+            </div>
+          </div>
+        ) : null}
+
+        {isConnected && !dataLoaded ? null : (
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -608,6 +627,7 @@ export function AppShell() {
             ) : null}
           </motion.div>
         </AnimatePresence>
+        )}
       </div>
 
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
