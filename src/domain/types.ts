@@ -162,6 +162,10 @@ export interface AccountSnapshot extends BaseEntity {
   total_liabilities?: number;
   net_worth?: number;
   monthly_fixed_cost?: number;
+  owned_physical_count?: number;
+  physical_residual_value?: number;
+  active_subscription_count?: number;
+  observing_desire_amount?: number;
 }
 
 export type ReviewType = 'object_review' | 'exit_record' | 'monthly' | 'annual';

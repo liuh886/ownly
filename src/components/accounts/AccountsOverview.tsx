@@ -9,6 +9,7 @@ import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type {
   AccountBalance,
   AccountSnapshot,
+  PhysicalObject,
   RecurringCostObject,
   WYQDObject,
 } from '@/domain/types';
@@ -16,6 +17,8 @@ import {
   calculateNetWorth,
   calculateNextBillingDate,
   calculateRecurringMonthlyCost,
+  calculateResidualValue,
+  calculateDesireAmount,
   findLatestSnapshot,
 } from '@/domain/calculations';
 import type { WYQDStoredEntity } from '@/core/repository';
@@ -134,9 +137,17 @@ function createSnapshotDraft({
   const now = new Date().toISOString();
   const totalAssets = sumBalances(assetBalances);
   const totalLiabilities = sumBalances(liabilityBalances);
-  const monthlyFixedCost = objects
-    .filter((o) => o.object_type === 'recurring_cost' && o.status === 'active')
-    .reduce((sum, o) => sum + calculateRecurringMonthlyCost(o as RecurringCostObject), 0);
+  const activeRecurringCosts = objects.filter((o) => o.object_type === 'recurring_cost' && o.status === 'active');
+  const monthlyFixedCost = activeRecurringCosts.reduce(
+    (sum, o) => sum + calculateRecurringMonthlyCost(o as RecurringCostObject), 0,
+  );
+  const ownedPhysicalObjects = objects.filter((o) => o.object_type === 'physical' && (o.status === 'using' || o.status === 'purchased'));
+  const physicalResidualValue = ownedPhysicalObjects.reduce(
+    (sum, o) => sum + calculateResidualValue(o as PhysicalObject), 0,
+  );
+  const observingDesireAmount = objects
+    .filter((o) => o.status === 'seeded' || o.status === 'observing' || o.status === 'planned')
+    .reduce((sum, o) => sum + calculateDesireAmount(o), 0);
 
   return {
     schema_version: WYQD_SCHEMA_VERSION,
@@ -153,6 +164,10 @@ function createSnapshotDraft({
     total_liabilities: totalLiabilities,
     net_worth: totalAssets - totalLiabilities,
     monthly_fixed_cost: monthlyFixedCost,
+    owned_physical_count: ownedPhysicalObjects.length,
+    physical_residual_value: physicalResidualValue,
+    active_subscription_count: activeRecurringCosts.length,
+    observing_desire_amount: observingDesireAmount,
     created_at: now,
     updated_at: now,
   };

@@ -308,7 +308,7 @@ const translations = {
     dailyCostAvg: 'Daily fixed cost',
     perDay: '/day',
     perYear: '/year',
-    unitWan: '万',
+    unitWan: 'k',
     comparedToMonthEnd: 'vs month-end',
     doctorDuplicateId: 'Duplicate entity id: {id}',
     doctorUnsupportedSchema: 'Unsupported schema version: {version}',

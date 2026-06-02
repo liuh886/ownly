@@ -82,10 +82,16 @@ export function formatCompactMoney(
   const cfg = getConfig(cur);
   const rounded = Math.round(value);
 
-  // CNY uses 万 compact format
-  if (cfg.compactUnit && cfg.compactThreshold && Math.abs(rounded) >= cfg.compactThreshold) {
+  // Chinese: use 万 (10k) compact format
+  if (locale === 'zh' && cfg.compactUnit && cfg.compactThreshold && Math.abs(rounded) >= cfg.compactThreshold) {
     const unit = t ? t('unitWan') : cfg.compactUnit;
     return `${cfg.symbol}${(rounded / cfg.compactThreshold).toFixed(1)}${unit}`;
+  }
+
+  // English: use k (1k) compact format
+  if (locale === 'en' && Math.abs(rounded) >= 1000) {
+    const unit = t ? t('unitWan') : 'k';
+    return `${cfg.symbol}${(rounded / 1000).toFixed(1)}${unit}`;
   }
 
   return `${cfg.symbol}${rounded.toLocaleString(cfg.locale)}`;
