@@ -228,11 +228,16 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     const files = this.markdownFilesIn(directory);
     const entities: WYQDStoredEntity<T>[] = [];
 
+    console.log(`Ownly: listing ${config.type} from ${directory}, found ${files.length} files`);
+
     for (const file of files) {
       try {
         const content = await this.vault.cachedRead(file);
         const parsed = parseMarkdownEntity<Record<string, unknown>>(content);
-        if (parsed.frontmatter.type !== config.entityType) continue;
+        if (parsed.frontmatter.type !== config.entityType) {
+          console.log(`Ownly: skipping ${file.name}, type mismatch: ${parsed.frontmatter.type} !== ${config.entityType}`);
+          continue;
+        }
 
         entities.push({
           fileName: file.name,
@@ -245,6 +250,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
       }
     }
 
+    console.log(`Ownly: loaded ${entities.length} ${config.type} entities`);
     return entities;
   }
 

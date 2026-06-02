@@ -127,9 +127,9 @@ Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, 
 | Archive & restore | ✅ | ✅ |
 | Markdown data export | ✅ Always | ✅ Always |
 
-> **Note:** The current version (1.0.0) includes all features for free. Pro tier may be introduced in a future release.
+> **Note:** The current version (1.0.0) uses a sponsorship model. Pro features can be unlocked with the free activation code shown in the app; supporting via [Ko-fi](https://ko-fi.com/F1F7WYJ6B) or [Gumroad](https://liuh886.gumroad.com/l/ownly) is optional and helps fund development.
 
-**Pro** is unlocked when you support the project via [Ko-fi](https://ko-fi.com/F1F7WYJ6B) or [Gumroad](https://liuh886.gumroad.com/l/ownly). Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
+Ownly does not perform paid license verification or make network calls for activation. Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
 
 ## FAQ
 
@@ -156,6 +156,8 @@ If Ownly has been useful to you, consider supporting the project:
 ```bash
 npm run validate           # Full gate: tsc + lint + web build + obsidian validation
 npm run validate:obsidian  # Obsidian plugin only
+npm run smoke:install      # One-time setup for Python Playwright browser smoke tests
+npm run smoke:web          # Starts Next locally and smoke-tests the Web runtime
 ```
 
 ### Agent CLI

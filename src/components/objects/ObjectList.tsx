@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type {

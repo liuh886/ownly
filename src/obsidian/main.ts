@@ -6,6 +6,7 @@ import {
   PluginSettingTab,
   Setting,
   WorkspaceLeaf,
+  type Command,
 } from 'obsidian';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -66,6 +67,7 @@ export default class WYQDPlugin extends Plugin {
   repository!: ObsidianVaultRepository;
   private workspaceRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private commandDefs: Record<string, { key: WYQDTranslationKey; callback: () => void }> = {};
+  private registeredCommandIds: string[] = [];
   private suppressVaultRefresh = false;
 
   async onload() {
@@ -103,9 +105,7 @@ export default class WYQDPlugin extends Plugin {
       'run-doctor': { key: 'runDoctorCommand', callback: () => void this.runDoctor() },
     };
 
-    for (const [id, def] of Object.entries(this.commandDefs)) {
-      this.addCommand({ id, name: this.t(def.key), callback: def.callback });
-    }
+    this.registerLocalizedCommands();
 
     this.addSettingTab(new WYQDSettingTab(this.app, this));
   }
@@ -212,11 +212,17 @@ export default class WYQDPlugin extends Plugin {
   }
 
   refreshCommands() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const registry = (this.app as any).commands?.commands;
+    for (const id of this.registeredCommandIds) {
+      this.removeCommand(id);
+    }
+    this.registeredCommandIds = [];
+    this.registerLocalizedCommands();
+  }
+
+  private registerLocalizedCommands() {
     for (const [id, def] of Object.entries(this.commandDefs)) {
-      if (registry) delete registry[id];
-      this.addCommand({ id, name: this.t(def.key), callback: def.callback });
+      const command: Command = this.addCommand({ id, name: this.t(def.key), callback: def.callback });
+      this.registeredCommandIds.push(command.id);
     }
   }
 
@@ -362,6 +368,8 @@ class WYQDWorkspaceView extends ItemView {
 }
 
 class WYQDSettingTab extends PluginSettingTab {
+  private displayCleanupCallbacks: Array<() => void> = [];
+
   constructor(
     app: App,
     private readonly wyqdPlugin: WYQDPlugin,
@@ -372,6 +380,7 @@ class WYQDSettingTab extends PluginSettingTab {
   async display() {
     const { containerEl } = this;
     const t = (key: WYQDTranslationKey) => this.wyqdPlugin.t(key);
+    this.cleanupDisplay();
     containerEl.empty();
     containerEl.addClass('wyqd-settings-view');
     const membership = await this.wyqdPlugin.getMembership();
@@ -475,11 +484,14 @@ class WYQDSettingTab extends PluginSettingTab {
         updateSuggestions(inputEl.value, inputEl);
       });
 
-      // Hide suggestions when clicking outside
-      document.addEventListener('click', (e) => {
+      const hideSuggestionsOnOutsideClick = (e: MouseEvent) => {
         if (!suggestionsEl.contains(e.target as Node) && e.target !== inputEl) {
           suggestionsEl.style.display = 'none';
         }
+      };
+      document.addEventListener('click', hideSuggestionsOnOutsideClick);
+      this.displayCleanupCallbacks.push(() => {
+        document.removeEventListener('click', hideSuggestionsOnOutsideClick);
       });
     });
 
@@ -577,6 +589,18 @@ class WYQDSettingTab extends PluginSettingTab {
         .setName(t('plan'))
         .setDesc(`${membership.planLabel} — ${membership.statusLabel}`);
     }
+  }
+
+  hide() {
+    this.cleanupDisplay();
+    super.hide();
+  }
+
+  private cleanupDisplay() {
+    for (const cleanup of this.displayCleanupCallbacks) {
+      cleanup();
+    }
+    this.displayCleanupCallbacks = [];
   }
 }
 

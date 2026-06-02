@@ -4,7 +4,7 @@ import {
   calculateRecurringMonthlyCost,
 } from '@/domain/calculations';
 import type { Account, AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
-import { WYQD_DATA_DIRECTORIES } from './paths';
+import { joinWYQDPath, WYQD_DATA_ROOT } from './paths';
 import type { WYQDReadonlyRepositoryAdapter, WYQDStoredEntity } from './repository';
 import type { WYQDTranslationKey } from './i18n';
 
@@ -42,6 +42,7 @@ export interface WYQDDoctorReport {
 export interface WYQDDoctorRepositoryAdapter
   extends Partial<WYQDReadonlyRepositoryAdapter> {
   listDataDirectories?: () => Promise<readonly string[]>;
+  getDataFolderPath?: () => string;
 }
 
 type AnyStoredEntity =
@@ -350,7 +351,21 @@ async function checkDirectories(
   if (!adapter.listDataDirectories) return [];
 
   const existingDirectories = new Set(await adapter.listDataDirectories());
-  return Object.values(WYQD_DATA_DIRECTORIES)
+  const root = adapter.getDataFolderPath?.() || WYQD_DATA_ROOT;
+  const expectedDirectories = [
+    root,
+    joinWYQDPath(root, 'Objects'),
+    joinWYQDPath(root, 'Accounts'),
+    joinWYQDPath(root, 'Snapshots'),
+    joinWYQDPath(root, 'Reviews'),
+    joinWYQDPath(root, 'Archive'),
+    joinWYQDPath(root, 'Archive', 'Objects'),
+    joinWYQDPath(root, 'Archive', 'Accounts'),
+    joinWYQDPath(root, 'Archive', 'Snapshots'),
+    joinWYQDPath(root, 'Archive', 'Reviews'),
+  ];
+
+  return expectedDirectories
     .filter((directory) => !existingDirectories.has(directory))
     .map((directory) => ({
       id: 'directory.presence' as const,

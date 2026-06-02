@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   createWYQDTranslator,
   normalizeWYQDLanguage,
@@ -34,17 +34,30 @@ export function I18nProvider({
 }) {
   const [language, setLanguage] = useState<WYQDLanguage>(() => {
     if (initialLanguage) return initialLanguage;
-    if (typeof window === 'undefined') return 'zh';
-    const stored = localStorage.getItem('ownly_language');
-    return normalizeWYQDLanguage(stored);
+    return 'zh';
   });
 
   const [currency, setCurrency] = useState<WYQDCurrency>(() => {
-    if (typeof window === 'undefined') return 'CNY';
-    const stored = localStorage.getItem('ownly_currency') as WYQDCurrency | null;
-    if (stored && ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'].includes(stored)) return stored;
     return defaultCurrency(language);
   });
+
+  useEffect(() => {
+    if (initialLanguage) return;
+
+    const timer = window.setTimeout(() => {
+      const storedLanguage = normalizeWYQDLanguage(localStorage.getItem('ownly_language'));
+      setLanguage(storedLanguage);
+
+      const storedCurrency = localStorage.getItem('ownly_currency') as WYQDCurrency | null;
+      if (storedCurrency && ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'].includes(storedCurrency)) {
+        setCurrency(storedCurrency);
+      } else {
+        setCurrency(defaultCurrency(storedLanguage));
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [initialLanguage]);
 
   const value = useMemo(() => {
     const translator = createWYQDTranslator(language);
