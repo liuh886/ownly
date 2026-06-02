@@ -429,20 +429,11 @@ class WYQDSettingTab extends PluginSettingTab {
       .setName(t('settingsDataFolder'))
       .setDesc(t('settingsDataFolderDesc'));
 
-    const folderInput = folderSetting.addText((text) =>
-      text
-        .setPlaceholder(DEFAULT_SETTINGS.dataFolder)
-        .setValue(this.wyqdPlugin.settings.dataFolder)
-        .onChange((value) => {
-          this.wyqdPlugin.settings.dataFolder = normalizeFolder(value) || DEFAULT_SETTINGS.dataFolder;
-        }),
-    );
-
     // Add folder suggestions
     const suggestionsEl = appPanel.createDiv({ cls: 'wyqd-folder-suggestions' });
     suggestionsEl.style.display = 'none';
 
-    const updateSuggestions = (query: string) => {
+    const updateSuggestions = (query: string, inputEl: HTMLInputElement) => {
       suggestionsEl.empty();
       const folders = this.app.vault.getAllFolders(false);
       const filtered = folders
@@ -460,26 +451,36 @@ class WYQDSettingTab extends PluginSettingTab {
         item.textContent = folder.path;
         item.addEventListener('click', () => {
           this.wyqdPlugin.settings.dataFolder = folder.path;
-          folderInput.inputEl.value = folder.path;
+          inputEl.value = folder.path;
           suggestionsEl.style.display = 'none';
         });
       }
     };
 
-    folderInput.inputEl.addEventListener('input', (e) => {
-      const target = e.target as HTMLInputElement;
-      updateSuggestions(target.value);
-    });
+    folderSetting.addText((text) => {
+      text
+        .setPlaceholder(DEFAULT_SETTINGS.dataFolder)
+        .setValue(this.wyqdPlugin.settings.dataFolder)
+        .onChange((value) => {
+          this.wyqdPlugin.settings.dataFolder = normalizeFolder(value) || DEFAULT_SETTINGS.dataFolder;
+        });
 
-    folderInput.inputEl.addEventListener('focus', () => {
-      updateSuggestions(folderInput.inputEl.value);
-    });
+      const inputEl = text.inputEl;
+      inputEl.addEventListener('input', (e) => {
+        const target = e.target as HTMLInputElement;
+        updateSuggestions(target.value, inputEl);
+      });
 
-    // Hide suggestions when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!suggestionsEl.contains(e.target as Node) && e.target !== folderInput.inputEl) {
-        suggestionsEl.style.display = 'none';
-      }
+      inputEl.addEventListener('focus', () => {
+        updateSuggestions(inputEl.value, inputEl);
+      });
+
+      // Hide suggestions when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!suggestionsEl.contains(e.target as Node) && e.target !== inputEl) {
+          suggestionsEl.style.display = 'none';
+        }
+      });
     });
 
     new Setting(appPanel)
