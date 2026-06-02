@@ -58,6 +58,13 @@ export interface WYQDWritableRepositoryAdapter {
 
 export type WYQDRepositoryAdapter = WYQDReadonlyRepositoryAdapter & WYQDWritableRepositoryAdapter;
 
+export interface WYQDRepositoryStorageInfo {
+  getDataFolderPath?: () => string;
+  listDataDirectories?: () => Promise<readonly string[]>;
+}
+
+export type WYQDRepositoryWithStorageInfo = WYQDRepositoryAdapter & WYQDRepositoryStorageInfo;
+
 export interface WYQDMarkdownFile {
   fileName: string;
   path: string;

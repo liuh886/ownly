@@ -50,6 +50,10 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
     }
   }
 
+  getDataFolderPath(): string {
+    return this.dirs.root;
+  }
+
   private async archiveEntity(
     sourceDirectory: string,
     archiveDirectory: string,

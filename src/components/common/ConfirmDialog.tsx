@@ -33,16 +33,48 @@ export function ConfirmDialog({
   const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onCancel();
+      if (e.key !== 'Tab') return;
+
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])',
+      );
+      const items = focusable ? Array.from(focusable).filter((item) => !item.hasAttribute('disabled')) : [];
+      if (items.length === 0) return;
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
+
     document.addEventListener('keydown', handleKeyDown);
-    if (inputRef.current) inputRef.current.focus();
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onCancel]);
+    window.setTimeout(() => {
+      inputRef.current?.focus();
+      if (!inputRef.current) {
+        (destructive ? cancelButtonRef.current : confirmButtonRef.current)?.focus();
+      }
+    }, 0);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [destructive, open, onCancel]);
 
   if (!open) return null;
 
@@ -82,6 +114,7 @@ export function ConfirmDialog({
 
         <div className="mt-4 flex gap-2">
           <button
+            ref={cancelButtonRef}
             type="button"
             onClick={onCancel}
             className="flex-1 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:border-stone-900"
@@ -89,6 +122,7 @@ export function ConfirmDialog({
             {cancelLabel ?? t('cancel')}
           </button>
           <button
+            ref={confirmButtonRef}
             type="button"
             onClick={() => onConfirm(inputValue)}
             className={confirmBtnClass}

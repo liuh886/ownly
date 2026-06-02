@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
+import { FilterChip, IconButton } from '@/components/common/ui-primitives';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type {
   OneTimeExperienceObject,
@@ -347,7 +348,11 @@ function matchesQuery(object: WYQDObject, query: string): boolean {
     .some((value) => String(value).toLowerCase().includes(normalized));
 }
 
-function matchesStatusGroup(object: WYQDObject, group: ObjectStatusGroupFilter): boolean {
+function matchesStatusGroup(
+  object: WYQDObject,
+  group: ObjectStatusGroupFilter,
+  reviewedObjectIds?: ReadonlySet<string>,
+): boolean {
   if (group === 'all') return true;
   if (group === 'observing') {
     return ['seeded', 'observing', 'planned'].includes(object.status);
@@ -356,6 +361,7 @@ function matchesStatusGroup(object: WYQDObject, group: ObjectStatusGroupFilter):
     return ['purchased', 'using', 'active', 'in_progress'].includes(object.status);
   }
   if (group === 'pendingReview') {
+    if (reviewedObjectIds?.has(object.id)) return false;
     // Items that are completed/idle but not yet reviewed
     if (object.object_type === 'one_time_experience') {
       return object.status === 'completed';
@@ -373,12 +379,13 @@ function getObjectTypeFilterCount(
   typeFilter: ObjectTypeFilter,
   statusGroupFilter: ObjectStatusGroupFilter,
   query: string,
+  reviewedObjectIds?: ReadonlySet<string>,
 ): number {
   return objects.filter((stored) => {
     const object = stored.entity;
     return (
       (typeFilter === 'all' || object.object_type === typeFilter) &&
-      matchesStatusGroup(object, statusGroupFilter) &&
+      matchesStatusGroup(object, statusGroupFilter, reviewedObjectIds) &&
       matchesQuery(object, query)
     );
   }).length;
@@ -389,11 +396,12 @@ function getObjectStatusGroupCount(
   statusGroupFilter: ObjectStatusGroupFilter,
   typeFilter: ObjectTypeFilter,
   query: string,
+  reviewedObjectIds?: ReadonlySet<string>,
 ): number {
   return objects.filter((stored) => {
     const object = stored.entity;
     return (
-      matchesStatusGroup(object, statusGroupFilter) &&
+      matchesStatusGroup(object, statusGroupFilter, reviewedObjectIds) &&
       (typeFilter === 'all' || object.object_type === typeFilter) &&
       matchesQuery(object, query)
     );
@@ -611,7 +619,7 @@ function ObjectDetailPanel({
   };
 
   // Save structured fields via ObjectComposer, then save body
-  const handleComposerSubmit = async (updatedObject: WYQDObject, _composerBody: string) => {
+  const handleComposerSubmit = async (updatedObject: WYQDObject) => {
     if (!onSave) return;
     // Save structured fields + user-edited body
     await onSave(updatedObject, bodyDraft);
@@ -720,6 +728,33 @@ function ObjectDetailPanel({
   );
 }
 
+function MoreActionsButton({
+  objectTitle,
+  menuId,
+  open,
+  onToggle,
+  t,
+}: {
+  objectTitle: string;
+  menuId: string;
+  open: boolean;
+  onToggle: () => void;
+  t: TranslateFn;
+}) {
+  return (
+    <IconButton
+      onClick={onToggle}
+      aria-label={`${t('moreActions')} - ${objectTitle}`}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      aria-controls={menuId}
+      title={t('more')}
+    >
+      <span aria-hidden="true">⋯</span>
+    </IconButton>
+  );
+}
+
 interface ObjectListProps {
   objects: WYQDStoredEntity<WYQDObject>[];
   reviews?: WYQDStoredEntity<ReviewEntry>[];
@@ -816,7 +851,7 @@ export function ObjectList({
     return (
       (controlBucketFilter === null || getObjectControlBucket(object, reviewedObjectIds) === controlBucketFilter) &&
       (typeFilter === 'all' || object.object_type === typeFilter) &&
-      matchesStatusGroup(object, statusGroupFilter) &&
+      matchesStatusGroup(object, statusGroupFilter, reviewedObjectIds) &&
       matchesQuery(object, query)
     );
   }), [objects, controlBucketFilter, typeFilter, statusGroupFilter, query, reviewedObjectIds]);
@@ -887,8 +922,6 @@ export function ObjectList({
     [observingObjects],
   );
 
-  const iconButtonClass =
-    'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-sm transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40';
   const menuItemClass =
     'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40';
 
@@ -900,14 +933,21 @@ export function ObjectList({
     setReviewExperienceScore('');
   }
 
+  function closeInlinePanels() {
+    setSelectedFileName(null);
+    setEditingFileName(null);
+    cancelObjectReview();
+    setOpenActionMenuFileName(null);
+  }
+
   function applyControlBucket(bucket: ObjectControlBucket) {
     const target = objectControlLabels[bucket];
+    closeInlinePanels();
     setQuery('');
     setFilter('all');
     setTypeFilter(target.typeFilter);
     setStatusGroupFilter(target.statusGroup);
     setControlBucketFilter(bucket);
-    setOpenActionMenuFileName(null);
     setShowAllPhysical(false);
     setShowAllSupporting(false);
   }
@@ -1008,6 +1048,7 @@ export function ObjectList({
             <input
               value={query}
               onChange={(event) => {
+                closeInlinePanels();
                 setQuery(event.target.value);
                 setControlBucketFilter(null);
                 setShowAllPhysical(false);
@@ -1021,7 +1062,10 @@ export function ObjectList({
             <span className="sr-only">{t('sortBy')}</span>
             <select
               value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as SortOption)}
+              onChange={(event) => {
+                closeInlinePanels();
+                setSortBy(event.target.value as SortOption);
+              }}
               className="h-full cursor-pointer rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-medium text-stone-700 outline-none transition hover:border-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
             >
               {(Object.keys(getSortLabels(t)) as SortOption[]).map((option) => (
@@ -1034,69 +1078,54 @@ export function ObjectList({
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label={t('filterByType')}>
           {(Object.keys(objectTypeFilterLabels) as ObjectTypeFilter[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => {
-                setTypeFilter(item);
+              <FilterChip
+                key={item}
+                onClick={() => {
+                  closeInlinePanels();
+                  setTypeFilter(item);
                 setControlBucketFilter(null);
                 setShowAllPhysical(false);
                 setShowAllSupporting(false);
               }}
-              aria-pressed={typeFilter === item}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                typeFilter === item
-                  ? 'bg-stone-950 text-white'
-                  : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
-              }`}
-            >
-              {objectTypeFilterLabels[item]} ({getObjectTypeFilterCount(objects, item, statusGroupFilter, query)})
-            </button>
+                active={typeFilter === item}
+              >
+                {objectTypeFilterLabels[item]} ({getObjectTypeFilterCount(objects, item, statusGroupFilter, query, reviewedObjectIds)})
+              </FilterChip>
           ))}
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label={t('filterByStatus')}>
           {(Object.keys(objectStatusGroupLabels) as ObjectStatusGroupFilter[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => {
-                setStatusGroupFilter(item);
+              <FilterChip
+                key={item}
+                onClick={() => {
+                  closeInlinePanels();
+                  setStatusGroupFilter(item);
                 setControlBucketFilter(null);
                 setShowAllPhysical(false);
                 setShowAllSupporting(false);
               }}
-              aria-pressed={statusGroupFilter === item}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                statusGroupFilter === item
-                  ? 'bg-stone-950 text-white'
-                  : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
-              }`}
-            >
-              {objectStatusGroupLabels[item]} ({getObjectStatusGroupCount(objects, item, typeFilter, query)})
-            </button>
+                active={statusGroupFilter === item}
+              >
+                {objectStatusGroupLabels[item]} ({getObjectStatusGroupCount(objects, item, typeFilter, query, reviewedObjectIds)})
+              </FilterChip>
           ))}
         </div>
         {physicalObjects.length > 0 ? (
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label={t('filterByPhysicalStatus')}>
             {(Object.keys(filterLabels) as PhysicalFilter[]).map((item) => (
-              <button
+              <FilterChip
                 key={item}
-                type="button"
                 onClick={() => {
+                  closeInlinePanels();
                   setFilter(item);
                   setControlBucketFilter(null);
                   setShowAllPhysical(false);
                   setShowAllSupporting(false);
                 }}
-                aria-pressed={filter === item}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                  filter === item
-                    ? 'bg-stone-950 text-white'
-                    : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'
-                }`}
+                active={filter === item}
               >
                 {filterLabels[item]} ({visiblePhysicalFilterCounts[item]})
-              </button>
+              </FilterChip>
             ))}
           </div>
         ) : null}
@@ -1187,46 +1216,40 @@ export function ObjectList({
 	                      </div>
 
 	                    <div className="relative flex gap-1.5 overflow-visible pb-0.5">
-	                      <button
-	                        type="button"
+	                      <IconButton
 	                        onClick={() => {
 	                          setSelectedFileName(stored.fileName);
 	                          setOpenActionMenuFileName(null);
 	                        }}
 	                        aria-label={`${t('viewDetails')} - ${object.title}`}
-	                        className={iconButtonClass}
 	                        title={t('detail')}
 	                      >
 	                        <span aria-hidden="true">🔎</span>
-	                      </button>
-	                      <button
-	                        type="button"
+	                      </IconButton>
+	                      <IconButton
 	                        onClick={() => {
 	                          setEditingFileName(stored.fileName);
 	                          setOpenActionMenuFileName(null);
 	                        }}
 	                        aria-label={`${t('editObject')} - ${object.title}`}
-	                        className={iconButtonClass}
 	                        disabled={disabled}
 	                        title={t('edit')}
 	                      >
 	                        <span aria-hidden="true">✏️</span>
-	                      </button>
-	                      <button
-	                        type="button"
-	                        onClick={() =>
+	                      </IconButton>
+	                      <MoreActionsButton
+	                        objectTitle={object.title}
+	                        menuId={`object-actions-${stored.fileName}`}
+	                        open={openActionMenuFileName === stored.fileName}
+	                        onToggle={() =>
 	                          setOpenActionMenuFileName((current) =>
 	                            current === stored.fileName ? null : stored.fileName,
 	                          )
 	                        }
-	                        aria-label={`${t('moreActions')} - ${object.title}`}
-	                        className={iconButtonClass}
-	                        title={t('more')}
-	                      >
-	                        <span aria-hidden="true">⋯</span>
-	                      </button>
-	                      {openActionMenuFileName === stored.fileName ? (
-	                        <div role="menu" className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+	                        t={t}
+	                      />
+                      {openActionMenuFileName === stored.fileName ? (
+                        <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
 	                          <button
 	                            type="button" role="menuitem"
 	                            onClick={async () => {
@@ -1418,34 +1441,29 @@ export function ObjectList({
 	                          </div>
 
 	                          <div className="relative flex gap-1.5 overflow-visible pb-0.5">
-	                            <button
-	                              type="button"
+	                            <IconButton
 	                              onClick={() => {
 	                                setSelectedFileName(stored.fileName);
 	                                setOpenActionMenuFileName(null);
 	                              }}
 	                              aria-label={`${t('viewDetails')} - ${object.title}`}
 	                              title={t('detail')}
-	                              className={iconButtonClass}
 	                            >
 	                              <span aria-hidden="true">🔎</span>
-	                            </button>
-	                            <button
-	                              type="button"
+	                            </IconButton>
+	                            <IconButton
 	                              onClick={() => {
 	                                setEditingFileName(stored.fileName);
 	                                setOpenActionMenuFileName(null);
 	                              }}
 	                              aria-label={`${t('editObject')} - ${object.title}`}
 	                              title={t('edit')}
-	                              className={iconButtonClass}
 	                              disabled={disabled}
 	                            >
 	                              <span aria-hidden="true">✏️</span>
-	                            </button>
+	                            </IconButton>
 	                            {supportingActionLabel ? (
-	                              <button
-	                                type="button"
+	                              <IconButton
 	                                onClick={async () => {
 	                                  if (
 	                                    object.object_type === 'one_time_experience' &&
@@ -1485,7 +1503,7 @@ export function ObjectList({
 	                                }}
 	                                aria-label={`${supportingActionLabel} - ${object.title}`}
 	                                title={supportingActionLabel}
-	                                className={`${iconButtonClass} border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50`}
+	                                className="border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50"
 	                                disabled={disabled || exitingFileName === stored.fileName}
 	                              >
 	                                <span aria-hidden="true">
@@ -1493,23 +1511,21 @@ export function ObjectList({
 	                                    ? '…'
 	                                    : getSupportingActionIcon(object)}
 	                                </span>
-	                              </button>
+	                              </IconButton>
 	                            ) : null}
-	                            <button
-	                              type="button"
-	                              onClick={() =>
+	                            <MoreActionsButton
+	                              objectTitle={object.title}
+	                              menuId={`object-actions-${stored.fileName}`}
+	                              open={openActionMenuFileName === stored.fileName}
+	                              onToggle={() =>
 	                                setOpenActionMenuFileName((current) =>
 	                                  current === stored.fileName ? null : stored.fileName,
 	                                )
 	                              }
-	                              aria-label={`${t('moreActions')} - ${object.title}`}
-	                              title={t('more')}
-	                              className={iconButtonClass}
-	                            >
-	                              <span aria-hidden="true">⋯</span>
-	                            </button>
-	                            {openActionMenuFileName === stored.fileName ? (
-	                              <div role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+	                              t={t}
+	                            />
+                            {openActionMenuFileName === stored.fileName ? (
+                              <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
 	                                {canCancelRecurringCost(object) ? (
 	                                  <button
 	                                    type="button" role="menuitem"

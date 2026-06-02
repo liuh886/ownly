@@ -64,8 +64,7 @@ function ReviewDetailSidebar({
   disabled,
   onStartEdit,
   onCancelEdit,
-  onSaveEdit,
-  onUpdateBody,
+  onSaveAll,
   editSummary,
   onEditSummaryChange,
   editFoodScore,
@@ -88,8 +87,7 @@ function ReviewDetailSidebar({
   disabled: boolean;
   onStartEdit: () => void;
   onCancelEdit: () => void;
-  onSaveEdit: (e: React.FormEvent) => void;
-  onUpdateBody: (fileName: string, review: ReviewEntry, body: string) => Promise<void>;
+  onSaveAll: (body: string) => Promise<void>;
   editSummary: string;
   onEditSummaryChange: (v: string) => void;
   editFoodScore: string;
@@ -117,11 +115,10 @@ function ReviewDetailSidebar({
   };
 
   // Save both structured fields and body
-  const handleSaveAll = async (e: React.FormEvent) => {
+  const handleSaveAll = async () => {
     setIsSavingAll(true);
     try {
-      await onSaveEdit(e);
-      await onUpdateBody(stored.fileName, review, bodyDraft);
+      await onSaveAll(bodyDraft);
     } finally {
       setIsSavingAll(false);
     }
@@ -371,6 +368,7 @@ export function ReviewHome({
       if (statusFilter === 'reviewed' && item.kind !== 'reviewed') return false;
 
       // Type filter only applies to reviewed items
+      if (item.kind === 'pending' && reviewTypeFilter !== 'all') return false;
       if (item.kind === 'reviewed' && reviewTypeFilter !== 'all') {
         if (item.stored.entity.review_type !== reviewTypeFilter) return false;
       }
@@ -473,34 +471,11 @@ export function ReviewHome({
     () => new Map(objects.map((object) => [object.id, object])),
     [objects],
   );
-  const filteredReviews = useMemo(() => {
-    const query = reviewQuery.trim().toLowerCase();
-
-    return latestReviews.filter((stored) => {
-      if (reviewTypeFilter !== 'all' && stored.entity.review_type !== reviewTypeFilter) {
-        return false;
-      }
-      if (!query) return true;
-
-      const haystack = [
-        stored.entity.title,
-        stored.entity.target,
-        stored.entity.summary,
-        stored.entity.review_type,
-        stored.entity.exit_type,
-        stored.entity.period,
-        stored.body,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      return haystack.includes(query);
-    });
-  }, [latestReviews, reviewQuery, reviewTypeFilter]);
+  const filteredReviewedItems = filteredUnifiedItems
+    .filter((item): item is Extract<UnifiedItem, { kind: 'reviewed' }> => item.kind === 'reviewed');
   const selectedReview =
-    latestReviews.find((stored) => stored.fileName === selectedReviewFileName) ||
-    filteredReviews[0] ||
+    filteredReviewedItems.find((item) => item.stored.fileName === selectedReviewFileName)?.stored ||
+    filteredReviewedItems[0]?.stored ||
     null;
   const selectedReviewTarget =
     selectedReview?.entity.target_id ? objectById.get(selectedReview.entity.target_id) : null;
@@ -563,6 +538,27 @@ export function ReviewHome({
     setExperienceScore(
       stored.entity.experience_score ? String(stored.entity.experience_score) : '',
     );
+  }
+
+  async function saveReviewEdit(stored: WYQDStoredEntity<ReviewEntry>, body: string) {
+    if (!canSubmit) return;
+
+    const nextReview: ReviewEntry = {
+      ...stored.entity,
+      summary: summary.trim(),
+      food_score: parseScore(foodScore),
+      scenery_score: parseScore(sceneryScore),
+      experience_score: parseScore(experienceScore),
+      updated_at: todayISO(),
+    };
+
+    setIsSaving(true);
+    try {
+      await onUpdateReview(stored.fileName, nextReview, body);
+      cancelEditing();
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   function cancelEditing() {
@@ -743,12 +739,10 @@ export function ReviewHome({
                 const isReviewingThis = reviewingExperienceId === exp.id;
                 return (
                   <div key={`pending-${exp.id}`}>
-                    <div
-                      className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-stone-50 ${isReviewingThis ? 'bg-stone-50 ring-1 ring-stone-200' : ''}`}
+                    <button
+                      type="button"
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-stone-50 ${isReviewingThis ? 'bg-stone-50 ring-1 ring-stone-200' : ''}`}
                       onClick={() => startExperienceReview(exp)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startExperienceReview(exp); } }}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -761,14 +755,12 @@ export function ReviewHome({
                           <span>{formatMoney(item.amount)}</span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); startExperienceReview(exp); }}
+                      <span
                         className="shrink-0 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
                       >
                         {t('reviewAction')}
-                      </button>
-                    </div>
+                      </span>
+                    </button>
                     {isReviewingThis ? (
                       <form ref={reviewFormRef} onSubmit={handleSubmit} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
                         <textarea value={summary} onChange={(event) => setSummary(event.target.value)} placeholder={t('reviewSummaryPlaceholder')} rows={3} aria-label={t('summary')} className={`${fieldClass} resize-none`} disabled={disabled || isSaving} />
@@ -866,8 +858,7 @@ export function ReviewHome({
                 disabled={disabled || isSaving}
                 onStartEdit={() => startEditingReview(selectedReview)}
                 onCancelEdit={cancelEditing}
-                onSaveEdit={handleSubmit}
-                onUpdateBody={onUpdateReview}
+                onSaveAll={(body) => saveReviewEdit(selectedReview, body)}
                 editSummary={summary}
                 onEditSummaryChange={setSummary}
                 editFoodScore={foodScore}

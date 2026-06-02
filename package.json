@@ -1,6 +1,6 @@
 {
   "name": "wyqd-app",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -14,7 +14,8 @@
     "validate": "tsc --noEmit && npm run lint && npm run build && npm run validate:obsidian",
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
     "smoke:web": "python tests/smoke/web_smoke.py",
-    "test:e2e": "npm run smoke:web",
+    "smoke:site": "python tests/smoke/site_functionality.py",
+    "test:e2e": "npm run smoke:web && npm run smoke:site",
     "deps:reset": "node -e \"require('node:fs').rmSync('node_modules',{recursive:true,force:true})\" && npm ci",
     "wyqd": "node scripts/wyqd-cli.mjs",
     "start": "next start",

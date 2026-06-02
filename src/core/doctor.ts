@@ -383,8 +383,6 @@ export async function runWYQDDoctor(
   t?: TranslateFn,
 ): Promise<WYQDDoctorReport> {
   const dataFolderPath = adapter.getDataFolderPath?.() || WYQD_DATA_ROOT;
-  console.log('Ownly Doctor: getDataFolderPath =', adapter.getDataFolderPath?.());
-  console.log('Ownly Doctor: dataFolderPath =', dataFolderPath);
 
   const [objects, accounts, snapshots, reviews, directoryFindings] = await Promise.all([
     adapter.listObjects?.() ?? Promise.resolve([]),
