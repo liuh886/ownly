@@ -359,7 +359,7 @@ export function HomeDashboard({
                       animate={{ scale: 1 }}
                       transition={{ delay: 0.6 + i * 0.06 }}
                     >
-                      <title>{`${date} · ${t('netWorthTrend')}: ${value}${isMonthEnd ? ` · ${t('monthEndSnapshot')}` : ''}`}</title>
+                      <title>{`${date} · ${t('accountNetWorth')}: ${value}${isMonthEnd ? ` · ${t('monthEndSnapshot')}` : ''}`}</title>
                     </motion.circle>
                   );
                 })}
