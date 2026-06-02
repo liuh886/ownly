@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -24,6 +26,13 @@ jobs:
       - name: Build Obsidian plugin
         run: npm run package:obsidian
 
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/obsidian/ownly/main.js
+            dist/obsidian/ownly/styles.css
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -31,6 +40,5 @@ jobs:
             dist/obsidian/ownly/main.js
             dist/obsidian/ownly/styles.css
             dist/obsidian/ownly/manifest.json
-            dist/obsidian/ownly/versions.json
           draft: false
           generate_release_notes: true
