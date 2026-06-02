@@ -72,10 +72,12 @@ export default class WYQDPlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
+    console.log('Ownly: loaded settings, dataFolder =', this.settings.dataFolder);
 
     this.repository = new ObsidianVaultRepository(this.app, {
       dataFolder: () => this.settings.dataFolder,
     });
+    console.log('Ownly: repository.getDataFolderPath() =', this.repository.getDataFolderPath());
 
     this.registerView(WYQD_VIEW_TYPE, (leaf) => new WYQDWorkspaceView(leaf, this));
 

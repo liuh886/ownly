@@ -659,7 +659,10 @@ export function ObjectComposer({
             location: travelLocation,
             locations: parsedExtraLocations.length > 0 ? parsedExtraLocations : undefined,
           });
-      await onSubmit(object, `## ${t('purchaseReason')}\n\n## ${t('usageLog')}\n\n## ${t('reviewAndRanking')}\n`);
+      const bodyTemplate = objectType === 'one_time_experience'
+        ? `## ${t('experienceReview')}\n\n## ${t('reviewRankingSection')}\n`
+        : `## ${t('purchaseReason')}\n\n## ${t('usageLog')}\n\n## ${t('reviewAndRanking')}\n`;
+      await onSubmit(object, bodyTemplate);
       if (!initialObject) {
         setTitle('');
         setAmount('');
