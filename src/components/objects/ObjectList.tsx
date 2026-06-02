@@ -598,6 +598,9 @@ function ObjectDetailPanel({
 }) {
   const { t } = useI18n();
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingBody, setIsEditingBody] = useState(false);
+  const [bodyDraft, setBodyDraft] = useState('');
+  const [isSavingBody, setIsSavingBody] = useState(false);
   const object = stored.entity;
   const detailRows = getDetailRows(object, t);
   const timelineRows = getTimelineRows(object, t).filter((row) => row.value);
@@ -686,10 +689,63 @@ function ObjectDetailPanel({
       </div>
 
       <div className="mt-6 border-t border-stone-100 pt-6">
-        <h3 className="text-sm font-semibold text-stone-950">{t('markdownBody')}</h3>
-        <div className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-stone-50 p-4 text-sm leading-relaxed text-stone-600">
-          {body || t('noBody')}
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-stone-950">{t('markdownBody')}</h3>
+          {onSave && !isEditingBody ? (
+            <button
+              type="button"
+              onClick={() => {
+                setBodyDraft(body);
+                setIsEditingBody(true);
+              }}
+              className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
+            >
+              {t('edit')}
+            </button>
+          ) : null}
         </div>
+        {isEditingBody ? (
+          <div className="mt-3 space-y-2">
+            <textarea
+              value={bodyDraft}
+              onChange={(e) => setBodyDraft(e.target.value)}
+              rows={8}
+              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 resize-none font-mono"
+              disabled={disabled || isSavingBody}
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditingBody(false)}
+                className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400"
+                disabled={isSavingBody}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!onSave) return;
+                  setIsSavingBody(true);
+                  try {
+                    await onSave(object, bodyDraft);
+                    setIsEditingBody(false);
+                  } finally {
+                    setIsSavingBody(false);
+                  }
+                }}
+                className="rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                disabled={disabled || isSavingBody}
+              >
+                {isSavingBody ? t('saving') : t('save')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-stone-50 p-4 text-sm leading-relaxed text-stone-600">
+            {body || t('noBody')}
+          </div>
+        )}
       </div>
     </motion.section>
   );
