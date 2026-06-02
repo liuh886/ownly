@@ -344,13 +344,14 @@ export function HomeDashboard({
                   const [cx, cy] = point.split(',').map(Number);
                   const date = trendSnapshots[i]?.snapshot_at || '';
                   const value = formatCompactMoney(netWorthTrendValues[i] || 0);
+                  const isMonthEnd = Boolean(trendSnapshots[i]?.is_month_end);
                   return (
                     <motion.circle
                       key={`nw-${i}`}
                       cx={cx}
                       cy={cy}
-                      r="3"
-                      fill="white"
+                      r={isMonthEnd ? '3.5' : '2.5'}
+                      fill={isMonthEnd ? '#1c1917' : 'white'}
                       stroke="#1c1917"
                       strokeWidth="1.5"
                       className="cursor-pointer"
@@ -358,7 +359,7 @@ export function HomeDashboard({
                       animate={{ scale: 1 }}
                       transition={{ delay: 0.6 + i * 0.06 }}
                     >
-                      <title>{`${date} · ${t('netWorthTrend')}: ${value}`}</title>
+                      <title>{`${date} · ${t('netWorthTrend')}: ${value}${isMonthEnd ? ` · ${t('monthEndSnapshot')}` : ''}`}</title>
                     </motion.circle>
                   );
                 })}
@@ -367,13 +368,14 @@ export function HomeDashboard({
                   const [cx, cy] = point.split(',').map(Number);
                   const date = trendSnapshots[i]?.snapshot_at || '';
                   const value = formatMoney(fixedCostTrendValues[i] || 0);
+                  const isMonthEnd = Boolean(trendSnapshots[i]?.is_month_end);
                   return (
                     <motion.circle
                       key={`fc-${i}`}
                       cx={cx}
                       cy={cy}
-                      r="2.5"
-                      fill="white"
+                      r={isMonthEnd ? '3' : '2'}
+                      fill={isMonthEnd ? '#f59e0b' : 'white'}
                       stroke="#f59e0b"
                       strokeWidth="1.5"
                       className="cursor-pointer"
@@ -381,7 +383,7 @@ export function HomeDashboard({
                       animate={{ scale: 1 }}
                       transition={{ delay: 0.9 + i * 0.06 }}
                     >
-                      <title>{`${date} · ${t('fixedCostTrend')}: ${value}`}</title>
+                      <title>{`${date} · ${t('fixedCostTrend')}: ${value}${isMonthEnd ? ` · ${t('monthEndSnapshot')}` : ''}`}</title>
                     </motion.circle>
                   );
                 })}
