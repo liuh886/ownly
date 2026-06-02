@@ -57,6 +57,255 @@ function createReviewDraft(
   };
 }
 
+function ReviewDetailSidebar({
+  stored,
+  target,
+  isEditing,
+  disabled,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onUpdateBody,
+  editSummary,
+  onEditSummaryChange,
+  editFoodScore,
+  onEditFoodScoreChange,
+  editSceneryScore,
+  onEditSceneryScoreChange,
+  editExperienceScore,
+  onEditExperienceScoreChange,
+  canSubmit,
+  t,
+  formatMoney,
+  getReviewTypeLabel,
+  getExitTypeLabel,
+  getScoreItems,
+  getStatusLabel,
+}: {
+  stored: WYQDStoredEntity<ReviewEntry>;
+  target: WYQDObject | undefined;
+  isEditing: boolean;
+  disabled: boolean;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (e: React.FormEvent) => void;
+  onUpdateBody: (fileName: string, review: ReviewEntry, body: string) => Promise<void>;
+  editSummary: string;
+  onEditSummaryChange: (v: string) => void;
+  editFoodScore: string;
+  onEditFoodScoreChange: (v: string) => void;
+  editSceneryScore: string;
+  onEditSceneryScoreChange: (v: string) => void;
+  editExperienceScore: string;
+  onEditExperienceScoreChange: (v: string) => void;
+  canSubmit: boolean;
+  t: (key: WYQDTranslationKey) => string;
+  formatMoney: (v: number) => string;
+  getReviewTypeLabel: (type: ReviewEntry['review_type']) => string;
+  getExitTypeLabel: (type?: ReviewEntry['exit_type']) => string;
+  getScoreItems: (review: ReviewEntry) => string[];
+  getStatusLabel: (obj: WYQDObject) => string;
+}) {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const review = stored.entity;
+  const [isEditingBody, setIsEditingBody] = useState(false);
+  const [bodyDraft, setBodyDraft] = useState('');
+  const [isSavingBody, setIsSavingBody] = useState(false);
+  const [onDeleteReview, setOnDeleteReview] = useState<((fn: string) => Promise<void>) | null>(null);
+
+  const handleDelete = async () => {
+    const confirmed = await confirm({
+      title: t('delete'),
+      message: t('deleteConfirm').replace('{title}', review.title),
+      destructive: true,
+    });
+    if (confirmed && onDeleteReview) {
+      await onDeleteReview(stored.fileName);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <form onSubmit={onSaveEdit} className="space-y-4">
+        <div>
+          <div className="text-xs text-stone-400">{t('editReview')}</div>
+          <h3 className="mt-1 break-words text-base font-semibold text-stone-950">{review.title}</h3>
+        </div>
+        <div>
+          <label className="text-xs text-stone-400">{t('summary')}</label>
+          <textarea
+            value={editSummary}
+            onChange={(e) => onEditSummaryChange(e.target.value)}
+            placeholder={t('reviewSummaryPlaceholder')}
+            rows={4}
+            className="mt-1 w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 resize-none"
+            disabled={disabled}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-stone-400">{t('rankings')}</label>
+          <div className="mt-1 grid grid-cols-3 gap-2">
+            <input value={editFoodScore} onChange={(e) => onEditFoodScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
+            <input value={editSceneryScore} onChange={(e) => onEditSceneryScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
+            <input value={editExperienceScore} onChange={(e) => onEditExperienceScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={onCancelEdit} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={disabled}>{t('cancel')}</button>
+          <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
+            {t('saveChanges')}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <>
+    <div className="space-y-4">
+      {/* Header with Edit button */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs text-stone-400">{t('reviewDetail')}</div>
+          <h3 className="mt-1 break-words text-base font-semibold text-stone-950">{review.title}</h3>
+          <p className="mt-1 break-all text-xs text-stone-400">{stored.fileName}</p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={onStartEdit}
+            className="h-9 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800"
+            disabled={disabled}
+          >
+            {t('edit')}
+          </button>
+        </div>
+      </div>
+
+      {/* Structured fields */}
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <div className="text-stone-400">{t('type')}</div>
+          <div className="mt-1 font-medium text-stone-800">{getReviewTypeLabel(review.review_type)}</div>
+        </div>
+        <div>
+          <div className="text-stone-400">{t('date')}</div>
+          <div className="mt-1 font-medium text-stone-800">{review.reviewed_at || review.created_at}</div>
+        </div>
+        <div>
+          <div className="text-stone-400">{t('exitType')}</div>
+          <div className="mt-1 font-medium text-stone-800">{getExitTypeLabel(review.exit_type)}</div>
+        </div>
+        <div>
+          <div className="text-stone-400">{t('experienceCost')}</div>
+          <div className="mt-1 font-medium text-stone-800">
+            {review.realized_experience_cost ? formatMoney(review.realized_experience_cost) : t('notRecorded')}
+          </div>
+        </div>
+      </div>
+
+      {/* Scores */}
+      {getScoreItems(review).length > 0 ? (
+        <div className="rounded-md bg-white p-3 text-xs">
+          <div className="text-stone-400">{t('rankings')}</div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {getScoreItems(review).map((item) => (
+              <span key={item} className="rounded-full bg-stone-100 px-2 py-1 font-medium text-stone-700">{item}</span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Related object */}
+      {review.target ? (
+        <div className="rounded-md bg-white p-3 text-xs">
+          <div className="text-stone-400">{t('relatedObject')}</div>
+          <div className="mt-1 font-medium text-stone-900">{review.target}</div>
+          {target ? (
+            <div className="mt-1 text-stone-500">
+              {getStatusLabel(target)}
+              {target.object_type ? ` · ${target.object_type}` : ''}
+            </div>
+          ) : review.target_id ? (
+            <div className="mt-1 break-all text-stone-400">{review.target_id}</div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Summary */}
+      {review.summary ? (
+        <div>
+          <div className="text-xs text-stone-400">{t('summary')}</div>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-700">{review.summary}</p>
+        </div>
+      ) : null}
+
+      {/* Markdown body — editable inline */}
+      <div className="border-t border-stone-200 pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs text-stone-400">{t('markdownBodyLabel')}</div>
+          {!isEditingBody ? (
+            <button
+              type="button"
+              onClick={() => {
+                setBodyDraft(stored.body.trim());
+                setIsEditingBody(true);
+              }}
+              className="rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:text-stone-900"
+              disabled={disabled}
+            >
+              {t('edit')}
+            </button>
+          ) : null}
+        </div>
+        {isEditingBody ? (
+          <div className="mt-2 space-y-2">
+            <textarea
+              value={bodyDraft}
+              onChange={(e) => setBodyDraft(e.target.value)}
+              rows={8}
+              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-xs leading-5 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 resize-none font-mono"
+              disabled={disabled || isSavingBody}
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditingBody(false)}
+                className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-400"
+                disabled={isSavingBody}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsSavingBody(true);
+                  try {
+                    await onUpdateBody(stored.fileName, review, bodyDraft);
+                    setIsEditingBody(false);
+                  } finally {
+                    setIsSavingBody(false);
+                  }
+                }}
+                className="rounded-lg bg-stone-950 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                disabled={disabled || isSavingBody}
+              >
+                {isSavingBody ? t('saving') : t('save')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-stone-600">
+            {stored.body.trim() || t('noBody')}
+          </pre>
+        )}
+      </div>
+    </div>
+    {confirmDialog}
+    </>
+  );
+}
+
 export function ReviewHome({
   disabled,
   objects,
@@ -614,21 +863,13 @@ export function ReviewHome({
                       {stored.entity.summary}
                     </p>
                   ) : null}
-                  <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="mt-3 flex gap-2">
                     <button
                       type="button"
                       onClick={() => selectReview(stored.fileName)}
-                      className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 active:scale-95"
+                      className="rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 active:scale-95"
                     >
                       {t('detail')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => startEditingReview(stored)}
-                      className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300"
-                      disabled={disabled || isSaving}
-                    >
-                      {t('edit')}
                     </button>
                     <button
                       type="button"
@@ -644,7 +885,7 @@ export function ReviewHome({
                           setDeletingFileName(null);
                         }
                       }}
-                      className="rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300"
+                      className="rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300"
                       disabled={disabled || deletingFileName === stored.fileName}
                     >
                       {deletingFileName === stored.fileName ? t('saving') : t('delete')}
@@ -656,108 +897,32 @@ export function ReviewHome({
           </div>
 
           <aside ref={reviewDetailRef} className="rounded-xl border border-stone-200 bg-stone-50/50 p-5">
-            {editingFileName && selectedReview ? (
-              /* Edit mode — inline form in sidebar */
-              <form ref={reviewFormRef} onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <div className="text-xs text-stone-400">{t('editReview')}</div>
-                  <h3 className="mt-1 break-words text-base font-semibold text-stone-950">
-                    {selectedReview.entity.title}
-                  </h3>
-                </div>
-                <div>
-                  <label className="text-xs text-stone-400">{t('summary')}</label>
-                  <textarea
-                    value={summary}
-                    onChange={(e) => setSummary(e.target.value)}
-                    placeholder={t('reviewSummaryPlaceholder')}
-                    rows={4}
-                    className={`${fieldClass} mt-1 resize-none`}
-                    disabled={disabled || isSaving}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-stone-400">{t('rankings')}</label>
-                  <div className="mt-1 grid grid-cols-3 gap-2">
-                    <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
-                    <input value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
-                    <input value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={cancelEditing} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSaving}>{t('cancel')}</button>
-                  <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
-                    {isSaving ? t('saving') : t('saveChanges')}
-                  </button>
-                </div>
-              </form>
-            ) : selectedReview ? (
-              /* Detail mode — read-only view */
-              <div className="space-y-4">
-                <div>
-                  <div className="text-xs text-stone-400">{t('reviewDetail')}</div>
-                  <h3 className="mt-1 break-words text-base font-semibold text-stone-950">
-                    {selectedReview.entity.title}
-                  </h3>
-                  <p className="mt-1 break-all text-xs text-stone-400">{selectedReview.fileName}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <div className="text-stone-400">{t('type')}</div>
-                    <div className="mt-1 font-medium text-stone-800">{getReviewTypeLabel(selectedReview.entity.review_type)}</div>
-                  </div>
-                  <div>
-                    <div className="text-stone-400">{t('date')}</div>
-                    <div className="mt-1 font-medium text-stone-800">{selectedReview.entity.reviewed_at || selectedReview.entity.created_at}</div>
-                  </div>
-                  <div>
-                    <div className="text-stone-400">{t('exitType')}</div>
-                    <div className="mt-1 font-medium text-stone-800">{getExitTypeLabel(selectedReview.entity.exit_type)}</div>
-                  </div>
-                  <div>
-                    <div className="text-stone-400">{t('experienceCost')}</div>
-                    <div className="mt-1 font-medium text-stone-800">
-                      {selectedReview.entity.realized_experience_cost ? formatMoney(selectedReview.entity.realized_experience_cost) : t('notRecorded')}
-                    </div>
-                  </div>
-                </div>
-                {getScoreItems(selectedReview.entity).length > 0 ? (
-                  <div className="rounded-md bg-white p-3 text-xs">
-                    <div className="text-stone-400">{t('rankings')}</div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {getScoreItems(selectedReview.entity).map((scoreItem) => (
-                        <span key={scoreItem} className="rounded-full bg-stone-100 px-2 py-1 font-medium text-stone-700">{scoreItem}</span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {selectedReview.entity.target ? (
-                  <div className="rounded-md bg-white p-3 text-xs">
-                    <div className="text-stone-400">{t('relatedObject')}</div>
-                    <div className="mt-1 font-medium text-stone-900">{selectedReview.entity.target}</div>
-                    {selectedReviewTarget ? (
-                      <div className="mt-1 text-stone-500">
-                        {getStatusLabel(selectedReviewTarget)}
-                        {selectedReviewTarget.object_type ? ` · ${selectedReviewTarget.object_type}` : ''}
-                      </div>
-                    ) : selectedReview.entity.target_id ? (
-                      <div className="mt-1 break-all text-stone-400">{selectedReview.entity.target_id}</div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {selectedReview.entity.summary ? (
-                  <div>
-                    <div className="text-xs text-stone-400">{t('summary')}</div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-700">{selectedReview.entity.summary}</p>
-                  </div>
-                ) : null}
-                {selectedReview.body.trim() ? (
-                  <div>
-                    <div className="text-xs text-stone-400">{t('markdownBodyLabel')}</div>
-                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs leading-5 text-stone-600">{selectedReview.body.trim()}</pre>
-                  </div>
-                ) : null}
-              </div>
+            {selectedReview ? (
+              <ReviewDetailSidebar
+                stored={selectedReview}
+                target={selectedReviewTarget ?? undefined}
+                isEditing={editingFileName === selectedReview.fileName}
+                disabled={disabled || isSaving}
+                onStartEdit={() => startEditingReview(selectedReview)}
+                onCancelEdit={cancelEditing}
+                onSaveEdit={handleSubmit}
+                onUpdateBody={onUpdateReview}
+                editSummary={summary}
+                onEditSummaryChange={setSummary}
+                editFoodScore={foodScore}
+                onEditFoodScoreChange={setFoodScore}
+                editSceneryScore={sceneryScore}
+                onEditSceneryScoreChange={setSceneryScore}
+                editExperienceScore={experienceScore}
+                onEditExperienceScoreChange={setExperienceScore}
+                canSubmit={canSubmit}
+                t={t}
+                formatMoney={formatMoney}
+                getReviewTypeLabel={getReviewTypeLabel}
+                getExitTypeLabel={getExitTypeLabel}
+                getScoreItems={getScoreItems}
+                getStatusLabel={getStatusLabel}
+              />
             ) : (
               <p className="text-sm text-stone-500">{t('selectReviewToView')}</p>
             )}

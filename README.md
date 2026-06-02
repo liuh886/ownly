@@ -1,6 +1,7 @@
 # Ownly
 
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)](https://obsidian.md/plugins?id=ownly)
+[![Status](https://img.shields.io/badge/status-stable_1.0.0-brightgreen.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)
 
@@ -8,9 +9,26 @@
 
 [中文文档](README.zh.md)
 
-Ownly is a local-first decision ledger for tracking possessions, subscriptions, and experiences — built as an Obsidian plugin and a standalone web app. All your data stays in your Vault as plain Markdown files. No cloud, no account, zero network calls.
+Ownly is a local-first decision ledger for people who want to buy less impulsively, understand what they actually use, and turn past purchases into better future decisions.
+
+- **Obsidian-native**: your Vault is the source of truth.
+- **Markdown-first**: every object, snapshot, and review is a plain `.md` file.
+- **Decision-focused**: track the full lifecycle from desire to review, not just the amount spent.
+- **Private by default**: no cloud account, no telemetry, no personal-data network calls.
 
 ![Ownly Homepage](docs/screenshot-homepage.jpg)
+
+## Project Status
+
+Ownly `1.0.0` is a stable public Obsidian plugin release. The Obsidian plugin is the primary supported experience; the Web runtime is kept for local browser use, development, and shared-core validation.
+
+| Area | Status |
+|---|---|
+| Obsidian plugin | Stable, primary runtime |
+| Web runtime | Compatible local runtime |
+| Data format | Plain Markdown + YAML frontmatter |
+| Storage model | Local Vault / local folder |
+| Network model | No personal-data network calls |
 
 ## Why Ownly?
 
@@ -20,6 +38,9 @@ It's not a budgeting app. It's not a wishlist. It's a structured system for maki
 
 - **Seed** a desire → **Observe** it over time → **Decide** to buy or pass → **Use** → **Review** after retirement
 - Every object has a lifecycle. Every experience gets a review. The data informs your next decision.
+- Desires are worth observing before they become purchases.
+- Objects only become meaningful when you can see their use, cost, and exit story.
+- Reviews turn old consumption into training data for your next decision.
 
 Your data lives as plain Markdown in your Obsidian Vault. You can edit, version-control, or move files freely. Ownly reads and writes frontmatter — it never locks, encrypts, or deletes your data.
 
@@ -78,9 +99,11 @@ Install directly from the Obsidian Community Plugins directory:
 
 👉 **[Install Ownly](https://obsidian.md/plugins?id=ownly)**
 
-### Web App (For Non-Obsidian Users & Developers)
+### Web Runtime (Local Browser / Developers)
 
-If you don't use Obsidian, you can run Ownly as a standalone web app. It runs in the browser and connects to a local folder via the File System Access API.
+Ownly can also run in a browser and connect to a local folder through the File System Access API. This is useful for trying the shared interface outside Obsidian, local development, and static deployment experiments.
+
+The Obsidian plugin remains the primary runtime. Web support is compatible with the shared Markdown model, but browser file access depends on the user's browser and permissions.
 
 ```bash
 # Clone and install
@@ -140,14 +163,29 @@ The Obsidian plugin is desktop-only (`isDesktopOnly: true`).
 Nothing. Your data is plain Markdown files in your Vault. Uninstalling the plugin does not delete your files. You can read, edit, and move them with any text editor.
 
 **Can I use Ownly without Obsidian?**
-Yes. The Web App runs in any modern browser and connects to a local folder. See the [Web App installation](#web-app-for-non-obsidian-users--developers) section.
+Yes. The Web runtime runs in supported desktop browsers and connects to a local folder. See the [Web Runtime installation](#web-runtime-local-browser--developers) section.
+
+## Roadmap
+
+- Add more release screenshots and short demo media.
+- Expand automated E2E coverage beyond smoke tests.
+- Improve account entity management parity between Obsidian and Web runtimes.
+- Add Doctor repair preview and rollback flows.
+- Continue polishing responsive layouts on narrow panes and real devices.
+
+## Known Limitations
+
+- The Obsidian plugin is desktop-only.
+- Browser folder access depends on File System Access API support.
+- The Web runtime focuses on local compatibility and shared-core validation; Obsidian is the primary supported experience.
+- Account snapshots work in Web, but full standalone account entity management is more complete in the Obsidian repository adapter.
 
 ## Support
 
 If Ownly has been useful to you, consider supporting the project:
 
 - [Ko-fi](https://ko-fi.com/F1F7WYJ6B) — One-time donation
-- [Gumroad](https://liuh886.gumroad.com/l/ownly) — Support with Pro unlock
+- [Gumroad](https://liuh886.gumroad.com/l/ownly) — Optional project sponsorship
 
 ## Developer Documentation
 
