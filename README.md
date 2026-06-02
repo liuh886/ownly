@@ -41,7 +41,7 @@ The design philosophy behind Ownly is not to encourage owning more, but to help 
 
 ## Network Calls
 
-Ownly is local-first. The **only** network call is the Gumroad License Verify API, used once when activating a Pro license key in the Obsidian plugin settings. After activation, the license state is stored locally and no further network calls are made. No telemetry, no analytics, no tracking.
+Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
 
 ## Support
 
@@ -52,13 +52,18 @@ If Ownly has been useful to you, consider supporting the project:
 
 ## Installation
 
-### From Obsidian Community Plugins
+### Obsidian Plugin (Recommended)
 
+Install directly from the Obsidian Community Plugins directory:
+
+👉 **[Install Ownly](https://obsidian.md/plugins?id=ownly)**
+
+Or manually in Obsidian:
 1. Open Obsidian → Settings → Community plugins → Browse.
 2. Search for **Ownly**.
 3. Install and enable.
 
-### Manual Installation
+### Manual Installation (Obsidian)
 
 ```bash
 # Build and package
@@ -72,12 +77,20 @@ Then enable `Ownly` from Obsidian → Settings → Community plugins.
 
 ### Web App
 
+The Web App is a separate deployment — it runs in the browser and connects to a local folder via the File System Access API.
+
 ```bash
-npm run dev        # Development
-npm run build      # Production static export to out/
+npm run dev        # Development server at localhost:3000
+npm run build      # Static export to out/
 ```
 
-The Web App is always Pro (no license gating). It uses the File System Access API to connect to a local folder, or falls back to IndexedDB.
+You can deploy `out/` to any static hosting (Vercel, Netlify, GitHub Pages, etc.) or serve it locally with PM2:
+
+```bash
+npx pm2 start ecosystem.config.cjs
+```
+
+The Web App always has all features enabled — no license gating.
 
 ## Data Storage
 
