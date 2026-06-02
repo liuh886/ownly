@@ -78,9 +78,9 @@ Install directly from the Obsidian Community Plugins directory:
 
 👉 **[Install Ownly](https://obsidian.md/plugins?id=ownly)**
 
-### Web App (Developer Only)
+### Web App (For Non-Obsidian Users & Developers)
 
-The Web App is for development and testing only. It runs in the browser and connects to a local folder via the File System Access API.
+If you don't use Obsidian, you can run Ownly as a standalone web app. It runs in the browser and connects to a local folder via the File System Access API.
 
 ```bash
 # Clone and install
@@ -140,7 +140,7 @@ The Obsidian plugin is desktop-only (`isDesktopOnly: true`).
 Nothing. Your data is plain Markdown files in your Vault. Uninstalling the plugin does not delete your files. You can read, edit, and move them with any text editor.
 
 **Can I use Ownly without Obsidian?**
-Ownly is designed for Obsidian. A web-based development version exists for contributors, but it is not a supported user-facing product.
+Yes. The Web App runs in any modern browser and connects to a local folder. See the [Web App installation](#web-app-for-non-obsidian-users--developers) section.
 
 ## Support
 
