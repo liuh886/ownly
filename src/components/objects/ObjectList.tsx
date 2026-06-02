@@ -588,17 +588,42 @@ function getTimelineRows(object: WYQDObject, t: TranslateFn): Array<{ label: str
 function ObjectDetailPanel({
   stored,
   onClose,
-  onEdit,
+  onSave,
+  disabled,
 }: {
   stored: WYQDStoredEntity<WYQDObject>;
   onClose: () => void;
-  onEdit?: () => void;
+  onSave?: (updatedObject: WYQDObject, body: string) => Promise<void>;
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
+  const [isEditing, setIsEditing] = useState(false);
   const object = stored.entity;
   const detailRows = getDetailRows(object, t);
   const timelineRows = getTimelineRows(object, t).filter((row) => row.value);
   const body = stored.body.trim();
+
+  if (isEditing && onSave) {
+    return (
+      <motion.section
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.15 }}
+        className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm"
+      >
+        <ObjectComposer
+          disabled={disabled}
+          initialObject={object}
+          submitLabel={t('saveChanges')}
+          onCancel={() => setIsEditing(false)}
+          onSubmit={async (updatedObject, updatedBody) => {
+            await onSave(updatedObject, stored.body || updatedBody);
+            setIsEditing(false);
+          }}
+        />
+      </motion.section>
+    );
+  }
 
   return (
     <motion.section
@@ -615,10 +640,10 @@ function ObjectDetailPanel({
           <p className="mt-1 break-all text-xs text-stone-400">{stored.fileName}</p>
         </div>
         <div className="flex shrink-0 gap-2">
-          {onEdit ? (
+          {onSave ? (
             <button
               type="button"
-              onClick={onEdit}
+              onClick={() => setIsEditing(true)}
               className="h-10 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800"
             >
               {t('edit')}
@@ -1086,10 +1111,10 @@ export function ObjectList({
                   <ObjectDetailPanel
                     stored={stored}
                     onClose={() => setSelectedFileName(null)}
-                    onEdit={() => {
-                      setEditingFileName(stored.fileName);
-                      setSelectedFileName(null);
+                    onSave={async (updatedObject, body) => {
+                      await onUpdate(stored.fileName, updatedObject, body);
                     }}
+                    disabled={disabled}
                   />
                 </div>
               ) : (
@@ -1310,10 +1335,10 @@ export function ObjectList({
                   <ObjectDetailPanel
                     stored={stored}
                     onClose={() => setSelectedFileName(null)}
-                    onEdit={() => {
-                      setEditingFileName(stored.fileName);
-                      setSelectedFileName(null);
+                    onSave={async (updatedObject, body) => {
+                      await onUpdate(stored.fileName, updatedObject, body);
                     }}
+                    disabled={disabled}
                   />
                 </div>
               ) : (
