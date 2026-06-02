@@ -18,7 +18,11 @@ export type WYQDDoctorCheckId =
   | 'entity.schema.unsupported'
   | 'object.cost.negative'
   | 'snapshot.net_worth.mismatch'
-  | 'review.target.missing';
+  | 'review.target.missing'
+  | 'object.review_ref.missing'
+  | 'object.status_date.inconsistent'
+  | 'entity.date.chronology'
+  | 'snapshot.stale';
 
 export interface WYQDDoctorFinding {
   id: WYQDDoctorCheckId;
@@ -188,6 +192,157 @@ function checkReviewTargets(
     }));
 }
 
+function checkReviewRefIntegrity(
+  objects: readonly WYQDStoredEntity<WYQDObject>[],
+  reviews: readonly WYQDStoredEntity<ReviewEntry>[],
+  t?: TranslateFn,
+): WYQDDoctorFinding[] {
+  const reviewIds = new Set(reviews.map((stored) => stored.entity.id));
+  const findings: WYQDDoctorFinding[] = [];
+
+  for (const stored of objects) {
+    const ref = stored.entity.review_ref;
+    if (ref && !reviewIds.has(ref)) {
+      findings.push({
+        id: 'object.review_ref.missing',
+        severity: 'warning',
+        message: t
+          ? t('doctorReviewRefMissing').replace('{title}', stored.entity.title)
+          : `Object references nonexistent review: ${stored.entity.title}`,
+        path: entityPath(stored),
+        entityId: stored.entity.id,
+        details: { reviewRef: ref },
+      });
+    }
+  }
+
+  return findings;
+}
+
+function checkStatusDateConsistency(
+  objects: readonly WYQDStoredEntity<WYQDObject>[],
+  t?: TranslateFn,
+): WYQDDoctorFinding[] {
+  const findings: WYQDDoctorFinding[] = [];
+
+  for (const stored of objects) {
+    const obj = stored.entity;
+
+    if (obj.object_type === 'physical') {
+      if ((obj.status === 'purchased' || obj.status === 'using') && !obj.purchased_at) {
+        findings.push({
+          id: 'object.status_date.inconsistent',
+          severity: 'warning',
+          message: t
+            ? t('doctorStatusDateInconsistent').replace('{title}', obj.title).replace('{status}', obj.status)
+            : `Physical object "${obj.title}" has status "${obj.status}" but no purchased_at date`,
+          path: entityPath(stored),
+          entityId: obj.id,
+        });
+      }
+      if ((obj.status === 'idle' || obj.status === 'transferred' || obj.status === 'discarded') && !obj.ended_at) {
+        findings.push({
+          id: 'object.status_date.inconsistent',
+          severity: 'warning',
+          message: t
+            ? t('doctorStatusDateInconsistent').replace('{title}', obj.title).replace('{status}', obj.status)
+            : `Physical object "${obj.title}" has status "${obj.status}" but no ended_at date`,
+          path: entityPath(stored),
+          entityId: obj.id,
+        });
+      }
+    }
+
+    if (obj.object_type === 'recurring_cost') {
+      if (obj.status === 'active' && (!obj.billing_amount || !obj.billing_cycle)) {
+        findings.push({
+          id: 'object.status_date.inconsistent',
+          severity: 'warning',
+          message: t
+            ? t('doctorStatusDateInconsistent').replace('{title}', obj.title).replace('{status}', obj.status)
+            : `Recurring cost "${obj.title}" is active but missing billing_amount or billing_cycle`,
+          path: entityPath(stored),
+          entityId: obj.id,
+        });
+      }
+    }
+
+    if (obj.object_type === 'one_time_experience') {
+      if (obj.status === 'completed' && !obj.ended_at) {
+        findings.push({
+          id: 'object.status_date.inconsistent',
+          severity: 'warning',
+          message: t
+            ? t('doctorStatusDateInconsistent').replace('{title}', obj.title).replace('{status}', obj.status)
+            : `Experience "${obj.title}" is completed but has no ended_at date`,
+          path: entityPath(stored),
+          entityId: obj.id,
+        });
+      }
+    }
+  }
+
+  return findings;
+}
+
+function checkDateChronology(
+  entities: readonly AnyStoredEntity[],
+  t?: TranslateFn,
+): WYQDDoctorFinding[] {
+  const findings: WYQDDoctorFinding[] = [];
+
+  for (const stored of entities) {
+    const e = stored.entity;
+    if (e.created_at && e.updated_at && e.created_at > e.updated_at) {
+      findings.push({
+        id: 'entity.date.chronology',
+        severity: 'warning',
+        message: t
+          ? t('doctorDateChronology').replace('{title}', e.title)
+          : `Entity "${e.title}" has created_at after updated_at`,
+        path: entityPath(stored),
+        entityId: e.id,
+        details: { created_at: e.created_at, updated_at: e.updated_at },
+      });
+    }
+  }
+
+  return findings;
+}
+
+function checkSnapshotStaleness(
+  snapshots: readonly WYQDStoredEntity<AccountSnapshot>[],
+  t?: TranslateFn,
+): WYQDDoctorFinding[] {
+  if (snapshots.length === 0) return [];
+
+  const sorted = [...snapshots].sort((a, b) =>
+    (b.entity.snapshot_at || '').localeCompare(a.entity.snapshot_at || ''),
+  );
+  const latest = sorted[0];
+  const latestDate = latest.entity.snapshot_at;
+  if (!latestDate) return [];
+
+  const daysSince = Math.floor(
+    (Date.now() - new Date(latestDate).getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (daysSince > 30) {
+    return [{
+      id: 'snapshot.stale',
+      severity: 'info',
+      message: t
+        ? t('doctorSnapshotStale').replace('{days}', String(daysSince)).replace('{date}', latestDate)
+        : `Latest snapshot is ${daysSince} days old (${latestDate}). Consider recording a new one.`,
+      path: entityPath(latest),
+      entityId: latest.entity.id,
+      details: { latestDate, daysSince },
+    }];
+  }
+
+  return [];
+}
+
 async function checkDirectories(
   adapter: WYQDDoctorRepositoryAdapter,
   t?: TranslateFn,
@@ -228,6 +383,10 @@ export async function runWYQDDoctor(
     ...checkObjectCosts(objects, t),
     ...checkSnapshotTotals(snapshots, t),
     ...checkReviewTargets(reviews, objects, t),
+    ...checkReviewRefIntegrity(objects, reviews, t),
+    ...checkStatusDateConsistency(objects, t),
+    ...checkDateChronology(entities, t),
+    ...checkSnapshotStaleness(snapshots, t),
   ];
 
   return createReport(findings, checkedAt);
