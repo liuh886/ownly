@@ -4,6 +4,7 @@ import type { WYQDRepositoryAdapter } from '@/core/repository';
 import type { WYQDMembershipState } from '@/core/membership';
 import { I18nProvider } from '@/core/i18n-context';
 import type { WYQDLanguage } from '@/core/i18n';
+import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
 
 export function ObsidianWorkspaceProvider({
   repository,
@@ -80,6 +81,11 @@ export function ObsidianWorkspaceProvider({
         }}
       >
         {children}
+        <LicenseKeyModal
+          open={licenseModalOpen}
+          onClose={() => setLicenseModalOpen(false)}
+          currentPlan={membership.plan}
+        />
       </OwnlyWorkspaceProvider>
     </I18nProvider>
   );
