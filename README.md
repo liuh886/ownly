@@ -78,19 +78,22 @@ Install directly from the Obsidian Community Plugins directory:
 
 👉 **[Install Ownly](https://obsidian.md/plugins?id=ownly)**
 
-### Web App
+### Web App (Developer Only)
 
-The Web App is a separate deployment — it runs in the browser and connects to a local folder via the File System Access API.
-
-```bash
-npm run dev        # Development server at localhost:3000
-npm run build      # Static export to out/
-```
-
-Deploy `out/` to any static hosting (Vercel, Netlify, GitHub Pages) or serve locally:
+The Web App is for development and testing only. It runs in the browser and connects to a local folder via the File System Access API.
 
 ```bash
-npx pm2 start ecosystem.config.cjs
+# Clone and install
+git clone https://github.com/liuh886/ownly.git
+cd ownly
+npm ci
+
+# Development server at localhost:3000
+npm run dev
+
+# Or build and serve static export
+npm run build
+npx pm2 start ecosystem.config.cjs   # serves out/ on port 3000
 ```
 
 ## Data Storage
@@ -131,13 +134,13 @@ Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, 
 ## FAQ
 
 **Does Ownly work on mobile?**
-The Obsidian plugin is desktop-only (`isDesktopOnly: true`). The Web App works on any modern browser.
+The Obsidian plugin is desktop-only (`isDesktopOnly: true`).
 
 **What happens to my data if I uninstall Ownly?**
 Nothing. Your data is plain Markdown files in your Vault. Uninstalling the plugin does not delete your files. You can read, edit, and move them with any text editor.
 
 **Can I use Ownly without Obsidian?**
-Yes. The Web App runs in any modern browser and connects to a local folder via the File System Access API. It has all features enabled.
+Ownly is designed for Obsidian. A web-based development version exists for contributors, but it is not a supported user-facing product.
 
 ## Support
 
