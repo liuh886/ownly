@@ -837,9 +837,6 @@ export function ObjectList({
     [observingObjects],
   );
 
-  const selectedStored = selectedFileName
-    ? objects.find((stored) => stored.fileName === selectedFileName) || null
-    : null;
   const iconButtonClass =
     'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-sm transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40';
   const menuItemClass =
@@ -1060,30 +1057,42 @@ export function ObjectList({
         {visibleFilteredObjects.map((stored) => {
           const object = stored.entity;
           const isEditing = editingFileName === stored.fileName;
-	          const dailyCost = getDailyCost(object);
-	          const serviceDaysInfo = getServiceDaysInfo(object);
-	          const bucket = getPhysicalBucket(object.status);
-	          const accent = getPhysicalAccentClasses(bucket);
+          const isDetailing = selectedFileName === stored.fileName;
+          const dailyCost = getDailyCost(object);
+          const serviceDaysInfo = getServiceDaysInfo(object);
+          const bucket = getPhysicalBucket(object.status);
+          const accent = getPhysicalAccentClasses(bucket);
 
-	          return (
-	            <article
-	              key={stored.fileName}
-	              className="overflow-visible rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
-	            >
-	              {isEditing ? (
-	                <div className="p-5">
-	                  <ObjectComposer
-	                    disabled={disabled}
-	                    initialObject={object}
-	                    submitLabel={t('saveChanges')}
-	                    onCancel={() => setEditingFileName(null)}
-	                    onSubmit={async (updatedObject, body) => {
-	                      await onUpdate(stored.fileName, updatedObject, stored.body || body);
-	                      setEditingFileName(null);
-	                    }}
-	                  />
-	                </div>
-	              ) : (
+          return (
+            <article
+              key={stored.fileName}
+              className="overflow-visible rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300"
+            >
+              {isEditing ? (
+                <div className="p-5">
+                  <ObjectComposer
+                    disabled={disabled}
+                    initialObject={object}
+                    submitLabel={t('saveChanges')}
+                    onCancel={() => setEditingFileName(null)}
+                    onSubmit={async (updatedObject, body) => {
+                      await onUpdate(stored.fileName, updatedObject, stored.body || body);
+                      setEditingFileName(null);
+                    }}
+                  />
+                </div>
+              ) : isDetailing ? (
+                <div className="p-1">
+                  <ObjectDetailPanel
+                    stored={stored}
+                    onClose={() => setSelectedFileName(null)}
+                    onEdit={() => {
+                      setEditingFileName(stored.fileName);
+                      setSelectedFileName(null);
+                    }}
+                  />
+                </div>
+              ) : (
 	                <div className="flex">
 	                  <div className={`w-1.5 shrink-0 ${accent.stripe}`} aria-hidden="true" />
 	                  <div className="flex min-w-0 flex-1 flex-col gap-4 p-5 md:flex-row md:items-center">
@@ -1249,19 +1258,6 @@ export function ObjectList({
         ) : null}
       </div>
 
-      <AnimatePresence>
-        {selectedStored ? (
-          <ObjectDetailPanel
-            stored={selectedStored}
-            onClose={() => setSelectedFileName(null)}
-            onEdit={() => {
-              setEditingFileName(selectedStored.fileName);
-              setSelectedFileName(null);
-            }}
-          />
-        ) : null}
-      </AnimatePresence>
-
       {supportingObjects.length > 0 ? (
         <section className="space-y-3 pt-2">
           <div className="flex items-center justify-between gap-3 px-1">
@@ -1288,6 +1284,8 @@ export function ObjectList({
                   : null;
               const supportingActionLabel = getSupportingActionLabel(object, t);
 
+              const isDetailing = selectedFileName === stored.fileName;
+
               return isEditing ? (
                 <div
                   key={stored.fileName}
@@ -1301,6 +1299,20 @@ export function ObjectList({
                     onSubmit={async (updatedObject, body) => {
                       await onUpdate(stored.fileName, updatedObject, stored.body || body);
                       setEditingFileName(null);
+                    }}
+                  />
+                </div>
+              ) : isDetailing ? (
+                <div
+                  key={stored.fileName}
+                  className="rounded-xl border border-stone-200 bg-white p-1 shadow-sm"
+                >
+                  <ObjectDetailPanel
+                    stored={stored}
+                    onClose={() => setSelectedFileName(null)}
+                    onEdit={() => {
+                      setEditingFileName(stored.fileName);
+                      setSelectedFileName(null);
                     }}
                   />
                 </div>
