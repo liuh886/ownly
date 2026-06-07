@@ -36,13 +36,13 @@ export class ObsidianFileSystemService {
         const permission = await handle.queryPermission(options);
         
         if (permission === 'granted') {
-          this.directoryHandle = handle as FileSystemDirectoryHandle;
+          this.directoryHandle = handle as FileSystemDirectoryHandle; // eslint-disable-line @typescript-eslint/no-unnecessary-type-assertion -- idb-keyval returns T | undefined, narrowing requires explicit cast
           return true;
         }
         
         const requestStatus = await handle.requestPermission(options);
         if (requestStatus === 'granted') {
-          this.directoryHandle = handle as FileSystemDirectoryHandle;
+          this.directoryHandle = handle as FileSystemDirectoryHandle; // eslint-disable-line @typescript-eslint/no-unnecessary-type-assertion
           return true;
         }
       }
@@ -312,3 +312,5 @@ export class ObsidianFileSystemService {
 }
 
 export const obsidianService = new ObsidianFileSystemService();
+
+/* eslint-enable @typescript-eslint/no-explicit-any */
