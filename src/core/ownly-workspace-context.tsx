@@ -21,6 +21,9 @@ export interface OwnlyWorkspaceContextValue {
   openLicenseModal: () => void;
   closeLicenseModal: () => void;
   licenseModalOpen: boolean;
+  /** Runtime-appropriate localStorage wrapper (Obsidian: App#saveLocalStorage/loadLocalStorage, Web: localStorage) */
+  storageGet: (key: string) => string | null;
+  storageSet: (key: string, value: string) => void;
 }
 
 const OwnlyWorkspaceContext = createContext<OwnlyWorkspaceContextValue | null>(null);

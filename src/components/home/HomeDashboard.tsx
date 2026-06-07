@@ -7,7 +7,7 @@ import {
   calculateRecurringMonthlyCost,
   isActiveRecurringCost,
 } from '@/domain/calculations';
-import type { AccountSnapshot, HomeMetrics, PhysicalObject, RecurringCostObject, WYQDObject } from '@/domain/types';
+import type { AccountSnapshot, HomeMetrics, OneTimeExperienceObject, PhysicalObject, RecurringCostObject, WYQDObject } from '@/domain/types';
 import type { WYQDDoctorReport } from '@/core/doctor';
 import { runWYQDDoctor } from '@/core/doctor';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
@@ -249,14 +249,14 @@ export function HomeDashboard({
   );
   const totalAcquisitionCost = useMemo(
     () => objects
-      .filter((o) => o.object_type === 'physical')
-      .reduce((sum: number, o) => sum + (o.purchase_price || 0), 0),
+      .filter((o): o is PhysicalObject => o.object_type === 'physical')
+      .reduce((sum, o) => sum + (o.purchase_price || 0), 0),
     [objects],
   );
   const totalExperienceCost = useMemo(
     () => objects
-      .filter((o) => o.object_type === 'one_time_experience')
-      .reduce((sum: number, o) => sum + (o.actual_total || o.budget_total || 0), 0),
+      .filter((o): o is OneTimeExperienceObject => o.object_type === 'one_time_experience')
+      .reduce((sum, o) => sum + (o.actual_total || o.budget_total || 0), 0),
     [objects],
   );
   const fixedCostCoverage = useMemo(

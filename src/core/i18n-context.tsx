@@ -27,11 +27,18 @@ export function I18nProvider({
   children,
   initialLanguage,
   onLanguageChange,
+  storageGet,
+  storageSet,
 }: {
   children: ReactNode;
   initialLanguage?: WYQDLanguage;
   onLanguageChange?: (lang: WYQDLanguage) => void;
+  storageGet?: (key: string) => string | null;
+  storageSet?: (key: string, value: string) => void;
 }) {
+  const get = storageGet ?? ((key: string) => localStorage.getItem(key));
+  const set = storageSet ?? ((key: string, value: string) => { localStorage.setItem(key, value); });
+
   const [language, setLanguage] = useState<WYQDLanguage>(() => {
     if (initialLanguage) return initialLanguage;
     return 'zh';
@@ -45,12 +52,10 @@ export function I18nProvider({
     if (initialLanguage) return;
 
     const timer = window.setTimeout(() => {
-      // eslint-disable-next-line obsidianmd/no-localstorage
-      const storedLanguage = normalizeWYQDLanguage(localStorage.getItem('ownly_language'));
+      const storedLanguage = normalizeWYQDLanguage(get('ownly_language'));
       setLanguage(storedLanguage);
 
-      // eslint-disable-next-line obsidianmd/no-localstorage
-      const storedCurrency = localStorage.getItem('ownly_currency') as WYQDCurrency | null;
+      const storedCurrency = get('ownly_currency') as WYQDCurrency | null;
       if (storedCurrency && ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'].includes(storedCurrency)) {
         setCurrency(storedCurrency);
       } else {
@@ -70,12 +75,9 @@ export function I18nProvider({
         if (onLanguageChange) {
           onLanguageChange(lang);
         } else {
-          // eslint-disable-next-line obsidianmd/no-localstorage
-          localStorage.setItem('ownly_language', lang);
+          set('ownly_language', lang);
         }
-        // Auto-switch currency when language changes (only if user hasn't manually set it)
-        // eslint-disable-next-line obsidianmd/no-localstorage
-        const stored = localStorage.getItem('ownly_currency');
+        const stored = get('ownly_currency');
         if (!stored) {
           setCurrency(defaultCurrency(lang));
         }
@@ -84,8 +86,7 @@ export function I18nProvider({
       currency,
       setCurrency: (cur: WYQDCurrency) => {
         setCurrency(cur);
-        // eslint-disable-next-line obsidianmd/no-localstorage
-        localStorage.setItem('ownly_currency', cur);
+        set('ownly_currency', cur);
       },
     };
   }, [language, currency, onLanguageChange]);

@@ -14,7 +14,7 @@ export function parseMarkdownEntity<T extends Record<string, unknown> = Record<s
     throw new Error('Markdown file does not contain YAML frontmatter.');
   }
 
-  const parsed = YAML.parse(match[1] || '{}');
+  const parsed: unknown = YAML.parse(match[1] || '{}');
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('YAML frontmatter is not a valid object.');

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useMemo, type ReactNode } from 'react';
+import type { App } from 'obsidian';
 import { OwnlyWorkspaceProvider } from '@/core/ownly-workspace-context';
 import type { WYQDRepositoryWithStorageInfo } from '@/core/repository';
 import type { WYQDMembershipState } from '@/core/membership';
@@ -7,14 +8,16 @@ import type { WYQDLanguage } from '@/core/i18n';
 import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
 
 export function ObsidianWorkspaceProvider({
+  app,
   repository,
   membership,
   language,
   onLanguageChange,
-  onRefresh, // eslint-disable-line @typescript-eslint/no-unused-vars -- Refresh callback passed for future use by workspace context consumers
+  onRefresh,
   withSuppressedRefresh,
   children,
 }: {
+  app: App;
   repository: WYQDRepositoryWithStorageInfo;
   membership: WYQDMembershipState;
   language: WYQDLanguage;
@@ -73,7 +76,12 @@ export function ObsidianWorkspaceProvider({
   const clearError = useCallback(() => {}, []);
 
   return (
-    <I18nProvider initialLanguage={language} onLanguageChange={onLanguageChange}>
+    <I18nProvider
+      initialLanguage={language}
+      onLanguageChange={onLanguageChange}
+      storageGet={(key) => app.loadLocalStorage(key) as string | null}
+      storageSet={(key, value) => { app.saveLocalStorage(key, value); }}
+    >
       <OwnlyWorkspaceProvider
         value={{
           repository: wrappedRepository,
@@ -95,6 +103,8 @@ export function ObsidianWorkspaceProvider({
           openLicenseModal: () => setLicenseModalOpen(true),
           closeLicenseModal: () => setLicenseModalOpen(false),
           licenseModalOpen,
+          storageGet: (key: string) => app.loadLocalStorage(key) as string | null,
+          storageSet: (key: string, value: string) => { app.saveLocalStorage(key, value); },
         }}
       >
         {children}

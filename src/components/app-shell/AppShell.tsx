@@ -108,6 +108,8 @@ export function AppShell() {
     showNotice,
     membership,
     openLicenseModal,
+    storageGet,
+    storageSet,
   } = useOwnlyWorkspace();
 
   const runtimeInfo = useMemo(() => createWYQDRuntimeInfo(runtimeTarget), [runtimeTarget]);
@@ -146,8 +148,7 @@ export function AppShell() {
         : '';
       await repository.saveReview(review, body);
     }
-    // eslint-disable-next-line obsidianmd/no-localstorage
-    localStorage.setItem('ownly_demo_seeded', 'true');
+    storageSet('ownly_demo_seeded', 'true');
     showNotice(t('demoDataSeeded'));
   }, [repository, t, showNotice]);
 
@@ -381,8 +382,7 @@ export function AppShell() {
 
         // Auto-seed demo data on first connect if vault is empty
         const isEmpty = nextObjects.length === 0 && nextSnapshots.length === 0 && nextReviews.length === 0;
-        // eslint-disable-next-line obsidianmd/no-localstorage
-        const alreadySeeded = localStorage.getItem('ownly_demo_seeded') === 'true';
+        const alreadySeeded = storageGet('ownly_demo_seeded') === 'true';
 
         if (isEmpty && !alreadySeeded) {
           try {

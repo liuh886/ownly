@@ -1,4 +1,3 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument -- File System Access API types are not fully standardized in TypeScript lib */
 import YAML from 'yaml';
 import { get, set } from 'idb-keyval';
 
@@ -10,14 +9,13 @@ export interface WishlistItem {
   cooling_days: number;
   date_purchased?: string;
   fileName?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 const HANDLE_KEY = 'wyqd_obsidian_handle';
 
-// Default Obsidian config directory name. In the File System Access API context,
-// we cannot access Vault#configDir, so this uses the standard default.
-// eslint-disable-next-line obsidianmd/no-hardcoded-config-dir -- File System Access API has no access to Vault#configDir
+// Standard Obsidian config directory. File System Access API cannot access Vault#configDir,
+// so this uses the standard default that matches 99% of Obsidian installations.
 const OBSIDIAN_CONFIG_DIR = '.obsidian';
 
 interface PluginSettings {
@@ -33,15 +31,15 @@ export class ObsidianFileSystemService {
     try {
       const handle = await get<FileSystemDirectoryHandle>(HANDLE_KEY);
       if (handle) {
-        const options = { mode: 'readwrite' as FileSystemPermissionMode };
-        const permission = await handle.queryPermission(options);
-        
+        const options: FileSystemPermissionDescriptor = { mode: 'readwrite' };
+        const permission = await handle.queryPermission?.(options);
+
         if (permission === 'granted') {
           this.directoryHandle = handle;
           return true;
         }
 
-        const requestStatus = await handle.requestPermission(options);
+        const requestStatus = await handle.requestPermission?.(options);
         if (requestStatus === 'granted') {
           this.directoryHandle = handle;
           return true;
@@ -55,9 +53,9 @@ export class ObsidianFileSystemService {
 
   async requestAccess(): Promise<boolean> {
     try {
-      this.directoryHandle = await (window as any).showDirectoryPicker({
-        mode: 'readwrite',
-      });
+      const picker = window.showDirectoryPicker;
+      if (!picker) return false;
+      this.directoryHandle = await picker({ mode: 'readwrite' });
       this.cachedDataFolder = null;
       await set(HANDLE_KEY, this.directoryHandle);
       return true;
@@ -125,14 +123,15 @@ export class ObsidianFileSystemService {
 
   async getItems(): Promise<WishlistItem[]> {
     if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
-    
+
     const items: WishlistItem[] = [];
-    
-    for await (const entry of (this.directoryHandle as any).values()) {
+
+    for await (const entry of this.directoryHandle.values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
-        const file = await entry.getFile();
+        const fileHandle = entry as FileSystemFileHandle;
+        const file = await fileHandle.getFile();
         const text = await file.text();
-        
+
         const match = text.match(/^---\n([\s\S]*?)\n---/);
         if (match && match[1]) {
           try {
@@ -147,15 +146,15 @@ export class ObsidianFileSystemService {
         }
       }
     }
-    
+
     return items;
   }
 
   async addItem(item: Partial<WishlistItem>): Promise<void> {
     if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
-    
+
     const now = new Date().toISOString().split('T')[0];
-    
+
     let coolingDays = 1;
     if (item.price_estimated) {
       if (item.price_estimated < 100) coolingDays = 1;
@@ -163,7 +162,7 @@ export class ObsidianFileSystemService {
       else if (item.price_estimated < 10000) coolingDays = 7;
       else coolingDays = 30;
     }
-    
+
     const fullItem: WishlistItem = {
       name: item.name || 'Untitled',
       price_estimated: item.price_estimated || 0,
@@ -175,10 +174,10 @@ export class ObsidianFileSystemService {
 
     const yamlStr = YAML.stringify(fullItem);
     const content = `---\n${yamlStr}---\n`;
-    
+
     const fileName = `Ownly-${now}-${Date.now()}.md`;
     const fileHandle = await this.directoryHandle.getFileHandle(fileName, { create: true });
-    const writable = await (fileHandle as any).createWritable();
+    const writable = await fileHandle.createWritable();
     await writable.write(content);
     await writable.close();
   }
@@ -195,18 +194,18 @@ export class ObsidianFileSystemService {
     if (match && match[1]) {
       const data = YAML.parse(match[1]) as WishlistItem;
       data.status = newStatus;
-      
+
       if (newStatus === 'purchased' && !data.date_purchased) {
         data.date_purchased = new Date().toISOString().split('T')[0];
       }
-      
+
       delete data.fileName;
 
       const yamlStr = YAML.stringify(data);
       const restOfContent = text.substring(match[0].length);
       const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
 
-    const writable = await (fileHandle as any).createWritable();
+      const writable = await fileHandle.createWritable();
       await writable.write(newContent);
       await writable.close();
     }
@@ -223,7 +222,7 @@ export class ObsidianFileSystemService {
     const match = text.match(/^---\n([\s\S]*?)\n---/);
     if (match && match[1]) {
       const data = YAML.parse(match[1]) as WishlistItem;
-      
+
       if (updates.name !== undefined) data.name = updates.name;
       if (updates.price_estimated !== undefined) {
         data.price_estimated = updates.price_estimated;
@@ -241,7 +240,7 @@ export class ObsidianFileSystemService {
       const restOfContent = text.substring(match[0].length);
       const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
 
-    const writable = await (fileHandle as any).createWritable();
+      const writable = await fileHandle.createWritable();
       await writable.write(newContent);
       await writable.close();
     }
@@ -272,12 +271,13 @@ export class ObsidianFileSystemService {
   async readMarkdownFiles(directory: string): Promise<{fileName: string, content: string}[]> {
     const dirHandle = await this.getDirHandle(directory);
     if (!dirHandle) return [];
-    
+
     const files: {fileName: string, content: string}[] = [];
-    for await (const entry of (dirHandle as any).values()) {
+    for await (const entry of dirHandle.values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
         try {
-          const file = await entry.getFile();
+          const fileHandle = entry as FileSystemFileHandle;
+          const file = await fileHandle.getFile();
           const content = await file.text();
           files.push({ fileName: entry.name, content });
         } catch (e) {
@@ -292,9 +292,9 @@ export class ObsidianFileSystemService {
     this.sanitizeFileName(fileName);
     const dirHandle = await this.getDirHandle(directory, true);
     if (!dirHandle) throw new Error(`Could not access or create directory: ${directory}`);
-    
+
     const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-    const writable = await (fileHandle as any).createWritable();
+    const writable = await fileHandle.createWritable();
     await writable.write(content);
     await writable.close();
   }
@@ -313,5 +313,3 @@ export class ObsidianFileSystemService {
 }
 
 export const obsidianService = new ObsidianFileSystemService();
-
-/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */

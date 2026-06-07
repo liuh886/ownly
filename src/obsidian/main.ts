@@ -334,6 +334,7 @@ class WYQDWorkspaceView extends ItemView {
         createElement(
           ObsidianWorkspaceProvider,
           {
+            app: this.plugin.app,
             repository: this.plugin.repository,
             membership,
             language: this.plugin.settings.language,
@@ -392,7 +393,8 @@ class WYQDSettingTab extends PluginSettingTab {
     super(app, wyqdPlugin);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Obsidian calls display() but does not await the result
+  // Obsidian PluginSettingTab.display() is async but the framework does not await it.
+  // This is an Obsidian API design constraint, not a bug.
   async display() {
     const { containerEl } = this;
     const t = (key: WYQDTranslationKey) => this.wyqdPlugin.t(key);
