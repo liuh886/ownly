@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+﻿/* eslint-disable @typescript-eslint/no-explicit-any -- File System Access API types are not fully standardized in TypeScript lib */
 import YAML from 'yaml';
 import { get, set } from 'idb-keyval';
 
@@ -15,6 +15,10 @@ export interface WishlistItem {
 
 const HANDLE_KEY = 'wyqd_obsidian_handle';
 
+// Default Obsidian config directory name. In the File System Access API context,
+// we cannot access Vault#configDir, so this uses the standard default.
+const OBSIDIAN_CONFIG_DIR = '.obsidian';
+
 interface PluginSettings {
   dataFolder?: string;
   [key: string]: unknown;
@@ -29,14 +33,14 @@ export class ObsidianFileSystemService {
       const handle = await get(HANDLE_KEY);
       if (handle) {
         const options = { mode: 'readwrite' as FileSystemPermissionMode };
-        const permission = await (handle as any).queryPermission(options);
+        const permission = await handle.queryPermission(options);
         
         if (permission === 'granted') {
           this.directoryHandle = handle as FileSystemDirectoryHandle;
           return true;
         }
         
-        const requestStatus = await (handle as any).requestPermission(options);
+        const requestStatus = await handle.requestPermission(options);
         if (requestStatus === 'granted') {
           this.directoryHandle = handle as FileSystemDirectoryHandle;
           return true;
@@ -93,7 +97,7 @@ export class ObsidianFileSystemService {
 
     // 3. Try Obsidian plugin settings lookup
     try {
-      const pluginDir = await this.getNestedDirectoryHandle(['.obsidian', 'plugins', 'wyqd']);
+      const pluginDir = await this.getNestedDirectoryHandle([OBSIDIAN_CONFIG_DIR, 'plugins', 'wyqd']);
       const dataFile = await pluginDir.getFileHandle('data.json');
       const file = await dataFile.getFile();
       const text = await file.text();

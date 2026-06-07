@@ -906,7 +906,7 @@ export function ObjectList({
     [allPhysicalObjects],
   );
   const totalResidualValue = useMemo(
-    () => ownedPhysicalObjects.reduce((sum, stored) => sum + calculateResidualValue(stored.entity as PhysicalObject), 0),
+    () => ownedPhysicalObjects.reduce((sum, stored) => sum + calculateResidualValue(stored.entity), 0),
     [ownedPhysicalObjects],
   );
   const dailyCosts = ownedPhysicalObjects

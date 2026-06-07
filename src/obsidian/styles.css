@@ -553,6 +553,19 @@
   box-shadow: var(--shadow-dropdown);
 }
 
+.wyqd-folder-suggestions--hidden {
+  display: none;
+}
+
+.wyqd-folder-suggestions--visible {
+  display: block;
+}
+
+.wyqd-license-key-input {
+  flex: 1;
+  font-family: monospace;
+}
+
 .wyqd-folder-suggestion-item {
   padding: 6px 12px;
   cursor: pointer;

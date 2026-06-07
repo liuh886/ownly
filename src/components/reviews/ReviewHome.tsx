@@ -481,7 +481,7 @@ export function ReviewHome({
     selectedReview?.entity.target_id ? objectById.get(selectedReview.entity.target_id) : null;
   const canSubmit = !disabled && summary.trim().length > 0 && !isSaving;
 
-  async function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
 
@@ -574,12 +574,12 @@ export function ReviewHome({
     cancelEditing();
     setReviewingExperienceId(experience.id);
     setSummary(t('reviewAbout').replace('{title}', experience.title));
-    setTimeout(() => reviewFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    window.setTimeout(() => reviewFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   }
 
   function selectReview(fileName: string) {
     setSelectedReviewFileName(fileName);
-    setTimeout(() => reviewDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    window.setTimeout(() => reviewDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
   }
 
   return (

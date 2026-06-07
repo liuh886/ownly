@@ -66,7 +66,7 @@ const WYQD_ENTITY_SUBFOLDERS: Record<DraftKind | 'account', string> = {
 export default class WYQDPlugin extends Plugin {
   settings: WYQDPluginSettings = DEFAULT_SETTINGS;
   repository!: ObsidianVaultRepository;
-  private workspaceRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private workspaceRefreshTimer: number | null = null;
   private commandDefs: Record<string, { key: WYQDTranslationKey; callback: () => void }> = {};
   private registeredCommandIds: string[] = [];
   private suppressVaultRefresh = false;
@@ -113,7 +113,7 @@ export default class WYQDPlugin extends Plugin {
 
   onunload() {
     if (this.workspaceRefreshTimer) {
-      clearTimeout(this.workspaceRefreshTimer);
+      window.clearTimeout(this.workspaceRefreshTimer);
       this.workspaceRefreshTimer = null;
     }
     this.app.workspace.getLeavesOfType(WYQD_VIEW_TYPE).forEach((leaf) => leaf.detach());
@@ -155,7 +155,7 @@ export default class WYQDPlugin extends Plugin {
 
   async runDoctor() {
     const en = createWYQDTranslator('en');
-    const report = await runWYQDDoctor(this.repository, undefined, (key) => en.t(key as WYQDTranslationKey));
+    const report = await runWYQDDoctor(this.repository, undefined, (key) => en.t(key));
     const findingsSummary = en.t('doctorFindings')
       .replace('{errors}', String(report.summary.error))
       .replace('{warnings}', String(report.summary.warning))
@@ -250,10 +250,10 @@ export default class WYQDPlugin extends Plugin {
 
   private scheduleWorkspaceRefresh() {
     if (this.workspaceRefreshTimer) {
-      clearTimeout(this.workspaceRefreshTimer);
+      window.clearTimeout(this.workspaceRefreshTimer);
     }
 
-    this.workspaceRefreshTimer = setTimeout(() => {
+    this.workspaceRefreshTimer = window.setTimeout(() => {
       this.workspaceRefreshTimer = null;
       this.refreshWorkspaceViews();
     }, 200);
@@ -419,7 +419,7 @@ class WYQDSettingTab extends PluginSettingTab {
     const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
     eyebrow.createEl('span', { text: `Ownly ${WYQD_CORE_TARGET_VERSION}` });
     eyebrow.createEl('span', { text: t('localVaultOnly') });
-    heroCopy.createEl('h2', { text: 'Ownly' });
+    new Setting(heroCopy).setName('Ownly').setHeading();
     heroCopy.createEl('p', { text: t('workspaceSubtitle') });
     heroCopy.createEl('p', { cls: 'wyqd-slogan', text: WYQD_PRODUCT_SLOGAN });
     const membershipCard = hero.createDiv({ cls: 'wyqd-settings-membership' });
@@ -428,9 +428,7 @@ class WYQDSettingTab extends PluginSettingTab {
     membershipCard.createEl('small', { text: membership.statusLabel });
 
     const appPanel = shell.createDiv({ cls: 'wyqd-settings-panel' });
-    const appHeader = appPanel.createDiv({ cls: 'wyqd-section-header' });
-    appHeader.createEl('h3', { text: t('workspaceTitle') });
-    appHeader.createEl('p', { text: t('settingsDataFolderDesc') });
+    new Setting(appPanel).setName(t('workspaceTitle')).setHeading();
 
     new Setting(appPanel)
       .setName(t('settingsLanguage'))
@@ -454,8 +452,7 @@ class WYQDSettingTab extends PluginSettingTab {
       .setDesc(t('settingsDataFolderDesc'));
 
     // Add folder suggestions
-    const suggestionsEl = appPanel.createDiv({ cls: 'wyqd-folder-suggestions' });
-    suggestionsEl.style.display = 'none';
+    const suggestionsEl = appPanel.createDiv({ cls: 'wyqd-folder-suggestions wyqd-folder-suggestions--hidden' });
 
     const updateSuggestions = (query: string, inputEl: HTMLInputElement) => {
       suggestionsEl.empty();
@@ -465,18 +462,21 @@ class WYQDSettingTab extends PluginSettingTab {
         .slice(0, 8);
 
       if (filtered.length === 0 || query === '') {
-        suggestionsEl.style.display = 'none';
+        suggestionsEl.removeClass('wyqd-folder-suggestions--visible');
+        suggestionsEl.addClass('wyqd-folder-suggestions--hidden');
         return;
       }
 
-      suggestionsEl.style.display = 'block';
+      suggestionsEl.removeClass('wyqd-folder-suggestions--hidden');
+      suggestionsEl.addClass('wyqd-folder-suggestions--visible');
       for (const folder of filtered) {
         const item = suggestionsEl.createDiv({ cls: 'wyqd-folder-suggestion-item' });
         item.textContent = folder.path;
         item.addEventListener('click', () => {
           this.wyqdPlugin.settings.dataFolder = folder.path;
           inputEl.value = folder.path;
-          suggestionsEl.style.display = 'none';
+          suggestionsEl.removeClass('wyqd-folder-suggestions--visible');
+          suggestionsEl.addClass('wyqd-folder-suggestions--hidden');
         });
       }
     };
@@ -501,7 +501,8 @@ class WYQDSettingTab extends PluginSettingTab {
 
       const hideSuggestionsOnOutsideClick = (e: MouseEvent) => {
         if (!suggestionsEl.contains(e.target as Node) && e.target !== inputEl) {
-          suggestionsEl.style.display = 'none';
+          suggestionsEl.removeClass('wyqd-folder-suggestions--visible');
+          suggestionsEl.addClass('wyqd-folder-suggestions--hidden');
         }
       };
       document.addEventListener('click', hideSuggestionsOnOutsideClick);
@@ -522,9 +523,7 @@ class WYQDSettingTab extends PluginSettingTab {
 
     // ── Membership panel ──
     const membershipPanel = shell.createDiv({ cls: 'wyqd-settings-panel' });
-    const membershipHeader = membershipPanel.createDiv({ cls: 'wyqd-section-header' });
-    membershipHeader.createEl('h3', { text: t('activationTitle') });
-    membershipHeader.createEl('p', { text: t('activationDesc') });
+    new Setting(membershipPanel).setName(t('activationTitle')).setHeading();
 
     if (membership.isPro) {
       // Pro unlocked — show status + sponsor link
@@ -536,7 +535,7 @@ class WYQDSettingTab extends PluginSettingTab {
         .setDesc(`${membership.planLabel} — ${membership.statusLabel}`);
 
       // Sponsor link
-      const sponsorRow = membershipHeader.createDiv({ cls: 'wyqd-settings-cta-row' });
+      const sponsorRow = membershipPanel.createDiv({ cls: 'wyqd-settings-cta-row' });
       const sponsorLink = sponsorRow.createEl('a', {
         text: t('sponsorButton'),
         href: GUMROAD_STORE_URL,
@@ -570,8 +569,7 @@ class WYQDSettingTab extends PluginSettingTab {
         .setDesc(t('settingsActivationHint'));
 
       keySetting.addText((text) => {
-        text.inputEl.style.flex = '1';
-        text.inputEl.style.fontFamily = 'monospace';
+        text.inputEl.addClass('wyqd-license-key-input');
         text
           .setPlaceholder(DEFAULT_ACTIVATION_CODE)
           .setValue(pendingLicenseKey)

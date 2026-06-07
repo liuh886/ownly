@@ -1,4 +1,4 @@
-import { TFile, TFolder, normalizePath, type App, type Vault } from 'obsidian';
+import { TFile, TFolder, normalizePath, type App, type FileManager, type Vault } from 'obsidian';
 
 import {
   createWYQDEntityFileName,
@@ -83,11 +83,18 @@ const ENTITY_CONFIG = {
 
 export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
   private readonly vault: Vault;
+  private readonly fileManager: FileManager | null;
   private readonly getDataFolder: () => string;
   private readonly t: (key: string) => string;
 
   constructor(appOrVault: App | Vault, options: ObsidianVaultRepositoryOptions) {
-    this.vault = 'vault' in appOrVault ? appOrVault.vault : appOrVault;
+    if ('vault' in appOrVault) {
+      this.vault = appOrVault.vault;
+      this.fileManager = appOrVault.fileManager;
+    } else {
+      this.vault = appOrVault;
+      this.fileManager = null;
+    }
     const dataFolder = options.dataFolder;
     this.getDataFolder = typeof dataFolder === 'function' ? dataFolder : () => dataFolder;
     this.t = options.t || ((key: string) => key);
@@ -95,6 +102,15 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
 
   getVault(): Vault {
     return this.vault;
+  }
+
+  /** Delete a file using trash (system trash if available, otherwise Obsidian trash). */
+  private async deleteFile(file: TFile): Promise<void> {
+    if (this.fileManager) {
+      await this.fileManager.trashFile(file);
+    } else {
+      await this.vault.delete(file);
+    }
   }
 
   getDataFolderPath(): string {
@@ -312,12 +328,12 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
 
     await this.vault.create(archivePath, archiveContent);
     try {
-      await this.vault.delete(sourceFile);
+      await this.deleteFile(sourceFile);
     } catch (deleteError) {
       // Cleanup: remove the archive copy if source delete fails to avoid duplicates
       const archiveFile = this.getMarkdownFile(this.archiveDirectory(config), basename(archivePath));
       if (archiveFile) {
-        try { await this.vault.delete(archiveFile); } catch { /* best effort cleanup */ }
+        try { await this.deleteFile(archiveFile); } catch { /* best effort cleanup */ }
       }
       throw deleteError;
     }
@@ -356,7 +372,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     );
 
     await this.vault.create(restorePath, restoredContent);
-    await this.vault.delete(archiveFile);
+    await this.deleteFile(archiveFile);
     return basename(restorePath);
   }
 

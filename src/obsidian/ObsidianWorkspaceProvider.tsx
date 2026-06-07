@@ -11,7 +11,7 @@ export function ObsidianWorkspaceProvider({
   membership,
   language,
   onLanguageChange,
-  onRefresh, // eslint-disable-line @typescript-eslint/no-unused-vars
+  onRefresh, // eslint-disable-line @typescript-eslint/no-unused-vars -- Refresh callback passed for future use by workspace context consumers
   withSuppressedRefresh,
   children,
 }: {
@@ -62,12 +62,12 @@ export function ObsidianWorkspaceProvider({
   }, [repository, withSuppressedRefresh]);
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
 
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
-    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = setTimeout(() => setNotice(null), 2600);
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 2600);
   }, []);
 
   const clearError = useCallback(() => {}, []);

@@ -252,7 +252,7 @@ function applyQuickLine(
   },
 ) {
   const parts = value
-    .split(/[\/，,|]/)
+    .split(/[／，,|]/)
     .map((part) => part.trim())
     .filter(Boolean);
 
@@ -462,12 +462,12 @@ export function ObjectComposer({
 
   useEffect(() => {
     if (autoFocus && nameInputRef.current) {
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         nameInputRef.current?.focus();
         onAutoFocusHandled?.();
       }, 300);
-      return () => clearTimeout(timer);
+      return () => window.clearTimeout(timer);
     }
   }, [autoFocus, onAutoFocusHandled]);
 
@@ -615,12 +615,12 @@ export function ObjectComposer({
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       if (canSubmit) {
-        handleSubmit(event as unknown as React.FormEvent);
+        handleSubmit(event as unknown as React.FormEvent<HTMLFormElement>);
       }
     }
   }
 
-  async function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const v = validate();
     if (Object.keys(v).length > 0) {

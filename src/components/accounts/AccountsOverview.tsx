@@ -251,7 +251,7 @@ export function AccountsOverview({
     !isSaving;
   const fieldClass = FIELD_CLASS;
 
-  async function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
 
