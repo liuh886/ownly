@@ -40,9 +40,12 @@ function getStatusLabel(status: string, t: (key: WYQDTranslationKey) => string):
 function ScoreBar({ label, score, color }: { label: string; score: number | null; color: string }) {
   if (score == null) return null;
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-7 text-[11px] text-stone-500 shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 rounded-full bg-stone-100 overflow-hidden">
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-stone-500">{label}</span>
+        <span className="text-[10px] font-mono font-medium text-stone-600">{score}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-stone-100 overflow-hidden">
         <motion.div
           className={`h-full rounded-full ${color}`}
           initial={{ width: 0 }}
@@ -50,7 +53,6 @@ function ScoreBar({ label, score, color }: { label: string; score: number | null
           transition={{ duration: 0.6, ease: 'easeOut' }}
         />
       </div>
-      <span className="w-7 text-right text-[11px] font-mono text-stone-500 shrink-0">{score}</span>
     </div>
   );
 }
@@ -192,7 +194,7 @@ export function TravelTimeline({
 
                     {/* Score bars (only if reviewed) */}
                     {review && (
-                      <div className="mt-3 space-y-1.5">
+                      <div className="mt-3 grid grid-cols-3 gap-3">
                         <ScoreBar
                           label={t('travelAvgFood')}
                           score={review.food_score ?? null}

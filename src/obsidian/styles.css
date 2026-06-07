@@ -1042,3 +1042,25 @@
   font-weight: var(--font-medium);
   color: var(--text-muted);
 }
+
+/* ---- Ranking Board entries ---- */
+/* Obsidian flattens <button> into compact inline rows; restore block layout,
+   padding, and line-height for ranking board entry buttons. */
+.wyqd-runtime-obsidian button.flex.w-full.items-center {
+  display: flex !important;
+  padding: 8px 12px !important;
+  height: auto !important;
+  min-height: 48px;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+  text-align: left;
+}
+
+/* Review list item buttons (Detail, Delete, Review) */
+.wyqd-runtime-obsidian .space-y-2 > div button.rounded-md {
+  display: inline-flex !important;
+  align-items: center;
+  height: auto !important;
+  padding: 6px 10px !important;
+  line-height: 1 !important;
+}
