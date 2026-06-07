@@ -119,6 +119,7 @@ export function AppShell() {
   const [archivedEntities, setArchivedEntities] = useState<WYQDArchivedStoredEntity[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [objectListFocus, setObjectListFocus] = useState<ObjectListFocus | null>(null);
+  const [autoFocusComposer, setAutoFocusComposer] = useState(false);
   const objects = useMemo(() => storedObjects.map((item) => item.entity), [storedObjects]);
   const snapshots = useMemo(
     () => storedSnapshots.map((item) => item.entity),
@@ -128,6 +129,7 @@ export function AppShell() {
 
   function openObjectsWithFocus(focus: Omit<ObjectListFocus, 'token'>) {
     setObjectListFocus({ ...focus, token: Date.now() });
+    setAutoFocusComposer(true);
     setActiveTab('objects');
   }
 
@@ -579,12 +581,15 @@ export function AppShell() {
                   disabled={!isConnected}
                   submitLabel={t('saveToOwnly')}
                   onSubmit={createObject}
+                  autoFocus={autoFocusComposer}
+                  onAutoFocusHandled={() => setAutoFocusComposer(false)}
                 />
                 <ArchivePanel
                   disabled={!isConnected}
                   archivedEntities={archivedEntities}
                   onRestore={restoreArchivedEntity}
                   onDelete={permanentlyDeleteArchivedEntity}
+                  filterType="objects"
                 />
               </div>
             ) : null}
@@ -603,6 +608,7 @@ export function AppShell() {
                   archivedEntities={archivedEntities}
                   onRestore={restoreArchivedEntity}
                   onDelete={permanentlyDeleteArchivedEntity}
+                  filterType="accounts"
                 />
               </div>
             ) : null}
@@ -622,6 +628,7 @@ export function AppShell() {
                   archivedEntities={archivedEntities}
                   onRestore={restoreArchivedEntity}
                   onDelete={permanentlyDeleteArchivedEntity}
+                  filterType="reviews"
                 />
               </div>
             ) : null}

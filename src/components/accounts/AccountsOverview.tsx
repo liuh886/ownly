@@ -611,11 +611,16 @@ export function AccountsOverview({
                 setHasTouchedSnapshotForm(true);
                 setAssetBalancesText(event.target.value);
               }}
-              placeholder={t('assetAccountsPlaceholder')}
+              placeholder={t('snapshotAssetPlaceholder')}
               rows={4}
               className={`${fieldClass} resize-none`}
               disabled={disabled || isSaving}
             />
+            {parsedAssetBalances.length > 0 && !hasInvalidAssetLines ? (
+              <p className="mt-1 text-xs text-stone-400">
+                {t('snapshotParsedPreview').replace('{count}', String(parsedAssetBalances.length)).replace('{total}', formatMoney(sumBalances(parsedAssetBalances)) ?? '')}
+              </p>
+            ) : null}
             {hasInvalidAssetLines ? (
               <span className="mt-1 block text-xs text-red-600">
                 {t('invalidAssetLine')}
@@ -631,11 +636,16 @@ export function AccountsOverview({
                 setHasTouchedSnapshotForm(true);
                 setLiabilityBalancesText(event.target.value);
               }}
-              placeholder={t('liabilityAccountsPlaceholder')}
+              placeholder={t('snapshotLiabilityPlaceholder')}
               rows={3}
               className={`${fieldClass} resize-none`}
               disabled={disabled || isSaving}
             />
+            {parsedLiabilityBalances.length > 0 && !hasInvalidLiabilityLines ? (
+              <p className="mt-1 text-xs text-stone-400">
+                {t('snapshotParsedPreview').replace('{count}', String(parsedLiabilityBalances.length)).replace('{total}', formatMoney(sumBalances(parsedLiabilityBalances)) ?? '')}
+              </p>
+            ) : null}
             {hasInvalidLiabilityLines ? (
               <span className="mt-1 block text-xs text-red-600">
                 {t('invalidLiabilityLine')}

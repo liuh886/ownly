@@ -9,6 +9,7 @@ import { TravelStatsStrip } from './TravelStatsStrip';
 import { TravelWorldMap } from './TravelWorldMap';
 import { TravelTimeline } from './TravelTimeline';
 import { TravelProLockedCard } from './TravelProLockedCard';
+import { Panel } from '../common/ui-primitives';
 
 export function TravelInsightsPanel({
   objects,
@@ -24,7 +25,17 @@ export function TravelInsightsPanel({
   const travelExperiences = getTravelExperiences(objects);
 
   if (!isPro) {
-    if (travelExperiences.length === 0) return null;
+    if (travelExperiences.length === 0) {
+      return (
+        <Panel className="border-dashed border-stone-300">
+          <div className="text-center py-6">
+            <div className="text-2xl mb-2">🌍</div>
+            <h3 className="font-semibold text-stone-900 text-sm">{t('travelDiscoveryTitle')}</h3>
+            <p className="text-xs text-stone-500 mt-1">{t('travelDiscoveryDesc')}</p>
+          </div>
+        </Panel>
+      );
+    }
     const summary = buildTravelSummary(travelExperiences, reviews);
     return <TravelProLockedCard summary={summary} />;
   }
@@ -40,7 +51,7 @@ export function TravelInsightsPanel({
         </div>
         <div className="mt-4 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-4 py-8 text-center">
           <p className="text-sm text-stone-500">{t('travelNoExperiences')}</p>
-          <p className="mt-1 text-xs text-stone-400">{t('travelInsightsDesc')}</p>
+          <p className="mt-1 text-xs text-stone-400">{t('travelDiscoveryDesc')}</p>
         </div>
       </section>
     );

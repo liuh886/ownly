@@ -24,15 +24,26 @@ export function ArchivePanel({
   archivedEntities,
   onRestore,
   onDelete,
+  filterType,
 }: {
   disabled?: boolean;
   archivedEntities: WYQDArchivedStoredEntity[];
   onRestore: (archiveType: WYQDArchiveEntityType, archiveFileName: string) => Promise<void>;
   onDelete: (archiveType: WYQDArchiveEntityType, archiveFileName: string) => Promise<void>;
+  filterType?: 'objects' | 'accounts' | 'reviews';
 }) {
   const { t } = useI18n();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+
+  const filtered = filterType
+    ? archivedEntities.filter((e) => {
+        if (filterType === 'objects') return e.archiveType === 'object';
+        if (filterType === 'accounts') return e.archiveType === 'account' || e.archiveType === 'snapshot';
+        if (filterType === 'reviews') return e.archiveType === 'review';
+        return true;
+      })
+    : archivedEntities;
 
   async function handleDelete(item: WYQDArchivedStoredEntity) {
     const title = item.entity.title || item.fileName;
@@ -61,17 +72,17 @@ export function ArchivePanel({
           </p>
         </div>
         <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-          {archivedEntities.length}
+          {filtered.length}
         </span>
       </div>
 
-      {archivedEntities.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-sm text-stone-500">
           {t('noArchivedData')}
         </div>
       ) : (
         <div className="mt-4 space-y-2">
-          {archivedEntities.map((item) => {
+          {filtered.map((item) => {
             const key = `${item.archiveType}:${item.fileName}`;
             return (
               <article

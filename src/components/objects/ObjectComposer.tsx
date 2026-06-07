@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type { WYQDTranslationKey } from '@/core/i18n';
@@ -23,6 +23,8 @@ interface ObjectComposerProps {
   submitLabel?: string;
   onCancel?: () => void;
   onSubmit: (object: WYQDObject, body: string) => Promise<void>;
+  autoFocus?: boolean;
+  onAutoFocusHandled?: () => void;
 }
 
 function getPhysicalCategories(t: (key: WYQDTranslationKey) => string): string[] {
@@ -452,8 +454,23 @@ export function ObjectComposer({
   submitLabel,
   onCancel,
   onSubmit,
+  autoFocus,
+  onAutoFocusHandled,
 }: ObjectComposerProps) {
   const { t, language } = useI18n();
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocus && nameInputRef.current) {
+      const timer = setTimeout(() => {
+        nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        nameInputRef.current?.focus();
+        onAutoFocusHandled?.();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [autoFocus, onAutoFocusHandled]);
+
   const physicalCategories = getPhysicalCategories(t);
   const physicalStatusOptions = getPhysicalStatusOptions(t);
   const recurringStatusOptions = getRecurringStatusOptions(t);
@@ -508,6 +525,7 @@ export function ObjectComposer({
   );
   const [quickLine, setQuickLine] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [experienceSubtype, setExperienceSubtype] = useState(
     initialObject?.object_type === 'one_time_experience' ? initialObject.experience_subtype || '' : '',
   );
@@ -554,6 +572,16 @@ export function ObjectComposer({
     !disabled && title.trim() && amount.trim() && Number(amount) >= 0 && isBillingDayValid && !isSaving;
   const fieldClass = FIELD_CLASS;
 
+  const validate = (): Record<string, string> => {
+    const e: Record<string, string> = {}
+    if (!title.trim()) e.name = t('validationTitleRequired')
+    if (amount !== undefined && amount.trim() && Number(amount) < 0) e.amount = t('validationAmountPositive')
+    if (objectType === 'recurring_cost' && billingDay !== undefined && billingDay !== null && billingDay.trim() !== '' && (Number(billingDay) < 1 || Number(billingDay) > 31)) {
+      e.billingDay = t('validationBillingDayRange')
+    }
+    return e
+  }
+
   function applyQuickLineToForm(next: string) {
     applyQuickLine(next, {
       setTitle,
@@ -594,6 +622,12 @@ export function ObjectComposer({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    const v = validate();
+    if (Object.keys(v).length > 0) {
+      setErrors(v);
+      return;
+    }
+    setErrors({});
     if (!canSubmit) return;
 
     setIsSaving(true);
@@ -716,7 +750,15 @@ export function ObjectComposer({
         {!initialObject ? (
           <div className="space-y-2">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('pasteLine')}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('pasteLine')}</span>
+                <span className="relative group mb-1.5">
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-stone-200 text-stone-500 text-[10px] cursor-help">?</span>
+                  <span className="invisible group-hover:visible absolute left-6 top-0 z-50 w-64 p-3 bg-stone-900 text-white text-xs rounded-lg shadow-lg leading-relaxed">
+                    {t('pasteLineFormatHelp')}
+                  </span>
+                </span>
+              </div>
               <input
                 value={quickLine}
                 onChange={(event) => {
@@ -729,6 +771,7 @@ export function ObjectComposer({
                 className={`${fieldClass} bg-stone-50 focus:bg-white`}
                 disabled={disabled || isSaving}
               />
+              <p className="text-[11px] text-stone-400 mt-1">{t('pasteLineHint')}</p>
             </label>
             <div className="flex gap-2 overflow-x-auto pb-0.5">
               {quickLineTemplates.map((template) => (
@@ -752,13 +795,15 @@ export function ObjectComposer({
         <label className="block">
           <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('name')}</span>
           <input
+            ref={nameInputRef}
             value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(event) => { setTitle(event.target.value); if (errors.name) setErrors(prev => ({ ...prev, name: '' })) }}
             placeholder={t('namePlaceholder')}
             className={fieldClass}
             disabled={disabled || isSaving}
           />
         </label>
+        {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
 
         <div className="grid grid-cols-1 gap-3">
           <label className="block min-w-0">
@@ -779,7 +824,7 @@ export function ObjectComposer({
             <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('amount')}</span>
             <input
               value={amount}
-              onChange={(event) => setAmount(event.target.value)}
+              onChange={(event) => { setAmount(event.target.value); if (errors.amount) setErrors(prev => ({ ...prev, amount: '' })) }}
               type="number"
               min="0"
               inputMode="decimal"
@@ -788,6 +833,7 @@ export function ObjectComposer({
               disabled={disabled || isSaving}
             />
           </label>
+          {errors.amount && <p className="text-xs text-red-500 mt-1">{errors.amount}</p>}
         </div>
 
         {objectType === 'physical' ? (
@@ -920,7 +966,7 @@ export function ObjectComposer({
                 <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('billingDay')}</span>
                 <input
                   value={billingDay}
-                  onChange={(event) => setBillingDay(event.target.value)}
+                  onChange={(event) => { setBillingDay(event.target.value); if (errors.billingDay) setErrors(prev => ({ ...prev, billingDay: '' })) }}
                   type="number"
                   min="1"
                   max="31"
@@ -930,6 +976,7 @@ export function ObjectComposer({
                   disabled={disabled || isSaving}
                 />
               </label>
+              {errors.billingDay && <p className="text-xs text-red-500 mt-1">{errors.billingDay}</p>}
               <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('paymentAccount')}</span>
                 <input

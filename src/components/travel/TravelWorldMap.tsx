@@ -145,12 +145,12 @@ export function TravelWorldMap({
     <div className="wyqd-travel-map mt-5">
       <div className="group relative rounded-lg border border-stone-200 bg-white p-3">
         {/* Zoom controls */}
-        <div className="absolute right-5 top-5 z-10 flex flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute right-5 top-5 z-10 flex flex-col gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
           <button
             type="button"
             onClick={handleZoomIn}
             disabled={!canZoomIn}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white text-sm font-medium text-stone-700 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-11 w-11 items-center justify-center rounded-md border border-stone-200 bg-white text-sm font-medium text-stone-700 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Zoom in"
           >
             +
@@ -159,7 +159,7 @@ export function TravelWorldMap({
             type="button"
             onClick={handleZoomOut}
             disabled={!canZoomOut}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white text-sm font-medium text-stone-700 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-11 w-11 items-center justify-center rounded-md border border-stone-200 bg-white text-sm font-medium text-stone-700 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Zoom out"
           >
             −
@@ -168,7 +168,7 @@ export function TravelWorldMap({
             <button
               type="button"
               onClick={handleReset}
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white text-[10px] font-medium text-stone-700 shadow-sm transition hover:bg-stone-50"
+              className="flex h-11 w-11 items-center justify-center rounded-md border border-stone-200 bg-white text-[10px] font-medium text-stone-700 shadow-sm transition hover:bg-stone-50"
               aria-label="Reset zoom"
             >
               ↺
@@ -221,7 +221,7 @@ export function TravelWorldMap({
                   <title>
                     {point.title}
                     {point.city ? ` — ${point.city}` : ''}
-                    {isPlanned ? ' (planned)' : ''}
+                    {point.status === 'planned' ? ` (${t('statusPlanned')})` : point.status === 'in_progress' ? ` (${t('statusInProgress')})` : ''}
                   </title>
                 </circle>
               );

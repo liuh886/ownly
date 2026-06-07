@@ -3,6 +3,7 @@
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { useFormatMoney } from '@/lib/use-format';
+import { formatLocalizedDate } from '@/lib/format';
 import type { OneTimeExperienceObject, ReviewEntry } from '@/domain/types';
 
 function getStatusBadge(status: string, t: (key: WYQDTranslationKey) => string): { label: string; className: string } {
@@ -27,7 +28,7 @@ export function TravelTimeline({
   experiences: OneTimeExperienceObject[];
   reviews: ReviewEntry[];
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { formatMoney } = useFormatMoney();
 
   const sorted = [...experiences].sort((a, b) => {
@@ -66,13 +67,13 @@ export function TravelTimeline({
                 </div>
                 <div className="flex items-center gap-2 text-xs text-stone-400">
                   {location ? <span>{location}</span> : null}
-                  {date ? <span>{date}</span> : null}
+                  {date ? <span>{formatLocalizedDate(date, language)}</span> : null}
                 </div>
                 {review ? (
                   <div className="mt-1 flex gap-2 text-[11px] text-stone-500">
-                    {review.food_score != null ? <span>{t('travelAvgFood')} {review.food_score}分</span> : null}
-                    {review.scenery_score != null ? <span>{t('travelAvgScenery')} {review.scenery_score}分</span> : null}
-                    {review.experience_score != null ? <span>{t('travelAvgExperience')} {review.experience_score}分</span> : null}
+                    {review.food_score != null ? <span>{t('travelAvgFood')} {review.food_score}{t('scoreUnit')}</span> : null}
+                    {review.scenery_score != null ? <span>{t('travelAvgScenery')} {review.scenery_score}{t('scoreUnit')}</span> : null}
+                    {review.experience_score != null ? <span>{t('travelAvgExperience')} {review.experience_score}{t('scoreUnit')}</span> : null}
                   </div>
                 ) : null}
               </div>
