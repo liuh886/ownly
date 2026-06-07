@@ -1,5 +1,4 @@
-﻿// File System Access API types are not fully standardized in TypeScript lib.
-// Inline eslint-disable-next-line comments are used where `any` is required.
+﻿/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument -- File System Access API types are not fully standardized in TypeScript lib */
 import YAML from 'yaml';
 import { get, set } from 'idb-keyval';
 
@@ -11,7 +10,6 @@ export interface WishlistItem {
   cooling_days: number;
   date_purchased?: string;
   fileName?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy interface allows arbitrary properties
   [key: string]: any;
 }
 
@@ -57,7 +55,6 @@ export class ObsidianFileSystemService {
 
   async requestAccess(): Promise<boolean> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- showDirectoryPicker is not in standard Window typings
       this.directoryHandle = await (window as any).showDirectoryPicker({
         mode: 'readwrite',
       });
@@ -131,7 +128,6 @@ export class ObsidianFileSystemService {
     
     const items: WishlistItem[] = [];
     
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemDirectoryHandle.values() async iterator
     for await (const entry of (this.directoryHandle as any).values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
         const file = await entry.getFile();
@@ -182,7 +178,6 @@ export class ObsidianFileSystemService {
     
     const fileName = `Ownly-${now}-${Date.now()}.md`;
     const fileHandle = await this.directoryHandle.getFileHandle(fileName, { create: true });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemFileHandle.createWritable() not in all lib typings
     const writable = await (fileHandle as any).createWritable();
     await writable.write(content);
     await writable.close();
@@ -211,7 +206,6 @@ export class ObsidianFileSystemService {
       const restOfContent = text.substring(match[0].length);
       const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemFileHandle.createWritable() not in all lib typings
     const writable = await (fileHandle as any).createWritable();
       await writable.write(newContent);
       await writable.close();
@@ -247,7 +241,6 @@ export class ObsidianFileSystemService {
       const restOfContent = text.substring(match[0].length);
       const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemFileHandle.createWritable() not in all lib typings
     const writable = await (fileHandle as any).createWritable();
       await writable.write(newContent);
       await writable.close();
@@ -281,7 +274,6 @@ export class ObsidianFileSystemService {
     if (!dirHandle) return [];
     
     const files: {fileName: string, content: string}[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemDirectoryHandle.values() async iterator
     for await (const entry of (dirHandle as any).values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
         try {
@@ -302,7 +294,6 @@ export class ObsidianFileSystemService {
     if (!dirHandle) throw new Error(`Could not access or create directory: ${directory}`);
     
     const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemFileHandle.createWritable() not in all lib typings
     const writable = await (fileHandle as any).createWritable();
     await writable.write(content);
     await writable.close();
@@ -322,3 +313,5 @@ export class ObsidianFileSystemService {
 }
 
 export const obsidianService = new ObsidianFileSystemService();
+
+/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */

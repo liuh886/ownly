@@ -33,11 +33,11 @@ export function ObsidianWorkspaceProvider({
 
     // Copy prototype methods that spread operator misses
     return {
-      listObjects: bind(repository.listObjects),
-      listAccounts: bind(repository.listAccounts),
-      listSnapshots: bind(repository.listSnapshots),
-      listReviews: bind(repository.listReviews),
-      listArchivedEntities: bind(repository.listArchivedEntities),
+      listObjects: bind(repository.listObjects.bind(repository)),
+      listAccounts: bind(repository.listAccounts.bind(repository)),
+      listSnapshots: bind(repository.listSnapshots.bind(repository)),
+      listReviews: bind(repository.listReviews.bind(repository)),
+      listArchivedEntities: bind(repository.listArchivedEntities.bind(repository)),
       getDataFolderPath: repository.getDataFolderPath?.bind(repository),
       listDataDirectories: repository.listDataDirectories?.bind(repository),
       saveObject: wrap(repository.saveObject.bind(repository)),
@@ -86,10 +86,10 @@ export function ObsidianWorkspaceProvider({
           notice,
           showNotice,
           membership,
-          activateLicenseKey: async () => {
+          activateLicenseKey: (_key: string) => {
             setLicenseModalOpen(false);
           },
-          clearLicenseKey: async () => {
+          clearLicenseKey: () => {
             setLicenseModalOpen(false);
           },
           openLicenseModal: () => setLicenseModalOpen(true),

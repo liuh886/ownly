@@ -27,7 +27,7 @@ export function TravelWorldMap({
   const translateStart = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    import('@/data/countries-110m.json').then((mod) => setWorldGeoData(mod.default));
+    void import('@/data/countries-110m.json').then((mod) => setWorldGeoData(mod.default));
   }, []);
 
   const projection = useMemo(

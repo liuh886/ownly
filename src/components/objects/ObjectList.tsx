@@ -827,11 +827,12 @@ export function ObjectList({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpenActionMenuFileName(null);
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
+    const doc = activeDocument ?? document;
+    doc.addEventListener('mousedown', handleClickOutside);
+    doc.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
+      doc.removeEventListener('mousedown', handleClickOutside);
+      doc.removeEventListener('keydown', handleKeyDown);
     };
   }, [openActionMenuFileName]);
 
@@ -1257,7 +1258,7 @@ export function ObjectList({
                         <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
 	                          <button
 	                            type="button" role="menuitem"
-	                            onClick={async () => {
+	                            onClick={() => void (async () => {
 	                              const next: PhysicalObject = {
 	                                ...object,
 	                                status: 'idle',
@@ -1271,7 +1272,7 @@ export function ObjectList({
 	                              } finally {
 	                                setExitingFileName(null);
 	                              }
-	                            }}
+	                            })()}
 	                            className={menuItemClass}
 	                            disabled={
 	                              disabled || exitingFileName === stored.fileName || bucket !== 'active'
@@ -1282,7 +1283,7 @@ export function ObjectList({
 	                          </button>
 	                          <button
 	                            type="button" role="menuitem"
-	                            onClick={async () => {
+	                            onClick={() => void (async () => {
 	                              const confirmed = await confirm({
                                 title: t('delete'),
                                 message: t('deleteConfirm').replace('{title}', object.title),
@@ -1296,7 +1297,7 @@ export function ObjectList({
 	                              } finally {
 	                                setDeletingFileName(null);
 	                              }
-	                            }}
+	                            })()}
 	                            className={`${menuItemClass} text-red-600 hover:bg-red-50`}
 	                            disabled={disabled || deletingFileName === stored.fileName}
 	                          >
@@ -1469,7 +1470,7 @@ export function ObjectList({
 	                            </IconButton>
 	                            {supportingActionLabel ? (
 	                              <IconButton
-	                                onClick={async () => {
+	                                onClick={() => void (async () => {
 	                                  if (
 	                                    object.object_type === 'one_time_experience' &&
 	                                    (object.status === 'completed' || object.status === 'reviewed')
@@ -1505,7 +1506,7 @@ export function ObjectList({
 	                                  } finally {
 	                                    setExitingFileName(null);
 	                                  }
-	                                }}
+	                                })()}
 	                                aria-label={`${supportingActionLabel} - ${object.title}`}
 	                                title={supportingActionLabel}
 	                                className="border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50"
@@ -1534,7 +1535,7 @@ export function ObjectList({
 	                                {canCancelRecurringCost(object) ? (
 	                                  <button
 	                                    type="button" role="menuitem"
-	                                    onClick={async () => {
+	                                    onClick={() => void (async () => {
 	                                      const reason = await prompt({
                                         title: t('cancelSubscription'),
                                         message: t('cancelReasonPrompt').replace('{title}', object.title),
@@ -1557,7 +1558,7 @@ export function ObjectList({
 	                                      } finally {
 	                                        setExitingFileName(null);
 	                                      }
-	                                    }}
+	                                    })()}
 	                                    className={`${menuItemClass} text-red-600 hover:bg-red-50`}
 	                                    disabled={disabled || exitingFileName === stored.fileName}
 	                                  >
@@ -1567,7 +1568,7 @@ export function ObjectList({
 	                                ) : null}
 	                                <button
 	                                  type="button" role="menuitem"
-	                                  onClick={async () => {
+	                                  onClick={() => void (async () => {
 	                                    const confirmed = await confirm({
                                 title: t('delete'),
                                 message: t('deleteConfirm').replace('{title}', object.title),
@@ -1581,7 +1582,7 @@ export function ObjectList({
 	                                    } finally {
 	                                      setDeletingFileName(null);
 	                                    }
-	                                  }}
+	                                  })()}
 	                                  className={`${menuItemClass} text-red-600 hover:bg-red-50`}
 	                                  disabled={disabled || deletingFileName === stored.fileName}
 	                                >
@@ -1599,7 +1600,7 @@ export function ObjectList({
                       {isReviewing ? (
                         <form
                           className="mt-4 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3"
-                          onSubmit={async (event) => {
+                          onSubmit={(event) => void (async () => {
                             event.preventDefault();
                             const summary = reviewSummary.trim();
                             if (!summary) return;
@@ -1621,7 +1622,7 @@ export function ObjectList({
                             } finally {
                               setExitingFileName(null);
                             }
-                          }}
+                          })()}
                         >
                           <div>
                             <label className="block text-xs font-medium text-stone-500">

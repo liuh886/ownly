@@ -574,7 +574,7 @@ export function AccountsOverview({
       </div>
 
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(e) => void handleSubmit(e)}
         className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
@@ -760,7 +760,7 @@ export function AccountsOverview({
                     <button
                       type="button"
                       disabled={disabled || deletingFileName === stored.fileName}
-                      onClick={async () => {
+                      onClick={() => void (async () => {
                         const confirmed = await confirm({
                           title: t('delete'),
                           message: t('deleteConfirm').replace('{title}', stored.entity.snapshot_at),
@@ -774,7 +774,7 @@ export function AccountsOverview({
                         } finally {
                           setDeletingFileName(null);
                         }
-                      }}
+                      })()}
                       className="min-h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {deletingFileName === stored.fileName ? '…' : t('delete')}

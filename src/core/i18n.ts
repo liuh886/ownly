@@ -1372,7 +1372,7 @@ export function createWYQDTranslator(language: unknown) {
 
   return {
     language: normalizedLanguage,
-    t(key: WYQDTranslationKey) {
+    t: (key: WYQDTranslationKey) => {
       return dictionary[key] ?? translations.en[key] ?? key;
     },
   };

@@ -107,7 +107,7 @@ export function ArchivePanel({
                     <button
                       type="button"
                       disabled={disabled}
-                      onClick={() => onRestore(item.archiveType, item.fileName)}
+                      onClick={() => void onRestore(item.archiveType, item.fileName)}
                       className="min-h-10 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
                     >
                       {t('restore')}
@@ -115,7 +115,7 @@ export function ArchivePanel({
                     <button
                       type="button"
                       disabled={disabled || deletingKey === key}
-                      onClick={() => handleDelete(item)}
+                      onClick={() => void handleDelete(item)}
                       className="min-h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {deletingKey === key ? '…' : t('permanentlyDelete')}

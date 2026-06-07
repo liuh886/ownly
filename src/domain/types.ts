@@ -1,4 +1,4 @@
-export type CurrencyCode = 'CNY' | 'USD' | 'EUR' | 'HKD' | string;
+export type CurrencyCode = 'CNY' | 'USD' | 'EUR' | 'HKD' | (string & Record<never, never>);
 
 export type WYQDEntityType = 'object' | 'account' | 'snapshot' | 'review';
 
@@ -105,7 +105,7 @@ export interface TravelLocation {
 export interface OneTimeExperienceObject extends BaseWYQDObject {
   object_type: 'one_time_experience';
   status: OneTimeExperienceStatus;
-  experience_subtype?: 'travel_worldview' | string;
+  experience_subtype?: 'travel_worldview' | (string & Record<never, never>);
   planned_at?: string;
   started_at?: string;
   ended_at?: string;

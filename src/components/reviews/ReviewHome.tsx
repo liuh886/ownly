@@ -168,7 +168,7 @@ function ReviewDetailSidebar({
         {/* Save / Cancel */}
         <div className="flex gap-2">
           <button type="button" onClick={onCancelEdit} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSavingAll}>{t('cancel')}</button>
-          <button type="button" onClick={handleSaveAll} disabled={!canSubmit || isSavingAll} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
+          <button type="button" onClick={() => void handleSaveAll()} disabled={!canSubmit || isSavingAll} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
             {isSavingAll ? t('saving') : t('saveChanges')}
           </button>
         </div>
@@ -769,7 +769,7 @@ export function ReviewHome({
                       </span>
                     </button>
                     {isReviewingThis ? (
-                      <form ref={reviewFormRef} onSubmit={handleSubmit} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+                      <form ref={reviewFormRef} onSubmit={(e) => void handleSubmit(e)} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
                         <textarea value={summary} onChange={(event) => setSummary(event.target.value)} placeholder={t('reviewSummaryPlaceholder')} rows={3} aria-label={t('summary')} className={`${fieldClass} resize-none`} disabled={disabled || isSaving} />
                         <div className="grid gap-2 sm:grid-cols-3">
                           <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
@@ -833,7 +833,7 @@ export function ReviewHome({
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
+                      onClick={() => void (async () => {
                         const confirmed = await confirm({ title: t('delete'), message: t('deleteConfirm').replace('{title}', stored.entity.title), destructive: true });
                         if (!confirmed) return;
                         setDeletingFileName(stored.fileName);
@@ -844,7 +844,7 @@ export function ReviewHome({
                         } finally {
                           setDeletingFileName(null);
                         }
-                      }}
+                      })()}
                       className="rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300"
                       disabled={disabled || deletingFileName === stored.fileName}
                     >

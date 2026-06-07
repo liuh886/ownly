@@ -28,7 +28,7 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
   const handleChange = useCallback((value: string) => {
     setQuery(value);
     if (value.trim().length > 0) {
-      searchCities(value, 8).then((matches) => {
+      void searchCities(value, 8).then((matches) => {
         setResults(matches);
         setIsOpen(true);
         setHighlightIndex(-1);
@@ -80,8 +80,9 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
         setIsOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const doc = activeDocument ?? document;
+    doc.addEventListener('mousedown', handleClickOutside);
+    return () => doc.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (

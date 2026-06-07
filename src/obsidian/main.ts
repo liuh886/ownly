@@ -364,7 +364,7 @@ class WYQDWorkspaceView extends ItemView {
     btn.addEventListener('click', () => {
       this.contentEl.empty();
       this.contentEl.addClass('wyqd-obsidian-view');
-      this.mountReact();
+      void this.mountReact();
     });
   }
 
@@ -392,6 +392,7 @@ class WYQDSettingTab extends PluginSettingTab {
     super(app, wyqdPlugin);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Obsidian calls display() but does not await the result
   async display() {
     const { containerEl } = this;
     const t = (key: WYQDTranslationKey) => this.wyqdPlugin.t(key);
@@ -408,10 +409,11 @@ class WYQDSettingTab extends PluginSettingTab {
       text: t('settingsSave'),
       cls: 'mod-cta wyqd-settings-save-btn',
     });
-    saveButton.addEventListener('click', async () => {
-      await this.wyqdPlugin.saveSettings();
-      this.wyqdPlugin.refreshWorkspaceViews();
-      new Notice(t('settingsSaved'));
+    saveButton.addEventListener('click', () => {
+      void this.wyqdPlugin.saveSettings().then(() => {
+        this.wyqdPlugin.refreshWorkspaceViews();
+        new Notice(t('settingsSaved'));
+      });
     });
 
     const hero = shell.createDiv({ cls: 'wyqd-settings-hero' });
@@ -505,9 +507,10 @@ class WYQDSettingTab extends PluginSettingTab {
           suggestionsEl.addClass('wyqd-folder-suggestions--hidden');
         }
       };
-      document.addEventListener('click', hideSuggestionsOnOutsideClick);
+      const doc = activeDocument ?? document;
+      doc.addEventListener('click', hideSuggestionsOnOutsideClick);
       this.displayCleanupCallbacks.push(() => {
-        document.removeEventListener('click', hideSuggestionsOnOutsideClick);
+        doc.removeEventListener('click', hideSuggestionsOnOutsideClick);
       });
     });
 

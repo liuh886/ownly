@@ -45,9 +45,11 @@ export function I18nProvider({
     if (initialLanguage) return;
 
     const timer = window.setTimeout(() => {
+      // eslint-disable-next-line obsidianmd/no-localstorage
       const storedLanguage = normalizeWYQDLanguage(localStorage.getItem('ownly_language'));
       setLanguage(storedLanguage);
 
+      // eslint-disable-next-line obsidianmd/no-localstorage
       const storedCurrency = localStorage.getItem('ownly_currency') as WYQDCurrency | null;
       if (storedCurrency && ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'].includes(storedCurrency)) {
         setCurrency(storedCurrency);
@@ -68,9 +70,11 @@ export function I18nProvider({
         if (onLanguageChange) {
           onLanguageChange(lang);
         } else {
+          // eslint-disable-next-line obsidianmd/no-localstorage
           localStorage.setItem('ownly_language', lang);
         }
         // Auto-switch currency when language changes (only if user hasn't manually set it)
+        // eslint-disable-next-line obsidianmd/no-localstorage
         const stored = localStorage.getItem('ownly_currency');
         if (!stored) {
           setCurrency(defaultCurrency(lang));
@@ -80,6 +84,7 @@ export function I18nProvider({
       currency,
       setCurrency: (cur: WYQDCurrency) => {
         setCurrency(cur);
+        // eslint-disable-next-line obsidianmd/no-localstorage
         localStorage.setItem('ownly_currency', cur);
       },
     };

@@ -615,7 +615,7 @@ export function ObjectComposer({
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       if (canSubmit) {
-        handleSubmit(event as unknown as React.SyntheticEvent<HTMLFormElement>);
+        void handleSubmit(event as unknown as React.SyntheticEvent<HTMLFormElement>);
       }
     }
   }
@@ -729,7 +729,7 @@ export function ObjectComposer({
   return (
     <form
       onKeyDown={handleKeyDown}
-      onSubmit={handleSubmit}
+      onSubmit={(e) => void handleSubmit(e)}
       className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
     >
       <div className="mb-4 flex items-start justify-between gap-4">

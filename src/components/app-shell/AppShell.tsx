@@ -146,6 +146,7 @@ export function AppShell() {
         : '';
       await repository.saveReview(review, body);
     }
+    // eslint-disable-next-line obsidianmd/no-localstorage
     localStorage.setItem('ownly_demo_seeded', 'true');
     showNotice(t('demoDataSeeded'));
   }, [repository, t, showNotice]);
@@ -380,6 +381,7 @@ export function AppShell() {
 
         // Auto-seed demo data on first connect if vault is empty
         const isEmpty = nextObjects.length === 0 && nextSnapshots.length === 0 && nextReviews.length === 0;
+        // eslint-disable-next-line obsidianmd/no-localstorage
         const alreadySeeded = localStorage.getItem('ownly_demo_seeded') === 'true';
 
         if (isEmpty && !alreadySeeded) {
@@ -516,7 +518,7 @@ export function AppShell() {
               {runtimeTarget === 'web' ? (
                 <button
                   type="button"
-                  onClick={connectVault}
+                  onClick={() => void connectVault()}
                   disabled={isLoading}
                   className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
                 >
@@ -532,7 +534,7 @@ export function AppShell() {
             isConnected={isConnected}
             isLoading={isLoading}
             error={error}
-            onConnect={connectVault}
+            onConnect={() => void connectVault()}
           />
         ) : null}
 

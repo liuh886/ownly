@@ -90,7 +90,7 @@ export function WebShell() {
       }
     }
 
-    init();
+    void init();
     return () => { isMounted = false; };
   }, [t]);
 

@@ -250,13 +250,13 @@ export function HomeDashboard({
   const totalAcquisitionCost = useMemo(
     () => objects
       .filter((o) => o.object_type === 'physical')
-      .reduce((sum, o) => sum + (o.purchase_price || 0), 0),
+      .reduce((sum: number, o) => sum + (o.purchase_price || 0), 0),
     [objects],
   );
   const totalExperienceCost = useMemo(
     () => objects
       .filter((o) => o.object_type === 'one_time_experience')
-      .reduce((sum, o) => sum + (o.actual_total || o.budget_total || 0), 0),
+      .reduce((sum: number, o) => sum + (o.actual_total || o.budget_total || 0), 0),
     [objects],
   );
   const fixedCostCoverage = useMemo(
@@ -558,7 +558,7 @@ export function HomeDashboard({
           <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('doctor')}</h3>
           <button
             type="button"
-            onClick={runDoctor}
+            onClick={() => void runDoctor()}
             disabled={doctorLoading}
             className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition hover:border-stone-400 hover:text-stone-950 disabled:cursor-not-allowed disabled:opacity-40"
           >
