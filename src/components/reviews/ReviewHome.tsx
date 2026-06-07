@@ -674,6 +674,13 @@ export function ReviewHome({
         ))}
       </div>
 
+      {/* Travel Insights — Pro feature, above review list */}
+      <TravelInsightsPanel
+        objects={objects}
+        reviews={reviews.map((r) => r.entity)}
+        membership={membership}
+      />
+
       {/* Unified Review List */}
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
@@ -881,13 +888,6 @@ export function ReviewHome({
           </aside>
         </div>
       </div>
-
-      {/* Travel Insights — Pro feature, at bottom */}
-      <TravelInsightsPanel
-        objects={objects}
-        reviews={reviews.map((r) => r.entity)}
-        membership={membership}
-      />
     </section>
     {confirmDialog}
     </>
