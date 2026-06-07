@@ -530,7 +530,7 @@ export function AccountsOverview({
               <motion.polyline
                 points={fixedCostTrendPoints}
                 fill="none"
-                stroke="rgb(28 25 23)"
+                stroke="#f59e0b"
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -549,7 +549,7 @@ export function AccountsOverview({
                     cy={cy}
                     r="2.5"
                     fill="white"
-                    stroke="rgb(28 25 23)"
+                    stroke="#f59e0b"
                     strokeWidth="1.5"
                     className="cursor-pointer"
                     initial={{ scale: 0 }}
