@@ -190,3 +190,18 @@ export function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
 }
+
+export function formatLocalizedDate(dateStr: string, locale: string = 'en'): string {
+  if (!dateStr) return ''
+  try {
+    const date = new Date(dateStr + (dateStr.length === 10 ? 'T00:00:00' : ''))
+    if (isNaN(date.getTime())) return dateStr
+    return date.toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  } catch {
+    return dateStr
+  }
+}
