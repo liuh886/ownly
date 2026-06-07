@@ -1,5 +1,34 @@
 import type { OneTimeExperienceObject, ReviewEntry, TravelLocation, WYQDObject } from './types';
 
+/**
+ * Convert ISO 3166-1 alpha-2 country code to flag emoji.
+ * Each letter maps to a regional indicator symbol: A=U+1F1E6, B=U+1F1E7, etc.
+ */
+export function countryCodeToFlag(code?: string): string {
+  if (!code || code.length !== 2) return ''
+  const upper = code.toUpperCase()
+  const a = upper.charCodeAt(0)
+  const b = upper.charCodeAt(1)
+  if (a < 65 || a > 90 || b < 65 || b > 90) return ''
+  return String.fromCodePoint(a + 0x1F1E6 - 65, b + 0x1F1E6 - 65)
+}
+
+/**
+ * Calculate the number of days between two date strings (inclusive).
+ */
+export function calculateDaysBetween(start?: string, end?: string): number | null {
+  if (!start || !end) return null
+  try {
+    const s = new Date(start + (start.length === 10 ? 'T00:00:00' : ''))
+    const e = new Date(end + (end.length === 10 ? 'T00:00:00' : ''))
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return null
+    const diff = Math.abs(e.getTime() - s.getTime())
+    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)) + 1)
+  } catch {
+    return null
+  }
+}
+
 export function getTravelExperiences(objects: WYQDObject[]): OneTimeExperienceObject[] {
   return objects.filter(
     (obj): obj is OneTimeExperienceObject =>
