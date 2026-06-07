@@ -419,7 +419,7 @@ class WYQDSettingTab extends PluginSettingTab {
     const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
     eyebrow.createEl('span', { text: `Ownly ${WYQD_CORE_TARGET_VERSION}` });
     eyebrow.createEl('span', { text: t('localVaultOnly') });
-    new Setting(heroCopy).setName('Ownly').setHeading();
+    new Setting(heroCopy).setHeading();
     heroCopy.createEl('p', { text: t('workspaceSubtitle') });
     heroCopy.createEl('p', { cls: 'wyqd-slogan', text: WYQD_PRODUCT_SLOGAN });
     const membershipCard = hero.createDiv({ cls: 'wyqd-settings-membership' });

@@ -481,7 +481,7 @@ export function ReviewHome({
     selectedReview?.entity.target_id ? objectById.get(selectedReview.entity.target_id) : null;
   const canSubmit = !disabled && summary.trim().length > 0 && !isSaving;
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
 

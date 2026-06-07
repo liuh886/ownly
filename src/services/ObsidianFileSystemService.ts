@@ -1,4 +1,5 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any -- File System Access API types are not fully standardized in TypeScript lib */
+﻿// File System Access API types are not fully standardized in TypeScript lib.
+// Inline eslint-disable-next-line comments are used where `any` is required.
 import YAML from 'yaml';
 import { get, set } from 'idb-keyval';
 
@@ -10,6 +11,7 @@ export interface WishlistItem {
   cooling_days: number;
   date_purchased?: string;
   fileName?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy interface allows arbitrary properties
   [key: string]: any;
 }
 
@@ -17,6 +19,7 @@ const HANDLE_KEY = 'wyqd_obsidian_handle';
 
 // Default Obsidian config directory name. In the File System Access API context,
 // we cannot access Vault#configDir, so this uses the standard default.
+// eslint-disable-next-line obsidianmd/no-hardcoded-config-dir -- File System Access API has no access to Vault#configDir
 const OBSIDIAN_CONFIG_DIR = '.obsidian';
 
 interface PluginSettings {
@@ -30,19 +33,19 @@ export class ObsidianFileSystemService {
 
   async initAutoConnect(): Promise<boolean> {
     try {
-      const handle = await get(HANDLE_KEY);
+      const handle = await get<FileSystemDirectoryHandle>(HANDLE_KEY);
       if (handle) {
         const options = { mode: 'readwrite' as FileSystemPermissionMode };
         const permission = await handle.queryPermission(options);
         
         if (permission === 'granted') {
-          this.directoryHandle = handle as FileSystemDirectoryHandle; // eslint-disable-line @typescript-eslint/no-unnecessary-type-assertion -- idb-keyval returns T | undefined, narrowing requires explicit cast
+          this.directoryHandle = handle;
           return true;
         }
-        
+
         const requestStatus = await handle.requestPermission(options);
         if (requestStatus === 'granted') {
-          this.directoryHandle = handle as FileSystemDirectoryHandle; // eslint-disable-line @typescript-eslint/no-unnecessary-type-assertion
+          this.directoryHandle = handle;
           return true;
         }
       }
@@ -54,6 +57,7 @@ export class ObsidianFileSystemService {
 
   async requestAccess(): Promise<boolean> {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- showDirectoryPicker is not in standard Window typings
       this.directoryHandle = await (window as any).showDirectoryPicker({
         mode: 'readwrite',
       });
@@ -127,6 +131,7 @@ export class ObsidianFileSystemService {
     
     const items: WishlistItem[] = [];
     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemDirectoryHandle.values() async iterator
     for await (const entry of (this.directoryHandle as any).values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
         const file = await entry.getFile();
@@ -177,6 +182,7 @@ export class ObsidianFileSystemService {
     
     const fileName = `Ownly-${now}-${Date.now()}.md`;
     const fileHandle = await this.directoryHandle.getFileHandle(fileName, { create: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemFileHandle.createWritable() not in all lib typings
     const writable = await (fileHandle as any).createWritable();
     await writable.write(content);
     await writable.close();
@@ -205,7 +211,8 @@ export class ObsidianFileSystemService {
       const restOfContent = text.substring(match[0].length);
       const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
 
-      const writable = await (fileHandle as any).createWritable();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemFileHandle.createWritable() not in all lib typings
+    const writable = await (fileHandle as any).createWritable();
       await writable.write(newContent);
       await writable.close();
     }
@@ -240,7 +247,8 @@ export class ObsidianFileSystemService {
       const restOfContent = text.substring(match[0].length);
       const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
 
-      const writable = await (fileHandle as any).createWritable();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemFileHandle.createWritable() not in all lib typings
+    const writable = await (fileHandle as any).createWritable();
       await writable.write(newContent);
       await writable.close();
     }
@@ -273,6 +281,7 @@ export class ObsidianFileSystemService {
     if (!dirHandle) return [];
     
     const files: {fileName: string, content: string}[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemDirectoryHandle.values() async iterator
     for await (const entry of (dirHandle as any).values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
         try {
@@ -293,6 +302,7 @@ export class ObsidianFileSystemService {
     if (!dirHandle) throw new Error(`Could not access or create directory: ${directory}`);
     
     const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileSystemFileHandle.createWritable() not in all lib typings
     const writable = await (fileHandle as any).createWritable();
     await writable.write(content);
     await writable.close();
@@ -312,5 +322,3 @@ export class ObsidianFileSystemService {
 }
 
 export const obsidianService = new ObsidianFileSystemService();
-
-/* eslint-enable @typescript-eslint/no-explicit-any */

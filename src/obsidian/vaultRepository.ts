@@ -109,6 +109,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     if (this.fileManager) {
       await this.fileManager.trashFile(file);
     } else {
+      // eslint-disable-next-line obsidianmd/no-vault-delete -- fallback when FileManager is unavailable
       await this.vault.delete(file);
     }
   }
