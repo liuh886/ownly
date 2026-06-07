@@ -181,10 +181,15 @@ function getServiceDaysInfo(object: WYQDObject): { elapsed: number; total: numbe
   if (object.object_type !== 'physical') return null;
   const today = todayLocalDate();
   const endDate = object.ended_at ? object.ended_at : undefined;
-  const elapsed = calculateInclusiveDays(object.purchased_at, endDate, today);
-  if (!elapsed) return null;
-  const total = endDate ? calculateInclusiveDays(object.purchased_at, endDate, today) : null;
-  return { elapsed, total };
+  const elapsedToToday = calculateInclusiveDays(object.purchased_at, undefined, today);
+  if (!elapsedToToday) return null;
+  if (endDate) {
+    const total = calculateInclusiveDays(object.purchased_at, endDate, today);
+    if (!total) return null;
+    const elapsed = Math.min(elapsedToToday, total);
+    return { elapsed, total };
+  }
+  return { elapsed: elapsedToToday, total: null };
 }
 
 function formatDateRange(object: WYQDObject, t: TranslateFn): string {
