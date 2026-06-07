@@ -19,7 +19,8 @@
     "deps:reset": "node -e \"require('node:fs').rmSync('node_modules',{recursive:true,force:true})\" && npm ci",
     "wyqd": "node scripts/wyqd-cli.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run"
   },
   "dependencies": {
     "d3-geo": "^3.1.1",
@@ -43,6 +44,7 @@
     "eslint-config-next": "16.2.6",
     "obsidian": "^1.12.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3"
   }
 }

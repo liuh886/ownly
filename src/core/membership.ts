@@ -68,21 +68,22 @@ export function canUseWYQDProFeature(membership: Pick<WYQDMembershipState, 'isPr
 }
 
 export const WYQD_FREE_LIMITS = {
-  objects: Infinity,
-  snapshots: Infinity,
-  reviews: Infinity,
+  objects: 200,
+  snapshots: 30,
+  reviews: 100,
 } as const;
 
-// Everyone is Pro — capacity is always unlimited.
 export function checkWYQDCapacity(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _membership: Pick<WYQDMembershipState, 'isPro'>,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _kind: keyof typeof WYQD_FREE_LIMITS,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _currentCount: number,
+  membership: Pick<WYQDMembershipState, 'isPro'>,
+  kind: keyof typeof WYQD_FREE_LIMITS,
+  currentCount: number,
 ): { allowed: boolean; limit: number; remaining: number } {
-  return { allowed: true, limit: Infinity, remaining: Infinity };
+  if (membership.isPro) {
+    return { allowed: true, limit: Infinity, remaining: Infinity };
+  }
+  const limit = WYQD_FREE_LIMITS[kind];
+  const remaining = Math.max(0, limit - currentCount);
+  return { allowed: remaining > 0, limit, remaining };
 }
 
 function createMembershipState(

@@ -1,5 +1,4 @@
 import type { OneTimeExperienceObject, ReviewEntry, TravelLocation, WYQDObject } from './types';
-import citiesData from '@/data/cities.json';
 
 export function getTravelExperiences(objects: WYQDObject[]): OneTimeExperienceObject[] {
   return objects.filter(
@@ -164,7 +163,14 @@ interface CityEntry {
   cn?: string;
 }
 
-const cityDatabase: CityEntry[] = citiesData as CityEntry[];
+let _cityDatabase: CityEntry[] | null = null;
+
+async function getCityDatabase(): Promise<CityEntry[]> {
+  if (!_cityDatabase) {
+    _cityDatabase = (await import('@/data/cities.json')).default as CityEntry[];
+  }
+  return _cityDatabase;
+}
 
 export interface CitySearchResult {
   name: string;
@@ -198,10 +204,11 @@ export const COUNTRY_NAMES: Record<string, string> = {
   ZM: 'Zambia', ZW: 'Zimbabwe', HK: 'Hong Kong', MO: 'Macau', PS: 'Palestine', XK: 'Kosovo',
 };
 
-export function searchCities(query: string, limit = 10): CitySearchResult[] {
+export async function searchCities(query: string, limit = 10): Promise<CitySearchResult[]> {
   if (!query.trim()) return [];
   const q = query.trim().toLowerCase();
 
+  const cityDatabase = await getCityDatabase();
   const matches: Array<{ entry: CityEntry; score: number }> = [];
 
   for (const entry of cityDatabase) {

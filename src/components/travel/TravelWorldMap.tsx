@@ -1,12 +1,11 @@
 'use client';
 
-import { useMemo, useState, useCallback, useRef, type WheelEvent, type MouseEvent } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef, type WheelEvent, type MouseEvent } from 'react';
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import * as topojson from 'topojson-client';
 import { useI18n } from '@/core/i18n-context';
 import type { OneTimeExperienceObject } from '@/domain/types';
 import { buildTravelMapPoints } from '@/domain/travel';
-import worldData from '@/data/countries-110m.json';
 
 const VIEWBOX_W = 800;
 const VIEWBOX_H = 420;
@@ -23,8 +22,13 @@ export function TravelWorldMap({
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [worldGeoData, setWorldGeoData] = useState<unknown>(null);
   const dragStart = useRef({ x: 0, y: 0 });
   const translateStart = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    import('@/data/countries-110m.json').then((mod) => setWorldGeoData(mod.default));
+  }, []);
 
   const projection = useMemo(
     () => geoNaturalEarth1().fitSize([VIEWBOX_W, VIEWBOX_H], { type: 'Sphere' }),
@@ -33,9 +37,10 @@ export function TravelWorldMap({
   const pathGenerator = useMemo(() => geoPath(projection), [projection]);
 
   const countries = useMemo(() => {
-    const topology = worldData as unknown as Parameters<typeof topojson.feature>[0];
+    if (!worldGeoData) return null;
+    const topology = worldGeoData as unknown as Parameters<typeof topojson.feature>[0];
     return topojson.feature(topology, topology.objects.countries) as unknown as GeoJSON.FeatureCollection;
-  }, []);
+  }, [worldGeoData]);
 
   const points = useMemo(() => buildTravelMapPoints(experiences), [experiences]);
   const pointExpIds = useMemo(() => new Set(points.map((p) => p.id.split('#')[0])), [points]);
@@ -125,6 +130,16 @@ export function TravelWorldMap({
   const canZoomIn = scale < MAX_SCALE;
   const canZoomOut = scale > MIN_SCALE;
   const isZoomed = scale > 1;
+
+  if (!countries) {
+    return (
+      <div className="wyqd-travel-map mt-5">
+        <div className="flex h-[420px] items-center justify-center rounded-lg border border-stone-200 bg-white">
+          <div className="text-sm text-stone-400">{t('loading')}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="wyqd-travel-map mt-5">

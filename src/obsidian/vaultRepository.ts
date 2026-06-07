@@ -426,7 +426,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
 }
 
 function serializeEntity<T extends BaseEntity>(entity: T, body: string): string {
-  return serializeMarkdownEntity(entity as unknown as Record<string, unknown>, body);
+  return serializeMarkdownEntity(entity, body);
 }
 
 function joinPath(...parts: string[]): string {

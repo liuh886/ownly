@@ -22,6 +22,7 @@ import { GUMROAD_STORE_URL } from '@/core/activation';
 import { resolveWYQDMembership } from '@/core/membership';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { runWYQDDoctor } from '@/core/doctor';
+import YAML from 'yaml';
 import type { AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
 import { ObsidianVaultRepository } from './vaultRepository';
 import { ObsidianWorkspaceProvider } from './ObsidianWorkspaceProvider';
@@ -681,32 +682,8 @@ function renderDraft(
   return {
     id,
     title,
-    content: `---\n${toYaml(entity)}---\n\n# ${title}\n\n${prompt}\n`,
+    content: `---\n${YAML.stringify(entity).trimEnd()}\n---\n\n# ${title}\n\n${prompt}\n`,
   };
-}
-
-function toYaml(value: WYQDObject | AccountSnapshot | ReviewEntry) {
-  return Object.entries(value as unknown as Record<string, unknown>)
-    .filter(([, entryValue]) => entryValue !== undefined)
-    .map(([key, entryValue]) => `${key}: ${formatYamlValue(entryValue)}`)
-    .join('\n')
-    .concat('\n');
-}
-
-function formatYamlValue(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(formatYamlValue).join(', ')}]`;
-  }
-
-  if (value === null) {
-    return 'null';
-  }
-
-  if (typeof value === 'boolean' || typeof value === 'number') {
-    return String(value);
-  }
-
-  return JSON.stringify(String(value));
 }
 
 function normalizeFolder(value: string) {

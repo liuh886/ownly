@@ -17,15 +17,6 @@ import type {
 import { obsidianService } from './ObsidianFileSystemService';
 import { createWYQDDirectories } from '@/data/paths';
 
-/** @deprecated Use WYQDStoredEntity from @/core/repository */
-export type StoredEntity<T extends import('@/domain/types').BaseEntity> = WYQDStoredEntity<T>;
-
-/** @deprecated Use WYQDArchiveEntityType from @/core/repository */
-export type ArchiveEntityType = WYQDArchiveEntityType;
-
-/** @deprecated Use WYQDArchivedStoredEntity from @/core/repository */
-export type ArchivedStoredEntity = WYQDArchivedStoredEntity;
-
 export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   private dirs: ReturnType<typeof createWYQDDirectories> = WYQD_DIRECTORIES;
 
@@ -192,14 +183,14 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   async saveObject(object: WYQDObject, body = ''): Promise<string> {
     const date = object.created_at || new Date().toISOString().split('T')[0];
     const fileName = createEntityFileName(date, slugify(object.title));
-    const content = serializeMarkdownEntity(object as unknown as Record<string, unknown>, body);
+    const content = serializeMarkdownEntity(object, body);
 
     await obsidianService.writeMarkdownFile(this.dirs.objects, fileName, content);
     return fileName;
   }
 
   async updateObject(fileName: string, object: WYQDObject, body = ''): Promise<void> {
-    const content = serializeMarkdownEntity(object as unknown as Record<string, unknown>, body);
+    const content = serializeMarkdownEntity(object, body);
     await obsidianService.writeMarkdownFile(this.dirs.objects, fileName, content);
   }
 
@@ -237,14 +228,14 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
       ? snapshot.created_at.slice(11, 19).replaceAll(':', '')
       : undefined;
     const fileName = createSnapshotFileName(date, time);
-    const content = serializeMarkdownEntity(snapshot as unknown as Record<string, unknown>, body);
+    const content = serializeMarkdownEntity(snapshot, body);
 
     await obsidianService.writeMarkdownFile(this.dirs.snapshots, fileName, content);
     return fileName;
   }
 
   async updateSnapshot(fileName: string, snapshot: AccountSnapshot, body = ''): Promise<void> {
-    const content = serializeMarkdownEntity(snapshot as unknown as Record<string, unknown>, body);
+    const content = serializeMarkdownEntity(snapshot, body);
     await obsidianService.writeMarkdownFile(this.dirs.snapshots, fileName, content);
   }
 
@@ -267,14 +258,14 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   async saveReview(review: ReviewEntry, body = ''): Promise<string> {
     const date = review.reviewed_at || review.exited_at || review.created_at || new Date().toISOString().split('T')[0];
     const fileName = createReviewFileName(date, slugify(review.title));
-    const content = serializeMarkdownEntity(review as unknown as Record<string, unknown>, body);
+    const content = serializeMarkdownEntity(review, body);
 
     await obsidianService.writeMarkdownFile(this.dirs.reviews, fileName, content);
     return fileName;
   }
 
   async updateReview(fileName: string, review: ReviewEntry, body = ''): Promise<void> {
-    const content = serializeMarkdownEntity(review as unknown as Record<string, unknown>, body);
+    const content = serializeMarkdownEntity(review, body);
     await obsidianService.writeMarkdownFile(this.dirs.reviews, fileName, content);
   }
 

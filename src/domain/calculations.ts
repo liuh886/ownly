@@ -67,6 +67,9 @@ export function calculatePhysicalDailyCost(object: PhysicalObject, today = new D
   return calculatePhysicalExperienceCost(object) / holdingDays;
 }
 
+// Residual value is intentionally 0 for active items (no ended_at).
+// This models default depreciation to zero — only items with an explicit
+// end/disposal date have a non-zero residual value.
 export function calculateResidualValue(object: PhysicalObject, today = new Date()): number {
   const price = object.total_acquisition_cost || object.purchase_price || 0;
   if (!object.ended_at || !object.purchased_at) return 0;

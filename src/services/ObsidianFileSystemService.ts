@@ -100,7 +100,8 @@ export class ObsidianFileSystemService {
       const settings = JSON.parse(text) as PluginSettings;
       this.cachedDataFolder = settings.dataFolder || fallback;
       return this.cachedDataFolder;
-    } catch {
+    } catch (e) {
+      console.warn('[Ownly] Failed to read plugin settings for data folder detection', e);
       this.cachedDataFolder = fallback;
       return this.cachedDataFolder;
     }
@@ -179,6 +180,7 @@ export class ObsidianFileSystemService {
 
   async updateItemStatus(fileName: string, newStatus: 'purchased' | 'archived'): Promise<void> {
     if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+    this.sanitizeFileName(fileName);
 
     const fileHandle = await this.directoryHandle.getFileHandle(fileName);
     const file = await fileHandle.getFile();
@@ -207,6 +209,7 @@ export class ObsidianFileSystemService {
 
   async updateItem(fileName: string, updates: Partial<WishlistItem>): Promise<void> {
     if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+    this.sanitizeFileName(fileName);
 
     const fileHandle = await this.directoryHandle.getFileHandle(fileName);
     const file = await fileHandle.getFile();
@@ -238,6 +241,14 @@ export class ObsidianFileSystemService {
       await writable.close();
     }
   }
+  private sanitizeFileName(fileName: string): string {
+    // Reject path traversal attempts
+    if (fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) {
+      throw new Error(`Invalid file name: ${fileName}`);
+    }
+    return fileName;
+  }
+
   private async getDirHandle(path: string, create = false): Promise<FileSystemDirectoryHandle | null> {
     if (!this.directoryHandle) return null;
     let current = this.directoryHandle;
@@ -273,6 +284,7 @@ export class ObsidianFileSystemService {
   }
 
   async writeMarkdownFile(directory: string, fileName: string, content: string): Promise<void> {
+    this.sanitizeFileName(fileName);
     const dirHandle = await this.getDirHandle(directory, true);
     if (!dirHandle) throw new Error(`Could not access or create directory: ${directory}`);
     
@@ -283,12 +295,14 @@ export class ObsidianFileSystemService {
   }
 
   async deleteMarkdownFile(directory: string, fileName: string): Promise<void> {
+    this.sanitizeFileName(fileName);
     const dirHandle = await this.getDirHandle(directory);
     if (!dirHandle) return;
     try {
       await dirHandle.removeEntry(fileName);
     } catch (e) {
       console.warn(`Failed to delete file ${fileName} in ${directory}`, e);
+      throw e;
     }
   }
 }

@@ -28,10 +28,11 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
   const handleChange = useCallback((value: string) => {
     setQuery(value);
     if (value.trim().length > 0) {
-      const matches = searchCities(value, 8);
-      setResults(matches);
-      setIsOpen(true);
-      setHighlightIndex(-1);
+      searchCities(value, 8).then((matches) => {
+        setResults(matches);
+        setIsOpen(true);
+        setHighlightIndex(-1);
+      });
     } else {
       setResults([]);
       setIsOpen(false);
