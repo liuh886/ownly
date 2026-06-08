@@ -36,8 +36,8 @@ export function I18nProvider({
   storageGet?: (key: string) => string | null;
   storageSet?: (key: string, value: string) => void;
 }) {
-  const get = storageGet ?? ((key: string) => localStorage.getItem(key));
-  const set = storageSet ?? ((key: string, value: string) => { localStorage.setItem(key, value); });
+  const get = storageGet ?? ((key: string) => window.localStorage.getItem(key));
+  const set = storageSet ?? ((key: string, value: string) => { window.localStorage.setItem(key, value); });
 
   const [language, setLanguage] = useState<WYQDLanguage>(() => {
     if (initialLanguage) return initialLanguage;

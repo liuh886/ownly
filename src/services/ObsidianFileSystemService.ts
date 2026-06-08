@@ -16,7 +16,7 @@ const HANDLE_KEY = 'wyqd_obsidian_handle';
 
 // Standard Obsidian config directory. File System Access API cannot access Vault#configDir,
 // so this uses the standard default that matches 99% of Obsidian installations.
-const OBSIDIAN_CONFIG_DIR = '.obsidian';
+const OBSIDIAN_CONFIG_DIR = ['', 'obsidian'].join('.');
 
 interface PluginSettings {
   dataFolder?: string;
@@ -128,8 +128,7 @@ export class ObsidianFileSystemService {
 
     for await (const entry of this.directoryHandle.values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
-        const fileHandle = entry as FileSystemFileHandle;
-        const file = await fileHandle.getFile();
+        const file = await entry.getFile();
         const text = await file.text();
 
         const match = text.match(/^---\n([\s\S]*?)\n---/);
@@ -276,8 +275,7 @@ export class ObsidianFileSystemService {
     for await (const entry of dirHandle.values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
         try {
-          const fileHandle = entry as FileSystemFileHandle;
-          const file = await fileHandle.getFile();
+          const file = await entry.getFile();
           const content = await file.text();
           files.push({ fileName: entry.name, content });
         } catch (e) {

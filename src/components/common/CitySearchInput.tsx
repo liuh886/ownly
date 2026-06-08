@@ -80,7 +80,7 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
         setIsOpen(false);
       }
     }
-    const doc = activeDocument ?? document;
+    const doc: Document = activeDocument ?? window.document;
     doc.addEventListener('mousedown', handleClickOutside);
     return () => doc.removeEventListener('mousedown', handleClickOutside);
   }, []);

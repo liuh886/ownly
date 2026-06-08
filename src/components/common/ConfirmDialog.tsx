@@ -39,7 +39,7 @@ export function ConfirmDialog({
 
   useEffect(() => {
     if (!open) return;
-    const doc = activeDocument ?? document;
+    const doc: Document = activeDocument ?? window.document;
     previousFocusRef.current = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
 
     function handleKeyDown(e: KeyboardEvent) {

@@ -110,8 +110,8 @@ export function WebShell() {
     openLicenseModal,
     closeLicenseModal,
     licenseModalOpen,
-    storageGet: (key: string) => localStorage.getItem(key),
-    storageSet: (key: string, value: string) => { localStorage.setItem(key, value); },
+    storageGet: (key: string) => window.localStorage.getItem(key),
+    storageSet: (key: string, value: string) => { window.localStorage.setItem(key, value); },
   }), [isConnected, isLoading, connect, error, clearError, notice, showNotice, membership, activateLicenseKey, clearLicenseKey, openLicenseModal, closeLicenseModal, licenseModalOpen]);
 
   return (
