@@ -244,13 +244,13 @@ export class ObsidianFileSystemService {
       await writable.close();
     }
   }
-  private sanitizeFileName(fileName: string): string {
+  private sanitizeFileName = (fileName: string): string => {
     // Reject path traversal attempts
     if (fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) {
       throw new Error(`Invalid file name: ${fileName}`);
     }
     return fileName;
-  }
+  };
 
   private async getDirHandle(path: string, create = false): Promise<FileSystemDirectoryHandle | null> {
     if (!this.directoryHandle) return null;

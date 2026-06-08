@@ -47,6 +47,7 @@
   }
 }
 
+/* Tailwind CSS v4 theme directive — processed by @tailwindcss/postcss at build time */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
