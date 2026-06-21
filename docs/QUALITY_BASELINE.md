@@ -3,11 +3,13 @@
 **Current Version:** 1.0.4
 
 ## Validation & Test Results
+- **Overall Validation (`npm run validate`):** ❌ Failed (due to Obsidian check below)
+- **Linting (`npm run lint`):** ⚠️ Passed with 6 warnings (treated as pass, does not exit with 1)
 - **Web runtime (`npm run build`):** ✅ Passed
 - **Obsidian package (`npm run validate:obsidian`):** ❌ Failed
   - *Error details:* `src/obsidian/vaultRepository.ts(109,11): error TS2531: Object is possibly 'null'.`
-- **Unit Tests (`npm run test`):** ❌ Failed
-  - *Error details:* No test files found. Vitest exits with code 1.
+- **Unit Tests (`npm run test`):** ⚠️ N/A
+  - *Error details:* unit test suite not established yet; vitest exits because no test files are present.
 - **E2E Smoke Tests (`npm run test:e2e`):** ❌ Failed
   - `smoke:web` passed.
   - `smoke:site` failed. It expected the heading "Object console" but did not find it (found "Objects" instead).
@@ -38,7 +40,7 @@ This checklist outlines the critical paths for smoke testing based on the requir
 - `npm run validate:obsidian` fails due to a TypeScript strict null check error in `vaultRepository.ts`.
 
 ### Major
-- `npm run test` fails entirely because no unit tests exist.
+- Unit test suite not established yet; vitest exits because no test files are present.
 
 ### Minor
 - 6 ESLint warnings across the app (React Hooks exhaustive-deps and unused vars).

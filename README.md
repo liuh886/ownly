@@ -20,11 +20,11 @@ Ownly is a local-first decision ledger for people who want to buy less impulsive
 
 ## Project Status
 
-Ownly `1.x` is a stable public Obsidian plugin release. The Obsidian plugin is the primary supported experience; the Web runtime is kept for local browser use, development, and shared-core validation.
+Ownly `1.x` is a public Obsidian plugin release; Obsidian is the primary runtime; current validation status is tracked in [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md). The Web runtime is kept for local browser use, development, and shared-core validation.
 
 | Area | Status |
 |---|---|
-| Obsidian plugin | Stable, primary runtime |
+| Obsidian plugin | Primary runtime; see quality baseline |
 | Web runtime | Compatible local runtime |
 | Data format | Plain Markdown + YAML frontmatter |
 | Storage model | Local Vault / local folder |
@@ -89,7 +89,7 @@ Track three types of objects with full lifecycle management:
 
 - **Bilingual UI** — English and Chinese, with auto-detection.
 - **Quick entry** — Templates for physical items, subscriptions, and experiences. Paste-line parsing for fast input.
-- **Dashboard** — Net worth trends, action center, priority queue, status distribution.
+- **Dashboard** — Ownership overview, cost pressure, quick entry, review actions, and data scale.
 
 ## Installation
 
