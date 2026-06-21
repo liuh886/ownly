@@ -34,7 +34,9 @@ export function validateBaseEntity(entity: BaseEntity): ValidationIssue[] {
   if (!entity.id) issues.push({ field: 'id', message: 'Missing ID', severity: 'error' });
   if (!entity.title) issues.push({ field: 'title', message: 'Missing title', severity: 'error' });
   if (!entity.created_at) issues.push({ field: 'created_at', message: 'Missing created_at', severity: 'error' });
-  if (entity.schema_version !== '0.1') {
+  if (!entity.schema_version) {
+    issues.push({ field: 'schema_version', message: 'Missing schema_version', severity: 'error' });
+  } else if (entity.schema_version !== '0.1') {
     issues.push({ field: 'schema_version', message: `Unsupported schema version: ${entity.schema_version}`, severity: 'warning' });
   }
   return issues;
@@ -100,7 +102,7 @@ export function validateObject(obj: WYQDObject): ValidationResult {
     case 'recurring_cost': return validateRecurring(obj);
     case 'one_time_experience': return validateExperience(obj);
     default:
-      return createResult([{ message: `Unknown object type: ${(obj as any).object_type}`, severity: 'error' }]);
+      return createResult([{ message: `Unknown object type: ${(obj as unknown as Record<string, unknown>).object_type}`, severity: 'error' }]);
   }
 }
 
@@ -119,21 +121,27 @@ export function validateSnapshot(snapshot: AccountSnapshot): ValidationResult {
 export function validateReview(review: ReviewEntry): ValidationResult {
   const issues = validateBaseEntity(review);
   if (!review.review_type) issues.push({ field: 'review_type', message: 'Missing review_type', severity: 'error' });
-  if (!review.target_id) issues.push({ field: 'target_id', message: 'Missing target_id', severity: 'error' });
+  
+  if (['object_review', 'exit_record'].includes(review.review_type) && !review.target_id) {
+    issues.push({ field: 'target_id', message: 'Missing target_id', severity: 'error' });
+  }
+  
   return createResult(issues);
 }
 
-export function validateEntity(entity: any): ValidationResult {
+export function validateEntity(entity: unknown): ValidationResult {
   if (!entity || typeof entity !== 'object') {
     return createResult([{ message: 'Entity is not an object', severity: 'error' }]);
   }
   
-  switch (entity.type) {
+  const entityRecord = entity as Record<string, unknown>;
+  
+  switch (entityRecord.type) {
     case 'object': return validateObject(entity as WYQDObject);
     case 'account': return validateAccount(entity as Account);
     case 'snapshot': return validateSnapshot(entity as AccountSnapshot);
     case 'review': return validateReview(entity as ReviewEntry);
     default:
-      return createResult([{ field: 'type', message: `Unknown entity type: ${entity.type}`, severity: 'error' }]);
+      return createResult([{ field: 'type', message: `Unknown entity type: ${entityRecord.type}`, severity: 'error' }]);
   }
 }

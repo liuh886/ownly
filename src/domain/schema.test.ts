@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateEntity } from './schema';
-import type { PhysicalObject, RecurringCostObject, OneTimeExperienceObject, Account, AccountSnapshot, ReviewEntry } from './types';
+import type { PhysicalObject, RecurringCostObject, OneTimeExperienceObject, ReviewEntry } from './types';
 
 describe('schema validation', () => {
   const baseEntity = {
@@ -136,5 +136,75 @@ describe('schema validation', () => {
     };
     const result = validateEntity(review);
     expect(result.valid).toBe(true);
+  });
+
+  it('validates monthly review without target_id', () => {
+    const review: ReviewEntry = {
+      ...baseEntity,
+      type: 'review',
+      review_type: 'monthly',
+      year: 2023,
+      period: '01'
+    };
+    const result = validateEntity(review);
+    expect(result.valid).toBe(true);
+  });
+
+  it('validates annual review without target_id', () => {
+    const review: ReviewEntry = {
+      ...baseEntity,
+      type: 'review',
+      review_type: 'annual',
+      year: 2023
+    };
+    const result = validateEntity(review);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects object_review without target_id', () => {
+    const review: ReviewEntry = {
+      ...baseEntity,
+      type: 'review',
+      review_type: 'object_review'
+    };
+    const result = validateEntity(review);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'target_id', severity: 'error' })
+      ])
+    );
+  });
+
+  it('rejects exit_record without target_id', () => {
+    const review: ReviewEntry = {
+      ...baseEntity,
+      type: 'review',
+      review_type: 'exit_record'
+    };
+    const result = validateEntity(review);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'target_id', severity: 'error' })
+      ])
+    );
+  });
+
+  it('rejects missing schema_version', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const review: any = {
+      ...baseEntity,
+      type: 'review',
+      review_type: 'monthly',
+      schema_version: undefined
+    };
+    const result = validateEntity(review);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'schema_version', severity: 'error' })
+      ])
+    );
   });
 });

@@ -115,7 +115,7 @@ function checkSchemaVersions(entities: readonly AnyStoredEntity[], t?: Translate
     }));
 }
 
-function checkSchemaValidation(entities: readonly AnyStoredEntity[], t?: TranslateFn): WYQDDoctorFinding[] {
+function checkSchemaValidation(entities: readonly AnyStoredEntity[]): WYQDDoctorFinding[] {
   const findings: WYQDDoctorFinding[] = [];
   
   for (const stored of entities) {
@@ -394,7 +394,7 @@ export async function runWYQDDoctor(
     ...checkSnapshotTotals(snapshots, t),
     ...checkReviewTargets(reviews, objects, t),
     ...checkReviewRefIntegrity(objects, reviews, t),
-    ...checkSchemaValidation(entities, t),
+    ...checkSchemaValidation(entities),
     ...checkDateChronology(entities, t),
     ...checkSnapshotStaleness(snapshots, t),
   ];
