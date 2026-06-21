@@ -2,6 +2,7 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import YAML from 'yaml';
+import { validateEntity } from '../src/domain/schema';
 
 const FRONTMATTER_PATTERN = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 const DIRECTORIES = {
@@ -206,6 +207,22 @@ function findArchivedEntry(vaultRoot, entityType, options) {
 }
 
 function writeEntry(directory, fileName, frontmatter, body) {
+  const result = validateEntity(frontmatter);
+  
+  if (result.issues.length > 0) {
+    for (const issue of result.issues) {
+      if (issue.severity === 'error') {
+        console.error(`[Validation Error] ${issue.message} (field: ${issue.field})`);
+      } else {
+        console.warn(`[Validation Warning] ${issue.message} (field: ${issue.field})`);
+      }
+    }
+  }
+
+  if (!result.valid) {
+    fail('Entity validation failed. Aborting write.');
+  }
+
   writeFileSync(join(directory, fileName), serializeMarkdown(frontmatter, body), 'utf8');
 }
 

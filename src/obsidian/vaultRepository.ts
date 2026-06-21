@@ -106,7 +106,11 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
 
   /** Delete a file using trash (respects user's file deletion preference). */
   private async deleteFile(file: TFile): Promise<void> {
-    await this.fileManager.trashFile(file);
+    if (this.fileManager) {
+      await this.fileManager.trashFile(file);
+    } else {
+      await this.vault.trash(file, true);
+    }
   }
 
   getDataFolderPath(): string {
