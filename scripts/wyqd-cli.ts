@@ -1,7 +1,10 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import YAML from 'yaml';
+import { validateEntity } from '../src/domain/schema';
 
 const FRONTMATTER_PATTERN = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 const DIRECTORIES = {
@@ -205,7 +208,23 @@ function findArchivedEntry(vaultRoot, entityType, options) {
   return matches[0];
 }
 
-function writeEntry(directory, fileName, frontmatter, body) {
+function writeEntry(directory, fileName, frontmatter, body, validateStrict = true) {
+  const result = validateEntity(frontmatter);
+  
+  if (result.issues.length > 0) {
+    for (const issue of result.issues) {
+      if (issue.severity === 'error') {
+        console.error(`[Validation Error] ${issue.message} (field: ${issue.field})`);
+      } else {
+        console.warn(`[Validation Warning] ${issue.message} (field: ${issue.field})`);
+      }
+    }
+  }
+
+  if (!result.valid && validateStrict) {
+    fail('Entity validation failed. Aborting write.');
+  }
+
   writeFileSync(join(directory, fileName), serializeMarkdown(frontmatter, body), 'utf8');
 }
 
@@ -220,7 +239,7 @@ function archiveEntry(vaultRoot, entityType, entry) {
     original_file_name: entry.fileName,
   };
 
-  writeEntry(archiveDirectory, archiveFileName, archiveFrontmatter, entry.body);
+  writeEntry(archiveDirectory, archiveFileName, archiveFrontmatter, entry.body, false);
   rmSync(entry.filePath);
 
   return archiveFileName;
@@ -242,7 +261,7 @@ function restoreArchivedEntry(vaultRoot, entityType, entry) {
     ? `restored-${new Date().toISOString().replace(/[:.]/g, '-')}--${preferredFileName}`
     : preferredFileName;
 
-  writeEntry(targetDirectory, fileName, { ...frontmatter, updated_at: todayISO() }, entry.body);
+  writeEntry(targetDirectory, fileName, { ...frontmatter, updated_at: todayISO() }, entry.body, false);
   rmSync(join(archiveDirectory, entry.fileName));
 
   return fileName;

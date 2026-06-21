@@ -17,7 +17,7 @@
     "smoke:site": "python tests/smoke/site_functionality.py",
     "test:e2e": "npm run smoke:web && npm run smoke:site",
     "deps:reset": "node -e \"require('node:fs').rmSync('node_modules',{recursive:true,force:true})\" && npm ci",
-    "wyqd": "node scripts/wyqd-cli.mjs",
+    "wyqd": "tsx scripts/wyqd-cli.ts",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run"
@@ -44,6 +44,7 @@
     "eslint-config-next": "16.2.6",
     "obsidian": "^1.12.3",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^3"
   }

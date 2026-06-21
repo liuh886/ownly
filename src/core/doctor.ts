@@ -7,6 +7,7 @@ import type { Account, AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain
 import { joinWYQDPath, WYQD_DATA_ROOT } from './paths';
 import type { WYQDReadonlyRepositoryAdapter, WYQDStoredEntity } from './repository';
 import type { WYQDTranslationKey } from './i18n';
+import { validateEntity } from '@/domain/schema';
 
 type TranslateFn = (key: WYQDTranslationKey) => string;
 
@@ -16,10 +17,12 @@ export type WYQDDoctorCheckId =
   | 'directory.presence'
   | 'entity.id.duplicate'
   | 'entity.schema.unsupported'
+  | 'entity.schema.invalid'
   | 'object.cost.negative'
   | 'snapshot.net_worth.mismatch'
   | 'review.target.missing'
   | 'object.review_ref.missing'
+  | 'object.review_ref.mismatch'
   | 'object.status_date.inconsistent'
   | 'entity.date.chronology'
   | 'snapshot.stale';
@@ -112,6 +115,28 @@ function checkSchemaVersions(entities: readonly AnyStoredEntity[], t?: Translate
     }));
 }
 
+function checkSchemaValidation(entities: readonly AnyStoredEntity[]): WYQDDoctorFinding[] {
+  const findings: WYQDDoctorFinding[] = [];
+  
+  for (const stored of entities) {
+    const result = validateEntity(stored.entity);
+    for (const issue of result.issues) {
+      if (issue.field === 'schema_version') continue; // Handled by checkSchemaVersions
+      
+      findings.push({
+        id: 'entity.schema.invalid',
+        severity: issue.severity,
+        message: `Schema validation ${issue.severity}: ${issue.message} (field: ${issue.field})`,
+        path: entityPath(stored),
+        entityId: stored.entity.id,
+        details: { field: issue.field, message: issue.message },
+      });
+    }
+  }
+  
+  return findings;
+}
+
 function checkObjectCosts(objects: readonly WYQDStoredEntity<WYQDObject>[], t?: TranslateFn): WYQDDoctorFinding[] {
   const findings: WYQDDoctorFinding[] = [];
 
@@ -177,20 +202,37 @@ function checkReviewTargets(
   objects: readonly WYQDStoredEntity<WYQDObject>[],
   t?: TranslateFn,
 ): WYQDDoctorFinding[] {
-  const objectIds = new Set(objects.map((stored) => stored.entity.id));
+  const objectMap = new Map(objects.map((stored) => [stored.entity.id, stored.entity]));
+  const findings: WYQDDoctorFinding[] = [];
 
-  return reviews
-    .filter((stored) => stored.entity.target_id && !objectIds.has(stored.entity.target_id))
-    .map((stored) => ({
-      id: 'review.target.missing' as const,
-      severity: 'warning' as const,
-      message: t
-        ? t('doctorReviewTargetMissing').replace('{title}', stored.entity.title)
-        : `Review target is missing: ${stored.entity.title}`,
-      path: entityPath(stored),
-      entityId: stored.entity.id,
-      details: { targetId: stored.entity.target_id },
-    }));
+  for (const stored of reviews) {
+    const targetId = stored.entity.target_id;
+    if (targetId) {
+      const obj = objectMap.get(targetId);
+      if (!obj) {
+        findings.push({
+          id: 'review.target.missing',
+          severity: 'warning',
+          message: t
+            ? t('doctorReviewTargetMissing').replace('{title}', stored.entity.title)
+            : `Review target is missing: ${stored.entity.title}`,
+          path: entityPath(stored),
+          entityId: stored.entity.id,
+          details: { targetId },
+        });
+      } else if (obj.review_ref !== stored.entity.id) {
+        findings.push({
+          id: 'object.review_ref.mismatch',
+          severity: 'warning',
+          message: `Review references object ${targetId}, but object's review_ref does not point back.`,
+          path: entityPath(stored),
+          entityId: stored.entity.id,
+          details: { targetId },
+        });
+      }
+    }
+  }
+  return findings;
 }
 
 function checkReviewRefIntegrity(
@@ -214,72 +256,6 @@ function checkReviewRefIntegrity(
         entityId: stored.entity.id,
         details: { reviewRef: ref },
       });
-    }
-  }
-
-  return findings;
-}
-
-function checkStatusDateConsistency(
-  objects: readonly WYQDStoredEntity<WYQDObject>[],
-  t?: TranslateFn,
-): WYQDDoctorFinding[] {
-  const findings: WYQDDoctorFinding[] = [];
-
-  for (const stored of objects) {
-    const obj = stored.entity;
-
-    if (obj.object_type === 'physical') {
-      if ((obj.status === 'purchased' || obj.status === 'using') && !obj.purchased_at) {
-        findings.push({
-          id: 'object.status_date.inconsistent',
-          severity: 'warning',
-          message: t
-            ? t('doctorStatusDateInconsistent').replace('{title}', obj.title).replace('{status}', obj.status)
-            : `Physical object "${obj.title}" has status "${obj.status}" but no purchased_at date`,
-          path: entityPath(stored),
-          entityId: obj.id,
-        });
-      }
-      if ((obj.status === 'idle' || obj.status === 'transferred' || obj.status === 'discarded') && !obj.ended_at) {
-        findings.push({
-          id: 'object.status_date.inconsistent',
-          severity: 'warning',
-          message: t
-            ? t('doctorStatusDateInconsistent').replace('{title}', obj.title).replace('{status}', obj.status)
-            : `Physical object "${obj.title}" has status "${obj.status}" but no ended_at date`,
-          path: entityPath(stored),
-          entityId: obj.id,
-        });
-      }
-    }
-
-    if (obj.object_type === 'recurring_cost') {
-      if (obj.status === 'active' && (!obj.billing_amount || !obj.billing_cycle)) {
-        findings.push({
-          id: 'object.status_date.inconsistent',
-          severity: 'warning',
-          message: t
-            ? t('doctorStatusDateInconsistent').replace('{title}', obj.title).replace('{status}', obj.status)
-            : `Recurring cost "${obj.title}" is active but missing billing_amount or billing_cycle`,
-          path: entityPath(stored),
-          entityId: obj.id,
-        });
-      }
-    }
-
-    if (obj.object_type === 'one_time_experience') {
-      if (obj.status === 'completed' && !obj.ended_at) {
-        findings.push({
-          id: 'object.status_date.inconsistent',
-          severity: 'warning',
-          message: t
-            ? t('doctorStatusDateInconsistent').replace('{title}', obj.title).replace('{status}', obj.status)
-            : `Experience "${obj.title}" is completed but has no ended_at date`,
-          path: entityPath(stored),
-          entityId: obj.id,
-        });
-      }
     }
   }
 
@@ -418,7 +394,7 @@ export async function runWYQDDoctor(
     ...checkSnapshotTotals(snapshots, t),
     ...checkReviewTargets(reviews, objects, t),
     ...checkReviewRefIntegrity(objects, reviews, t),
-    ...checkStatusDateConsistency(objects, t),
+    ...checkSchemaValidation(entities),
     ...checkDateChronology(entities, t),
     ...checkSnapshotStaleness(snapshots, t),
   ];

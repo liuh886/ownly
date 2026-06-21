@@ -105,9 +105,9 @@ def assert_english_desktop(page: Page, base_url: str) -> None:
 
     page.get_by_role("button", name="Objects").click()
     expect(page.get_by_role("heading", name="Objects")).to_be_visible()
-    if page.get_by_text("No objects yet").first.is_visible():
-        expect(page.get_by_text("No objects yet").first).to_be_visible()
-    else:
+    try:
+        expect(page.get_by_text("No objects yet").first).to_be_visible(timeout=3000)
+    except AssertionError:
         expect(page.get_by_role("heading", name="Object console")).to_be_visible()
         expect(page.get_by_placeholder("Search name, category, status, or type")).to_be_visible()
         first_detail = page.get_by_role("button", name=re.compile(r"^View details -")).first
