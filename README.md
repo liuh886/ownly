@@ -1,7 +1,7 @@
 # Ownly
 
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)](https://obsidian.md/plugins?id=ownly)
-[![Status](https://img.shields.io/badge/status-stable_1.0.0-brightgreen.svg)](CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-stable_1.x-brightgreen.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)
 
@@ -20,11 +20,11 @@ Ownly is a local-first decision ledger for people who want to buy less impulsive
 
 ## Project Status
 
-Ownly `1.0.0` is a stable public Obsidian plugin release. The Obsidian plugin is the primary supported experience; the Web runtime is kept for local browser use, development, and shared-core validation.
+Ownly `1.x` is a public Obsidian plugin release; Obsidian is the primary runtime; current validation status is tracked in [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md). The Web runtime is kept for local browser use, development, and shared-core validation.
 
 | Area | Status |
 |---|---|
-| Obsidian plugin | Stable, primary runtime |
+| Obsidian plugin | Primary runtime; see quality baseline |
 | Web runtime | Compatible local runtime |
 | Data format | Plain Markdown + YAML frontmatter |
 | Storage model | Local Vault / local folder |
@@ -89,7 +89,7 @@ Track three types of objects with full lifecycle management:
 
 - **Bilingual UI** — English and Chinese, with auto-detection.
 - **Quick entry** — Templates for physical items, subscriptions, and experiences. Paste-line parsing for fast input.
-- **Dashboard** — Net worth trends, action center, priority queue, status distribution.
+- **Dashboard** — Ownership overview, cost pressure, quick entry, review actions, and data scale.
 
 ## Installation
 
@@ -138,9 +138,11 @@ Each entity is a standalone `.md` file with YAML frontmatter. You can edit, vers
 
 Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
 
-## Free vs Pro
+## Sponsorship Model & Pro Unlock
 
-| Feature | Free | Pro |
+Ownly is built on a sponsorship model. It does not perform paid license verification or make network calls for activation. Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
+
+| Feature | Base | Supporter (Pro) |
 |---|---|---|
 | Object tracking | ✅ Up to 200 | ✅ Unlimited |
 | Net worth snapshots | ✅ Up to 30 | ✅ Unlimited |
@@ -150,9 +152,7 @@ Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, 
 | Archive & restore | ✅ | ✅ |
 | Markdown data export | ✅ Always | ✅ Always |
 
-> **Note:** The current version (1.0.0) uses a sponsorship model. Pro features can be unlocked with the free activation code shown in the app; supporting via [Ko-fi](https://ko-fi.com/F1F7WYJ6B) or [Gumroad](https://liuh886.gumroad.com/l/ownly) is optional and helps fund development.
-
-Ownly does not perform paid license verification or make network calls for activation. Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
+> **Note:** The current version (1.x) uses a sponsorship model. Pro features can be unlocked with the free activation code shown in the app; supporting via [Ko-fi](https://ko-fi.com/F1F7WYJ6B) or [Gumroad](https://liuh886.gumroad.com/l/ownly) is optional and helps fund development.
 
 ## FAQ
 
@@ -190,7 +190,9 @@ npm run smoke:install      # One-time setup for Python Playwright browser smoke 
 npm run smoke:web          # Starts Next locally and smoke-tests the Web runtime
 ```
 
-### Agent CLI
+### Ownly CLI
+
+The CLI can be accessed via the legacy alias `wyqd`:
 
 ```bash
 npm run wyqd -- --vault /path/to/vault object list
@@ -200,7 +202,7 @@ See [AGENT_CLI_GUIDE.md](docs/AGENT_CLI_GUIDE.md) for full documentation.
 
 ### Sample Vault
 
-A repeatable demo fixture is at `samples/wyqd-vault/`. Use it for QA and testing.
+A repeatable demo fixture is at `samples/wyqd-vault/` (using historical internal naming). Use it for QA and testing.
 
 ### Platform-Specific Dependency Reset
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4 (2026-06-21)
+
+- Documentation consistency updates (Version alignment and naming cleanup).
+
 ## 1.0.0 (2026-05-31)
 
 ### Highlights
