@@ -4,10 +4,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { ReviewEntry, WYQDObject } from '@/domain/types';
-import type { PhysicalObject } from '@/domain/types';
-import { calculateResidualValue, calculateDesireAmount } from '@/domain/calculations';
 import { useI18n } from '@/core/i18n-context';
 
+import { useObjectListStats } from './useObjectListStats';
 import {
   useObjectFilterSort,
   matchesStatusGroup,
@@ -26,8 +25,6 @@ import {
   getObjectStatusGroupLabels,
   getObjectControlLabels,
   getFilterLabels,
-  getPrimaryAmount,
-  getDailyCost,
   isPhysicalObject,
 } from './ObjectListUtils';
 
@@ -124,13 +121,19 @@ export function ObjectList({
     };
   }, [openActionMenuFileName]);
 
-  const reviewedObjectIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const r of reviews) {
-      if (r.entity.target_id) ids.add(r.entity.target_id);
-    }
-    return ids;
-  }, [reviews]);
+  const {
+    reviewedObjectIds,
+    allPhysicalObjects,
+    controlCounts,
+    totalCost,
+    ownedPhysicalObjectsCount,
+    totalResidualValue,
+    averageDailyCost,
+    observingObjectsCount,
+    observingAmount,
+    getObjectTypeFilterCount,
+    getObjectStatusGroupCount,
+  } = useObjectListStats(objects, reviews, query, typeFilter, statusGroupFilter);
 
   const visibleObjects = useMemo(() => objects.filter((stored) => {
     const object = stored.entity;
@@ -142,7 +145,6 @@ export function ObjectList({
     );
   }), [objects, controlBucketFilter, typeFilter, statusGroupFilter, query, reviewedObjectIds]);
 
-  const allPhysicalObjects = useMemo(() => objects.filter(s => isPhysicalObject(s.entity)), [objects]);
   const physicalObjects = useMemo(() => visibleObjects.filter(s => isPhysicalObject(s.entity)), [visibleObjects]);
   const supportingObjects = useMemo(
     () =>
@@ -171,41 +173,6 @@ export function ObjectList({
     retired: physicalObjects.filter((stored) => getPhysicalBucket(stored.entity.status) === 'retired').length,
     sold: physicalObjects.filter((stored) => getPhysicalBucket(stored.entity.status) === 'sold').length,
   };
-  
-  const controlCounts = objects.reduce<Record<ObjectControlBucket, number>>(
-    (counts, stored) => {
-      counts[getObjectControlBucket(stored.entity, reviewedObjectIds)] += 1;
-      return counts;
-    },
-    { attention: 0, active: 0, review: 0, closed: 0 },
-  );
-
-  const totalCost = allPhysicalObjects.reduce((sum, stored) => sum + getPrimaryAmount(stored.entity), 0);
-  const ownedPhysicalObjects = useMemo(
-    () => allPhysicalObjects.filter((stored) => stored.entity.status === 'purchased' || stored.entity.status === 'using'),
-    [allPhysicalObjects],
-  );
-  const totalResidualValue = useMemo(
-    () => ownedPhysicalObjects.reduce((sum, stored) => sum + calculateResidualValue(stored.entity as PhysicalObject), 0),
-    [ownedPhysicalObjects],
-  );
-  const dailyCosts = ownedPhysicalObjects
-    .map((stored) => getDailyCost(stored.entity))
-    .filter((value): value is number => value !== null);
-  const averageDailyCost =
-    dailyCosts.length > 0 ? dailyCosts.reduce((sum, value) => sum + value, 0) : 0;
-
-  const observingObjects = useMemo(
-    () => objects.filter((stored) => {
-      const s = stored.entity.status;
-      return s === 'seeded' || s === 'observing' || s === 'planned';
-    }),
-    [objects],
-  );
-  const observingAmount = useMemo(
-    () => observingObjects.reduce((sum, stored) => sum + calculateDesireAmount(stored.entity), 0),
-    [observingObjects],
-  );
 
   const menuItemClass =
     'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40';
@@ -241,28 +208,6 @@ export function ObjectList({
     setShowAllSupporting(false);
   }
 
-  const getObjectTypeFilterCount = (type: string) => {
-    return objects.filter((stored) => {
-      const object = stored.entity;
-      return (
-        (type === 'all' || object.object_type === type) &&
-        matchesStatusGroup(object, statusGroupFilter, reviewedObjectIds) &&
-        matchesQuery(object, query)
-      );
-    }).length;
-  };
-
-  const getObjectStatusGroupCount = (group: ObjectStatusGroupFilter) => {
-    return objects.filter((stored) => {
-      const object = stored.entity;
-      return (
-        matchesStatusGroup(object, group, reviewedObjectIds) &&
-        (typeFilter === 'all' || object.object_type === typeFilter) &&
-        matchesQuery(object, query)
-      );
-    }).length;
-  };
-
   if (objects.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-center">
@@ -278,10 +223,10 @@ export function ObjectList({
         objectsCount={objects.length}
         allPhysicalObjectsCount={allPhysicalObjects.length}
         totalCost={totalCost}
-        ownedPhysicalObjectsCount={ownedPhysicalObjects.length}
+        ownedPhysicalObjectsCount={ownedPhysicalObjectsCount}
         totalResidualValue={totalResidualValue}
         averageDailyCost={averageDailyCost}
-        observingObjectsCount={observingObjects.length}
+        observingObjectsCount={observingObjectsCount}
         observingAmount={observingAmount}
         controlCounts={controlCounts}
         controlBucketFilter={controlBucketFilter}
