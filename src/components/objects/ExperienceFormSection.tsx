@@ -116,8 +116,7 @@ export function ExperienceFormSection({
           <option value="travel_worldview">{t('travelSubtype')}</option>
         </select>
       </label>
-      {experienceSubtype === 'travel_worldview' ? (
-        <div className="space-y-3">
+      <div className="space-y-3">
           <div>
             <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('travelCity')}</span>
             <CitySearchInput
@@ -202,7 +201,6 @@ export function ExperienceFormSection({
             ))}
           </div>
         </div>
-      ) : null}
     </div>
   );
 }
