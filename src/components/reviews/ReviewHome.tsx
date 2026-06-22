@@ -322,7 +322,7 @@ export function ReviewHome({
     () =>
       experiences.filter(
         (object) =>
-          (object.status === 'completed' || object.status === 'reviewed') && !object.review_ref && !reviewedTargetIds.has(object.id),
+          (object.status === 'completed' || object.status === 'reviewed') && !reviewedTargetIds.has(object.id),
       ),
     [experiences, reviewedTargetIds],
   );
