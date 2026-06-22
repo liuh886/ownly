@@ -34,7 +34,11 @@ export function useComposerFormState({
     initialObject?.object_type === 'physical' ? initialObject.purchased_at || '' : '',
   );
   const [endedAt, setEndedAt] = useState(
-    initialObject?.object_type === 'physical' ? initialObject.ended_at || '' : '',
+    initialObject?.object_type === 'physical'
+      ? initialObject.ended_at || ''
+      : initialObject?.object_type === 'one_time_experience'
+        ? initialObject.ended_at || ''
+        : '',
   );
   const [physicalStatus, setPhysicalStatus] = useState<PhysicalStatus>(
     initialObject?.object_type === 'physical' ? initialObject.status : 'observing',
@@ -249,6 +253,8 @@ export function useComposerFormState({
         setLocationLatitude('');
         setLocationLongitude('');
         setQuickLine('');
+        setExtraLocations([]);
+        setSalePrice('');
       }
     } finally {
       setIsSaving(false);
