@@ -107,7 +107,9 @@ export function ObjectCardPhysical({
         </div>
       ) : (
         <div
-          className="flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-stone-50 focus:bg-stone-50 disabled:opacity-50"
+          className={`flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-stone-50 focus:bg-stone-50 aria-disabled:opacity-50 ${
+            bucket === 'retired' || bucket === 'discarded' ? 'opacity-60 grayscale' : ''
+          }`}
           onClick={() => setSelectedFileName(stored.fileName)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {

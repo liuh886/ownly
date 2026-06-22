@@ -98,7 +98,7 @@ export function useComposerFormState({
   const [extraLocations, setExtraLocations] = useState<Array<{
     city: string; country: string; countryCode: string; lat: string; lng: string;
   }>>(
-    initialObject?.object_type === 'one_time_experience' && initialObject.locations
+    initialObject?.object_type === 'one_time_experience' && Array.isArray(initialObject.locations)
       ? initialObject.locations.map((loc) => ({
           city: loc.city || '',
           country: loc.country || '',

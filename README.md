@@ -15,10 +15,7 @@ Ownly is a local-first decision ledger for people who want to buy less impulsive
 - **Markdown-native personal data**: Every object, snapshot, and review is a plain `.md` file in your Obsidian vault. Private by default with no cloud sync or telemetry.
 - **Built for humans and AI agents**: Edit via the Obsidian UI, or automate your life with the provided Agent CLI.
 
-<p align="center">
-  <img src="docs/assets/home-light.png" width="48%" alt="Ownly Homepage Light" />
-  <img src="docs/assets/home-dark.png" width="48%" alt="Ownly Homepage Dark" />
-</p>
+![Ownly Homepage](docs/screenshot-homepage.jpg)
 
 ## Project Status
 
@@ -166,28 +163,7 @@ Yes. The Web runtime runs in supported desktop browsers and connects to a local 
 
 ## Screenshots
 
-<details>
-<summary>Click to view screenshots of Objects, Accounts, and Reviews pages</summary>
-
-**Objects**
-<p align="center">
-  <img src="docs/assets/objects-light.png" width="48%" />
-  <img src="docs/assets/objects-dark.png" width="48%" />
-</p>
-
-**Accounts**
-<p align="center">
-  <img src="docs/assets/accounts-light.png" width="48%" />
-  <img src="docs/assets/accounts-dark.png" width="48%" />
-</p>
-
-**Reviews**
-<p align="center">
-  <img src="docs/assets/reviews-light.png" width="48%" />
-  <img src="docs/assets/reviews-dark.png" width="48%" />
-</p>
-
-</details>
+*(More screenshots coming soon)*
 
 ## Support
 
