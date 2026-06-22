@@ -10,7 +10,7 @@ If you suspect data corruption:
 1. Open your terminal in the Ownly plugin directory.
 2. Run the Doctor CLI command:
    ```bash
-   npm run wyqd -- doctor
+   npm run --silent wyqd -- --vault /path/to/vault doctor --json
    ```
 3. The output will list warnings or errors (e.g., missing fields, invalid status). Open the respective `.md` files in Obsidian and manually correct the YAML frontmatter.
 
@@ -24,7 +24,7 @@ If an AI agent recently modified your data and things broke, you can check the a
 
 Ownly soft-deletes files by moving them to the `Ownly/Archive/` directory and appending archive metadata to the frontmatter.
 - If you accidentally deleted something, simply find it in the archive folder, remove the `archived_at` fields, and move the file back to its original folder (e.g., `Ownly/Objects/`).
-- Or, use the CLI: `npm run wyqd -- object restore --id <id>`.
+- Or, use the CLI: `npm run --silent wyqd -- --vault /path/to/vault object restore --id <id>`.
 
 ## 4. UI / Display Issues
 

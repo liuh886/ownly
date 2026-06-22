@@ -12,8 +12,7 @@ async def main():
             "Home": "",
             "Objects": "?tab=objects",
             "Accounts": "?tab=accounts",
-            "Reviews": "?tab=reviews",
-            "Doctor": "?tab=doctor"
+            "Reviews": "?tab=reviews"
         }
 
         modes = ["light", "dark"]

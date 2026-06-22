@@ -139,7 +139,7 @@ Each entity is a standalone `.md` file with YAML frontmatter. You can edit, vers
 
 ## Network Calls
 
-Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
+Ownly does not make personal-data network calls from the app runtime. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
 
 ## Sponsorship Model & Pro Unlock
 
@@ -198,11 +198,6 @@ Yes. The Web runtime runs in supported desktop browsers and connects to a local 
   <img src="docs/assets/reviews-dark.png" width="48%" />
 </p>
 
-**Doctor**
-<p align="center">
-  <img src="docs/assets/doctor-light.png" width="48%" />
-  <img src="docs/assets/doctor-dark.png" width="48%" />
-</p>
 </details>
 
 ## Support
