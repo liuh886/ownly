@@ -80,9 +80,9 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
         setIsOpen(false);
       }
     }
-    const doc: Document = typeof activeDocument !== 'undefined' ? activeDocument : window.document;
-    doc.addEventListener('mousedown', handleClickOutside);
-    return () => doc.removeEventListener('mousedown', handleClickOutside);
+    const doc: Document | undefined = typeof activeDocument !== 'undefined' ? activeDocument : (typeof window !== 'undefined' ? window.document : undefined);
+    if (doc) doc.addEventListener('mousedown', handleClickOutside);
+    return () => { if (doc) doc.removeEventListener('mousedown', handleClickOutside); };
   }, []);
 
   return (

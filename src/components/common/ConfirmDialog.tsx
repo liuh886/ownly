@@ -39,8 +39,8 @@ export function ConfirmDialog({
 
   useEffect(() => {
     if (!open) return;
-    const doc: Document = typeof activeDocument !== 'undefined' ? activeDocument : window.document;
-    previousFocusRef.current = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
+    const doc: Document | undefined = typeof activeDocument !== 'undefined' ? activeDocument : (typeof window !== 'undefined' ? window.document : undefined);
+    previousFocusRef.current = doc?.activeElement instanceof HTMLElement ? doc.activeElement : null;
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onCancel();
@@ -54,16 +54,16 @@ export function ConfirmDialog({
 
       const first = items[0];
       const last = items[items.length - 1];
-      if (e.shiftKey && doc.activeElement === first) {
+      if (e.shiftKey && doc?.activeElement === first) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && doc.activeElement === last) {
+      } else if (!e.shiftKey && doc?.activeElement === last) {
         e.preventDefault();
         first.focus();
       }
     }
 
-    doc.addEventListener('keydown', handleKeyDown);
+    if (doc) doc.addEventListener('keydown', handleKeyDown);
     window.setTimeout(() => {
       inputRef.current?.focus();
       if (!inputRef.current) {
@@ -72,7 +72,7 @@ export function ConfirmDialog({
     }, 0);
 
     return () => {
-      doc.removeEventListener('keydown', handleKeyDown);
+      if (doc) doc.removeEventListener('keydown', handleKeyDown);
       previousFocusRef.current?.focus();
     };
   }, [destructive, open, onCancel]);
