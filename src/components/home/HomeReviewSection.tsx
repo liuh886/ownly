@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
-import { CARD_CLASS } from '@/lib/ui-constants';
+import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
 import type { WYQDObject } from '@/domain/types';
 import { getUpcomingRecurringCosts, getPendingExperienceReviews } from './homeDashboardUtils';
 
@@ -32,7 +32,7 @@ export function HomeReviewSection({
   return (
     <motion.section variants={itemVariants}>
       <div className="mb-3 flex items-center justify-between px-1">
-        <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('reviewGroup')}</h3>
+        <h3 className={SECTION_TITLE_CLASS}>{t('reviewGroup')}</h3>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 items-stretch">
         <div className={CARD_CLASS}>

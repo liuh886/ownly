@@ -8,6 +8,7 @@ import { useFormatMoney } from '@/lib/use-format';
 import { formatLocalizedDate } from '@/lib/format';
 import { countryCodeToFlag, calculateDaysBetween } from '@/domain/travel';
 import type { OneTimeExperienceObject, ReviewEntry } from '@/domain/types';
+import { SECTION_TITLE_CLASS } from '@/lib/ui-constants';
 
 /* ── Status → node color ───────────────────────────────── */
 
@@ -97,7 +98,7 @@ export function TravelTimeline({
 
   return (
     <div className="wyqd-travel-timeline mt-5">
-      <h3 className="text-sm font-semibold tracking-tight text-stone-950">
+      <h3 className={SECTION_TITLE_CLASS}>
         {t('travelTimeline')}
       </h3>
 

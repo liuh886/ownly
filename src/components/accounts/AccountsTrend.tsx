@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import type { AccountSnapshot } from '@/domain/types';
 import type { WYQDTranslationKey } from '@/core/i18n';
+import { CARD_CLASS } from '@/lib/ui-constants';
 
 export interface AccountsTrendProps {
   trendSnapshots: AccountSnapshot[];
@@ -27,7 +28,7 @@ export function AccountsTrend({
 }: AccountsTrendProps) {
   return (
     <>
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+      <div className={CARD_CLASS}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('netWorthHistory')}</h2>
@@ -93,7 +94,7 @@ export function AccountsTrend({
         )}
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+      <div className={CARD_CLASS}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('fixedCostHistory')}</h2>

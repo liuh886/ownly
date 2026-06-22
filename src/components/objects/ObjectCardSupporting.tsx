@@ -3,7 +3,7 @@ import { useFormatMoney } from '@/lib/use-format';
 import { IconButton } from '@/components/common/ui-primitives';
 import { ObjectComposer } from './ObjectComposer';
 import { ObjectDetailPanel } from './ObjectDetailPanel';
-import { getSupportingVisuals, getSupportingActionLabel, getSupportingActionIcon, canCancelRecurringCost, getSupportingMeta, getPrimaryAmount, getObjectIcon, getStatusLabel, translateCategory, transitionSupportingObject, type TranslateFn } from './ObjectListUtils';
+import { getSupportingVisuals, getSupportingActionLabel, getSupportingActionIcon, canCancelRecurringCost, getSupportingMeta, getPrimaryAmount, getStatusLabel, transitionSupportingObject, type TranslateFn } from './ObjectListUtils';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { WYQDObject, RecurringCostObject, ReviewEntry } from '@/domain/types';
 import { calculateNextBillingDate } from '@/domain/calculations';
@@ -155,77 +155,57 @@ export function ObjectCardSupporting({
           />
         </div>
       ) : (
-        <div className="flex">
-          <div className={`w-1.5 shrink-0 ${visual.accentClass}`} aria-hidden="true" />
-          <div className="min-w-0 flex-1 p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <div className="flex min-w-0 flex-1 gap-3">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-lg ring-1 ring-stone-200"
-                  aria-hidden="true"
-                >
-                  {getObjectIcon(object)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="min-w-0 break-words text-base font-semibold leading-snug text-stone-950">
-                      {object.title}
-                    </h3>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${visual.badgeClass}`}
-                    >
-                      {getStatusLabel(object, t)}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
-                    <span className="flex items-center gap-1.5">
-                      <span className={`h-1.5 w-1.5 rounded-full ${visual.dotClass}`} />
-                      {visual.label}
-                    </span>
-                    <span>{getSupportingMeta(object, nextBillingDate, t)}</span>
-                    {object.category ? <span>{translateCategory(object.category, t)}</span> : null}
-                  </div>
-                </div>
+        <div
+          className="flex cursor-pointer flex-col p-4 transition-colors hover:bg-stone-50 focus:bg-stone-50 disabled:opacity-50"
+          onClick={() => setSelectedFileName(stored.fileName)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setSelectedFileName(stored.fileName);
+            }
+          }}
+          tabIndex={disabled ? -1 : 0}
+          role="button"
+          aria-disabled={disabled}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${visual.badgeClass}`}>
+                  {getStatusLabel(object, t)}
+                </span>
+                <h3 className="truncate text-sm font-semibold text-stone-950">
+                  {object.title}
+                </h3>
               </div>
+              <div className="flex items-center gap-3 text-xs text-stone-500">
+                <span>{getSupportingMeta(object, nextBillingDate, t)}</span>
+              </div>
+            </div>
 
-              <div className="flex items-center justify-between gap-3 md:w-72 md:shrink-0 md:justify-end">
-                <div className="rounded-lg bg-stone-50 px-3 py-2 sm:text-right">
-                  <div className="text-xs text-stone-400">{visual.amountLabel}</div>
-                  <div className="mt-0.5 font-mono text-base font-semibold text-stone-950">
-                    {formatMoney(getPrimaryAmount(object))}
-                  </div>
-                  {nextBillingDate ? (
-                    <div className="mt-0.5 text-[11px] text-sky-700">
-                      {formatDueLabel(nextBillingDate, t)}
-                    </div>
-                  ) : null}
+            <div className="flex shrink-0 items-center gap-4 text-right">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-stone-400">{visual.amountLabel}</div>
+                <div className="mt-0.5 font-mono text-sm font-medium text-stone-900">
+                  {formatMoney(getPrimaryAmount(object))}
                 </div>
-
-                <div className="relative flex gap-1.5 overflow-visible pb-0.5">
+                {nextBillingDate ? (
+                  <div className="mt-0.5 text-[10px] text-sky-700">
+                    {formatDueLabel(nextBillingDate, t)}
+                  </div>
+                ) : null}
+              </div>
+              
+              {supportingActionLabel ? (
+                <div 
+                  className="z-10 ml-2" 
+                  onClick={(e) => e.stopPropagation()} 
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
                   <IconButton
-                    onClick={() => {
-                      setSelectedFileName(stored.fileName);
-                      setOpenActionMenuFileName(null);
-                    }}
-                    aria-label={`${t('viewDetails')} - ${object.title}`}
-                    title={t('detail')}
-                  >
-                    <span aria-hidden="true">🔎</span>
-                  </IconButton>
-                  <IconButton
-                    onClick={() => {
-                      setEditingFileName(stored.fileName);
-                      setOpenActionMenuFileName(null);
-                    }}
-                    aria-label={`${t('editObject')} - ${object.title}`}
-                    title={t('edit')}
-                    disabled={disabled}
-                  >
-                    <span aria-hidden="true">✏️</span>
-                  </IconButton>
-                  {supportingActionLabel ? (
-                    <IconButton
-                      onClick={() => void (async () => {
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void (async () => {
                         if (
                           object.object_type === 'one_time_experience' &&
                           (object.status === 'completed' || object.status === 'reviewed')
@@ -260,96 +240,110 @@ export function ObjectCardSupporting({
                         } finally {
                           setExitingFileName(null);
                         }
-                      })()}
-                      aria-label={`${supportingActionLabel} - ${object.title}`}
-                      title={supportingActionLabel}
-                      className="border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50"
-                      disabled={disabled || exitingFileName === stored.fileName}
-                    >
-                      <span aria-hidden="true">
-                        {exitingFileName === stored.fileName
-                          ? '…'
-                          : getSupportingActionIcon(object)}
-                      </span>
-                    </IconButton>
-                  ) : null}
-                  <MoreActionsButton
-                    objectTitle={object.title}
-                    menuId={`object-actions-${stored.fileName}`}
-                    open={openActionMenuFileName === stored.fileName}
-                    onToggle={() =>
-                      setOpenActionMenuFileName((current) =>
-                        current === stored.fileName ? null : stored.fileName,
-                      )
-                    }
-                    t={t}
-                  />
-                  {openActionMenuFileName === stored.fileName ? (
-                    <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
-                      {canCancelRecurringCost(object) ? (
-                        <button
-                          type="button" role="menuitem"
-                          onClick={() => void (async () => {
-                            const reason = await prompt({
-                              title: t('cancelSubscription'),
-                              message: t('cancelReasonPrompt').replace('{title}', object.title),
-                              inputLabel: t('cancelReasonPrompt').replace('{title}', ''),
-                              destructive: true,
-                            });
-                            if (reason === null) return;
-
-                            const next: RecurringCostObject = {
-                              ...object,
-                              status: 'cancelled',
-                              cancelled_at: todayISO(),
-                              cancel_reason: reason.trim() || t('notRecorded'),
-                              updated_at: todayISO(),
-                            };
-                            setOpenActionMenuFileName(null);
-                            setExitingFileName(stored.fileName);
-                            try {
-                              await onUpdate(stored.fileName, next, stored.body);
-                            } finally {
-                              setExitingFileName(null);
-                            }
-                          })()}
-                          className={`${menuItemClass} text-red-600 hover:bg-red-50`}
-                          disabled={disabled || exitingFileName === stored.fileName}
-                        >
-                          <span>{t('cancelSubscription')}</span>
-                          <span aria-hidden="true">🚫</span>
-                        </button>
-                      ) : null}
+                      })();
+                    }}
+                    aria-label={`${supportingActionLabel} - ${object.title}`}
+                    title={supportingActionLabel}
+                    className="border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-700 hover:bg-amber-50"
+                    disabled={disabled || exitingFileName === stored.fileName}
+                  >
+                    <span aria-hidden="true">
+                      {exitingFileName === stored.fileName
+                        ? '…'
+                        : getSupportingActionIcon(object)}
+                    </span>
+                  </IconButton>
+                </div>
+              ) : null}
+              
+              <div 
+                className="relative z-10 ml-2"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <MoreActionsButton
+                  objectTitle={object.title}
+                  menuId={`object-actions-${stored.fileName}`}
+                  open={openActionMenuFileName === stored.fileName}
+                  onToggle={() =>
+                    setOpenActionMenuFileName((current) =>
+                      current === stored.fileName ? null : stored.fileName,
+                    )
+                  }
+                  t={t}
+                />
+                {openActionMenuFileName === stored.fileName ? (
+                  <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+                    {canCancelRecurringCost(object) ? (
                       <button
                         type="button" role="menuitem"
                         onClick={() => void (async () => {
-                          const confirmed = await confirm({
-                            title: t('delete'),
-                            message: t('deleteConfirm').replace('{title}', object.title),
+                          const reason = await prompt({
+                            title: t('cancelSubscription'),
+                            message: t('cancelReasonPrompt').replace('{title}', object.title),
+                            inputLabel: t('cancelReasonPrompt').replace('{title}', ''),
                             destructive: true,
                           });
-                          if (!confirmed) return;
+                          if (reason === null) return;
+
+                          const next: RecurringCostObject = {
+                            ...object,
+                            status: 'cancelled',
+                            cancelled_at: todayISO(),
+                            cancel_reason: reason.trim() || t('notRecorded'),
+                            updated_at: todayISO(),
+                          };
                           setOpenActionMenuFileName(null);
-                          setDeletingFileName(stored.fileName);
+                          setExitingFileName(stored.fileName);
                           try {
-                            await onDelete(stored.fileName);
+                            await onUpdate(stored.fileName, next, stored.body);
                           } finally {
-                            setDeletingFileName(null);
+                            setExitingFileName(null);
                           }
                         })()}
                         className={`${menuItemClass} text-red-600 hover:bg-red-50`}
-                        disabled={disabled || deletingFileName === stored.fileName}
+                        disabled={disabled || exitingFileName === stored.fileName}
                       >
-                        <span>{t('delete')}</span>
-                        <span aria-hidden="true">
-                          {deletingFileName === stored.fileName ? '…' : '🗑️'}
-                        </span>
+                        <span>{t('cancelSubscription')}</span>
+                        <span aria-hidden="true">🚫</span>
                       </button>
-                    </div>
-                  ) : null}
-                </div>
+                    ) : null}
+                    <button
+                      type="button" role="menuitem"
+                      onClick={() => void (async () => {
+                        const confirmed = await confirm({
+                          title: t('delete'),
+                          message: t('deleteConfirm').replace('{title}', object.title),
+                          destructive: true,
+                        });
+                        if (!confirmed) return;
+                        setOpenActionMenuFileName(null);
+                        setDeletingFileName(stored.fileName);
+                        try {
+                          await onDelete(stored.fileName);
+                        } finally {
+                          setDeletingFileName(null);
+                        }
+                      })()}
+                      className={`${menuItemClass} text-red-600 hover:bg-red-50`}
+                      disabled={disabled || deletingFileName === stored.fileName}
+                    >
+                      <span>{t('delete')}</span>
+                      <span aria-hidden="true">
+                        {deletingFileName === stored.fileName ? '…' : '🗑️'}
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
               </div>
+
+              {!supportingActionLabel ? (
+                <div className="text-stone-300 ml-1">
+                  <span aria-hidden="true">→</span>
+                </div>
+              ) : null}
             </div>
+          </div>
 
             {isReviewing ? (
               <form
@@ -456,7 +450,6 @@ export function ObjectCardSupporting({
               </form>
             ) : null}
           </div>
-        </div>
       )}
     </article>
   );

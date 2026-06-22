@@ -1,4 +1,4 @@
-import { FIELD_CLASS } from '@/lib/ui-constants';
+import { FIELD_CLASS, CARD_CLASS } from '@/lib/ui-constants';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { AccountBalance, AccountSnapshot } from '@/domain/types';
 import { sumBalances } from './accountsUtils';
@@ -61,7 +61,7 @@ export function AccountsForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
+      className={CARD_CLASS}
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>

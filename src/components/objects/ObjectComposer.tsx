@@ -2,7 +2,7 @@
 
 import { useRef, useEffect } from 'react';
 import { useI18n } from '@/core/i18n-context';
-import { FIELD_CLASS } from '@/lib/ui-constants';
+import { FIELD_CLASS, CARD_CLASS } from '@/lib/ui-constants';
 import type { WYQDObject, WYQDObjectType } from '@/domain/types';
 
 import { getQuickLineTemplates } from './composerQuickLine';
@@ -91,7 +91,7 @@ export function ObjectComposer({
     <form
       onKeyDown={handleKeyDown}
       onSubmit={(e) => void handleSubmit(e)}
-      className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
+      className={CARD_CLASS}
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="min-w-0">

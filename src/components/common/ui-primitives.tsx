@@ -1,6 +1,7 @@
 'use client';
 
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { CARD_CLASS } from '@/lib/ui-constants';
 
 export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
@@ -14,7 +15,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <div className={cx('rounded-xl border border-stone-200 bg-white p-5 shadow-sm', className)}>
+    <div className={cx(CARD_CLASS, className)}>
       {children}
     </div>
   );

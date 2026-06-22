@@ -3,7 +3,7 @@ import { useFormatMoney } from '@/lib/use-format';
 import { IconButton } from '@/components/common/ui-primitives';
 import { ObjectComposer } from './ObjectComposer';
 import { ObjectDetailPanel } from './ObjectDetailPanel';
-import { getDailyCost, getServiceDaysInfo, getPhysicalAccentClasses, getObjectIcon, getStatusLabel, formatDateRange, translateCategory, type TranslateFn } from './ObjectListUtils';
+import { getDailyCost, getPhysicalAccentClasses, getStatusLabel, formatDateRange, type TranslateFn } from './ObjectListUtils';
 import { getPhysicalBucket } from './useObjectFilterSort';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { PhysicalObject, WYQDObject } from '@/domain/types';
@@ -76,7 +76,6 @@ export function ObjectCardPhysical({
   const object = stored.entity as PhysicalObject;
 
   const dailyCost = getDailyCost(object);
-  const serviceDaysInfo = getServiceDaysInfo(object);
   const bucket = getPhysicalBucket(object.status);
   const accent = getPhysicalAccentClasses(bucket);
 
@@ -107,71 +106,52 @@ export function ObjectCardPhysical({
           />
         </div>
       ) : (
-        <div className="flex">
-          <div className={`w-1.5 shrink-0 ${accent.stripe}`} aria-hidden="true" />
-          <div className="flex min-w-0 flex-1 flex-col gap-4 p-5 md:flex-row md:items-center">
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-lg ring-1 ring-stone-200"
-              aria-hidden="true"
-            >
-              {getObjectIcon(object)}
+        <div
+          className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-stone-50 focus:bg-stone-50 disabled:opacity-50"
+          onClick={() => setSelectedFileName(stored.fileName)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setSelectedFileName(stored.fileName);
+            }
+          }}
+          tabIndex={disabled ? -1 : 0}
+          role="button"
+          aria-disabled={disabled}
+        >
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${accent.badge}`}>
+                {getStatusLabel(object, t)}
+              </span>
+              <h3 className="truncate text-sm font-semibold text-stone-950">
+                {object.title}
+              </h3>
             </div>
+            <div className="flex items-center gap-3 text-xs text-stone-500">
+              <span>{formatDateRange(object, t)}</span>
+            </div>
+          </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="min-w-0 break-words text-base font-semibold leading-snug text-stone-950">
-                  {object.title}
-                </h3>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${accent.badge}`}
-                >
-                  {getStatusLabel(object, t)}
-                </span>
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
-                <span className="flex items-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} />
-                  {serviceDaysInfo
-                    ? serviceDaysInfo.total
-                      ? t('daysUsedOf').replace('{elapsed}', String(serviceDaysInfo.elapsed)).replace('{total}', String(serviceDaysInfo.total))
-                      : t('daysUsed').replace('{count}', String(serviceDaysInfo.elapsed))
-                    : t('notStarted')}
-                </span>
-                <span>{formatDateRange(object, t)}</span>
-                {object.category ? <span>{translateCategory(object.category, t)}</span> : null}
+          <div className="flex shrink-0 items-center gap-4 text-right">
+            <div className="hidden sm:block">
+              <div className="text-[10px] uppercase tracking-wider text-stone-400">{t('totalAcquisitionCost')}</div>
+              <div className="mt-0.5 font-mono text-sm font-medium text-stone-900">
+                {object.purchase_price ? formatMoney(object.purchase_price) : '—'}
               </div>
             </div>
-
-            <div className="flex items-center justify-between gap-3 md:w-72 md:shrink-0 md:justify-end">
-              <div className="min-w-[7rem] rounded-lg bg-stone-50 px-3 py-2 text-right">
-                <div className="text-xs text-stone-400">{t('dailyCostAvg')}</div>
-                <div className="mt-0.5 font-mono text-base font-semibold leading-none text-stone-950">
-                  {dailyCost ? formatMoney(dailyCost) : '—'}
-                </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-stone-400">{t('dailyCostAvg')}</div>
+              <div className="mt-0.5 font-mono text-sm font-medium text-stone-900">
+                {dailyCost ? formatMoney(dailyCost) : '—'}
               </div>
-
-              <div className="relative flex gap-1.5 overflow-visible pb-0.5">
-                <IconButton
-                  onClick={() => {
-                    setSelectedFileName(stored.fileName);
-                    setOpenActionMenuFileName(null);
-                  }}
-                  aria-label={`${t('viewDetails')} - ${object.title}`}
-                  title={t('detail')}
-                >
-                  <span aria-hidden="true">🔎</span>
-                </IconButton>
-                <IconButton
-                  onClick={() => {
-                    setEditingFileName(stored.fileName);
-                    setOpenActionMenuFileName(null);
-                  }}
-                  aria-label={`${t('editObject')} - ${object.title}`}
-                  disabled={disabled}
-                  title={t('edit')}
-                >
-                  <span aria-hidden="true">✏️</span>
-                </IconButton>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className="relative z-10"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
                 <MoreActionsButton
                   objectTitle={object.title}
                   menuId={`object-actions-${stored.fileName}`}
@@ -237,6 +217,9 @@ export function ObjectCardPhysical({
                     </button>
                   </div>
                 ) : null}
+              </div>
+              <div className="text-stone-300">
+                <span aria-hidden="true">→</span>
               </div>
             </div>
           </div>

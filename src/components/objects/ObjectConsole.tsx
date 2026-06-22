@@ -3,6 +3,7 @@ import { useFormatMoney } from '@/lib/use-format';
 import { FilterChip } from '@/components/common/ui-primitives';
 import type { ObjectControlBucket, ObjectStatusGroupFilter, ObjectTypeFilter, PhysicalFilter, SortOption } from './useObjectFilterSort';
 import type { TranslateFn } from './ObjectListUtils';
+import { CARD_CLASS, SECTION_TITLE_CLASS, MUTED_TEXT_CLASS } from '@/lib/ui-constants';
 
 interface ObjectConsoleProps {
   objectsCount: number;
@@ -76,30 +77,30 @@ export function ObjectConsole({
 
   return (
     <>
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('physicalAssets')}</h2>
+      <div className={CARD_CLASS}>
+        <h2 className={SECTION_TITLE_CLASS}>{t('physicalAssets')}</h2>
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
-            <div className="text-xs text-stone-500">{t('totalAcquisitionCost')}（{allPhysicalObjectsCount}）</div>
+            <div className={MUTED_TEXT_CLASS}>{t('totalAcquisitionCost')}（{allPhysicalObjectsCount}）</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
               {formatMoney(totalCost)}
             </div>
           </div>
           <div>
-            <div className="text-xs text-stone-500">{t('physicalAssetValue')}（{ownedPhysicalObjectsCount}）</div>
+            <div className={MUTED_TEXT_CLASS}>{t('physicalAssetValue')}（{ownedPhysicalObjectsCount}）</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
               {formatMoney(totalResidualValue)}
             </div>
           </div>
           <div>
-            <div className="text-xs text-stone-500">{t('dailyCostAvg')}（{ownedPhysicalObjectsCount}）</div>
+            <div className={MUTED_TEXT_CLASS}>{t('dailyCostAvg')}（{ownedPhysicalObjectsCount}）</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
               {formatMoney(averageDailyCost)}
               <span className="ml-1 text-xs font-medium text-stone-400">{t('perDay')}</span>
             </div>
           </div>
           <div>
-            <div className="text-xs text-stone-500">{t('observeAmount')}（{observingObjectsCount}）</div>
+            <div className={MUTED_TEXT_CLASS}>{t('observeAmount')}（{observingObjectsCount}）</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
               {formatMoney(observingAmount)}
             </div>
@@ -107,7 +108,7 @@ export function ObjectConsole({
         </div>
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+      <div className={CARD_CLASS}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('objectConsoleTitle')}</h2>

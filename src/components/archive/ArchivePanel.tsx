@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type { WYQDArchivedStoredEntity, WYQDArchiveEntityType } from '@/core/repository';
+import { CARD_CLASS } from '@/lib/ui-constants';
 
 function archiveTypeLabels(t: ReturnType<typeof useI18n>['t']): Record<WYQDArchiveEntityType, string> {
   return {
@@ -63,7 +64,7 @@ export function ArchivePanel({
   }
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+    <section className={CARD_CLASS}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('archiveBox')}</h2>
