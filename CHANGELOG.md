@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5 (2026-06-22)
+
+- Minor CLI printHelp fix for review add parameters.
+- Re-ran validation pipelines successfully.
+
 ## 1.0.4 (2026-06-21)
 
 - Documentation consistency updates (Version alignment and naming cleanup).

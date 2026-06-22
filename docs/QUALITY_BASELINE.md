@@ -1,6 +1,6 @@
 # Ownly Quality Baseline
 
-**Current Version:** 1.0.4
+**Current Version:** 1.0.5
 
 ## Validation & Test Results
 - **Overall Validation (`npm run validate`):** ✅ Passed
