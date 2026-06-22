@@ -34,7 +34,11 @@ export function useComposerFormState({
     initialObject?.object_type === 'physical' ? initialObject.purchased_at || '' : '',
   );
   const [endedAt, setEndedAt] = useState(
-    initialObject?.object_type === 'physical' ? initialObject.ended_at || '' : '',
+    initialObject?.object_type === 'physical'
+      ? initialObject.ended_at || ''
+      : initialObject?.object_type === 'one_time_experience'
+        ? initialObject.ended_at || ''
+        : '',
   );
   const [physicalStatus, setPhysicalStatus] = useState<PhysicalStatus>(
     initialObject?.object_type === 'physical' ? initialObject.status : 'observing',
@@ -73,7 +77,9 @@ export function useComposerFormState({
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [experienceSubtype, setExperienceSubtype] = useState(
-    initialObject?.object_type === 'one_time_experience' ? initialObject.experience_subtype || '' : '',
+    initialObject?.object_type === 'one_time_experience'
+      ? initialObject.experience_subtype || 'travel_worldview'
+      : 'travel_worldview',
   );
   const [locationCountry, setLocationCountry] = useState(
     initialObject?.object_type === 'one_time_experience' ? initialObject.location?.country || '' : '',
@@ -249,6 +255,8 @@ export function useComposerFormState({
         setLocationLatitude('');
         setLocationLongitude('');
         setQuickLine('');
+        setExtraLocations([]);
+        setSalePrice('');
       }
     } finally {
       setIsSaving(false);

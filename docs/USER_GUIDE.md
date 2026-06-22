@@ -17,6 +17,35 @@ The Objects tab is where you manage your physical items, subscriptions, and expe
 - **Recurring Costs**: Track subscriptions. You can "Cancel" them here.
 - **Experiences**: Track trips, dining, and events. Once finished, they move to the "Pending Review" state.
 
+### Quick Entry Format Reference
+
+The Quick Entry input accepts a one-line shorthand to fill all object fields at once. Fields are separated by `/`, `／`, `，`, `,`, or `|`. A parse preview shows what was recognized — you can still edit any field before saving.
+
+#### Physical items
+```
+title / physical / price / purchase_date(YYYY-MM-DD) / end_date / category / status
+```
+Example: `Sony A7C / physical / 12000 / 2026-05-01 / 2026-05-17 / Camera / using`
+
+Status values: `observing`, `purchased`, `using`, `idle`, `transferred`, `discarded` (Chinese also supported, e.g. `使用中`, `已退役`).
+
+#### Recurring costs (subscriptions)
+```
+title / recurring_cost / amount / cycle / billing_day / payment_account / start_date / status / category
+```
+Example: `ChatGPT Plus / recurring_cost / 20 / monthly / 1 / Credit Card / 2026-01-01 / active / AI Tools`
+
+Cycle values: `weekly`, `monthly`, `quarterly`, `annual`, `custom`. Status: `seeded`, `active`, `paused`, `cancelled`. `fixed` is accepted as an alias for `recurring_cost`.
+
+#### Travel experiences
+```
+title / travel / budget / actual_cost / end_date / category / status / country_code / city / latitude / longitude
+```
+Example: `Tokyo trip / travel / 18000 / 16500 / 2026-05-04 / Travel / completed / JP / Tokyo / 35.6762 / 139.6503`
+
+- `travel`, `experience`, `旅行`, `体验` all map to travel experiences.
+- Legacy 10-field format (without city) defaults city to the title with a warning.
+
 ## 3. Snapshots (Accounts)
 The Snapshots tab tracks your financial health over time.
 - **Add Snapshot**: Enter your total assets and total liabilities on a specific date.

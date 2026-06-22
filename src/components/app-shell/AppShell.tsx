@@ -103,7 +103,7 @@ export function AppShell() {
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
 
       <footer className="mt-4 pb-20 text-center">
-        <span className="text-[10px] text-stone-300">Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget}</span>
+        <span className="text-[10px] text-stone-300">Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget} · {runtimeInfo.gitSha}</span>
       </footer>
     </main>
   );

@@ -45,6 +45,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# auto-generated at build time
+src/core/git-sha.ts
+
 # local tool configs
 .antigravitycli/
 .claude/

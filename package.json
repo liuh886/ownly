@@ -4,9 +4,9 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "build:obsidian": "node esbuild.obsidian.mjs --production",
+    "dev": "node scripts/gen-git-sha.mjs && next dev",
+    "build": "node scripts/gen-git-sha.mjs && next build",
+    "build:obsidian": "node scripts/gen-git-sha.mjs && node esbuild.obsidian.mjs --production",
     "check:obsidian": "tsc -p tsconfig.obsidian.json --pretty false",
     "lint:obsidian": "eslint \"src/obsidian/\"",
     "build:all": "npm run build && npm run build:obsidian",

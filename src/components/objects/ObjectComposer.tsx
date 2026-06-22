@@ -1,11 +1,11 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { FIELD_CLASS, CARD_CLASS } from '@/lib/ui-constants';
 import type { WYQDObject, WYQDObjectType } from '@/domain/types';
 
-import { getQuickLineTemplates } from './composerQuickLine';
+import { getQuickLineTemplates, parseQuickLine } from './composerQuickLine';
 import { useComposerFormState } from './useComposerFormState';
 import { PhysicalFormSection } from './PhysicalFormSection';
 import { RecurringFormSection } from './RecurringFormSection';
@@ -85,6 +85,29 @@ export function ObjectComposer({
     onCancel,
   });
 
+  const parseResult = useMemo(() => {
+    if (!quickLine.trim()) return null;
+    return parseQuickLine(quickLine);
+  }, [quickLine]);
+
+  // Build compact preview string for a parsed result
+  const previewLabel = useMemo(() => {
+    if (!parseResult?.ok || !parseResult.objectType) return null;
+    const f = parseResult.fields;
+    if (parseResult.objectType === 'physical') {
+      return `${f.title || '?'} · ¥${f.amount || '?'} · ${f.physicalStatus || ''}`;
+    }
+    if (parseResult.objectType === 'recurring_cost') {
+      return `${f.title || '?'} · ¥${f.amount || '?'}/${f.cycle || '?'} · ${f.account || ''}`;
+    }
+    if (parseResult.objectType === 'one_time_experience') {
+      const loc = f.countryCode ? `${f.countryCode}${f.city ? '/' + f.city : ''}` : '';
+      const cost = f.actual || f.budget || '?';
+      return `${f.title || '?'}${loc ? ' · ' + loc : ''} · ¥${cost}`;
+    }
+    return null;
+  }, [parseResult]);
+
   const fieldClass = FIELD_CLASS;
 
   return (
@@ -132,7 +155,30 @@ export function ObjectComposer({
                 className={`${fieldClass} bg-stone-50 focus:bg-white`}
                 disabled={disabled || isSaving}
               />
-              <p className="text-[11px] text-stone-400 mt-1">{t('pasteLineHint')}</p>
+              {parseResult ? (
+                <div className="mt-1.5 space-y-0.5">
+                  {previewLabel ? (
+                    <div className="text-xs text-stone-600">
+                      <span className="font-medium">{t('quickEntryParsedPreview')}: </span>
+                      <span>{previewLabel}</span>
+                    </div>
+                  ) : null}
+                  {parseResult.warnings.map((w, i) => (
+                    <div key={`w-${i}`} className="text-[11px] text-amber-600">
+                      <span className="font-medium">{t('quickEntryParseWarning')}: </span>
+                      <span>{w}</span>
+                    </div>
+                  ))}
+                  {parseResult.errors.map((e, i) => (
+                    <div key={`e-${i}`} className="text-[11px] text-red-600">
+                      <span className="font-medium">{t('quickEntryParseError')}: </span>
+                      <span>{e}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-stone-400 mt-1">{t('quickEntryNoParse')}</p>
+              )}
             </label>
             <div className="flex gap-2 overflow-x-auto pb-0.5">
               {quickLineTemplates.map((template) => (

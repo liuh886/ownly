@@ -1,3 +1,5 @@
+import { GIT_SHA } from './git-sha';
+
 export const WYQD_CORE_TARGET_VERSION = '1.0.5' as const;
 
 export const WYQD_PRODUCT_SLOGAN = 'Own less, Live more, Decide better' as const;
@@ -15,6 +17,7 @@ export interface WYQDRuntimeInfo {
   coreTargetVersion: typeof WYQD_CORE_TARGET_VERSION;
   schemaVersion: typeof WYQD_SCHEMA_VERSION;
   runtimeTarget: WYQDRuntimeTarget;
+  gitSha: string;
 }
 
 export function createWYQDRuntimeInfo(runtimeTarget: WYQDRuntimeTarget): WYQDRuntimeInfo {
@@ -22,5 +25,6 @@ export function createWYQDRuntimeInfo(runtimeTarget: WYQDRuntimeTarget): WYQDRun
     coreTargetVersion: WYQD_CORE_TARGET_VERSION,
     schemaVersion: WYQD_SCHEMA_VERSION,
     runtimeTarget,
+    gitSha: GIT_SHA,
   };
 }
