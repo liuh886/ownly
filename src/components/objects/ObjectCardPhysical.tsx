@@ -3,7 +3,7 @@ import { useFormatMoney } from '@/lib/use-format';
 import { IconButton } from '@/components/common/ui-primitives';
 import { ObjectComposer } from './ObjectComposer';
 import { ObjectDetailPanel } from './ObjectDetailPanel';
-import { getDailyCost, getServiceDaysInfo, getPhysicalAccentClasses, getObjectIcon, getStatusLabel, formatDateRange, translateCategory, type TranslateFn } from './ObjectListUtils';
+import { getDailyCost, getPhysicalAccentClasses, getStatusLabel, formatDateRange, type TranslateFn } from './ObjectListUtils';
 import { getPhysicalBucket } from './useObjectFilterSort';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { PhysicalObject, WYQDObject } from '@/domain/types';
@@ -76,7 +76,6 @@ export function ObjectCardPhysical({
   const object = stored.entity as PhysicalObject;
 
   const dailyCost = getDailyCost(object);
-  const serviceDaysInfo = getServiceDaysInfo(object);
   const bucket = getPhysicalBucket(object.status);
   const accent = getPhysicalAccentClasses(bucket);
 
@@ -147,8 +146,81 @@ export function ObjectCardPhysical({
                 {dailyCost ? formatMoney(dailyCost) : '—'}
               </div>
             </div>
-            <div className="text-stone-300">
-              <span aria-hidden="true">→</span>
+            <div className="flex items-center gap-2">
+              <div
+                className="relative z-10"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <MoreActionsButton
+                  objectTitle={object.title}
+                  menuId={`object-actions-${stored.fileName}`}
+                  open={openActionMenuFileName === stored.fileName}
+                  onToggle={() =>
+                    setOpenActionMenuFileName((current: string | null) =>
+                      current === stored.fileName ? null : stored.fileName,
+                    )
+                  }
+                  t={t}
+                />
+                {openActionMenuFileName === stored.fileName ? (
+                  <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+                    <button
+                      type="button" role="menuitem"
+                      onClick={() => void (async () => {
+                        const next: PhysicalObject = {
+                          ...object,
+                          status: 'idle',
+                          ended_at: object.ended_at || todayISO(),
+                          updated_at: todayISO(),
+                        };
+                        setOpenActionMenuFileName(null);
+                        setExitingFileName(stored.fileName);
+                        try {
+                          await onUpdate(stored.fileName, next, stored.body);
+                        } finally {
+                          setExitingFileName(null);
+                        }
+                      })()}
+                      className={menuItemClass}
+                      disabled={
+                        disabled || exitingFileName === stored.fileName || bucket !== 'active'
+                      }
+                    >
+                      <span>{t('retire')}</span>
+                      <span aria-hidden="true">📦</span>
+                    </button>
+                    <button
+                      type="button" role="menuitem"
+                      onClick={() => void (async () => {
+                        const confirmed = await confirm({
+                          title: t('delete'),
+                          message: t('deleteConfirm').replace('{title}', object.title),
+                          destructive: true,
+                        });
+                        if (!confirmed) return;
+                        setOpenActionMenuFileName(null);
+                        setDeletingFileName(stored.fileName);
+                        try {
+                          await onDelete(stored.fileName);
+                        } finally {
+                          setDeletingFileName(null);
+                        }
+                      })()}
+                      className={`${menuItemClass} text-red-600 hover:bg-red-50`}
+                      disabled={disabled || deletingFileName === stored.fileName}
+                    >
+                      <span>{t('delete')}</span>
+                      <span aria-hidden="true">
+                        {deletingFileName === stored.fileName ? '…' : '🗑️'}
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="text-stone-300">
+                <span aria-hidden="true">→</span>
+              </div>
             </div>
           </div>
         </div>

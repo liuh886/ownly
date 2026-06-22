@@ -3,7 +3,7 @@ import { useFormatMoney } from '@/lib/use-format';
 import { IconButton } from '@/components/common/ui-primitives';
 import { ObjectComposer } from './ObjectComposer';
 import { ObjectDetailPanel } from './ObjectDetailPanel';
-import { getSupportingVisuals, getSupportingActionLabel, getSupportingActionIcon, canCancelRecurringCost, getSupportingMeta, getPrimaryAmount, getObjectIcon, getStatusLabel, translateCategory, transitionSupportingObject, type TranslateFn } from './ObjectListUtils';
+import { getSupportingVisuals, getSupportingActionLabel, getSupportingActionIcon, canCancelRecurringCost, getSupportingMeta, getPrimaryAmount, getStatusLabel, transitionSupportingObject, type TranslateFn } from './ObjectListUtils';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { WYQDObject, RecurringCostObject, ReviewEntry } from '@/domain/types';
 import { calculateNextBillingDate } from '@/domain/calculations';
@@ -254,11 +254,94 @@ export function ObjectCardSupporting({
                     </span>
                   </IconButton>
                 </div>
-              ) : (
-                <div className="text-stone-300">
+              ) : null}
+              
+              <div 
+                className="relative z-10 ml-2"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <MoreActionsButton
+                  objectTitle={object.title}
+                  menuId={`object-actions-${stored.fileName}`}
+                  open={openActionMenuFileName === stored.fileName}
+                  onToggle={() =>
+                    setOpenActionMenuFileName((current) =>
+                      current === stored.fileName ? null : stored.fileName,
+                    )
+                  }
+                  t={t}
+                />
+                {openActionMenuFileName === stored.fileName ? (
+                  <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+                    {canCancelRecurringCost(object) ? (
+                      <button
+                        type="button" role="menuitem"
+                        onClick={() => void (async () => {
+                          const reason = await prompt({
+                            title: t('cancelSubscription'),
+                            message: t('cancelReasonPrompt').replace('{title}', object.title),
+                            inputLabel: t('cancelReasonPrompt').replace('{title}', ''),
+                            destructive: true,
+                          });
+                          if (reason === null) return;
+
+                          const next: RecurringCostObject = {
+                            ...object,
+                            status: 'cancelled',
+                            cancelled_at: todayISO(),
+                            cancel_reason: reason.trim() || t('notRecorded'),
+                            updated_at: todayISO(),
+                          };
+                          setOpenActionMenuFileName(null);
+                          setExitingFileName(stored.fileName);
+                          try {
+                            await onUpdate(stored.fileName, next, stored.body);
+                          } finally {
+                            setExitingFileName(null);
+                          }
+                        })()}
+                        className={`${menuItemClass} text-red-600 hover:bg-red-50`}
+                        disabled={disabled || exitingFileName === stored.fileName}
+                      >
+                        <span>{t('cancelSubscription')}</span>
+                        <span aria-hidden="true">🚫</span>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button" role="menuitem"
+                      onClick={() => void (async () => {
+                        const confirmed = await confirm({
+                          title: t('delete'),
+                          message: t('deleteConfirm').replace('{title}', object.title),
+                          destructive: true,
+                        });
+                        if (!confirmed) return;
+                        setOpenActionMenuFileName(null);
+                        setDeletingFileName(stored.fileName);
+                        try {
+                          await onDelete(stored.fileName);
+                        } finally {
+                          setDeletingFileName(null);
+                        }
+                      })()}
+                      className={`${menuItemClass} text-red-600 hover:bg-red-50`}
+                      disabled={disabled || deletingFileName === stored.fileName}
+                    >
+                      <span>{t('delete')}</span>
+                      <span aria-hidden="true">
+                        {deletingFileName === stored.fileName ? '…' : '🗑️'}
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {!supportingActionLabel ? (
+                <div className="text-stone-300 ml-1">
                   <span aria-hidden="true">→</span>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
