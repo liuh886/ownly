@@ -156,7 +156,7 @@ export function ObjectCardSupporting({
         </div>
       ) : (
         <div
-          className="flex cursor-pointer flex-col p-4 transition-colors hover:bg-stone-50 focus:bg-stone-50 disabled:opacity-50"
+          className="flex cursor-pointer flex-col p-3 transition-colors hover:bg-stone-50 focus:bg-stone-50 disabled:opacity-50"
           onClick={() => setSelectedFileName(stored.fileName)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -174,7 +174,7 @@ export function ObjectCardSupporting({
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${visual.badgeClass}`}>
                   {getStatusLabel(object, t)}
                 </span>
-                <h3 className="truncate text-sm font-semibold text-stone-950">
+                <h3 className="truncate text-[13px] font-medium text-stone-900">
                   {object.title}
                 </h3>
               </div>
@@ -186,7 +186,7 @@ export function ObjectCardSupporting({
             <div className="flex shrink-0 items-center gap-4 text-right">
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-stone-400">{visual.amountLabel}</div>
-                <div className="mt-0.5 font-mono text-sm font-medium text-stone-900">
+                <div className="mt-0.5 font-mono text-[13px] font-medium text-stone-900">
                   {formatMoney(getPrimaryAmount(object))}
                 </div>
                 {nextBillingDate ? (

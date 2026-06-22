@@ -107,7 +107,7 @@ export function ObjectCardPhysical({
         </div>
       ) : (
         <div
-          className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-stone-50 focus:bg-stone-50 disabled:opacity-50"
+          className="flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-stone-50 focus:bg-stone-50 disabled:opacity-50"
           onClick={() => setSelectedFileName(stored.fileName)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -124,7 +124,7 @@ export function ObjectCardPhysical({
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${accent.badge}`}>
                 {getStatusLabel(object, t)}
               </span>
-              <h3 className="truncate text-sm font-semibold text-stone-950">
+              <h3 className="truncate text-[13px] font-medium text-stone-900">
                 {object.title}
               </h3>
             </div>
@@ -136,13 +136,13 @@ export function ObjectCardPhysical({
           <div className="flex shrink-0 items-center gap-4 text-right">
             <div className="hidden sm:block">
               <div className="text-[10px] uppercase tracking-wider text-stone-400">{t('totalAcquisitionCost')}</div>
-              <div className="mt-0.5 font-mono text-sm font-medium text-stone-900">
+              <div className="mt-0.5 font-mono text-[13px] font-medium text-stone-900">
                 {object.purchase_price ? formatMoney(object.purchase_price) : '—'}
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-stone-400">{t('dailyCostAvg')}</div>
-              <div className="mt-0.5 font-mono text-sm font-medium text-stone-900">
+              <div className="mt-0.5 font-mono text-[13px] font-medium text-stone-900">
                 {dailyCost ? formatMoney(dailyCost) : '—'}
               </div>
             </div>

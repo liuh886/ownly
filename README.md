@@ -11,10 +11,9 @@
 
 Ownly is a local-first decision ledger for people who want to buy less impulsively, understand what they actually use, and turn past purchases into better future decisions.
 
-- **Obsidian-native**: your Vault is the source of truth.
-- **Markdown-first**: every object, snapshot, and review is a plain `.md` file.
-- **Decision-focused**: track the full lifecycle from desire to review, not just the amount spent.
-- **Private by default**: no cloud account, no telemetry, no personal-data network calls.
+- **Local-first decision ledger**: Track the full lifecycle from desire to review, not just the amount spent.
+- **Markdown-native personal data**: Every object, snapshot, and review is a plain `.md` file in your Obsidian vault. Private by default with no cloud sync or telemetry.
+- **Built for humans and AI agents**: Edit via the Obsidian UI, or automate your life with the provided Agent CLI.
 
 <p align="center">
   <img src="docs/assets/home-light.png" width="48%" alt="Ownly Homepage Light" />
@@ -141,21 +140,11 @@ Each entity is a standalone `.md` file with YAML frontmatter. You can edit, vers
 
 Ownly does not make personal-data network calls from the app runtime. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
 
-## Sponsorship Model & Pro Unlock
+## Sponsorship
 
-Ownly is built on a sponsorship model. It does not perform paid license verification or make network calls for activation. Free users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export because of license state.
+Ownly is built on a sponsorship model. It does not perform paid license verification or make network calls for activation. The app is fully functional with generous limits out-of-the-box (e.g. 200 objects, 100 reviews), and all users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export.
 
-| Feature | Base | Supporter (Pro) |
-|---|---|---|
-| Object tracking | ✅ Up to 200 | ✅ Unlimited |
-| Net worth snapshots | ✅ Up to 30 | ✅ Unlimited |
-| Reviews | ✅ Up to 100 | ✅ Unlimited |
-| Travel insights & world map | ❌ | ✅ |
-| Doctor diagnostics | ✅ | ✅ |
-| Archive & restore | ✅ | ✅ |
-| Markdown data export | ✅ Always | ✅ Always |
-
-> **Note:** The current version (1.x) uses a sponsorship model. Pro features can be unlocked with the free activation code shown in the app; supporting via [Ko-fi](https://ko-fi.com/F1F7WYJ6B) or [Gumroad](https://liuh886.gumroad.com/l/ownly) is optional and helps fund development.
+The current version (1.x) allows you to unlock unlimited usage and extra features (like travel insights) with a free activation code shown directly in the app.
 
 ## FAQ
 
