@@ -18,7 +18,7 @@ npm run build:obsidian
 ```
 
 ## 4. Obsidian Validation
-Run the strict validation checks to ensure compliance with Obsidian's API rules:
+Run the strict validation checks to ensure compliance with Obsidian's API rules. See the [Obsidian Reviewer Compliance Checklist](./OBSIDIAN_REVIEWER_CHECKLIST.md) for strict pre-PR rules.
 ```bash
 npm run validate:obsidian
 ```

@@ -179,6 +179,7 @@ If Ownly has been useful to you, consider supporting the project:
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — How to fix corrupted data and use the Doctor tool.
 - [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md) — How to programmatically manage your Ownly data using AI agents.
 - [Release Checklist](docs/RELEASE_CHECKLIST.md) — Release instructions.
+- [Obsidian Reviewer Compliance](docs/OBSIDIAN_REVIEWER_CHECKLIST.md) — Pre-PR checklist for Obsidian plugin submission.
 
 ## Developer Documentation
 
