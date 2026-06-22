@@ -178,7 +178,7 @@ Yes. The Web runtime runs in supported desktop browsers and connects to a local 
 ## Screenshots
 
 <details>
-<summary>Click to view screenshots of Objects, Accounts, Reviews, and Doctor pages</summary>
+<summary>Click to view screenshots of Objects, Accounts, and Reviews pages</summary>
 
 **Objects**
 <p align="center">

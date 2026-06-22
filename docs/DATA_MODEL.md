@@ -16,7 +16,7 @@ Ownly manages entities using the following types:
 
 3. **One-Time Experiences**
    - Type: `one_time_experience`
-   - Fields: `id`, `object_type`, `title`, `purchase_price`, `status` (`planned`, `in_progress`, `completed`, `reviewed`).
+   - Fields: `id`, `object_type`, `title`, `planned_at`, `started_at`, `ended_at`, `reviewed_at`, `budget_total`, `actual_total`, `expense_items`, `status` (`planned`, `in_progress`, `completed`, `reviewed`).
 
 4. **Reviews**
    - Type: `review`

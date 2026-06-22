@@ -8,9 +8,10 @@
     "build": "next build",
     "build:obsidian": "node esbuild.obsidian.mjs --production",
     "check:obsidian": "tsc -p tsconfig.obsidian.json --pretty false",
+    "lint:obsidian": "eslint \"src/obsidian/\"",
     "build:all": "npm run build && npm run build:obsidian",
     "package:obsidian": "npm run build:obsidian && node scripts/package-obsidian-plugin.mjs",
-    "validate:obsidian": "npm run check:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
+    "validate:obsidian": "npm run check:obsidian && npm run lint:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
     "validate": "tsc --noEmit && npm run lint && npm run build && npm run validate:obsidian",
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
     "smoke:web": "python tests/smoke/web_smoke.py",
@@ -49,21 +50,5 @@
     "typescript": "^5",
     "vitest": "^3"
   },
-  "description": "[![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)](https://obsidian.md/plugins?id=ownly)\r [![Status](https://img.shields.io/badge/status-stable_1.x-brightgreen.svg)](CHANGELOG.md)\r [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)\r [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)",
-  "main": "main.js",
-  "directories": {
-    "doc": "docs",
-    "test": "tests"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/liuh886/ownly.git"
-  },
-  "keywords": [],
-  "author": "",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/liuh886/ownly/issues"
-  },
-  "homepage": "https://github.com/liuh886/ownly#readme"
+  "description": "Local-first Obsidian decision ledger for possessions, subscriptions, and experiences."
 }
