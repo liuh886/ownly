@@ -395,7 +395,11 @@ class WYQDSettingTab extends PluginSettingTab {
 
   // Obsidian PluginSettingTab.display() is async but the framework does not await it.
   // This is an Obsidian API design constraint, not a bug.
-  async display() {
+  display(): void {
+    void this.renderAsync();
+  }
+
+  private async renderAsync(): Promise<void> {
     const { containerEl } = this;
     const t = (key: WYQDTranslationKey) => this.wyqdPlugin.t(key);
     this.cleanupDisplay();
@@ -406,17 +410,19 @@ class WYQDSettingTab extends PluginSettingTab {
     const shell = containerEl.createDiv({ cls: 'wyqd-settings-shell' });
 
     // ── Save button at top ──
-    const saveBar = shell.createDiv({ cls: 'wyqd-settings-save-bar' });
-    const saveButton = saveBar.createEl('button', {
-      text: t('settingsSave'),
-      cls: 'mod-cta wyqd-settings-save-btn',
-    });
-    saveButton.addEventListener('click', () => {
-      void this.wyqdPlugin.saveSettings().then(() => {
-        this.wyqdPlugin.refreshWorkspaceViews();
-        new Notice(t('settingsSaved'));
+    new Setting(shell)
+      .setClass('wyqd-settings-save-bar')
+      .addButton((btn) => {
+        btn
+          .setButtonText(t('settingsSave'))
+          .setCta()
+          .onClick(() => {
+            void this.wyqdPlugin.saveSettings().then(() => {
+              this.wyqdPlugin.refreshWorkspaceViews();
+              new Notice(t('settingsSaved'));
+            });
+          });
       });
-    });
 
     const hero = shell.createDiv({ cls: 'wyqd-settings-hero' });
     const heroCopy = hero.createDiv();

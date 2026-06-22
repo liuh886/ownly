@@ -8,9 +8,10 @@
     "build": "next build",
     "build:obsidian": "node esbuild.obsidian.mjs --production",
     "check:obsidian": "tsc -p tsconfig.obsidian.json --pretty false",
+    "lint:obsidian": "eslint \"src/obsidian/\"",
     "build:all": "npm run build && npm run build:obsidian",
     "package:obsidian": "npm run build:obsidian && node scripts/package-obsidian-plugin.mjs",
-    "validate:obsidian": "npm run check:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
+    "validate:obsidian": "npm run check:obsidian && npm run lint:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
     "validate": "tsc --noEmit && npm run lint && npm run build && npm run validate:obsidian",
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
     "smoke:web": "python tests/smoke/web_smoke.py",
@@ -42,10 +43,12 @@
     "esbuild": "^0.28.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "eslint-plugin-obsidianmd": "^0.3.0",
     "obsidian": "^1.12.3",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^3"
-  }
+  },
+  "description": "Local-first Obsidian decision ledger for possessions, subscriptions, and experiences."
 }

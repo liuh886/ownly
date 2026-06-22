@@ -16,7 +16,10 @@ Ownly is a local-first decision ledger for people who want to buy less impulsive
 - **Decision-focused**: track the full lifecycle from desire to review, not just the amount spent.
 - **Private by default**: no cloud account, no telemetry, no personal-data network calls.
 
-![Ownly Homepage](docs/screenshot-homepage.jpg)
+<p align="center">
+  <img src="docs/assets/home-light.png" width="48%" alt="Ownly Homepage Light" />
+  <img src="docs/assets/home-dark.png" width="48%" alt="Ownly Homepage Dark" />
+</p>
 
 ## Project Status
 
@@ -136,7 +139,7 @@ Each entity is a standalone `.md` file with YAML frontmatter. You can edit, vers
 
 ## Network Calls
 
-Ownly makes **zero network calls**. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
+Ownly does not make personal-data network calls from the app runtime. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
 
 ## Sponsorship Model & Pro Unlock
 
@@ -172,12 +175,45 @@ Yes. The Web runtime runs in supported desktop browsers and connects to a local 
 - The Web runtime focuses on local compatibility and shared-core validation; Obsidian is the primary supported experience.
 - Account snapshots work in Web, but full standalone account entity management is more complete in the Obsidian repository adapter.
 
+## Screenshots
+
+<details>
+<summary>Click to view screenshots of Objects, Accounts, and Reviews pages</summary>
+
+**Objects**
+<p align="center">
+  <img src="docs/assets/objects-light.png" width="48%" />
+  <img src="docs/assets/objects-dark.png" width="48%" />
+</p>
+
+**Accounts**
+<p align="center">
+  <img src="docs/assets/accounts-light.png" width="48%" />
+  <img src="docs/assets/accounts-dark.png" width="48%" />
+</p>
+
+**Reviews**
+<p align="center">
+  <img src="docs/assets/reviews-light.png" width="48%" />
+  <img src="docs/assets/reviews-dark.png" width="48%" />
+</p>
+
+</details>
+
 ## Support
 
 If Ownly has been useful to you, consider supporting the project:
 
 - [Ko-fi](https://ko-fi.com/F1F7WYJ6B) — One-time donation
 - [Gumroad](https://liuh886.gumroad.com/l/ownly) — Optional project sponsorship
+
+## Documentation
+
+- [User Guide](docs/USER_GUIDE.md) — How to use the Home, Objects, Snapshots, and Reviews features.
+- [Data Model](docs/DATA_MODEL.md) — Explanation of the Markdown frontmatter schemas and storage structure.
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — How to fix corrupted data and use the Doctor tool.
+- [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md) — How to programmatically manage your Ownly data using AI agents.
+- [Release Checklist](docs/RELEASE_CHECKLIST.md) — Release instructions.
 
 ## Developer Documentation
 
