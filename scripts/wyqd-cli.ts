@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import YAML from 'yaml';
 import { validateEntity } from '../src/domain/schema';
@@ -84,7 +84,10 @@ Usage:
   npm run wyqd -- --vault <vault> snapshot restore --id <id>
   npm run wyqd -- --vault <vault> review add --summary <text> [--food-rank 1] [--scenery-rank 2] [--experience-rank 3]
   npm run wyqd -- --vault <vault> review restore --id <id>
-
+  npm run wyqd -- --vault <vault> object search --query <text> [--json]
+  npm run wyqd -- --vault <vault> object review-needed [--json]
+  npm run wyqd -- --vault <vault> summary [--json]
+  npm run wyqd -- --vault <vault> doctor [--json]
 Machine-readable output:
   npm run --silent wyqd -- --vault <vault> object list --json
 
@@ -128,6 +131,19 @@ function ensureDirectoryPath(vaultRoot, relativePath) {
   const directory = join(vaultRoot, relativePath);
   mkdirSync(directory, { recursive: true });
   return directory;
+}
+
+function writeAgentLog(vaultRoot, action, entityId, beforeSummary, afterSummary) {
+  const directory = ensureDirectoryPath(vaultRoot, 'Ownly/Logs');
+  const logFile = join(directory, 'agent_operations.log');
+  const entry = {
+    timestamp: new Date().toISOString(),
+    action,
+    entity_id: entityId,
+    before: beforeSummary,
+    after: afterSummary,
+  };
+  appendFileSync(logFile, JSON.stringify(entry) + '\n', 'utf8');
 }
 
 function parseMarkdown(content, fileName) {
@@ -581,10 +597,43 @@ function objectCommand(vaultRoot, command, options) {
     return;
   }
 
+  if (command === 'search') {
+    const query = (options.query || '').toLowerCase();
+    if (!query) fail('Missing --query');
+    const entries = listEntries(vaultRoot, 'object');
+    const matches = entries.filter((e) => {
+      const { title, category } = e.frontmatter;
+      return (title && title.toLowerCase().includes(query)) ||
+        (category && category.toLowerCase().includes(query)) ||
+        (e.body && e.body.toLowerCase().includes(query));
+    });
+    console.log(JSON.stringify(matches.map((m) => m.frontmatter), null, 2));
+    return;
+  }
+
+  if (command === 'review-needed') {
+    const entries = listEntries(vaultRoot, 'object').filter((e) => {
+      const status = e.frontmatter.status;
+      if (e.frontmatter.object_type === 'physical') {
+        return status === 'idle' || status === 'transferred' || status === 'discarded';
+      }
+      if (e.frontmatter.object_type === 'recurring_cost') {
+        return status === 'cancelled';
+      }
+      if (e.frontmatter.object_type === 'one_time_experience') {
+        return status === 'completed';
+      }
+      return false;
+    });
+    console.log(JSON.stringify(entries.map((e) => e.frontmatter), null, 2));
+    return;
+  }
+
   if (command === 'add') {
     const object = createObject(options);
     const fileName = `${object.created_at}--${slugify(object.title)}.md`;
     writeEntry(directory, fileName, object, options.body || '## Notes\n');
+    writeAgentLog(vaultRoot, 'object_add', object.id, null, object);
     console.log(JSON.stringify({ fileName, id: object.id, title: object.title }, null, 2));
     return;
   }
@@ -647,6 +696,7 @@ function objectCommand(vaultRoot, command, options) {
     }
 
     writeEntry(directory, entry.fileName, next, entry.body);
+    writeAgentLog(vaultRoot, 'object_update', next.id, entry.frontmatter, next);
     console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, title: next.title }, null, 2));
     return;
   }
@@ -660,6 +710,7 @@ function objectCommand(vaultRoot, command, options) {
       updated_at: todayISO(),
     };
     writeEntry(directory, entry.fileName, next, entry.body);
+    writeAgentLog(vaultRoot, 'object_retire', next.id, entry.frontmatter, next);
     console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
     return;
   }
@@ -678,6 +729,7 @@ function objectCommand(vaultRoot, command, options) {
       updated_at: todayISO(),
     };
     writeEntry(directory, entry.fileName, next, entry.body);
+    writeAgentLog(vaultRoot, 'object_cancel', next.id, entry.frontmatter, next);
     console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
     return;
   }
@@ -686,6 +738,7 @@ function objectCommand(vaultRoot, command, options) {
     const entry = findEntry(vaultRoot, 'object', options);
     if (!options.yes) fail('Refusing to delete without --yes.');
     const archiveFileName = archiveEntry(vaultRoot, 'object', entry);
+    writeAgentLog(vaultRoot, 'object_delete', entry.frontmatter.id, entry.frontmatter, null);
     console.log(
       JSON.stringify(
         { archived: basename(entry.filePath), archiveFileName, id: entry.frontmatter.id },
@@ -699,6 +752,7 @@ function objectCommand(vaultRoot, command, options) {
   if (command === 'restore') {
     const entry = findArchivedEntry(vaultRoot, 'object', options);
     const fileName = restoreArchivedEntry(vaultRoot, 'object', entry);
+    writeAgentLog(vaultRoot, 'object_restore', entry.frontmatter.id, null, entry.frontmatter);
     console.log(JSON.stringify({ restored: fileName, id: entry.frontmatter.id }, null, 2));
     return;
   }
@@ -747,6 +801,7 @@ function snapshotCommand(vaultRoot, command, options) {
     };
     const fileName = `snapshot--${snapshotAt}.md`;
     writeEntry(directory, fileName, snapshot, options.body || '## Notes\n');
+    writeAgentLog(vaultRoot, 'snapshot_add', snapshot.id, null, snapshot);
     console.log(JSON.stringify({ fileName, id: snapshot.id, net_worth: snapshot.net_worth }, null, 2));
     return;
   }
@@ -782,6 +837,7 @@ function snapshotCommand(vaultRoot, command, options) {
       updated_at: todayISO(),
     };
     writeEntry(directory, entry.fileName, next, entry.body);
+    writeAgentLog(vaultRoot, 'snapshot_update', next.id, entry.frontmatter, next);
     console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, net_worth: next.net_worth }, null, 2));
     return;
   }
@@ -790,6 +846,7 @@ function snapshotCommand(vaultRoot, command, options) {
     const entry = findEntry(vaultRoot, 'snapshot', options);
     if (!options.yes) fail('Refusing to delete without --yes.');
     const archiveFileName = archiveEntry(vaultRoot, 'snapshot', entry);
+    writeAgentLog(vaultRoot, 'snapshot_delete', entry.frontmatter.id, entry.frontmatter, null);
     console.log(
       JSON.stringify(
         { archived: basename(entry.filePath), archiveFileName, id: entry.frontmatter.id },
@@ -803,6 +860,7 @@ function snapshotCommand(vaultRoot, command, options) {
   if (command === 'restore') {
     const entry = findArchivedEntry(vaultRoot, 'snapshot', options);
     const fileName = restoreArchivedEntry(vaultRoot, 'snapshot', entry);
+    writeAgentLog(vaultRoot, 'snapshot_restore', entry.frontmatter.id, null, entry.frontmatter);
     console.log(JSON.stringify({ restored: fileName, id: entry.frontmatter.id }, null, 2));
     return;
   }
@@ -847,6 +905,7 @@ function reviewCommand(vaultRoot, command, options) {
     };
     const fileName = `review--${reviewedAt}--${slugify(review.title)}.md`;
     writeEntry(directory, fileName, review, options.body || `## Review\n\n${summary}\n`);
+    writeAgentLog(vaultRoot, 'review_add', review.id, null, review);
     console.log(JSON.stringify({ fileName, id: review.id, title: review.title }, null, 2));
     return;
   }
@@ -869,6 +928,7 @@ function reviewCommand(vaultRoot, command, options) {
     };
     const body = options.body || entry.body;
     writeEntry(directory, entry.fileName, next, body);
+    writeAgentLog(vaultRoot, 'review_update', next.id, entry.frontmatter, next);
     console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, title: next.title }, null, 2));
     return;
   }
@@ -877,6 +937,7 @@ function reviewCommand(vaultRoot, command, options) {
     const entry = findEntry(vaultRoot, 'review', options);
     if (!options.yes) fail('Refusing to delete without --yes.');
     const archiveFileName = archiveEntry(vaultRoot, 'review', entry);
+    writeAgentLog(vaultRoot, 'review_delete', entry.frontmatter.id, entry.frontmatter, null);
     console.log(
       JSON.stringify(
         { archived: basename(entry.filePath), archiveFileName, id: entry.frontmatter.id },
@@ -890,11 +951,83 @@ function reviewCommand(vaultRoot, command, options) {
   if (command === 'restore') {
     const entry = findArchivedEntry(vaultRoot, 'review', options);
     const fileName = restoreArchivedEntry(vaultRoot, 'review', entry);
+    writeAgentLog(vaultRoot, 'review_restore', entry.frontmatter.id, null, entry.frontmatter);
     console.log(JSON.stringify({ restored: fileName, id: entry.frontmatter.id }, null, 2));
     return;
   }
 
   fail(`Unknown review command: ${command}`);
+}
+
+function doctorCommand(vaultRoot, options) {
+  const objects = listEntries(vaultRoot, 'object');
+  const snapshots = listEntries(vaultRoot, 'snapshot');
+  const reviews = listEntries(vaultRoot, 'review');
+
+  const results = {
+    valid: true,
+    entitiesChecked: 0,
+    errors: [],
+    warnings: [],
+  };
+
+  const check = (entry) => {
+    results.entitiesChecked++;
+    const res = validateEntity(entry.frontmatter);
+    if (!res.valid) {
+      results.valid = false;
+      res.issues.forEach((issue) => {
+        if (issue.severity === 'error') {
+          results.errors.push({ id: entry.frontmatter.id, ...issue });
+        } else {
+          results.warnings.push({ id: entry.frontmatter.id, ...issue });
+        }
+      });
+    } else {
+      res.issues.forEach((issue) => {
+        if (issue.severity === 'warning') {
+          results.warnings.push({ id: entry.frontmatter.id, ...issue });
+        }
+      });
+    }
+  };
+
+  objects.forEach(check);
+  snapshots.forEach(check);
+  reviews.forEach(check);
+
+  if (options.json) {
+    console.log(JSON.stringify(results, null, 2));
+  } else {
+    console.log(`Doctor checked ${results.entitiesChecked} entities.`);
+    console.log(`Errors: ${results.errors.length}, Warnings: ${results.warnings.length}`);
+    results.errors.forEach((e) => console.error(`[ERROR] ${e.id}: ${e.message}`));
+    results.warnings.forEach((w) => console.warn(`[WARN] ${w.id}: ${w.message}`));
+    if (!results.valid) process.exit(1);
+  }
+}
+
+function summaryCommand(vaultRoot, options) {
+  const objects = listEntries(vaultRoot, 'object').map((e) => e.frontmatter);
+  
+  const totalObjects = objects.length;
+  const physicalCount = objects.filter((o) => o.object_type === 'physical').length;
+  const activeRecurring = objects.filter((o) => o.object_type === 'recurring_cost' && o.status === 'active').length;
+
+  const summary = {
+    total_objects: totalObjects,
+    physical: physicalCount,
+    active_recurring_costs: activeRecurring,
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(summary, null, 2));
+  } else {
+    console.log(`Vault Summary:`);
+    console.log(`Total Objects: ${summary.total_objects}`);
+    console.log(`Physical: ${summary.physical}`);
+    console.log(`Active Recurring Costs: ${summary.active_recurring_costs}`);
+  }
 }
 
 function main() {
@@ -907,7 +1040,9 @@ function main() {
   const [resource, command = 'list'] = positionals;
   const vaultRoot = getVaultRoot(options);
 
-  if (resource === 'object') objectCommand(vaultRoot, command, options);
+  if (resource === 'doctor') doctorCommand(vaultRoot, options);
+  else if (resource === 'summary') summaryCommand(vaultRoot, options);
+  else if (resource === 'object') objectCommand(vaultRoot, command, options);
   else if (resource === 'snapshot') snapshotCommand(vaultRoot, command, options);
   else if (resource === 'review') reviewCommand(vaultRoot, command, options);
   else fail(`Unknown resource: ${resource}`);
