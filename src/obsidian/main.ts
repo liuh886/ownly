@@ -515,7 +515,7 @@ class WYQDSettingTab extends PluginSettingTab {
           suggestionsEl.addClass('wyqd-folder-suggestions--hidden');
         }
       };
-      const doc = activeDocument ?? document;
+      const doc = typeof activeDocument !== 'undefined' ? activeDocument : document;
       doc.addEventListener('click', hideSuggestionsOnOutsideClick);
       this.displayCleanupCallbacks.push(() => {
         doc.removeEventListener('click', hideSuggestionsOnOutsideClick);
