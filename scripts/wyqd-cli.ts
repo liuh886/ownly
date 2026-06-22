@@ -84,7 +84,10 @@ Usage:
   npm run wyqd -- --vault <vault> snapshot restore --id <id>
   npm run wyqd -- --vault <vault> review add --summary <text> [--food-rank 1] [--scenery-rank 2] [--experience-rank 3]
   npm run wyqd -- --vault <vault> review restore --id <id>
-
+  npm run wyqd -- --vault <vault> object search --query <text> [--json]
+  npm run wyqd -- --vault <vault> object review-needed [--json]
+  npm run wyqd -- --vault <vault> summary [--json]
+  npm run wyqd -- --vault <vault> doctor [--json]
 Machine-readable output:
   npm run --silent wyqd -- --vault <vault> object list --json
 
@@ -611,7 +614,7 @@ function objectCommand(vaultRoot, command, options) {
   if (command === 'review-needed') {
     const entries = listEntries(vaultRoot, 'object').filter((e) => {
       const status = e.frontmatter.status;
-      if (e.frontmatter.object_type === 'physical_asset') {
+      if (e.frontmatter.object_type === 'physical') {
         return status === 'idle' || status === 'transferred' || status === 'discarded';
       }
       if (e.frontmatter.object_type === 'recurring_cost') {
@@ -1008,12 +1011,12 @@ function summaryCommand(vaultRoot, options) {
   const objects = listEntries(vaultRoot, 'object').map((e) => e.frontmatter);
   
   const totalObjects = objects.length;
-  const physicalCount = objects.filter((o) => o.object_type === 'physical_asset').length;
+  const physicalCount = objects.filter((o) => o.object_type === 'physical').length;
   const activeRecurring = objects.filter((o) => o.object_type === 'recurring_cost' && o.status === 'active').length;
 
   const summary = {
     total_objects: totalObjects,
-    physical_assets: physicalCount,
+    physical: physicalCount,
     active_recurring_costs: activeRecurring,
   };
 
@@ -1022,7 +1025,7 @@ function summaryCommand(vaultRoot, options) {
   } else {
     console.log(`Vault Summary:`);
     console.log(`Total Objects: ${summary.total_objects}`);
-    console.log(`Physical Assets: ${summary.physical_assets}`);
+    console.log(`Physical: ${summary.physical}`);
     console.log(`Active Recurring Costs: ${summary.active_recurring_costs}`);
   }
 }
