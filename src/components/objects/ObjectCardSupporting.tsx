@@ -128,6 +128,10 @@ export function ObjectCardSupporting({
       : null;
   const supportingActionLabel = getSupportingActionLabel(object, t);
 
+  const isArchived = 
+    (object.object_type === 'recurring_cost' && (object.status === 'cancelled' || object.status === 'paused')) ||
+    (object.object_type === 'one_time_experience' && (object.status === 'completed' || object.status === 'reviewed'));
+
   return (
     <article className="overflow-visible rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300">
       {isEditing ? (
@@ -156,7 +160,9 @@ export function ObjectCardSupporting({
         </div>
       ) : (
         <div
-          className="flex cursor-pointer flex-col p-3 transition-colors hover:bg-stone-50 focus:bg-stone-50 disabled:opacity-50"
+          className={`flex cursor-pointer flex-col p-3 transition-colors hover:bg-stone-50 focus:bg-stone-50 aria-disabled:opacity-50 ${
+            isArchived ? 'opacity-60 grayscale' : ''
+          }`}
           onClick={() => setSelectedFileName(stored.fileName)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {

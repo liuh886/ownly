@@ -63,9 +63,13 @@ function ScoreBar({ label, score, color }: { label: string; score: number | null
 export function TravelTimeline({
   experiences,
   reviews,
+  onSelectReview,
+  onSelectExperience,
 }: {
   experiences: OneTimeExperienceObject[];
   reviews: ReviewEntry[];
+  onSelectReview?: (reviewId: string) => void;
+  onSelectExperience?: (expId: string) => void;
 }) {
   const { t, language } = useI18n();
   const { formatMoney } = useFormatMoney();
@@ -145,7 +149,29 @@ export function TravelTimeline({
                   />
 
                   {/* Card */}
-                  <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                  <div
+                    className={`rounded-xl border border-stone-200 bg-white p-4 shadow-sm ${
+                      onSelectReview || onSelectExperience
+                        ? 'cursor-pointer transition hover:border-stone-400 hover:shadow-md'
+                        : ''
+                    }`}
+                    onClick={() => {
+                      if (review && onSelectReview) {
+                        onSelectReview(review.id);
+                      } else if (onSelectExperience) {
+                        onSelectExperience(exp.id);
+                      }
+                    }}
+                    role={onSelectReview || onSelectExperience ? 'button' : undefined}
+                    tabIndex={onSelectReview || onSelectExperience ? 0 : undefined}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (review && onSelectReview) onSelectReview(review.id);
+                        else if (onSelectExperience) onSelectExperience(exp.id);
+                      }
+                    }}
+                  >
                     {/* Header row */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

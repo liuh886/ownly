@@ -15,10 +15,14 @@ export function TravelInsightsPanel({
   objects,
   reviews,
   membership,
+  onSelectReview,
+  onSelectExperience,
 }: {
   objects: WYQDObject[];
   reviews: ReviewEntry[];
   membership: WYQDMembershipState;
+  onSelectReview?: (reviewId: string) => void;
+  onSelectExperience?: (expId: string) => void;
 }) {
   const { t } = useI18n();
   const isPro = canUseWYQDProFeature(membership);
@@ -83,7 +87,12 @@ export function TravelInsightsPanel({
         </details>
       ) : null}
       <TravelWorldMap experiences={travelExperiences} />
-      <TravelTimeline experiences={travelExperiences} reviews={reviews} />
+      <TravelTimeline
+        experiences={travelExperiences}
+        reviews={reviews}
+        onSelectReview={onSelectReview}
+        onSelectExperience={onSelectExperience}
+      />
     </section>
   );
 }

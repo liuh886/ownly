@@ -106,9 +106,19 @@ body {
   .wyqd-web-shell .bg-stone-200 {
     background-color: var(--surface-tertiary);
   }
-  .wyqd-web-shell .bg-stone-950 {
-    background-color: var(--surface-card);
-    color: var(--text-primary);
+  .wyqd-web-shell .bg-stone-950,
+  .wyqd-web-shell .bg-stone-900 {
+    background-color: var(--text-primary);
+    color: var(--surface-card);
+  }
+  /* Ensure text inside primary buttons remains high contrast */
+  .wyqd-web-shell .bg-stone-950 .text-white,
+  .wyqd-web-shell .bg-stone-900 .text-white {
+    color: var(--surface-card);
+  }
+
+  .wyqd-web-shell .bg-stone-300 {
+    background-color: var(--surface-tertiary);
   }
 
   /* Borders */
@@ -139,7 +149,8 @@ body {
   .wyqd-web-shell .text-stone-500 {
     color: var(--text-secondary);
   }
-  .wyqd-web-shell .text-stone-400 {
+  .wyqd-web-shell .text-stone-400,
+  .wyqd-web-shell .text-stone-300 {
     color: var(--text-tertiary);
   }
   .wyqd-web-shell .text-white {

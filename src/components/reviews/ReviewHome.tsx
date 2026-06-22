@@ -322,7 +322,7 @@ export function ReviewHome({
     () =>
       experiences.filter(
         (object) =>
-          object.status === 'completed' && !object.review_ref && !reviewedTargetIds.has(object.id),
+          (object.status === 'completed' || object.status === 'reviewed') && !object.review_ref && !reviewedTargetIds.has(object.id),
       ),
     [experiences, reviewedTargetIds],
   );
@@ -679,6 +679,14 @@ export function ReviewHome({
         objects={objects}
         reviews={reviews.map((r) => r.entity)}
         membership={membership}
+        onSelectReview={(id) => {
+          const rev = reviews.find((r) => r.entity.id === id);
+          if (rev) selectReview(rev.fileName);
+        }}
+        onSelectExperience={(expId) => {
+          const exp = objects.find((o) => o.id === expId);
+          if (exp) startExperienceReview(exp);
+        }}
       />
 
       {/* Unified Review List */}
