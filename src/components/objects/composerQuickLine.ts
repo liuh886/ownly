@@ -184,7 +184,7 @@ export function applyQuickLine(
   },
 ) {
   const parts = value
-    .split(/[／，,|]/)
+    .split(/[\/／，,|]/)
     .map((part) => part.trim())
     .filter(Boolean);
 
