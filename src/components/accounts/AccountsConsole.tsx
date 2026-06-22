@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from '@/domain/types';
 import type { WYQDTranslationKey } from '@/core/i18n';
+import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
 
 export interface AccountsConsoleProps {
   latest: AccountSnapshot | null;
@@ -19,7 +20,7 @@ export function AccountsConsole({
   formatMoney,
 }: AccountsConsoleProps) {
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+    <div className={CARD_CLASS}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('accountConsole')}</h2>
@@ -65,7 +66,7 @@ export function AccountsConsole({
 
       <div className="mt-5 border-t border-stone-100 pt-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('accountList')}</h3>
+          <h3 className={SECTION_TITLE_CLASS}>{t('accountList')}</h3>
           <span className="text-xs text-stone-400">
             {latest ? t('snapshotDateLabel').replace('{date}', latest.snapshot_at) : t('notRecordedYet')}
           </span>
@@ -75,7 +76,7 @@ export function AccountsConsole({
           <div className="mt-5 space-y-4">
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('assetAccounts')}</h2>
+                <h2 className={SECTION_TITLE_CLASS}>{t('assetAccounts')}</h2>
                 <span className="text-xs text-stone-400">{formatMoney(latest.total_assets)}</span>
               </div>
               <div className="space-y-2">
@@ -98,7 +99,7 @@ export function AccountsConsole({
             {latest.liability_balances.length > 0 ? (
               <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold tracking-tight text-stone-950">{t('liabilityAccounts')}</h2>
+                  <h2 className={SECTION_TITLE_CLASS}>{t('liabilityAccounts')}</h2>
                   <span className="text-xs text-stone-400">
                     {formatMoney(latest.total_liabilities)}
                   </span>

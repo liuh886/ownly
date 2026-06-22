@@ -4,7 +4,7 @@ import { MetricCard } from './MetricCard';
 import { useFormatMoney } from '@/lib/use-format';
 import { useI18n } from '@/core/i18n-context';
 import type { HomeMetrics, AccountSnapshot } from '@/domain/types';
-import { CARD_CLASS } from '@/lib/ui-constants';
+import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
 import { calculateNetWorth } from '@/domain/calculations';
 
 import { buildDualLinePoints } from './homeDashboardUtils';
@@ -74,7 +74,7 @@ export function HomeOwnSection({
   return (
     <motion.section variants={itemVariants}>
       <div className="mb-3 flex items-center justify-between px-1">
-        <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('ownGroup')}</h3>
+        <h3 className={SECTION_TITLE_CLASS}>{t('ownGroup')}</h3>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

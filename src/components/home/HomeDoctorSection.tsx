@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
-import { CARD_CLASS } from '@/lib/ui-constants';
+import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
 import type { WYQDDoctorReport } from '@/core/doctor';
 import { runWYQDDoctor } from '@/core/doctor';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
@@ -31,7 +31,7 @@ export function HomeDoctorSection({
   return (
     <motion.section variants={itemVariants}>
       <div className="mb-3 flex items-center justify-between px-1">
-        <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('doctor')}</h3>
+        <h3 className={SECTION_TITLE_CLASS}>{t('doctor')}</h3>
         <button
           type="button"
           onClick={() => void runDoctor()}

@@ -11,7 +11,7 @@ import type { WYQDMembershipState } from '@/core/membership';
 import { parseScore, todayISO } from '@/lib/format';
 import { useFormatMoney } from '@/lib/use-format';
 import { TravelInsightsPanel } from '@/components/travel/TravelInsightsPanel';
-import { FIELD_CLASS } from '@/lib/ui-constants';
+import { FIELD_CLASS, CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
 
 function getExperienceAmount(object: WYQDObject): number {
   if (object.object_type !== 'one_time_experience') return 0;
@@ -585,7 +585,7 @@ export function ReviewHome({
   return (
     <>
     <section className="space-y-5">
-      <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+      <div className={CARD_CLASS}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('reviewConsole')}</h2>
@@ -638,7 +638,7 @@ export function ReviewHome({
         {rankingBoards.map((board) => (
           <section key={board.key} className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold tracking-tight text-stone-950">
+              <h2 className={SECTION_TITLE_CLASS}>
                 {board.label}{rankingBoardSuffix}
               </h2>
               <span className="text-xs text-stone-400">{t('topRanking').replace('{count}', String(board.entries.length))}</span>

@@ -95,7 +95,9 @@ body {
   .wyqd-web-shell .bg-white {
     background-color: var(--surface-card);
   }
-  .wyqd-web-shell .bg-stone-50 {
+  .wyqd-web-shell .bg-stone-50,
+  .wyqd-web-shell .hover\:bg-stone-50:hover,
+  .wyqd-web-shell .focus\:bg-stone-50:focus {
     background-color: var(--surface-secondary);
   }
   .wyqd-web-shell .bg-stone-100 {
@@ -123,11 +125,15 @@ body {
 
   /* Text */
   .wyqd-web-shell .text-stone-950,
-  .wyqd-web-shell .text-stone-900 {
+  .wyqd-web-shell .text-stone-900,
+  .wyqd-web-shell .hover\:text-stone-950:hover,
+  .wyqd-web-shell .hover\:text-stone-900:hover {
     color: var(--text-primary);
   }
   .wyqd-web-shell .text-stone-700,
-  .wyqd-web-shell .text-stone-600 {
+  .wyqd-web-shell .text-stone-600,
+  .wyqd-web-shell .hover\:text-stone-700:hover,
+  .wyqd-web-shell .hover\:text-stone-600:hover {
     color: var(--text-secondary);
   }
   .wyqd-web-shell .text-stone-500 {

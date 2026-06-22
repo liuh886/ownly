@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 import { useFormatMoney } from '@/lib/use-format';
-import { CARD_CLASS } from '@/lib/ui-constants';
+import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
 import type { HomeMetrics, WYQDObject, PhysicalObject } from '@/domain/types';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { InsightCard } from './InsightCard';
@@ -46,7 +46,7 @@ export function HomeCostSection({
   return (
     <motion.section variants={itemVariants}>
       <div className="mb-3 flex items-center justify-between px-1">
-        <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('costGroup')}</h3>
+        <h3 className={SECTION_TITLE_CLASS}>{t('costGroup')}</h3>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 items-stretch">
         <div className={CARD_CLASS}>
@@ -79,28 +79,28 @@ export function HomeCostSection({
           detail={largestRecurringCost ? t('clickToViewSubscription') : t('enterFixedCostHint')}
           onSelect={largestRecurringCost ? () => onOpenObjects({ typeFilter: 'recurring_cost', statusGroupFilter: 'using' }) : undefined}
         />
-        <div className="flex flex-col rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col rounded-xl border border-dashed border-stone-200 bg-transparent p-4">
           <div className="text-xs font-medium text-stone-500">{t('quickEntry')}</div>
-          <div className="mt-2 flex-1 text-xs text-stone-500">{t('quickEntryDesc')}</div>
+          <div className="mt-1 flex-1 text-xs text-stone-400">{t('quickEntryDesc')}</div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <button
               type="button"
               onClick={() => onOpenObjects({ typeFilter: 'physical' })}
-              className="rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:bg-white"
+              className="rounded-md bg-stone-100 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:bg-stone-200"
             >
               {t('physicalTemplate')}
             </button>
             <button
               type="button"
               onClick={() => onOpenObjects({ typeFilter: 'recurring_cost' })}
-              className="rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:bg-white"
+              className="rounded-md bg-stone-100 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:bg-stone-200"
             >
               {t('fixedCostTemplate')}
             </button>
             <button
               type="button"
               onClick={() => onOpenObjects({ typeFilter: 'one_time_experience' })}
-              className="rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:border-stone-400 hover:bg-white"
+              className="rounded-md bg-stone-100 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:bg-stone-200"
             >
               {t('experienceTemplate')}
             </button>

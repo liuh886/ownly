@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 import { useFormatMoney } from '@/lib/use-format';
-import { CARD_CLASS } from '@/lib/ui-constants';
+import { SECTION_TITLE_CLASS, MUTED_TEXT_CLASS } from '@/lib/ui-constants';
 import type { HomeMetrics, WYQDObject, AccountSnapshot, PhysicalObject, OneTimeExperienceObject } from '@/domain/types';
 
 export function HomeDataScaleSection({
@@ -45,44 +45,46 @@ export function HomeDataScaleSection({
   return (
     <motion.section variants={itemVariants}>
       <div className="mb-3 flex items-center justify-between px-1">
-        <h3 className="text-sm font-semibold tracking-tight text-stone-950">{t('dataScale')}</h3>
-        <span className="text-xs text-stone-500">
+        <h3 className={SECTION_TITLE_CLASS}>{t('dataScale')}</h3>
+        <span className={MUTED_TEXT_CLASS}>
           {t('objectsCount').replace('{count}', String(objects.length))}
         </span>
       </div>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 items-stretch">
-        <div className={CARD_CLASS}>
-          <div className="text-xs font-medium text-stone-500">{t('physical')}</div>
-          <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{physicalCount}</div>
-        </div>
-        <div className={CARD_CLASS}>
-          <div className="text-xs font-medium text-stone-500">{t('fixedCost')}</div>
-          <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{recurringCount}</div>
-        </div>
-        <div className={CARD_CLASS}>
-          <div className="text-xs font-medium text-stone-500">{t('experience')}</div>
-          <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{experienceCount}</div>
-        </div>
-        <div className={CARD_CLASS}>
-          <div className="text-xs font-medium text-stone-500">{t('accountSnapshot')}</div>
-          <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{snapshots.length}</div>
-        </div>
-        <div className={CARD_CLASS}>
-          <div className="text-xs font-medium text-stone-500">{t('totalAcquisitionCost')}</div>
-          <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{formatCompactMoney(totalAcquisitionCost)}</div>
-        </div>
-        <div className={CARD_CLASS}>
-          <div className="text-xs font-medium text-stone-500">{t('totalExperienceCost')}</div>
-          <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{formatCompactMoney(totalExperienceCost)}</div>
-        </div>
-        {fixedCostCoverage !== null ? (
-          <div className={CARD_CLASS}>
-            <div className="text-xs font-medium text-stone-500">{t('fixedCostCoverage')}</div>
-            <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">
-              {fixedCostCoverage} <span className="text-xs font-medium text-stone-400">{t('monthsUnit')}</span>
-            </div>
+      <div className="rounded-xl bg-stone-50/50 p-6">
+        <div className="grid grid-cols-2 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
+          <div>
+            <div className="text-xs font-medium text-stone-500">{t('physical')}</div>
+            <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{physicalCount}</div>
           </div>
-        ) : null}
+          <div>
+            <div className="text-xs font-medium text-stone-500">{t('fixedCost')}</div>
+            <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{recurringCount}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-stone-500">{t('experience')}</div>
+            <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{experienceCount}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-stone-500">{t('accountSnapshot')}</div>
+            <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{snapshots.length}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-stone-500">{t('totalAcquisitionCost')}</div>
+            <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{formatCompactMoney(totalAcquisitionCost)}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-stone-500">{t('totalExperienceCost')}</div>
+            <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{formatCompactMoney(totalExperienceCost)}</div>
+          </div>
+          {fixedCostCoverage !== null ? (
+            <div>
+              <div className="text-xs font-medium text-stone-500">{t('fixedCostCoverage')}</div>
+              <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">
+                {fixedCostCoverage} <span className="text-xs font-medium text-stone-400">{t('monthsUnit')}</span>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </motion.section>
   );
