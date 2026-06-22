@@ -112,11 +112,12 @@ describe('parseQuickLine', () => {
     expect(result.warnings.some(w => w.toLowerCase().includes('legacy') || w.includes('city'))).toBe(true);
   });
 
-  it('parses travel with experience keyword as subtype', () => {
+  it('does NOT auto-set travel subtype for "experience" keyword', () => {
     const result = parseQuickLine('Qingdao / experience / 5000 / 4500 / 2026-06-21 / completed / CN');
     expect(result.ok).toBe(true);
     expect(result.objectType).toBe('one_time_experience');
-    expect(result.fields[QL_FIELD.SUBTYPE]).toBe('travel_worldview');
+    // "experience" keyword alone should NOT set travel_worldview
+    expect(result.fields[QL_FIELD.SUBTYPE]).toBeUndefined();
   });
 
   // ── Backward compat ────────────────────────────────
@@ -152,6 +153,13 @@ describe('parseQuickLine', () => {
     const result = parseQuickLine('MacBook | physical | 15000');
     expect(result.ok).toBe(true);
     expect(result.fields[QL_FIELD.TITLE]).toBe('MacBook');
+  });
+
+  it('supports tab separator', () => {
+    const result = parseQuickLine('MacBook\tphysical\t15000');
+    expect(result.ok).toBe(true);
+    expect(result.fields[QL_FIELD.TITLE]).toBe('MacBook');
+    expect(result.fields[QL_FIELD.AMOUNT]).toBe('15000');
   });
 
   // ── Errors ─────────────────────────────────────────
@@ -274,27 +282,9 @@ describe('applyQuickLine', () => {
     expect(calls.locationCity).toBe('Tokyo'); // fallback
   });
 
-  it('parses travel experience with "experience" keyword as subtype', () => {
+  it('parses recurring cost line (with recurring_cost alias)', () => {
     const { setters, calls } = makeSetters();
-    applyQuickLine('Qingdao / experience / 5000 / 4500 / 2026-06-21 / completed / CN', setters);
-
-    expect(calls.title).toBe('Qingdao');
-    expect(calls.objectType).toBe('one_time_experience');
-    expect(calls.experienceSubtype).toBe('travel_worldview');
-  });
-
-  it('parses travel experience with "体验" keyword as subtype', () => {
-    const { setters, calls } = makeSetters();
-    applyQuickLine('青岛 / 体验 / 5000 / 4500 / 2026-06-21 / completed / CN', setters);
-
-    expect(calls.title).toBe('青岛');
-    expect(calls.objectType).toBe('one_time_experience');
-    expect(calls.experienceSubtype).toBe('travel_worldview');
-  });
-
-  it('parses recurring cost line', () => {
-    const { setters, calls } = makeSetters();
-    applyQuickLine('ChatGPT Plus / fixed / 145 / monthly / 20 / 招行信用卡 / 2026-01-01 / 订阅中 / AI工具', setters);
+    applyQuickLine('ChatGPT Plus / recurring_cost / 145 / monthly / 20 / 招行信用卡 / 2026-01-01 / 订阅中 / AI工具', setters);
 
     expect(calls.title).toBe('ChatGPT Plus');
     expect(calls.objectType).toBe('recurring_cost');

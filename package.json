@@ -12,7 +12,7 @@
     "build:all": "npm run build && npm run build:obsidian",
     "package:obsidian": "npm run build:obsidian && node scripts/package-obsidian-plugin.mjs",
     "validate:obsidian": "npm run check:obsidian && npm run lint:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
-    "validate": "tsc --noEmit && npm run lint && npm run build && npm run validate:obsidian",
+    "validate": "node scripts/gen-git-sha.mjs && tsc --noEmit && npm run lint && npm run build && npm run validate:obsidian",
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
     "smoke:web": "python tests/smoke/web_smoke.py",
     "smoke:site": "python tests/smoke/site_functionality.py",

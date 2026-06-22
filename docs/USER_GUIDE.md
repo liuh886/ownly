@@ -7,7 +7,7 @@ The Home dashboard is your high-level overview. It shows:
 - **Total Net Worth**: The sum of your tracked assets minus liabilities (requires creating Snapshots).
 - **Fixed Monthly Cost**: The sum of all active subscriptions and recurring costs.
 - **Daily Cost**: The amortized daily cost of all active physical items and subscriptions.
-- **Quick Entry**: A low-friction input box. Type a quick line like `Macbook 8000` to quickly draft an object.
+- **Quick Entry**: A low-friction input box. Type a quick line like `MacBook / physical / 8000` to quickly draft an object.
 - **Data Scale**: Diagnostics showing how many items are tracked and your database health.
 
 ## 2. Objects
@@ -19,7 +19,7 @@ The Objects tab is where you manage your physical items, subscriptions, and expe
 
 ### Quick Entry Format Reference
 
-The Quick Entry input accepts a one-line shorthand to fill all object fields at once. Fields are separated by `/`, `／`, `，`, `,`, or `|`. A parse preview shows what was recognized — you can still edit any field before saving.
+The Quick Entry input accepts a one-line shorthand to fill all object fields at once. Fields are separated by `/`, `／`, `，`, `,`, `|`, or Tab. A parse preview shows what was recognized — you can still edit any field before saving.
 
 #### Physical items
 ```
@@ -43,7 +43,9 @@ title / travel / budget / actual_cost / end_date / category / status / country_c
 ```
 Example: `Tokyo trip / travel / 18000 / 16500 / 2026-05-04 / Travel / completed / JP / Tokyo / 35.6762 / 139.6503`
 
-- `travel`, `experience`, `旅行`, `体验` all map to travel experiences.
+- Use `travel` or `旅行` for travel experiences (appears in Travel Insights).
+- Use `experience` or `体验` for generic one-time experiences (dining, events, etc. — not shown in Travel Insights).
+- `fixed` is an alias for `recurring_cost`.
 - Legacy 10-field format (without city) defaults city to the title with a warning.
 
 ## 3. Snapshots (Accounts)

@@ -51,14 +51,14 @@ export function getQuickLineTemplates(t: (key: WYQDTranslationKey) => string, la
     {
       label: t('physicalTemplate'),
       value: isZh
-        ? `Sony A7C / physical / 12000 / 2026-05-01 / 2026-05-17 / ${t('categoryElectronics')} / 使用中`
-        : `Sony A7C / physical / 12000 / 2026-05-01 / 2026-05-17 / ${t('categoryElectronics')} / using`,
+        ? `小米13U / physical / 5843 / 2023-06-07 / 2025-09-20 / 电子产品 / 已退役`
+        : `Sony A7C / physical / 12000 / 2026-05-01 / 2026-05-17 / Camera / using`,
     },
     {
       label: t('fixedCostTemplate'),
       value: isZh
-        ? `ChatGPT Plus / fixed / 145 / monthly / 20 / 招行信用卡 / 2026-05-01 / 订阅中 / ${aiCategory}`
-        : `ChatGPT Plus / fixed / 20 / monthly / 1 / Credit Card / 2026-01-01 / active / ${aiCategory}`,
+        ? `ChatGPT Plus / recurring_cost / 145 / monthly / 20 / 招行信用卡 / 2026-05-01 / 订阅中 / ${aiCategory}`
+        : `ChatGPT Plus / recurring_cost / 20 / monthly / 1 / Credit Card / 2026-01-01 / active / ${aiCategory}`,
     },
     {
       label: t('experienceTemplate'),
@@ -199,7 +199,7 @@ export function isDateLike(value: string): boolean {
 
 function splitParts(value: string): string[] {
   return value
-    .split(/[\/／，,|]/)
+    .split(/[\/／，,|\t]/)
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -296,7 +296,7 @@ function parseExperienceFields(parts: string[]) {
   const fields: Record<string, string> = {};
   const warnings: string[] = [];
 
-  const subtypeKeywords = ['travel', '旅行', '旅行体验', 'travel_worldview', 'experience', '体验'];
+  const subtypeKeywords = ['travel', '旅行', '旅行体验', 'travel_worldview'];
 
   const [name, typeOrSubtype, budget, actual, endedAt, maybeCategory, status] = parts;
 
@@ -431,12 +431,6 @@ export function parseQuickLine(value: string): QuickLineParseResult {
   // Merge type-specific fields and warnings
   Object.assign(fields, typeFields.fields);
   warnings = typeFields.warnings;
-
-  // Common validations on the amount field
-  const amtKey = parsedType === 'one_time_experience' ? QL_FIELD.BUDGET : QL_FIELD.AMOUNT;
-  if (fields[amtKey] && !isNumeric(fields[amtKey])) {
-    warnings.push('Amount is not a valid number');
-  }
 
   return {
     ok: errors.length === 0,

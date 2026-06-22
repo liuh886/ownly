@@ -77,9 +77,7 @@ export function useComposerFormState({
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [experienceSubtype, setExperienceSubtype] = useState(
-    initialObject?.object_type === 'one_time_experience'
-      ? initialObject.experience_subtype || 'travel_worldview'
-      : 'travel_worldview',
+    initialObject?.object_type === 'one_time_experience' ? initialObject.experience_subtype || '' : '',
   );
   const [locationCountry, setLocationCountry] = useState(
     initialObject?.object_type === 'one_time_experience' ? initialObject.location?.country || '' : '',
