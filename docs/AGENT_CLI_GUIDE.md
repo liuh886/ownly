@@ -184,15 +184,51 @@ node scripts/wyqd-cli.mjs --vault /mnt/zhihaol review restore --id <review_id>
 
 Review deletion moves the note to `Ownly/Archive/Reviews`.
 
+## System Commands
+
+Get vault summary statistics:
+
+```bash
+node scripts/wyqd-cli.mjs --vault /mnt/zhihaol summary --json
+```
+
+Run schema validation on all objects (Doctor):
+
+```bash
+node scripts/wyqd-cli.mjs --vault /mnt/zhihaol doctor --json
+```
+
 ## Agent Workflow
 
 1. Parse the user's natural language intent into entity type, action, and fields.
-2. For updates, retirements, and deletions, resolve the entry with `list --json`, `get --id`, or `get --title`.
-3. If more than one entry matches, ask for clarification instead of guessing.
-4. Run the CLI command.
-5. For writes, run a follow-up `get` or `list --json` to verify the result.
-6. For deletes, report that the item is archived and can be restored with the matching `restore` command.
-7. Report the changed entity and key fields back to the user.
+2. Search before updating. Use `object list --json`, `object get --id`, `object search --query` to resolve entities.
+3. **Handling multiple matches**: If more than one entry matches a title or search, ask the user to clarify using the ID or specific details instead of guessing.
+4. **Asking when unsure**: If the user's request lacks required parameters (like amount, title, or date) or seems destructive, explicitly ask the user for confirmation before executing.
+5. **No Direct Frontmatter Edits**: You MUST use the CLI to edit objects. DO NOT bypass the CLI to directly edit Markdown files using file editing tools unless it is a read-only operation or the user explicitly asks for advanced manual maintenance.
+6. **Schema Warnings**: When creating or updating an object, if the CLI outputs a schema warning, you may proceed if the object was successfully written, but you should report the warning to the user. If it outputs an error, it will block the write, and you must correct your CLI arguments.
+7. **Writing Review Summary**: When the user wants to review an item or the vault, generate a thoughtful summary based on their prompt and use `review add --summary "..."`. Focus on the value and usage behavior.
+8. **Agent Operation Logs**: Every time you execute a CLI write command (add, update, delete, restore, cancel, retire), the CLI automatically appends an audit log to `Ownly/Logs/agent_operations.log`. You do not need to do anything manually, but you can read this file if you need to audit past agent actions.
+
+## Object Commands
+
+List objects:
+
+```bash
+node scripts/wyqd-cli.mjs --vault /mnt/zhihaol object list
+node scripts/wyqd-cli.mjs --vault /mnt/zhihaol object list --status idle --json
+```
+
+Search objects by title, category, or notes:
+
+```bash
+node scripts/wyqd-cli.mjs --vault /mnt/zhihaol object search --query "macbook" --json
+```
+
+List objects that need review (e.g. idle physical assets, cancelled recurring costs, completed experiences):
+
+```bash
+node scripts/wyqd-cli.mjs --vault /mnt/zhihaol object review-needed --json
+```
 
 ## Status Mapping
 
