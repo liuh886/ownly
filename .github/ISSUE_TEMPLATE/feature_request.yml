@@ -1,25 +1,30 @@
 name: Feature Request
-description: Suggest a new feature for Ownly
+description: Suggest an idea for Ownly
+title: "[Feature]: "
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make Ownly better! Keep in mind our philosophy: **Own less, Live more, Decide better.** We prioritize features that help with decision-making and reflection over pure financial tracking.
   - type: textarea
     id: problem
     attributes:
-      label: Problem
-      description: What problem does this feature solve?
+      label: Is your feature request related to a problem?
+      description: A clear and concise description of what the problem is. Ex. I'm always frustrated when...
     validations:
       required: true
   - type: textarea
     id: solution
     attributes:
-      label: Proposed solution
-      description: How should it work?
+      label: Describe the solution you'd like
+      description: A clear and concise description of what you want to happen.
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: Any alternative approaches you've thought about.
+      label: Describe alternatives you've considered
+      description: A clear and concise description of any alternative solutions or features you've considered.
     validations:
       required: false

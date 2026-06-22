@@ -1,0 +1,38 @@
+name: Data Corruption / Parsing Issue
+description: File cannot be parsed or data appears lost/corrupted
+title: "[Data]: "
+labels: ["bug", "data"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please use this template if Ownly fails to parse your Markdown files or if data appears corrupted.
+  - type: input
+    id: version
+    attributes:
+      label: Ownly Version
+      description: Which version of Ownly are you using? (e.g. 1.0.0)
+    validations:
+      required: true
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: Symptoms
+      description: Describe what is wrong. Does the UI crash? Is a file ignored?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor_output
+    attributes:
+      label: Doctor Output
+      description: Please run the Doctor tool (see TROUBLESHOOTING.md) and paste the relevant warnings/errors here.
+    validations:
+      required: false
+  - type: textarea
+    id: frontmatter
+    attributes:
+      label: Affected YAML Frontmatter
+      description: Paste the YAML frontmatter of the affected file (please remove sensitive information like exact amounts or notes if you prefer).
+      render: yaml
+    validations:
+      required: true

@@ -1,46 +1,44 @@
 name: Bug Report
-description: Report a bug in Ownly
+description: Create a report to help us improve
+title: "[Bug]: "
 labels: ["bug"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: version
+    attributes:
+      label: Ownly Version
+      description: Which version of Ownly are you using? (e.g. 1.0.0)
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Are you using the Obsidian plugin or Web Runtime? If Obsidian, what version?
+    validations:
+      required: true
   - type: textarea
     id: description
     attributes:
       label: Description
-      description: A clear description of the bug.
+      description: A clear and concise description of what the bug is.
     validations:
       required: true
   - type: textarea
-    id: steps
+    id: reproduction
     attributes:
-      label: Steps to reproduce
+      label: Steps to Reproduce
       description: Steps to reproduce the behavior.
-      placeholder: |
-        1. Go to '...'
-        2. Click on '...'
-        3. See error
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected behavior
-      description: What you expected to happen.
-    validations:
-      required: true
-  - type: input
-    id: version
-    attributes:
-      label: Plugin version
-      placeholder: "0.2.5"
-    validations:
-      required: true
-  - type: dropdown
-    id: runtime
-    attributes:
-      label: Runtime
-      options:
-        - Obsidian Desktop
-        - Obsidian Mobile
-        - Web (ownly.app)
+      label: Expected Behavior
+      description: What did you expect to happen?
     validations:
       required: true

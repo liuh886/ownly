@@ -1,0 +1,23 @@
+name: UI / UX Feedback
+description: Feedback on the user interface, design, or user experience
+title: "[UI/UX]: "
+labels: ["design", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We aim for a quiet, restrained, premium, and object-first design. We'd love your feedback on how to improve the visual texture and interaction details!
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Feedback Description
+      description: What part of the UI feels off? How can we improve the visual hierarchy, token usage, or interaction?
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or Mockups
+      description: Please drag and drop screenshots here if applicable.
+    validations:
+      required: false
