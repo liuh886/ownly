@@ -82,7 +82,7 @@ Usage:
   npm run wyqd -- --vault <vault> object restore --id <id>
   npm run wyqd -- --vault <vault> snapshot add --date YYYY-MM-DD --assets <num> --liabilities <num> [--month-end]
   npm run wyqd -- --vault <vault> snapshot restore --id <id>
-  npm run wyqd -- --vault <vault> review add --summary <text> [--food-rank 1] [--scenery-rank 2] [--experience-rank 3]
+  npm run wyqd -- --vault <vault> review add --summary <text> [--food-score 8] [--scenery-score 8] [--experience-score 8]
   npm run wyqd -- --vault <vault> review restore --id <id>
   npm run wyqd -- --vault <vault> object search --query <text> [--json]
   npm run wyqd -- --vault <vault> object review-needed [--json]

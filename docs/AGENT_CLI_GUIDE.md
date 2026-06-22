@@ -177,7 +177,7 @@ Add a review:
 ```bash
 npm run --silent wyqd -- --vault /mnt/zhihaol review add \
   --summary "本月冲动消费下降，电子产品使用成本可接受" \
-  --regret-score 2
+  --experience-score 8
 ```
 
 List reviews:

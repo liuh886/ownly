@@ -1,18 +1,17 @@
 # Ownly Quality Baseline
 
-**Current Version:** 1.0.4
+**Current Version:** 1.0.5
 
 ## Validation & Test Results
-- **Overall Validation (`npm run validate`):** ❌ Failed (due to Obsidian check below)
-- **Linting (`npm run lint`):** ⚠️ Passed with 6 warnings (treated as pass, does not exit with 1)
+- **Overall Validation (`npm run validate`):** ✅ Passed
+- **Linting (`npm run lint`):** ✅ Passed (Warnings treated as cleanup targets)
 - **Web runtime (`npm run build`):** ✅ Passed
-- **Obsidian package (`npm run validate:obsidian`):** ❌ Failed
-  - *Error details:* `src/obsidian/vaultRepository.ts(109,11): error TS2531: Object is possibly 'null'.`
-- **Unit Tests (`npm run test`):** ⚠️ N/A
-  - *Error details:* unit test suite not established yet; vitest exits because no test files are present.
-- **E2E Smoke Tests (`npm run test:e2e`):** ❌ Failed
-  - `smoke:web` passed.
-  - `smoke:site` failed. It expected the heading "Object console" but did not find it (found "Objects" instead).
+- **Obsidian package (`npm run validate:obsidian`):** ✅ Passed
+- **Unit Tests (`npm run test`):** ✅ Passed (Basic schema checks established)
+- **E2E Smoke Tests (`npm run test:e2e`):** ✅ Passed
+
+**Note on Test Coverage:**
+Known coverage gaps: create/update/archive/restore workflows need deeper automated coverage.
 
 ## Smoke Test Checklist (Coverage Analysis)
 This checklist outlines the critical paths for smoke testing based on the requirements:
@@ -36,14 +35,14 @@ This checklist outlines the critical paths for smoke testing based on the requir
 ## Risk List & Known Issues
 
 ### Blocker
-- `npm run test:e2e` fails due to a missing heading (`Object console`) in the UI, blocking full automated verification of basic site navigation.
-- `npm run validate:obsidian` fails due to a TypeScript strict null check error in `vaultRepository.ts`.
+- None currently.
 
 ### Major
-- Unit test suite not established yet; vitest exits because no test files are present.
+- Core data mutation workflows (create/update/archive/restore) are not yet deeply guarded. UI navigation and build quality are guarded, but these core behaviors lack behavior-level E2E coverage.
+- The CLI (`scripts/wyqd-cli.ts`) still contains `@ts-nocheck`. It needs strict typing (Phase 7A) since it's the core read/write entry point for agents.
 
 ### Minor
-- 6 ESLint warnings across the app (React Hooks exhaustive-deps and unused vars).
+- 2-4 ESLint warnings across the app (React Hooks exhaustive-deps and unused vars).
 
 ### Polish
-- The smoke test suite currently lacks coverage for almost all critical user workflows (creating objects, snapshots, reviews, archive/restore, dark mode).
+- The smoke test suite needs to be expanded into full behavioral E2E tests for the core workflows.
