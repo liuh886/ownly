@@ -9,51 +9,67 @@
 
 [中文文档](README.zh.md)
 
-Ownly is a local-first decision ledger for people who want to buy less impulsively, understand what they actually use, and turn past purchases into better future decisions.
+**Local-first ownership memory for humans and AI agents.**
 
-- **Local-first decision ledger**: Track the full lifecycle from desire to review, not just the amount spent.
-- **Markdown-native personal data**: Every object, snapshot, and review is a plain `.md` file in your Obsidian vault. Private by default with no cloud sync or telemetry.
-- **Built for humans and AI agents**: Edit via the Obsidian UI, or automate your life with the provided Agent CLI.
+Ownly helps you track what you own, what it costs, how you used it, and what you learned — all stored as plain Markdown in your Obsidian vault.
+
+- **Agent-readable ownership memory** — Stable CLI read surface with structured JSON output, designed for AI agents to read and safely interact with your data.
+- **Markdown-native personal data** — Every object, snapshot, and review is a `.md` file with YAML frontmatter. No proprietary formats, no lock-in.
+- **Decision-first object lifecycle** — Seed, observe, decide, use, and review. Each object earns its place through structured reflection.
+- **Human UI + Agent CLI** — Full Obsidian workspace for daily use; CLI for automation, scripting, and agent integration.
 
 ![Ownly Homepage](docs/screenshot-homepage.jpg)
 
+## Built for AI Agents
+
+Agents can read your local ownership data through stable CLI JSON commands. Every command follows a documented JSON contract — no UI scraping needed.
+
+```bash
+# Set your vault path
+export OWNLY_VAULT=/path/to/vault
+
+# Read commands designed for agents
+npm run --silent wyqd -- object list --json
+npm run --silent wyqd -- object get --id <id> --json
+npm run --silent wyqd -- object history --id <id> --json
+npm run --silent wyqd -- object review-needed --json
+npm run --silent wyqd -- recurring list --active --json
+npm run --silent wyqd -- summary --json
+```
+
+See [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) for the full stable API reference, JSON shapes, and error codes. For agent workflow guidance, see [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md).
+
 ## Project Status
 
-Ownly `1.x` is a public Obsidian plugin release; Obsidian is the primary runtime; current validation status is tracked in [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md). The Web runtime is kept for local browser use, development, and shared-core validation.
+Ownly `1.x` is a public Obsidian plugin release; Obsidian is the primary runtime. Current validation status is tracked in [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md). The Web runtime is kept for local browser use, development, and shared-core validation.
 
 | Area | Status |
 |---|---|
-| Obsidian plugin | Primary runtime; see quality baseline |
+| Obsidian plugin | Primary runtime |
 | Web runtime | Compatible local runtime |
+| Agent CLI | Stable read surface with JSON contract |
 | Data format | Plain Markdown + YAML frontmatter |
-| Storage model | Local Vault / local folder |
-| Network model | No personal-data network calls |
+| Storage model | Local vault / local folder |
 
 ## Why Ownly?
 
 Most tracking tools focus on **how much you spend**. Ownly focuses on **whether you should**.
 
-It's not a budgeting app. It's not a wishlist. It's a structured system for making and reviewing consumption decisions:
-
 - **Seed** a desire → **Observe** it over time → **Decide** to buy or pass → **Use** → **Review** after retirement
 - Every object has a lifecycle. Every experience gets a review. The data informs your next decision.
-- Desires are worth observing before they become purchases.
-- Objects only become meaningful when you can see their use, cost, and exit story.
-- Reviews turn old consumption into training data for your next decision.
-
-Your data lives as plain Markdown in your Obsidian Vault. You can edit, version-control, or move files freely. Ownly reads and writes frontmatter — it never locks, encrypts, or deletes your data.
+- Your data lives as plain Markdown in your Obsidian vault — you can edit, version-control, or move files freely.
 
 ## Quick Start
 
 1. **Install** — Open Obsidian → Settings → Community plugins → Browse → search "Ownly" → Install & Enable.
 2. **Open** — Click the Ownly icon in the left ribbon or run `Open Ownly workspace` from the command palette.
-3. **Explore** — Demo data is auto-seeded on first connect. You'll see sample objects, snapshots, and reviews ready to explore.
+3. **Explore** — Demo data is auto-seeded on first connect with sample objects, snapshots, and reviews.
 
 ## Features
 
-### Object Tracking
+### Ownership Ledger
 
-Track three types of objects with full lifecycle management:
+Track three object types with full lifecycle management:
 
 | Type | Lifecycle |
 |---|---|
@@ -61,168 +77,95 @@ Track three types of objects with full lifecycle management:
 | **Subscriptions** | Active → Paused → Cancelled |
 | **Experiences** | Planned → In Progress → Completed → Reviewed |
 
-### Financial Tracking
+- Quick entry templates and paste-line parsing for fast capture.
+- Cost tracking: purchase price, billing amount, budget vs actual, daily cost, annualized cost.
+- Payment account aggregation for fixed costs.
 
-- **Net worth snapshots** — Record asset and liability balances over time with trend charts.
-- **Cost analysis** — Daily cost, monthly fixed cost, annual subscription cost, and acquisition cost breakdowns.
-- **Payment account aggregation** — See fixed cost pressure by payment account.
+### Agent CLI Read Surface
 
-### Reviews & Rankings
+- Stable JSON output for all read commands: `object list`, `object get`, `object search`, `object history`, `review-needed`, `recurring list`, `summary`.
+- Type-specific fields exposed automatically: cost fields for physical items, billing fields for subscriptions, location data for travel experiences.
+- Enriched agent fields: `has_review`, `needs_review`, `review_ref`, source file path.
+- JSON error format with documented error codes (`NOT_FOUND`, `MISSING_OPTION`, `INVALID_INPUT`, `VAULT_NOT_FOUND`).
+- See [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) for the full specification.
 
-- Write exit records for physical items and experience reviews.
+### Review Memory
+
+- Write exit records for physical items and reviews for experiences.
 - Score food, scenery, and experience on a 1-10 scale.
-- Rank and compare experiences across categories.
+- Rank and compare across categories.
+- Reviews link back to objects via bidirectional `review_ref` / `target_id`.
 
-### Travel Insights
+### Local Markdown Data
 
-- World map with visited countries and cities.
-- Travel timeline and statistics.
-- Travel-specific experience reviews.
+- All data stored as plain `.md` files under `Ownly/Objects`, `Ownly/Reviews`, `Ownly/Snapshots`.
+- Each file is self-contained YAML frontmatter + Markdown body.
+- No database, no cloud sync, no telemetry.
 
 ### Data Health
 
-- **Doctor diagnostics** — Local data quality checks: duplicate IDs, schema validation, negative costs, missing references.
-- **Archive & restore** — Soft-delete with full recovery. Your Markdown data is never lost.
+- **Doctor diagnostics** — Local quality checks: duplicate IDs, schema validation, negative costs, dangling references, review ref integrity.
+- **Repair tool** — Preview and fix `review_ref` mismatches with file-level confirmations.
+- **Archive & restore** — Soft-delete with full recovery.
 
-### More
+### Supporting UI
 
-- **Bilingual UI** — English and Chinese, with auto-detection.
-- **Quick entry** — Templates for physical items, subscriptions, and experiences. Paste-line parsing for fast input.
 - **Dashboard** — Ownership overview, cost pressure, quick entry, review actions, and data scale.
+- **Travel Insights** — World map with visited countries, travel timeline, statistics.
+- **Ranking boards** — Top experiences by food, scenery, and experience scores.
+- **Bilingual UI** — English and Chinese, auto-detected.
 
 ## Installation
 
 ### Obsidian Plugin (Recommended)
 
-Install directly from the Obsidian Community Plugins directory:
+Install from the Obsidian Community Plugins directory:
 
 👉 **[Install Ownly](https://obsidian.md/plugins?id=ownly)**
 
-### Web Runtime (Local Browser / Developers)
+### Web Runtime
 
-Ownly can also run in a browser and connect to a local folder through the File System Access API. This is useful for trying the shared interface outside Obsidian, local development, and static deployment experiments.
-
-The Obsidian plugin remains the primary runtime. Web support is compatible with the shared Markdown model, but browser file access depends on the user's browser and permissions.
+Run locally in a browser via File System Access API:
 
 ```bash
-# Clone and install
 git clone https://github.com/liuh886/ownly.git
 cd ownly
 npm ci
-
-# Development server at localhost:3000
-npm run dev
-
-# Or build and serve static export
-npm run build
-npx pm2 start ecosystem.config.cjs   # serves out/ on port 3000
+npm run dev       # localhost:3000
 ```
 
 ## Data Storage
 
-All data is stored as Markdown files in your Vault under the `Ownly/` directory:
-
 ```text
 Ownly/
   Objects/         # Physical items, subscriptions, experiences
-  Accounts/        # Financial accounts
   Snapshots/       # Net worth snapshots
   Reviews/         # Exit records, experience reviews
   Archive/         # Soft-deleted items (recoverable)
 ```
 
-Each entity is a standalone `.md` file with YAML frontmatter. You can edit, version-control, or move these files freely.
-
-## Network Calls
-
-Ownly does not make personal-data network calls from the app runtime. All data stays in your Vault. No telemetry, no analytics, no tracking, no license verification.
-
 ## Sponsorship
 
-Ownly is built on a sponsorship model. It does not perform paid license verification or make network calls for activation. The app is fully functional with generous limits out-of-the-box (e.g. 200 objects, 100 reviews), and all users always retain full access to their Markdown data — Ownly never locks, encrypts, deletes, or blocks export.
-
-The current version (1.x) allows you to unlock unlimited usage and extra features (like travel insights) with a free activation code shown directly in the app.
-
-## FAQ
-
-**Does Ownly work on mobile?**
-The Obsidian plugin is marked as desktop-only (`isDesktopOnly: true`) because it has not been tested on mobile. It may work, but mobile support is not guaranteed.
-
-**What happens to my data if I uninstall Ownly?**
-Nothing. Your data is plain Markdown files in your Vault. Uninstalling the plugin does not delete your files. You can read, edit, and move them with any text editor.
-
-**Can I use Ownly without Obsidian?**
-Yes. The Web runtime runs in supported desktop browsers and connects to a local folder. See the [Web Runtime installation](#web-runtime-local-browser--developers) section.
-
-## Known Limitations
-
-- The Obsidian plugin is desktop-only.
-- Browser folder access depends on File System Access API support.
-- The Web runtime focuses on local compatibility and shared-core validation; Obsidian is the primary supported experience.
-- Account snapshots work in Web, but full standalone account entity management is more complete in the Obsidian repository adapter.
-
-## Screenshots
-
-*(More screenshots coming soon)*
-
-## Support
-
-If Ownly has been useful to you, consider supporting the project:
-
-- [Ko-fi](https://ko-fi.com/F1F7WYJ6B) — One-time donation
-- [Gumroad](https://liuh886.gumroad.com/l/ownly) — Optional project sponsorship
+Ownly is free with generous limits (200 objects, 100 reviews). A free activation code shown in the app unlocks unlimited usage and Pro features. No paid license verification, no network calls for activation.
 
 ## Documentation
 
-- [User Guide](docs/USER_GUIDE.md) — How to use the Home, Objects, Snapshots, and Reviews features.
-- [Data Model](docs/DATA_MODEL.md) — Explanation of the Markdown frontmatter schemas and storage structure.
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — How to fix corrupted data and use the Doctor tool.
-- [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md) — How to programmatically manage your Ownly data using AI agents.
-- [Release Checklist](docs/RELEASE_CHECKLIST.md) — Release instructions.
-- [Obsidian Reviewer Compliance](docs/OBSIDIAN_REVIEWER_CHECKLIST.md) — Pre-PR checklist for Obsidian plugin submission.
+- [User Guide](docs/USER_GUIDE.md) — Core features and workflows.
+- [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) — Stable JSON API for AI agents.
+- [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md) — Agent workflow patterns and write commands.
+- [Data Model](docs/DATA_MODEL.md) — Markdown frontmatter schemas.
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — Doctor tool and data repair.
+- [Release Checklist](docs/RELEASE_CHECKLIST.md) — Release process.
+- [Obsidian Reviewer Checklist](docs/OBSIDIAN_REVIEWER_CHECKLIST.md) — Plugin submission checklist.
 
-## Developer Documentation
-
-### Validation
-
-```bash
-npm run validate           # Full gate: tsc + lint + web build + obsidian validation
-npm run validate:obsidian  # Obsidian plugin only
-npm run smoke:install      # One-time setup for Python Playwright browser smoke tests
-npm run smoke:web          # Starts Next locally and smoke-tests the Web runtime
-```
-
-### Ownly CLI
-
-The CLI can be accessed via the legacy alias `wyqd`:
+## Developer Quick Reference
 
 ```bash
-npm run wyqd -- --vault /path/to/vault object list
+npm run validate           # Full gate: tsc + lint + build + obsidian validation
+npm run test               # Unit tests (vitest)
+npm run wyqd -- --vault <path> object list --json
 ```
-
-See [AGENT_CLI_GUIDE.md](docs/AGENT_CLI_GUIDE.md) for full documentation.
-
-### Sample Vault
-
-A repeatable demo fixture is at `samples/wyqd-vault/` (using historical internal naming). Use it for QA and testing.
-
-### Platform-Specific Dependency Reset
-
-`esbuild` ships native binaries. If cross-platform builds fail:
-
-```bash
-npm run deps:reset
-npm run package:obsidian
-```
-
-## Versioning
-
-Ownly follows [Semantic Versioning](https://semver.org/). See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
-
-## Privacy
-
-See [PRIVACY.md](PRIVACY.md). All data stays local. No telemetry. No cloud sync.
+MIT. See [LICENSE](LICENSE). All data stays local. No telemetry. No cloud sync.
