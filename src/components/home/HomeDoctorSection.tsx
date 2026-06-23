@@ -125,7 +125,7 @@ export function HomeDoctorSection({
           {repairPlan && totalRepairs > 0 ? (
             <div className="mt-3 rounded-md bg-amber-50 px-3 py-3 text-xs space-y-1.5">
               <div className="font-medium text-amber-800">
-                {t('doctorRepair')}: {totalRepairs} {t('warnings').toLowerCase()}
+                {t('doctorRepairChanges').replace('{count}', String(totalRepairs))}
               </div>
               {repairPlan.mismatches.map((item) => (
                 <div key={item.objectId} className="text-amber-700">
