@@ -89,19 +89,18 @@ Environment:
 
 let globalOptions = {};
 
-function fail(message, code = 1) {
+function fail(message, errorCode = 'INVALID_INPUT', exitCode = 1) {
   if (globalOptions.json) {
-    const err = { error: message, code: code === 1 ? 'ERROR' : 'NOT_FOUND' };
-    console.error(JSON.stringify(err));
+    console.error(JSON.stringify({ error: message, code: errorCode }));
   } else {
     console.error(message);
   }
-  process.exit(code);
+  process.exit(exitCode);
 }
 
 function requireOption(options, key) {
   if (options[key] === undefined || options[key] === '') {
-    fail(`Missing required option --${key.replaceAll('_', '-')}`);
+    fail(`Missing required option --${key.replaceAll('_', '-')}`, 'MISSING_OPTION');
   }
   return options[key];
 }
@@ -109,13 +108,13 @@ function requireOption(options, key) {
 function numberOption(options, key, fallback = undefined) {
   if (options[key] === undefined || options[key] === '') return fallback;
   const value = Number(options[key]);
-  if (!Number.isFinite(value)) fail(`Option --${key.replaceAll('_', '-')} must be a number.`);
+  if (!Number.isFinite(value)) fail(`Option --${key.replaceAll('_', '-')} must be a number.`, 'INVALID_INPUT');
   return value;
 }
 
 function getVaultRoot(options) {
   const root = options.vault || process.env.OWNLY_VAULT || process.env.WYQD_VAULT;
-  if (!root) fail('Missing vault root. Pass --vault <path> or set OWNLY_VAULT.');
+  if (!root) fail('Missing vault root. Pass --vault <path> or set OWNLY_VAULT.', 'VAULT_NOT_FOUND');
   return resolve(String(root));
 }
 
@@ -146,7 +145,7 @@ function writeAgentLog(vaultRoot, action, entityId, beforeSummary, afterSummary)
 
 function parseMarkdown(content, fileName) {
   const match = content.match(FRONTMATTER_PATTERN);
-  if (!match) fail(`Invalid Markdown frontmatter: ${fileName}`);
+  if (!match) fail(`Invalid Markdown frontmatter: ${fileName}`, 'INVALID_INPUT');
 
   return {
     frontmatter: YAML.parse(match[1] || '{}') || {},
@@ -189,15 +188,15 @@ function findEntry(vaultRoot, entityType, options) {
   const id = options.id ? String(options.id) : null;
   const title = options.title ? String(options.title) : null;
 
-  if (!id && !title) fail('Pass --id or --title to select an entry.');
+  if (!id && !title) fail('Pass --id or --title to select an entry.', 'MISSING_OPTION');
 
   const matches = entries.filter((entry) => {
     if (id) return entry.frontmatter.id === id;
     return entry.frontmatter.title === title;
   });
 
-  if (matches.length === 0) fail(`No ${entityType} matched.`);
-  if (matches.length > 1) fail(`Multiple ${entityType} entries matched. Use --id.`);
+  if (matches.length === 0) fail(`No ${entityType} matched.`, 'NOT_FOUND');
+  if (matches.length > 1) fail(`Multiple ${entityType} entries matched. Use --id.`, 'NOT_FOUND');
   return matches[0];
 }
 
@@ -208,7 +207,7 @@ function findArchivedEntry(vaultRoot, entityType, options) {
   const title = options.title ? String(options.title) : null;
 
   if (!archiveFile && !id && !title) {
-    fail('Pass --archive-file, --id or --title to select an archived entry.');
+    fail('Pass --archive-file, --id or --title to select an archived entry.', 'MISSING_OPTION');
   }
 
   const matches = entries.filter((entry) => {
@@ -217,8 +216,8 @@ function findArchivedEntry(vaultRoot, entityType, options) {
     return entry.frontmatter.title === title;
   });
 
-  if (matches.length === 0) fail(`No archived ${entityType} matched.`);
-  if (matches.length > 1) fail(`Multiple archived ${entityType} entries matched. Use --archive-file.`);
+  if (matches.length === 0) fail(`No archived ${entityType} matched.`, 'NOT_FOUND');
+  if (matches.length > 1) fail(`Multiple archived ${entityType} entries matched. Use --archive-file.`, 'NOT_FOUND');
   return matches[0];
 }
 
@@ -236,7 +235,7 @@ function writeEntry(directory, fileName, frontmatter, body, validateStrict = tru
   }
 
   if (!result.valid && validateStrict) {
-    fail('Entity validation failed. Aborting write.');
+    fail('Entity validation failed. Aborting write.', 'INVALID_INPUT');
   }
 
   writeFileSync(join(directory, fileName), serializeMarkdown(frontmatter, body), 'utf8');
@@ -498,7 +497,7 @@ function daysBetween(fromDate, toDate) {
 function createObject(options) {
   const title = requireOption(options, 'title');
   const amount = numberOption(options, 'amount');
-  if (amount === undefined) fail('Missing required option --amount');
+  if (amount === undefined) fail('Missing required option --amount', 'MISSING_OPTION');
 
   const objectType = options.object_type || 'physical';
   const date = todayISO();
@@ -534,7 +533,7 @@ function createObject(options) {
   if (objectType === 'recurring_cost') {
     const billingDay = numberOption(options, 'billing_day');
     if (billingDay !== undefined && (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31)) {
-      fail('Option --billing-day must be an integer from 1 to 31.');
+      fail('Option --billing-day must be an integer from 1 to 31.', 'INVALID_INPUT');
     }
 
     return {
@@ -670,7 +669,7 @@ function objectCommand(vaultRoot, command, options) {
 
   if (command === 'search') {
     const query = (options.query || '').toLowerCase();
-    if (!query) fail('Missing --query');
+    if (!query) fail('Missing --query', 'MISSING_OPTION');
     const entries = listEntries(vaultRoot, 'object');
     const matches = entries.filter((e) => {
       const { title, category } = e.frontmatter;
@@ -770,7 +769,7 @@ function objectCommand(vaultRoot, command, options) {
       const billingDay = numberOption(options, 'billing_day');
       if (billingDay !== undefined) {
         if (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31) {
-          fail('Option --billing-day must be an integer from 1 to 31.');
+          fail('Option --billing-day must be an integer from 1 to 31.', 'INVALID_INPUT');
         }
         next.billing_day = billingDay;
       }
@@ -810,7 +809,7 @@ function objectCommand(vaultRoot, command, options) {
   if (command === 'cancel') {
     const entry = findEntry(vaultRoot, 'object', options);
     if (entry.frontmatter.object_type !== 'recurring_cost') {
-      fail('object cancel only supports recurring_cost objects.');
+      fail('object cancel only supports recurring_cost objects.', 'INVALID_INPUT');
     }
 
     const next = {
@@ -828,7 +827,7 @@ function objectCommand(vaultRoot, command, options) {
 
   if (command === 'delete') {
     const entry = findEntry(vaultRoot, 'object', options);
-    if (!options.yes) fail('Refusing to delete without --yes.');
+    if (!options.yes) fail('Refusing to delete without --yes.', 'MISSING_OPTION');
     const archiveFileName = archiveEntry(vaultRoot, 'object', entry);
     writeAgentLog(vaultRoot, 'object_delete', entry.frontmatter.id, entry.frontmatter, null);
     console.log(
@@ -849,7 +848,7 @@ function objectCommand(vaultRoot, command, options) {
     return;
   }
 
-  fail(`Unknown object command: ${command}`);
+  fail(`Unknown object command: ${command}`, 'INVALID_INPUT');
 }
 
 function snapshotCommand(vaultRoot, command, options) {
@@ -870,7 +869,7 @@ function snapshotCommand(vaultRoot, command, options) {
     const snapshotAt = options.date || todayISO();
     const assets = numberOption(options, 'assets');
     const liabilities = numberOption(options, 'liabilities', 0);
-    if (assets === undefined) fail('Missing required option --assets');
+    if (assets === undefined) fail('Missing required option --assets', 'MISSING_OPTION');
 
     const snapshot = {
       schema_version: '0.1',
@@ -936,7 +935,7 @@ function snapshotCommand(vaultRoot, command, options) {
 
   if (command === 'delete') {
     const entry = findEntry(vaultRoot, 'snapshot', options);
-    if (!options.yes) fail('Refusing to delete without --yes.');
+    if (!options.yes) fail('Refusing to delete without --yes.', 'MISSING_OPTION');
     const archiveFileName = archiveEntry(vaultRoot, 'snapshot', entry);
     writeAgentLog(vaultRoot, 'snapshot_delete', entry.frontmatter.id, entry.frontmatter, null);
     console.log(
@@ -957,7 +956,7 @@ function snapshotCommand(vaultRoot, command, options) {
     return;
   }
 
-  fail(`Unknown snapshot command: ${command}`);
+  fail(`Unknown snapshot command: ${command}`, 'INVALID_INPUT');
 }
 
 function reviewCommand(vaultRoot, command, options) {
@@ -1027,7 +1026,7 @@ function reviewCommand(vaultRoot, command, options) {
 
   if (command === 'delete') {
     const entry = findEntry(vaultRoot, 'review', options);
-    if (!options.yes) fail('Refusing to delete without --yes.');
+    if (!options.yes) fail('Refusing to delete without --yes.', 'MISSING_OPTION');
     const archiveFileName = archiveEntry(vaultRoot, 'review', entry);
     writeAgentLog(vaultRoot, 'review_delete', entry.frontmatter.id, entry.frontmatter, null);
     console.log(
@@ -1048,7 +1047,7 @@ function reviewCommand(vaultRoot, command, options) {
     return;
   }
 
-  fail(`Unknown review command: ${command}`);
+  fail(`Unknown review command: ${command}`, 'INVALID_INPUT');
 }
 
 function doctorCommand(vaultRoot, options) {
@@ -1148,7 +1147,7 @@ function recurringCommand(vaultRoot, command, options) {
     }
     return;
   }
-  fail(`Unknown recurring command: ${command}`);
+  fail(`Unknown recurring command: ${command}`, 'INVALID_INPUT');
 }
 
 function main() {
@@ -1168,7 +1167,7 @@ function main() {
   else if (resource === 'snapshot') snapshotCommand(vaultRoot, command, options);
   else if (resource === 'review') reviewCommand(vaultRoot, command, options);
   else if (resource === 'recurring') recurringCommand(vaultRoot, command, options);
-  else fail(`Unknown resource: ${resource}`);
+  else fail(`Unknown resource: ${resource}`, 'INVALID_INPUT');
 }
 
 main();

@@ -15,6 +15,16 @@ function wyqdJson(args: string): unknown {
   return JSON.parse(wyqd(args));
 }
 
+function wyqdStderr(args: string): string {
+  try {
+    execSync(`${CLI} ${args}`, { encoding: 'utf-8', cwd: process.cwd(), stdio: 'pipe' });
+    return '';
+  } catch (e: unknown) {
+    const err = e as { stderr?: string };
+    return (err.stderr || '').trim();
+  }
+}
+
 beforeAll(() => {
   vaultDir = join(tmpdir(), `ownly-test-${Date.now()}`);
   mkdirSync(join(vaultDir, 'Ownly', 'Objects'), { recursive: true });
@@ -267,5 +277,23 @@ describe('recurring list --active --json', () => {
       expect(obj.object_type).toBe('recurring_cost');
       expect(obj.status).toBe('active');
     }
+  });
+});
+
+describe('JSON error output', () => {
+  it('returns JSON with code NOT_FOUND for missing object', () => {
+    const stderr = wyqdStderr(`object get --id nonexistent --json ${vaultArg()}`);
+    expect(stderr).toBeTruthy();
+    const err = JSON.parse(stderr);
+    expect(err.error).toBeDefined();
+    expect(err.code).toBe('NOT_FOUND');
+  });
+
+  it('returns JSON with code MISSING_OPTION for search without --query', () => {
+    const stderr = wyqdStderr(`object search --json ${vaultArg()}`);
+    expect(stderr).toBeTruthy();
+    const err = JSON.parse(stderr);
+    expect(err.error).toBeDefined();
+    expect(err.code).toBe('MISSING_OPTION');
   });
 });
