@@ -401,3 +401,64 @@ export async function runWYQDDoctor(
 
   return createReport(findings, checkedAt);
 }
+
+// ── Auto-repair ─────────────────────────────────────────
+
+export interface WYQDDoctorRepairAdapter {
+  listObjects(): Promise<readonly WYQDStoredEntity<WYQDObject>[]>;
+  listReviews(): Promise<readonly WYQDStoredEntity<ReviewEntry>[]>;
+  updateObject(fileName: string, object: WYQDObject, body?: string): Promise<void>;
+}
+
+export interface WYQDDoctorRepairResult {
+  fixedMismatches: number;
+  clearedDangling: number;
+}
+
+/**
+ * Auto-repair review_ref integrity:
+ * 1. For each review that targets an object whose review_ref differs,
+ *    update the object's review_ref to point back.
+ * 2. For each object whose review_ref points to a non-existent review,
+ *    clear the review_ref.
+ */
+export async function autoRepairReviewRefs(
+  adapter: WYQDDoctorRepairAdapter,
+): Promise<WYQDDoctorRepairResult> {
+  const [objects, reviews] = await Promise.all([
+    adapter.listObjects(),
+    adapter.listReviews(),
+  ]);
+
+  const reviewIds = new Set(reviews.map((r) => r.entity.id));
+  const objectMap = new Map(objects.map((o) => [o.entity.id, o]));
+  let fixedMismatches = 0;
+  let clearedDangling = 0;
+
+  // 1. Fix mismatches: review.target_id → object, but object.review_ref !== review.id
+  for (const stored of reviews) {
+    const targetId = stored.entity.target_id;
+    if (!targetId) continue;
+    const obj = objectMap.get(targetId);
+    if (obj && obj.entity.review_ref !== stored.entity.id) {
+      const fixed = { ...obj.entity, review_ref: stored.entity.id, updated_at: new Date().toISOString() };
+      await adapter.updateObject(obj.fileName, fixed, obj.body);
+      // Keep the map updated so subsequent repairs see the fix
+      objectMap.set(targetId, { ...obj, entity: fixed });
+      fixedMismatches++;
+    }
+  }
+
+  // 2. Clear dangling refs: object.review_ref → review that doesn't exist
+  for (const stored of objects) {
+    const ref = stored.entity.review_ref;
+    if (ref && !reviewIds.has(ref)) {
+      const { review_ref: _, ...rest } = stored.entity as WYQDObject & { review_ref?: string | null };
+      const fixed = { ...rest, review_ref: null, updated_at: new Date().toISOString() } as WYQDObject;
+      await adapter.updateObject(stored.fileName, fixed, stored.body);
+      clearedDangling++;
+    }
+  }
+
+  return { fixedMismatches, clearedDangling };
+}

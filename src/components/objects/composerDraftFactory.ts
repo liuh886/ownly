@@ -164,7 +164,8 @@ export function createObjectDraft({
     ...base,
     object_type: 'one_time_experience',
     status: experienceStatus || 'planned',
-    experience_subtype: experienceSubtype || undefined,
+    experience_subtype: experienceSubtype
+      || (location?.latitude != null || location?.longitude != null ? 'travel_worldview' : undefined),
     budget_total: amount,
     actual_total: actualAmount,
     ended_at: endedAt || undefined,
@@ -264,7 +265,10 @@ export function updateObjectDraft(
     updated_at: updatedAt,
     category: values.category || undefined,
     status: values.experienceStatus || existing.status,
-    experience_subtype: values.experienceSubtype || (existing as { experience_subtype?: string }).experience_subtype,
+    experience_subtype: values.experienceSubtype
+      || (values.location?.latitude != null || values.location?.longitude != null
+        ? 'travel_worldview'
+        : (existing as { experience_subtype?: string }).experience_subtype),
     budget_total: values.amount,
     actual_total: values.actualAmount,
     ended_at: values.endedAt || existing.ended_at,
