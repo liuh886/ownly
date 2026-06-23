@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.6 (2026-06-23)
+
+- Agent CLI Write Surface: added write commands (object add/update/retire/cancel/delete, review link, batch-review-needed).
+- Extended AGENT_CLI_CONTRACT with write chapter and JSON error codes.
+- Hardened write surface semantics and cleaned up unused variables.
+
 ## 1.0.5 (2026-06-22)
 
 - Minor CLI printHelp fix for review add parameters.
