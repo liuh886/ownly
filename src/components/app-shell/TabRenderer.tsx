@@ -94,6 +94,15 @@ export function TabRenderer({
   if (activeTab === 'objects') {
     return (
       <div className="space-y-5">
+        <ObjectComposer
+          disabled={!isConnected}
+          submitLabel={t('saveToOwnly')}
+          onSubmit={actions.createObject}
+          autoFocus={autoFocusComposer}
+          onAutoFocusHandled={() => setAutoFocusComposer(false)}
+          focusTarget={composerFocusTarget}
+          quickEntryRequest={quickEntryRequest ?? undefined}
+        />
         <ObjectList
           key={objectListFocus?.token || 'objects-default'}
           disabled={!isConnected}
@@ -103,15 +112,6 @@ export function TabRenderer({
           onUpdate={actions.updateObject}
           onDelete={actions.archiveObject}
           onCreateObjectReview={actions.createObjectReview}
-        />
-        <ObjectComposer
-          disabled={!isConnected}
-          submitLabel={t('saveToOwnly')}
-          onSubmit={actions.createObject}
-          autoFocus={autoFocusComposer}
-          onAutoFocusHandled={() => setAutoFocusComposer(false)}
-          focusTarget={composerFocusTarget}
-          quickEntryRequest={quickEntryRequest ?? undefined}
         />
         <ArchivePanel
           disabled={!isConnected}
