@@ -159,6 +159,27 @@ function serializeMarkdown(frontmatter, body = '') {
   return `---\n${yaml}\n---\n${normalizedBody}`;
 }
 
+function readEntry(directory, fileName) {
+  const filePath = join(directory, fileName);
+  const content = readFileSync(filePath, 'utf-8');
+  const parsed = parseMarkdown(content, fileName);
+  return { ...parsed, fileName, path: filePath };
+}
+
+function writeObjectResult(vaultRoot, directory, fileName) {
+  const reloaded = readEntry(directory, fileName);
+  const reviews = listEntries(vaultRoot, 'review');
+  return formatAgentRow(reloaded, reviews);
+}
+
+function reviewRow(entry) {
+  return {
+    id: entry.frontmatter.id, title: entry.frontmatter.title,
+    review_type: entry.frontmatter.review_type,
+    target_id: entry.frontmatter.target_id, fileName: entry.fileName,
+  };
+}
+
 function listEntries(vaultRoot, entityType) {
   const directory = ensureDirectory(vaultRoot, entityType);
   return readdirSync(directory)
@@ -715,12 +736,75 @@ function objectCommand(vaultRoot, command, options) {
     return;
   }
 
+  if (command === 'link') {
+    const objectId = requireOption(options, 'object_id');
+    const reviewId = requireOption(options, 'review_id');
+    const objEntry = findEntry(vaultRoot, 'object', { id: objectId });
+    const reviewEntry = findEntry(vaultRoot, 'review', { id: reviewId });
+
+    // Conflict detection
+    if (reviewEntry.frontmatter.target_id && reviewEntry.frontmatter.target_id !== objectId) {
+      if (!options.force) fail(`Review ${reviewId} already targets ${reviewEntry.frontmatter.target_id}. Use --force to override.`, 'INVALID_INPUT');
+    }
+    if (objEntry.frontmatter.review_ref && objEntry.frontmatter.review_ref !== reviewId) {
+      if (!options.force) fail(`Object ${objectId} already has review_ref ${objEntry.frontmatter.review_ref}. Use --force to override.`, 'INVALID_INPUT');
+    }
+
+    const nextObj = { ...objEntry.frontmatter, review_ref: reviewId, updated_at: todayISO() };
+    const nextReview = { ...reviewEntry.frontmatter, target_id: objectId, target: objEntry.frontmatter.title, target_type: objEntry.frontmatter.object_type, updated_at: todayISO() };
+
+    writeEntry(join(vaultRoot, DIRECTORIES.object), objEntry.fileName, nextObj, objEntry.body);
+    writeEntry(join(vaultRoot, DIRECTORIES.review), reviewEntry.fileName, nextReview, reviewEntry.body);
+    writeAgentLog(vaultRoot, 'object_link', objectId, objEntry.frontmatter, nextObj);
+
+    const objDir = join(vaultRoot, DIRECTORIES.object);
+    const revDir = join(vaultRoot, DIRECTORIES.review);
+    console.log(JSON.stringify({
+      linked: true,
+      object: writeObjectResult(vaultRoot, objDir, objEntry.fileName),
+      review: reviewRow(readEntry(revDir, reviewEntry.fileName)),
+    }, null, 2));
+    return;
+  }
+
+  if (command === 'batch-review-needed') {
+    const reviews = listEntries(vaultRoot, 'review');
+    const objects = listEntries(vaultRoot, 'object');
+    const objDir = join(vaultRoot, DIRECTORIES.object);
+    const items = [];
+    let processed = 0;
+    let skipped = 0;
+
+    for (const e of objects) {
+      const row = formatAgentRow(e, reviews);
+      if (!row.needs_review) continue;
+
+      // Do NOT overwrite lifecycle status — only set review_ref if review exists
+      const next = { ...e.frontmatter, updated_at: todayISO() };
+      const existingReview = reviews.find((r) => r.frontmatter.target_id === e.frontmatter.id);
+      if (existingReview) {
+        next.review_ref = existingReview.frontmatter.id;
+      }
+      writeEntry(objDir, e.fileName, next, e.body);
+      items.push(writeObjectResult(vaultRoot, objDir, e.fileName));
+      processed++;
+    }
+
+    skipped = objects.length - processed;
+    console.log(JSON.stringify({ processed, updated: items, skipped, items }, null, 2));
+    return;
+  }
+
   if (command === 'add') {
     const object = createObject(options);
     const fileName = `${object.created_at}--${slugify(object.title)}.md`;
     writeEntry(directory, fileName, object, options.body || '## Notes\n');
     writeAgentLog(vaultRoot, 'object_add', object.id, null, object);
-    console.log(JSON.stringify({ fileName, id: object.id, title: object.title }, null, 2));
+    if (options.json) {
+      console.log(JSON.stringify(writeObjectResult(vaultRoot, directory, fileName), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName, id: object.id, title: object.title }, null, 2));
+    }
     return;
   }
 
@@ -788,7 +872,11 @@ function objectCommand(vaultRoot, command, options) {
 
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_update', next.id, entry.frontmatter, next);
-    console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, title: next.title }, null, 2));
+    if (options.json) {
+      console.log(JSON.stringify(writeObjectResult(vaultRoot, directory, entry.fileName), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, title: next.title }, null, 2));
+    }
     return;
   }
 
@@ -802,7 +890,11 @@ function objectCommand(vaultRoot, command, options) {
     };
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_retire', next.id, entry.frontmatter, next);
-    console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
+    if (options.json) {
+      console.log(JSON.stringify(writeObjectResult(vaultRoot, directory, entry.fileName), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
+    }
     return;
   }
 
@@ -821,7 +913,11 @@ function objectCommand(vaultRoot, command, options) {
     };
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_cancel', next.id, entry.frontmatter, next);
-    console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
+    if (options.json) {
+      console.log(JSON.stringify(writeObjectResult(vaultRoot, directory, entry.fileName), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
+    }
     return;
   }
 
@@ -830,13 +926,17 @@ function objectCommand(vaultRoot, command, options) {
     if (!options.yes) fail('Refusing to delete without --yes.', 'MISSING_OPTION');
     const archiveFileName = archiveEntry(vaultRoot, 'object', entry);
     writeAgentLog(vaultRoot, 'object_delete', entry.frontmatter.id, entry.frontmatter, null);
-    console.log(
-      JSON.stringify(
-        { archived: basename(entry.filePath), archiveFileName, id: entry.frontmatter.id },
-        null,
-        2,
-      ),
-    );
+    if (options.json) {
+      const reviews = listEntries(vaultRoot, 'review');
+      console.log(JSON.stringify({
+        archived: true,
+        archiveFileName,
+        object: formatAgentRow(entry, reviews),
+      }, null, 2));
+    } else {
+      console.log(JSON.stringify(
+        { archived: basename(entry.filePath), archiveFileName, id: entry.frontmatter.id }, null, 2));
+    }
     return;
   }
 
@@ -844,7 +944,11 @@ function objectCommand(vaultRoot, command, options) {
     const entry = findArchivedEntry(vaultRoot, 'object', options);
     const fileName = restoreArchivedEntry(vaultRoot, 'object', entry);
     writeAgentLog(vaultRoot, 'object_restore', entry.frontmatter.id, null, entry.frontmatter);
-    console.log(JSON.stringify({ restored: fileName, id: entry.frontmatter.id }, null, 2));
+    if (options.json) {
+      console.log(JSON.stringify({ restored: true, object: writeObjectResult(vaultRoot, directory, fileName) }, null, 2));
+    } else {
+      console.log(JSON.stringify({ restored: fileName, id: entry.frontmatter.id }, null, 2));
+    }
     return;
   }
 

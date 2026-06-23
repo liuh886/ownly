@@ -297,3 +297,80 @@ describe('JSON error output', () => {
     expect(err.code).toBe('MISSING_OPTION');
   });
 });
+
+let deleteTargetId = '';
+
+describe('write commands', () => {
+  it('object add --json returns full AgentObjectRow', () => {
+    const result = wyqdJson(`object add --json --title "CLI Test Item" --amount 999 --object-type physical ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.id).toBeDefined();
+    deleteTargetId = result.id as string;
+    expect(result.title).toBe('CLI Test Item');
+    expect(result.object_type).toBe('physical');
+    expect(result.status).toBeDefined();
+    expect(result.fileName).toBeDefined();
+    expect(typeof result.has_review).toBe('boolean');
+    expect(typeof result.needs_review).toBe('boolean');
+    expect(result.created_at).toBeDefined();
+  });
+
+  it('object update --json returns updated fields', () => {
+    const result = wyqdJson(`object update --json --id obj_test_camera --category "Updated Category" ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.id).toBe('obj_test_camera');
+    expect(result.category).toBe('Updated Category');
+  });
+
+  it('object retire --json returns status=idle and ended_at', () => {
+    const result = wyqdJson(`object retire --json --id obj_test_camera ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.status).toBe('idle');
+    expect(result.ended_at).toBeDefined();
+  });
+
+  it('object cancel --json returns status=cancelled', () => {
+    const result = wyqdJson(`object cancel --json --id obj_test_sub ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.status).toBe('cancelled');
+  });
+
+  it('review link writes bidirectionally', () => {
+    const addResult = wyqdJson(`review add --summary "Test review for camera" ${vaultArg()}`) as Record<string, unknown>;
+    const newReviewId = addResult.id as string;
+    const result = wyqdJson(`object link --object_id obj_test_camera --review_id ${newReviewId} ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.linked).toBe(true);
+    const obj = result.object as Record<string, unknown>;
+    const review = result.review as Record<string, unknown>;
+    expect(obj.review_ref).toBe(newReviewId);
+    expect(review.target_id).toBe('obj_test_camera');
+  });
+
+  it('review link rejects conflicting link without --force', () => {
+    const stderr = wyqdStderr(`object link --object_id obj_test_camera --review_id review_test_trip --json ${vaultArg()}`);
+    const err = JSON.parse(stderr);
+    expect(err.code).toBe('INVALID_INPUT');
+  });
+
+  it('batch-review-needed returns item-level results', () => {
+    const result = wyqdJson(`object batch-review-needed ${vaultArg()}`) as Record<string, unknown>;
+    expect(typeof result.processed).toBe('number');
+    expect(typeof result.skipped).toBe('number');
+    expect(Array.isArray(result.updated)).toBe(true);
+    expect(Array.isArray(result.items)).toBe(true);
+    for (const item of result.items as Array<Record<string, unknown>>) {
+      expect(item.status).toBeDefined();
+      expect(['idle', 'transferred', 'discarded', 'cancelled', 'completed']).toContain(item.status);
+    }
+  });
+
+  it('object delete --json returns archiveFileName', () => {
+    expect(deleteTargetId).toBeTruthy();
+    const result = wyqdJson(`object delete --id ${deleteTargetId} --yes --json ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.archived).toBe(true);
+    expect(result.archiveFileName).toBeDefined();
+    expect(result.object).toBeDefined();
+  });
+
+  it('write command returns JSON error on missing --yes', () => {
+    const stderr = wyqdStderr(`object delete --id obj_test_trip --json ${vaultArg()}`);
+    const err = JSON.parse(stderr);
+    expect(err.code).toBe('MISSING_OPTION');
+  });
+});
