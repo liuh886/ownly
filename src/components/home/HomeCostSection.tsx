@@ -24,7 +24,10 @@ export function HomeCostSection({
   metrics: HomeMetrics;
   objects: WYQDObject[];
   itemVariants: Variants;
-  onOpenObjects: (focus: Omit<ObjectListFocus, 'token'>) => void;
+  onOpenObjects: (focus: Omit<ObjectListFocus, 'token'> & {
+    quickEntryTemplateType?: 'physical' | 'recurring_cost' | 'travel';
+    focusTarget?: 'quickLine' | 'title';
+  }) => void;
 }) {
   const { t } = useI18n();
   const { formatMoney, formatDailyMoney } = useFormatMoney();
@@ -85,21 +88,21 @@ export function HomeCostSection({
           <div className="mt-3 flex flex-wrap gap-1.5">
             <button
               type="button"
-              onClick={() => onOpenObjects({ typeFilter: 'physical' })}
+              onClick={() => onOpenObjects({ typeFilter: 'physical', quickEntryTemplateType: 'physical', focusTarget: 'quickLine' })}
               className="rounded-md bg-stone-100 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:bg-stone-200"
             >
               {t('physicalTemplate')}
             </button>
             <button
               type="button"
-              onClick={() => onOpenObjects({ typeFilter: 'recurring_cost' })}
+              onClick={() => onOpenObjects({ typeFilter: 'recurring_cost', quickEntryTemplateType: 'recurring_cost', focusTarget: 'quickLine' })}
               className="rounded-md bg-stone-100 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:bg-stone-200"
             >
               {t('fixedCostTemplate')}
             </button>
             <button
               type="button"
-              onClick={() => onOpenObjects({ typeFilter: 'one_time_experience' })}
+              onClick={() => onOpenObjects({ typeFilter: 'one_time_experience', quickEntryTemplateType: 'travel', focusTarget: 'quickLine' })}
               className="rounded-md bg-stone-100 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition hover:bg-stone-200"
             >
               {t('experienceTemplate')}

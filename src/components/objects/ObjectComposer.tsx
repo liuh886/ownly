@@ -19,6 +19,8 @@ export interface ObjectComposerProps {
   onSubmit: (object: WYQDObject, body: string) => Promise<void>;
   autoFocus?: boolean;
   onAutoFocusHandled?: () => void;
+  focusTarget?: 'quickLine' | 'title';
+  initialQuickLineTemplate?: string;
 }
 
 export function ObjectComposer({
@@ -29,22 +31,35 @@ export function ObjectComposer({
   onSubmit,
   autoFocus,
   onAutoFocusHandled,
+  focusTarget,
+  initialQuickLineTemplate,
 }: ObjectComposerProps) {
   const { t, language } = useI18n();
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const quickLineInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (autoFocus && nameInputRef.current) {
-      const timer = window.setTimeout(() => {
-        nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        nameInputRef.current?.focus();
-        onAutoFocusHandled?.();
-      }, 300);
-      return () => window.clearTimeout(timer);
-    }
-  }, [autoFocus, onAutoFocusHandled]);
+    if (!autoFocus) return;
+    const targetRef = focusTarget === 'quickLine' ? quickLineInputRef : nameInputRef;
+    const timer = window.setTimeout(() => {
+      targetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetRef.current?.focus();
+      onAutoFocusHandled?.();
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [autoFocus, focusTarget, onAutoFocusHandled]);
 
   const quickLineTemplates = getQuickLineTemplates(t, language);
+
+  // Auto-fill template when initialQuickLineTemplate is provided
+  useEffect(() => {
+    if (initialQuickLineTemplate) {
+      setQuickLine(initialQuickLineTemplate);
+      applyQuickLineToForm(initialQuickLineTemplate);
+    }
+    // Only run on mount / when the template string changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuickLineTemplate]);
 
   const {
     title, setTitle,
@@ -144,6 +159,7 @@ export function ObjectComposer({
                 </span>
               </div>
               <input
+                ref={quickLineInputRef}
                 value={quickLine}
                 onChange={(event) => {
                   const next = event.target.value;
