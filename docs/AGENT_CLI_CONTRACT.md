@@ -110,7 +110,47 @@ Type-specific fields appear only when applicable (e.g. `purchase_price` on physi
 
 ## Write Commands
 
-Write commands (`add`, `update`, `retire`, `cancel`, `delete`, `restore`) always output JSON with at minimum `{ id, title }`. These are documented in `AGENT_CLI_GUIDE.md`.
+## Write Commands
+
+All write commands accept `--json` for standardized output. They return the full `AgentObjectRow` shape (same as read commands) after persisting to disk.
+
+### `object add --json`
+
+Create a new object. Required: `--title`, `--amount`. Optional: `--object-type` (default `physical`), `--category`, `--purchased-at`, `--ended-at`, `--billing-cycle`, `--billing-day`, `--payment-account`, `--status`.
+
+Returns: full `AgentObjectRow`.
+
+### `object update --id <id> --json`
+
+Update fields on an existing object. Returns: full `AgentObjectRow` with updated fields.
+
+### `object retire --id <id> --json`
+
+Set a physical object to `status: idle`. Returns: full `AgentObjectRow`.
+
+### `object cancel --id <id> --json`
+
+Cancel a recurring cost. Only works on `recurring_cost` objects. Returns: full `AgentObjectRow`.
+
+### `object delete --id <id> --yes --json`
+
+Archive an object. Returns: `{ archived: true, archiveFileName, object: AgentObjectRow }`.
+
+### `object restore --id <id> --json`
+
+Restore from archive. Returns: `{ restored: true, object: AgentObjectRow }`.
+
+### `object link --object_id <id> --review_id <id> --json`
+
+Explicitly link an object and review bidirectionally. Sets `object.review_ref` and `review.target_id`. Rejects conflicting links unless `--force` is provided.
+
+Returns: `{ linked: true, object: AgentObjectRow, review: { id, title, review_type, target_id, fileName } }`.
+
+### `object batch-review-needed --json`
+
+Mark all objects needing review (sets `review_ref` if a review already targets the object). Does not overwrite lifecycle status.
+
+Returns: `{ processed: number, updated: AgentObjectRow[], skipped: number, items: AgentObjectRow[] }`.
 
 ## Error Format
 

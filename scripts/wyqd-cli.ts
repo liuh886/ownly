@@ -873,7 +873,6 @@ function objectCommand(vaultRoot, command, options) {
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_update', next.id, entry.frontmatter, next);
     if (options.json) {
-      const updated = readEntry(directory, entry.fileName);
       console.log(JSON.stringify(writeObjectResult(vaultRoot, directory, entry.fileName), null, 2));
     } else {
       console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, title: next.title }, null, 2));
@@ -892,7 +891,6 @@ function objectCommand(vaultRoot, command, options) {
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_retire', next.id, entry.frontmatter, next);
     if (options.json) {
-      const updated = readEntry(directory, entry.fileName);
       console.log(JSON.stringify(writeObjectResult(vaultRoot, directory, entry.fileName), null, 2));
     } else {
       console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
@@ -916,7 +914,6 @@ function objectCommand(vaultRoot, command, options) {
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_cancel', next.id, entry.frontmatter, next);
     if (options.json) {
-      const updated = readEntry(directory, entry.fileName);
       console.log(JSON.stringify(writeObjectResult(vaultRoot, directory, entry.fileName), null, 2));
     } else {
       console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
@@ -948,7 +945,6 @@ function objectCommand(vaultRoot, command, options) {
     const fileName = restoreArchivedEntry(vaultRoot, 'object', entry);
     writeAgentLog(vaultRoot, 'object_restore', entry.frontmatter.id, null, entry.frontmatter);
     if (options.json) {
-      const restored = readEntry(join(vaultRoot, DIRECTORIES.object), fileName);
       console.log(JSON.stringify({ restored: true, object: writeObjectResult(vaultRoot, directory, fileName) }, null, 2));
     } else {
       console.log(JSON.stringify({ restored: fileName, id: entry.frontmatter.id }, null, 2));
