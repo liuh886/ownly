@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import { HomeDashboard } from '@/components/home/HomeDashboard';
 import { ObjectList, type ObjectListFocus } from '@/components/objects/ObjectList';
 import { ObjectComposer } from '@/components/objects/ObjectComposer';
@@ -7,7 +7,6 @@ import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
-import { getQuickLineTemplates } from '@/components/objects/composerQuickLine';
 import type { AppTab } from './BottomNav';
 import type { WYQDObject, AccountSnapshot, ReviewEntry } from '@/domain/types';
 import type { WYQDStoredEntity, WYQDArchivedStoredEntity } from '@/core/repository';
@@ -53,10 +52,12 @@ export function TabRenderer({
   const { t, language } = useI18n();
   const { membership } = useOwnlyWorkspace();
 
-  const quickEntryRef = useRef<{
-    templateType?: 'physical' | 'recurring_cost' | 'travel';
-    focusTarget?: 'quickLine' | 'title';
-  }>({});
+  const [quickEntryRequest, setQuickEntryRequest] = useState<{
+    token: number;
+    templateType: 'physical' | 'recurring_cost' | 'travel';
+  } | null>(null);
+
+  const [composerFocusTarget, setComposerFocusTarget] = useState<'quickLine' | 'title' | undefined>(undefined);
 
   function openObjectsWithFocus(
     focus: Omit<ObjectListFocus, 'token'> & {
@@ -65,10 +66,12 @@ export function TabRenderer({
     },
   ) {
     setObjectListFocus({ ...focus, token: Date.now() });
-    quickEntryRef.current = {
-      templateType: focus.quickEntryTemplateType,
-      focusTarget: focus.focusTarget,
-    };
+    if (focus.quickEntryTemplateType) {
+      setQuickEntryRequest({ token: Date.now(), templateType: focus.quickEntryTemplateType });
+    } else {
+      setQuickEntryRequest(null);
+    }
+    setComposerFocusTarget(focus.focusTarget);
     setAutoFocusComposer(true);
     setActiveTab('objects');
   }
@@ -103,20 +106,8 @@ export function TabRenderer({
           onSubmit={actions.createObject}
           autoFocus={autoFocusComposer}
           onAutoFocusHandled={() => setAutoFocusComposer(false)}
-          focusTarget={quickEntryRef.current.focusTarget}
-          initialQuickLineTemplate={
-            quickEntryRef.current.templateType
-              ? getQuickLineTemplates(t, language).find(
-                  (tmpl) => {
-                    const tType = quickEntryRef.current.templateType;
-                    if (tType === 'physical') return tmpl.label === t('physicalTemplate');
-                    if (tType === 'recurring_cost') return tmpl.label === t('fixedCostTemplate');
-                    if (tType === 'travel') return tmpl.label === t('experienceTemplate');
-                    return false;
-                  },
-                )?.value
-              : undefined
-          }
+          focusTarget={composerFocusTarget}
+          quickEntryRequest={quickEntryRequest ?? undefined}
         />
         <ArchivePanel
           disabled={!isConnected}

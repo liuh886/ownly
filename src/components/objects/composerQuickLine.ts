@@ -43,25 +43,28 @@ export const QL_FIELD = {
 
 // ── Templates ────────────────────────────────────────────
 
-export function getQuickLineTemplates(t: (key: WYQDTranslationKey) => string, lang: string): Array<{ label: string; value: string }> {
+export function getQuickLineTemplates(t: (key: WYQDTranslationKey) => string, lang: string): Array<{ label: string; value: string; kind: 'physical' | 'recurring_cost' | 'travel' }> {
   const isZh = lang !== 'en';
   const travelCategory = isZh ? '旅行体验' : 'Travel experience';
   const aiCategory = isZh ? 'AI工具' : 'AI Tools';
   return [
     {
       label: t('physicalTemplate'),
+      kind: 'physical' as const,
       value: isZh
         ? `小米13U / physical / 5843 / 2023-06-07 / 2025-09-20 / 电子产品 / 已退役`
         : `Sony A7C / physical / 12000 / 2026-05-01 / 2026-05-17 / Camera / using`,
     },
     {
       label: t('fixedCostTemplate'),
+      kind: 'recurring_cost' as const,
       value: isZh
         ? `ChatGPT Plus / recurring_cost / 145 / monthly / 20 / 招行信用卡 / 2026-05-01 / 订阅中 / ${aiCategory}`
         : `ChatGPT Plus / recurring_cost / 20 / monthly / 1 / Credit Card / 2026-01-01 / active / ${aiCategory}`,
     },
     {
       label: t('experienceTemplate'),
+      kind: 'travel' as const,
       value: isZh
         ? `香港之旅 / travel / 18000 / 16500 / 2026-05-04 / ${travelCategory} / 已完成 / HK / Hong Kong / 22.3193 / 114.1694`
         : `Tokyo trip / travel / 18000 / 16500 / 2026-05-04 / ${travelCategory} / completed / JP / Tokyo / 35.6762 / 139.6503`,
