@@ -415,50 +415,82 @@ export interface WYQDDoctorRepairResult {
   clearedDangling: number;
 }
 
-/**
- * Auto-repair review_ref integrity:
- * 1. For each review that targets an object whose review_ref differs,
- *    update the object's review_ref to point back.
- * 2. For each object whose review_ref points to a non-existent review,
- *    clear the review_ref.
- */
-export async function autoRepairReviewRefs(
-  adapter: WYQDDoctorRepairAdapter,
-): Promise<WYQDDoctorRepairResult> {
-  const [objects, reviews] = await Promise.all([
-    adapter.listObjects(),
-    adapter.listReviews(),
-  ]);
+export interface RepairItem {
+  objectTitle: string;
+  objectId: string;
+  fileName: string;
+  reviewId?: string;
+  action: 'sync' | 'clear';
+}
 
+export interface RepairPlan {
+  mismatches: RepairItem[];
+  dangling: RepairItem[];
+}
+
+export async function inspectReviewRefRepairs(
+  adapter: WYQDDoctorRepairAdapter,
+): Promise<RepairPlan> {
+  const [objects, reviews] = await Promise.all([adapter.listObjects(), adapter.listReviews()]);
   const reviewIds = new Set(reviews.map((r) => r.entity.id));
   const objectMap = new Map(objects.map((o) => [o.entity.id, o]));
-  let fixedMismatches = 0;
-  let clearedDangling = 0;
+  const mismatches: RepairItem[] = [];
+  const dangling: RepairItem[] = [];
 
-  // 1. Fix mismatches: review.target_id → object, but object.review_ref !== review.id
   for (const stored of reviews) {
     const targetId = stored.entity.target_id;
     if (!targetId) continue;
     const obj = objectMap.get(targetId);
     if (obj && obj.entity.review_ref !== stored.entity.id) {
-      const fixed = { ...obj.entity, review_ref: stored.entity.id, updated_at: new Date().toISOString() };
-      await adapter.updateObject(obj.fileName, fixed, obj.body);
-      // Keep the map updated so subsequent repairs see the fix
-      objectMap.set(targetId, { ...obj, entity: fixed });
-      fixedMismatches++;
+      mismatches.push({ objectTitle: obj.entity.title, objectId: obj.entity.id, fileName: obj.fileName, reviewId: stored.entity.id, action: 'sync' });
     }
   }
-
-  // 2. Clear dangling refs: object.review_ref → review that doesn't exist
   for (const stored of objects) {
     const ref = stored.entity.review_ref;
     if (ref && !reviewIds.has(ref)) {
-      const { review_ref: _, ...rest } = stored.entity as WYQDObject & { review_ref?: string | null };
+      dangling.push({ objectTitle: stored.entity.title, objectId: stored.entity.id, fileName: stored.fileName, action: 'clear' });
+    }
+  }
+  return { mismatches, dangling };
+}
+
+export async function applyReviewRefRepairs(
+  adapter: WYQDDoctorRepairAdapter,
+  plan: RepairPlan,
+): Promise<WYQDDoctorRepairResult> {
+  const [objects, reviews] = await Promise.all([adapter.listObjects(), adapter.listReviews()]);
+  const reviewIds = new Set(reviews.map((r) => r.entity.id));
+  const objectMap = new Map(objects.map((o) => [o.entity.id, o]));
+  let fixedMismatches = 0;
+  let clearedDangling = 0;
+
+  for (const item of plan.mismatches) {
+    const obj = objectMap.get(item.objectId);
+    // Verify reviewId still exists before syncing
+    if (obj && item.reviewId && reviewIds.has(item.reviewId)) {
+      const fixed = { ...obj.entity, review_ref: item.reviewId, updated_at: new Date().toISOString() };
+      await adapter.updateObject(obj.fileName, fixed, obj.body);
+      objectMap.set(item.objectId, { ...obj, entity: fixed });
+      fixedMismatches++;
+    }
+  }
+  for (const item of plan.dangling) {
+    const obj = objectMap.get(item.objectId);
+    const ref = obj?.entity.review_ref;
+    // Double-check: ref still dangling?
+    if (obj && ref && !reviewIds.has(ref)) {
+      const { review_ref: _, ...rest } = obj.entity as WYQDObject & { review_ref?: string | null };
       const fixed = { ...rest, review_ref: null, updated_at: new Date().toISOString() } as WYQDObject;
-      await adapter.updateObject(stored.fileName, fixed, stored.body);
+      await adapter.updateObject(obj.fileName, fixed, obj.body);
       clearedDangling++;
     }
   }
-
   return { fixedMismatches, clearedDangling };
+}
+
+export async function autoRepairReviewRefs(
+  adapter: WYQDDoctorRepairAdapter,
+): Promise<WYQDDoctorRepairResult> {
+  const plan = await inspectReviewRefRepairs(adapter);
+  return applyReviewRefRepairs(adapter, plan);
 }
