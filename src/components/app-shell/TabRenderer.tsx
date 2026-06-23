@@ -54,7 +54,7 @@ export function TabRenderer({
 
   const [quickEntryRequest, setQuickEntryRequest] = useState<{
     token: number;
-    templateType: 'physical' | 'recurring_cost' | 'travel';
+    templateValue: string;
   } | null>(null);
 
   const [composerFocusTarget, setComposerFocusTarget] = useState<'quickLine' | 'title' | undefined>(undefined);
@@ -67,7 +67,11 @@ export function TabRenderer({
   ) {
     setObjectListFocus({ ...focus, token: Date.now() });
     if (focus.quickEntryTemplateType) {
-      setQuickEntryRequest({ token: Date.now(), templateType: focus.quickEntryTemplateType });
+      const templates = getQuickLineTemplates(t, language);
+      const match = templates.find((tmpl) => tmpl.kind === focus.quickEntryTemplateType);
+      if (match) {
+        setQuickEntryRequest({ token: Date.now(), templateValue: match.value });
+      }
     } else {
       setQuickEntryRequest(null);
     }

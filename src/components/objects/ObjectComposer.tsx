@@ -20,7 +20,7 @@ export interface ObjectComposerProps {
   autoFocus?: boolean;
   onAutoFocusHandled?: () => void;
   focusTarget?: 'quickLine' | 'title';
-  quickEntryRequest?: { token: number; templateType: 'physical' | 'recurring_cost' | 'travel' };
+  quickEntryRequest?: { token: number; templateValue: string };
 }
 
 export function ObjectComposer({
@@ -54,12 +54,9 @@ export function ObjectComposer({
   // Auto-fill template when quickEntryRequest token changes
   useEffect(() => {
     if (!quickEntryRequest) return;
-    const template = quickLineTemplates.find((t) => t.kind === quickEntryRequest.templateType);
-    if (template) {
-      setQuickLine(template.value);
-      applyQuickLineToForm(template.value);
-    }
-  }, [quickEntryRequest?.token]);
+    setQuickLine(quickEntryRequest.templateValue);
+    applyQuickLineToForm(quickEntryRequest.templateValue);
+  }, [quickEntryRequest?.token, quickEntryRequest?.templateValue]);
 
   const {
     title, setTitle,
