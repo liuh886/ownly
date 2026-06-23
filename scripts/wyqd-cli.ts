@@ -87,8 +87,15 @@ Environment:
 `);
 }
 
+let globalOptions = {};
+
 function fail(message, code = 1) {
-  console.error(message);
+  if (globalOptions.json) {
+    const err = { error: message, code: code === 1 ? 'ERROR' : 'NOT_FOUND' };
+    console.error(JSON.stringify(err));
+  } else {
+    console.error(message);
+  }
   process.exit(code);
 }
 
@@ -333,9 +340,19 @@ function formatAgentRow(entry, allReviews) {
   return row;
 }
 
+function printObjectRows(vaultRoot, entries, reviews) {
+  const reviewEntries = reviews || listEntries(vaultRoot, 'review');
+  console.log(JSON.stringify(entries.map((e) => formatAgentRow(e, reviewEntries)), null, 2));
+}
+
 function printEntries(entries, json) {
   if (json) {
-    console.log(JSON.stringify(entries.map((e) => formatAgentRow(e, [])), null, 2));
+    // Generic JSON for snapshots/reviews — not agent object rows
+    const rows = entries.map((entry) => ({
+      file: entry.fileName,
+      ...entry.frontmatter,
+    }));
+    console.log(JSON.stringify(rows, null, 2));
     return;
   }
 
@@ -643,7 +660,11 @@ function objectCommand(vaultRoot, command, options) {
     if (options.status) {
       entries = entries.filter((entry) => entry.frontmatter.status === normalizePhysicalStatus(options.status));
     }
-    printEntries(entries, Boolean(options.json));
+    if (options.json) {
+      printObjectRows(vaultRoot, entries);
+    } else {
+      printEntries(entries, false);
+    }
     return;
   }
 
@@ -657,7 +678,7 @@ function objectCommand(vaultRoot, command, options) {
         (category && category.toLowerCase().includes(query)) ||
         (e.body && e.body.toLowerCase().includes(query));
     });
-    const reviews = options.json ? listEntries(vaultRoot, 'review') : [];
+    const reviews = listEntries(vaultRoot, 'review');
     console.log(JSON.stringify(matches.map((m) => formatAgentRow(m, reviews)), null, 2));
     return;
   }
@@ -706,7 +727,12 @@ function objectCommand(vaultRoot, command, options) {
 
   if (command === 'get') {
     const entry = findEntry(vaultRoot, 'object', options);
-    console.log(JSON.stringify({ fileName: entry.fileName, ...entry.frontmatter }, null, 2));
+    if (options.json) {
+      const reviews = listEntries(vaultRoot, 'review');
+      console.log(JSON.stringify(formatAgentRow(entry, reviews), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName: entry.fileName, ...entry.frontmatter }, null, 2));
+    }
     return;
   }
 
@@ -1133,6 +1159,7 @@ function main() {
   }
 
   const [resource, command = 'list'] = positionals;
+  globalOptions = options;
   const vaultRoot = getVaultRoot(options);
 
   if (resource === 'doctor') doctorCommand(vaultRoot, options);

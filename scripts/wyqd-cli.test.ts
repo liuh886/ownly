@@ -19,6 +19,7 @@ beforeAll(() => {
   vaultDir = join(tmpdir(), `ownly-test-${Date.now()}`);
   mkdirSync(join(vaultDir, 'Ownly', 'Objects'), { recursive: true });
   mkdirSync(join(vaultDir, 'Ownly', 'Reviews'), { recursive: true });
+  mkdirSync(join(vaultDir, 'Ownly', 'Snapshots'), { recursive: true });
 
   // Seed sample objects
   const physicalYaml = `---
@@ -95,6 +96,21 @@ created_at: '2026-05-10'
 ## Review
 `;
   writeFileSync(join(vaultDir, 'Ownly', 'Reviews', '2026-05-10--review-test-trip.md'), reviewYaml);
+
+  const snapshotYaml = `---
+schema_version: '0.1'
+id: snap_test_1
+type: snapshot
+snapshot_type: net_worth
+title: Test Snapshot
+snapshot_at: '2026-06-01'
+is_month_end: true
+net_worth: 50000
+created_at: '2026-06-01'
+---
+## Snapshot
+`;
+  writeFileSync(join(vaultDir, 'Ownly', 'Snapshots', '2026-06-01--test-snapshot.md'), snapshotYaml);
 });
 
 afterAll(() => {
@@ -151,12 +167,50 @@ describe('object list --json', () => {
     expect(trip!.experience_subtype).toBe('travel_worldview');
     expect((trip!.location as Record<string, unknown>)?.city).toBe('Tokyo');
   });
+
+  it('sets has_review=true and needs_review=false for reviewed objects', () => {
+    const result = wyqdJson(`object list --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    const trip = result.find((o) => o.id === 'obj_test_trip');
+    expect(trip).toBeDefined();
+    expect(trip!.has_review).toBe(true);
+    expect(trip!.needs_review).toBe(false);
+  });
 });
 
 describe('object get --id', () => {
-  it('returns a single object', () => {
-    const result = wyqdJson(`object get --id obj_test_trip ${vaultArg()}`) as Record<string, unknown>;
-    expect(result.id || (result as Record<string, unknown>).fileName).toBeDefined();
+  it('returns a single standardized object with --json', () => {
+    const result = wyqdJson(`object get --id obj_test_trip --json ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.id).toBe('obj_test_trip');
+    expect(result.object_type).toBe('one_time_experience');
+    expect(result.has_review).toBe(true);
+    expect(result.needs_review).toBe(false);
+    expect(result.fileName).toBeDefined();
+    expect(result.budget_total).toBe(18000);
+    expect(result.actual_total).toBe(16500);
+  });
+});
+
+describe('snapshot list --json', () => {
+  it('returns snapshot fields, not object row fields', () => {
+    const result = wyqdJson(`snapshot list --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    // Snapshots don't have object_type or needs_review
+    for (const s of result) {
+      expect(s.object_type).toBeUndefined();
+      expect(s.needs_review).toBeUndefined();
+      expect(s.has_review).toBeUndefined();
+    }
+  });
+});
+
+describe('review list --json', () => {
+  it('returns review fields, not object row fields', () => {
+    const result = wyqdJson(`review list --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    const review = result[0];
+    expect(review.review_type).toBeDefined();
+    expect(review.reviewed_at).toBeDefined();
+    expect(review.object_type).toBeUndefined();
+    expect(review.needs_review).toBeUndefined();
   });
 });
 
