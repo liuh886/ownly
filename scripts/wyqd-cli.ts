@@ -70,26 +70,17 @@ function printHelp() {
 
 Usage:
   npm run wyqd -- --vault <vault> object list [--json] [--status idle]
-  npm run wyqd -- --vault <vault> object due [--days 30] [--json]
-  npm run wyqd -- --vault <vault> object accounts [--json]
-  npm run wyqd -- --vault <vault> object add --title <name> --amount <num> [--category <text>] [--purchased-at YYYY-MM-DD] [--ended-at YYYY-MM-DD] [--status using]
-  npm run wyqd -- --vault <vault> object add --title <name> --object-type recurring_cost --amount <num> [--billing-cycle monthly] [--billing-day 15] [--payment-account <text>]
-  npm run wyqd -- --vault <vault> object get --id <id>
-  npm run wyqd -- --vault <vault> object update --id <id> [--title <name>] [--amount <num>] [--status idle]
-  npm run wyqd -- --vault <vault> object retire --id <id> [--ended-at YYYY-MM-DD]
-  npm run wyqd -- --vault <vault> object cancel --id <id> [--reason <text>]
-  npm run wyqd -- --vault <vault> object delete --id <id> --yes
-  npm run wyqd -- --vault <vault> object restore --id <id>
-  npm run wyqd -- --vault <vault> snapshot add --date YYYY-MM-DD --assets <num> --liabilities <num> [--month-end]
-  npm run wyqd -- --vault <vault> snapshot restore --id <id>
-  npm run wyqd -- --vault <vault> review add --summary <text> [--food-score 8] [--scenery-score 8] [--experience-score 8]
-  npm run wyqd -- --vault <vault> review restore --id <id>
+  npm run wyqd -- --vault <vault> object get --id <id> [--json]
   npm run wyqd -- --vault <vault> object search --query <text> [--json]
   npm run wyqd -- --vault <vault> object review-needed [--json]
-  npm run wyqd -- --vault <vault> summary [--json]
+  npm run wyqd -- --vault <vault> object history --id <id> [--json]
+  npm run wyqd -- --vault <vault> object due [--days 30] [--json]
+  npm run wyqd -- --vault <vault> object accounts [--json]
+  npm run wyqd -- --vault <vault> object add --title <name> --amount <num> [--category <text>] [--purchased-at YYYY-MM-DD]
+  npm run wyqd -- --vault <vault> object add --title <name> --object-type recurring_cost --amount <num> [--billing-cycle monthly]
+  npm run wyqd -- --vault <vault> recurring list --active --json
+  npm run wyqd -- --vault <vault> summary --json
   npm run wyqd -- --vault <vault> doctor [--json]
-Machine-readable output:
-  npm run --silent wyqd -- --vault <vault> object list --json
 
 Environment:
   OWNLY_VAULT can be used instead of --vault.
@@ -283,7 +274,71 @@ function restoreArchivedEntry(vaultRoot, entityType, entry) {
   return fileName;
 }
 
+function formatAgentRow(entry, allReviews) {
+  const o = entry.frontmatter || entry;
+  const fileName = entry.fileName || '';
+  const reviews = Array.isArray(allReviews) ? allReviews : [];
+  const hasReview = Boolean(o.review_ref) || reviews.some((r) => (r.frontmatter || r).target_id === o.id);
+
+  const needsReview =
+    (o.object_type === 'physical' && ['idle', 'transferred', 'discarded'].includes(o.status)) ||
+    (o.object_type === 'recurring_cost' && o.status === 'cancelled') ||
+    (o.object_type === 'one_time_experience' && o.status === 'completed' && !hasReview);
+
+  const row = {
+    id: o.id,
+    title: o.title,
+    object_type: o.object_type,
+    status: o.status,
+    category: o.category || undefined,
+    fileName,
+    created_at: o.created_at,
+    updated_at: o.updated_at || undefined,
+    review_ref: o.review_ref || null,
+    has_review: hasReview,
+    needs_review: needsReview,
+  };
+
+  if (o.object_type === 'physical') {
+    Object.assign(row, {
+      purchase_price: o.purchase_price,
+      total_acquisition_cost: o.total_acquisition_cost,
+      sale_price: o.sale_price,
+      purchased_at: o.purchased_at,
+      ended_at: o.ended_at,
+    });
+  } else if (o.object_type === 'recurring_cost') {
+    Object.assign(row, {
+      billing_amount: o.billing_amount,
+      billing_cycle: o.billing_cycle,
+      annualized_cost: o.annualized_cost,
+      payment_account: o.payment_account,
+      started_at: o.started_at,
+    });
+  } else if (o.object_type === 'one_time_experience') {
+    const loc = o.location;
+    Object.assign(row, {
+      budget_total: o.budget_total,
+      actual_total: o.actual_total,
+      experience_subtype: o.experience_subtype,
+      ended_at: o.ended_at,
+      location: loc ? { city: loc.city, country: loc.country, country_code: loc.country_code } : undefined,
+    });
+  }
+
+  for (const key of Object.keys(row)) {
+    if (row[key] === undefined) delete row[key];
+  }
+
+  return row;
+}
+
 function printEntries(entries, json) {
+  if (json) {
+    console.log(JSON.stringify(entries.map((e) => formatAgentRow(e, [])), null, 2));
+    return;
+  }
+
   const rows = entries.map((entry) => ({
     file: entry.fileName,
     id: entry.frontmatter.id,
@@ -294,11 +349,6 @@ function printEntries(entries, json) {
     snapshot_at: entry.frontmatter.snapshot_at,
     reviewed_at: entry.frontmatter.reviewed_at,
   }));
-
-  if (json) {
-    console.log(JSON.stringify(rows, null, 2));
-    return;
-  }
 
   for (const row of rows) {
     console.log(
@@ -607,25 +657,41 @@ function objectCommand(vaultRoot, command, options) {
         (category && category.toLowerCase().includes(query)) ||
         (e.body && e.body.toLowerCase().includes(query));
     });
-    console.log(JSON.stringify(matches.map((m) => m.frontmatter), null, 2));
+    const reviews = options.json ? listEntries(vaultRoot, 'review') : [];
+    console.log(JSON.stringify(matches.map((m) => formatAgentRow(m, reviews)), null, 2));
     return;
   }
 
   if (command === 'review-needed') {
+    const reviews = listEntries(vaultRoot, 'review');
     const entries = listEntries(vaultRoot, 'object').filter((e) => {
-      const status = e.frontmatter.status;
-      if (e.frontmatter.object_type === 'physical') {
-        return status === 'idle' || status === 'transferred' || status === 'discarded';
-      }
-      if (e.frontmatter.object_type === 'recurring_cost') {
-        return status === 'cancelled';
-      }
-      if (e.frontmatter.object_type === 'one_time_experience') {
-        return status === 'completed';
-      }
-      return false;
+      const row = formatAgentRow(e, reviews);
+      return row.needs_review;
     });
-    console.log(JSON.stringify(entries.map((e) => e.frontmatter), null, 2));
+    console.log(JSON.stringify(entries.map((e) => formatAgentRow(e, reviews)), null, 2));
+    return;
+  }
+
+  if (command === 'history') {
+    requireOption(options, 'id');
+    const obj = findEntry(vaultRoot, 'object', options);
+    const reviews = listEntries(vaultRoot, 'review').filter(
+      (r) => r.frontmatter.target_id === obj.frontmatter.id,
+    );
+    console.log(JSON.stringify({
+      object: formatAgentRow(obj, reviews),
+      reviews: reviews.map((r) => ({
+        id: r.frontmatter.id,
+        title: r.frontmatter.title,
+        review_type: r.frontmatter.review_type,
+        reviewed_at: r.frontmatter.reviewed_at,
+        summary: r.frontmatter.summary,
+        food_score: r.frontmatter.food_score,
+        scenery_score: r.frontmatter.scenery_score,
+        experience_score: r.frontmatter.experience_score,
+        fileName: r.fileName,
+      })),
+    }, null, 2));
     return;
   }
 
@@ -1009,15 +1075,26 @@ function doctorCommand(vaultRoot, options) {
 
 function summaryCommand(vaultRoot, options) {
   const objects = listEntries(vaultRoot, 'object').map((e) => e.frontmatter);
-  
+  const reviews = listEntries(vaultRoot, 'review');
+
   const totalObjects = objects.length;
   const physicalCount = objects.filter((o) => o.object_type === 'physical').length;
   const activeRecurring = objects.filter((o) => o.object_type === 'recurring_cost' && o.status === 'active').length;
+  const travelExperiences = objects.filter((o) => o.object_type === 'one_time_experience' && o.experience_subtype === 'travel_worldview').length;
+  const reviewNeeded = objects.filter((o) => {
+    const hasReview = Boolean(o.review_ref) || reviews.some((r) => r.frontmatter.target_id === o.id);
+    return (o.object_type === 'physical' && ['idle', 'transferred', 'discarded'].includes(o.status)) ||
+      (o.object_type === 'recurring_cost' && o.status === 'cancelled') ||
+      (o.object_type === 'one_time_experience' && o.status === 'completed' && !hasReview);
+  }).length;
 
   const summary = {
     total_objects: totalObjects,
     physical: physicalCount,
     active_recurring_costs: activeRecurring,
+    travel_experiences: travelExperiences,
+    needs_review_count: reviewNeeded,
+    data_folder: join(vaultRoot, DIRECTORIES.object),
   };
 
   if (options.json) {
@@ -1027,7 +1104,25 @@ function summaryCommand(vaultRoot, options) {
     console.log(`Total Objects: ${summary.total_objects}`);
     console.log(`Physical: ${summary.physical}`);
     console.log(`Active Recurring Costs: ${summary.active_recurring_costs}`);
+    console.log(`Travel Experiences: ${summary.travel_experiences}`);
+    console.log(`Needs Review: ${summary.needs_review_count}`);
+    console.log(`Data Folder: ${summary.data_folder}`);
   }
+}
+
+function recurringCommand(vaultRoot, command, options) {
+  if (command === 'list') {
+    const entries = listEntries(vaultRoot, 'object')
+      .filter((e) => e.frontmatter.object_type === 'recurring_cost' && e.frontmatter.status === 'active');
+    const json = Boolean(options.json);
+    if (json) {
+      console.log(JSON.stringify(entries.map((e) => formatAgentRow(e, [])), null, 2));
+    } else {
+      printEntries(entries, false);
+    }
+    return;
+  }
+  fail(`Unknown recurring command: ${command}`);
 }
 
 function main() {
@@ -1045,6 +1140,7 @@ function main() {
   else if (resource === 'object') objectCommand(vaultRoot, command, options);
   else if (resource === 'snapshot') snapshotCommand(vaultRoot, command, options);
   else if (resource === 'review') reviewCommand(vaultRoot, command, options);
+  else if (resource === 'recurring') recurringCommand(vaultRoot, command, options);
   else fail(`Unknown resource: ${resource}`);
 }
 

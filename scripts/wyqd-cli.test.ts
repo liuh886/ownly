@@ -1,0 +1,217 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { execSync } from 'node:child_process';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+const CLI = 'npx tsx scripts/wyqd-cli.ts';
+let vaultDir: string;
+
+function wyqd(args: string): string {
+  return execSync(`${CLI} ${args}`, { encoding: 'utf-8', cwd: process.cwd() }).trim();
+}
+
+function wyqdJson(args: string): unknown {
+  return JSON.parse(wyqd(args));
+}
+
+beforeAll(() => {
+  vaultDir = join(tmpdir(), `ownly-test-${Date.now()}`);
+  mkdirSync(join(vaultDir, 'Ownly', 'Objects'), { recursive: true });
+  mkdirSync(join(vaultDir, 'Ownly', 'Reviews'), { recursive: true });
+
+  // Seed sample objects
+  const physicalYaml = `---
+schema_version: '0.1'
+id: obj_test_camera
+type: object
+object_type: physical
+title: Test Camera
+status: using
+category: Electronics
+purchase_price: 12000
+total_acquisition_cost: 13200
+purchased_at: '2026-05-01'
+created_at: '2026-05-01'
+updated_at: '2026-06-15'
+---
+## Notes
+`;
+  writeFileSync(join(vaultDir, 'Ownly', 'Objects', '2026-05-01--test-camera.md'), physicalYaml);
+
+  const recurringYaml = `---
+schema_version: '0.1'
+id: obj_test_sub
+type: object
+object_type: recurring_cost
+title: Test Subscription
+status: active
+billing_amount: 20
+billing_cycle: monthly
+annualized_cost: 240
+payment_account: Credit Card
+started_at: '2026-01-01'
+created_at: '2026-01-01'
+---
+## Notes
+`;
+  writeFileSync(join(vaultDir, 'Ownly', 'Objects', '2026-01-01--test-subscription.md'), recurringYaml);
+
+  const experienceYaml = `---
+schema_version: '0.1'
+id: obj_test_trip
+type: object
+object_type: one_time_experience
+title: Test Trip
+status: completed
+experience_subtype: travel_worldview
+budget_total: 18000
+actual_total: 16500
+ended_at: '2026-05-04'
+location:
+  city: Tokyo
+  country: Japan
+  country_code: JP
+created_at: '2026-04-01'
+---
+## Notes
+`;
+  writeFileSync(join(vaultDir, 'Ownly', 'Objects', '2026-04-01--test-trip.md'), experienceYaml);
+
+  const reviewYaml = `---
+schema_version: '0.1'
+id: review_test_trip
+type: review
+review_type: object_review
+title: Review Test Trip
+target_id: obj_test_trip
+reviewed_at: '2026-05-10'
+summary: Great trip
+food_score: 90
+scenery_score: 85
+experience_score: 95
+created_at: '2026-05-10'
+---
+## Review
+`;
+  writeFileSync(join(vaultDir, 'Ownly', 'Reviews', '2026-05-10--review-test-trip.md'), reviewYaml);
+});
+
+afterAll(() => {
+  rmSync(vaultDir, { recursive: true, force: true });
+});
+
+function vaultArg() {
+  return `--vault ${vaultDir}`;
+}
+
+describe('object list --json', () => {
+  it('returns an array of objects', () => {
+    const result = wyqdJson(`object list --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThanOrEqual(3);
+  }, 10000);
+
+  it('includes stable fields on each object', () => {
+    const result = wyqdJson(`object list --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    for (const obj of result) {
+      expect(obj.id).toBeDefined();
+      expect(obj.title).toBeDefined();
+      expect(obj.object_type).toBeDefined();
+      expect(obj.status).toBeDefined();
+      expect(obj.fileName).toBeDefined();
+      expect(obj.created_at).toBeDefined();
+      expect(typeof obj.has_review).toBe('boolean');
+      expect(typeof obj.needs_review).toBe('boolean');
+    }
+  });
+
+  it('includes cost fields for physical objects', () => {
+    const result = wyqdJson(`object list --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    const camera = result.find((o) => o.id === 'obj_test_camera');
+    expect(camera).toBeDefined();
+    expect(camera!.purchase_price).toBe(12000);
+    expect(camera!.total_acquisition_cost).toBe(13200);
+  });
+
+  it('includes billing fields for recurring_cost objects', () => {
+    const result = wyqdJson(`object list --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    const sub = result.find((o) => o.id === 'obj_test_sub');
+    expect(sub).toBeDefined();
+    expect(sub!.billing_amount).toBe(20);
+    expect(sub!.billing_cycle).toBe('monthly');
+  });
+
+  it('includes travel fields for one_time_experience objects', () => {
+    const result = wyqdJson(`object list --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    const trip = result.find((o) => o.id === 'obj_test_trip');
+    expect(trip).toBeDefined();
+    expect(trip!.budget_total).toBe(18000);
+    expect(trip!.actual_total).toBe(16500);
+    expect(trip!.experience_subtype).toBe('travel_worldview');
+    expect((trip!.location as Record<string, unknown>)?.city).toBe('Tokyo');
+  });
+});
+
+describe('object get --id', () => {
+  it('returns a single object', () => {
+    const result = wyqdJson(`object get --id obj_test_trip ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.id || (result as Record<string, unknown>).fileName).toBeDefined();
+  });
+});
+
+describe('object search --query', () => {
+  it('finds objects by title', () => {
+    const result = wyqdJson(`object search --query camera ${vaultArg()}`) as Array<Record<string, unknown>>;
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    const camera = result.find((o) => o.id === 'obj_test_camera');
+    expect(camera).toBeDefined();
+  });
+
+  it('returns standardized rows', () => {
+    const result = wyqdJson(`object search --query test ${vaultArg()}`) as Array<Record<string, unknown>>;
+    expect(result.length).toBeGreaterThanOrEqual(3);
+    for (const obj of result) {
+      expect(obj.id).toBeDefined();
+      expect(obj.object_type).toBeDefined();
+    }
+  });
+});
+
+describe('object review-needed', () => {
+  it('returns objects needing review', () => {
+    const result = wyqdJson(`object review-needed ${vaultArg()}`) as Array<Record<string, unknown>>;
+    // Test Trip is completed and has a review, so should NOT appear
+    const trip = result.find((o) => o.id === 'obj_test_trip');
+    expect(trip).toBeUndefined();
+  });
+});
+
+describe('summary --json', () => {
+  it('returns vault statistics', () => {
+    const result = wyqdJson(`summary --json ${vaultArg()}`) as Record<string, unknown>;
+    expect(typeof result.total_objects).toBe('number');
+    expect(typeof result.physical).toBe('number');
+    expect(typeof result.active_recurring_costs).toBe('number');
+    expect(typeof result.travel_experiences).toBe('number');
+    expect(typeof result.needs_review_count).toBe('number');
+    expect(typeof result.data_folder).toBe('string');
+  });
+
+  it('reports correct counts', () => {
+    const result = wyqdJson(`summary --json ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.total_objects).toBe(3);
+    expect(result.travel_experiences).toBe(1);
+  });
+});
+
+describe('recurring list --active --json', () => {
+  it('returns only active recurring costs', () => {
+    const result = wyqdJson(`recurring list --active --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    expect(Array.isArray(result)).toBe(true);
+    for (const obj of result) {
+      expect(obj.object_type).toBe('recurring_cost');
+      expect(obj.status).toBe('active');
+    }
+  });
+});
