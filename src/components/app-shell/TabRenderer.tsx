@@ -7,6 +7,7 @@ import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+import { getQuickLineTemplates } from '@/components/objects/composerQuickLine';
 import type { AppTab } from './BottomNav';
 import type { WYQDObject, AccountSnapshot, ReviewEntry } from '@/domain/types';
 import type { WYQDStoredEntity, WYQDArchivedStoredEntity } from '@/core/repository';
