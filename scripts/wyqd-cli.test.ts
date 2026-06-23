@@ -297,3 +297,41 @@ describe('JSON error output', () => {
     expect(err.code).toBe('MISSING_OPTION');
   });
 });
+
+describe('write commands', () => {
+  it('object add --json returns AgentObjectRow', () => {
+    const result = wyqdJson(`object add --json --title "CLI Test Item" --amount 999 --object-type physical ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.id).toBeDefined();
+    expect(result.title).toBe('CLI Test Item');
+    expect(result.object_type).toBe('physical');
+    expect(result.fileName).toBeDefined();
+    expect(typeof result.has_review).toBe('boolean');
+    expect(typeof result.needs_review).toBe('boolean');
+  });
+
+  it('object update --json returns updated AgentObjectRow', () => {
+    const result = wyqdJson(`object update --json --id obj_test_camera --category "Updated Category" ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.id).toBe('obj_test_camera');
+    expect(result.category).toBe('Updated Category');
+  });
+
+  it('review link returns linked pair', () => {
+    const result = wyqdJson(`object link --object_id obj_test_camera --review_id review_test_trip ${vaultArg()}`) as Record<string, unknown>;
+    const obj = result.object as Record<string, unknown>;
+    const review = result.review as Record<string, unknown>;
+    expect(obj.review_ref).toBe('review_test_trip');
+    expect(review.target_id).toBe('obj_test_camera');
+  });
+
+  it('batch-review-needed returns processed count', () => {
+    const result = wyqdJson(`object batch-review-needed ${vaultArg()}`) as Record<string, unknown>;
+    expect(typeof result.processed).toBe('number');
+    expect(Array.isArray(result.updated)).toBe(true);
+  });
+
+  it('write command returns JSON error on missing --yes', () => {
+    const stderr = wyqdStderr(`object delete --id obj_test_camera --json ${vaultArg()}`);
+    const err = JSON.parse(stderr);
+    expect(err.code).toBe('MISSING_OPTION');
+  });
+});

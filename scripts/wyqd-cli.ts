@@ -159,6 +159,13 @@ function serializeMarkdown(frontmatter, body = '') {
   return `---\n${yaml}\n---\n${normalizedBody}`;
 }
 
+function readEntry(directory, fileName) {
+  const filePath = join(directory, fileName);
+  const content = readFileSync(filePath, 'utf-8');
+  const parsed = parseMarkdown(content, fileName);
+  return { ...parsed, fileName, path: filePath };
+}
+
 function listEntries(vaultRoot, entityType) {
   const directory = ensureDirectory(vaultRoot, entityType);
   return readdirSync(directory)
@@ -337,6 +344,11 @@ function formatAgentRow(entry, allReviews) {
   }
 
   return row;
+}
+
+function writeResult(vaultRoot, entry) {
+  const reviews = listEntries(vaultRoot, 'review');
+  return formatAgentRow(entry, reviews);
 }
 
 function printObjectRows(vaultRoot, entries, reviews) {
@@ -715,12 +727,59 @@ function objectCommand(vaultRoot, command, options) {
     return;
   }
 
+  if (command === 'link') {
+    const objectId = requireOption(options, 'object_id');
+    const reviewId = requireOption(options, 'review_id');
+    const objEntry = findEntry(vaultRoot, 'object', { id: objectId });
+    const reviewEntry = findEntry(vaultRoot, 'review', { id: reviewId });
+
+    const nextObj = { ...objEntry.frontmatter, review_ref: reviewId, updated_at: todayISO() };
+    const nextReview = { ...reviewEntry.frontmatter, target_id: objectId, target_type: objEntry.frontmatter.object_type, updated_at: todayISO() };
+
+    writeEntry(join(vaultRoot, DIRECTORIES.object), objEntry.fileName, nextObj, objEntry.body);
+    writeEntry(join(vaultRoot, DIRECTORIES.review), reviewEntry.fileName, nextReview, reviewEntry.body);
+    writeAgentLog(vaultRoot, 'object_link', objectId, objEntry.frontmatter, nextObj);
+
+    const updatedObj = readEntry(join(vaultRoot, DIRECTORIES.object), objEntry.fileName);
+    const updatedReview = readEntry(join(vaultRoot, DIRECTORIES.review), reviewEntry.fileName);
+    console.log(JSON.stringify({
+      object: writeResult(vaultRoot, updatedObj),
+      review: {
+        id: updatedReview.frontmatter.id, title: updatedReview.frontmatter.title,
+        review_type: updatedReview.frontmatter.review_type,
+        target_id: updatedReview.frontmatter.target_id, fileName: updatedReview.fileName,
+      },
+    }, null, 2));
+    return;
+  }
+
+  if (command === 'batch-review-needed') {
+    const reviews = listEntries(vaultRoot, 'review');
+    const objects = listEntries(vaultRoot, 'object');
+    const needsReview = objects.filter((e) => formatAgentRow(e, reviews).needs_review);
+    const updated = [];
+    for (const e of needsReview) {
+      const next = { ...e.frontmatter, updated_at: todayISO() };
+      const existingReview = reviews.find((r) => r.frontmatter.target_id === e.frontmatter.id);
+      if (existingReview) next.review_ref = existingReview.frontmatter.id;
+      writeEntry(join(vaultRoot, DIRECTORIES.object), e.fileName, next, e.body);
+      updated.push(writeResult(vaultRoot, readEntry(join(vaultRoot, DIRECTORIES.object), e.fileName)));
+    }
+    console.log(JSON.stringify({ processed: needsReview.length, updated }, null, 2));
+    return;
+  }
+
   if (command === 'add') {
     const object = createObject(options);
     const fileName = `${object.created_at}--${slugify(object.title)}.md`;
     writeEntry(directory, fileName, object, options.body || '## Notes\n');
     writeAgentLog(vaultRoot, 'object_add', object.id, null, object);
-    console.log(JSON.stringify({ fileName, id: object.id, title: object.title }, null, 2));
+    if (options.json) {
+      const entry = readEntry(directory, fileName);
+      console.log(JSON.stringify(writeResult(vaultRoot, entry), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName, id: object.id, title: object.title }, null, 2));
+    }
     return;
   }
 
@@ -788,7 +847,12 @@ function objectCommand(vaultRoot, command, options) {
 
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_update', next.id, entry.frontmatter, next);
-    console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, title: next.title }, null, 2));
+    if (options.json) {
+      const updated = readEntry(directory, entry.fileName);
+      console.log(JSON.stringify(writeResult(vaultRoot, updated), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, title: next.title }, null, 2));
+    }
     return;
   }
 
@@ -802,7 +866,12 @@ function objectCommand(vaultRoot, command, options) {
     };
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_retire', next.id, entry.frontmatter, next);
-    console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
+    if (options.json) {
+      const updated = readEntry(directory, entry.fileName);
+      console.log(JSON.stringify(writeResult(vaultRoot, updated), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
+    }
     return;
   }
 
@@ -821,7 +890,12 @@ function objectCommand(vaultRoot, command, options) {
     };
     writeEntry(directory, entry.fileName, next, entry.body);
     writeAgentLog(vaultRoot, 'object_cancel', next.id, entry.frontmatter, next);
-    console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
+    if (options.json) {
+      const updated = readEntry(directory, entry.fileName);
+      console.log(JSON.stringify(writeResult(vaultRoot, updated), null, 2));
+    } else {
+      console.log(JSON.stringify({ fileName: entry.fileName, id: next.id, status: next.status }, null, 2));
+    }
     return;
   }
 
@@ -830,13 +904,16 @@ function objectCommand(vaultRoot, command, options) {
     if (!options.yes) fail('Refusing to delete without --yes.', 'MISSING_OPTION');
     const archiveFileName = archiveEntry(vaultRoot, 'object', entry);
     writeAgentLog(vaultRoot, 'object_delete', entry.frontmatter.id, entry.frontmatter, null);
-    console.log(
-      JSON.stringify(
-        { archived: basename(entry.filePath), archiveFileName, id: entry.frontmatter.id },
-        null,
-        2,
-      ),
-    );
+    if (options.json) {
+      console.log(JSON.stringify({
+        archived: true,
+        archiveFileName,
+        object: writeResult(vaultRoot, entry),
+      }, null, 2));
+    } else {
+      console.log(JSON.stringify(
+        { archived: basename(entry.filePath), archiveFileName, id: entry.frontmatter.id }, null, 2));
+    }
     return;
   }
 
@@ -844,7 +921,12 @@ function objectCommand(vaultRoot, command, options) {
     const entry = findArchivedEntry(vaultRoot, 'object', options);
     const fileName = restoreArchivedEntry(vaultRoot, 'object', entry);
     writeAgentLog(vaultRoot, 'object_restore', entry.frontmatter.id, null, entry.frontmatter);
-    console.log(JSON.stringify({ restored: fileName, id: entry.frontmatter.id }, null, 2));
+    if (options.json) {
+      const restored = readEntry(join(vaultRoot, DIRECTORIES.object), fileName);
+      console.log(JSON.stringify({ restored: true, object: writeResult(vaultRoot, restored) }, null, 2));
+    } else {
+      console.log(JSON.stringify({ restored: fileName, id: entry.frontmatter.id }, null, 2));
+    }
     return;
   }
 
