@@ -20,7 +20,7 @@ export interface ObjectComposerProps {
   autoFocus?: boolean;
   onAutoFocusHandled?: () => void;
   focusTarget?: 'quickLine' | 'title';
-  initialQuickLineTemplate?: string;
+  quickEntryRequest?: { token: number; templateValue: string };
 }
 
 export function ObjectComposer({
@@ -32,7 +32,7 @@ export function ObjectComposer({
   autoFocus,
   onAutoFocusHandled,
   focusTarget,
-  initialQuickLineTemplate,
+  quickEntryRequest,
 }: ObjectComposerProps) {
   const { t, language } = useI18n();
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -51,15 +51,12 @@ export function ObjectComposer({
 
   const quickLineTemplates = getQuickLineTemplates(t, language);
 
-  // Auto-fill template when initialQuickLineTemplate is provided
+  // Auto-fill template when quickEntryRequest token changes
   useEffect(() => {
-    if (initialQuickLineTemplate) {
-      setQuickLine(initialQuickLineTemplate);
-      applyQuickLineToForm(initialQuickLineTemplate);
-    }
-    // Only run on mount / when the template string changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQuickLineTemplate]);
+    if (!quickEntryRequest) return;
+    setQuickLine(quickEntryRequest.templateValue);
+    applyQuickLineToForm(quickEntryRequest.templateValue);
+  }, [quickEntryRequest?.token, quickEntryRequest?.templateValue]);
 
   const {
     title, setTitle,
