@@ -181,7 +181,8 @@ export function useComposerFormState({
 
     setIsSaving(true);
     try {
-      const travelLocation = (locationCountry || locationRegion || locationCity || locationCountryCode || locationLatitude || locationLongitude)
+      const isTravel = objectType === 'one_time_experience' && experienceSubtype === 'travel_worldview';
+      const travelLocation = isTravel && (locationCountry || locationRegion || locationCity || locationCountryCode || locationLatitude || locationLongitude)
         ? {
             country: locationCountry || undefined,
             region: locationRegion || undefined,
@@ -191,15 +192,17 @@ export function useComposerFormState({
             longitude: locationLongitude ? Number(locationLongitude) : undefined,
           }
         : undefined;
-      const parsedExtraLocations = extraLocations
-        .filter((loc) => loc.city || loc.lat || loc.lng)
-        .map((loc) => ({
-          city: loc.city || undefined,
-          country: loc.country || undefined,
-          country_code: loc.countryCode || undefined,
-          latitude: loc.lat ? Number(loc.lat) : undefined,
-          longitude: loc.lng ? Number(loc.lng) : undefined,
-        }));
+      const parsedExtraLocations = isTravel
+        ? extraLocations
+            .filter((loc) => loc.city || loc.lat || loc.lng)
+            .map((loc) => ({
+              city: loc.city || undefined,
+              country: loc.country || undefined,
+              country_code: loc.countryCode || undefined,
+              latitude: loc.lat ? Number(loc.lat) : undefined,
+              longitude: loc.lng ? Number(loc.lng) : undefined,
+            }))
+        : [];
 
       const values = {
         title: title.trim(),
