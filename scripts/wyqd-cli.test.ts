@@ -30,6 +30,7 @@ beforeAll(() => {
   mkdirSync(join(vaultDir, 'Ownly', 'Objects'), { recursive: true });
   mkdirSync(join(vaultDir, 'Ownly', 'Reviews'), { recursive: true });
   mkdirSync(join(vaultDir, 'Ownly', 'Snapshots'), { recursive: true });
+  mkdirSync(join(vaultDir, 'Ownly', 'Logs', 'Object Experiences'), { recursive: true });
 
   // Seed sample objects
   const physicalYaml = `---
@@ -121,6 +122,24 @@ created_at: '2026-06-01'
 ## Snapshot
 `;
   writeFileSync(join(vaultDir, 'Ownly', 'Snapshots', '2026-06-01--test-snapshot.md'), snapshotYaml);
+
+  // Seed a sample object log
+  const logYaml = `---
+schema_version: '0.1'
+id: log_test_camera_1
+type: object_log
+title: Camera heavy usage during trip
+target_id: obj_test_camera
+event_type: usage
+occurred_at: '2026-06-10'
+summary: Used the camera heavily during a 3-day trip
+lesson: Battery life could be better for extended shoots
+source: cli
+created_at: '2026-06-10'
+---
+## Log
+`;
+  writeFileSync(join(vaultDir, 'Ownly', 'Logs', 'Object Experiences', 'log--2026-06-10--camera-heavy-usage.md'), logYaml);
 });
 
 afterAll(() => {
@@ -372,5 +391,78 @@ describe('write commands', () => {
     const stderr = wyqdStderr(`object delete --id obj_test_trip --json ${vaultArg()}`);
     const err = JSON.parse(stderr);
     expect(err.code).toBe('MISSING_OPTION');
+  });
+});
+
+describe('object log add --json', () => {
+  it('creates a log and returns full shape', () => {
+    const result = wyqdJson(`object log add --id obj_test_camera --type usage --summary "Quick test log entry" ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.id).toBeDefined();
+    expect(String(result.id)).toMatch(/^log_/);
+    expect(result.type).toBe('object_log');
+    expect(result.target_id).toBe('obj_test_camera');
+    expect(result.event_type).toBe('usage');
+    expect(result.summary).toBe('Quick test log entry');
+    expect(result.source).toBe('cli');
+    expect(result.fileName).toBeDefined();
+    expect(result.created_at).toBeDefined();
+  });
+
+  it('accepts optional lesson', () => {
+    const result = wyqdJson(`object log add --id obj_test_camera --type lesson --summary "Learned about aperture" --lesson "f/2.8 is great for portraits" ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.lesson).toBe('f/2.8 is great for portraits');
+    expect(result.event_type).toBe('lesson');
+  });
+
+  it('returns NOT_FOUND for missing object', () => {
+    const stderr = wyqdStderr(`object log add --id nonexistent --type usage --summary "test" --json ${vaultArg()}`);
+    expect(stderr).toBeTruthy();
+    const err = JSON.parse(stderr);
+    expect(err.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('object log list --json', () => {
+  it('returns logs for an object', () => {
+    const result = wyqdJson(`object log list --id obj_test_camera --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    for (const log of result) {
+      expect(log.id).toBeDefined();
+      expect(log.type).toBe('object_log');
+      expect(log.target_id).toBe('obj_test_camera');
+      expect(log.event_type).toBeDefined();
+      expect(log.summary).toBeDefined();
+      expect(log.source).toBeDefined();
+      expect(log.fileName).toBeDefined();
+    }
+  });
+
+  it('returns empty array for object with no logs', () => {
+    const result = wyqdJson(`object log list --id obj_test_sub --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBe(0);
+  });
+
+  it('returns NOT_FOUND for missing object', () => {
+    const stderr = wyqdStderr(`object log list --id nonexistent --json ${vaultArg()}`);
+    expect(stderr).toBeTruthy();
+    const err = JSON.parse(stderr);
+    expect(err.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('object history includes logs', () => {
+  it('returns logs[] alongside reviews[]', () => {
+    const result = wyqdJson(`object history --id obj_test_camera --json ${vaultArg()}`) as Record<string, unknown>;
+    expect(result.object).toBeDefined();
+    expect(Array.isArray(result.reviews)).toBe(true);
+    expect(Array.isArray(result.logs)).toBe(true);
+    expect((result.logs as Array<Record<string, unknown>>).length).toBeGreaterThanOrEqual(1);
+    const log = (result.logs as Array<Record<string, unknown>>)[0];
+    expect(log.id).toBeDefined();
+    expect(log.event_type).toBeDefined();
+    expect(log.summary).toBeDefined();
+    expect(log.fileName).toBeDefined();
   });
 });

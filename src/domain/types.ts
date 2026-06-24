@@ -1,6 +1,6 @@
 export type CurrencyCode = 'CNY' | 'USD' | 'EUR' | 'HKD' | (string & Record<never, never>);
 
-export type WYQDEntityType = 'object' | 'account' | 'snapshot' | 'review';
+export type WYQDEntityType = 'object' | 'account' | 'snapshot' | 'review' | 'object_log';
 
 export type WYQDObjectType = 'physical' | 'recurring_cost' | 'one_time_experience';
 
@@ -193,6 +193,18 @@ export interface ReviewEntry extends BaseEntity {
   summary?: string;
   period?: string;
   year?: number;
+}
+
+export type ObjectLogEventType = 'usage' | 'issue' | 'maintenance' | 'regret' | 'lesson' | 'comparison' | 'exit_note';
+
+export interface ObjectLogEntry extends BaseEntity {
+  type: 'object_log';
+  target_id: string;
+  event_type: ObjectLogEventType;
+  occurred_at?: string;
+  summary: string;
+  lesson?: string;
+  source?: string;
 }
 
 export interface HomeMetrics {

@@ -196,6 +196,34 @@ npm run --silent wyqd -- --vault /mnt/zhihaol review restore --id <review_id>
 
 Review deletion moves the note to `Ownly/Archive/Reviews`.
 
+## Object Log Commands
+
+Record usage experience for an object:
+
+```bash
+npm run --silent wyqd -- --vault /mnt/zhihaol object log add \
+  --id <object_id> \
+  --type usage \
+  --summary "Heavy usage during vacation, battery held up well" \
+  --lesson "Battery life matters for travel cameras"
+```
+
+Event types: `usage`, `issue`, `maintenance`, `regret`, `lesson`, `comparison`, `exit_note`.
+
+List experience logs for an object:
+
+```bash
+npm run --silent wyqd -- --vault /mnt/zhihaol object log list --id <object_id> --json
+```
+
+View full object history (reviews + logs):
+
+```bash
+npm run --silent wyqd -- --vault /mnt/zhihaol object history --id <object_id> --json
+```
+
+Logs are append-only. They do not change object lifecycle status.
+
 ## System Commands
 
 Get vault summary statistics:

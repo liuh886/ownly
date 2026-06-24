@@ -3,7 +3,7 @@ import {
   calculatePhysicalAcquisitionCost,
   calculateRecurringMonthlyCost,
 } from '@/domain/calculations';
-import type { Account, AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
+import type { Account, AccountSnapshot, ObjectLogEntry, ReviewEntry, WYQDObject } from '@/domain/types';
 import { joinWYQDPath, WYQD_DATA_ROOT } from './paths';
 import type { WYQDReadonlyRepositoryAdapter, WYQDStoredEntity } from './repository';
 import type { WYQDTranslationKey } from './i18n';
@@ -25,7 +25,8 @@ export type WYQDDoctorCheckId =
   | 'object.review_ref.mismatch'
   | 'object.status_date.inconsistent'
   | 'entity.date.chronology'
-  | 'snapshot.stale';
+  | 'snapshot.stale'
+  | 'log.target.missing';
 
 export interface WYQDDoctorFinding {
   id: WYQDDoctorCheckId;
@@ -46,13 +47,15 @@ export interface WYQDDoctorRepositoryAdapter
   extends Partial<WYQDReadonlyRepositoryAdapter> {
   listDataDirectories?: () => Promise<readonly string[]>;
   getDataFolderPath?: () => string;
+  listObjectLogs?: () => Promise<readonly WYQDStoredEntity<ObjectLogEntry>[]>;
 }
 
 type AnyStoredEntity =
   | WYQDStoredEntity<WYQDObject>
   | WYQDStoredEntity<Account>
   | WYQDStoredEntity<AccountSnapshot>
-  | WYQDStoredEntity<ReviewEntry>;
+  | WYQDStoredEntity<ReviewEntry>
+  | WYQDStoredEntity<ObjectLogEntry>;
 
 function createReport(findings: WYQDDoctorFinding[], checkedAt = new Date().toISOString()): WYQDDoctorReport {
   return {
@@ -320,6 +323,33 @@ function checkSnapshotStaleness(
   return [];
 }
 
+function checkLogTargets(
+  logs: readonly WYQDStoredEntity<ObjectLogEntry>[],
+  objects: readonly WYQDStoredEntity<WYQDObject>[],
+  t?: TranslateFn,
+): WYQDDoctorFinding[] {
+  const objectIds = new Set(objects.map((stored) => stored.entity.id));
+  const findings: WYQDDoctorFinding[] = [];
+
+  for (const stored of logs) {
+    const targetId = stored.entity.target_id;
+    if (targetId && !objectIds.has(targetId)) {
+      findings.push({
+        id: 'log.target.missing',
+        severity: 'warning',
+        message: t
+          ? t('doctorLogTargetMissing').replace('{title}', stored.entity.title)
+          : `Log target object is missing: ${stored.entity.title}`,
+        path: entityPath(stored),
+        entityId: stored.entity.id,
+        details: { targetId },
+      });
+    }
+  }
+
+  return findings;
+}
+
 async function checkDirectories(
   adapter: WYQDDoctorRepositoryAdapter,
   t?: TranslateFn,
@@ -360,15 +390,16 @@ export async function runWYQDDoctor(
 ): Promise<WYQDDoctorReport> {
   const dataFolderPath = adapter.getDataFolderPath?.() || WYQD_DATA_ROOT;
 
-  const [objects, accounts, snapshots, reviews, directoryFindings] = await Promise.all([
+  const [objects, accounts, snapshots, reviews, objectLogs, directoryFindings] = await Promise.all([
     adapter.listObjects?.() ?? Promise.resolve([]),
     adapter.listAccounts?.() ?? Promise.resolve([]),
     adapter.listSnapshots?.() ?? Promise.resolve([]),
     adapter.listReviews?.() ?? Promise.resolve([]),
+    adapter.listObjectLogs?.() ?? Promise.resolve([]),
     checkDirectories(adapter, t),
   ]);
 
-  const entities: AnyStoredEntity[] = [...objects, ...accounts, ...snapshots, ...reviews];
+  const entities: AnyStoredEntity[] = [...objects, ...accounts, ...snapshots, ...reviews, ...objectLogs];
 
   // Add data folder path info as first finding
   const pathInfo: WYQDDoctorFinding = {
@@ -381,6 +412,7 @@ export async function runWYQDDoctor(
       accounts: accounts.length,
       snapshots: snapshots.length,
       reviews: reviews.length,
+      objectLogs: objectLogs.length,
       total: entities.length,
     },
   };
@@ -394,6 +426,7 @@ export async function runWYQDDoctor(
     ...checkSnapshotTotals(snapshots, t),
     ...checkReviewTargets(reviews, objects, t),
     ...checkReviewRefIntegrity(objects, reviews, t),
+    ...checkLogTargets(objectLogs, objects, t),
     ...checkSchemaValidation(entities),
     ...checkDateChronology(entities, t),
     ...checkSnapshotStaleness(snapshots, t),

@@ -1,11 +1,12 @@
-import type { 
-  WYQDObject, 
-  PhysicalObject, 
-  RecurringCostObject, 
+import type {
+  WYQDObject,
+  PhysicalObject,
+  RecurringCostObject,
   OneTimeExperienceObject,
   Account,
   AccountSnapshot,
   ReviewEntry,
+  ObjectLogEntry,
   BaseEntity
 } from './types';
 
@@ -121,11 +122,19 @@ export function validateSnapshot(snapshot: AccountSnapshot): ValidationResult {
 export function validateReview(review: ReviewEntry): ValidationResult {
   const issues = validateBaseEntity(review);
   if (!review.review_type) issues.push({ field: 'review_type', message: 'Missing review_type', severity: 'error' });
-  
+
   if (['object_review', 'exit_record'].includes(review.review_type) && !review.target_id) {
     issues.push({ field: 'target_id', message: 'Missing target_id', severity: 'error' });
   }
-  
+
+  return createResult(issues);
+}
+
+export function validateObjectLog(log: ObjectLogEntry): ValidationResult {
+  const issues = validateBaseEntity(log);
+  if (!log.target_id) issues.push({ field: 'target_id', message: 'Missing target_id', severity: 'error' });
+  if (!log.event_type) issues.push({ field: 'event_type', message: 'Missing event_type', severity: 'error' });
+  if (!log.summary) issues.push({ field: 'summary', message: 'Missing summary', severity: 'error' });
   return createResult(issues);
 }
 
@@ -141,6 +150,7 @@ export function validateEntity(entity: unknown): ValidationResult {
     case 'account': return validateAccount(entity as Account);
     case 'snapshot': return validateSnapshot(entity as AccountSnapshot);
     case 'review': return validateReview(entity as ReviewEntry);
+    case 'object_log': return validateObjectLog(entity as ObjectLogEntry);
     default:
       return createResult([{ field: 'type', message: `Unknown entity type: ${entityRecord.type}`, severity: 'error' }]);
   }
