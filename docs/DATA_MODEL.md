@@ -22,7 +22,15 @@ Ownly manages entities using the following types:
    - Type: `review`
    - Fields: `id`, `review_type`, `target_id`, `reviewed_at`, `summary`, `scores` (food, scenery, experience), `ranks`.
 
-5. **Snapshots**
+5. **Object Experience Logs**
+   - Type: `object_log`
+   - Path: `Ownly/Logs/Object Experiences/`
+   - Fields: `id`, `target_id`, `event_type`, `occurred_at`, `summary`, `lesson`, `source`, `created_at`.
+   - Event types: `usage`, `issue`, `maintenance`, `regret`, `lesson`, `comparison`, `exit_note`.
+   - Append-only; does not mutate object lifecycle status.
+   - Linked to objects via `target_id`.
+
+6. **Snapshots**
    - Type: `snapshot`
    - Fields: `id`, `type: snapshot`, `snapshot_at`, `asset_balances`, `liability_balances`, `total_assets`, `total_liabilities`, `net_worth`.
 

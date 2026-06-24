@@ -2,11 +2,12 @@ import type {
   Account,
   AccountSnapshot,
   BaseEntity,
+  ObjectLogEntry,
   ReviewEntry,
   WYQDObject,
 } from '@/domain/types';
 
-export type WYQDEntity = WYQDObject | Account | AccountSnapshot | ReviewEntry;
+export type WYQDEntity = WYQDObject | Account | AccountSnapshot | ReviewEntry | ObjectLogEntry;
 
 export interface WYQDStoredEntity<T extends BaseEntity = WYQDEntity> {
   fileName: string;
@@ -15,19 +16,21 @@ export interface WYQDStoredEntity<T extends BaseEntity = WYQDEntity> {
   body: string;
 }
 
-export type WYQDArchiveEntityType = 'object' | 'account' | 'snapshot' | 'review';
+export type WYQDArchiveEntityType = 'object' | 'account' | 'snapshot' | 'review' | 'object_log';
 
 export type WYQDArchivedStoredEntity =
   | (WYQDStoredEntity<WYQDObject> & { archiveType: 'object' })
   | (WYQDStoredEntity<Account> & { archiveType: 'account' })
   | (WYQDStoredEntity<AccountSnapshot> & { archiveType: 'snapshot' })
-  | (WYQDStoredEntity<ReviewEntry> & { archiveType: 'review' });
+  | (WYQDStoredEntity<ReviewEntry> & { archiveType: 'review' })
+  | (WYQDStoredEntity<ObjectLogEntry> & { archiveType: 'object_log' });
 
 export interface WYQDReadonlyRepositoryAdapter {
   listObjects(): Promise<readonly WYQDStoredEntity<WYQDObject>[]>;
   listAccounts(): Promise<readonly WYQDStoredEntity<Account>[]>;
   listSnapshots(): Promise<readonly WYQDStoredEntity<AccountSnapshot>[]>;
   listReviews(): Promise<readonly WYQDStoredEntity<ReviewEntry>[]>;
+  listObjectLogs(): Promise<readonly WYQDStoredEntity<ObjectLogEntry>[]>;
   listArchivedEntities(): Promise<readonly WYQDArchivedStoredEntity[]>;
 }
 

@@ -414,6 +414,25 @@ describe('object log add --json', () => {
     expect(result.event_type).toBe('lesson');
   });
 
+  it('creates distinct files for duplicate summaries on same day', () => {
+    const result1 = wyqdJson(`object log add --id obj_test_camera --type usage --summary "Same summary twice" ${vaultArg()}`) as Record<string, unknown>;
+    const result2 = wyqdJson(`object log add --id obj_test_camera --type usage --summary "Same summary twice" ${vaultArg()}`) as Record<string, unknown>;
+    expect(result1.fileName).not.toBe(result2.fileName);
+    expect(result1.id).not.toBe(result2.id);
+    // Both should appear in list
+    const list = wyqdJson(`object log list --id obj_test_camera --json ${vaultArg()}`) as Array<Record<string, unknown>>;
+    const ids = list.map((l) => l.id);
+    expect(ids).toContain(result1.id);
+    expect(ids).toContain(result2.id);
+  });
+
+  it('returns INVALID_INPUT for invalid event_type', () => {
+    const stderr = wyqdStderr(`object log add --id obj_test_camera --type invalid_type --summary "test" --json ${vaultArg()}`);
+    expect(stderr).toBeTruthy();
+    const err = JSON.parse(stderr);
+    expect(err.code).toBe('INVALID_INPUT');
+  });
+
   it('returns NOT_FOUND for missing object', () => {
     const stderr = wyqdStderr(`object log add --id nonexistent --type usage --summary "test" --json ${vaultArg()}`);
     expect(stderr).toBeTruthy();

@@ -12,6 +12,7 @@ function archiveTypeLabels(t: ReturnType<typeof useI18n>['t']): Record<WYQDArchi
     account: t('accounts'),
     snapshot: t('snapshots'),
     review: t('reviews'),
+    object_log: 'Object Logs',
   };
 }
 

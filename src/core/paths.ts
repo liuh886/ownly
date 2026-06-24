@@ -8,11 +8,13 @@ export const WYQD_DATA_DIRECTORIES = {
   accounts: `${WYQD_DATA_ROOT}/Accounts`,
   snapshots: `${WYQD_DATA_ROOT}/Snapshots`,
   reviews: `${WYQD_DATA_ROOT}/Reviews`,
+  objectLogs: `${WYQD_DATA_ROOT}/Logs/Object Experiences`,
   archive: `${WYQD_DATA_ROOT}/Archive`,
   objectArchive: `${WYQD_DATA_ROOT}/Archive/Objects`,
   accountArchive: `${WYQD_DATA_ROOT}/Archive/Accounts`,
   snapshotArchive: `${WYQD_DATA_ROOT}/Archive/Snapshots`,
   reviewArchive: `${WYQD_DATA_ROOT}/Archive/Reviews`,
+  objectLogArchive: `${WYQD_DATA_ROOT}/Archive/Object Logs`,
 } as const;
 
 export type WYQDDataDirectoryKey = keyof typeof WYQD_DATA_DIRECTORIES;
@@ -52,6 +54,12 @@ export function getWYQDEntityDirectory(descriptor: WYQDEntityPathDescriptor): st
     return mode === 'archive'
       ? WYQD_DATA_DIRECTORIES.snapshotArchive
       : WYQD_DATA_DIRECTORIES.snapshots;
+  }
+
+  if (descriptor.type === 'object_log') {
+    return mode === 'archive'
+      ? WYQD_DATA_DIRECTORIES.objectLogArchive
+      : WYQD_DATA_DIRECTORIES.objectLogs;
   }
 
   return mode === 'archive'

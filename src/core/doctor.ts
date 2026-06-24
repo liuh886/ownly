@@ -47,7 +47,6 @@ export interface WYQDDoctorRepositoryAdapter
   extends Partial<WYQDReadonlyRepositoryAdapter> {
   listDataDirectories?: () => Promise<readonly string[]>;
   getDataFolderPath?: () => string;
-  listObjectLogs?: () => Promise<readonly WYQDStoredEntity<ObjectLogEntry>[]>;
 }
 
 type AnyStoredEntity =

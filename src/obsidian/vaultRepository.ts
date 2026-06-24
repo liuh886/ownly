@@ -17,6 +17,7 @@ import type {
   Account,
   AccountSnapshot,
   BaseEntity,
+  ObjectLogEntry,
   ReviewEntry,
   WYQDObject,
   WYQDEntityType,
@@ -27,7 +28,7 @@ interface ObsidianVaultRepositoryOptions {
   t?: (key: string) => string;
 }
 
-type EntityFolderKey = WYQDArchiveEntityType;
+type EntityFolderKey = WYQDArchiveEntityType | 'object_log';
 
 type EntityConfig<T extends BaseEntity> = {
   type: EntityFolderKey;
@@ -74,11 +75,20 @@ const REVIEW_CONFIG: EntityConfig<ReviewEntry> = {
     ),
 };
 
+const OBJECT_LOG_CONFIG: EntityConfig<ObjectLogEntry> = {
+  type: 'object_log' as EntityFolderKey,
+  folderName: 'Logs/Object Experiences',
+  entityType: 'object_log',
+  createFileName: (entity: ObjectLogEntry) =>
+    `log--${toDateSegment(entity.occurred_at || entity.created_at)}--${entity.id}--${slugifyWYQDTitle(entity.summary.slice(0, 40))}.md`,
+};
+
 const ENTITY_CONFIG = {
   object: OBJECT_CONFIG,
   account: ACCOUNT_CONFIG,
   snapshot: SNAPSHOT_CONFIG,
   review: REVIEW_CONFIG,
+  object_log: OBJECT_LOG_CONFIG,
 };
 
 export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
@@ -133,15 +143,20 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     return this.listEntities<ReviewEntry>(ENTITY_CONFIG.review);
   }
 
+  async listObjectLogs(): Promise<readonly WYQDStoredEntity<ObjectLogEntry>[]> {
+    return this.listEntities<ObjectLogEntry>(OBJECT_LOG_CONFIG);
+  }
+
   async listArchivedEntities(): Promise<readonly WYQDArchivedStoredEntity[]> {
-    const [objects, accounts, snapshots, reviews] = await Promise.all([
+    const [objects, accounts, snapshots, reviews, objectLogs] = await Promise.all([
       this.listArchivedEntitiesFor<WYQDObject>(ENTITY_CONFIG.object),
       this.listArchivedEntitiesFor<Account>(ENTITY_CONFIG.account),
       this.listArchivedEntitiesFor<AccountSnapshot>(ENTITY_CONFIG.snapshot),
       this.listArchivedEntitiesFor<ReviewEntry>(ENTITY_CONFIG.review),
+      this.listArchivedEntitiesFor<ObjectLogEntry>(OBJECT_LOG_CONFIG),
     ]);
 
-    return [...objects, ...accounts, ...snapshots, ...reviews] as WYQDArchivedStoredEntity[];
+    return [...objects, ...accounts, ...snapshots, ...reviews, ...objectLogs] as WYQDArchivedStoredEntity[];
   }
 
   async listDataDirectories(): Promise<readonly string[]> {

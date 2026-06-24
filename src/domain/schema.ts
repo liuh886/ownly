@@ -7,8 +7,13 @@ import type {
   AccountSnapshot,
   ReviewEntry,
   ObjectLogEntry,
+  ObjectLogEventType,
   BaseEntity
 } from './types';
+
+export const VALID_OBJECT_LOG_EVENT_TYPES: readonly ObjectLogEventType[] = [
+  'usage', 'issue', 'maintenance', 'regret', 'lesson', 'comparison', 'exit_note',
+];
 
 export type ValidationSeverity = 'warning' | 'error';
 
@@ -133,7 +138,11 @@ export function validateReview(review: ReviewEntry): ValidationResult {
 export function validateObjectLog(log: ObjectLogEntry): ValidationResult {
   const issues = validateBaseEntity(log);
   if (!log.target_id) issues.push({ field: 'target_id', message: 'Missing target_id', severity: 'error' });
-  if (!log.event_type) issues.push({ field: 'event_type', message: 'Missing event_type', severity: 'error' });
+  if (!log.event_type) {
+    issues.push({ field: 'event_type', message: 'Missing event_type', severity: 'error' });
+  } else if (!VALID_OBJECT_LOG_EVENT_TYPES.includes(log.event_type)) {
+    issues.push({ field: 'event_type', message: `Invalid event_type: ${log.event_type}. Allowed: ${VALID_OBJECT_LOG_EVENT_TYPES.join(', ')}`, severity: 'error' });
+  }
   if (!log.summary) issues.push({ field: 'summary', message: 'Missing summary', severity: 'error' });
   return createResult(issues);
 }

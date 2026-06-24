@@ -7,7 +7,7 @@ import {
 } from '@/core/paths';
 import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
 import { migrateReviewEntry } from '@/lib/format';
-import type { Account, AccountSnapshot, ReviewEntry, WYQDObject, WYQDEntityType } from '@/domain/types';
+import type { Account, AccountSnapshot, ObjectLogEntry, ReviewEntry, WYQDObject, WYQDEntityType } from '@/domain/types';
 import type {
   WYQDRepositoryAdapter,
   WYQDStoredEntity,
@@ -30,11 +30,13 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
         accounts: 'Accounts',
         snapshots: 'Snapshots',
         reviews: 'Reviews',
+        objectLogs: 'Logs/Object Experiences',
         archive: 'Archive',
         objectArchive: 'Archive/Objects',
         accountArchive: 'Archive/Accounts',
         snapshotArchive: 'Archive/Snapshots',
         reviewArchive: 'Archive/Reviews',
+        objectLogArchive: 'Archive/Object Logs',
       };
     } else {
       this.dirs = createWYQDDirectories(dataFolder);
@@ -168,6 +170,10 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
     return this.listEntities<ReviewEntry>(this.dirs.reviews, 'review', 'review');
   }
 
+  async listObjectLogs(): Promise<WYQDStoredEntity<ObjectLogEntry>[]> {
+    return this.listEntities<ObjectLogEntry>(this.dirs.objectLogs, 'object_log', 'object log');
+  }
+
   async listArchivedEntities(): Promise<WYQDArchivedStoredEntity[]> {
     const [objects, snapshots, reviews] = await Promise.all([
       this.listEntities<WYQDObject>(this.dirs.objectArchive, 'object', 'archived object')
@@ -294,6 +300,7 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
       account: this.dirs.accountArchive,
       snapshot: this.dirs.snapshotArchive,
       review: this.dirs.reviewArchive,
+      object_log: this.dirs.objectLogArchive,
     };
     await obsidianService.deleteMarkdownFile(dirMap[archiveType], archiveFileName);
   }

@@ -4,7 +4,7 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import YAML from 'yaml';
-import { validateEntity } from '../src/domain/schema';
+import { validateEntity, VALID_OBJECT_LOG_EVENT_TYPES } from '../src/domain/schema';
 
 const FRONTMATTER_PATTERN = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 const DIRECTORIES = {
@@ -723,9 +723,13 @@ function objectCommand(vaultRoot, command, options) {
     const reviews = listEntries(vaultRoot, 'review').filter(
       (r) => r.frontmatter.target_id === obj.frontmatter.id,
     );
-    const logs = listEntries(vaultRoot, 'object_log').filter(
-      (l) => l.frontmatter.target_id === obj.frontmatter.id,
-    );
+    const logs = listEntries(vaultRoot, 'object_log')
+      .filter((l) => l.frontmatter.target_id === obj.frontmatter.id)
+      .sort((a, b) => {
+        const dateA = a.frontmatter.occurred_at || a.frontmatter.created_at || '';
+        const dateB = b.frontmatter.occurred_at || b.frontmatter.created_at || '';
+        return dateA.localeCompare(dateB);
+      });
     console.log(JSON.stringify({
       object: formatAgentRow(obj, reviews),
       reviews: reviews.map((r) => ({
@@ -1186,6 +1190,11 @@ function logCommand(vaultRoot, subCommand, options) {
     const eventType = requireOption(options, 'type');
     const summary = requireOption(options, 'summary');
 
+    // Validate event_type
+    if (!VALID_OBJECT_LOG_EVENT_TYPES.includes(eventType)) {
+      fail(`Invalid event_type: ${eventType}. Allowed: ${VALID_OBJECT_LOG_EVENT_TYPES.join(', ')}`, 'INVALID_INPUT');
+    }
+
     // Validate target object exists
     try {
       findEntry(vaultRoot, 'object', { id: targetId });
@@ -1194,9 +1203,10 @@ function logCommand(vaultRoot, subCommand, options) {
     }
 
     const date = todayISO();
+    const logId = `log_${nowId()}`;
     const log = {
       schema_version: '0.1',
-      id: `log_${nowId()}`,
+      id: logId,
       type: 'object_log',
       title: summary.slice(0, 80),
       target_id: targetId,
@@ -1208,7 +1218,7 @@ function logCommand(vaultRoot, subCommand, options) {
       created_at: date,
     };
 
-    const fileName = `log--${date}--${slugify(summary.slice(0, 40))}.md`;
+    const fileName = `log--${date}--${logId}--${slugify(summary.slice(0, 40))}.md`;
     writeEntry(directory, fileName, log, options.body || `## Log\n\n${summary}\n`);
     console.log(JSON.stringify({ ...log, fileName }, null, 2));
     return;
@@ -1224,9 +1234,13 @@ function logCommand(vaultRoot, subCommand, options) {
       fail(`Object not found: ${targetId}`, 'NOT_FOUND');
     }
 
-    const entries = listEntries(vaultRoot, 'object_log').filter(
-      (e) => e.frontmatter.target_id === targetId,
-    );
+    const entries = listEntries(vaultRoot, 'object_log')
+      .filter((e) => e.frontmatter.target_id === targetId)
+      .sort((a, b) => {
+        const dateA = a.frontmatter.occurred_at || a.frontmatter.created_at || '';
+        const dateB = b.frontmatter.occurred_at || b.frontmatter.created_at || '';
+        return dateA.localeCompare(dateB);
+      });
     const rows = entries.map((e) => ({
       id: e.frontmatter.id,
       type: e.frontmatter.type,

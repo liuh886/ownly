@@ -52,6 +52,8 @@ Objects that need review: idle/transferred/discarded physical, cancelled recurri
 
 ### `object history --id <id> [--json]`
 
+Returns the object, its reviews, and its experience logs. Logs are sorted by `occurred_at` ascending (falls back to `created_at`).
+
 ```json
 {
   "object": { /* standard object row */ },
@@ -184,7 +186,7 @@ Returns:
 
 ### `object log list --id <object_id> --json`
 
-List all experience logs for an object. Returns array of log entries (same shape as add output).
+List all experience logs for an object. Returns array of log entries sorted by `occurred_at` ascending (falls back to `created_at`). Same shape as add output.
 
 ## Error Format
 
