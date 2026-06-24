@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0 (2026-06-23)
+
+### Added
+- Added Object Experience Logs for recording usage, issues, maintenance, regrets, lessons, comparisons, and exit notes.
+- Added `object log add` and `object log list` CLI commands.
+- `object history --json` now includes `logs[]` alongside `reviews[]`.
+- Doctor now checks object log references and object log directories.
+- Added schema validation for object log event types.
+
+### Improved
+- Expanded Agent CLI documentation and data model documentation.
+
 ## 1.0.6 (2026-06-23)
 
 - Agent CLI Write Surface: added write commands (object add/update/retire/cancel/delete, review link, batch-review-needed).
