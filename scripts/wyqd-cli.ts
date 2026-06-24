@@ -4,19 +4,21 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import YAML from 'yaml';
-import { validateEntity } from '../src/domain/schema';
+import { validateEntity, VALID_OBJECT_LOG_EVENT_TYPES } from '../src/domain/schema';
 
 const FRONTMATTER_PATTERN = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 const DIRECTORIES = {
   object: 'Ownly/Objects',
   snapshot: 'Ownly/Snapshots',
   review: 'Ownly/Reviews',
+  object_log: 'Ownly/Logs/Object Experiences',
 };
 
 const ARCHIVE_DIRECTORIES = {
   object: 'Ownly/Archive/Objects',
   snapshot: 'Ownly/Archive/Snapshots',
   review: 'Ownly/Archive/Reviews',
+  object_log: 'Ownly/Archive/Object Logs',
 };
 
 function todayISO() {
@@ -78,6 +80,8 @@ Usage:
   npm run wyqd -- --vault <vault> object accounts [--json]
   npm run wyqd -- --vault <vault> object add --title <name> --amount <num> [--category <text>] [--purchased-at YYYY-MM-DD]
   npm run wyqd -- --vault <vault> object add --title <name> --object-type recurring_cost --amount <num> [--billing-cycle monthly]
+  npm run wyqd -- --vault <vault> object log add --id <object_id> --type <event_type> --summary <text> [--lesson <text>] [--json]
+  npm run wyqd -- --vault <vault> object log list --id <object_id> [--json]
   npm run wyqd -- --vault <vault> recurring list --active --json
   npm run wyqd -- --vault <vault> summary --json
   npm run wyqd -- --vault <vault> doctor [--json]
@@ -719,6 +723,13 @@ function objectCommand(vaultRoot, command, options) {
     const reviews = listEntries(vaultRoot, 'review').filter(
       (r) => r.frontmatter.target_id === obj.frontmatter.id,
     );
+    const logs = listEntries(vaultRoot, 'object_log')
+      .filter((l) => l.frontmatter.target_id === obj.frontmatter.id)
+      .sort((a, b) => {
+        const dateA = a.frontmatter.occurred_at || a.frontmatter.created_at || '';
+        const dateB = b.frontmatter.occurred_at || b.frontmatter.created_at || '';
+        return dateA.localeCompare(dateB);
+      });
     console.log(JSON.stringify({
       object: formatAgentRow(obj, reviews),
       reviews: reviews.map((r) => ({
@@ -731,6 +742,15 @@ function objectCommand(vaultRoot, command, options) {
         scenery_score: r.frontmatter.scenery_score,
         experience_score: r.frontmatter.experience_score,
         fileName: r.fileName,
+      })),
+      logs: logs.map((l) => ({
+        id: l.frontmatter.id,
+        event_type: l.frontmatter.event_type,
+        occurred_at: l.frontmatter.occurred_at,
+        summary: l.frontmatter.summary,
+        lesson: l.frontmatter.lesson || undefined,
+        source: l.frontmatter.source,
+        fileName: l.fileName,
       })),
     }, null, 2));
     return;
@@ -952,6 +972,14 @@ function objectCommand(vaultRoot, command, options) {
     return;
   }
 
+  if (command === 'log') {
+    // Sub-command is the 3rd positional: object log <sub-command>
+    const { positionals: allPositionals } = parseArgs(process.argv.slice(2));
+    const logSubCommand = allPositionals[2] || 'list';
+    logCommand(vaultRoot, logSubCommand, options);
+    return;
+  }
+
   fail(`Unknown object command: ${command}`, 'INVALID_INPUT');
 }
 
@@ -1154,10 +1182,95 @@ function reviewCommand(vaultRoot, command, options) {
   fail(`Unknown review command: ${command}`, 'INVALID_INPUT');
 }
 
+function logCommand(vaultRoot, subCommand, options) {
+  const directory = ensureDirectory(vaultRoot, 'object_log');
+
+  if (subCommand === 'add') {
+    const targetId = requireOption(options, 'id');
+    const eventType = requireOption(options, 'type');
+    const summary = requireOption(options, 'summary');
+
+    // Validate event_type
+    if (!VALID_OBJECT_LOG_EVENT_TYPES.includes(eventType)) {
+      fail(`Invalid event_type: ${eventType}. Allowed: ${VALID_OBJECT_LOG_EVENT_TYPES.join(', ')}`, 'INVALID_INPUT');
+    }
+
+    // Validate target object exists
+    try {
+      findEntry(vaultRoot, 'object', { id: targetId });
+    } catch {
+      fail(`Object not found: ${targetId}`, 'NOT_FOUND');
+    }
+
+    const date = todayISO();
+    const logId = `log_${nowId()}`;
+    const log = {
+      schema_version: '0.1',
+      id: logId,
+      type: 'object_log',
+      title: summary.slice(0, 80),
+      target_id: targetId,
+      event_type: eventType,
+      occurred_at: options.occurred_at || date,
+      summary,
+      lesson: options.lesson || undefined,
+      source: 'cli',
+      created_at: date,
+    };
+
+    const fileName = `log--${date}--${logId}--${slugify(summary.slice(0, 40))}.md`;
+    writeEntry(directory, fileName, log, options.body || `## Log\n\n${summary}\n`);
+    console.log(JSON.stringify({ ...log, fileName }, null, 2));
+    return;
+  }
+
+  if (subCommand === 'list') {
+    const targetId = requireOption(options, 'id');
+
+    // Validate target object exists
+    try {
+      findEntry(vaultRoot, 'object', { id: targetId });
+    } catch {
+      fail(`Object not found: ${targetId}`, 'NOT_FOUND');
+    }
+
+    const entries = listEntries(vaultRoot, 'object_log')
+      .filter((e) => e.frontmatter.target_id === targetId)
+      .sort((a, b) => {
+        const dateA = a.frontmatter.occurred_at || a.frontmatter.created_at || '';
+        const dateB = b.frontmatter.occurred_at || b.frontmatter.created_at || '';
+        return dateA.localeCompare(dateB);
+      });
+    const rows = entries.map((e) => ({
+      id: e.frontmatter.id,
+      type: e.frontmatter.type,
+      target_id: e.frontmatter.target_id,
+      event_type: e.frontmatter.event_type,
+      occurred_at: e.frontmatter.occurred_at,
+      summary: e.frontmatter.summary,
+      lesson: e.frontmatter.lesson || undefined,
+      source: e.frontmatter.source,
+      created_at: e.frontmatter.created_at,
+      fileName: e.fileName,
+    }));
+    // Remove undefined fields
+    for (const row of rows) {
+      for (const key of Object.keys(row)) {
+        if (row[key] === undefined) delete row[key];
+      }
+    }
+    console.log(JSON.stringify(rows, null, 2));
+    return;
+  }
+
+  fail(`Unknown log command: ${subCommand}`, 'INVALID_INPUT');
+}
+
 function doctorCommand(vaultRoot, options) {
   const objects = listEntries(vaultRoot, 'object');
   const snapshots = listEntries(vaultRoot, 'snapshot');
   const reviews = listEntries(vaultRoot, 'review');
+  const objectLogs = listEntries(vaultRoot, 'object_log');
 
   const results = {
     valid: true,
@@ -1190,6 +1303,21 @@ function doctorCommand(vaultRoot, options) {
   objects.forEach(check);
   snapshots.forEach(check);
   reviews.forEach(check);
+  objectLogs.forEach(check);
+
+  // Check log.target_id points to existing object
+  const objectIds = new Set(objects.map((e) => e.frontmatter.id));
+  for (const logEntry of objectLogs) {
+    const targetId = logEntry.frontmatter.target_id;
+    if (targetId && !objectIds.has(targetId)) {
+      results.warnings.push({
+        id: logEntry.frontmatter.id,
+        field: 'target_id',
+        message: `Log target object not found: ${targetId}`,
+        severity: 'warning',
+      });
+    }
+  }
 
   if (options.json) {
     console.log(JSON.stringify(results, null, 2));

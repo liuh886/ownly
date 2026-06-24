@@ -52,6 +52,8 @@ Objects that need review: idle/transferred/discarded physical, cancelled recurri
 
 ### `object history --id <id> [--json]`
 
+Returns the object, its reviews, and its experience logs. Logs are sorted by `occurred_at` ascending (falls back to `created_at`).
+
 ```json
 {
   "object": { /* standard object row */ },
@@ -66,6 +68,17 @@ Objects that need review: idle/transferred/discarded physical, cancelled recurri
       "scenery_score": null,
       "experience_score": 85,
       "fileName": "2026-06-15--review-sony-a7c.md"
+    }
+  ],
+  "logs": [
+    {
+      "id": "log_20260623_123456",
+      "event_type": "usage",
+      "occurred_at": "2026-06-23",
+      "summary": "Heavy usage during vacation",
+      "lesson": "Battery life matters for travel",
+      "source": "cli",
+      "fileName": "log--2026-06-23--heavy-usage-during-vacation.md"
     }
   ]
 }
@@ -151,6 +164,29 @@ Returns: `{ linked: true, object: AgentObjectRow, review: { id, title, review_ty
 Mark all objects needing review (sets `review_ref` if a review already targets the object). Does not overwrite lifecycle status.
 
 Returns: `{ processed: number, updated: AgentObjectRow[], skipped: number, items: AgentObjectRow[] }`.
+
+### `object log add --id <object_id> --type <event_type> --summary <text> [--lesson <text>] --json`
+
+Append an experience log entry to an object. Event types: `usage`, `issue`, `maintenance`, `regret`, `lesson`, `comparison`, `exit_note`.
+
+Returns:
+```json
+{
+  "id": "log_20260623_123456",
+  "type": "object_log",
+  "target_id": "obj_20260623_123",
+  "event_type": "usage",
+  "summary": "Heavy usage during vacation",
+  "lesson": "Battery life matters for travel",
+  "source": "cli",
+  "created_at": "2026-06-23",
+  "fileName": "log--2026-06-23--heavy-usage-during-vacation.md"
+}
+```
+
+### `object log list --id <object_id> --json`
+
+List all experience logs for an object. Returns array of log entries sorted by `occurred_at` ascending (falls back to `created_at`). Same shape as add output.
 
 ## Error Format
 

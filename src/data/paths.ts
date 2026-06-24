@@ -16,10 +16,12 @@ export function createWYQDDirectories(root: string) {
     accounts: `${root}/Accounts`,
     snapshots: `${root}/Snapshots`,
     reviews: `${root}/Reviews`,
+    objectLogs: `${root}/Logs/Object Experiences`,
     archive: `${root}/Archive`,
     objectArchive: `${root}/Archive/Objects`,
     accountArchive: `${root}/Archive/Accounts`,
     snapshotArchive: `${root}/Archive/Snapshots`,
     reviewArchive: `${root}/Archive/Reviews`,
+    objectLogArchive: `${root}/Archive/Object Logs`,
   };
 }
