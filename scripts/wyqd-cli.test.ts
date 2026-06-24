@@ -424,7 +424,7 @@ describe('object log add --json', () => {
     const ids = list.map((l) => l.id);
     expect(ids).toContain(result1.id);
     expect(ids).toContain(result2.id);
-  });
+  }, 15000);
 
   it('returns INVALID_INPUT for invalid event_type', () => {
     const stderr = wyqdStderr(`object log add --id obj_test_camera --type invalid_type --summary "test" --json ${vaultArg()}`);

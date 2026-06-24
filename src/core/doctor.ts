@@ -363,11 +363,14 @@ async function checkDirectories(
     joinWYQDPath(root, 'Accounts'),
     joinWYQDPath(root, 'Snapshots'),
     joinWYQDPath(root, 'Reviews'),
+    joinWYQDPath(root, 'Logs'),
+    joinWYQDPath(root, 'Logs', 'Object Experiences'),
     joinWYQDPath(root, 'Archive'),
     joinWYQDPath(root, 'Archive', 'Objects'),
     joinWYQDPath(root, 'Archive', 'Accounts'),
     joinWYQDPath(root, 'Archive', 'Snapshots'),
     joinWYQDPath(root, 'Archive', 'Reviews'),
+    joinWYQDPath(root, 'Archive', 'Object Logs'),
   ];
 
   return expectedDirectories
