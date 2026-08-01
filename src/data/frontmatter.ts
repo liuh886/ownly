@@ -1,13 +1,15 @@
 import YAML from 'yaml';
 
-export interface ParsedMarkdown<T extends Record<string, unknown>> {
+export interface ParsedMarkdown<T extends object> {
   frontmatter: T;
   body: string;
 }
 
 const FRONTMATTER_PATTERN = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
-export function parseMarkdownEntity<T extends Record<string, unknown> = Record<string, unknown>>(content: string): ParsedMarkdown<T> {
+export function parseMarkdownEntity<T extends object = Record<string, unknown>>(
+  content: string,
+): ParsedMarkdown<T> {
   const match = content.match(FRONTMATTER_PATTERN);
 
   if (!match) {
@@ -20,17 +22,16 @@ export function parseMarkdownEntity<T extends Record<string, unknown> = Record<s
     throw new Error('YAML frontmatter is not a valid object.');
   }
 
-  const frontmatter = parsed as T;
+  const frontmatterRecord = parsed as Record<string, unknown>;
   const body = content.slice(match[0].length);
 
-  // Validate required fields
   const requiredFields = ['schema_version', 'id', 'type'] as const;
-  const missing = requiredFields.filter((field) => !(field in frontmatter));
+  const missing = requiredFields.filter((field) => !(field in frontmatterRecord));
   if (missing.length > 0) {
     throw new Error(`Frontmatter missing required fields: ${missing.join(', ')}`);
   }
 
-  return { frontmatter, body };
+  return { frontmatter: parsed as T, body };
 }
 
 export function serializeMarkdownEntity<T extends object>(
