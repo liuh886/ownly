@@ -11,42 +11,120 @@
 
 [中文文档](README.zh.md)
 
-**Local-first ownership memory for humans and AI agents.**
+**A local-first ownership memory and decision ledger.**
 
-Ownly helps you track what you own, what it costs, how you used it, and what you learned. Your data is stored as plain Markdown in a local folder — preferably inside an Obsidian Vault, but Obsidian itself is not required for the Web or PWA experience.
+Ownly helps you record what you own, what it costs, how you used it, and what you learned. Personal data stays in an **Ownly data folder** as plain Markdown with YAML frontmatter.
 
-- **Agent-readable ownership memory** — Stable CLI read surface with structured JSON output, designed for AI agents to read and safely interact with your data.
-- **Markdown-native personal data** — Every object, snapshot, and review is a `.md` file with YAML frontmatter. No proprietary formats, no lock-in.
-- **Decision-first object lifecycle** — Seed, observe, decide, use, and review. Each object earns its place through structured reflection.
-- **Human UI + Agent CLI** — Hosted Web app, installable PWA, and Obsidian workspace for people; CLI for automation, scripting, and agent integration.
+Obsidian is recommended as a convenient place to store and inspect the files, but it is **not required** for the hosted Web app or installed PWA.
 
-![Ownly Homepage](docs/screenshot-homepage.jpg)
-
-## Use Ownly Your Way
-
-Ownly supports two human-facing runtimes and three convenient entry points:
-
-| Entry point | Requires Obsidian? | Local server? | Best for |
-|---|---:|---:|---|
-| **GitHub Pages Web app** | No | No | Opening Ownly instantly in a supported desktop browser |
-| **Installed PWA** | No | No | Running Ownly in its own app window with offline startup support |
-| **Obsidian plugin** | Yes | No | Deep Vault integration and working directly inside Obsidian |
+## Open Ownly
 
 👉 **[Open Ownly on GitHub Pages](https://liuh886.github.io/ownly/)**
 
-The Web app and PWA are the same local-first browser runtime. They can connect directly to a standalone local Ownly data folder, so you can use Ownly without installing Obsidian.
+| Entry point | Obsidian required? | Local server required? | Best for |
+|---|---:|---:|---|
+| GitHub Pages Web app | No | No | Immediate use in a supported desktop browser |
+| Installed PWA | No | No | A standalone app window with offline application-shell startup |
+| Obsidian plugin | Yes | No | Native Vault integration and direct Markdown work |
 
-**Recommended storage:** keep the `Ownly/` data directory inside an Obsidian Vault even when you mainly use the Web app or PWA. This keeps the files readable and searchable in Obsidian, lets the Web/PWA and Obsidian plugin share the same dataset, and preserves a simple migration path if your preferred interface changes later.
+The Web app and PWA are the same browser runtime. Installation changes the launch experience, not the data model.
 
-## Built for AI Agents
+## First use: create or open local data
 
-Agents can read your local ownership data through stable CLI JSON commands. Every command follows a documented JSON contract — no UI scraping needed.
+When Ownly starts without an existing folder permission, choose one of two paths:
+
+### Create new local data
+
+Select a parent location such as `Documents`, an Obsidian Vault root, or an empty folder already named `Ownly`.
+
+Ownly initializes:
+
+```text
+Ownly/
+  Objects/
+  Accounts/
+  Snapshots/
+  Reviews/
+  Logs/
+    Object Experiences/
+  Archive/
+    Objects/
+    Accounts/
+    Snapshots/
+    Reviews/
+    Object Logs/
+```
+
+If the selected folder is already named `Ownly`, Ownly uses it directly and does not create `Ownly/Ownly`.
+
+### Open existing data
+
+Select any supported location:
+
+- an initialized Ownly data root containing `Objects/`;
+- an empty or initialized folder named `Ownly`;
+- an Obsidian Vault containing an `Ownly/` child folder;
+- an Obsidian Vault using the plugin's configured Ownly data folder.
+
+The browser asks for explicit local read/write permission. Personal Markdown files are not uploaded to GitHub Pages and are not copied into the PWA service-worker cache.
+
+## Recommended storage
+
+Recommended layout:
+
+```text
+<My Obsidian Vault>/
+  Ownly/
+    Objects/
+    Accounts/
+    Snapshots/
+    Reviews/
+    Logs/
+    Archive/
+```
+
+Standalone use without Obsidian is also supported:
+
+```text
+<My local folder>/
+  Ownly/
+    Objects/
+    Accounts/
+    Snapshots/
+    Reviews/
+    Logs/
+    Archive/
+```
+
+Keeping `Ownly/` inside an Obsidian Vault makes the Markdown easy to read, search, edit, version, and reuse across the Web/PWA, Obsidian plugin, and Agent CLI.
+
+## Product principles
+
+- **Local first** — no required cloud account, hosted database, telemetry, or mandatory synchronization.
+- **Markdown native** — records remain portable and human-readable.
+- **Decision led** — observe, acquire or pass, use, exit, and review.
+- **Recoverable mutations** — archive and restore are distinct from permanent deletion.
+- **One data model** — Web, PWA, Obsidian, and CLI operate on the same schemas and directory structure.
+- **Fact ready** — scripts and external AI agents can consume deterministic data contracts; Ownly itself is not an AI assistant.
+
+## What Ownly tracks
+
+| Record | Purpose |
+|---|---|
+| Physical item | Purchase, use, cost, condition, retirement, transfer, or discard lifecycle |
+| Recurring cost | Subscription or other repeating obligation, billing cycle, status, and annualized cost |
+| One-time experience | Plan, budget, actual cost, location, completion, and review |
+| Snapshot | Point-in-time net-worth and account-balance facts |
+| Review | Structured post-use, post-exit, monthly, or annual reflection |
+| Object experience log | Append-only usage, issue, maintenance, regret, lesson, comparison, or exit event |
+
+## Fact-ready Agent CLI
+
+Ownly exposes deterministic JSON read/write commands for scripts and external agents. It does not include model APIs, embeddings, AI chat, or generated recommendations.
 
 ```bash
-# Set your vault path
-export OWNLY_VAULT=/path/to/vault
+export OWNLY_VAULT=/path/to/location-containing-Ownly
 
-# Read commands designed for agents
 npm run --silent wyqd -- object list --json
 npm run --silent wyqd -- object get --id <id> --json
 npm run --silent wyqd -- object history --id <id> --json
@@ -55,180 +133,81 @@ npm run --silent wyqd -- recurring list --active --json
 npm run --silent wyqd -- summary --json
 ```
 
-See [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) for the full stable API reference, JSON shapes, and error codes. For agent workflow guidance, see [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md).
+See:
 
-## Project Status
+- [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md)
+- [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md)
+- [Data Model](docs/DATA_MODEL.md)
 
-Ownly `1.x` supports two human-facing runtimes: the Obsidian plugin for deep Vault integration and a hosted local-first Web runtime that can also be installed as a PWA. Current validation status is tracked in [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md).
+`OWNLY_VAULT` is retained as a legacy-compatible environment-variable name. It may point to an Obsidian Vault or another local location containing the Ownly data folder.
+
+## Current runtime status
 
 | Area | Status |
 |---|---|
-| Obsidian plugin | Integrated Vault runtime |
-| Web runtime | Hosted local-first browser runtime on GitHub Pages |
-| PWA | Installable Web runtime with offline application-shell startup |
-| Agent CLI | Stable read surface with JSON contract |
-| Data format | Plain Markdown + YAML frontmatter |
-| Storage model | Local Obsidian Vault recommended; standalone local folder supported |
+| Hosted Web app | Static GitHub Pages runtime with local-folder access |
+| Installed PWA | Same Web data behavior, standalone launch and cached app shell |
+| Obsidian plugin | Native Vault interface over the shared Ownly data model |
+| Agent CLI | Stable fact-ready JSON contract; strict typing work is tracked in #33 |
+| Data storage | Plain local Markdown + YAML frontmatter |
+| Mutation safety | Repository create/update/archive/restore contract protected by CI |
 
-## Why Ownly?
+Current validation and known coverage gaps are documented in [Quality Baseline](docs/QUALITY_BASELINE.md).
 
-Most tracking tools focus on **how much you spend**. Ownly focuses on **whether you should**.
+## Browser support
 
-- **Seed** a desire → **Observe** it over time → **Decide** to buy or pass → **Use** → **Review** after retirement
-- Every object has a lifecycle. Every experience gets a review. The data informs your next decision.
-- Your data lives as plain Markdown in a local folder — preferably your Obsidian Vault — so you can edit, version-control, or move files freely.
+Direct local-folder access uses the File System Access API.
 
-## Quick Start
+- Recommended: current desktop Chrome or Microsoft Edge.
+- Unsupported browsers can view demo mode but cannot connect local data.
+- Mobile direct-folder access is not a production target.
+- Browser permission may need to be renewed after restart or permission reset.
 
-### Option A — GitHub Pages Web app
+See [Web Runtime](docs/WEB_RUNTIME.md) for privacy boundaries, PWA behavior, and deployment details.
 
-Obsidian is not required.
+## Obsidian plugin
 
-1. Open **[Ownly Web](https://liuh886.github.io/ownly/)** in a current desktop Chrome or Microsoft Edge browser.
-2. Select **Connect Vault**.
-3. Choose either:
-   - your Obsidian Vault root (**recommended**), or
-   - a standalone local `Ownly` data folder.
-4. Approve local folder access in the browser prompt.
-
-The Web app is a static site hosted on GitHub Pages. Vault contents stay on your device and are not uploaded to GitHub Pages.
-
-### Option B — Install Ownly as a PWA
-
-The PWA also does not require Obsidian.
-
-1. Open **[Ownly Web](https://liuh886.github.io/ownly/)** in a supported desktop browser.
-2. Select **Install app** when it appears in the Ownly header, or use the browser's install command.
-3. Launch Ownly from your operating-system app list, desktop, or taskbar.
-4. Connect the same local data folder you use in the browser or Obsidian.
-
-The installed PWA runs in a standalone window and caches the application shell for offline startup. Your Markdown data remains in the local folder you selected and is never copied into the PWA cache.
-
-### Option C — Obsidian plugin
-
-1. **Install** — Open Obsidian → Settings → Community plugins → Browse → search "Ownly" → Install & Enable.
-2. **Open** — Click the Ownly icon in the left ribbon or run `Open Ownly workspace` from the command palette.
-3. **Explore** — Demo data is auto-seeded on first connect with sample objects, snapshots, and reviews.
-
-## Features
-
-### Ownership Ledger
-
-Track three object types with full lifecycle management:
-
-| Type | Lifecycle |
-|---|---|
-| **Physical items** | Seeded → Observing → Purchased → Using → Idle → Transferred / Discarded |
-| **Subscriptions** | Active → Paused → Cancelled |
-| **Experiences** | Planned → In Progress → Completed → Reviewed |
-
-- Quick entry templates and paste-line parsing for fast capture.
-- Cost tracking: purchase price, billing amount, budget vs actual, daily cost, annualized cost.
-- Payment account aggregation for fixed costs.
-
-### Agent CLI Read Surface
-
-- Stable JSON output for all read commands: `object list`, `object get`, `object search`, `object history`, `review-needed`, `recurring list`, `summary`.
-- Type-specific fields exposed automatically: cost fields for physical items, billing fields for subscriptions, location data for travel experiences.
-- Enriched agent fields: `has_review`, `needs_review`, `review_ref`, source file path.
-- JSON error format with documented error codes (`NOT_FOUND`, `MISSING_OPTION`, `INVALID_INPUT`, `VAULT_NOT_FOUND`).
-- See [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) for the full specification.
-
-### Review Memory
-
-- Write exit records for physical items and reviews for experiences.
-- Score food, scenery, and experience on a 1-10 scale.
-- Rank and compare across categories.
-- Reviews link back to objects via bidirectional `review_ref` / `target_id`.
-
-### Local Markdown Data
-
-- All data is stored as plain `.md` files under `Ownly/Objects`, `Ownly/Reviews`, and `Ownly/Snapshots`.
-- Each file is self-contained YAML frontmatter + Markdown body.
-- The `Ownly/` directory can live inside an Obsidian Vault or in a standalone local folder.
-- No database, no required cloud account, no telemetry.
-
-### Data Health
-
-- **Doctor diagnostics** — Local quality checks: duplicate IDs, schema validation, negative costs, dangling references, review ref integrity.
-- **Repair tool** — Preview and fix `review_ref` mismatches with file-level confirmations.
-- **Archive & restore** — Soft-delete with full recovery.
-
-### Supporting UI
-
-- **Dashboard** — Ownership overview, cost pressure, quick entry, review actions, and data scale.
-- **Travel Insights** — World map with visited countries, travel timeline, statistics.
-- **Ranking boards** — Top experiences by food, scenery, and experience scores.
-- **Bilingual UI** — English and Chinese, auto-detected.
-
-## Installation
-
-### Web App and PWA — simplest start
-
-Use the hosted app without installing Obsidian, installing Ownly locally, or running a local server:
-
-👉 **[Open Ownly Web](https://liuh886.github.io/ownly/)**
-
-From the hosted app, use **Install app** to add Ownly as a PWA when your browser offers the installation prompt.
-
-Direct local-folder access requires a desktop browser that supports the File System Access API. For browser support, PWA behavior, privacy boundaries, deployment details, and local development, see [Web Runtime](docs/WEB_RUNTIME.md).
-
-### Obsidian Plugin — deepest Vault integration
-
-Install from the Obsidian Community Plugins directory:
+Install from Obsidian Community Plugins:
 
 👉 **[Install Ownly](https://obsidian.md/plugins?id=ownly)**
 
-The plugin is optional for Web/PWA users, but storing data inside an Obsidian Vault remains the recommended layout.
+The plugin is optional for Web/PWA users. Use the term **Obsidian Vault** only for a real Vault or the Obsidian runtime; the cross-runtime storage term is **Ownly data folder**.
 
-## Data Storage
+## Data health
 
-Recommended layout:
+Ownly includes deterministic Doctor checks for issues such as:
 
-```text
-<My Obsidian Vault>/
-  Ownly/
-    Objects/         # Physical items, subscriptions, experiences
-    Snapshots/       # Net worth snapshots
-    Reviews/         # Exit records, experience reviews
-    Archive/         # Soft-deleted items (recoverable)
-```
+- duplicate entity IDs;
+- unsupported schema versions;
+- invalid costs or dates;
+- missing object/review references;
+- stale snapshots;
+- missing data directories.
 
-Standalone layout, without Obsidian:
-
-```text
-<Local folder>/
-  Objects/
-  Snapshots/
-  Reviews/
-  Archive/
-```
-
-The Web app can connect to either the Obsidian Vault root or the standalone Ownly data root.
-
-## Sponsorship
-
-Ownly is free with generous limits (200 objects, 100 reviews). A free activation code shown in the app unlocks unlimited usage and Pro features. No paid license verification, no network calls for activation.
+These checks operate on local facts and do not use AI.
 
 ## Documentation
 
-- [User Guide](docs/USER_GUIDE.md) — Core features and workflows.
-- [Web Runtime](docs/WEB_RUNTIME.md) — GitHub Pages, PWA installation, browser support, privacy boundary, and deployment.
-- [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) — Stable JSON API for AI agents.
-- [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md) — Agent workflow patterns and write commands.
-- [Data Model](docs/DATA_MODEL.md) — Markdown frontmatter schemas.
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — Doctor tool and data repair.
-- [Release Checklist](docs/RELEASE_CHECKLIST.md) — Release process.
-- [Obsidian Reviewer Checklist](docs/OBSIDIAN_REVIEWER_CHECKLIST.md) — Plugin submission checklist.
+- [User Guide](docs/USER_GUIDE.md)
+- [Web Runtime](docs/WEB_RUNTIME.md)
+- [Terminology Contract](docs/TERMINOLOGY.md)
+- [Quality Baseline](docs/QUALITY_BASELINE.md)
+- [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md)
+- [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md)
+- [Data Model](docs/DATA_MODEL.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Release Checklist](docs/RELEASE_CHECKLIST.md)
 
-## Developer Quick Reference
+## Development
 
 ```bash
-npm run validate           # Full gate: tsc + lint + build + obsidian validation
-npm run test               # Unit tests (vitest)
+npm ci
+npm run validate
+npm run test
+npm run test:e2e:data
 npm run wyqd -- --vault <path> object list --json
 ```
 
 ## License
 
-MIT. See [LICENSE](LICENSE). All data stays local. No telemetry. No required cloud sync.
+MIT. See [LICENSE](LICENSE). Personal data stays local. No telemetry. No required cloud synchronization.
