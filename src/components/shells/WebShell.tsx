@@ -50,14 +50,19 @@ export function WebShell() {
     setIsLoading(true);
     setError(null);
     try {
-      const connected = await obsidianService.requestAccess();
-      if (connected) {
-        await markdownEntityRepository.initialize();
-        setIsConnected(true);
-        return true;
+      if (typeof window.showDirectoryPicker !== 'function') {
+        setError(t('browserNotSupported'));
+        return false;
       }
-      setError(t('browserNotSupported'));
-      return false;
+
+      const connected = await obsidianService.requestAccess();
+      if (!connected) {
+        return false;
+      }
+
+      await markdownEntityRepository.initialize();
+      setIsConnected(true);
+      return true;
     } catch (event) {
       setError(event instanceof Error ? event.message : t('connectVaultFailed'));
       return false;
