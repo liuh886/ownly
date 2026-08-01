@@ -29,7 +29,7 @@
     "d3-geo": "^3.1.1",
     "framer-motion": "^12.41.0",
     "idb-keyval": "^6.2.5",
-    "next": "16.2.6",
+    "next": "16.2.12",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "topojson-client": "^3.1.0",
@@ -44,13 +44,19 @@
     "@types/topojson-client": "^3.1.5",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.12",
     "eslint-plugin-obsidianmd": "^0.3.0",
     "obsidian": "^1.13.1",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
     "vitest": "^3.2.6"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.25",
+      "sharp": "0.35.3"
+    }
   },
   "description": "Local-first Obsidian decision ledger for possessions, subscriptions, and experiences."
 }
