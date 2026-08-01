@@ -6,7 +6,7 @@ Use this checklist for every Ownly release. Web/PWA, Obsidian, CLI, schemas, and
 
 - Identify user-facing changes, data/schema changes, runtime-specific changes, and compatibility risks.
 - Confirm the release does not introduce an undocumented parallel data model.
-- Record any intentional Web/PWA/Obsidian capability difference.
+- Review [RUNTIME_COMPATIBILITY.md](RUNTIME_COMPATIBILITY.md) and record every intentional Web/PWA/Obsidian capability difference.
 - Confirm fact-ready Agent CLI changes preserve documented JSON and error contracts, or clearly mark a breaking change.
 
 ## 2. Synchronize versions
@@ -50,7 +50,26 @@ Run:
 npm run validate:terminology
 ```
 
-## 5. Full validation
+## 5. Runtime parity
+
+Review the typed capability contract in `src/core/runtime-capabilities.ts` and the committed [runtime compatibility matrix](RUNTIME_COMPATIBILITY.md).
+
+Confirm:
+
+- hosted Web and installed PWA still share one browser data runtime;
+- no PWA-specific repository, serializer, schema, migration core, or application shell has been introduced;
+- shared entity schemas, calculations, lifecycle rules, Doctor checks, and portability services remain runtime-independent;
+- any new platform exception is visible in the matrix and covered by a test or explicit manual check;
+- unsupported human editing surfaces fail visibly or remain documented rather than silently disappearing.
+
+Run:
+
+```bash
+npm run validate:runtime-parity
+npm run test:runtime-parity
+```
+
+## 6. Full validation
 
 ```bash
 npm ci
@@ -59,9 +78,9 @@ npm run test
 npm run test:e2e:data
 ```
 
-The full gate must include TypeScript, lint, repository mutation contracts, Web build/static export, PWA validation, and Obsidian package validation.
+The full gate must include TypeScript, lint, terminology, runtime parity, repository mutation contracts, CLI contracts, onboarding, portability, Web build/static export, PWA validation, and Obsidian package validation.
 
-## 6. Web/PWA manual check
+## 7. Web/PWA manual check
 
 Using current desktop Chrome or Microsoft Edge:
 
@@ -74,7 +93,7 @@ Using current desktop Chrome or Microsoft Edge:
 7. Confirm personal Markdown is not uploaded or included in the service-worker cache.
 8. Confirm permission cancellation or renewal produces a clear, non-destructive state.
 
-## 7. Obsidian validation
+## 8. Obsidian validation
 
 ```bash
 npm run build:obsidian
@@ -97,7 +116,7 @@ Verify:
 
 See [OBSIDIAN_REVIEWER_CHECKLIST.md](OBSIDIAN_REVIEWER_CHECKLIST.md).
 
-## 8. Data safety and migration
+## 9. Data safety and migration
 
 For any storage or schema change:
 
@@ -108,9 +127,9 @@ For any storage or schema change:
 - test restore into a clean location;
 - do not silently overwrite an existing valid file.
 
-Until versioned backup/migration work in #34 is complete, avoid destructive in-place transformations.
+Use the shared backup, restore, and migration services. Do not implement runtime-specific migration rules.
 
-## 9. Agent CLI contract
+## 10. Agent CLI contract
 
 Run representative success and error commands against a disposable dataset:
 
@@ -123,7 +142,7 @@ Confirm stdout JSON, stderr JSON, exit codes, and persisted Markdown match [AGEN
 
 Ownly exposes facts and validated mutations; do not add model APIs, embeddings, AI chat, or generated recommendations as part of routine release work.
 
-## 10. Publish
+## 11. Publish
 
 1. Create a tag matching the release version.
 2. Draft the GitHub Release.

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { BottomNav, type AppTab } from './BottomNav';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { createWYQDRuntimeInfo } from '@/core/runtime';
+import { getWYQDRuntimeCapabilities } from '@/core/runtime-capabilities';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import type { FirstObjectChoice } from '@/core/first-object-copy';
 import {
@@ -38,6 +39,10 @@ export function AppShell() {
     storageSet,
   } = useOwnlyWorkspace();
   const runtimeInfo = useMemo(() => createWYQDRuntimeInfo(runtimeTarget), [runtimeTarget]);
+  const runtimeCapabilities = useMemo(
+    () => getWYQDRuntimeCapabilities(runtimeTarget),
+    [runtimeTarget],
+  );
 
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [objectListFocus, setObjectListFocus] = useState<ObjectListFocus | null>(null);
@@ -62,14 +67,15 @@ export function AppShell() {
     completeFirstObjectOnboarding,
   );
 
-  const automaticFirstObjectPrompt = shouldPromptForFirstObject({
-    isConnected,
-    dataLoaded: data.dataLoaded,
-    objectCount: data.storedObjects.length,
-    completed: storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true',
-    dismissed: storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true',
-    promptHandled: firstObjectPromptHandled,
-  });
+  const automaticFirstObjectPrompt = runtimeCapabilities.firstObjectOnboarding
+    && shouldPromptForFirstObject({
+      isConnected,
+      dataLoaded: data.dataLoaded,
+      objectCount: data.storedObjects.length,
+      completed: storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true',
+      dismissed: storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true',
+      promptHandled: firstObjectPromptHandled,
+    });
   const firstObjectOpen = firstObjectForcedOpen || automaticFirstObjectPrompt;
 
   async function connectVault() {
@@ -98,7 +104,8 @@ export function AppShell() {
     setFirstObjectForcedOpen(true);
   }, [storageSet]);
 
-  const showEmptyDataBanner = isConnected
+  const showEmptyDataBanner = runtimeCapabilities.firstObjectOnboarding
+    && isConnected
     && data.dataLoaded
     && data.storedObjects.length === 0;
 
@@ -125,7 +132,7 @@ export function AppShell() {
             isLoading={isLoading}
             error={error}
             onConnect={() => void connectVault()}
-            isWebRuntime={runtimeTarget === 'web'}
+            isWebRuntime={runtimeCapabilities.dataRuntime === 'browser'}
           />
         ) : null}
 
@@ -180,7 +187,9 @@ export function AppShell() {
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
 
       <footer className="mt-4 pb-20 text-center">
-        <span className="text-[10px] text-stone-300">Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget} · {runtimeInfo.gitSha}</span>
+        <span className="text-[10px] text-stone-300">
+          Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget} · {runtimeCapabilities.dataBehaviorContract} · {runtimeInfo.gitSha}
+        </span>
       </footer>
 
       <FirstObjectOnboarding

@@ -2,6 +2,7 @@ import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
 import { WYQD_PRODUCT_SLOGAN } from '@/core/runtime';
+import { getWYQDRuntimeCapabilities } from '@/core/runtime-capabilities';
 import { WYQD_CURRENCIES, WYQD_CURRENCY_LABELS } from '@/lib/format';
 import { PwaInstallButton } from '@/components/pwa/PwaInstallButton';
 import type { AppTab } from './BottomNav';
@@ -27,7 +28,8 @@ export function AppHeader({
 }) {
   const { t, language, setLanguage, currency, setCurrency } = useI18n();
   const { runtimeTarget, isConnected, isLoading, membership, openLicenseModal } = useOwnlyWorkspace();
-  const isWebRuntime = runtimeTarget === 'web';
+  const runtimeCapabilities = getWYQDRuntimeCapabilities(runtimeTarget);
+  const usesBrowserLocalData = runtimeCapabilities.dataRuntime === 'browser';
   const localDataCopy = getOwnlyLocalDataCopy(language);
 
   return (
@@ -75,9 +77,9 @@ export function AppHeader({
               aria-hidden="true"
             />
             {isConnected
-              ? isWebRuntime ? localDataCopy.connected : t('vaultConnected')
+              ? usesBrowserLocalData ? localDataCopy.connected : t('vaultConnected')
               : isLoading
-                ? isWebRuntime ? localDataCopy.connecting : t('connecting')
+                ? usesBrowserLocalData ? localDataCopy.connecting : t('connecting')
                 : t('demoMode')}
           </span>
           <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500 ring-1 ring-stone-200">
@@ -105,9 +107,9 @@ export function AppHeader({
               </option>
             ))}
           </select>
-          {isWebRuntime ? (
+          {runtimeCapabilities.canPromptForLocalData ? (
             <>
-              <PwaInstallButton />
+              {runtimeCapabilities.canInstallPwa ? <PwaInstallButton /> : null}
               <button
                 type="button"
                 onClick={onConnectVault}
