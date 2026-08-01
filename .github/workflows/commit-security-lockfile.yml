@@ -1,0 +1,44 @@
+name: Commit Security Lockfile
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/commit-security-lockfile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  commit-lockfile:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Generate audited lockfile
+        run: |
+          npm install --package-lock-only
+          npm audit fix --package-lock-only
+          npm install
+          npm audit --audit-level=low
+
+      - name: Commit lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "fix(security): refresh audited dependency lockfile"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
