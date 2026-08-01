@@ -6,6 +6,11 @@ import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { createWYQDRuntimeInfo } from '@/core/runtime';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import type { FirstObjectChoice } from '@/core/first-object-copy';
+import {
+  FIRST_OBJECT_COMPLETED_KEY,
+  FIRST_OBJECT_DISMISSED_KEY,
+  shouldPromptForFirstObject,
+} from '@/core/first-object-onboarding';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 
@@ -18,9 +23,6 @@ import {
   EmptyOwnlyDataBanner,
   FirstObjectOnboarding,
 } from '@/components/onboarding/FirstObjectOnboarding';
-
-const FIRST_OBJECT_COMPLETED_KEY = 'ownly_first_object_completed';
-const FIRST_OBJECT_DISMISSED_KEY = 'ownly_first_object_dismissed';
 
 export function AppShell() {
   const { t } = useI18n();
@@ -60,11 +62,15 @@ export function AppShell() {
   );
 
   useEffect(() => {
-    if (!isConnected || !data.dataLoaded || data.storedObjects.length > 0) return;
-    if (firstObjectPromptHandled) return;
-    const completed = storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true';
-    const dismissed = storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true';
-    if (!completed && !dismissed) setFirstObjectOpen(true);
+    const shouldPrompt = shouldPromptForFirstObject({
+      isConnected,
+      dataLoaded: data.dataLoaded,
+      objectCount: data.storedObjects.length,
+      completed: storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true',
+      dismissed: storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true',
+      promptHandled: firstObjectPromptHandled,
+    });
+    if (shouldPrompt) setFirstObjectOpen(true);
   }, [
     data.dataLoaded,
     data.storedObjects.length,
