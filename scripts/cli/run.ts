@@ -8,6 +8,7 @@ import {
   summaryCommand,
   type CommandContext,
 } from './commands';
+import { backupCommand, migrateCommand } from './portability-commands';
 import { CliError, processCliIo, type CliIo } from './types';
 
 export const CLI_HELP = `Ownly CLI
@@ -36,6 +37,14 @@ Usage:
   npm run wyqd -- --vault <path> summary [--json]
   npm run wyqd -- --vault <path> doctor [--json]
 
+Data portability:
+  npm run wyqd -- --vault <path> backup create [--output <file>] --json
+  npm run wyqd -- --vault <path> backup inspect --input <file> --json
+  npm run wyqd -- --vault <path> backup validate --input <file> --json
+  npm run wyqd -- --vault <path> backup preflight --input <file> [--target <path>] [--collision reject|skip|overwrite] --json
+  npm run wyqd -- --vault <path> backup restore --input <file> [--target <path>] [--collision reject|skip|overwrite] [--dry-run] [--yes] --json
+  npm run wyqd -- --vault <path> migrate [--target-version 0.1] [--dry-run] [--yes] --json
+
 Environment:
   OWNLY_VAULT can be used instead of --vault. The compatibility name may point
   to an Obsidian Vault or another local location containing the Ownly data folder.
@@ -47,7 +56,10 @@ export interface RunCliOptions {
   now?: Date;
 }
 
-export function runCli(argv: readonly string[], runOptions: RunCliOptions = {}): number {
+export async function runCli(
+  argv: readonly string[],
+  runOptions: RunCliOptions = {},
+): Promise<number> {
   const env = runOptions.env ?? process.env;
   const io = runOptions.io ?? processCliIo;
   const now = runOptions.now ?? new Date();
@@ -75,6 +87,8 @@ export function runCli(argv: readonly string[], runOptions: RunCliOptions = {}):
     else if (resource === 'snapshot') snapshotCommand(context, command);
     else if (resource === 'review') reviewCommand(context, command);
     else if (resource === 'recurring') recurringCommand(context, command);
+    else if (resource === 'backup') await backupCommand(context, command);
+    else if (resource === 'migrate') await migrateCommand(context);
     else throw new CliError(`Unknown resource: ${resource}`);
     return 0;
   } catch (error) {
