@@ -2,6 +2,7 @@ import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { WYQD_PRODUCT_SLOGAN } from '@/core/runtime';
 import { WYQD_CURRENCIES, WYQD_CURRENCY_LABELS } from '@/lib/format';
+import { PwaInstallButton } from '@/components/pwa/PwaInstallButton';
 import type { AppTab } from './BottomNav';
 import type { WYQDTranslationKey } from '@/core/i18n';
 
@@ -96,14 +97,17 @@ export function AppHeader({
             ))}
           </select>
           {runtimeTarget === 'web' ? (
-            <button
-              type="button"
-              onClick={onConnectVault}
-              disabled={isLoading}
-              className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
-            >
-              {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
-            </button>
+            <>
+              <PwaInstallButton />
+              <button
+                type="button"
+                onClick={onConnectVault}
+                disabled={isLoading}
+                className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+              >
+                {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
+              </button>
+            </>
           ) : null}
         </div>
       </div>
