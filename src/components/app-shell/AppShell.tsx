@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { BottomNav, type AppTab } from './BottomNav';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { createWYQDRuntimeInfo } from '@/core/runtime';
@@ -42,7 +42,7 @@ export function AppShell() {
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [objectListFocus, setObjectListFocus] = useState<ObjectListFocus | null>(null);
   const [autoFocusComposer, setAutoFocusComposer] = useState(false);
-  const [firstObjectOpen, setFirstObjectOpen] = useState(false);
+  const [firstObjectForcedOpen, setFirstObjectForcedOpen] = useState(false);
   const [firstObjectPromptHandled, setFirstObjectPromptHandled] = useState(false);
   const [firstObjectRequest, setFirstObjectRequest] = useState<FirstObjectRequest | undefined>();
 
@@ -51,8 +51,9 @@ export function AppShell() {
   const completeFirstObjectOnboarding = useCallback(() => {
     storageSet(FIRST_OBJECT_COMPLETED_KEY, 'true');
     storageSet(FIRST_OBJECT_DISMISSED_KEY, 'false');
-    setFirstObjectOpen(false);
+    setFirstObjectForcedOpen(false);
     setFirstObjectPromptHandled(true);
+    setFirstObjectRequest(undefined);
   }, [storageSet]);
 
   const actions = useOwnlyActions(
@@ -61,23 +62,15 @@ export function AppShell() {
     completeFirstObjectOnboarding,
   );
 
-  useEffect(() => {
-    const shouldPrompt = shouldPromptForFirstObject({
-      isConnected,
-      dataLoaded: data.dataLoaded,
-      objectCount: data.storedObjects.length,
-      completed: storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true',
-      dismissed: storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true',
-      promptHandled: firstObjectPromptHandled,
-    });
-    if (shouldPrompt) setFirstObjectOpen(true);
-  }, [
-    data.dataLoaded,
-    data.storedObjects.length,
-    firstObjectPromptHandled,
+  const automaticFirstObjectPrompt = shouldPromptForFirstObject({
     isConnected,
-    storageGet,
-  ]);
+    dataLoaded: data.dataLoaded,
+    objectCount: data.storedObjects.length,
+    completed: storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true',
+    dismissed: storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true',
+    promptHandled: firstObjectPromptHandled,
+  });
+  const firstObjectOpen = firstObjectForcedOpen || automaticFirstObjectPrompt;
 
   async function connectVault() {
     clearError();
@@ -85,25 +78,25 @@ export function AppShell() {
   }
 
   const chooseFirstObject = useCallback((choice: FirstObjectChoice) => {
-    setFirstObjectOpen(false);
+    const token = Date.now();
+    setFirstObjectForcedOpen(false);
     setFirstObjectPromptHandled(true);
-    setFirstObjectRequest({ token: Date.now(), choice });
+    setFirstObjectRequest({ token, choice });
+    setObjectListFocus({ token });
+    setAutoFocusComposer(true);
+    setActiveTab('objects');
   }, []);
 
   const dismissFirstObject = useCallback(() => {
     storageSet(FIRST_OBJECT_DISMISSED_KEY, 'true');
-    setFirstObjectOpen(false);
+    setFirstObjectForcedOpen(false);
     setFirstObjectPromptHandled(true);
   }, [storageSet]);
 
   const reopenFirstObject = useCallback(() => {
     storageSet(FIRST_OBJECT_DISMISSED_KEY, 'false');
-    setFirstObjectOpen(true);
+    setFirstObjectForcedOpen(true);
   }, [storageSet]);
-
-  const firstObjectRequestHandled = useCallback(() => {
-    setFirstObjectRequest(undefined);
-  }, []);
 
   const showEmptyDataBanner = isConnected
     && data.dataLoaded
@@ -178,7 +171,6 @@ export function AppShell() {
                 setObjectListFocus={setObjectListFocus}
                 setAutoFocusComposer={setAutoFocusComposer}
                 setActiveTab={setActiveTab}
-                onFirstObjectRequestHandled={firstObjectRequestHandled}
               />
             </motion.div>
           </AnimatePresence>
