@@ -2,4 +2,6 @@
 
 import { runCli } from './cli/run';
 
-process.exitCode = runCli(process.argv.slice(2));
+void runCli(process.argv.slice(2)).then((exitCode) => {
+  process.exitCode = exitCode;
+});
