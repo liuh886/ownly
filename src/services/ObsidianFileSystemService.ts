@@ -171,6 +171,19 @@ export class ObsidianFileSystemService {
     }
   }
 
+  async getPortableDataRootHandle(): Promise<FileSystemDirectoryHandle> {
+    if (!this.directoryHandle) throw new Error('Not connected to local data');
+
+    const dataFolder = await this.getDataFolder();
+    if (!dataFolder) return this.directoryHandle;
+
+    const dataRoot = await this.getDirHandle(dataFolder);
+    if (!dataRoot) {
+      throw new Error(`Could not access Ownly data root: ${dataFolder}`);
+    }
+    return dataRoot;
+  }
+
   async ensureDataStructure(): Promise<void> {
     const dataFolder = await this.getDataFolder();
     for (const directory of OWNLY_REQUIRED_DIRECTORIES) {
