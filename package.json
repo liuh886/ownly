@@ -13,7 +13,8 @@
     "package:obsidian": "npm run build:obsidian && node scripts/package-obsidian-plugin.mjs",
     "validate:obsidian": "npm run check:obsidian && npm run lint:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
     "validate": "node scripts/gen-git-sha.mjs && tsc --noEmit && npm run lint && npm run build && npm run validate:obsidian",
-    "validate:pages": "node scripts/validate-static-export.mjs",
+    "validate:pages": "node scripts/validate-static-export.mjs && node scripts/validate-pwa.mjs",
+    "validate:pwa": "node scripts/validate-pwa.mjs",
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
     "smoke:web": "python tests/smoke/web_smoke.py",
     "smoke:site": "python tests/smoke/site_functionality.py",
@@ -40,7 +41,7 @@
     "@types/node": "^20.19.43",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-client": "^5.0.4",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.12",
@@ -50,6 +51,12 @@
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
     "vitest": "^3.2.6"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.25",
+      "sharp": "0.35.3"
+    }
   },
   "description": "Local-first Obsidian decision ledger for possessions, subscriptions, and experiences."
 }
