@@ -12,7 +12,8 @@
     "build:all": "npm run build && npm run build:obsidian",
     "package:obsidian": "npm run build:obsidian && node scripts/package-obsidian-plugin.mjs",
     "validate:obsidian": "npm run check:obsidian && npm run lint:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
-    "validate": "node scripts/gen-git-sha.mjs && tsc --noEmit && npm run lint && npm run test:e2e:data && npm run build && npm run validate:obsidian",
+    "validate:terminology": "node scripts/validate-terminology.mjs",
+    "validate": "node scripts/gen-git-sha.mjs && tsc --noEmit && npm run lint && npm run validate:terminology && npm run test:e2e:data && npm run build && npm run validate:obsidian",
     "validate:pages": "node scripts/validate-static-export.mjs && node scripts/validate-pwa.mjs && vitest run src/services/ownly-data-layout.test.ts",
     "validate:pwa": "node scripts/validate-pwa.mjs",
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
@@ -59,5 +60,5 @@
       "sharp": "0.35.3"
     }
   },
-  "description": "Local-first Obsidian decision ledger for possessions, subscriptions, and experiences."
+  "description": "Local-first ownership memory and decision ledger with portable Markdown data."
 }

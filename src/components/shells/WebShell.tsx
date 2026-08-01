@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { OwnlyWorkspaceProvider } from '@/core/ownly-workspace-context';
 import { type WYQDMembershipState } from '@/core/membership';
+import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
 import { markdownEntityRepository } from '@/services/MarkdownEntityRepository';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import { AppShell } from '@/components/app-shell/AppShell';
@@ -16,6 +17,7 @@ type LocalDataAction = 'create' | 'open';
 
 export function WebShell() {
   const { t, language } = useI18n();
+  const localDataCopy = getOwnlyLocalDataCopy(language);
 
   const WEB_PRO_MEMBERSHIP: WYQDMembershipState = useMemo(() => ({
     plan: 'pro_lifetime',
@@ -34,8 +36,8 @@ export function WebShell() {
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
   const [membership] = useState<WYQDMembershipState>(WEB_PRO_MEMBERSHIP);
 
-  const showNotice = useCallback((msg: string) => {
-    setNotice(msg);
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
     window.setTimeout(() => setNotice(null), 2600);
   }, []);
 
@@ -55,19 +57,19 @@ export function WebShell() {
   const connect = useCallback(async (): Promise<boolean> => {
     setError(null);
     if (typeof window.showDirectoryPicker !== 'function') {
-      setError(t('browserNotSupported'));
+      setError(localDataCopy.browserNotSupported);
       return false;
     }
     setOnboardingOpen(true);
     return false;
-  }, [t]);
+  }, [localDataCopy]);
 
   const connectLocalData = useCallback(async (action: LocalDataAction): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
     try {
       if (typeof window.showDirectoryPicker !== 'function') {
-        setError(t('browserNotSupported'));
+        setError(localDataCopy.browserNotSupported);
         return false;
       }
 
@@ -80,23 +82,15 @@ export function WebShell() {
       setIsConnected(true);
       setOnboardingOpen(false);
       window.localStorage.removeItem(ONBOARDING_DISMISSED_KEY);
-      showNotice(
-        language === 'zh'
-          ? action === 'create'
-            ? '本地 Ownly 数据目录已创建。'
-            : '本地 Ownly 数据已连接。'
-          : action === 'create'
-            ? 'Local Ownly data has been created.'
-            : 'Local Ownly data is connected.',
-      );
+      showNotice(action === 'create' ? localDataCopy.createdNotice : localDataCopy.openedNotice);
       return true;
     } catch (event) {
-      setError(event instanceof Error ? event.message : t('connectVaultFailed'));
+      setError(event instanceof Error ? event.message : localDataCopy.connectFailed);
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [language, showNotice, t]);
+  }, [localDataCopy, showNotice]);
 
   const continueInDemo = useCallback(() => {
     window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, 'true');
@@ -104,7 +98,7 @@ export function WebShell() {
     setOnboardingOpen(false);
   }, []);
 
-  // Auto-connect on mount. First-time users see the local-data chooser instead of a Vault-only prompt.
+  // Auto-connect on mount. First-time users see the local-data chooser.
   useEffect(() => {
     let isMounted = true;
 
@@ -124,7 +118,7 @@ export function WebShell() {
         }
       } catch (event) {
         if (isMounted) {
-          setError(event instanceof Error ? event.message : t('initVaultFailed'));
+          setError(event instanceof Error ? event.message : localDataCopy.initializeFailed);
           if (window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true') {
             setOnboardingOpen(true);
           }
@@ -136,7 +130,7 @@ export function WebShell() {
 
     void init();
     return () => { isMounted = false; };
-  }, [t]);
+  }, [localDataCopy]);
 
   const contextValue = useMemo(() => ({
     repository: markdownEntityRepository,

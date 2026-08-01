@@ -1,5 +1,6 @@
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
 import { WYQD_PRODUCT_SLOGAN } from '@/core/runtime';
 import { WYQD_CURRENCIES, WYQD_CURRENCY_LABELS } from '@/lib/format';
 import { PwaInstallButton } from '@/components/pwa/PwaInstallButton';
@@ -27,10 +28,7 @@ export function AppHeader({
   const { t, language, setLanguage, currency, setCurrency } = useI18n();
   const { runtimeTarget, isConnected, isLoading, membership, openLicenseModal } = useOwnlyWorkspace();
   const isWebRuntime = runtimeTarget === 'web';
-  const webStatus = language === 'zh' ? '本地数据已连接' : 'Local data connected';
-  const webConnectLabel = isConnected
-    ? language === 'zh' ? '更换数据目录' : 'Change data folder'
-    : language === 'zh' ? '创建或打开数据' : 'Create or open data';
+  const localDataCopy = getOwnlyLocalDataCopy(language);
 
   return (
     <header className="mb-8 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
@@ -77,8 +75,10 @@ export function AppHeader({
               aria-hidden="true"
             />
             {isConnected
-              ? isWebRuntime ? webStatus : t('vaultConnected')
-              : isLoading ? t('connecting') : t('demoMode')}
+              ? isWebRuntime ? localDataCopy.connected : t('vaultConnected')
+              : isLoading
+                ? isWebRuntime ? localDataCopy.connecting : t('connecting')
+                : t('demoMode')}
           </span>
           <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500 ring-1 ring-stone-200">
             {objectCount} {t('objects')}
@@ -96,11 +96,13 @@ export function AppHeader({
           </button>
           <select
             value={currency}
-            onChange={(e) => setCurrency(e.target.value as typeof currency)}
+            onChange={(event) => setCurrency(event.target.value as typeof currency)}
             className="cursor-pointer rounded-full bg-stone-100 px-2 py-1 text-[11px] font-medium text-stone-600 ring-1 ring-stone-200 outline-none transition hover:bg-stone-200 hover:text-stone-900"
           >
-            {WYQD_CURRENCIES.map((cur) => (
-              <option key={cur} value={cur}>{WYQD_CURRENCY_LABELS[cur]}</option>
+            {WYQD_CURRENCIES.map((currentCurrency) => (
+              <option key={currentCurrency} value={currentCurrency}>
+                {WYQD_CURRENCY_LABELS[currentCurrency]}
+              </option>
             ))}
           </select>
           {isWebRuntime ? (
@@ -112,7 +114,9 @@ export function AppHeader({
                 disabled={isLoading}
                 className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
               >
-                {isLoading ? t('connecting') : webConnectLabel}
+                {isLoading
+                  ? localDataCopy.connecting
+                  : isConnected ? localDataCopy.changeFolder : localDataCopy.createOrOpen}
               </button>
             </>
           ) : null}
