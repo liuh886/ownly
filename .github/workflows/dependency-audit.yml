@@ -1,0 +1,64 @@
+name: Dependency Audit
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/dependency-audit.yml
+      - scripts/summarize-npm-audit.mjs
+      - scripts/enforce-production-audit.mjs
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/dependency-audit.yml
+      - scripts/summarize-npm-audit.mjs
+      - scripts/enforce-production-audit.mjs
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate full dependency audit
+        run: npm audit --json > npm-audit-full.json || true
+
+      - name: Generate production dependency audit
+        run: npm audit --omit=dev --json > npm-audit-production.json || true
+
+      - name: Summarize audit findings
+        run: |
+          node scripts/summarize-npm-audit.mjs npm-audit-full.json "Full dependency tree"
+          node scripts/summarize-npm-audit.mjs npm-audit-production.json "Production dependency tree"
+
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-reports
+          path: |
+            npm-audit-full.json
+            npm-audit-production.json
+          retention-days: 30
+
+      - name: Enforce production dependency gate
+        run: node scripts/enforce-production-audit.mjs npm-audit-production.json
