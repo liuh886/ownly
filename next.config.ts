@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
   output: "export",
   trailingSlash: true,
   basePath,
+  env: {
+    NEXT_PUBLIC_OWNLY_BASE_PATH: basePath,
+  },
 };
 
 export default nextConfig;
