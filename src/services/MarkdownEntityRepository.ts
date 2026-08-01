@@ -17,11 +17,25 @@ import type {
 import { obsidianService } from './ObsidianFileSystemService';
 import { createWYQDDirectories } from '@/data/paths';
 
+export interface MarkdownFileStore {
+  getDataFolder(): Promise<string>;
+  readMarkdownFiles(directory: string): Promise<{ fileName: string; content: string }[]>;
+  writeMarkdownFile(directory: string, fileName: string, content: string): Promise<void>;
+  deleteMarkdownFile(directory: string, fileName: string): Promise<void>;
+}
+
+export type RepositoryClock = () => Date;
+
 export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   private dirs: ReturnType<typeof createWYQDDirectories> = WYQD_DIRECTORIES;
 
+  constructor(
+    private readonly store: MarkdownFileStore = obsidianService,
+    private readonly clock: RepositoryClock = () => new Date(),
+  ) {}
+
   async initialize(): Promise<void> {
-    const dataFolder = await obsidianService.getDataFolder();
+    const dataFolder = await this.store.getDataFolder();
     if (dataFolder === '') {
       // Selected folder IS the data root — use relative paths
       this.dirs = {
@@ -47,19 +61,48 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
     return this.dirs.root;
   }
 
+  private now(): Date {
+    return this.clock();
+  }
+
+  private async getAvailableFileName(directory: string, preferredFileName: string): Promise<string> {
+    const existingNames = new Set(
+      (await this.store.readMarkdownFiles(directory)).map((file) => file.fileName),
+    );
+    if (!existingNames.has(preferredFileName)) return preferredFileName;
+
+    const extensionIndex = preferredFileName.toLowerCase().endsWith('.md')
+      ? preferredFileName.length - 3
+      : preferredFileName.length;
+    const base = preferredFileName.slice(0, extensionIndex);
+    const extension = preferredFileName.slice(extensionIndex);
+
+    let suffix = 2;
+    let candidate = `${base}--${suffix}${extension}`;
+    while (existingNames.has(candidate)) {
+      suffix += 1;
+      candidate = `${base}--${suffix}${extension}`;
+    }
+    return candidate;
+  }
+
   private async archiveEntity(
     sourceDirectory: string,
     archiveDirectory: string,
     fileName: string,
   ): Promise<string> {
-    const files = await obsidianService.readMarkdownFiles(sourceDirectory);
+    const files = await this.store.readMarkdownFiles(sourceDirectory);
     const target = files.find((file) => file.fileName === fileName);
     if (!target) {
       throw new Error(`Markdown file not found: ${fileName}`);
     }
 
-    const timestamp = new Date().toISOString();
-    const archiveFileName = `${timestamp.replace(/[:.]/g, '-')}--${fileName}`;
+    const timestamp = this.now().toISOString();
+    const preferredArchiveFileName = `${timestamp.replace(/[:.]/g, '-')}--${fileName}`;
+    const archiveFileName = await this.getAvailableFileName(
+      archiveDirectory,
+      preferredArchiveFileName,
+    );
     const parsed = parseMarkdownEntity<Record<string, unknown>>(target.content);
     const content = serializeMarkdownEntity(
       {
@@ -71,8 +114,9 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
       parsed.body,
     );
 
-    await obsidianService.writeMarkdownFile(archiveDirectory, archiveFileName, content);
-    await obsidianService.deleteMarkdownFile(sourceDirectory, fileName);
+    // Write the recoverable archive copy before removing the active source.
+    await this.store.writeMarkdownFile(archiveDirectory, archiveFileName, content);
+    await this.store.deleteMarkdownFile(sourceDirectory, fileName);
     return archiveFileName;
   }
 
@@ -81,7 +125,7 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
     targetDirectory: string,
     archiveFileName: string,
   ): Promise<string> {
-    const archivedFiles = await obsidianService.readMarkdownFiles(archiveDirectory);
+    const archivedFiles = await this.store.readMarkdownFiles(archiveDirectory);
     const target = archivedFiles.find((file) => file.fileName === archiveFileName);
     if (!target) {
       throw new Error(`Archived Markdown file not found: ${archiveFileName}`);
@@ -93,27 +137,31 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
     delete frontmatter.archived_at;
     delete frontmatter.archived_from;
     delete frontmatter.original_file_name;
-    const existingFiles = await obsidianService.readMarkdownFiles(targetDirectory);
+
     const preferredFileName =
       typeof originalFileName === 'string' && originalFileName.endsWith('.md')
         ? originalFileName
         : archiveFileName.replace(/^[^-]+--/, '');
-    const fileName = existingFiles.some((file) => file.fileName === preferredFileName)
-      ? `restored-${new Date().toISOString().replace(/[:.]/g, '-')}--${preferredFileName}`
+    const restoreTimestamp = this.now().toISOString().replace(/[:.]/g, '-');
+    const existingFiles = await this.store.readMarkdownFiles(targetDirectory);
+    const existingNames = new Set(existingFiles.map((file) => file.fileName));
+    const collisionSafePreferred = existingNames.has(preferredFileName)
+      ? `restored-${restoreTimestamp}--${preferredFileName}`
       : preferredFileName;
+    const fileName = await this.getAvailableFileName(targetDirectory, collisionSafePreferred);
 
-    await obsidianService.writeMarkdownFile(
+    await this.store.writeMarkdownFile(
       targetDirectory,
       fileName,
       serializeMarkdownEntity(
         {
           ...frontmatter,
-          updated_at: new Date().toISOString().split('T')[0],
+          updated_at: this.now().toISOString().split('T')[0],
         },
         parsed.body,
       ),
     );
-    await obsidianService.deleteMarkdownFile(archiveDirectory, archiveFileName);
+    await this.store.deleteMarkdownFile(archiveDirectory, archiveFileName);
     return fileName;
   }
 
@@ -122,7 +170,7 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
     type: WYQDEntityType,
     warningLabel: string,
   ): Promise<WYQDStoredEntity<T>[]> {
-    const files = await obsidianService.readMarkdownFiles(directory);
+    const files = await this.store.readMarkdownFiles(directory);
     const entities: WYQDStoredEntity<T>[] = [];
 
     for (const file of files) {
@@ -130,7 +178,6 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
         const parsed = parseMarkdownEntity<Record<string, unknown>>(file.content);
         if (parsed.frontmatter.type !== type) continue;
 
-        // 对 review 类型进行数据迁移
         let frontmatter = parsed.frontmatter;
         if (type === 'review') {
           frontmatter = migrateReviewEntry(frontmatter);
@@ -177,27 +224,28 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   async listArchivedEntities(): Promise<WYQDArchivedStoredEntity[]> {
     const [objects, snapshots, reviews] = await Promise.all([
       this.listEntities<WYQDObject>(this.dirs.objectArchive, 'object', 'archived object')
-        .then((entries) => entries.map((e) => ({ ...e, archiveType: 'object' as const }))),
+        .then((entries) => entries.map((entry) => ({ ...entry, archiveType: 'object' as const }))),
       this.listEntities<AccountSnapshot>(this.dirs.snapshotArchive, 'snapshot', 'archived snapshot')
-        .then((entries) => entries.map((e) => ({ ...e, archiveType: 'snapshot' as const }))),
+        .then((entries) => entries.map((entry) => ({ ...entry, archiveType: 'snapshot' as const }))),
       this.listEntities<ReviewEntry>(this.dirs.reviewArchive, 'review', 'archived review')
-        .then((entries) => entries.map((e) => ({ ...e, archiveType: 'review' as const }))),
+        .then((entries) => entries.map((entry) => ({ ...entry, archiveType: 'review' as const }))),
     ]);
     return [...objects, ...snapshots, ...reviews];
   }
 
   async saveObject(object: WYQDObject, body = ''): Promise<string> {
-    const date = object.created_at || new Date().toISOString().split('T')[0];
-    const fileName = createEntityFileName(date, slugify(object.title));
+    const date = object.created_at || this.now().toISOString().split('T')[0];
+    const preferredFileName = createEntityFileName(date, slugify(object.title));
+    const fileName = await this.getAvailableFileName(this.dirs.objects, preferredFileName);
     const content = serializeMarkdownEntity(object, body);
 
-    await obsidianService.writeMarkdownFile(this.dirs.objects, fileName, content);
+    await this.store.writeMarkdownFile(this.dirs.objects, fileName, content);
     return fileName;
   }
 
   async updateObject(fileName: string, object: WYQDObject, body = ''): Promise<void> {
     const content = serializeMarkdownEntity(object, body);
-    await obsidianService.writeMarkdownFile(this.dirs.objects, fileName, content);
+    await this.store.writeMarkdownFile(this.dirs.objects, fileName, content);
   }
 
   async archiveObject(fileName: string): Promise<string> {
@@ -229,20 +277,21 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   }
 
   async saveSnapshot(snapshot: AccountSnapshot, body = ''): Promise<string> {
-    const date = snapshot.snapshot_at || snapshot.created_at || new Date().toISOString().split('T')[0];
+    const date = snapshot.snapshot_at || snapshot.created_at || this.now().toISOString().split('T')[0];
     const time = snapshot.created_at?.includes('T')
       ? snapshot.created_at.slice(11, 19).replaceAll(':', '')
       : undefined;
-    const fileName = createSnapshotFileName(date, time);
+    const preferredFileName = createSnapshotFileName(date, time);
+    const fileName = await this.getAvailableFileName(this.dirs.snapshots, preferredFileName);
     const content = serializeMarkdownEntity(snapshot, body);
 
-    await obsidianService.writeMarkdownFile(this.dirs.snapshots, fileName, content);
+    await this.store.writeMarkdownFile(this.dirs.snapshots, fileName, content);
     return fileName;
   }
 
   async updateSnapshot(fileName: string, snapshot: AccountSnapshot, body = ''): Promise<void> {
     const content = serializeMarkdownEntity(snapshot, body);
-    await obsidianService.writeMarkdownFile(this.dirs.snapshots, fileName, content);
+    await this.store.writeMarkdownFile(this.dirs.snapshots, fileName, content);
   }
 
   async archiveSnapshot(fileName: string): Promise<string> {
@@ -262,17 +311,18 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   }
 
   async saveReview(review: ReviewEntry, body = ''): Promise<string> {
-    const date = review.reviewed_at || review.exited_at || review.created_at || new Date().toISOString().split('T')[0];
-    const fileName = createReviewFileName(date, slugify(review.title));
+    const date = review.reviewed_at || review.exited_at || review.created_at || this.now().toISOString().split('T')[0];
+    const preferredFileName = createReviewFileName(date, slugify(review.title));
+    const fileName = await this.getAvailableFileName(this.dirs.reviews, preferredFileName);
     const content = serializeMarkdownEntity(review, body);
 
-    await obsidianService.writeMarkdownFile(this.dirs.reviews, fileName, content);
+    await this.store.writeMarkdownFile(this.dirs.reviews, fileName, content);
     return fileName;
   }
 
   async updateReview(fileName: string, review: ReviewEntry, body = ''): Promise<void> {
     const content = serializeMarkdownEntity(review, body);
-    await obsidianService.writeMarkdownFile(this.dirs.reviews, fileName, content);
+    await this.store.writeMarkdownFile(this.dirs.reviews, fileName, content);
   }
 
   async archiveReview(fileName: string): Promise<string> {
@@ -302,7 +352,7 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
       review: this.dirs.reviewArchive,
       object_log: this.dirs.objectLogArchive,
     };
-    await obsidianService.deleteMarkdownFile(dirMap[archiveType], archiveFileName);
+    await this.store.deleteMarkdownFile(dirMap[archiveType], archiveFileName);
   }
 }
 
