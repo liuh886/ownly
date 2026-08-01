@@ -13,20 +13,8 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<InstallChoice>;
 };
 
-type NavigatorWithStandalone = Navigator & {
-  standalone?: boolean;
-};
-
 const basePath = process.env.NEXT_PUBLIC_OWNLY_BASE_PATH ?? '';
 const appScope = `${basePath}/`;
-
-function isStandaloneMode(): boolean {
-  if (typeof window === 'undefined') return false;
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    (navigator as NavigatorWithStandalone).standalone === true
-  );
-}
 
 export function PwaInstallButton() {
   const { language } = useI18n();
@@ -34,8 +22,6 @@ export function PwaInstallButton() {
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    setInstalled(isStandaloneMode());
-
     if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
       void navigator.serviceWorker.register(`${basePath}/sw.js`, { scope: appScope }).catch((error) => {
         console.warn('[Ownly PWA] Service worker registration failed.', error);
