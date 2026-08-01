@@ -1,5 +1,10 @@
 import YAML from 'yaml';
 import { get, set } from 'idb-keyval';
+import {
+  OWNLY_DATA_ROOT_NAME,
+  OWNLY_REQUIRED_DIRECTORIES,
+  shouldUseSelectedDirectoryAsDataRoot,
+} from './ownly-data-layout';
 
 export interface WishlistItem {
   name: string;
@@ -51,18 +56,68 @@ export class ObsidianFileSystemService {
     return false;
   }
 
-  async requestAccess(): Promise<boolean> {
+  private async hasDirectory(
+    handle: FileSystemDirectoryHandle,
+    directoryName: string,
+  ): Promise<boolean> {
+    try {
+      await handle.getDirectoryHandle(directoryName);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async persistDirectoryHandle(
+    handle: FileSystemDirectoryHandle,
+    dataFolder: string | null,
+  ): Promise<void> {
+    this.directoryHandle = handle;
+    this.cachedDataFolder = dataFolder;
+    await set(HANDLE_KEY, handle);
+  }
+
+  async createLocalData(): Promise<boolean> {
     try {
       const picker = window.showDirectoryPicker;
       if (!picker) return false;
-      this.directoryHandle = await picker({ mode: 'readwrite' });
-      this.cachedDataFolder = null;
-      await set(HANDLE_KEY, this.directoryHandle);
+
+      const selectedDirectory = await picker({ mode: 'readwrite' });
+      const hasObsidianConfig = await this.hasDirectory(selectedDirectory, OBSIDIAN_CONFIG_DIR);
+      const useSelectedAsRoot = shouldUseSelectedDirectoryAsDataRoot(
+        selectedDirectory.name,
+        hasObsidianConfig,
+      );
+      const dataRoot = useSelectedAsRoot
+        ? selectedDirectory
+        : await selectedDirectory.getDirectoryHandle(OWNLY_DATA_ROOT_NAME, { create: true });
+
+      await this.persistDirectoryHandle(dataRoot, '');
+      await this.ensureDataStructure();
       return true;
     } catch (error) {
-      console.error('User denied access or error occurred:', error);
-      return false;
+      if (error instanceof DOMException && error.name === 'AbortError') return false;
+      console.error('Failed to create Ownly local data:', error);
+      throw error;
     }
+  }
+
+  async openLocalData(): Promise<boolean> {
+    try {
+      const picker = window.showDirectoryPicker;
+      if (!picker) return false;
+      const selectedDirectory = await picker({ mode: 'readwrite' });
+      await this.persistDirectoryHandle(selectedDirectory, null);
+      return true;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return false;
+      console.error('Failed to open Ownly local data:', error);
+      throw error;
+    }
+  }
+
+  async requestAccess(): Promise<boolean> {
+    return this.openLocalData();
   }
 
   get isConnected(): boolean {
@@ -70,31 +125,37 @@ export class ObsidianFileSystemService {
   }
 
   async getDataFolder(): Promise<string> {
-    if (this.cachedDataFolder) return this.cachedDataFolder;
+    if (this.cachedDataFolder !== null) return this.cachedDataFolder;
 
-    const fallback = 'Ownly';
+    const fallback = OWNLY_DATA_ROOT_NAME;
     if (!this.directoryHandle) return fallback;
 
-    // 1. Check if selected folder IS the data root (has Objects/ directly)
+    // 1. The selected directory is already an initialized Ownly data root.
     try {
       await this.directoryHandle.getDirectoryHandle('Objects');
       this.cachedDataFolder = '';
       return this.cachedDataFolder;
     } catch {
-      // Not a direct data folder, continue
+      // Continue with empty-folder and Vault detection.
     }
 
-    // 2. Check if selected folder contains Ownly/ subfolder with data
+    // 2. An empty standalone directory named Ownly is also the data root.
+    const hasObsidianConfig = await this.hasDirectory(this.directoryHandle, OBSIDIAN_CONFIG_DIR);
+    if (shouldUseSelectedDirectoryAsDataRoot(this.directoryHandle.name, hasObsidianConfig)) {
+      this.cachedDataFolder = '';
+      return this.cachedDataFolder;
+    }
+
+    // 3. The selected directory contains an Ownly child folder (typically a Vault root).
     try {
-      const ownlyDir = await this.directoryHandle.getDirectoryHandle('Ownly');
-      await ownlyDir.getDirectoryHandle('Objects');
-      this.cachedDataFolder = 'Ownly';
+      await this.directoryHandle.getDirectoryHandle(OWNLY_DATA_ROOT_NAME);
+      this.cachedDataFolder = OWNLY_DATA_ROOT_NAME;
       return this.cachedDataFolder;
     } catch {
-      // Not here either, continue
+      // Not here either, continue.
     }
 
-    // 3. Try Obsidian plugin settings lookup
+    // 4. Try Obsidian plugin settings lookup for custom data folders.
     try {
       const pluginDir = await this.getNestedDirectoryHandle([OBSIDIAN_CONFIG_DIR, 'plugins', 'wyqd']);
       const dataFile = await pluginDir.getFileHandle('data.json');
@@ -110,8 +171,16 @@ export class ObsidianFileSystemService {
     }
   }
 
+  async ensureDataStructure(): Promise<void> {
+    const dataFolder = await this.getDataFolder();
+    for (const directory of OWNLY_REQUIRED_DIRECTORIES) {
+      const path = dataFolder ? `${dataFolder}/${directory}` : directory;
+      await this.getDirHandle(path, true);
+    }
+  }
+
   private async getNestedDirectoryHandle(parts: string[]): Promise<FileSystemDirectoryHandle> {
-    if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+    if (!this.directoryHandle) throw new Error('Not connected to local data');
 
     let current = this.directoryHandle;
     for (const part of parts) {
@@ -122,7 +191,7 @@ export class ObsidianFileSystemService {
   }
 
   async getItems(): Promise<WishlistItem[]> {
-    if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+    if (!this.directoryHandle) throw new Error('Not connected to local data');
 
     const items: WishlistItem[] = [];
 
@@ -150,7 +219,7 @@ export class ObsidianFileSystemService {
   }
 
   async addItem(item: Partial<WishlistItem>): Promise<void> {
-    if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+    if (!this.directoryHandle) throw new Error('Not connected to local data');
 
     const now = new Date().toISOString().split('T')[0];
 
@@ -182,7 +251,7 @@ export class ObsidianFileSystemService {
   }
 
   async updateItemStatus(fileName: string, newStatus: 'purchased' | 'archived'): Promise<void> {
-    if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+    if (!this.directoryHandle) throw new Error('Not connected to local data');
     this.sanitizeFileName(fileName);
 
     const fileHandle = await this.directoryHandle.getFileHandle(fileName);
@@ -211,7 +280,7 @@ export class ObsidianFileSystemService {
   }
 
   async updateItem(fileName: string, updates: Partial<WishlistItem>): Promise<void> {
-    if (!this.directoryHandle) throw new Error('Not connected to Obsidian Vault');
+    if (!this.directoryHandle) throw new Error('Not connected to local data');
     this.sanitizeFileName(fileName);
 
     const fileHandle = await this.directoryHandle.getFileHandle(fileName);
