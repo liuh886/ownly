@@ -56,7 +56,7 @@ class MemoryAdapter implements OwnlyTextFileAdapter {
 
 const SOURCE = { runtime: 'test' as const, ownly_version: '1.1.0' };
 const NOW = new Date('2026-08-01T10:00:00.000Z');
-const metadata = (version = OWNLY_DATASET_SCHEMA_VERSION) => `${JSON.stringify({
+const metadata = (version: string = OWNLY_DATASET_SCHEMA_VERSION) => `${JSON.stringify({
   kind: 'ownly-dataset',
   schema_version: version,
   initialized_at: '2026-08-01T09:00:00.000Z',
