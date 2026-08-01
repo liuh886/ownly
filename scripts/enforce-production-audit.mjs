@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 
 const reportPath = process.argv[2] ?? 'npm-audit-production.json';
+const reportLabel = process.argv[3] ?? 'Dependency';
 
 if (!fs.existsSync(reportPath)) {
-  console.error(`[security audit] Missing production report: ${reportPath}`);
+  console.error(`[security audit] Missing ${reportLabel.toLowerCase()} report: ${reportPath}`);
   process.exit(1);
 }
 
@@ -14,11 +15,11 @@ const high = Number(counts.high ?? 0);
 
 if (critical > 0 || high > 0) {
   console.error(
-    `[security audit] Production dependency gate failed: critical=${critical}, high=${high}.`,
+    `[security audit] ${reportLabel} gate failed: critical=${critical}, high=${high}.`,
   );
   process.exit(1);
 }
 
 console.log(
-  `[security audit] Production dependency gate passed: critical=${critical}, high=${high}.`,
+  `[security audit] ${reportLabel} gate passed: critical=${critical}, high=${high}.`,
 );
