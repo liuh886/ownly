@@ -1,6 +1,6 @@
 # Ownly Web Runtime
 
-Ownly Web is a static, local-first browser application. The hosted page serves only the interface code; personal data is read and written directly by the browser after the user explicitly grants access to a local folder.
+Ownly Web is a static, local-first browser application. The hosted page serves the interface code; personal Ownly records are read and written directly by the browser after the user explicitly grants access to a local folder.
 
 ## Hosted app
 
@@ -78,11 +78,15 @@ Direct folder access depends on the File System Access API.
 ## Privacy and security boundary
 
 - Personal Markdown files stay on the user's device.
-- The GitHub Pages host does not receive or store personal data.
+- GitHub Pages does not receive or store the contents of the selected Ownly data folder.
 - Ownly does not require a backend API for local folder access.
 - Access is limited to the directory selected by the user and the permission granted by the browser.
 - The service worker caches only same-origin application resources; it does not cache personal Markdown files.
-- The hosted Web runtime should not add analytics or third-party scripts that can inspect application state without an explicit privacy review.
+- Hosted Web/PWA loads Google Analytics with measurement ID `G-KXXVS33FQ2` to measure aggregate site traffic and page visits.
+- Ownly does not define custom analytics events containing Markdown contents, local file names, form values, object records, reviews, account snapshots, or selected-folder data.
+- The Obsidian plugin and Agent CLI do not load Google Analytics.
+
+Adding any future custom event, advertising integration, session replay, user identifier, or application-state instrumentation requires a separate privacy review and corresponding documentation update.
 
 Because browser permissions are scoped to the site origin, moving from localhost to GitHub Pages or from GitHub Pages to a custom domain requires the user to connect the local data again.
 
@@ -99,7 +103,7 @@ Local development continues to use the root path and does not register the produ
 OWNLY_BASE_PATH=/ownly
 ```
 
-The Next.js static export, PWA package, and standalone directory-layout behavior are validated with:
+The Next.js static export, PWA package, Google Analytics tag, and standalone directory-layout behavior are validated with:
 
 ```bash
 npm run validate:pages
@@ -111,7 +115,7 @@ npm run validate:pages
 
 1. Install dependencies.
 2. Run the full project validation gate.
-3. Validate the static export, `/ownly` asset prefix, manifest, icons, service worker, and local-data layout behavior.
+3. Validate the static export, `/ownly` asset prefix, Google Analytics tag, manifest, icons, service worker, and local-data layout behavior.
 4. Upload the `out/` directory as a Pages artifact.
 5. Deploy only for non-pull-request runs.
 
