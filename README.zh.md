@@ -68,6 +68,8 @@ Ownly/
 
 浏览器会明确请求本地读写权限。个人 Markdown 文件不会上传到 GitHub Pages，也不会被复制进 PWA 的 service worker 缓存。
 
+托管 Web/PWA 使用 Google Analytics 测量 ID `G-KXXVS33FQ2` 统计整体访问情况。Ownly 不会把 Markdown 正文、本地文件名、表单值、对象记录或所选目录信息作为自定义分析事件发送。Obsidian 插件和 Agent CLI 不加载 Google Analytics。
+
 ## 推荐的数据存储方式
 
 推荐布局：
@@ -100,7 +102,7 @@ Ownly/
 
 ## 产品原则
 
-- **本地优先** —— 无需云端账号、托管数据库、遥测或强制同步。
+- **本地优先** —— 无需云端账号、托管数据库或强制同步。托管 Web/PWA 只进行整体访问统计，本地 Ownly 记录仍保留在本地。
 - **Markdown 原生** —— 数据长期可读、可迁移、无私有格式锁定。
 - **以决策为主线** —— 观察、购买或放弃、使用、退出与复盘。
 - **数据操作可恢复** —— 归档与恢复不同于永久删除。
@@ -210,4 +212,4 @@ npm run wyqd -- --vault <path> object list --json
 
 ## 许可证
 
-MIT。参见 [LICENSE](LICENSE)。个人数据始终保留在本地，无遥测，无强制云同步。
+MIT。参见 [LICENSE](LICENSE)。个人 Ownly 记录始终保留在本地。托管 Web/PWA 使用 Google Analytics 统计整体访问情况；Obsidian 插件和 CLI 不使用该分析服务。
