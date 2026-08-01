@@ -23,5 +23,14 @@
     "src/lib/**/*.ts",
     "src/data/**/*.ts"
   ],
-  "exclude": ["node_modules", ".next", "src/services/ObsidianFileSystemService.ts", "src/components/shells/WebShell.tsx", "src/app/**"]
+  "exclude": [
+    "node_modules",
+    ".next",
+    "src/app/**",
+    "src/components/data-safety/**",
+    "src/components/shells/WebShell.tsx",
+    "src/services/BrowserDataPortabilityService.ts",
+    "src/services/BrowserOwnlyTextFileAdapter.ts",
+    "src/services/ObsidianFileSystemService.ts"
+  ]
 }

@@ -7,6 +7,8 @@ const configuredBasePath = (process.env.OWNLY_BASE_PATH ?? '').trim();
 const basePath = configuredBasePath && configuredBasePath !== '/'
   ? `/${configuredBasePath.replace(/^\/+|\/+$/g, '')}`
   : '';
+const googleAnalyticsId = 'G-KXXVS33FQ2';
+const googleAnalyticsLoader = `https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`;
 
 function fail(message) {
   console.error(`[pages validation] ${message}`);
@@ -36,6 +38,14 @@ if (!existsSync(indexPath)) {
     if (nextReferences.length === 0 || nextReferences.some((reference) => !reference.startsWith(`${basePath}/_next/`))) {
       fail(`Next.js assets are not consistently prefixed with ${basePath}.`);
     }
+  }
+
+  if (!html.includes(googleAnalyticsLoader)) {
+    fail(`Google Analytics loader is missing for ${googleAnalyticsId}.`);
+  }
+
+  if (!html.includes(`gtag('config', '${googleAnalyticsId}')`)) {
+    fail(`Google Analytics configuration is missing for ${googleAnalyticsId}.`);
   }
 }
 

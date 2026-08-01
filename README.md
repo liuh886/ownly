@@ -68,6 +68,8 @@ Select any supported location:
 
 The browser asks for explicit local read/write permission. Personal Markdown files are not uploaded to GitHub Pages and are not copied into the PWA service-worker cache.
 
+The hosted Web/PWA runtime uses Google Analytics measurement ID `G-KXXVS33FQ2` for aggregate site-traffic measurement. Ownly does not send Markdown contents, local file names, form values, object records, or selected-folder data as custom analytics events. The Obsidian plugin and Agent CLI do not load Google Analytics.
+
 ## Recommended storage
 
 Recommended layout:
@@ -100,7 +102,7 @@ Keeping `Ownly/` inside an Obsidian Vault makes the Markdown easy to read, searc
 
 ## Product principles
 
-- **Local first** — no required cloud account, hosted database, telemetry, or mandatory synchronization.
+- **Local first** — no required cloud account, hosted database, or mandatory synchronization. Hosted Web/PWA uses aggregate traffic analytics; local Ownly records remain local.
 - **Markdown native** — records remain portable and human-readable.
 - **Decision led** — observe, acquire or pass, use, exit, and review.
 - **Recoverable mutations** — archive and restore are distinct from permanent deletion.
@@ -210,4 +212,4 @@ npm run wyqd -- --vault <path> object list --json
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Personal data stays local. No telemetry. No required cloud synchronization.
+MIT. See [LICENSE](LICENSE). Personal Ownly records stay local. Hosted Web/PWA uses Google Analytics for aggregate site traffic; the Obsidian plugin and CLI do not.
