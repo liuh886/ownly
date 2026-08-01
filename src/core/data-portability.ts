@@ -132,7 +132,10 @@ interface MigrationStep {
   }>;
 }
 
-const SUPPORTED_DATASET_VERSIONS = new Set(['0.0', OWNLY_DATASET_SCHEMA_VERSION]);
+const SUPPORTED_DATASET_VERSIONS = new Set<string>([
+  '0.0',
+  OWNLY_DATASET_SCHEMA_VERSION,
+]);
 const textEncoder = new TextEncoder();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -363,9 +366,7 @@ export async function planOwnlyRestore(
         path: file.path,
         action: collisionPolicy === 'overwrite'
           ? 'overwrite'
-          : collisionPolicy === 'skip'
-            ? 'skip_conflict'
-            : 'skip_conflict',
+          : 'skip_conflict',
         backup_sha256: file.sha256,
         existing_sha256: existingHash,
       });
@@ -558,7 +559,7 @@ const MIGRATIONS: MigrationStep[] = [
 
 export async function migrateOwnlyBackup(
   bundle: OwnlyBackupBundle,
-  targetVersion = OWNLY_DATASET_SCHEMA_VERSION,
+  targetVersion: string = OWNLY_DATASET_SCHEMA_VERSION,
 ): Promise<MigrationReport> {
   const validation = await validateOwnlyBackup(bundle);
   if (!validation.valid) throw new Error('Cannot migrate an invalid backup bundle.');
