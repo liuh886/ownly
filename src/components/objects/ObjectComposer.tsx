@@ -51,13 +51,6 @@ export function ObjectComposer({
 
   const quickLineTemplates = getQuickLineTemplates(t, language);
 
-  // Auto-fill template when quickEntryRequest token changes
-  useEffect(() => {
-    if (!quickEntryRequest) return;
-    setQuickLine(quickEntryRequest.templateValue);
-    applyQuickLineToForm(quickEntryRequest.templateValue);
-  }, [quickEntryRequest?.token, quickEntryRequest?.templateValue]);
-
   const {
     title, setTitle,
     objectType, setObjectType,
@@ -96,6 +89,13 @@ export function ObjectComposer({
     onSubmit,
     onCancel,
   });
+
+  // Auto-fill template when quickEntryRequest token changes
+  useEffect(() => {
+    if (!quickEntryRequest) return;
+    setQuickLine(quickEntryRequest.templateValue);
+    applyQuickLineToForm(quickEntryRequest.templateValue);
+  }, [quickEntryRequest?.token, quickEntryRequest?.templateValue]);
 
   const parseResult = useMemo(() => {
     if (!quickLine.trim()) return null;
