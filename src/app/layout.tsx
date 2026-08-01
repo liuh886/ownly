@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { WYQD_PRODUCT_POSITIONING, WYQD_PRODUCT_SLOGAN } from "@/core/runtime";
 import { Providers } from "./providers";
 import "./globals.css";
+
+const GOOGLE_ANALYTICS_ID = "G-KXXVS33FQ2";
 
 function getBasePath(): string {
   const configured = process.env.OWNLY_BASE_PATH?.trim() ?? "";
@@ -46,6 +49,18 @@ export default function RootLayout({
     <html lang="en" className="h-full antialiased">
       <body className="font-sans min-h-full flex flex-col">
         <Providers>{children}</Providers>
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ANALYTICS_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GOOGLE_ANALYTICS_ID}');
+          `}
+        </Script>
       </body>
     </html>
   );
