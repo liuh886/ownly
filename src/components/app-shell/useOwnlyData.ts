@@ -32,14 +32,7 @@ export function useOwnlyData() {
   }, [repository]);
 
   useEffect(() => {
-    if (!isConnected) {
-      setDataLoaded(false);
-      setStoredObjects([]);
-      setStoredSnapshots([]);
-      setStoredReviews([]);
-      setArchivedEntities([]);
-      return;
-    }
+    if (!isConnected) return;
 
     let isMounted = true;
 
