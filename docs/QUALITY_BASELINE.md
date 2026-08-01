@@ -12,6 +12,7 @@
 - **Obsidian package (`npm run validate:obsidian`):** ✅ Passed
 - **Repository mutation contract (`npm run test:e2e:data`):** ✅ Passed
 - **Agent CLI process contract (`npm run test:cli`):** ✅ Passed
+- **First-object onboarding policy (`npm run test:onboarding`):** ✅ Passed
 - **Browser smoke tests (`npm run test:e2e`):** ✅ Passed
 
 ## Core data mutation coverage
@@ -59,13 +60,32 @@ The monolithic type-suppressed CLI has been replaced by strict modules under `sc
 
 The process suite is part of `npm run validate`, so CLI regressions block CI.
 
+## First-object onboarding coverage
+
+The first-object journey is implemented in the shared AppShell and reuses the normal Object Composer and repository save path.
+
+| Onboarding behavior | Coverage | Notes |
+|---|---:|---|
+| Connected, loaded, empty dataset trigger | ✅ | Deterministic policy test |
+| Existing object dataset suppression | ✅ | Does not interrupt established data |
+| Completed/dismissed/session-handled suppression | ✅ | Deterministic policy test |
+| Physical item choice | ✅ | Maps to existing physical composer template |
+| Recurring cost choice | ✅ | Maps to existing recurring-cost template |
+| Experience choice | ✅ | Maps to existing travel/experience template |
+| Bilingual real-data copy | ✅ | English and Chinese explicitly distinguish real records from demo data |
+| Completion after successful save | ✅ | Callback occurs only after repository save and reload succeed |
+| Automatic demo writes to real data | ✅ Removed | Empty real folders are loaded as empty and remain untouched until user saves |
+| Reopen after dismissal | ✅ | Empty-data banner exposes the chooser without blocking the user |
+| SSR/static export storage boundary | ✅ | Web storage adapter is safe during static prerender |
+
 ## Browser and runtime coverage
 
 | Scenario | Current coverage | Status/Notes |
 |---|---:|---|
-| First-use local-data chooser | ⚠️ Partial | Static/build coverage exists; native permission interaction is not behavior-tested |
+| First-use local-data chooser | ⚠️ Partial | Static/build and directory policy coverage exist; native permission interaction is not behavior-tested |
 | Create/open local directory | ⚠️ Partial | Directory-layout rules are unit-tested; native picker permission flow remains |
-| New object through browser UI | ❌ | Repository write is covered, but full composer-to-filesystem browser flow remains |
+| First real object policy and routing | ✅ | Trigger, dismissal, templates, copy, and successful-save completion are protected |
+| Full composer-to-filesystem browser interaction | ❌ | Repository and onboarding policy are covered; browser UI automation remains |
 | Archive/restore through browser UI | ❌ | Repository behavior is covered; UI interaction remains |
 | Obsidian mutation contract | ⚠️ Partial | Package/type validation passes; shared adapter contract remains part of runtime-parity work |
 | Language switching | ✅ | Existing smoke coverage |
