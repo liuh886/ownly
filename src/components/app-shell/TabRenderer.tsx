@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { HomeDashboard } from '@/components/home/HomeDashboard';
 import { ObjectList, type ObjectListFocus } from '@/components/objects/ObjectList';
 import { ObjectComposer } from '@/components/objects/ObjectComposer';
@@ -7,6 +7,8 @@ import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+import type { FirstObjectChoice } from '@/core/first-object-copy';
+import { firstObjectTemplateType } from '@/core/first-object-onboarding';
 import { getQuickLineTemplates } from '@/components/objects/composerQuickLine';
 import type { AppTab } from './BottomNav';
 import type { WYQDObject, AccountSnapshot, ReviewEntry } from '@/domain/types';
@@ -14,6 +16,11 @@ import type { WYQDStoredEntity, WYQDArchivedStoredEntity } from '@/core/reposito
 
 import type { HomeMetrics } from '@/domain/types';
 import type { useOwnlyActions } from './useOwnlyActions';
+
+export interface FirstObjectRequest {
+  token: number;
+  choice: FirstObjectChoice;
+}
 
 interface TabRendererProps {
   activeTab: AppTab;
@@ -27,6 +34,7 @@ interface TabRendererProps {
   archivedEntities: WYQDArchivedStoredEntity[];
   objectListFocus: ObjectListFocus | null;
   autoFocusComposer: boolean;
+  firstObjectRequest?: FirstObjectRequest;
   actions: ReturnType<typeof useOwnlyActions>;
   setObjectListFocus: (focus: ObjectListFocus | null) => void;
   setAutoFocusComposer: (focus: boolean) => void;
@@ -45,6 +53,7 @@ export function TabRenderer({
   archivedEntities,
   objectListFocus,
   autoFocusComposer,
+  firstObjectRequest,
   actions,
   setObjectListFocus,
   setAutoFocusComposer,
@@ -60,16 +69,22 @@ export function TabRenderer({
 
   const [composerFocusTarget, setComposerFocusTarget] = useState<'quickLine' | 'title' | undefined>(undefined);
 
-  function openObjectsWithFocus(
+  const quickLineTemplates = useMemo(
+    () => getQuickLineTemplates(t, language),
+    [language, t],
+  );
+
+  const openObjectsWithFocus = useCallback((
     focus: Omit<ObjectListFocus, 'token'> & {
       quickEntryTemplateType?: 'physical' | 'recurring_cost' | 'travel';
       focusTarget?: 'quickLine' | 'title';
     },
-  ) {
+  ) => {
     setObjectListFocus({ ...focus, token: Date.now() });
     if (focus.quickEntryTemplateType) {
-      const templates = getQuickLineTemplates(t, language);
-      const match = templates.find((tmpl) => tmpl.kind === focus.quickEntryTemplateType);
+      const match = quickLineTemplates.find(
+        (template) => template.kind === focus.quickEntryTemplateType,
+      );
       if (match) {
         setQuickEntryRequest({ token: Date.now(), templateValue: match.value });
       }
@@ -79,7 +94,21 @@ export function TabRenderer({
     setComposerFocusTarget(focus.focusTarget);
     setAutoFocusComposer(true);
     setActiveTab('objects');
-  }
+  }, [quickLineTemplates, setActiveTab, setAutoFocusComposer, setObjectListFocus]);
+
+  const firstObjectQuickEntryRequest = useMemo(() => {
+    if (!firstObjectRequest) return undefined;
+    const templateKind = firstObjectTemplateType(firstObjectRequest.choice);
+    const template = quickLineTemplates.find((item) => item.kind === templateKind);
+    if (!template) return undefined;
+    return {
+      token: firstObjectRequest.token,
+      templateValue: template.value,
+    };
+  }, [firstObjectRequest, quickLineTemplates]);
+
+  const effectiveQuickEntryRequest = firstObjectQuickEntryRequest ?? quickEntryRequest ?? undefined;
+  const effectiveFocusTarget = firstObjectRequest ? 'title' : composerFocusTarget;
 
   if (activeTab === 'home') {
     return (
@@ -101,8 +130,8 @@ export function TabRenderer({
           onSubmit={actions.createObject}
           autoFocus={autoFocusComposer}
           onAutoFocusHandled={() => setAutoFocusComposer(false)}
-          focusTarget={composerFocusTarget}
-          quickEntryRequest={quickEntryRequest ?? undefined}
+          focusTarget={effectiveFocusTarget}
+          quickEntryRequest={effectiveQuickEntryRequest}
         />
         <ObjectList
           key={objectListFocus?.token || 'objects-default'}

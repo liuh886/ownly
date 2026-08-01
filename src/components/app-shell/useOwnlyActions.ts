@@ -12,7 +12,8 @@ interface ReviewRankings {
 
 export function useOwnlyActions(
   loadVaultData: () => Promise<void>,
-  storedObjects: WYQDStoredEntity<WYQDObject>[]
+  storedObjects: WYQDStoredEntity<WYQDObject>[],
+  onObjectCreated?: () => void,
 ) {
   const { t } = useI18n();
   const { repository, showNotice } = useOwnlyWorkspace();
@@ -21,6 +22,7 @@ export function useOwnlyActions(
     try {
       await repository.saveObject(object, body);
       await loadVaultData();
+      onObjectCreated?.();
       showNotice(t('objectSaved'));
     } catch (event) {
       showNotice(event instanceof Error ? event.message : t('objectSaveFailed'));
