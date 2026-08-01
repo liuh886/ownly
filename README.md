@@ -1,6 +1,7 @@
 # Ownly
 
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)](https://obsidian.md/plugins?id=ownly)
+[![Web App](https://img.shields.io/badge/Web-Open_Ownly-111827?logo=googlechrome&logoColor=white)](https://liuh886.github.io/ownly/)
 [![Status](https://img.shields.io/badge/status-stable_1.x-brightgreen.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)
@@ -16,7 +17,7 @@ Ownly helps you track what you own, what it costs, how you used it, and what you
 - **Agent-readable ownership memory** — Stable CLI read surface with structured JSON output, designed for AI agents to read and safely interact with your data.
 - **Markdown-native personal data** — Every object, snapshot, and review is a `.md` file with YAML frontmatter. No proprietary formats, no lock-in.
 - **Decision-first object lifecycle** — Seed, observe, decide, use, and review. Each object earns its place through structured reflection.
-- **Human UI + Agent CLI** — Full Obsidian workspace for daily use; CLI for automation, scripting, and agent integration.
+- **Human UI + Agent CLI** — Hosted Web app and Obsidian workspace for people; CLI for automation, scripting, and agent integration.
 
 ![Ownly Homepage](docs/screenshot-homepage.jpg)
 
@@ -41,12 +42,12 @@ See [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) for the full stable API ref
 
 ## Project Status
 
-Ownly `1.x` is a public Obsidian plugin release; Obsidian is the primary runtime. Current validation status is tracked in [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md). The Web runtime is kept for local browser use, development, and shared-core validation.
+Ownly `1.x` supports two human-facing runtimes: the Obsidian plugin for deep Vault integration and a hosted local-first Web app for zero-install access. Current validation status is tracked in [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md).
 
 | Area | Status |
 |---|---|
-| Obsidian plugin | Primary runtime |
-| Web runtime | Compatible local runtime |
+| Obsidian plugin | Primary integrated runtime |
+| Web runtime | Hosted local-first browser runtime |
 | Agent CLI | Stable read surface with JSON contract |
 | Data format | Plain Markdown + YAML frontmatter |
 | Storage model | Local vault / local folder |
@@ -60,6 +61,16 @@ Most tracking tools focus on **how much you spend**. Ownly focuses on **whether 
 - Your data lives as plain Markdown in your Obsidian vault — you can edit, version-control, or move files freely.
 
 ## Quick Start
+
+### Web — no installation
+
+1. Open **[Ownly Web](https://liuh886.github.io/ownly/)** in a current desktop Chrome or Microsoft Edge browser.
+2. Select **Connect Vault**.
+3. Choose your Obsidian Vault root or the local `Ownly` data folder and approve browser access.
+
+The Web app runs as a static site. Vault contents stay on your device and are not uploaded to GitHub Pages.
+
+### Obsidian plugin
 
 1. **Install** — Open Obsidian → Settings → Community plugins → Browse → search "Ownly" → Install & Enable.
 2. **Open** — Click the Ownly icon in the left ribbon or run `Open Ownly workspace` from the command palette.
@@ -125,14 +136,11 @@ Install from the Obsidian Community Plugins directory:
 
 ### Web Runtime
 
-Run locally in a browser via File System Access API:
+Use the hosted app without installing Ownly or running a local server:
 
-```bash
-git clone https://github.com/liuh886/ownly.git
-cd ownly
-npm ci
-npm run dev       # localhost:3000
-```
+👉 **[Open Ownly Web](https://liuh886.github.io/ownly/)**
+
+Direct Vault access requires a desktop browser that supports the File System Access API. For browser support, privacy boundaries, deployment details, and local development, see [Web Runtime](docs/WEB_RUNTIME.md).
 
 ## Data Storage
 
@@ -151,6 +159,7 @@ Ownly is free with generous limits (200 objects, 100 reviews). A free activation
 ## Documentation
 
 - [User Guide](docs/USER_GUIDE.md) — Core features and workflows.
+- [Web Runtime](docs/WEB_RUNTIME.md) — Hosted app, browser support, privacy boundary, and deployment.
 - [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) — Stable JSON API for AI agents.
 - [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md) — Agent workflow patterns and write commands.
 - [Data Model](docs/DATA_MODEL.md) — Markdown frontmatter schemas.
