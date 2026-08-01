@@ -54,6 +54,7 @@ export function AppShell() {
             isLoading={isLoading}
             error={error}
             onConnect={() => void connectVault()}
+            isWebRuntime={runtimeTarget === 'web'}
           />
         ) : null}
 
