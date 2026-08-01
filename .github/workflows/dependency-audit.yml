@@ -36,8 +36,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Refresh compatible dependency lock
+        run: |
+          npm install --package-lock-only
+          npm audit fix --package-lock-only
+          npm install
 
       - name: Generate full dependency audit
         run: npm audit --json > npm-audit-full.json || true
@@ -50,7 +53,7 @@ jobs:
           node scripts/summarize-npm-audit.mjs npm-audit-full.json "Full dependency tree"
           node scripts/summarize-npm-audit.mjs npm-audit-production.json "Production dependency tree"
 
-      - name: Upload audit reports
+      - name: Upload audit reports and candidate lockfile
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -58,6 +61,7 @@ jobs:
           path: |
             npm-audit-full.json
             npm-audit-production.json
+            package-lock.json
           retention-days: 30
 
       - name: Enforce production dependency gate
