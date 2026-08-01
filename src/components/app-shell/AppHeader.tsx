@@ -26,6 +26,11 @@ export function AppHeader({
 }) {
   const { t, language, setLanguage, currency, setCurrency } = useI18n();
   const { runtimeTarget, isConnected, isLoading, membership, openLicenseModal } = useOwnlyWorkspace();
+  const isWebRuntime = runtimeTarget === 'web';
+  const webStatus = language === 'zh' ? '本地数据已连接' : 'Local data connected';
+  const webConnectLabel = isConnected
+    ? language === 'zh' ? '更换数据目录' : 'Change data folder'
+    : language === 'zh' ? '创建或打开数据' : 'Create or open data';
 
   return (
     <header className="mb-8 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
@@ -71,7 +76,9 @@ export function AppHeader({
               className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-stone-400'}`}
               aria-hidden="true"
             />
-            {isConnected ? t('vaultConnected') : isLoading ? t('connecting') : t('demoMode')}
+            {isConnected
+              ? isWebRuntime ? webStatus : t('vaultConnected')
+              : isLoading ? t('connecting') : t('demoMode')}
           </span>
           <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500 ring-1 ring-stone-200">
             {objectCount} {t('objects')}
@@ -96,7 +103,7 @@ export function AppHeader({
               <option key={cur} value={cur}>{WYQD_CURRENCY_LABELS[cur]}</option>
             ))}
           </select>
-          {runtimeTarget === 'web' ? (
+          {isWebRuntime ? (
             <>
               <PwaInstallButton />
               <button
@@ -105,7 +112,7 @@ export function AppHeader({
                 disabled={isLoading}
                 className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
               >
-                {isLoading ? t('connecting') : isConnected ? t('reconnectVault') : t('connectVault')}
+                {isLoading ? t('connecting') : webConnectLabel}
               </button>
             </>
           ) : null}
