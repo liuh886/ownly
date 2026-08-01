@@ -53,6 +53,9 @@ export interface StoredEntry<T extends SupportedCliEntity = SupportedCliEntity> 
   body: string;
 }
 
+export type ObjectEntry = StoredEntry<WYQDObject>;
+export type ReviewEntryFile = StoredEntry<ReviewEntry>;
+
 export interface AgentObjectRow {
   id: string;
   title: string;
