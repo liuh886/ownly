@@ -1,4 +1,5 @@
 import { useI18n } from '@/core/i18n-context';
+import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
 
 export function StatusBanner({
   isConnected,
@@ -14,19 +15,7 @@ export function StatusBanner({
   isWebRuntime: boolean;
 }) {
   const { t, language } = useI18n();
-  const webTitle = isConnected
-    ? language === 'zh' ? '本地数据已连接' : 'Local data connected'
-    : t('demoMode');
-  const webDescription = isConnected
-    ? language === 'zh'
-      ? 'Markdown 数据保存在你选择的本地目录中。'
-      : 'Markdown data stays in the local folder you selected.'
-    : language === 'zh'
-      ? '创建新的本地数据，或打开已有的 Ownly / Obsidian 数据。使用 Ownly 不要求安装 Obsidian。'
-      : 'Create new local data or open existing Ownly / Obsidian data. Obsidian is not required.';
-  const webButton = isConnected
-    ? language === 'zh' ? '更换数据目录' : 'Change data folder'
-    : language === 'zh' ? '创建或打开数据' : 'Create or open data';
+  const localDataCopy = getOwnlyLocalDataCopy(language);
 
   return (
     <section className="mb-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
@@ -37,10 +26,18 @@ export function StatusBanner({
               className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-stone-300'}`}
               aria-hidden="true"
             />
-            {isWebRuntime ? webTitle : isConnected ? t('vaultConnected') : t('demoMode')}
+            {isWebRuntime
+              ? isConnected ? localDataCopy.connected : t('demoMode')
+              : isConnected ? t('vaultConnected') : t('demoMode')}
           </div>
           <p className="mt-1 text-xs leading-relaxed text-stone-500">
-            {isWebRuntime ? webDescription : isConnected ? t('vaultConnectedDesc') : t('demoModeDesc')}
+            {isWebRuntime
+              ? isConnected
+                ? localDataCopy.connectedDescription
+                : localDataCopy.disconnectedDescription
+              : isConnected
+                ? t('vaultConnectedDesc')
+                : t('demoModeDesc')}
           </p>
         </div>
         <button
@@ -50,8 +47,10 @@ export function StatusBanner({
           className="min-h-10 shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
         >
           {isLoading
-            ? t('connecting')
-            : isWebRuntime ? webButton : isConnected ? t('reconnectVault') : t('connectVault')}
+            ? isWebRuntime ? localDataCopy.connecting : t('connecting')
+            : isWebRuntime
+              ? isConnected ? localDataCopy.changeFolder : localDataCopy.createOrOpen
+              : isConnected ? t('reconnectVault') : t('connectVault')}
         </button>
       </div>
       {!isConnected ? (
