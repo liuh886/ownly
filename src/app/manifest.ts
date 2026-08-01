@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
 
+export const dynamic = 'force-static';
+
 function getBasePath(): string {
   const configured = process.env.OWNLY_BASE_PATH?.trim() ?? '';
   if (!configured || configured === '/') return '';
