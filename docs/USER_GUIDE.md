@@ -32,7 +32,28 @@ Choose an existing Ownly data root or an Obsidian Vault containing Ownly data. T
 
 The hosted site does not upload personal Markdown. The PWA service worker caches application resources, not the user's data files.
 
-## 3. Home dashboard
+## 3. Create your first real object
+
+When Ownly connects to a readable data folder containing no objects, it offers a short first-object chooser:
+
+- **Physical item** — a possession you are considering, using, or preparing to exit;
+- **Recurring cost** — a subscription or other repeating obligation;
+- **Experience or plan** — a trip, event, course, meal, or other finite experience.
+
+Selecting a type opens the existing Object Composer with the corresponding canonical template. The record is saved through the normal repository and serializer, so it is indistinguishable from any object created later.
+
+Important behavior:
+
+- Ownly does **not** automatically write sample objects, snapshots, or reviews into a real user data folder.
+- No onboarding-specific frontmatter fields are added.
+- Onboarding is marked complete only after the normal Markdown save succeeds.
+- The chooser can be dismissed without changing the dataset.
+- When the dataset remains empty, a small banner allows the chooser to be reopened later.
+- Existing datasets are not interrupted by the first-object prompt.
+
+Demo mode remains available before local data is connected, but demo records are not silently copied into real data.
+
+## 4. Home dashboard
 
 The Home dashboard summarizes:
 
@@ -45,7 +66,7 @@ The Home dashboard summarizes:
 
 A snapshot is a point-in-time fact, not a live bank connection. Ownly does not connect to financial institutions.
 
-## 4. Objects
+## 5. Objects
 
 The Objects tab manages three stable object types.
 
@@ -79,7 +100,7 @@ planned → in_progress → completed → reviewed
 
 Use one-time experiences for travel, dining, events, and other finite plans.
 
-## 5. Quick entry
+## 6. Quick entry
 
 Quick Entry accepts one-line input separated by `/`, `／`, `，`, `,`, `|`, or Tab. Always review the parse preview before saving.
 
@@ -121,7 +142,7 @@ Tokyo trip / travel / 18000 / 16500 / 2026-05-04 / Travel / completed / JP / Tok
 
 Aliases such as `fixed` for `recurring_cost`, `travel` for travel experiences, and Chinese type/status terms remain supported where documented.
 
-## 6. Snapshots
+## 7. Snapshots
 
 Snapshots record point-in-time account and net-worth facts.
 
@@ -131,7 +152,7 @@ Snapshots record point-in-time account and net-worth facts.
 
 Snapshots are stored in `Ownly/Snapshots/`.
 
-## 7. Reviews
+## 8. Reviews
 
 Reviews capture what happened after use, completion, cancellation, transfer, or discard.
 
@@ -142,7 +163,7 @@ Reviews capture what happened after use, completion, cancellation, transfer, or 
 
 The purpose is to preserve structured facts and reflections that can inform later decisions.
 
-## 8. Object experience logs
+## 9. Object experience logs
 
 Object experience logs are append-only records of meaningful events:
 
@@ -156,7 +177,7 @@ Object experience logs are append-only records of meaningful events:
 
 Logs do not silently change an object's lifecycle status. They are stored under `Ownly/Logs/Object Experiences/`.
 
-## 9. Archive, restore, and permanent deletion
+## 10. Archive, restore, and permanent deletion
 
 - **Archive** removes a record from active views but keeps a recoverable copy.
 - **Restore** returns an archived record to active storage.
@@ -164,7 +185,7 @@ Logs do not silently change an object's lifecycle status. They are stored under 
 
 Do not treat Archive and Permanently delete as equivalent actions.
 
-## 10. Doctor and data health
+## 11. Doctor and data health
 
 Doctor performs deterministic checks such as:
 
@@ -177,7 +198,7 @@ Doctor performs deterministic checks such as:
 
 Doctor does not use AI. It validates local facts and relationships.
 
-## 11. Agent CLI
+## 12. Agent CLI
 
 Scripts and external AI agents should use the documented CLI instead of editing YAML through unvalidated file manipulation.
 
@@ -194,7 +215,7 @@ See:
 - [Data Model](DATA_MODEL.md)
 - [Terminology Contract](TERMINOLOGY.md)
 
-## 12. Storage terminology
+## 13. Storage terminology
 
 Use these terms consistently:
 
