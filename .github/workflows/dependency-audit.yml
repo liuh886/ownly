@@ -39,7 +39,6 @@ jobs:
       - name: Refresh compatible dependency lock
         run: |
           npm install --package-lock-only
-          npm audit fix --package-lock-only
           npm install
 
       - name: Generate full dependency audit
