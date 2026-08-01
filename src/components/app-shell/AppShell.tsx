@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BottomNav, type AppTab } from './BottomNav';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { createWYQDRuntimeInfo } from '@/core/runtime';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+import type { FirstObjectChoice } from '@/core/first-object-copy';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 
@@ -12,24 +13,95 @@ import { useOwnlyData } from './useOwnlyData';
 import { useOwnlyActions } from './useOwnlyActions';
 import { AppHeader } from './AppHeader';
 import { StatusBanner } from './StatusBanner';
-import { TabRenderer } from './TabRenderer';
+import { TabRenderer, type FirstObjectRequest } from './TabRenderer';
+import {
+  EmptyOwnlyDataBanner,
+  FirstObjectOnboarding,
+} from '@/components/onboarding/FirstObjectOnboarding';
+
+const FIRST_OBJECT_COMPLETED_KEY = 'ownly_first_object_completed';
+const FIRST_OBJECT_DISMISSED_KEY = 'ownly_first_object_dismissed';
 
 export function AppShell() {
   const { t } = useI18n();
-  const { runtimeTarget, isConnected, isLoading, connect, error, clearError, notice } = useOwnlyWorkspace();
+  const {
+    runtimeTarget,
+    isConnected,
+    isLoading,
+    connect,
+    error,
+    clearError,
+    notice,
+    storageGet,
+    storageSet,
+  } = useOwnlyWorkspace();
   const runtimeInfo = useMemo(() => createWYQDRuntimeInfo(runtimeTarget), [runtimeTarget]);
 
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [objectListFocus, setObjectListFocus] = useState<ObjectListFocus | null>(null);
   const [autoFocusComposer, setAutoFocusComposer] = useState(false);
+  const [firstObjectOpen, setFirstObjectOpen] = useState(false);
+  const [firstObjectPromptHandled, setFirstObjectPromptHandled] = useState(false);
+  const [firstObjectRequest, setFirstObjectRequest] = useState<FirstObjectRequest | undefined>();
 
   const data = useOwnlyData();
-  const actions = useOwnlyActions(data.loadVaultData, data.storedObjects);
+
+  const completeFirstObjectOnboarding = useCallback(() => {
+    storageSet(FIRST_OBJECT_COMPLETED_KEY, 'true');
+    storageSet(FIRST_OBJECT_DISMISSED_KEY, 'false');
+    setFirstObjectOpen(false);
+    setFirstObjectPromptHandled(true);
+  }, [storageSet]);
+
+  const actions = useOwnlyActions(
+    data.loadVaultData,
+    data.storedObjects,
+    completeFirstObjectOnboarding,
+  );
+
+  useEffect(() => {
+    if (!isConnected || !data.dataLoaded || data.storedObjects.length > 0) return;
+    if (firstObjectPromptHandled) return;
+    const completed = storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true';
+    const dismissed = storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true';
+    if (!completed && !dismissed) setFirstObjectOpen(true);
+  }, [
+    data.dataLoaded,
+    data.storedObjects.length,
+    firstObjectPromptHandled,
+    isConnected,
+    storageGet,
+  ]);
 
   async function connectVault() {
     clearError();
     await connect();
   }
+
+  const chooseFirstObject = useCallback((choice: FirstObjectChoice) => {
+    setFirstObjectOpen(false);
+    setFirstObjectPromptHandled(true);
+    setFirstObjectRequest({ token: Date.now(), choice });
+  }, []);
+
+  const dismissFirstObject = useCallback(() => {
+    storageSet(FIRST_OBJECT_DISMISSED_KEY, 'true');
+    setFirstObjectOpen(false);
+    setFirstObjectPromptHandled(true);
+  }, [storageSet]);
+
+  const reopenFirstObject = useCallback(() => {
+    storageSet(FIRST_OBJECT_DISMISSED_KEY, 'false');
+    setFirstObjectOpen(true);
+  }, [storageSet]);
+
+  const firstObjectRequestHandled = useCallback(() => {
+    setFirstObjectRequest(undefined);
+  }, []);
+
+  const showEmptyDataBanner = isConnected
+    && data.dataLoaded
+    && data.storedObjects.length === 0;
 
   return (
     <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-24 pt-8 text-stone-950 sm:px-6 sm:pt-10">
@@ -56,6 +128,10 @@ export function AppShell() {
             onConnect={() => void connectVault()}
             isWebRuntime={runtimeTarget === 'web'}
           />
+        ) : null}
+
+        {showEmptyDataBanner ? (
+          <EmptyOwnlyDataBanner onCreate={reopenFirstObject} />
         ) : null}
 
         {isConnected && !data.dataLoaded ? (
@@ -91,10 +167,12 @@ export function AppShell() {
                 archivedEntities={data.archivedEntities}
                 objectListFocus={objectListFocus}
                 autoFocusComposer={autoFocusComposer}
+                firstObjectRequest={firstObjectRequest}
                 actions={actions}
                 setObjectListFocus={setObjectListFocus}
                 setAutoFocusComposer={setAutoFocusComposer}
                 setActiveTab={setActiveTab}
+                onFirstObjectRequestHandled={firstObjectRequestHandled}
               />
             </motion.div>
           </AnimatePresence>
@@ -106,6 +184,12 @@ export function AppShell() {
       <footer className="mt-4 pb-20 text-center">
         <span className="text-[10px] text-stone-300">Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget} · {runtimeInfo.gitSha}</span>
       </footer>
+
+      <FirstObjectOnboarding
+        open={firstObjectOpen}
+        onChoose={chooseFirstObject}
+        onDismiss={dismissFirstObject}
+      />
     </main>
   );
 }
