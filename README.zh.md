@@ -1,6 +1,7 @@
 # Ownly
 
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)](https://obsidian.md/plugins?id=ownly)
+[![Web App](https://img.shields.io/badge/Web-打开_Ownly-111827?logo=googlechrome&logoColor=white)](https://liuh886.github.io/ownly/)
 [![Status](https://img.shields.io/badge/status-stable_1.x-brightgreen.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)
@@ -16,7 +17,7 @@ Ownly 帮助你追踪拥有什么、花了多少、用得如何、学到了什�
 - **Agent 可读的所有权记忆** — 稳定的 CLI 读接口，结构化 JSON 输出，专为 AI Agent 读取和交互设计。
 - **纯 Markdown 的个人数据** — 每个物品、快照和复盘都是带有 YAML frontmatter 的 `.md` 文件。无私有格式，无锁定。
 - **决策优先的物品生命周期** — 种草、观察、决定、使用、复盘。每个物品通过结构化反思获得意义。
-- **人类界面 + Agent CLI** — 完整的 Obsidian 工作区用于日常使用；CLI 用于自动化、脚本和 Agent 集成。
+- **人类界面 + Agent CLI** — 在线 Web App 与 Obsidian 工作区服务于用户；CLI 用于自动化、脚本和 Agent 集成。
 
 ![Ownly Homepage](docs/screenshot-homepage.jpg)
 
@@ -41,12 +42,12 @@ npm run --silent wyqd -- summary --json
 
 ## 项目状态
 
-Ownly `1.x` 是公开的 Obsidian 插件版本；Obsidian 是主要支持的使用形态。当前验证状态见 [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md)。Web runtime 保留用于本地浏览器使用、开发调试和核心层验证。
+Ownly `1.x` 支持两种面向用户的运行时：Obsidian 插件提供深度 Vault 集成，在线 Web App 提供零安装、本地优先的访问入口。当前验证状态见 [docs/QUALITY_BASELINE.md](docs/QUALITY_BASELINE.md)。
 
 | 领域 | 状态 |
 |---|---|
-| Obsidian 插件 | 主要运行时 |
-| Web runtime | 兼容的本地运行时 |
+| Obsidian 插件 | 主要集成运行时 |
+| Web runtime | 在线托管的本地优先浏览器运行时 |
 | Agent CLI | 稳定的 JSON 读接口 |
 | 数据格式 | 纯 Markdown + YAML frontmatter |
 | 存储模型 | 本地 Vault / 本地文件夹 |
@@ -60,6 +61,16 @@ Ownly `1.x` 是公开的 Obsidian 插件版本；Obsidian 是主要支持的使�
 - 数据以纯 Markdown 形式存储在 Obsidian Vault 中——自由编辑、版本控制或移动
 
 ## 快速开始
+
+### Web——无需安装
+
+1. 使用最新版桌面 Chrome 或 Microsoft Edge 打开 **[Ownly Web](https://liuh886.github.io/ownly/)**。
+2. 点击 **Connect Vault / 连接 Vault**。
+3. 选择 Obsidian Vault 根目录或本地 `Ownly` 数据目录，并在浏览器中授权。
+
+Web App 是纯静态站点。Vault 内容保留在用户设备上，不会上传到 GitHub Pages。
+
+### Obsidian 插件
 
 1. **安装** — 打开 Obsidian → 设置 → 社区插件 → 浏览 → 搜索 "Ownly" → 安装并启用。
 2. **打开** — 点击左侧 Ribbon 的 Ownly 图标，或从命令面板运行 `Open Ownly workspace`。
@@ -125,14 +136,11 @@ Ownly `1.x` 是公开的 Obsidian 插件版本；Obsidian 是主要支持的使�
 
 ### Web Runtime
 
-通过 File System Access API 在浏览器中本地运行：
+无需安装 Ownly，也无需在本地启动 Web 服务器：
 
-```bash
-git clone https://github.com/liuh886/ownly.git
-cd ownly
-npm ci
-npm run dev       # localhost:3000
-```
+👉 **[打开 Ownly Web](https://liuh886.github.io/ownly/)**
+
+直接连接 Vault 需要支持 File System Access API 的桌面浏览器。浏览器支持范围、隐私边界、部署方式和本地开发说明见 [Web Runtime 文档](docs/WEB_RUNTIME.md)。
 
 ## 数据存储
 
@@ -151,6 +159,7 @@ Ownly 免费提供，基础额度宽裕（200 件物品、100 条复盘）。App
 ## 文档
 
 - [用户指南](docs/USER_GUIDE.md) — 核心功能与工作流。
+- [Web Runtime](docs/WEB_RUNTIME.md) — 在线入口、浏览器支持、隐私边界和部署方式。
 - [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md) — AI Agent 的稳定 JSON API。
 - [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md) — Agent 工作流模式与写入命令。
 - [数据模型](docs/DATA_MODEL.md) — Markdown frontmatter 结构。
