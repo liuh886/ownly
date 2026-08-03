@@ -12,6 +12,7 @@ import { WebDataOnboarding } from '@/components/onboarding/WebDataOnboarding';
 import { useI18n } from '@/core/i18n-context';
 
 const ONBOARDING_DISMISSED_KEY = 'ownly_web_onboarding_dismissed';
+const basePath = process.env.NEXT_PUBLIC_OWNLY_BASE_PATH ?? '';
 
 type LocalDataAction = 'create' | 'open';
 
@@ -92,6 +93,11 @@ export function WebShell() {
   }, []);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('demo') === '1') {
+      window.location.replace(`${basePath}/#preview`);
+      return;
+    }
+
     let isMounted = true;
 
     async function init() {
