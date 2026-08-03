@@ -2,10 +2,11 @@ const CACHE_NAME = 'ownly-pwa-v3';
 const scriptUrl = new URL(self.location.href);
 const siteBase = scriptUrl.pathname.replace(/\/sw\.js$/, '');
 const appUrl = `${siteBase}/app/`;
+const manifestUrl = `${siteBase}/app/manifest.webmanifest`;
 
 const coreAssets = [
   appUrl,
-  `${siteBase}/manifest.webmanifest`,
+  manifestUrl,
   `${siteBase}/icons/ownly-192.svg`,
   `${siteBase}/icons/ownly-512.svg`,
   `${siteBase}/icons/ownly-maskable.svg`,
@@ -116,7 +117,7 @@ self.addEventListener('fetch', (event) => {
   const isStaticAsset =
     url.pathname.includes('/_next/static/') ||
     url.pathname.startsWith(`${siteBase}/icons/`) ||
-    url.pathname.endsWith('/manifest.webmanifest');
+    url.pathname === manifestUrl;
 
   event.respondWith(isStaticAsset ? cacheFirst(request) : staleWhileRevalidate(request));
 });
