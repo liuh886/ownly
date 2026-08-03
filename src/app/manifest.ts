@@ -10,16 +10,17 @@ function getBasePath(): string {
 
 export default function manifest(): MetadataRoute.Manifest {
   const basePath = getBasePath();
-  const appRoot = `${basePath}/`;
+  const siteRoot = `${basePath}/`;
+  const appRoot = `${basePath}/app/`;
 
   return {
     id: appRoot,
     name: 'Ownly — Local-first ownership memory',
     short_name: 'Ownly',
     description:
-      'Track possessions, subscriptions, experiences, and reviews in local Markdown files without uploading your Vault.',
+      'Track possessions, subscriptions, experiences, and reviews in local Markdown files without uploading personal records.',
     start_url: appRoot,
-    scope: appRoot,
+    scope: siteRoot,
     display: 'standalone',
     background_color: '#fafaf9',
     theme_color: '#1c1917',
