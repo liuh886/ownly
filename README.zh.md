@@ -20,8 +20,8 @@ Ownly 帮助你记录拥有什么、花费多少、实际如何使用，以及�
 ## 打开 Ownly
 
 - **[浏览产品主页](https://liuh886.github.io/ownly/)**
+- **[查看首页内嵌产品预览](https://liuh886.github.io/ownly/#preview)**
 - **[打开 Web App / PWA](https://liuh886.github.io/ownly/app/)**
-- **[查看无需权限的产品预览](https://liuh886.github.io/ownly/app/?demo=1)**
 
 | 使用入口 | 是否需要 Obsidian | 是否需要本地服务器 | 适合场景 |
 |---|---:|---:|---|
@@ -29,7 +29,7 @@ Ownly 帮助你记录拥有什么、花费多少、实际如何使用，以及�
 | 安装为 PWA | 否 | 否 | 独立应用窗口，并支持离线启动应用界面 |
 | Obsidian 插件 | 是 | 否 | 原生 Vault 集成与深度 Markdown 工作流 |
 
-Web App 和 PWA 是同一个浏览器运行时。安装 PWA 只改变启动方式，不改变数据模型。
+Web App 和 PWA 是同一个浏览器运行时。安装 PWA 只改变启动方式，不改变数据模型；产品主页本身不是 PWA 安装入口。
 
 ## 首次使用：创建或打开本地数据
 
@@ -149,10 +149,9 @@ npm run --silent wyqd -- summary --json
 
 | 领域 | 状态 |
 |---|---|
-| 产品主页 | 静态双语产品介绍与转化入口 |
+| 产品主页 | 静态双语产品介绍，并内嵌可交互产品预览 |
 | 在线 Web App | 托管于 GitHub Pages，通过浏览器直接访问本地目录 |
-| 产品预览 | 使用虚构数据、无需权限、不写入本地文件 |
-| 安装版 PWA | 与 Web 数据行为一致，增加独立启动和应用界面离线缓存 |
+| 安装版 PWA | 仅在 `/app/` 提供安装入口、独立启动和应用界面离线缓存 |
 | Obsidian 插件 | 基于共享 Ownly 数据模型的原生 Vault 界面 |
 | Agent CLI | 稳定、严格类型化的 fact-ready JSON 契约 |
 | 数据存储 | 本地纯 Markdown + YAML frontmatter |
@@ -165,7 +164,7 @@ npm run --silent wyqd -- summary --json
 直接访问本地目录依赖 File System Access API。
 
 - 推荐使用最新版桌面 Chrome 或 Microsoft Edge。
-- 不支持的浏览器可以浏览产品主页和无需权限的产品预览，但不能连接本地数据。
+- 不支持的浏览器可以浏览产品主页和内嵌产品预览，但不能连接本地数据。
 - 移动端直接目录访问不是当前生产目标。
 - 浏览器重启、权限清理后，可能需要重新授权本地目录。
 
