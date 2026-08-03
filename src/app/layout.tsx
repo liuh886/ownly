@@ -21,6 +21,11 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
+        url: `${basePath}/icons/ownly-mark.svg`,
+        sizes: "any",
+        type: "image/svg+xml",
+      },
+      {
         url: `${basePath}/icons/ownly-192.svg`,
         sizes: "192x192",
         type: "image/svg+xml",
@@ -31,6 +36,7 @@ export const metadata: Metadata = {
         type: "image/svg+xml",
       },
     ],
+    shortcut: `${basePath}/icons/ownly-mark.svg`,
   },
 };
 
