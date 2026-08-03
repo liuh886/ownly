@@ -18,11 +18,26 @@ function read(relativePath) {
   return fs.readFileSync(absolutePath, 'utf8');
 }
 
+function listFiles(directory) {
+  return fs.readdirSync(directory).flatMap((entry) => {
+    const absolutePath = path.join(directory, entry);
+    return fs.statSync(absolutePath).isDirectory()
+      ? listFiles(absolutePath)
+      : [absolutePath];
+  });
+}
+
 const landingHtml = read('index.html');
 const appHtml = read('app/index.html');
 const serviceWorker = read('sw.js');
 const manifestText = read('app/manifest.webmanifest');
 const manifest = JSON.parse(manifestText);
+const staticDir = path.join(outDir, '_next', 'static');
+assert(fs.existsSync(staticDir), 'Missing _next/static client assets');
+const clientBundle = listFiles(staticDir)
+  .filter((filePath) => filePath.endsWith('.js'))
+  .map((filePath) => fs.readFileSync(filePath, 'utf8'))
+  .join('\n');
 
 for (const icon of ['icons/ownly-192.svg', 'icons/ownly-512.svg', 'icons/ownly-maskable.svg']) {
   read(icon);
@@ -87,8 +102,9 @@ assert(
   'service worker must not cache the marketing homepage',
 );
 assert(
-  appHtml.includes('Install Ownly as a standalone app') || appHtml.includes('ownly_pwa_install_nudge_dismissed'),
-  'the app bundle must include the first-use PWA install invitation',
+  clientBundle.includes('Install Ownly as a standalone app') ||
+    clientBundle.includes('ownly_pwa_install_nudge_dismissed'),
+  'the app client bundle must include the first-use PWA install invitation',
 );
 
 console.log(`[pwa validation] marketing root stays non-PWA at ${expectedRoot}; installed app is scoped to ${expectedApp}`);
