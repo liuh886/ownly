@@ -10,7 +10,6 @@ function getBasePath(): string {
 
 export default function manifest(): MetadataRoute.Manifest {
   const basePath = getBasePath();
-  const siteRoot = `${basePath}/`;
   const appRoot = `${basePath}/app/`;
 
   return {
@@ -20,7 +19,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description:
       'Track possessions, subscriptions, experiences, and reviews in local Markdown files without uploading personal records.',
     start_url: appRoot,
-    scope: siteRoot,
+    scope: appRoot,
     display: 'standalone',
     background_color: '#fafaf9',
     theme_color: '#1c1917',
