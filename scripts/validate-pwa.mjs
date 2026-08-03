@@ -33,8 +33,8 @@ const expectedApp = `${basePath}/app/`;
 const expectedManifestUrl = `${basePath}/manifest.webmanifest`;
 
 assert(
-  landingHtml.includes(expectedManifestUrl),
-  `landing page does not reference ${expectedManifestUrl}`,
+  !landingHtml.includes(expectedManifestUrl),
+  'the marketing homepage must not expose the PWA manifest',
 );
 assert(
   appHtml.includes(expectedManifestUrl),
@@ -45,7 +45,7 @@ assert(
   `landing page does not link to ${expectedApp}`,
 );
 assert(manifest.start_url === expectedApp, `start_url must be ${expectedApp}`);
-assert(manifest.scope === expectedRoot, `scope must be ${expectedRoot}`);
+assert(manifest.scope === expectedApp, `scope must be ${expectedApp}`);
 assert(manifest.id === expectedApp, `id must be ${expectedApp}`);
 assert(manifest.display === 'standalone', 'display must be standalone');
 assert(typeof manifest.name === 'string' && manifest.name.length > 0, 'name is required');
@@ -75,8 +75,16 @@ assert(
   'service worker must install an application cache and handle fetches',
 );
 assert(
-  serviceWorker.includes("const appUrl = `${basePath}/app/`"),
-  'service worker must cache the application route separately from the marketing root',
+  serviceWorker.includes("const appUrl = `${siteBase}/app/`"),
+  'service worker must derive and cache the application route',
+);
+assert(
+  !serviceWorker.includes('cachePageAndAssets(cache, rootUrl)'),
+  'service worker must not cache the marketing homepage',
+);
+assert(
+  appHtml.includes('Install Ownly as a standalone app') || appHtml.includes('ownly_pwa_install_nudge_dismissed'),
+  'the app bundle must include the first-use PWA install invitation',
 );
 
-console.log(`[pwa validation] Ownly landing page is at ${expectedRoot}; installed app launches at ${expectedApp}`);
+console.log(`[pwa validation] marketing root stays non-PWA at ${expectedRoot}; installed app is scoped to ${expectedApp}`);
