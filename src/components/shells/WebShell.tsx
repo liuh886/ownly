@@ -15,6 +15,11 @@ const ONBOARDING_DISMISSED_KEY = 'ownly_web_onboarding_dismissed';
 
 type LocalDataAction = 'create' | 'open';
 
+function previewRequested(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('demo') === '1';
+}
+
 export function WebShell() {
   const { t, language } = useI18n();
   const localDataCopy = getOwnlyLocalDataCopy(language);
@@ -98,7 +103,6 @@ export function WebShell() {
     setOnboardingOpen(false);
   }, []);
 
-  // Auto-connect on mount. First-time users see the local-data chooser.
   useEffect(() => {
     let isMounted = true;
 
@@ -112,16 +116,17 @@ export function WebShell() {
         }
         if (isMounted) {
           setIsConnected(connected);
-          if (!connected && window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true') {
-            setOnboardingOpen(true);
-          }
+          const shouldPrompt = !connected
+            && !previewRequested()
+            && window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
+          setOnboardingOpen(shouldPrompt);
         }
       } catch (event) {
         if (isMounted) {
           setError(event instanceof Error ? event.message : localDataCopy.initializeFailed);
-          if (window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true') {
-            setOnboardingOpen(true);
-          }
+          const shouldPrompt = !previewRequested()
+            && window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
+          setOnboardingOpen(shouldPrompt);
         }
       } finally {
         if (isMounted) setIsLoading(false);
