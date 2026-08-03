@@ -3,6 +3,7 @@ import Script from "next/script";
 import { WYQD_PRODUCT_POSITIONING, WYQD_PRODUCT_SLOGAN } from "@/core/runtime";
 import { Providers } from "./providers";
 import "./globals.css";
+import "./brand.css";
 
 const GOOGLE_ANALYTICS_ID = "G-KXXVS33FQ2";
 
@@ -21,6 +22,11 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
+        url: `${basePath}/icons/ownly-mark.svg`,
+        sizes: "any",
+        type: "image/svg+xml",
+      },
+      {
         url: `${basePath}/icons/ownly-192.svg`,
         sizes: "192x192",
         type: "image/svg+xml",
@@ -31,6 +37,7 @@ export const metadata: Metadata = {
         type: "image/svg+xml",
       },
     ],
+    shortcut: `${basePath}/icons/ownly-mark.svg`,
   },
 };
 

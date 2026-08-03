@@ -1,0 +1,39 @@
+:root {
+  --ownly-brand-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='1' y='1' width='62' height='62' rx='15' fill='%231c1917' stroke='%2344403c' stroke-width='1.25'/%3E%3Cpath d='M50.5 32A18.5 18.5 0 1 1 35.213 13.782' fill='none' stroke='%23faf7f0' stroke-width='7.5' stroke-linecap='round'/%3E%3Ccircle cx='46.17' cy='20.11' r='5.1' fill='%2310b981' stroke='%231c1917' stroke-width='2.5'/%3E%3C/svg%3E");
+}
+
+/*
+ * Keep every visible Ownly mark aligned with the canonical favicon/PWA asset.
+ * The existing elements retain their semantic text fallback while the shared
+ * vector mark supplies the rendered brand surface.
+ */
+a[aria-label="Ownly home"] > span:first-child,
+#preview aside > div:first-child > span:first-child,
+aside.fixed.bottom-24 span.grid.h-10.w-10,
+main.grid.min-h-screen > section > span:first-child {
+  overflow: hidden;
+  color: transparent !important;
+  background-color: transparent !important;
+  background-image: var(--ownly-brand-mark) !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: contain !important;
+}
+
+/* Add the same mark to the real application header without duplicating SVG. */
+.wyqd-web-shell header > div:first-child > span.text-lg.font-bold {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.wyqd-web-shell header > div:first-child > span.text-lg.font-bold::before {
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 auto;
+  content: "";
+  background-image: var(--ownly-brand-mark);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
