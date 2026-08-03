@@ -1,8 +1,8 @@
 # Ownly
 
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)](https://obsidian.md/plugins?id=ownly)
-[![Web App](https://img.shields.io/badge/Web-打开_Ownly-111827?logo=googlechrome&logoColor=white)](https://liuh886.github.io/ownly/)
-[![PWA](https://img.shields.io/badge/PWA-可安装-0f766e?logo=pwa&logoColor=white)](https://liuh886.github.io/ownly/)
+[![Web App](https://img.shields.io/badge/Web-打开_Ownly-111827?logo=googlechrome&logoColor=white)](https://liuh886.github.io/ownly/app/)
+[![PWA](https://img.shields.io/badge/PWA-可安装-0f766e?logo=pwa&logoColor=white)](https://liuh886.github.io/ownly/app/)
 [![Status](https://img.shields.io/badge/status-stable_1.x-brightgreen.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)
@@ -19,7 +19,9 @@ Ownly 帮助你记录拥有什么、花费多少、实际如何使用，以及�
 
 ## 打开 Ownly
 
-👉 **[通过 GitHub Pages 打开 Ownly](https://liuh886.github.io/ownly/)**
+- **[浏览产品主页](https://liuh886.github.io/ownly/)**
+- **[打开 Web App / PWA](https://liuh886.github.io/ownly/app/)**
+- **[查看无需权限的产品预览](https://liuh886.github.io/ownly/app/?demo=1)**
 
 | 使用入口 | 是否需要 Obsidian | 是否需要本地服务器 | 适合场景 |
 |---|---:|---:|---|
@@ -147,10 +149,12 @@ npm run --silent wyqd -- summary --json
 
 | 领域 | 状态 |
 |---|---|
+| 产品主页 | 静态双语产品介绍与转化入口 |
 | 在线 Web App | 托管于 GitHub Pages，通过浏览器直接访问本地目录 |
+| 产品预览 | 使用虚构数据、无需权限、不写入本地文件 |
 | 安装版 PWA | 与 Web 数据行为一致，增加独立启动和应用界面离线缓存 |
 | Obsidian 插件 | 基于共享 Ownly 数据模型的原生 Vault 界面 |
-| Agent CLI | 稳定的 fact-ready JSON 契约；严格类型化由 #33 跟踪 |
+| Agent CLI | 稳定、严格类型化的 fact-ready JSON 契约 |
 | 数据存储 | 本地纯 Markdown + YAML frontmatter |
 | 数据操作安全 | 创建、修改、归档和恢复的 repository 契约由 CI 保护 |
 
@@ -161,7 +165,7 @@ npm run --silent wyqd -- summary --json
 直接访问本地目录依赖 File System Access API。
 
 - 推荐使用最新版桌面 Chrome 或 Microsoft Edge。
-- 不支持的浏览器可以查看演示模式，但不能连接本地数据。
+- 不支持的浏览器可以浏览产品主页和无需权限的产品预览，但不能连接本地数据。
 - 移动端直接目录访问不是当前生产目标。
 - 浏览器重启、权限清理后，可能需要重新授权本地目录。
 
