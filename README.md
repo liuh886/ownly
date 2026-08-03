@@ -20,8 +20,8 @@ Obsidian is recommended as a convenient place to store and inspect the files, bu
 ## Open Ownly
 
 - **[Explore the product page](https://liuh886.github.io/ownly/)**
+- **[See the embedded product preview](https://liuh886.github.io/ownly/#preview)**
 - **[Open the Web app / PWA](https://liuh886.github.io/ownly/app/)**
-- **[View the permission-free product preview](https://liuh886.github.io/ownly/app/?demo=1)**
 
 | Entry point | Obsidian required? | Local server required? | Best for |
 |---|---:|---:|---|
@@ -29,7 +29,7 @@ Obsidian is recommended as a convenient place to store and inspect the files, bu
 | Installed PWA | No | No | A standalone app window with offline application-shell startup |
 | Obsidian plugin | Yes | No | Native Vault integration and direct Markdown work |
 
-The Web app and PWA are the same browser runtime. Installation changes the launch experience, not the data model.
+The Web app and PWA are the same browser runtime. Installation changes the launch experience, not the data model. The product homepage itself is not a PWA surface.
 
 ## First use: create or open local data
 
@@ -149,10 +149,9 @@ See:
 
 | Area | Status |
 |---|---|
-| Product homepage | Static bilingual product explanation and conversion entry point |
+| Product homepage | Static bilingual product explanation with an embedded interactive preview |
 | Hosted Web app | Static GitHub Pages runtime with local-folder access |
-| Product preview | Permission-free fictional data walkthrough; no local writes |
-| Installed PWA | Same Web data behavior, standalone launch and cached app shell |
+| Installed PWA | App-route-only install surface, standalone launch and cached app shell |
 | Obsidian plugin | Native Vault interface over the shared Ownly data model |
 | Agent CLI | Stable, strict-typed fact-ready JSON contract |
 | Data storage | Plain local Markdown + YAML frontmatter |
@@ -165,7 +164,7 @@ Current validation and known coverage gaps are documented in [Quality Baseline](
 Direct local-folder access uses the File System Access API.
 
 - Recommended: current desktop Chrome or Microsoft Edge.
-- Unsupported browsers can view the product page and permission-free preview but cannot connect local data.
+- Unsupported browsers can view the product page and embedded preview but cannot connect local data.
 - Mobile direct-folder access is not a production target.
 - Browser permission may need to be renewed after restart or permission reset.
 
