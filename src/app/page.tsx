@@ -8,22 +8,42 @@ function getBasePath(): string {
 }
 
 const basePath = getBasePath();
+const publicUrl = 'https://liuh886.github.io/ownly/';
+const socialImage = 'https://liuh886.github.io/ownly/icons/ownly-512.svg';
 
 export const metadata: Metadata = {
   title: 'Ownly — Own less. Live more. Decide better.',
   description:
     'A local-first ownership memory and decision ledger for possessions, recurring costs and important experiences.',
+  alternates: {
+    canonical: publicUrl,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
   openGraph: {
     title: 'Ownly — Know what deserves to stay',
     description:
       'Record ownership facts as portable Markdown, understand real cost and review before the next decision.',
     type: 'website',
+    url: publicUrl,
+    siteName: 'Ownly',
+    images: [
+      {
+        url: socialImage,
+        width: 512,
+        height: 512,
+        alt: 'Ownly',
+      },
+    ],
   },
   twitter: {
     card: 'summary',
     title: 'Ownly — Know what deserves to stay',
     description:
       'A local-first ownership memory and decision ledger with portable Markdown data.',
+    images: [socialImage],
   },
 };
 
