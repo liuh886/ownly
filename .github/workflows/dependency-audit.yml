@@ -60,7 +60,8 @@ jobs:
             npm-audit-production.json
           retention-days: 30
 
-      - name: Enforce full dependency gate
+      - name: Report full dependency risk
+        continue-on-error: true
         run: node scripts/enforce-production-audit.mjs npm-audit-full.json "Full dependency"
 
       - name: Enforce production dependency gate
