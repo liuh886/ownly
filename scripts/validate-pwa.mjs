@@ -18,11 +18,26 @@ function read(relativePath) {
   return fs.readFileSync(absolutePath, 'utf8');
 }
 
+function listFiles(directory) {
+  return fs.readdirSync(directory).flatMap((entry) => {
+    const absolutePath = path.join(directory, entry);
+    return fs.statSync(absolutePath).isDirectory()
+      ? listFiles(absolutePath)
+      : [absolutePath];
+  });
+}
+
 const landingHtml = read('index.html');
 const appHtml = read('app/index.html');
 const serviceWorker = read('sw.js');
-const manifestText = read('manifest.webmanifest');
+const manifestText = read('app/manifest.webmanifest');
 const manifest = JSON.parse(manifestText);
+const staticDir = path.join(outDir, '_next', 'static');
+assert(fs.existsSync(staticDir), 'Missing _next/static client assets');
+const clientBundle = listFiles(staticDir)
+  .filter((filePath) => filePath.endsWith('.js'))
+  .map((filePath) => fs.readFileSync(filePath, 'utf8'))
+  .join('\n');
 
 for (const icon of ['icons/ownly-192.svg', 'icons/ownly-512.svg', 'icons/ownly-maskable.svg']) {
   read(icon);
@@ -30,11 +45,11 @@ for (const icon of ['icons/ownly-192.svg', 'icons/ownly-512.svg', 'icons/ownly-m
 
 const expectedRoot = `${basePath}/`;
 const expectedApp = `${basePath}/app/`;
-const expectedManifestUrl = `${basePath}/manifest.webmanifest`;
+const expectedManifestUrl = `${basePath}/app/manifest.webmanifest`;
 
 assert(
-  landingHtml.includes(expectedManifestUrl),
-  `landing page does not reference ${expectedManifestUrl}`,
+  !landingHtml.includes('manifest.webmanifest'),
+  'the marketing homepage must not expose a PWA manifest',
 );
 assert(
   appHtml.includes(expectedManifestUrl),
@@ -44,9 +59,9 @@ assert(
   landingHtml.includes(expectedApp),
   `landing page does not link to ${expectedApp}`,
 );
-assert(manifest.start_url === expectedApp, `start_url must be ${expectedApp}`);
-assert(manifest.scope === expectedRoot, `scope must be ${expectedRoot}`);
-assert(manifest.id === expectedApp, `id must be ${expectedApp}`);
+assert(manifest.start_url === './', 'start_url must resolve relative to the app manifest');
+assert(manifest.scope === './', 'scope must remain inside the app route');
+assert(manifest.id === './', 'id must resolve to the app route');
 assert(manifest.display === 'standalone', 'display must be standalone');
 assert(typeof manifest.name === 'string' && manifest.name.length > 0, 'name is required');
 assert(typeof manifest.short_name === 'string' && manifest.short_name.length > 0, 'short_name is required');
@@ -64,8 +79,8 @@ assert(
   'a maskable icon is required',
 );
 assert(
-  manifest.icons.every((icon) => String(icon.src).startsWith(`${basePath}/icons/`)),
-  `all icon URLs must use the ${basePath || '/'} deployment root`,
+  manifest.icons.every((icon) => String(icon.src).startsWith('../icons/')),
+  'all icon URLs must resolve from the app manifest to the shared icon directory',
 );
 
 assert(
@@ -75,8 +90,21 @@ assert(
   'service worker must install an application cache and handle fetches',
 );
 assert(
-  serviceWorker.includes("const appUrl = `${basePath}/app/`"),
-  'service worker must cache the application route separately from the marketing root',
+  serviceWorker.includes("const appUrl = `${siteBase}/app/`"),
+  'service worker must derive and cache the application route',
+);
+assert(
+  serviceWorker.includes("const manifestUrl = `${siteBase}/app/manifest.webmanifest`"),
+  'service worker must cache the app-scoped manifest',
+);
+assert(
+  !serviceWorker.includes('cachePageAndAssets(cache, rootUrl)'),
+  'service worker must not cache the marketing homepage',
+);
+assert(
+  clientBundle.includes('Install Ownly as a standalone app') ||
+    clientBundle.includes('ownly_pwa_install_nudge_dismissed'),
+  'the app client bundle must include the first-use PWA install invitation',
 );
 
-console.log(`[pwa validation] Ownly landing page is at ${expectedRoot}; installed app launches at ${expectedApp}`);
+console.log(`[pwa validation] marketing root stays non-PWA at ${expectedRoot}; installed app is scoped to ${expectedApp}`);

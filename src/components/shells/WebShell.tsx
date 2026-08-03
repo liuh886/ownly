@@ -8,19 +8,12 @@ import { markdownEntityRepository } from '@/services/MarkdownEntityRepository';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
-import { ProductPreview } from '@/components/marketing/ProductPreview';
 import { WebDataOnboarding } from '@/components/onboarding/WebDataOnboarding';
 import { useI18n } from '@/core/i18n-context';
 
 const ONBOARDING_DISMISSED_KEY = 'ownly_web_onboarding_dismissed';
-const basePath = process.env.NEXT_PUBLIC_OWNLY_BASE_PATH ?? '';
 
 type LocalDataAction = 'create' | 'open';
-
-function previewRequested(): boolean {
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('demo') === '1';
-}
 
 export function WebShell() {
   const { t, language } = useI18n();
@@ -35,7 +28,6 @@ export function WebShell() {
     statusLabel: t('webAlwaysPro'),
     upgradeMessage: t('webAlwaysProDesc'),
   }), [t]);
-  const [isPreview, setIsPreview] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,15 +42,8 @@ export function WebShell() {
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
-
-  const activateLicenseKey = useCallback(() => {
-    setLicenseModalOpen(false);
-  }, []);
-
-  const clearLicenseKey = useCallback(() => {
-    setLicenseModalOpen(false);
-  }, []);
-
+  const activateLicenseKey = useCallback(() => setLicenseModalOpen(false), []);
+  const clearLicenseKey = useCallback(() => setLicenseModalOpen(false), []);
   const openLicenseModal = useCallback(() => setLicenseModalOpen(true), []);
   const closeLicenseModal = useCallback(() => setLicenseModalOpen(false), []);
 
@@ -111,22 +96,10 @@ export function WebShell() {
 
     async function init() {
       setIsLoading(true);
-
-      if (previewRequested()) {
-        if (isMounted) {
-          setIsPreview(true);
-          setOnboardingOpen(false);
-          setIsLoading(false);
-        }
-        return;
-      }
-
       try {
         const connected = await obsidianService.initAutoConnect();
         if (!isMounted) return;
-        if (connected) {
-          await markdownEntityRepository.initialize();
-        }
+        if (connected) await markdownEntityRepository.initialize();
         if (isMounted) {
           setIsConnected(connected);
           const shouldPrompt = !connected
@@ -171,15 +144,6 @@ export function WebShell() {
       if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
     },
   }), [isConnected, isLoading, connect, error, clearError, notice, showNotice, membership, activateLicenseKey, clearLicenseKey, openLicenseModal, closeLicenseModal, licenseModalOpen]);
-
-  if (isPreview) {
-    return (
-      <ProductPreview
-        appHref={`${basePath}/app/`}
-        homeHref={`${basePath}/`}
-      />
-    );
-  }
 
   return (
     <OwnlyWorkspaceProvider value={contextValue}>

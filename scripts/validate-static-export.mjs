@@ -12,7 +12,7 @@ const googleAnalyticsId = 'G-KXXVS33FQ2';
 const googleAnalyticsLoader = `https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`;
 const publicUrl = 'https://liuh886.github.io/ownly/';
 const appUrl = 'https://liuh886.github.io/ownly/app/';
-const previewUrl = 'https://liuh886.github.io/ownly/app/?demo=1';
+const previewUrl = 'https://liuh886.github.io/ownly/#preview';
 
 function fail(message) {
   console.error(`[pages validation] ${message}`);
@@ -68,6 +68,14 @@ if (!existsSync(indexPath)) {
   if (!html.includes('og:site_name') || !html.includes('Ownly')) {
     fail('The public homepage is missing its Open Graph product identity.');
   }
+
+  if (!html.includes('id="preview"') || !html.includes('Product preview')) {
+    fail('The interactive product preview must be embedded as the second homepage screen.');
+  }
+
+  if (html.includes('/app/?demo=1')) {
+    fail('The homepage must not route visitors to a separate demo page.');
+  }
 }
 
 if (!existsSync(appIndexPath)) {
@@ -99,8 +107,8 @@ if (!existsSync(staticDir)) {
       .filter((path) => path.endsWith('.js'))
       .map((path) => readFileSync(path, 'utf8'))
       .join('\n');
-    if (!clientBundle.includes('Sample data only') || !clientBundle.includes('no folder permission requested')) {
-      fail('The permission-free product preview is missing from the client bundle.');
+    if (!clientBundle.includes('Sample data') || !clientBundle.includes('no permission')) {
+      fail('The permission-free homepage preview is missing from the client bundle.');
     }
   }
 }
@@ -112,10 +120,13 @@ for (const readmePath of ['README.md', 'README.zh.md']) {
       fail(`${readmePath} is missing the product entry point ${url}.`);
     }
   }
+  if (readme.includes('/app/?demo=1')) {
+    fail(`${readmePath} still points to the retired standalone demo route.`);
+  }
 }
 
 if (process.exitCode) {
   process.exit(process.exitCode);
 }
 
-console.log(`[pages validation] public homepage, preview and app are ready${basePath ? ` for ${basePath}` : ''}.`);
+console.log(`[pages validation] polished homepage, embedded preview and app route are ready${basePath ? ` for ${basePath}` : ''}.`);
