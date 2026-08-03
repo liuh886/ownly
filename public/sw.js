@@ -1,16 +1,14 @@
-const CACHE_NAME = 'ownly-pwa-v2';
-const scopeUrl = new URL(self.registration.scope);
-const basePath = scopeUrl.pathname.replace(/\/$/, '');
-const rootUrl = `${basePath}/`;
-const appUrl = `${basePath}/app/`;
+const CACHE_NAME = 'ownly-pwa-v3';
+const scriptUrl = new URL(self.location.href);
+const siteBase = scriptUrl.pathname.replace(/\/sw\.js$/, '');
+const appUrl = `${siteBase}/app/`;
 
 const coreAssets = [
-  rootUrl,
   appUrl,
-  `${basePath}/manifest.webmanifest`,
-  `${basePath}/icons/ownly-192.svg`,
-  `${basePath}/icons/ownly-512.svg`,
-  `${basePath}/icons/ownly-maskable.svg`,
+  `${siteBase}/manifest.webmanifest`,
+  `${siteBase}/icons/ownly-192.svg`,
+  `${siteBase}/icons/ownly-512.svg`,
+  `${siteBase}/icons/ownly-maskable.svg`,
 ];
 
 async function cachePageAndAssets(cache, pageUrl) {
@@ -24,11 +22,7 @@ async function cachePageAndAssets(cache, pageUrl) {
     .map((match) => match[1])
     .filter(Boolean)
     .map((value) => new URL(value, self.location.origin))
-    .filter(
-      (url) =>
-        url.origin === self.location.origin &&
-        (url.pathname === basePath || url.pathname.startsWith(`${basePath}/`)),
-    );
+    .filter((url) => url.origin === self.location.origin && url.pathname.startsWith(`${siteBase}/`));
 
   await Promise.allSettled(
     assetUrls.map(async (url) => {
@@ -49,10 +43,7 @@ async function precacheAppShell() {
   );
 
   try {
-    await Promise.all([
-      cachePageAndAssets(cache, rootUrl),
-      cachePageAndAssets(cache, appUrl),
-    ]);
+    await cachePageAndAssets(cache, appUrl);
   } catch (error) {
     console.warn('[Ownly PWA] App-shell precache was incomplete.', error);
   }
@@ -73,14 +64,14 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-async function networkFirst(request, fallbackUrl) {
+async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
     const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());
     return response;
   } catch {
-    return (await cache.match(request)) || (await cache.match(fallbackUrl)) || Response.error();
+    return (await cache.match(request)) || (await cache.match(appUrl)) || Response.error();
   }
 }
 
@@ -113,17 +104,18 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) return;
 
   if (request.mode === 'navigate') {
-    const fallbackUrl = url.pathname.startsWith(`${basePath}/app`) ? appUrl : rootUrl;
-    event.respondWith(networkFirst(request, fallbackUrl));
+    if (!url.pathname.startsWith(appUrl)) return;
+    event.respondWith(networkFirst(request));
     return;
   }
 
+  if (!url.pathname.startsWith(`${siteBase}/`)) return;
+
   const isStaticAsset =
     url.pathname.includes('/_next/static/') ||
-    url.pathname.startsWith(`${basePath}/icons/`) ||
+    url.pathname.startsWith(`${siteBase}/icons/`) ||
     url.pathname.endsWith('/manifest.webmanifest');
 
   event.respondWith(isStaticAsset ? cacheFirst(request) : staleWhileRevalidate(request));
