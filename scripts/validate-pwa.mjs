@@ -44,9 +44,9 @@ assert(
   landingHtml.includes(expectedApp),
   `landing page does not link to ${expectedApp}`,
 );
-assert(manifest.start_url === expectedApp, `start_url must be ${expectedApp}`);
-assert(manifest.scope === expectedApp, `scope must be ${expectedApp}`);
-assert(manifest.id === expectedApp, `id must be ${expectedApp}`);
+assert(manifest.start_url === './', 'start_url must resolve relative to the app manifest');
+assert(manifest.scope === './', 'scope must remain inside the app route');
+assert(manifest.id === './', 'id must resolve to the app route');
 assert(manifest.display === 'standalone', 'display must be standalone');
 assert(typeof manifest.name === 'string' && manifest.name.length > 0, 'name is required');
 assert(typeof manifest.short_name === 'string' && manifest.short_name.length > 0, 'short_name is required');
@@ -64,8 +64,8 @@ assert(
   'a maskable icon is required',
 );
 assert(
-  manifest.icons.every((icon) => String(icon.src).startsWith(`${basePath}/icons/`)),
-  `all icon URLs must use the ${basePath || '/'} deployment root`,
+  manifest.icons.every((icon) => String(icon.src).startsWith('../icons/')),
+  'all icon URLs must resolve from the app manifest to the shared icon directory',
 );
 
 assert(
