@@ -1,27 +1,30 @@
-import Link from 'next/link';
+function getBasePath(): string {
+  const configured = process.env.OWNLY_BASE_PATH?.trim() ?? '';
+  if (!configured || configured === '/') return '';
+  return `/${configured.replace(/^\/+|\/+$/g, '')}`;
+}
+
+const basePath = getBasePath();
 
 export default function NotFound() {
   return (
-    <div className="flex h-full min-h-screen flex-col items-center justify-center bg-stone-50 p-6 text-center">
-      <div className="rounded-2xl border border-stone-200 bg-white p-8 shadow-sm max-w-md w-full space-y-6">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
-          <svg className="h-6 w-6 text-stone-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
+    <main className="grid min-h-screen place-items-center bg-[#f4f1e9] px-5 text-stone-950">
+      <section className="w-full max-w-2xl rounded-[2rem] border border-stone-900/10 bg-white/70 p-8 text-center shadow-[0_24px_80px_-48px_rgba(28,25,23,0.55)] sm:p-12">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-stone-950 text-lg font-semibold text-white">O</span>
+        <p className="mt-8 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">404 · Ownly</p>
+        <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">This record is not here.</h1>
+        <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-stone-600">
+          The page may have moved. Return to the product page, or open the local-first Web app directly.
+        </p>
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <a href={`${basePath}/`} className="rounded-full bg-stone-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-stone-800">
+            Product page
+          </a>
+          <a href={`${basePath}/app/`} className="rounded-full border border-stone-300 bg-white px-6 py-3 text-sm font-semibold text-stone-800 transition hover:border-stone-400">
+            Open Ownly
+          </a>
         </div>
-        <div>
-          <h2 className="text-lg font-semibold text-stone-900">Page not found</h2>
-          <p className="mt-2 text-sm text-stone-500">
-            The page or path you requested does not exist in the Ownly workspace.
-          </p>
-        </div>
-        <Link
-          href="/"
-          className="inline-flex w-full items-center justify-center rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-stone-800"
-        >
-          Back to dashboard
-        </Link>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
