@@ -39,13 +39,19 @@ const clientBundle = listFiles(staticDir)
   .map((filePath) => fs.readFileSync(filePath, 'utf8'))
   .join('\n');
 
-for (const icon of ['icons/ownly-192.svg', 'icons/ownly-512.svg', 'icons/ownly-maskable.svg']) {
-  read(icon);
-}
+const brandMark = read('icons/ownly-mark.svg');
+const installIcons = [
+  read('icons/ownly-192.svg'),
+  read('icons/ownly-512.svg'),
+  read('icons/ownly-maskable.svg'),
+];
+const brandCss = fs.readFileSync(path.resolve('src/app/brand.css'), 'utf8');
+const canonicalArc = 'M50.5 32A18.5 18.5 0 1 1 35.213 13.782';
 
 const expectedRoot = `${basePath}/`;
 const expectedApp = `${basePath}/app/`;
 const expectedManifestUrl = `${basePath}/app/manifest.webmanifest`;
+const expectedBrandMarkUrl = `${basePath}/icons/ownly-mark.svg`;
 
 assert(
   !landingHtml.includes('manifest.webmanifest'),
@@ -58,6 +64,10 @@ assert(
 assert(
   landingHtml.includes(expectedApp),
   `landing page does not link to ${expectedApp}`,
+);
+assert(
+  landingHtml.includes(expectedBrandMarkUrl) && appHtml.includes(expectedBrandMarkUrl),
+  'the marketing page and application must share the canonical favicon mark',
 );
 assert(manifest.start_url === './', 'start_url must resolve relative to the app manifest');
 assert(manifest.scope === './', 'scope must remain inside the app route');
@@ -84,6 +94,24 @@ assert(
 );
 
 assert(
+  brandMark.includes(canonicalArc) && brandMark.includes('#10b981'),
+  'the canonical Ownly mark must retain the open ring and decision node',
+);
+assert(
+  installIcons.every((icon) => icon.includes(canonicalArc) && icon.includes('#10b981')),
+  'all install icons must derive from the canonical Ownly mark',
+);
+for (const selector of [
+  'a[aria-label="Ownly home"]',
+  '#preview aside',
+  'aside.fixed.bottom-24',
+  '.wyqd-web-shell header',
+  'main.grid.min-h-screen',
+]) {
+  assert(brandCss.includes(selector), `brand treatment is missing the ${selector} surface`);
+}
+
+assert(
   serviceWorker.includes("self.addEventListener('install'") &&
     serviceWorker.includes("self.addEventListener('fetch'") &&
     serviceWorker.includes('caches.open'),
@@ -107,4 +135,4 @@ assert(
   'the app client bundle must include the first-use PWA install invitation',
 );
 
-console.log(`[pwa validation] marketing root stays non-PWA at ${expectedRoot}; installed app is scoped to ${expectedApp}`);
+console.log(`[pwa validation] unified Ownly mark is active; marketing root stays non-PWA at ${expectedRoot}; installed app is scoped to ${expectedApp}`);
