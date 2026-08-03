@@ -14,7 +14,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      shared: ${{ steps.scope.outputs.shared }}
+      web: ${{ steps.scope.outputs.web }}
+      obsidian: ${{ steps.scope.outputs.obsidian }}
+    steps:
+      - name: Checkout change history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify affected runtimes
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "shared=true" >> "$GITHUB_OUTPUT"
+            echo "web=true" >> "$GITHUB_OUTPUT"
+            echo "obsidian=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --name-only "$BASE_SHA" "$GITHUB_SHA" > changed-files.txt
+          cat changed-files.txt
+
+          full=false
+          shared=false
+          web=false
+          obsidian=false
+
+          if grep -Eq '^(package(-lock)?\.json|tsconfig.*\.json|eslint\.config\.|\.github/workflows/pages\.yml)' changed-files.txt; then
+            full=true
+          fi
+          if [[ "$full" == true ]] || grep -Eq '^(src/(core|services|types)/|scripts/cli/|scripts/wyqd-cli\.ts|tests/|docs/(DATA|WEB_RUNTIME|AGENT_CLI)|.*migration)' changed-files.txt; then
+            shared=true
+          fi
+          if [[ "$full" == true || "$shared" == true ]] || grep -Eq '^(src/(app|components|hooks|lib)/|public/|next\.config|postcss\.config|scripts/(gen-git-sha|validate-static-export|validate-pwa)\.mjs)' changed-files.txt; then
+            web=true
+          fi
+          if [[ "$full" == true ]] || grep -Eq '^(src/obsidian/|esbuild\.obsidian\.mjs|manifest\.json|styles\.css|scripts/(package-obsidian-plugin|validate-obsidian-release)\.mjs)' changed-files.txt; then
+            obsidian=true
+          fi
+
+          echo "shared=$shared" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "obsidian=$obsidian" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: detect-scope
     runs-on: ubuntu-latest
     env:
       OWNLY_BASE_PATH: /ownly
@@ -25,17 +78,26 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
-      - name: Install dependencies
+      - name: Install locked dependencies
         run: npm ci
 
-      - name: Validate project
-        run: npm run validate
+      - name: Fast repository validation
+        run: npm run validate:fast
 
-      - name: Validate static export
-        run: npm run validate:pages
+      - name: Shared data, CLI and portability contracts
+        if: needs.detect-scope.outputs.shared == 'true'
+        run: npm run validate:shared
+
+      - name: Web and PWA validation
+        if: needs.detect-scope.outputs.web == 'true'
+        run: npm run validate:web
+
+      - name: Obsidian plugin validation
+        if: needs.detect-scope.outputs.obsidian == 'true'
+        run: npm run validate:obsidian
 
       - name: Upload GitHub Pages artifact
         if: github.event_name != 'pull_request'
