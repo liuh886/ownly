@@ -1,0 +1,33 @@
+{
+  "id": "./",
+  "name": "Ownly — Local-first ownership memory",
+  "short_name": "Ownly",
+  "description": "Track possessions, subscriptions, experiences, and reviews in local Markdown files without uploading personal records.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fafaf9",
+  "theme_color": "#1c1917",
+  "orientation": "any",
+  "categories": ["productivity", "finance", "utilities"],
+  "icons": [
+    {
+      "src": "../icons/ownly-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/ownly-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/ownly-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
