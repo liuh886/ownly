@@ -1,8 +1,8 @@
 # Ownly
 
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)](https://obsidian.md/plugins?id=ownly)
-[![Web App](https://img.shields.io/badge/Web-Open_Ownly-111827?logo=googlechrome&logoColor=white)](https://liuh886.github.io/ownly/)
-[![PWA](https://img.shields.io/badge/PWA-Installable-0f766e?logo=pwa&logoColor=white)](https://liuh886.github.io/ownly/)
+[![Web App](https://img.shields.io/badge/Web-Open_Ownly-111827?logo=googlechrome&logoColor=white)](https://liuh886.github.io/ownly/app/)
+[![PWA](https://img.shields.io/badge/PWA-Installable-0f766e?logo=pwa&logoColor=white)](https://liuh886.github.io/ownly/app/)
 [![Status](https://img.shields.io/badge/status-stable_1.x-brightgreen.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F7WYJ6B)
@@ -19,7 +19,9 @@ Obsidian is recommended as a convenient place to store and inspect the files, bu
 
 ## Open Ownly
 
-👉 **[Open Ownly on GitHub Pages](https://liuh886.github.io/ownly/)**
+- **[Explore the product page](https://liuh886.github.io/ownly/)**
+- **[Open the Web app / PWA](https://liuh886.github.io/ownly/app/)**
+- **[View the permission-free product preview](https://liuh886.github.io/ownly/app/?demo=1)**
 
 | Entry point | Obsidian required? | Local server required? | Best for |
 |---|---:|---:|---|
@@ -147,10 +149,12 @@ See:
 
 | Area | Status |
 |---|---|
+| Product homepage | Static bilingual product explanation and conversion entry point |
 | Hosted Web app | Static GitHub Pages runtime with local-folder access |
+| Product preview | Permission-free fictional data walkthrough; no local writes |
 | Installed PWA | Same Web data behavior, standalone launch and cached app shell |
 | Obsidian plugin | Native Vault interface over the shared Ownly data model |
-| Agent CLI | Stable fact-ready JSON contract; strict typing work is tracked in #33 |
+| Agent CLI | Stable, strict-typed fact-ready JSON contract |
 | Data storage | Plain local Markdown + YAML frontmatter |
 | Mutation safety | Repository create/update/archive/restore contract protected by CI |
 
@@ -161,7 +165,7 @@ Current validation and known coverage gaps are documented in [Quality Baseline](
 Direct local-folder access uses the File System Access API.
 
 - Recommended: current desktop Chrome or Microsoft Edge.
-- Unsupported browsers can view demo mode but cannot connect local data.
+- Unsupported browsers can view the product page and permission-free preview but cannot connect local data.
 - Mobile direct-folder access is not a production target.
 - Browser permission may need to be renewed after restart or permission reset.
 
