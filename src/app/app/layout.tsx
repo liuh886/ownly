@@ -9,7 +9,7 @@ function getBasePath(): string {
 const basePath = getBasePath();
 
 export const metadata: Metadata = {
-  manifest: `${basePath}/manifest.webmanifest`,
+  manifest: `${basePath}/app/manifest.webmanifest`,
 };
 
 export default function OwnlyAppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
