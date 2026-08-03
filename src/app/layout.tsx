@@ -18,7 +18,6 @@ export const metadata: Metadata = {
   title: "Ownly",
   applicationName: "Ownly",
   description: `${WYQD_PRODUCT_POSITIONING} ${WYQD_PRODUCT_SLOGAN}.`,
-  manifest: `${basePath}/manifest.webmanifest`,
   icons: {
     icon: [
       {
