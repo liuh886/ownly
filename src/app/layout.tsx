@@ -3,6 +3,7 @@ import Script from "next/script";
 import { WYQD_PRODUCT_POSITIONING, WYQD_PRODUCT_SLOGAN } from "@/core/runtime";
 import { Providers } from "./providers";
 import "./globals.css";
+import "./brand.css";
 
 const GOOGLE_ANALYTICS_ID = "G-KXXVS33FQ2";
 
