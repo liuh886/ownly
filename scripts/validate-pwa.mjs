@@ -18,7 +18,8 @@ function read(relativePath) {
   return fs.readFileSync(absolutePath, 'utf8');
 }
 
-const indexHtml = read('index.html');
+const landingHtml = read('index.html');
+const appHtml = read('app/index.html');
 const serviceWorker = read('sw.js');
 const manifestText = read('manifest.webmanifest');
 const manifest = JSON.parse(manifestText);
@@ -28,14 +29,24 @@ for (const icon of ['icons/ownly-192.svg', 'icons/ownly-512.svg', 'icons/ownly-m
 }
 
 const expectedRoot = `${basePath}/`;
+const expectedApp = `${basePath}/app/`;
 const expectedManifestUrl = `${basePath}/manifest.webmanifest`;
 
 assert(
-  indexHtml.includes(expectedManifestUrl),
-  `index.html does not reference ${expectedManifestUrl}`,
+  landingHtml.includes(expectedManifestUrl),
+  `landing page does not reference ${expectedManifestUrl}`,
 );
-assert(manifest.start_url === expectedRoot, `start_url must be ${expectedRoot}`);
+assert(
+  appHtml.includes(expectedManifestUrl),
+  `app page does not reference ${expectedManifestUrl}`,
+);
+assert(
+  landingHtml.includes(expectedApp),
+  `landing page does not link to ${expectedApp}`,
+);
+assert(manifest.start_url === expectedApp, `start_url must be ${expectedApp}`);
 assert(manifest.scope === expectedRoot, `scope must be ${expectedRoot}`);
+assert(manifest.id === expectedApp, `id must be ${expectedApp}`);
 assert(manifest.display === 'standalone', 'display must be standalone');
 assert(typeof manifest.name === 'string' && manifest.name.length > 0, 'name is required');
 assert(typeof manifest.short_name === 'string' && manifest.short_name.length > 0, 'short_name is required');
@@ -63,5 +74,9 @@ assert(
     serviceWorker.includes('caches.open'),
   'service worker must install an application cache and handle fetches',
 );
+assert(
+  serviceWorker.includes("const appUrl = `${basePath}/app/`"),
+  'service worker must cache the application route separately from the marketing root',
+);
 
-console.log(`[pwa validation] Ownly is installable and offline-ready at ${expectedRoot}`);
+console.log(`[pwa validation] Ownly landing page is at ${expectedRoot}; installed app launches at ${expectedApp}`);
