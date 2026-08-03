@@ -21,7 +21,7 @@ function read(relativePath) {
 const landingHtml = read('index.html');
 const appHtml = read('app/index.html');
 const serviceWorker = read('sw.js');
-const manifestText = read('manifest.webmanifest');
+const manifestText = read('app/manifest.webmanifest');
 const manifest = JSON.parse(manifestText);
 
 for (const icon of ['icons/ownly-192.svg', 'icons/ownly-512.svg', 'icons/ownly-maskable.svg']) {
@@ -30,11 +30,11 @@ for (const icon of ['icons/ownly-192.svg', 'icons/ownly-512.svg', 'icons/ownly-m
 
 const expectedRoot = `${basePath}/`;
 const expectedApp = `${basePath}/app/`;
-const expectedManifestUrl = `${basePath}/manifest.webmanifest`;
+const expectedManifestUrl = `${basePath}/app/manifest.webmanifest`;
 
 assert(
-  !landingHtml.includes(expectedManifestUrl),
-  'the marketing homepage must not expose the PWA manifest',
+  !landingHtml.includes('manifest.webmanifest'),
+  'the marketing homepage must not expose a PWA manifest',
 );
 assert(
   appHtml.includes(expectedManifestUrl),
@@ -77,6 +77,10 @@ assert(
 assert(
   serviceWorker.includes("const appUrl = `${siteBase}/app/`"),
   'service worker must derive and cache the application route',
+);
+assert(
+  serviceWorker.includes("const manifestUrl = `${siteBase}/app/manifest.webmanifest`"),
+  'service worker must cache the app-scoped manifest',
 );
 assert(
   !serviceWorker.includes('cachePageAndAssets(cache, rootUrl)'),
