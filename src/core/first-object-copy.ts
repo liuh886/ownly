@@ -33,8 +33,8 @@ const COPY: Record<WYQDLanguage, FirstObjectCopy> = {
         example: 'Example: camera, laptop, bicycle',
       },
       recurring_cost: {
-        title: 'Recurring cost',
-        description: 'A subscription or other repeating obligation worth reviewing.',
+        title: 'Subscription',
+        description: 'A subscription with an ongoing cost worth reviewing.',
         example: 'Example: cloud storage, software, membership',
       },
       experience: {
@@ -60,8 +60,8 @@ const COPY: Record<WYQDLanguage, FirstObjectCopy> = {
         example: '例如：相机、电脑、自行车',
       },
       recurring_cost: {
-        title: '周期性支出',
-        description: '值得持续审视的一项订阅或重复性支出。',
+        title: '订阅',
+        description: '一项值得持续审视的订阅及其订阅成本。',
         example: '例如：云存储、软件、会员',
       },
       experience: {
