@@ -15,12 +15,12 @@ const copy = {
     eyebrow: 'Product preview',
     title: 'See the decision system before opening the app.',
     description:
-      'Fictional data shows how Ownly connects ownership, recurring cost, use and review. Nothing here requests folder access or saves changes.',
+      'Fictional data shows how Ownly connects ownership, subscription cost, real use and review. Nothing here requests folder access or saves changes.',
     open: 'Open the real app',
     note: 'Sample data · no permission · no persistence',
     tabs: { overview: 'Overview', objects: 'Objects', reviews: 'Reviews' },
     metrics: [
-      ['Monthly fixed cost', '$107'],
+      ['Monthly subscription cost', '$107'],
       ['Active possessions', '42'],
       ['Reviews due', '3'],
       ['Tracked experience', '18 mo'],
@@ -33,7 +33,7 @@ const copy = {
     ],
     cue: 'Decision cue',
     cueText: 'The camera has been used twice in six months. Review the lived experience before buying another lens.',
-    costs: 'Recurring cost map',
+    costs: 'Subscription cost map',
     costRows: [
       ['Cloud storage', '$9.99 / month', 'Essential'],
       ['Music service', '$10.99 / month', 'Review'],
@@ -44,7 +44,7 @@ const copy = {
     objectsIntro: 'Each record combines acquisition facts, real use, condition, cost and the next decision point.',
     objects: [
       ['Sony WH-1000XM5', 'Physical item', '$349', 'Using', '18 uses · excellent condition'],
-      ['iCloud+', 'Recurring cost', '$119.88 / yr', 'Active', 'Review in 12 days'],
+      ['iCloud+', 'Subscription', '$119.88 / yr', 'Active', 'Review in 12 days'],
       ['Kyoto autumn trip', 'Experience', '$1,860', 'Reviewed', '9.2 / 10 experience score'],
       ['Weekend camera', 'Physical item', '$1,240', 'Idle', '2 uses in 6 months'],
     ],
@@ -60,12 +60,12 @@ const copy = {
     eyebrow: '产品预览',
     title: '进入应用之前，先看清 Ownly 如何支持决策。',
     description:
-      '这里使用虚构数据展示 Ownly 如何连接所有权、持续支出、真实使用和回顾。不会请求文件夹权限，也不会保存任何修改。',
+      '这里使用虚构数据展示 Ownly 如何连接所有权、订阅成本、真实使用和回顾。不会请求文件夹权限，也不会保存任何修改。',
     open: '打开真实应用',
     note: '示例数据 · 无需权限 · 不保存修改',
     tabs: { overview: '总览', objects: '对象', reviews: '回顾' },
     metrics: [
-      ['每月固定支出', '¥764'],
+      ['月均订阅成本', '¥764'],
       ['当前物品', '42'],
       ['待回顾', '3'],
       ['持续记录', '18 个月'],
@@ -78,7 +78,7 @@ const copy = {
     ],
     cue: '决策提示',
     cueText: '这台相机半年只使用了两次。购买下一支镜头前，先回顾真实使用体验。',
-    costs: '持续支出图谱',
+    costs: '订阅成本图谱',
     costRows: [
       ['云存储', '¥69 / 月', '必要'],
       ['音乐服务', '¥88 / 月', '回顾'],
@@ -89,7 +89,7 @@ const copy = {
     objectsIntro: '每条记录把购入事实、真实使用、状态、成本和下一次决策放在一起。',
     objects: [
       ['Sony WH-1000XM5', '实物', '¥2,499', '使用中', '已使用 18 次 · 状态良好'],
-      ['iCloud+', '持续支出', '¥828 / 年', '有效', '12 天后回顾'],
+      ['iCloud+', '订阅', '¥828 / 年', '有效', '12 天后回顾'],
       ['京都秋日旅行', '经历', '¥13,300', '已回顾', '体验评分 9.2 / 10'],
       ['周末相机', '实物', '¥8,900', '闲置', '半年使用 2 次'],
     ],

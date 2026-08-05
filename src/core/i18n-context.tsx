@@ -10,6 +10,7 @@ import {
   detectPreferredLanguage,
   OWNLY_LANGUAGE_STORAGE_KEY,
 } from './language-preference';
+import { getTerminologyOverride } from './terminology';
 import type { WYQDCurrency } from '@/lib/format';
 
 function defaultCurrency(language: WYQDLanguage): WYQDCurrency {
@@ -107,7 +108,7 @@ export function I18nProvider({
       t: (key: WYQDTranslationKey) => {
         // Keep this compatibility override until the legacy translation table is split by locale.
         if (language === 'en' && key === 'deleteConfirm') return 'Delete "{title}"?';
-        return translator.t(key);
+        return getTerminologyOverride(language, key) ?? translator.t(key);
       },
       currency,
       setCurrency: (cur: WYQDCurrency) => {
