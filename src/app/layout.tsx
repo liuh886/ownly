@@ -58,7 +58,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans min-h-full flex flex-col">
         <Providers>{children}</Providers>
-        <Script src={`${basePath}/membership-config.js`} strategy="afterInteractive" />
+        <Script src={`${basePath}/membership-config.js`} strategy="beforeInteractive" />
         <Script src={`${basePath}/membership-widget.js`} strategy="afterInteractive" />
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ANALYTICS_ID}`}
