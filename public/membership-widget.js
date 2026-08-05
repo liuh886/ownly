@@ -121,16 +121,16 @@
     state.error = '';
     setLoading(true);
     try {
-      return await refreshEntitlements();
+      await refreshEntitlements();
     } catch (error) {
       state.error = error?.message || String(error);
       render();
       emit();
-      return snapshot();
     } finally {
       setLoading(false);
       emit();
     }
+    return snapshot();
   }
 
   async function handleSession(session) {
