@@ -51,6 +51,7 @@ for (const stale of [
   "intro: config.privacyNote || '账户仅用于验证会员权益",
   "ui.refresh.addEventListener('click', () => void refreshEntitlements())",
   "window.setTimeout(() => void refreshEntitlements(), 1500)",
+  'return await refreshEntitlements();',
 ]) {
   if (client.includes(stale)) throw new Error(`membership client contains stale bug-prone behavior: ${stale}`);
 }
