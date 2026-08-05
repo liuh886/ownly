@@ -55,22 +55,27 @@ export function I18nProvider({
     if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
   });
 
-  const [language, setLanguageState] = useState<WYQDLanguage>(() => {
-    if (initialLanguage) return initialLanguage;
-    return detectPreferredLanguage({
-      storedLanguage: get(OWNLY_LANGUAGE_STORAGE_KEY),
-      browserLanguages: browserLanguagePreferences(),
-      fallback: 'en',
-    });
-  });
+  // Keep the server render and the first browser render identical. Browser and
+  // persisted preferences are applied immediately after hydration.
+  const [language, setLanguageState] = useState<WYQDLanguage>(initialLanguage ?? 'en');
 
   const [currency, setCurrency] = useState<WYQDCurrency>(() => {
     const storedCurrency = get('ownly_currency') as WYQDCurrency | null;
     if (storedCurrency && ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'].includes(storedCurrency)) {
       return storedCurrency;
     }
-    return defaultCurrency(language);
+    return defaultCurrency(initialLanguage ?? 'en');
   });
+
+  useEffect(() => {
+    if (initialLanguage) return;
+    const preferredLanguage = detectPreferredLanguage({
+      storedLanguage: get(OWNLY_LANGUAGE_STORAGE_KEY),
+      browserLanguages: browserLanguagePreferences(),
+      fallback: 'en',
+    });
+    setLanguageState((current) => current === preferredLanguage ? current : preferredLanguage);
+  }, [initialLanguage]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
