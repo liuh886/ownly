@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   createWYQDTranslator,
   type WYQDLanguage,
@@ -55,9 +55,17 @@ export function I18nProvider({
     if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
   });
 
-  // Keep the server render and the first browser render identical. Browser and
-  // persisted preferences are applied immediately after hydration.
-  const [language, setLanguageState] = useState<WYQDLanguage>(initialLanguage ?? 'en');
+  const detectedLanguage = useSyncExternalStore(
+    () => () => undefined,
+    () => initialLanguage ?? detectPreferredLanguage({
+      storedLanguage: get(OWNLY_LANGUAGE_STORAGE_KEY),
+      browserLanguages: browserLanguagePreferences(),
+      fallback: 'en',
+    }),
+    () => initialLanguage ?? 'en',
+  );
+  const [languageOverride, setLanguageOverride] = useState<WYQDLanguage | null>(null);
+  const language = languageOverride ?? detectedLanguage;
 
   const [currency, setCurrency] = useState<WYQDCurrency>(() => {
     const storedCurrency = get('ownly_currency') as WYQDCurrency | null;
@@ -66,16 +74,6 @@ export function I18nProvider({
     }
     return defaultCurrency(initialLanguage ?? 'en');
   });
-
-  useEffect(() => {
-    if (initialLanguage) return;
-    const preferredLanguage = detectPreferredLanguage({
-      storedLanguage: get(OWNLY_LANGUAGE_STORAGE_KEY),
-      browserLanguages: browserLanguagePreferences(),
-      fallback: 'en',
-    });
-    setLanguageState((current) => current === preferredLanguage ? current : preferredLanguage);
-  }, [initialLanguage]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -99,7 +97,7 @@ export function I18nProvider({
     return {
       language,
       setLanguage: (lang: WYQDLanguage) => {
-        setLanguageState(lang);
+        setLanguageOverride(lang);
         if (onLanguageChange) {
           onLanguageChange(lang);
         } else {
