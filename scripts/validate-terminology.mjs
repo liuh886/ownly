@@ -13,6 +13,7 @@ const files = [
   'src/core/first-object-copy.ts',
   'src/components/marketing/MarketingHome.tsx',
   'src/components/marketing/HomepagePreview.tsx',
+  'src/obsidian/main.ts',
 ];
 
 const forbiddenPhrases = [
@@ -42,6 +43,9 @@ const forbiddenByFile = {
     'Recurring cost',
     '每月固定支出',
     '持续支出',
+  ],
+  'src/obsidian/main.ts': [
+    'return createWYQDTranslator(this.settings.language).t(key);',
   ],
 };
 
@@ -96,6 +100,10 @@ const requiredByFile = {
   'src/components/marketing/HomepagePreview.tsx': [
     'Monthly subscription cost',
     '订阅成本图谱',
+  ],
+  'src/obsidian/main.ts': [
+    "import { getTerminologyOverride } from '@/core/terminology';",
+    'return getTerminologyOverride(this.settings.language, key)',
   ],
 };
 
