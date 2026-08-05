@@ -58,7 +58,7 @@ jobs:
           if [[ "$full" == true || "$shared" == true ]] || grep -Eq '^(src/(app|components|hooks|lib)/|public/|next\.config|postcss\.config|scripts/(gen-git-sha|validate-static-export|validate-pwa)\.mjs)' changed-files.txt; then
             web=true
           fi
-          if [[ "$full" == true ]] || grep -Eq '^(src/obsidian/|esbuild\.obsidian\.mjs|manifest\.json|styles\.css|scripts/(package-obsidian-plugin|validate-obsidian-release)\.mjs)' changed-files.txt; then
+          if [[ "$full" == true || "$shared" == true ]] || grep -Eq '^(src/obsidian/|esbuild\.obsidian\.mjs|manifest\.json|styles\.css|scripts/(package-obsidian-plugin|validate-obsidian-release)\.mjs)' changed-files.txt; then
             obsidian=true
           fi
 
