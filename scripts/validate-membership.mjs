@@ -28,6 +28,7 @@ for (const contract of [
   "productCode: 'ownly'",
   "entitlementCode: 'ownly.pro'",
   'billingEnabled: false',
+  'privacyNoteZh:',
   'sb_publishable_',
   '/functions/v1/create-checkout-session',
   '/functions/v1/create-portal-session',
@@ -39,8 +40,19 @@ for (const contract of [
   "Authorization: `Bearer ${token}`",
   'apikey: config.supabasePublishableKey',
   "window.dispatchEvent(new CustomEvent('hao:membership-changed'",
+  'config.privacyNoteZh',
+  'refreshEntitlementsFromUi',
+  "attributeFilter: ['lang']",
 ]) {
   if (!client.includes(contract)) throw new Error(`membership client is missing ${contract}`);
+}
+
+for (const stale of [
+  "intro: config.privacyNote || '账户仅用于验证会员权益",
+  "ui.refresh.addEventListener('click', () => void refreshEntitlements())",
+  "window.setTimeout(() => void refreshEntitlements(), 1500)",
+]) {
+  if (client.includes(stale)) throw new Error(`membership client contains stale bug-prone behavior: ${stale}`);
 }
 
 const combined = `${config}\n${client}`;
