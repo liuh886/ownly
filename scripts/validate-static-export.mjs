@@ -69,8 +69,14 @@ if (!existsSync(indexPath)) {
     fail('The public homepage is missing its Open Graph product identity.');
   }
 
-  if (!html.includes('id="preview"') || !html.includes('Product preview')) {
-    fail('The interactive product preview must be embedded as the second homepage screen.');
+  for (const scene of ['overview', 'cost', 'review']) {
+    if (!html.includes(`data-ownly-scene="${scene}"`)) {
+      fail(`The focused homepage is missing its ${scene} product scene.`);
+    }
+  }
+
+  if (!html.includes('id="preview"') || !html.includes('id="review"') || !html.includes('id="local"')) {
+    fail('The homepage must expose stable cost, review, and local-data anchors.');
   }
 
   if (html.includes('/app/?demo=1')) {
@@ -107,8 +113,15 @@ if (!existsSync(staticDir)) {
       .filter((path) => path.endsWith('.js'))
       .map((path) => readFileSync(path, 'utf8'))
       .join('\n');
-    if (!clientBundle.includes('Sample data') || !clientBundle.includes('no permission')) {
-      fail('The permission-free homepage preview is missing from the client bundle.');
+    for (const contract of [
+      'Sample data',
+      'Price is only the beginning.',
+      'Review before the next purchase or renewal.',
+      'No hosted personal database',
+    ]) {
+      if (!clientBundle.includes(contract)) {
+        fail(`The focused homepage client bundle is missing: ${contract}`);
+      }
     }
   }
 }
@@ -129,4 +142,4 @@ if (process.exitCode) {
   process.exit(process.exitCode);
 }
 
-console.log(`[pages validation] polished homepage, embedded preview and app route are ready${basePath ? ` for ${basePath}` : ''}.`);
+console.log(`[pages validation] three-scene homepage, local-data trust rail and app route are ready${basePath ? ` for ${basePath}` : ''}.`);
