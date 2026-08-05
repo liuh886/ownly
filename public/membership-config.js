@@ -14,5 +14,6 @@
     portalFunctionUrl: 'https://blgwlycfcwvsupmqyqwn.supabase.co/functions/v1/create-portal-session',
     redirectUrl: 'https://liuh886.github.io/ownly/app/',
     privacyNote: 'Ownly records remain in your local data folder. The account only verifies membership access.',
+    privacyNoteZh: 'Ownly 记录始终保存在你的本地数据目录中，账户仅用于验证会员权益。',
   });
 })();
