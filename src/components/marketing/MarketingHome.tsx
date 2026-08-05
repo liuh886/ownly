@@ -21,7 +21,7 @@ const copy = {
   en: {
     nav: ['Understand cost', 'Review decisions', 'Local data'],
     open: 'Open Ownly',
-    heroTitle: 'Make ownership easier to remember—and easier to reconsider.',
+    heroTitle: 'Know what you own. Decide what deserves to stay.',
     heroDescription:
       'Ownly keeps possessions, subscriptions and important experiences in one local decision ledger, so real use—not vague memory—can guide what stays, renews or leaves.',
     seeHow: 'See how it works',
@@ -99,7 +99,7 @@ const copy = {
   zh: {
     nav: ['理解成本', '完成回顾', '本地数据'],
     open: '打开 Ownly',
-    heroTitle: '让所有权更容易被记住，也更容易被重新审视。',
+    heroTitle: '记住你拥有什么，决定什么值得留下。',
     heroDescription:
       'Ownly 将实物、订阅和重要经历放进同一本地决策账本，让真实使用而不是模糊记忆，决定什么值得保留、续费或离开。',
     seeHow: '查看工作方式',
@@ -301,7 +301,7 @@ function CostWindow({ brandMarkHref, text }: { brandMarkHref: string; text: type
             <div className="flex items-center justify-between"><p className="text-xs font-semibold">{text.usageHistory}</p><span className="text-[9px] uppercase tracking-[0.12em] text-stone-400">{text.sixMonths}</span></div>
             <div className="mt-6 flex h-36 items-end gap-2.5">
               {bars.map((height, index) => (
-                <div key={text.usageMonths[index]} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2">
+                <div key={text.usageMonths[index]} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
                   <div className="w-full rounded-t-md bg-emerald-700/90" style={{ height: `${height}%` }} />
                   <span className="text-[9px] text-stone-400">{text.usageMonths[index]}</span>
                 </div>
