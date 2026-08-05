@@ -12,7 +12,6 @@ const files = [
   'src/core/terminology.ts',
   'src/core/first-object-copy.ts',
   'src/components/marketing/MarketingHome.tsx',
-  'src/components/marketing/HomepagePreview.tsx',
   'src/obsidian/main.ts',
 ];
 
@@ -35,10 +34,6 @@ const forbiddenByFile = {
   ],
   'src/components/marketing/MarketingHome.tsx': [
     'monthly fixed cost',
-    '每月固定支出',
-    '持续支出',
-  ],
-  'src/components/marketing/HomepagePreview.tsx': [
     'Monthly fixed cost',
     'Recurring cost',
     '每月固定支出',
@@ -95,11 +90,9 @@ const requiredByFile = {
   ],
   'src/components/marketing/MarketingHome.tsx': [
     'monthly subscription cost',
+    'usage cost and subscription cost',
     '月均订阅成本',
-  ],
-  'src/components/marketing/HomepagePreview.tsx': [
-    'Monthly subscription cost',
-    '订阅成本图谱',
+    '使用成本、订阅成本',
   ],
   'src/obsidian/main.ts': [
     "import { getTerminologyOverride } from '@/core/terminology';",
