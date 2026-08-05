@@ -22,7 +22,7 @@
         account: '账户',
         title: `${config.appName || '应用'} 账户`,
         optional: '可选账户',
-        intro: config.privacyNote || '账户仅用于验证会员权益，现有本地功能保持不变。',
+        intro: config.privacyNoteZh || '账户仅用于验证会员权益，现有本地功能保持不变。',
         google: '使用 Google 登录',
         email: '邮箱地址',
         send: '发送登录链接',
@@ -114,6 +114,22 @@
     });
     render();
     emit();
+    return snapshot();
+  }
+
+  async function refreshEntitlementsFromUi() {
+    state.error = '';
+    setLoading(true);
+    try {
+      await refreshEntitlements();
+    } catch (error) {
+      state.error = error?.message || String(error);
+      render();
+      emit();
+    } finally {
+      setLoading(false);
+      emit();
+    }
     return snapshot();
   }
 
@@ -336,6 +352,10 @@
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && state.open) closeDialog();
     });
+    const languageObserver = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) => mutation.attributeName === 'lang')) render();
+    });
+    languageObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
     ui.google.addEventListener('click', () => void signInWithGoogle());
     ui.emailForm.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -343,7 +363,7 @@
     });
     ui.upgrade.addEventListener('click', () => void callBilling(config.checkoutFunctionUrl));
     ui.manage.addEventListener('click', () => void callBilling(config.portalFunctionUrl));
-    ui.refresh.addEventListener('click', () => void refreshEntitlements());
+    ui.refresh.addEventListener('click', () => void refreshEntitlementsFromUi());
     ui.signOut.addEventListener('click', () => void signOut());
     render();
   }
@@ -361,7 +381,7 @@
       if (new URLSearchParams(window.location.search).get('billing') === 'success') {
         ui.status.textContent = copy().signedIn;
         ui.status.dataset.kind = 'success';
-        window.setTimeout(() => void refreshEntitlements(), 1500);
+        window.setTimeout(() => void refreshEntitlementsFromUi(), 1500);
       }
     } catch (error) {
       state.error = error?.message || String(error);
@@ -375,7 +395,7 @@
     getState: snapshot,
     can,
     open: openDialog,
-    refresh: refreshEntitlements,
+    refresh: refreshEntitlementsFromUi,
   });
 
   void initialise();

@@ -18,6 +18,7 @@ import {
   type WYQDLanguage,
   type WYQDTranslationKey,
 } from '@/core/i18n';
+import { getTerminologyOverride } from '@/core/terminology';
 import { GUMROAD_STORE_URL } from '@/core/activation';
 import { resolveWYQDMembership } from '@/core/membership';
 import { WYQD_CORE_TARGET_VERSION, WYQD_PRODUCT_SLOGAN, WYQD_SCHEMA_VERSION } from '@/core/runtime';
@@ -207,7 +208,8 @@ export default class WYQDPlugin extends Plugin {
   }
 
   t(key: WYQDTranslationKey) {
-    return createWYQDTranslator(this.settings.language).t(key);
+    return getTerminologyOverride(this.settings.language, key)
+      ?? createWYQDTranslator(this.settings.language).t(key);
   }
 
   refreshWorkspaceViews() {
