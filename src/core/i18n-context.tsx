@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   createWYQDTranslator,
   type WYQDLanguage,
@@ -55,21 +55,24 @@ export function I18nProvider({
     if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
   });
 
-  const [language, setLanguageState] = useState<WYQDLanguage>(() => {
-    if (initialLanguage) return initialLanguage;
-    return detectPreferredLanguage({
+  const detectedLanguage = useSyncExternalStore(
+    () => () => undefined,
+    () => initialLanguage ?? detectPreferredLanguage({
       storedLanguage: get(OWNLY_LANGUAGE_STORAGE_KEY),
       browserLanguages: browserLanguagePreferences(),
       fallback: 'en',
-    });
-  });
+    }),
+    () => initialLanguage ?? 'en',
+  );
+  const [languageOverride, setLanguageOverride] = useState<WYQDLanguage | null>(null);
+  const language = languageOverride ?? detectedLanguage;
 
   const [currency, setCurrency] = useState<WYQDCurrency>(() => {
     const storedCurrency = get('ownly_currency') as WYQDCurrency | null;
     if (storedCurrency && ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'].includes(storedCurrency)) {
       return storedCurrency;
     }
-    return defaultCurrency(language);
+    return defaultCurrency(initialLanguage ?? 'en');
   });
 
   useEffect(() => {
@@ -94,7 +97,7 @@ export function I18nProvider({
     return {
       language,
       setLanguage: (lang: WYQDLanguage) => {
-        setLanguageState(lang);
+        setLanguageOverride(lang);
         if (onLanguageChange) {
           onLanguageChange(lang);
         } else {

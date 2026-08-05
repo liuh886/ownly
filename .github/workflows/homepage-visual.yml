@@ -1,0 +1,82 @@
+name: Homepage Visual QA
+
+on:
+  pull_request:
+    paths:
+      - 'src/components/marketing/**'
+      - 'src/app/page.tsx'
+      - 'src/app/globals.css'
+      - 'scripts/validate-static-export.mjs'
+      - 'tests/smoke/homepage_visual.py'
+      - '.github/workflows/homepage-visual.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ownly-homepage-visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Build GitHub Pages export
+        env:
+          OWNLY_BASE_PATH: /ownly
+        run: npm run build
+
+      - name: Install Playwright
+        run: |
+          python -m pip install -r requirements-smoke.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Prepare static preview
+        run: |
+          mkdir -p preview-root/ownly artifacts/homepage
+          cp -R out/. preview-root/ownly/
+          python -m http.server 4173 --directory preview-root > /tmp/ownly-homepage-server.log 2>&1 &
+          echo $! > /tmp/ownly-homepage-server.pid
+
+      - name: Capture desktop and mobile scenes
+        run: >-
+          python tests/smoke/homepage_visual.py
+          --base-url http://127.0.0.1:4173/ownly/
+          --output-dir artifacts/homepage
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ownly-homepage-visual-${{ github.run_id }}
+          path: |
+            artifacts/homepage
+            /tmp/ownly-homepage-server.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop preview server
+        if: always()
+        run: |
+          if [ -f /tmp/ownly-homepage-server.pid ]; then
+            kill "$(cat /tmp/ownly-homepage-server.pid)" || true
+          fi
