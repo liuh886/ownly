@@ -12,9 +12,9 @@ const publicUrl = 'https://liuh886.github.io/ownly/';
 const socialImage = 'https://liuh886.github.io/ownly/icons/ownly-512.svg';
 
 export const metadata: Metadata = {
-  title: 'Ownly — Own less. Live more. Decide better.',
+  title: 'Ownly — Know what deserves to stay',
   description:
-    'A local-first ownership memory and decision ledger for possessions, subscriptions and important experiences.',
+    'A local-first ownership memory and decision ledger that connects possessions, subscriptions, real use, cost, and review.',
   alternates: {
     canonical: publicUrl,
   },
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Ownly — Know what deserves to stay',
     description:
-      'Record ownership facts as portable Markdown, understand usage and subscription costs, and review before the next decision.',
+      'Remember what entered your life, understand its real cost, and review before the next purchase or renewal.',
     type: 'website',
     url: publicUrl,
     siteName: 'Ownly',
@@ -53,6 +53,7 @@ export default function Home() {
       appHref={`${basePath}/app/`}
       githubHref="https://github.com/liuh886/ownly"
       obsidianHref="https://obsidian.md/plugins?id=ownly"
+      brandMarkHref={`${basePath}/icons/ownly-mark.svg`}
     />
   );
 }
