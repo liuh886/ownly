@@ -8,6 +8,7 @@ const files = [
   'docs/WEB_RUNTIME.md',
   'docs/USER_GUIDE.md',
   'docs/RELEASE_CHECKLIST.md',
+  'src/app/page.tsx',
   'src/core/terminology.ts',
   'src/core/first-object-copy.ts',
   'src/components/marketing/MarketingHome.tsx',
@@ -24,6 +25,9 @@ const forbiddenPhrases = [
 ];
 
 const forbiddenByFile = {
+  'src/app/page.tsx': [
+    'possessions, recurring costs',
+  ],
   'src/core/first-object-copy.ts': [
     "title: 'Recurring cost'",
     "title: '周期性支出'",
@@ -70,6 +74,10 @@ const requiredByFile = {
   'docs/RELEASE_CHECKLIST.md': [
     'Terminology consistency',
     'npm run validate:terminology',
+  ],
+  'src/app/page.tsx': [
+    'possessions, subscriptions and important experiences',
+    'usage and subscription costs',
   ],
   'src/core/terminology.ts': [
     "dailyCostAvg: '日均使用成本'",
