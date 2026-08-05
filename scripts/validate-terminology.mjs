@@ -8,6 +8,10 @@ const files = [
   'docs/WEB_RUNTIME.md',
   'docs/USER_GUIDE.md',
   'docs/RELEASE_CHECKLIST.md',
+  'src/core/terminology.ts',
+  'src/core/first-object-copy.ts',
+  'src/components/marketing/MarketingHome.tsx',
+  'src/components/marketing/HomepagePreview.tsx',
 ];
 
 const forbiddenPhrases = [
@@ -18,6 +22,24 @@ const forbiddenPhrases = [
   'Web and PWA require Obsidian',
   'Web/PWA 需要安装 Obsidian',
 ];
+
+const forbiddenByFile = {
+  'src/core/first-object-copy.ts': [
+    "title: 'Recurring cost'",
+    "title: '周期性支出'",
+  ],
+  'src/components/marketing/MarketingHome.tsx': [
+    'monthly fixed cost',
+    '每月固定支出',
+    '持续支出',
+  ],
+  'src/components/marketing/HomepagePreview.tsx': [
+    'Monthly fixed cost',
+    'Recurring cost',
+    '每月固定支出',
+    '持续支出',
+  ],
+};
 
 const requiredByFile = {
   'README.md': [
@@ -49,6 +71,24 @@ const requiredByFile = {
     'Terminology consistency',
     'npm run validate:terminology',
   ],
+  'src/core/terminology.ts': [
+    "dailyCostAvg: '日均使用成本'",
+    "monthlyFixedCostAvg: '月均订阅成本'",
+    "highestDailyCost: '最高日使用成本'",
+    "fixedCostTemplate: '订阅成本模板'",
+  ],
+  'src/core/first-object-copy.ts': [
+    "title: 'Subscription'",
+    "title: '订阅'",
+  ],
+  'src/components/marketing/MarketingHome.tsx': [
+    'monthly subscription cost',
+    '月均订阅成本',
+  ],
+  'src/components/marketing/HomepagePreview.tsx': [
+    'Monthly subscription cost',
+    '订阅成本图谱',
+  ],
 };
 
 const errors = [];
@@ -62,7 +102,7 @@ for (const file of files) {
     continue;
   }
 
-  for (const phrase of forbiddenPhrases) {
+  for (const phrase of [...forbiddenPhrases, ...(forbiddenByFile[file] ?? [])]) {
     if (content.includes(phrase)) {
       errors.push(`${file}: contains forbidden stale wording: ${JSON.stringify(phrase)}`);
     }
