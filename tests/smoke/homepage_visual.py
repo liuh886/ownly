@@ -91,7 +91,7 @@ def run(base_url: str, output_dir: Path) -> None:
         desktop_page.route("**/*", lambda route: keep_local_requests(route, allowed_host))
         desktop_page_errors, desktop_console_errors = attach_error_collectors(desktop_page)
         desktop_page.goto(base_url, wait_until="networkidle", timeout=60_000)
-        desktop_page.get_by_role("heading", name="Make ownership easier to remember—and easier to reconsider.").wait_for()
+        desktop_page.get_by_role("heading", name="Know what you own. Decide what deserves to stay.").wait_for()
         for scene in ("overview", "cost", "review"):
             if desktop_page.locator(f'[data-ownly-scene="{scene}"]').count() != 1:
                 raise AssertionError(f"Expected exactly one {scene} scene")
@@ -106,7 +106,7 @@ def run(base_url: str, output_dir: Path) -> None:
         mobile_page.route("**/*", lambda route: keep_local_requests(route, allowed_host))
         mobile_page_errors, mobile_console_errors = attach_error_collectors(mobile_page)
         mobile_page.goto(base_url, wait_until="networkidle", timeout=60_000)
-        mobile_page.get_by_role("heading", name="让所有权更容易被记住，也更容易被重新审视。").wait_for()
+        mobile_page.get_by_role("heading", name="记住你拥有什么，决定什么值得留下。").wait_for()
         capture(mobile_page, '[data-ownly-scene="overview"]', output_dir / "homepage-mobile-zh.png", "mobile Chinese overview")
         capture(mobile_page, '[data-ownly-scene="review"]', output_dir / "review-mobile-zh.png", "mobile Chinese review")
         assert_no_runtime_errors(mobile_page_errors, mobile_console_errors)
