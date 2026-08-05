@@ -28,6 +28,13 @@ const TERMINOLOGY_OVERRIDES: Record<WYQDLanguage, TerminologyOverrides> = {
     subscriptionServiceUnified: 'Manage subscriptions and one-time experiences together.',
     fixedCostTrend: 'Subscription cost trend',
     fixedCostTemplate: 'Subscription cost template',
+    fixedCostPressure: 'Subscription cost pressure',
+    subscriptionAndFixedInertia: 'Subscription spending inertia',
+    fixedCostAccountPressure: 'Subscription cost by account',
+    fixedCostAccountPressureDesc: 'Aggregate active subscriptions by payment account to assess monthly deduction pressure.',
+    countFixedCostItems: '{count} subscriptions',
+    noActiveFixedCost: 'No active subscriptions, or payment accounts have not been filled in.',
+    priorityCandidate: 'Candidate subscription, waiting for an activation decision',
   },
   zh: {
     workspaceSubtitle: '面向实物、订阅与体验复盘的本地优先决策账本。',
@@ -57,6 +64,14 @@ const TERMINOLOGY_OVERRIDES: Record<WYQDLanguage, TerminologyOverrides> = {
     subscriptionServiceUnified: '订阅与一次性体验统一管理。',
     fixedCostTrend: '订阅成本趋势',
     fixedCostTemplate: '订阅成本模板',
+    accountConsoleDesc: '用快照校准真实资产，用订阅成本识别每月扣费压力。',
+    fixedCostPressure: '订阅成本',
+    subscriptionAndFixedInertia: '订阅支出惯性',
+    fixedCostAccountPressure: '订阅成本账户压力',
+    fixedCostAccountPressureDesc: '按支付账户聚合活跃订阅，帮助判断每月扣费压力。',
+    countFixedCostItems: '{count} 项订阅',
+    noActiveFixedCost: '暂无活跃订阅，或尚未填写支付账户。',
+    priorityCandidate: '候选订阅，等待开通决策',
   },
 };
 
