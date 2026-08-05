@@ -53,8 +53,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
+      <head>
+        <link rel="stylesheet" href={`${basePath}/membership-widget.css`} />
+      </head>
       <body className="font-sans min-h-full flex flex-col">
         <Providers>{children}</Providers>
+        <Script src={`${basePath}/membership-config.js`} strategy="beforeInteractive" />
+        <Script src={`${basePath}/membership-widget.js`} strategy="afterInteractive" />
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ANALYTICS_ID}`}
           strategy="afterInteractive"

@@ -1,0 +1,224 @@
+#hao-membership-root {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 2147482000;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.hao-membership-launcher {
+  min-width: 76px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, Canvas 92%, transparent);
+  color: CanvasText;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 14%);
+  backdrop-filter: blur(14px);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.hao-membership-launcher[data-tier="pro"] {
+  border-color: #b68a2f;
+  color: #8b6518;
+}
+
+.hao-membership-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(15 23 42 / 48%);
+  backdrop-filter: blur(5px);
+}
+
+.hao-membership-backdrop[hidden] {
+  display: none;
+}
+
+.hao-membership-dialog {
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid rgb(148 163 184 / 28%);
+  border-radius: 20px;
+  background: Canvas;
+  color: CanvasText;
+  box-shadow: 0 28px 80px rgb(15 23 42 / 28%);
+}
+
+.hao-membership-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+
+.hao-membership-dialog header p {
+  margin: 0 0 5px;
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.hao-membership-dialog h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.hao-membership-close {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, CanvasText 7%, transparent);
+  color: inherit;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.hao-membership-intro {
+  margin: 0 0 18px;
+  color: color-mix(in srgb, CanvasText 70%, transparent);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.hao-membership-primary,
+.hao-membership-actions button,
+.hao-membership-email button {
+  min-height: 40px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, CanvasText 6%, transparent);
+  color: inherit;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.hao-membership-primary {
+  width: 100%;
+  background: CanvasText;
+  color: Canvas;
+}
+
+.hao-membership-email {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.hao-membership-email input {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 11px;
+  background: Canvas;
+  color: inherit;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.hao-membership-account-card {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, CanvasText 5%, transparent);
+}
+
+.hao-membership-account-card span {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, CanvasText 8%, transparent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.hao-membership-account-card span[data-tier="pro"] {
+  background: #f3e4b6;
+  color: #775715;
+}
+
+.hao-membership-account-card strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.hao-membership-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hao-membership-actions .hao-membership-primary {
+  grid-column: 1 / -1;
+}
+
+.hao-membership-dialog small {
+  display: block;
+  margin-top: 14px;
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.hao-membership-status,
+.hao-membership-error {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.hao-membership-status[data-kind="success"] {
+  color: #16794f;
+}
+
+.hao-membership-error {
+  color: #b42318;
+}
+
+.hao-membership-dialog button:disabled,
+.hao-membership-dialog input:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+@media (max-width: 560px) {
+  #hao-membership-root {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .hao-membership-dialog {
+    padding: 18px;
+    border-radius: 16px;
+  }
+
+  .hao-membership-email,
+  .hao-membership-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .hao-membership-actions .hao-membership-primary {
+    grid-column: auto;
+  }
+}
