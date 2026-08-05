@@ -17,14 +17,14 @@ const copy = {
     eyebrow: 'A local-first ownership memory',
     title: 'Know what you own. Understand what it costs. Decide what deserves to stay.',
     description:
-      'Ownly turns possessions, recurring costs and important experiences into a portable decision ledger. No account is required, and your personal records remain readable Markdown on your device.',
+      'Ownly turns possessions, subscriptions and important experiences into a portable decision ledger. No account is required, and your personal records remain readable Markdown on your device.',
     open: 'Open Ownly',
     preview: 'See the product',
     proof: ['No required account', 'Plain Markdown', 'Backup and restore', 'Open source'],
     quietSignal: 'A quieter way to make ownership decisions',
     facts: [
       ['42', 'active possessions'],
-      ['$107', 'monthly fixed cost'],
+      ['$107', 'monthly subscription cost'],
       ['3', 'reviews due'],
     ],
     valueEyebrow: 'From memory to evidence',
@@ -33,7 +33,7 @@ const copy = {
       'It preserves the facts behind ownership so the next purchase, renewal, transfer or exit can be based on lived evidence instead of memory.',
     values: [
       ['01', 'Remember what entered your life', 'Record physical items, subscriptions, plans and experiences in one durable, human-readable system.'],
-      ['02', 'Understand the real cost', 'Bring price, recurring expense, use, condition and time into the same ownership picture.'],
+      ['02', 'Understand the real cost', 'Bring purchase price, usage cost, subscription cost, condition and time into the same ownership picture.'],
       ['03', 'Review before the next decision', 'Use real experience to decide whether to keep, renew, replace, transfer or let go.'],
     ],
     localEyebrow: 'Your facts should remain yours',
@@ -69,14 +69,14 @@ const copy = {
     eyebrow: '本地优先的所有权记忆系统',
     title: '记住你拥有什么，理解它付出了什么，并判断它是否仍值得留下。',
     description:
-      'Ownly 将物品、持续支出和重要经历组织成可迁移的决策账本。无需注册账户，个人记录以可读的 Markdown 保存在你的设备中。',
+      'Ownly 将物品、订阅和重要经历组织成可迁移的决策账本。无需注册账户，个人记录以可读的 Markdown 保存在你的设备中。',
     open: '打开 Ownly',
     preview: '查看产品',
     proof: ['无需注册账户', '纯 Markdown', '备份与恢复', '开源'],
     quietSignal: '一种更安静、更有依据的所有权决策方式',
     facts: [
       ['42', '当前物品'],
-      ['¥764', '每月固定支出'],
+      ['¥764', '月均订阅成本'],
       ['3', '待回顾'],
     ],
     valueEyebrow: '从记忆走向证据',
@@ -85,7 +85,7 @@ const copy = {
       '它保存所有权背后的事实，让下一次购买、续费、转让或退出，不再只依赖模糊记忆。',
     values: [
       ['01', '记住什么进入了你的生活', '用一个持久、可读的系统记录物品、订阅、计划和重要经历。'],
-      ['02', '理解真实成本', '把价格、持续支出、使用频率、状态和时间放在同一张所有权图景中。'],
+      ['02', '理解真实成本', '把购入价格、使用成本、订阅成本、状态和时间放在同一张所有权图景中。'],
       ['03', '在下一次决定前回顾', '根据真实经历判断保留、续费、更换、转让或放弃。'],
     ],
     localEyebrow: '你的事实应该始终属于你',
@@ -177,7 +177,6 @@ export function MarketingHome({ appHref, githubHref, obsidianHref }: MarketingHo
           </div>
         </div>
       </header>
-
       <div id="top" />
       <section className="relative flex min-h-screen items-center overflow-hidden px-5 pb-16 pt-28 sm:px-8 lg:px-10">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(28,25,23,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(28,25,23,0.035)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_84%)]" />
