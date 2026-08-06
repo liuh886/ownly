@@ -6,6 +6,7 @@ import "./globals.css";
 import "./brand.css";
 
 const GOOGLE_ANALYTICS_ID = "G-KXXVS33FQ2";
+const HAO_ACCOUNT_ASSET_ROOT = "https://liuh886.github.io/admin/shared";
 
 function getBasePath(): string {
   const configured = process.env.OWNLY_BASE_PATH?.trim() ?? "";
@@ -54,12 +55,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <head>
-        <link rel="stylesheet" href={`${basePath}/membership-widget.css`} />
+        <link rel="stylesheet" href={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.css?v=1`} />
       </head>
       <body className="font-sans min-h-full flex flex-col">
         <Providers>{children}</Providers>
         <Script src={`${basePath}/membership-config.js`} strategy="beforeInteractive" />
-        <Script src={`${basePath}/membership-widget.js`} strategy="afterInteractive" />
+        <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.js?v=1`} strategy="afterInteractive" />
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ANALYTICS_ID}`}
           strategy="afterInteractive"
