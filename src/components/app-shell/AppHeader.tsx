@@ -90,7 +90,7 @@ export function AppHeader({
             {snapshotCount} {t('snapshots')}
           </span>
           <span className="mx-0.5 h-3 w-px bg-stone-200" aria-hidden="true" />
-          <div className="ownly-account-slot" data-account-slot aria-label={t('account')} />
+          <div className="ownly-account-slot" data-account-slot aria-label={t('membership')} />
           <button
             type="button"
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
