@@ -21,9 +21,9 @@ const [layout, config, header, styles] = await Promise.all([
 
 for (const reference of [
   'https://liuh886.github.io/admin/shared',
-  'account-shell.css?v=1',
+  'account-shell.css?v=2',
   'membership-config.js',
-  'account-shell.js?v=1',
+  'account-shell.js?v=2',
 ]) {
   if (!layout.includes(reference)) throw new Error(`Ownly layout is missing ${reference}`);
 }
@@ -59,4 +59,4 @@ for (const forbidden of ['Objects/', 'Accounts/', 'Snapshots/', 'Reviews/', 'Log
   if (config.includes(forbidden)) throw new Error(`Ownly account config must not inspect local data paths: ${forbidden}`);
 }
 
-console.log('Ownly account is embedded in the app header and preserves the local-data isolation boundary.');
+console.log('Ownly account is embedded in the app header, preserves local-data isolation, and loads Account Shell v2.');
