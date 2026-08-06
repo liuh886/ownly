@@ -44,8 +44,11 @@ for (const contract of [
 for (const contract of ['data-account-slot', 'ownly-account-slot', "import './account-integration.css'"]) {
   if (!header.includes(contract)) throw new Error(`Ownly app header is missing ${contract}`);
 }
-for (const contract of ['.ownly-account-slot .hao-account-trigger', 'box-shadow: none', 'backdrop-filter: none', '.hao-account-mount.is-floating']) {
+for (const contract of ['.ownly-account-slot .hao-account-trigger', 'box-shadow: none', 'backdrop-filter: none']) {
   if (!styles.includes(contract)) throw new Error(`Ownly account integration styles are missing ${contract}`);
+}
+if (styles.includes('is-floating')) {
+  throw new Error('Ownly must not retain compatibility with the retired floating account state.');
 }
 
 const combined = `${layout}\n${config}\n${header}\n${styles}`;
@@ -59,4 +62,4 @@ for (const forbidden of ['Objects/', 'Accounts/', 'Snapshots/', 'Reviews/', 'Log
   if (config.includes(forbidden)) throw new Error(`Ownly account config must not inspect local data paths: ${forbidden}`);
 }
 
-console.log('Ownly account is embedded in the app header, preserves local-data isolation, and loads Account Shell v2.');
+console.log('Ownly account uses only the native app-header slot, preserves local-data isolation, and loads Account Shell v2.');
