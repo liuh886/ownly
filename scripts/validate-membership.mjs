@@ -5,14 +5,18 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const configPath = resolve(root, 'public/membership-config.js');
-await access(configPath);
+const headerPath = resolve(root, 'src/components/app-shell/AppHeader.tsx');
+const stylesPath = resolve(root, 'src/components/app-shell/account-integration.css');
+await Promise.all([access(configPath), access(headerPath), access(stylesPath)]);
 
 const syntax = spawnSync(process.execPath, ['--check', configPath], { encoding: 'utf8' });
 if (syntax.status !== 0) throw new Error(`${configPath} syntax check failed:\n${syntax.stderr}`);
 
-const [layout, config] = await Promise.all([
+const [layout, config, header, styles] = await Promise.all([
   readFile(resolve(root, 'src/app/layout.tsx'), 'utf8'),
   readFile(configPath, 'utf8'),
+  readFile(headerPath, 'utf8'),
+  readFile(stylesPath, 'utf8'),
 ]);
 
 for (const reference of [
@@ -28,17 +32,23 @@ for (const contract of [
   'window.HaoAccountConfig',
   "productCode: 'ownly'",
   "entitlementCode: 'ownly.pro'",
+  "mountSelectors: ['[data-account-slot]']",
+  'compactTrigger: false',
   'billingEnabled: false',
   'feedbackEnabled: false',
   'sb_publishable_',
-  '/functions/v1/create-checkout-session',
-  '/functions/v1/create-portal-session',
   'Markdown、附件、归档和本地目录不会上传',
 ]) {
   if (!config.includes(contract)) throw new Error(`Ownly account config is missing ${contract}`);
 }
+for (const contract of ['data-account-slot', 'ownly-account-slot', "import './account-integration.css'"]) {
+  if (!header.includes(contract)) throw new Error(`Ownly app header is missing ${contract}`);
+}
+for (const contract of ['.ownly-account-slot .hao-account-trigger', 'box-shadow: none', 'backdrop-filter: none', '.hao-account-mount.is-floating']) {
+  if (!styles.includes(contract)) throw new Error(`Ownly account integration styles are missing ${contract}`);
+}
 
-const combined = `${layout}\n${config}`;
+const combined = `${layout}\n${config}\n${header}\n${styles}`;
 for (const forbidden of [/sk_(live|test)_/, /whsec_/, /sb_secret_/, /service_role/]) {
   if (forbidden.test(combined)) throw new Error(`Ownly browser assets contain forbidden secret material: ${forbidden}`);
 }
@@ -49,4 +59,4 @@ for (const forbidden of ['Objects/', 'Accounts/', 'Snapshots/', 'Reviews/', 'Log
   if (config.includes(forbidden)) throw new Error(`Ownly account config must not inspect local data paths: ${forbidden}`);
 }
 
-console.log('Ownly shared account and local-data isolation contract passed.');
+console.log('Ownly account is embedded in the app header and preserves the local-data isolation boundary.');
