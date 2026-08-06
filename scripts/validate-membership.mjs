@@ -5,64 +5,48 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const configPath = resolve(root, 'public/membership-config.js');
-const clientPath = resolve(root, 'public/membership-widget.js');
-const cssPath = resolve(root, 'public/membership-widget.css');
+await access(configPath);
 
-for (const path of [configPath, clientPath, cssPath]) await access(path);
-for (const path of [configPath, clientPath]) {
-  const syntax = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
-  if (syntax.status !== 0) throw new Error(`${path} syntax check failed:\n${syntax.stderr}`);
-}
+const syntax = spawnSync(process.execPath, ['--check', configPath], { encoding: 'utf8' });
+if (syntax.status !== 0) throw new Error(`${configPath} syntax check failed:\n${syntax.stderr}`);
 
-const [layout, config, client] = await Promise.all([
+const [layout, config] = await Promise.all([
   readFile(resolve(root, 'src/app/layout.tsx'), 'utf8'),
   readFile(configPath, 'utf8'),
-  readFile(clientPath, 'utf8'),
 ]);
 
-for (const reference of ['membership-widget.css', 'membership-config.js', 'membership-widget.js']) {
+for (const reference of [
+  'https://liuh886.github.io/admin/shared',
+  'account-shell.css?v=1',
+  'membership-config.js',
+  'account-shell.js?v=1',
+]) {
   if (!layout.includes(reference)) throw new Error(`Ownly layout is missing ${reference}`);
 }
 for (const contract of [
-  "pathPrefix: '/ownly/app/'",
+  "window.location.pathname.startsWith('/ownly/app/')",
+  'window.HaoAccountConfig',
   "productCode: 'ownly'",
   "entitlementCode: 'ownly.pro'",
   'billingEnabled: false',
-  'privacyNoteZh:',
+  'feedbackEnabled: false',
   'sb_publishable_',
   '/functions/v1/create-checkout-session',
   '/functions/v1/create-portal-session',
+  'Markdown、附件、归档和本地目录不会上传',
 ]) {
-  if (!config.includes(contract)) throw new Error(`membership config is missing ${contract}`);
-}
-for (const contract of [
-  "from('entitlements')",
-  "Authorization: `Bearer ${token}`",
-  'apikey: config.supabasePublishableKey',
-  "window.dispatchEvent(new CustomEvent('hao:membership-changed'",
-  'config.privacyNoteZh',
-  'refreshEntitlementsFromUi',
-  "attributeFilter: ['lang']",
-]) {
-  if (!client.includes(contract)) throw new Error(`membership client is missing ${contract}`);
+  if (!config.includes(contract)) throw new Error(`Ownly account config is missing ${contract}`);
 }
 
-for (const stale of [
-  "intro: config.privacyNote || '账户仅用于验证会员权益",
-  "ui.refresh.addEventListener('click', () => void refreshEntitlements())",
-  "window.setTimeout(() => void refreshEntitlements(), 1500)",
-  'return await refreshEntitlements();',
-]) {
-  if (client.includes(stale)) throw new Error(`membership client contains stale bug-prone behavior: ${stale}`);
-}
-
-const combined = `${config}\n${client}`;
+const combined = `${layout}\n${config}`;
 for (const forbidden of [/sk_(live|test)_/, /whsec_/, /sb_secret_/, /service_role/]) {
-  if (forbidden.test(combined)) throw new Error(`membership browser assets contain forbidden secret material: ${forbidden}`);
+  if (forbidden.test(combined)) throw new Error(`Ownly browser assets contain forbidden secret material: ${forbidden}`);
 }
-
+if (combined.includes('membership-widget.js') || combined.includes('membership-widget.css')) {
+  throw new Error('Ownly must not load the retired local membership widget');
+}
 for (const forbidden of ['Objects/', 'Accounts/', 'Snapshots/', 'Reviews/', 'Logs/']) {
-  if (client.includes(forbidden)) throw new Error(`membership client must not inspect Ownly data paths: ${forbidden}`);
+  if (config.includes(forbidden)) throw new Error(`Ownly account config must not inspect local data paths: ${forbidden}`);
 }
 
-console.log('Ownly shared membership and local-data isolation contract passed.');
+console.log('Ownly shared account and local-data isolation contract passed.');
