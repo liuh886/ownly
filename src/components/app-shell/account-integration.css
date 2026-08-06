@@ -1,0 +1,55 @@
+.ownly-account-slot {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.ownly-account-slot .hao-account-mount {
+  position: static;
+  z-index: auto;
+}
+
+.ownly-account-slot .hao-account-trigger {
+  min-height: 26px;
+  padding: 4px 9px 4px 5px;
+  border: 1px solid rgb(231 229 228);
+  border-radius: 999px;
+  background: rgb(245 245 244);
+  color: rgb(87 83 78);
+  box-shadow: none;
+  backdrop-filter: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.ownly-account-slot .hao-account-trigger:hover {
+  transform: none;
+  border-color: rgb(214 211 209);
+  background: rgb(231 229 228);
+  color: rgb(28 25 23);
+  box-shadow: none;
+}
+
+.ownly-account-slot .hao-account-trigger-visual {
+  width: 18px;
+  height: 18px;
+}
+
+.hao-account-mount.is-floating {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .ownly-account-slot .hao-account-trigger {
+    width: 28px;
+    min-height: 28px;
+    justify-content: center;
+    padding: 4px;
+  }
+
+  .ownly-account-slot .hao-account-trigger-label {
+    display: none;
+  }
+}
