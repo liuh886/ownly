@@ -14,12 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  detect-scope:
+  build:
     runs-on: ubuntu-latest
-    outputs:
-      shared: ${{ steps.scope.outputs.shared }}
-      web: ${{ steps.scope.outputs.web }}
-      obsidian: ${{ steps.scope.outputs.obsidian }}
+    env:
+      OWNLY_BASE_PATH: /ownly
     steps:
       - name: Checkout change history
         uses: actions/checkout@v6
@@ -38,6 +36,7 @@ jobs:
             echo "shared=true" >> "$GITHUB_OUTPUT"
             echo "web=true" >> "$GITHUB_OUTPUT"
             echo "obsidian=true" >> "$GITHUB_OUTPUT"
+            echo "any=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -55,7 +54,7 @@ jobs:
           if [[ "$full" == true ]] || grep -Eq '^(src/(core|services|types)/|scripts/cli/|scripts/wyqd-cli\.ts|tests/|docs/(DATA|WEB_RUNTIME|AGENT_CLI)|.*migration)' changed-files.txt; then
             shared=true
           fi
-          if [[ "$full" == true || "$shared" == true ]] || grep -Eq '^(src/(app|components|hooks|lib)/|public/|next\.config|postcss\.config|scripts/(gen-git-sha|validate-static-export|validate-pwa)\.mjs)' changed-files.txt; then
+          if [[ "$full" == true || "$shared" == true ]] || grep -Eq '^(src/(app|components|hooks|lib)/|public/|next\.config|postcss\.config|scripts/(gen-git-sha|validate-static-export|validate-pwa|validate-membership)\.mjs)' changed-files.txt; then
             web=true
           fi
           if [[ "$full" == true || "$shared" == true ]] || grep -Eq '^(src/obsidian/|esbuild\.obsidian\.mjs|manifest\.json|styles\.css|scripts/(package-obsidian-plugin|validate-obsidian-release)\.mjs)' changed-files.txt; then
@@ -65,38 +64,37 @@ jobs:
           echo "shared=$shared" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
           echo "obsidian=$obsidian" >> "$GITHUB_OUTPUT"
-
-  build:
-    needs: detect-scope
-    runs-on: ubuntu-latest
-    env:
-      OWNLY_BASE_PATH: /ownly
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+          if [[ "$shared" == true || "$web" == true || "$obsidian" == true ]]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Node.js
+        if: steps.scope.outputs.any == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
 
       - name: Install locked dependencies
+        if: steps.scope.outputs.any == 'true'
         run: npm ci
 
       - name: Fast repository validation
+        if: steps.scope.outputs.any == 'true'
         run: npm run validate:fast
 
       - name: Shared data, CLI and portability contracts
-        if: needs.detect-scope.outputs.shared == 'true'
+        if: steps.scope.outputs.shared == 'true'
         run: npm run validate:shared
 
       - name: Web and PWA validation
-        if: needs.detect-scope.outputs.web == 'true'
+        if: steps.scope.outputs.web == 'true'
         run: npm run validate:web
 
       - name: Obsidian plugin validation
-        if: needs.detect-scope.outputs.obsidian == 'true'
+        if: steps.scope.outputs.obsidian == 'true'
         run: npm run validate:obsidian
 
       - name: Upload GitHub Pages artifact

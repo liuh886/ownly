@@ -14,8 +14,8 @@
     checkoutFunctionUrl: 'https://blgwlycfcwvsupmqyqwn.supabase.co/functions/v1/create-checkout-session',
     portalFunctionUrl: 'https://blgwlycfcwvsupmqyqwn.supabase.co/functions/v1/create-portal-session',
     redirectUrl: 'https://liuh886.github.io/ownly/app/',
-    mountSelectors: ['[data-account-slot]', '.app-header-actions', 'header nav', 'header'],
-    compactTrigger: true,
+    mountSelectors: ['[data-account-slot]'],
+    compactTrigger: false,
     title: {
       zh: 'Ownly 账户',
       en: 'Ownly account',

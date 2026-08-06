@@ -1,14 +1,6 @@
 name: Homepage Visual QA
 
 on:
-  pull_request:
-    paths:
-      - 'src/components/marketing/**'
-      - 'src/app/page.tsx'
-      - 'src/app/globals.css'
-      - 'scripts/validate-static-export.mjs'
-      - 'tests/smoke/homepage_visual.py'
-      - '.github/workflows/homepage-visual.yml'
   workflow_dispatch:
 
 permissions:

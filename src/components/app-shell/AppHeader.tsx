@@ -7,6 +7,7 @@ import { WYQD_CURRENCIES, WYQD_CURRENCY_LABELS } from '@/lib/format';
 import { PwaInstallButton } from '@/components/pwa/PwaInstallButton';
 import type { AppTab } from './BottomNav';
 import type { WYQDTranslationKey } from '@/core/i18n';
+import './account-integration.css';
 
 const tabHeadingKeys: Record<AppTab, { title: WYQDTranslationKey; description: WYQDTranslationKey }> = {
   home: { title: 'tabHome', description: 'tabHomeDesc' },
@@ -89,6 +90,7 @@ export function AppHeader({
             {snapshotCount} {t('snapshots')}
           </span>
           <span className="mx-0.5 h-3 w-px bg-stone-200" aria-hidden="true" />
+          <div className="ownly-account-slot" data-account-slot aria-label={t('membership')} />
           <button
             type="button"
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
