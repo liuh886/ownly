@@ -8,8 +8,8 @@ const configuredBasePath = (process.env.OWNLY_BASE_PATH ?? '').trim();
 const basePath = configuredBasePath && configuredBasePath !== '/'
   ? `/${configuredBasePath.replace(/^\/+|\/+$/g, '')}`
   : '';
-const googleAnalyticsId = 'G-KXXVS33FQ2';
-const googleAnalyticsLoader = `https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`;
+const cloudflareAnalyticsToken = (process.env.NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN ?? '').trim();
+const cloudflareAnalyticsLoader = 'https://static.cloudflareinsights.com/beacon.min.js';
 const publicUrl = 'https://liuh886.github.io/ownly/';
 const appUrl = 'https://liuh886.github.io/ownly/app/';
 const previewUrl = 'https://liuh886.github.io/ownly/#preview';
@@ -53,12 +53,17 @@ if (!existsSync(indexPath)) {
     }
   }
 
-  if (!html.includes(googleAnalyticsLoader)) {
-    fail(`Google Analytics loader is missing for ${googleAnalyticsId}.`);
+  if (html.includes('googletagmanager.com') || html.includes('google-analytics.com')) {
+    fail('Ownly must not ship Google Analytics; aggregate RUM uses Cloudflare Web Analytics only.');
   }
 
-  if (!html.includes(`gtag('config', '${googleAnalyticsId}')`)) {
-    fail(`Google Analytics configuration is missing for ${googleAnalyticsId}.`);
+  if (cloudflareAnalyticsToken) {
+    if (!html.includes(cloudflareAnalyticsLoader)) {
+      fail('Cloudflare Web Analytics loader is missing while a token is configured.');
+    }
+    if (!html.includes(cloudflareAnalyticsToken)) {
+      fail('Cloudflare Web Analytics token is not present in the static export.');
+    }
   }
 
   if (!html.includes(publicUrl)) {
