@@ -70,7 +70,7 @@ Ownly/
 
 浏览器会明确请求本地读写权限。个人 Markdown 文件不会上传到 GitHub Pages，也不会被复制进 PWA 的 service worker 缓存。
 
-托管 Web/PWA 仅在构建时配置 `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` 后加载 Cloudflare Web Analytics，用于整体访问情况与 Web Vitals；未配置时不加载任何分析 beacon。Ownly 不会把 Markdown 正文、本地文件名、表单值、对象记录或所选目录信息作为分析事件发送。Obsidian 插件和 Agent CLI 不加载 Web Analytics。
+托管 Web/PWA 使用 Google Analytics 4 测量 ID `G-KXXVS33FQ2` 了解产品采用情况，同时在构建时配置 `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` 后加载 Cloudflare Web Analytics，用于整体访问情况与 Web Vitals。GA4 自定义事件仅记录“创建/打开本地数据”和“进入 Demo”这类产品动作，不发送 Markdown 正文、本地文件名、表单值、对象记录、复盘内容、账户快照或所选目录信息。Obsidian 插件和 Agent CLI 均不加载这两类 Web Analytics。
 
 ## 推荐的数据存储方式
 
@@ -104,7 +104,7 @@ Ownly/
 
 ## 产品原则
 
-- **本地优先** —— 无需云端账号、托管数据库或强制同步。托管 Web/PWA 可进行隐私优先的整体访问统计，本地 Ownly 记录始终保留在本地。
+- **本地优先** —— 无需云端账号、托管数据库或强制同步。托管 Web/PWA 可以做整体访问与有限产品采用分析，本地 Ownly 记录始终保留在本地。
 - **Markdown 原生** —— 数据长期可读、可迁移、无私有格式锁定。
 - **以决策为主线** —— 观察、购买或放弃、使用、退出与复盘。
 - **数据操作可恢复** —— 归档与恢复不同于永久删除。
@@ -215,4 +215,4 @@ npm run wyqd -- --vault <path> object list --json
 
 ## 许可证
 
-MIT。参见 [LICENSE](LICENSE)。个人 Ownly 记录始终保留在本地。托管 Web/PWA 仅在配置后加载 Cloudflare Web Analytics 进行整体访问与 Web Vitals 统计；Obsidian 插件和 CLI 不使用该分析服务。
+MIT。参见 [LICENSE](LICENSE)。个人 Ownly 记录始终保留在本地。托管 Web/PWA 可使用 GA4 记录有限产品采用事件，并使用 Cloudflare Web Analytics 统计整体访问与 Web Vitals；Obsidian 插件和 CLI 均不加载这两类分析服务。
