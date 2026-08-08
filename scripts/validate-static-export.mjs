@@ -8,6 +8,8 @@ const configuredBasePath = (process.env.OWNLY_BASE_PATH ?? '').trim();
 const basePath = configuredBasePath && configuredBasePath !== '/'
   ? `/${configuredBasePath.replace(/^\/+|\/+$/g, '')}`
   : '';
+const googleAnalyticsId = 'G-KXXVS33FQ2';
+const googleAnalyticsLoader = `https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`;
 const cloudflareAnalyticsToken = (process.env.NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN ?? '').trim();
 const cloudflareAnalyticsLoader = 'https://static.cloudflareinsights.com/beacon.min.js';
 const publicUrl = 'https://liuh886.github.io/ownly/';
@@ -53,8 +55,8 @@ if (!existsSync(indexPath)) {
     }
   }
 
-  if (html.includes('googletagmanager.com') || html.includes('google-analytics.com')) {
-    fail('Ownly must not ship Google Analytics; aggregate RUM uses Cloudflare Web Analytics only.');
+  if (!html.includes(googleAnalyticsLoader) || !html.includes(googleAnalyticsId)) {
+    fail(`Google Analytics ${googleAnalyticsId} is missing from the static export.`);
   }
 
   if (cloudflareAnalyticsToken) {
@@ -123,6 +125,8 @@ if (!existsSync(staticDir)) {
       'Price is only the beginning.',
       'Review before the next purchase or renewal.',
       'No hosted personal database',
+      'local_data_connected',
+      'demo_started',
     ]) {
       if (!clientBundle.includes(contract)) {
         fail(`The focused homepage client bundle is missing: ${contract}`);
@@ -147,4 +151,4 @@ if (process.exitCode) {
   process.exit(process.exitCode);
 }
 
-console.log(`[pages validation] three-scene homepage, local-data trust rail and app route are ready${basePath ? ` for ${basePath}` : ''}.`);
+console.log(`[pages validation] three-scene homepage, dual analytics, local-data trust rail and app route are ready${basePath ? ` for ${basePath}` : ''}.`);
