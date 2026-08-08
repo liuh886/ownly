@@ -10,6 +10,7 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
 import { WebDataOnboarding } from '@/components/onboarding/WebDataOnboarding';
 import { useI18n } from '@/core/i18n-context';
+import { trackOwnlyEvent } from '@/lib/analytics';
 
 const ONBOARDING_DISMISSED_KEY = 'ownly_web_onboarding_dismissed';
 const basePath = process.env.NEXT_PUBLIC_OWNLY_BASE_PATH ?? '';
@@ -77,6 +78,7 @@ export function WebShell() {
       setOnboardingOpen(false);
       window.localStorage.removeItem(ONBOARDING_DISMISSED_KEY);
       showNotice(action === 'create' ? localDataCopy.createdNotice : localDataCopy.openedNotice);
+      trackOwnlyEvent('local_data_connected', { action });
       return true;
     } catch (event) {
       setError(event instanceof Error ? event.message : localDataCopy.connectFailed);
@@ -90,6 +92,7 @@ export function WebShell() {
     window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, 'true');
     setError(null);
     setOnboardingOpen(false);
+    trackOwnlyEvent('demo_started', { surface: 'web' });
   }, []);
 
   useEffect(() => {
