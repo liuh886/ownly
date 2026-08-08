@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OWNLY_BASE_PATH: /ownly
+      NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN: ${{ vars.CLOUDFLARE_WEB_ANALYTICS_TOKEN || '' }}
     steps:
       - name: Checkout change history
         uses: actions/checkout@v6
