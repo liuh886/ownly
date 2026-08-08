@@ -5,7 +5,8 @@ import { Providers } from "./providers";
 import "./globals.css";
 import "./brand.css";
 
-const GOOGLE_ANALYTICS_ID = "G-KXXVS33FQ2";
+const CLOUDFLARE_WEB_ANALYTICS_TOKEN =
+  process.env.NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN?.trim() ?? "";
 const HAO_ACCOUNT_ASSET_ROOT = "https://liuh886.github.io/admin/shared";
 
 function getBasePath(): string {
@@ -61,18 +62,13 @@ export default function RootLayout({
         <Providers>{children}</Providers>
         <Script src={`${basePath}/membership-config.js`} strategy="beforeInteractive" />
         <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.js?v=2`} strategy="afterInteractive" />
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ANALYTICS_ID}`}
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', '${GOOGLE_ANALYTICS_ID}');
-          `}
-        </Script>
+        {CLOUDFLARE_WEB_ANALYTICS_TOKEN ? (
+          <Script
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            strategy="afterInteractive"
+            data-cf-beacon={JSON.stringify({ token: CLOUDFLARE_WEB_ANALYTICS_TOKEN })}
+          />
+        ) : null}
       </body>
     </html>
   );

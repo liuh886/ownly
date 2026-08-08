@@ -46,8 +46,6 @@ def assert_no_runtime_errors(page_errors: list[str], console_errors: list[str]) 
     ignored = (
         "ERR_FAILED",
         "Failed to load resource",
-        "googletagmanager",
-        "google-analytics",
     )
     relevant = [message for message in console_errors if not any(fragment in message for fragment in ignored)]
     if page_errors or relevant:

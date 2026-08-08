@@ -70,7 +70,7 @@ Select any supported location:
 
 The browser asks for explicit local read/write permission. Personal Markdown files are not uploaded to GitHub Pages and are not copied into the PWA service-worker cache.
 
-The hosted Web/PWA runtime uses Google Analytics measurement ID `G-KXXVS33FQ2` for aggregate site-traffic measurement. Ownly does not send Markdown contents, local file names, form values, object records, or selected-folder data as custom analytics events. The Obsidian plugin and Agent CLI do not load Google Analytics.
+The hosted Web/PWA runtime can load Cloudflare Web Analytics for aggregate traffic and Web Vitals when `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` is configured at build time. Without that token, Ownly ships no analytics beacon. Ownly never sends Markdown contents, local file names, form values, object records, or selected-folder data as analytics events. The Obsidian plugin and Agent CLI do not load Web Analytics.
 
 ## Recommended storage
 
@@ -104,7 +104,7 @@ Keeping `Ownly/` inside an Obsidian Vault makes the Markdown easy to read, searc
 
 ## Product principles
 
-- **Local first** — no required cloud account, hosted database, or mandatory synchronization. Hosted Web/PWA uses aggregate traffic analytics; local Ownly records remain local.
+- **Local first** — no required cloud account, hosted database, or mandatory synchronization. Hosted Web/PWA may use aggregate privacy-first traffic analytics; local Ownly records remain local.
 - **Markdown native** — records remain portable and human-readable.
 - **Decision led** — observe, acquire or pass, use, exit, and review.
 - **Recoverable mutations** — archive and restore are distinct from permanent deletion.
@@ -215,4 +215,4 @@ npm run wyqd -- --vault <path> object list --json
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Personal Ownly records stay local. Hosted Web/PWA uses Google Analytics for aggregate site traffic; the Obsidian plugin and CLI do not.
+MIT. See [LICENSE](LICENSE). Personal Ownly records stay local. The hosted Web/PWA may load Cloudflare Web Analytics for aggregate traffic and Web Vitals when configured; the Obsidian plugin and CLI do not.
