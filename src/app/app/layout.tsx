@@ -20,7 +20,7 @@ export default function OwnlyAppLayout({ children }: Readonly<{ children: React.
   return (
     <>
       {children}
-      <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.js?v=3`} strategy="afterInteractive" />
+      <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.js?v=4`} strategy="afterInteractive" />
     </>
   );
 }
