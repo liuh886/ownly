@@ -82,9 +82,9 @@ Direct folder access depends on the File System Access API.
 - Ownly does not require a backend API for local folder access.
 - Access is limited to the directory selected by the user and the permission granted by the browser.
 - The service worker caches only same-origin application resources; it does not cache personal Markdown files.
-- Hosted Web/PWA loads Cloudflare Web Analytics only when `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` is configured for the production build; otherwise no analytics beacon is emitted.
-- Web Analytics is limited to aggregate traffic and Web Vitals. Ownly does not define custom analytics events containing Markdown contents, local file names, form values, object records, reviews, account snapshots, or selected-folder data.
-- The Obsidian plugin and Agent CLI do not load Web Analytics.
+- Hosted Web/PWA loads Google Analytics 4 measurement ID `G-KXXVS33FQ2` for product adoption and can also load Cloudflare Web Analytics when `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` is configured for the production build.
+- GA4 custom events are limited to `local_data_connected` with `action=create|open` and `demo_started` with `surface=web`. Neither analytics layer receives Markdown contents, local file names, form values, object records, reviews, account snapshots, selected-folder data, or user identifiers from Ownly custom events.
+- The Obsidian plugin and Agent CLI do not load either web analytics provider.
 
 Adding any future custom event, advertising integration, session replay, user identifier, or application-state instrumentation requires a separate privacy review and corresponding documentation update.
 
@@ -103,11 +103,13 @@ Local development continues to use the root path and does not register the produ
 OWNLY_BASE_PATH=/ownly
 ```
 
-Cloudflare Web Analytics is opt-in at build time:
+Cloudflare Web Analytics remains opt-in at build time:
 
 ```text
 NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN=<public site token>
 ```
+
+GA4 uses the fixed public measurement ID `G-KXXVS33FQ2`; no secret is required in the browser build.
 
 The Next.js static export, PWA package, analytics boundary, and standalone directory-layout behavior are validated with:
 
