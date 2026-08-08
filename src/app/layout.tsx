@@ -56,12 +56,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <head>
-        <link rel="stylesheet" href={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.css?v=2`} />
+        <link rel="stylesheet" href={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.css?v=3`} />
       </head>
       <body className="font-sans min-h-full flex flex-col">
         <Providers>{children}</Providers>
         <Script src={`${basePath}/membership-config.js`} strategy="beforeInteractive" />
-        <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.js?v=2`} strategy="afterInteractive" />
+        <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.js?v=3`} strategy="afterInteractive" />
         {CLOUDFLARE_WEB_ANALYTICS_TOKEN ? (
           <Script
             src="https://static.cloudflareinsights.com/beacon.min.js"
