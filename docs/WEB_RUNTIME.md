@@ -82,9 +82,9 @@ Direct folder access depends on the File System Access API.
 - Ownly does not require a backend API for local folder access.
 - Access is limited to the directory selected by the user and the permission granted by the browser.
 - The service worker caches only same-origin application resources; it does not cache personal Markdown files.
-- Hosted Web/PWA loads Google Analytics with measurement ID `G-KXXVS33FQ2` to measure aggregate site traffic and page visits.
-- Ownly does not define custom analytics events containing Markdown contents, local file names, form values, object records, reviews, account snapshots, or selected-folder data.
-- The Obsidian plugin and Agent CLI do not load Google Analytics.
+- Hosted Web/PWA loads Cloudflare Web Analytics only when `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` is configured for the production build; otherwise no analytics beacon is emitted.
+- Web Analytics is limited to aggregate traffic and Web Vitals. Ownly does not define custom analytics events containing Markdown contents, local file names, form values, object records, reviews, account snapshots, or selected-folder data.
+- The Obsidian plugin and Agent CLI do not load Web Analytics.
 
 Adding any future custom event, advertising integration, session replay, user identifier, or application-state instrumentation requires a separate privacy review and corresponding documentation update.
 
@@ -103,7 +103,13 @@ Local development continues to use the root path and does not register the produ
 OWNLY_BASE_PATH=/ownly
 ```
 
-The Next.js static export, PWA package, Google Analytics tag, and standalone directory-layout behavior are validated with:
+Cloudflare Web Analytics is opt-in at build time:
+
+```text
+NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN=<public site token>
+```
+
+The Next.js static export, PWA package, analytics boundary, and standalone directory-layout behavior are validated with:
 
 ```bash
 npm run validate:pages
@@ -115,7 +121,7 @@ npm run validate:pages
 
 1. Install dependencies.
 2. Run the full project validation gate.
-3. Validate the static export, `/ownly` asset prefix, Google Analytics tag, manifest, icons, service worker, and local-data layout behavior.
+3. Validate the static export, `/ownly` asset prefix, analytics boundary, manifest, icons, service worker, and local-data layout behavior.
 4. Upload the `out/` directory as a Pages artifact.
 5. Deploy only for non-pull-request runs.
 
