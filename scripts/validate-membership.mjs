@@ -21,9 +21,9 @@ const [layout, config, header, styles] = await Promise.all([
 
 for (const reference of [
   'https://liuh886.github.io/admin/shared',
-  'account-shell.css?v=2',
+  'account-shell.css?v=3',
   'membership-config.js',
-  'account-shell.js?v=2',
+  'account-shell.js?v=3',
 ]) {
   if (!layout.includes(reference)) throw new Error(`Ownly layout is missing ${reference}`);
 }
@@ -62,4 +62,4 @@ for (const forbidden of ['Objects/', 'Accounts/', 'Snapshots/', 'Reviews/', 'Log
   if (config.includes(forbidden)) throw new Error(`Ownly account config must not inspect local data paths: ${forbidden}`);
 }
 
-console.log('Ownly account uses only the native app-header slot, preserves local-data isolation, and loads Account Shell v2.');
+console.log('Ownly account uses only the native app-header slot, preserves local-data isolation, and loads Turnstile-enabled Account Shell v3.');
