@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.ref }}
-  cancel-in-progress: true
+  group: pages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -80,7 +80,7 @@ jobs:
 
       - name: Install locked dependencies
         if: steps.scope.outputs.any == 'true'
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Fast repository validation
         if: steps.scope.outputs.any == 'true'
