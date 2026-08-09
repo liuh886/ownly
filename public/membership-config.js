@@ -21,18 +21,34 @@
       en: 'Ownly account',
     },
     description: {
-      zh: '账户用于统一身份、保存轻量偏好，并为未来高级模板、数据健康与导出能力建立权益基础。',
-      en: 'Your account provides one identity, keeps lightweight preferences, and prepares access for future advanced templates, data health, and export tools.',
+      zh: 'Ownly 保持本地优先。登录只用于统一身份、轻量偏好和 Pro 权益，不会把你的知识库上传到共享账户。',
+      en: 'Ownly stays local-first. Sign-in is only for identity, lightweight preferences, and Pro access; your knowledge base is never uploaded to the shared account.',
     },
     privacyNote: {
-      zh: 'Ownly 仍是本地优先产品。Markdown、附件、归档和本地目录不会上传到共享账户。',
-      en: 'Ownly remains local-first. Markdown, attachments, archives, and local folders are never uploaded to the shared account.',
+      zh: 'Markdown、附件、归档和本地目录不会上传到共享账户。',
+      en: 'Markdown, attachments, archives, and local folders are never uploaded to the shared account.',
     },
-    features: [
-      { zh: '未来解锁高级模板与数据健康检查', en: 'Prepare for advanced templates and data-health checks' },
-      { zh: '未来增强导出、迁移与工作流能力', en: 'Prepare for enhanced export, migration, and workflows' },
-      { zh: '与其他 Hao Apps 共用同一登录身份', en: 'Use the same identity across Hao Apps' },
-    ],
+    proUpgrade: {
+      title: { zh: 'Free 与 Ownly Pro', en: 'Free and Ownly Pro' },
+      freeTitle: { zh: '核心本地功能保持免费', en: 'Core local features stay free' },
+      freeFeatures: [
+        { zh: '继续使用本地知识库、Markdown、附件与归档', en: 'Keep using your local knowledge base, Markdown, attachments, and archives' },
+      ],
+      proTitle: { zh: '支持产品持续开发', en: 'Support continued development' },
+      proFeatures: [
+        { zh: '保留 Ownly Pro 身份并支持高级能力持续开发', en: 'Keep Ownly Pro status and support continued development of advanced capabilities' },
+        { zh: '未来正式上线的高级模板、数据健康与增强导出能力将进入 Pro', en: 'Future released advanced templates, data-health, and enhanced export capabilities will be included in Pro' },
+      ],
+      note: {
+        zh: '当前 Pro 不会减少或锁住现有 Free 核心功能。',
+        en: 'Pro does not remove or lock any existing Free core feature.',
+      },
+      checkoutDescription: {
+        zh: 'US$1/月支持 Ownly 持续维护并激活 Pro 身份。现有本地核心功能继续免费。',
+        en: 'US$1/month supports Ownly maintenance and activates Pro status. Existing local core features remain free.',
+      },
+      ctaTitle: { zh: '开通 Ownly Pro', en: 'Upgrade to Ownly Pro' },
+    },
     feedbackEnabled: false,
   });
 })();
