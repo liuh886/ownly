@@ -21,7 +21,7 @@ export default function OwnlyAppLayout({ children }: Readonly<{ children: React.
     <>
       {children}
       <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.js?v=5`} strategy="afterInteractive" />
-      <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-upgrade.js?v=2`} strategy="afterInteractive" />
+      <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-upgrade.js?v=3`} strategy="afterInteractive" />
     </>
   );
 }
