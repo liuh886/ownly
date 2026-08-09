@@ -54,7 +54,7 @@ for (const contract of [
   "entitlementCode: 'ownly.pro'",
   "mountSelectors: ['[data-account-slot]']",
   'compactTrigger: false',
-  'billingEnabled: false',
+  'billingEnabled: true',
   'feedbackEnabled: false',
   'sb_publishable_',
   'Markdown、附件、归档和本地目录不会上传',
