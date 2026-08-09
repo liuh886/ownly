@@ -5,7 +5,7 @@
 
   window.HaoAccountConfig = Object.freeze({
     enabled: isOwnlyApp,
-    billingEnabled: false,
+    billingEnabled: true,
     appName: 'Ownly',
     productCode: 'ownly',
     entitlementCode: 'ownly.pro',
