@@ -34,8 +34,8 @@ if (!rootLayout.includes('membership-config.js')) {
 }
 for (const reference of [
   'https://liuh886.github.io/admin/shared',
-  'account-shell.js?v=5',
-  'account-upgrade.js?v=4',
+  'account-shell.js?v=6',
+  'account-upgrade.js?v=5',
   "import './account-shell.css'",
 ]) {
   if (!appLayout.includes(reference)) throw new Error(`Ownly app layout is missing ${reference}`);
@@ -43,7 +43,7 @@ for (const reference of [
 if (!routeAccountStyles.includes('account-shell.css?v=5')) {
   throw new Error('Ownly app route must load Account Shell v5 styles.');
 }
-for (const forbiddenRootAsset of ['account-shell.css?v=5', 'account-shell.js?v=5', 'account-upgrade.js?v=4']) {
+for (const forbiddenRootAsset of ['account-shell.css?v=5', 'account-shell.js?v=6', 'account-upgrade.js?v=5']) {
   if (rootLayout.includes(forbiddenRootAsset)) {
     throw new Error(`Ownly marketing root must not load app-only account asset ${forbiddenRootAsset}`);
   }
@@ -83,4 +83,4 @@ for (const forbidden of ['Objects/', 'Accounts/', 'Snapshots/', 'Reviews/', 'Log
   if (config.includes(forbidden)) throw new Error(`Ownly account config must not inspect local data paths: ${forbidden}`);
 }
 
-console.log('Ownly scopes Account Shell v5 and Account Upgrade v4 to /app, keeps the native header slot, and preserves local-data isolation.');
+console.log('Ownly scopes Account Shell v6 and Account Upgrade v5 to /app, keeps the native header slot, and preserves local-data isolation.');
