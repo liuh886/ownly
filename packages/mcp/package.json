@@ -1,0 +1,49 @@
+{
+  "name": "@ownly/mcp",
+  "version": "0.1.0",
+  "description": "Read-only local MCP server for Ownly ownership and recurring-cost evidence.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "ownly-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "yaml": "2.9.0",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liuh886/ownly.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/liuh886/ownly#agent--mcp",
+  "bugs": {
+    "url": "https://github.com/liuh886/ownly/issues"
+  },
+  "keywords": [
+    "ownly",
+    "mcp",
+    "model-context-protocol",
+    "local-first",
+    "subscriptions",
+    "personal-data"
+  ]
+}
