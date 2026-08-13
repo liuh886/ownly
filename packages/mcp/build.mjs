@@ -22,6 +22,7 @@ await esbuild.build({
   external: [
     '@modelcontextprotocol/server',
     '@modelcontextprotocol/server/stdio',
+    'yaml',
     'zod',
     'zod/v4',
   ],
