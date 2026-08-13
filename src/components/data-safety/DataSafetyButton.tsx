@@ -12,8 +12,8 @@ import {
 const COPY = {
   en: {
     button: 'Data safety',
-    title: 'Backup, restore, and migrate',
-    description: 'Ownly uses a readable JSON backup with a versioned manifest and SHA-256 for every local file.',
+    title: 'Backup, restore, and storage safety',
+    description: 'Ownly uses a readable JSON backup with a versioned manifest and SHA-256 for every file in the selected Ownly data folder.',
     export: 'Export backup',
     choose: 'Choose backup file',
     checkMigration: 'Check migration',
@@ -27,7 +27,7 @@ const COPY = {
     conflicts: 'Conflicts',
     restore: 'Restore backup',
     overwrite: 'Download safety backup and overwrite',
-    overwriteConfirm: 'Conflicting local files will be replaced after a safety backup is downloaded. Continue?',
+    overwriteConfirm: 'Conflicting files in the selected Ownly data folder will be replaced after a safety backup is downloaded. Continue?',
     restored: 'Restore completed and verified.',
     exported: 'Backup downloaded.',
     current: 'Dataset is already on the current schema version.',
@@ -35,12 +35,13 @@ const COPY = {
     applyMigration: 'Download pre-migration backup and migrate',
     migrationConfirm: 'Ownly will download a complete pre-migration backup before applying the migration. Continue?',
     migrated: 'Migration completed and verified.',
-    localOnly: 'All operations stay on this device. No backup is uploaded.',
+    localOnly: 'Ownly performs these operations directly on the folder you selected. No backup is uploaded to an Ownly server.',
+    syncBoundary: 'If this folder is synchronized by your own cloud provider, keep it available offline and use one sync provider for this Ownly data folder. Provider synchronization and provider-level conflicts remain outside Ownly.',
   },
   zh: {
     button: '数据安全',
-    title: '备份、恢复与迁移',
-    description: 'Ownly 使用可读 JSON 备份包，包含版本化 manifest，并为每个本地文件记录 SHA-256。',
+    title: '备份、恢复与存储安全',
+    description: 'Ownly 使用可读 JSON 备份包，包含版本化 manifest，并为所选 Ownly 数据目录中的每个文件记录 SHA-256。',
     export: '导出备份',
     choose: '选择备份文件',
     checkMigration: '检查数据迁移',
@@ -54,7 +55,7 @@ const COPY = {
     conflicts: '冲突文件',
     restore: '恢复备份',
     overwrite: '下载安全备份并覆盖',
-    overwriteConfirm: '冲突的本地文件将在安全备份下载后被替换。是否继续？',
+    overwriteConfirm: '所选 Ownly 数据目录中的冲突文件将在安全备份下载后被替换。是否继续？',
     restored: '恢复已完成并通过校验。',
     exported: '备份已下载。',
     current: '当前数据已是最新 schema 版本。',
@@ -62,7 +63,8 @@ const COPY = {
     applyMigration: '下载迁移前备份并执行迁移',
     migrationConfirm: 'Ownly 会先下载完整的迁移前备份，再执行迁移。是否继续？',
     migrated: '迁移已完成并通过校验。',
-    localOnly: '所有操作均在本机完成，不会上传备份。',
+    localOnly: 'Ownly 直接在你选择的数据目录上执行这些操作，不会把备份上传到 Ownly 服务器。',
+    syncBoundary: '如果该目录由你自己的云盘服务同步，请让目录保持可离线使用，并且一个 Ownly 数据目录只使用一个同步服务。云盘同步和服务商层面的冲突不由 Ownly 处理。',
   },
 } as const;
 
@@ -175,7 +177,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-8 backdrop-blur-sm">
-          <section role="dialog" aria-modal="true" className="w-full max-w-xl rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl sm:p-8">
+          <section role="dialog" aria-modal="true" className="max-h-[calc(100vh-4rem)] w-full max-w-xl overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl sm:p-8">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold tracking-tight text-stone-950">{copy.title}</h2>
@@ -184,7 +186,8 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
               <button type="button" onClick={() => setOpen(false)} className="text-sm text-stone-400 hover:text-stone-900">×</button>
             </div>
 
-            <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{copy.localOnly}</p>
+            <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">{copy.localOnly}</p>
+            <p className="mt-2 rounded-lg bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-900">{copy.syncBoundary}</p>
 
             <div className="mt-5 grid gap-2 sm:grid-cols-3">
               <button type="button" disabled={busy} onClick={() => void exportBackup()} className="min-h-11 rounded-lg bg-stone-950 px-3 py-2 text-xs font-semibold text-white hover:bg-stone-800 disabled:bg-stone-300">
