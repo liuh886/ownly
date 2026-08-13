@@ -12,7 +12,7 @@ Ownly has three synchronized data entry paths:
 
 For agent work, prefer the CLI. It preserves the Markdown storage model while avoiding ad hoc frontmatter edits.
 
-## Vault Resolution
+## Data Location Resolution
 
 In the Ductor container, the normal Vault path is:
 
@@ -29,6 +29,8 @@ npm run --silent wyqd -- --vault /mnt/zhihaol object list --json
 ```
 
 If the Vault path is unknown, ask the user before writing data.
+
+The path may point to a parent containing the default `Ownly/` folder or directly to a custom Ownly data root containing `Objects/`. The CLI detects both forms; it does not require custom folders to be renamed.
 
 ## Object Commands
 

@@ -1,100 +1,73 @@
 # Ownly MCP
 
-Ownly MCP is a **read-only local MCP server** for Ownly ownership, recurring-cost and evidence data.
+Ownly MCP is a local-first MCP server for Ownly ownership, recurring-cost, review, and history data. It reads the canonical Markdown directly and can perform explicitly enabled, two-phase writes with a safety backup.
 
-It runs as a local `stdio` process. The canonical Ownly Markdown stays in the user-controlled local data folder; the MCP server reads only the local records needed for each tool call and returns bounded structured facts to the connected MCP client.
+## Data location
 
-## Requirements
+`--data-dir` and `OWNLY_DATA_DIR` accept either:
 
-- Node.js 20 or newer.
-- An existing Ownly data location containing an `Ownly/` folder.
-- An MCP client that supports local `stdio` servers, such as Codex or Claude Code.
-
-## Configuration
-
-Ownly MCP accepts exactly one current data-location contract:
+- a parent directory containing the default `Ownly/` data folder; or
+- a custom Ownly data root containing `Objects/` directly.
 
 ```bash
-ownly-mcp --data-dir /path/to/location-containing-Ownly
+ownly-mcp --data-dir /path/to/vault
+ownly-mcp --data-dir /path/to/custom-data-root
 ```
 
-or:
+The server fails closed when the location is missing, unreadable, or invalid.
+
+## Modes
+
+Read-only is the default:
 
 ```bash
-OWNLY_DATA_DIR=/path/to/location-containing-Ownly ownly-mcp
+npx -y @ownly-app/mcp --data-dir /path/to/vault
 ```
 
-The path is the directory **containing** `Ownly/`, not `Ownly/Objects` itself.
-
-The server fails closed when the location is missing, unreadable or not an Ownly data location.
-
-## Public package
-
-The package manifest is prepared as `@ownly/mcp`. After the first package release, the intended direct launch is:
+Enable persistent mutations explicitly:
 
 ```bash
-npx -y @ownly/mcp --data-dir /path/to/location-containing-Ownly
+npx -y @ownly-app/mcp --data-dir /path/to/vault --allow-write
 ```
 
-Until that package release exists, build and run the package from an Ownly source checkout:
+or set `OWNLY_MCP_ALLOW_WRITE=1`.
 
-```bash
-npm ci
-npm install --prefix packages/mcp --ignore-scripts --no-audit --no-fund
-npm run build --prefix packages/mcp
-node packages/mcp/dist/index.js --data-dir /path/to/location-containing-Ownly
-```
+Every mutation has two phases:
 
-The source checkout is only a development/distribution step. The MCP runtime still reads the user's normal local Ownly data folder and does not create a second database.
+1. Call an `ownly_prepare_*` tool and inspect its `before` / `after` preview.
+2. After user confirmation, pass its short-lived `operation_id` to `ownly_commit_operation`.
+
+Commit creates a full Ownly backup in the sibling `Ownly Backups/` directory before changing data. It rejects stale previews if the target file changed and is idempotent when the same operation ID is retried.
 
 ## Tools
 
-Ownly MCP v0.1 exposes nine read-only tools:
+Read tools:
 
-- `ownly_summary`
-- `ownly_search`
-- `ownly_get_object`
-- `ownly_object_history`
-- `ownly_recurring_costs`
-- `ownly_recurring_due`
-- `ownly_recurring_by_account`
-- `ownly_review_needed`
-- `ownly_doctor`
+- `ownly_summary`, `ownly_search`, `ownly_get_object`, `ownly_object_history`
+- `ownly_recurring_costs`, `ownly_recurring_due`, `ownly_recurring_by_account`
+- `ownly_review_needed`, `ownly_doctor`
 
-Every tool is annotated as read-only and non-destructive.
+Write workflow tools:
 
-The MCP layer does not expose create, update, cancel, archive, restore or delete operations in v0.1.
+- `ownly_prepare_create_object`, `ownly_prepare_update_object`
+- `ownly_prepare_retire_object`, `ownly_prepare_cancel_recurring_cost`
+- `ownly_prepare_add_object_log`, `ownly_prepare_create_review`
+- `ownly_prepare_create_snapshot`
+- `ownly_prepare_archive_object`, `ownly_prepare_restore_object`
+- `ownly_commit_operation`, `ownly_discard_operation`
 
 ## Privacy boundary
 
-The precise privacy claim is:
-
-> **The Ownly source-of-truth stays local. Only facts requested through an agent session are returned to that MCP client.**
-
-Ownly MCP does not:
-
-- upload the whole data folder to an Ownly service;
-- run a hosted Ownly database;
-- send MCP telemetry to GA4 or Cloudflare;
-- return local absolute paths as normal tool data;
-- return whole Markdown bodies when structured fields are sufficient;
-- continuously index or scan the data folder in the background.
-
-A fact returned to Codex, Claude Code or another MCP client may become part of that client's/model's context. Do not interpret local source-of-truth as a claim that no selected facts can ever leave the device during an external agent session.
-
-## Currency safety
-
-`ownly_recurring_by_account` keeps monetary totals separated by currency. Ownly MCP never silently adds USD, CNY, EUR or other currencies into one synthetic monthly total.
+The Ownly source-of-truth stays in the user-controlled local folder. Only facts returned by a requested tool enter the connected MCP client context. Ownly MCP does not create a hosted mirror or send analytics, file paths, or background indexes to Ownly services.
 
 ## Development
 
-From the repository root:
-
 ```bash
+npm ci
 npm run test:mcp
-npm install --prefix packages/mcp --ignore-scripts --no-audit --no-fund
 npm run build --prefix packages/mcp
-npm pack --prefix packages/mcp --dry-run
+node packages/mcp/dist/index.js --help
+(cd packages/mcp && npm pack --dry-run)
 ```
 
-See [`../../docs/MCP.md`](../../docs/MCP.md) for Codex and Claude Code setup, example prompts, architecture and troubleshooting.
+See [`../../docs/MCP.md`](../../docs/MCP.md) for setup, safety semantics, and examples.

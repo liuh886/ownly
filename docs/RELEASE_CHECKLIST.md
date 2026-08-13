@@ -146,7 +146,7 @@ Use the shared backup and restore services. Do not implement runtime-specific or
 
 Run representative CLI success/error commands and MCP contract tests against a disposable dataset.
 
-Confirm stdout/stderr contracts, exit codes, persisted Markdown, MCP tool results, and read-only MCP boundaries match their documentation.
+Confirm stdout/stderr contracts, exit codes, persisted Markdown, MCP tool results, default read-only behavior, and opt-in two-phase MCP write boundaries match their documentation.
 
 The selected Ownly data folder remains the source of truth whether it is in a normal local location or a personal cloud-synced local folder.
 

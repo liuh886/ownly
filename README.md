@@ -31,7 +31,7 @@ The Ownly data folder can live in a normal local directory or inside a local fol
 | Installed PWA | No | No | A standalone app window with offline application-shell startup |
 | Obsidian plugin | Yes | No | Native Vault integration and direct Markdown work |
 | Agent CLI | No | Yes | Deterministic scripting and validated local mutations |
-| Local MCP | No | Yes | Read-only Ownly evidence for Codex, Claude Code and compatible agents |
+| Local MCP | No | Yes | Bounded reads plus opt-in, preview-before-commit maintenance for compatible agents |
 
 The Web app and PWA are the same browser runtime. Installation changes the launch experience, not the data model. The product homepage itself is not a PWA surface.
 
@@ -178,11 +178,11 @@ The CLI data location may point to an Obsidian Vault or another filesystem locat
 
 ## Agent / MCP
 
-Ownly also exposes a **read-only local MCP server** for Codex, Claude Code and other MCP clients that can start a local STDIO process.
+Ownly also exposes a **local-first MCP server** for Codex, Claude Code and other MCP clients that can start a local STDIO process. It is read-only by default; persistent mutations require explicit startup permission plus a separate preview and commit call.
 
 The MCP server is an adapter over the same validated Ownly data model. It does not create a second database, hosted mirror or embedded AI assistant.
 
-The v0.1 tool surface covers:
+The MCP tool surface covers:
 
 - data summary and Doctor health checks;
 - object search and bounded object facts;
@@ -191,6 +191,8 @@ The v0.1 tool surface covers:
 - upcoming subscription renewals;
 - recurring costs grouped by payment account with currencies kept separate;
 - deterministic review-needed records.
+- opt-in creation and updates, lifecycle changes, append-only logs, reviews, snapshots, and recoverable archive/restore;
+- short-lived before/after previews, pre-write backups, stale-write conflict detection, and idempotent commits.
 
 The source-of-truth stays in the user-selected Ownly data folder. Facts returned by an MCP tool can enter the connected external agent's context, so Ownly does not claim that every selected fact remains on-device during an agent session.
 
@@ -205,9 +207,9 @@ The publish-ready MCP package lives in [`packages/mcp`](packages/mcp). See the [
 | Installed PWA | App-route-only install surface, standalone launch and cached app shell |
 | Obsidian plugin | Native Vault interface over the shared Ownly data model |
 | Agent CLI | Stable, strict-typed fact-ready JSON contract |
-| Local MCP | Read-only STDIO adapter over the canonical Ownly evidence store |
+| Local MCP | Read-only by default; opt-in two-phase writes over the canonical Ownly evidence store |
 | Data storage | Plain Markdown + YAML frontmatter in a user-controlled filesystem folder |
-| Mutation safety | Repository create/update/archive/restore contract protected by CI; MCP v0.1 has no mutation tools |
+| Mutation safety | Validation, preview/commit confirmation, atomic writes, safety backups, audit logs, conflict detection, archive/restore, and CI contracts |
 
 Current validation and known coverage gaps are documented in [Quality Baseline](docs/QUALITY_BASELINE.md).
 
@@ -275,7 +277,7 @@ MCP package validation additionally runs only for MCP-specific changes:
 npm install --prefix packages/mcp --ignore-scripts --no-audit --no-fund
 npm run build --prefix packages/mcp
 node packages/mcp/dist/index.js --help
-npm pack --prefix packages/mcp --dry-run
+(cd packages/mcp && npm pack --dry-run)
 ```
 
 ## License

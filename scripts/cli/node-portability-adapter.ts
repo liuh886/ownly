@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import { resolveOwnlyDataRoot } from '../shared/data-root';
 import {
   normalizeOwnlyBackupPath,
   type OwnlyTextFileAdapter,
@@ -27,16 +28,15 @@ function walkFiles(directory: string): string[] {
 
 export class NodeOwnlyTextFileAdapter implements OwnlyTextFileAdapter {
   private readonly root: string;
-  private readonly ownlyRoot: string;
 
   constructor(dataLocation: string) {
-    this.root = resolve(dataLocation);
-    this.ownlyRoot = join(this.root, 'Ownly');
+    this.root = resolveOwnlyDataRoot(dataLocation, { allowCreateDefault: true });
   }
 
   private resolveCanonicalPath(path: string): string {
     const canonical = normalizeOwnlyBackupPath(path);
-    const absolute = resolve(this.root, ...canonical.split('/'));
+    const [, ...insideOwnly] = canonical.split('/');
+    const absolute = resolve(this.root, ...insideOwnly);
     const relativePath = relative(this.root, absolute);
     if (
       relativePath.startsWith('..')
@@ -49,8 +49,8 @@ export class NodeOwnlyTextFileAdapter implements OwnlyTextFileAdapter {
   }
 
   async listFiles(): Promise<string[]> {
-    return walkFiles(this.ownlyRoot)
-      .map((absolute) => relative(this.root, absolute).split(sep).join('/'))
+    return walkFiles(this.root)
+      .map((absolute) => `Ownly/${relative(this.root, absolute).split(sep).join('/')}`)
       .map(normalizeOwnlyBackupPath)
       .sort((left, right) => left.localeCompare(right));
   }

@@ -1,8 +1,8 @@
 {
   "name": "@ownly-app/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "mcpName": "io.github.liuh886/ownly",
-  "description": "Read-only local MCP server for Ownly ownership and recurring-cost evidence.",
+  "description": "Local-first MCP server for Ownly evidence with opt-in, two-phase writes.",
   "license": "MIT",
   "type": "module",
   "bin": {
