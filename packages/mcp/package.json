@@ -1,6 +1,7 @@
 {
   "name": "@ownly/mcp",
   "version": "0.1.0",
+  "mcpName": "io.github.liuh886/ownly",
   "description": "Read-only local MCP server for Ownly ownership and recurring-cost evidence.",
   "license": "MIT",
   "type": "module",
@@ -15,7 +16,8 @@
     "node": ">=20"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "node build.mjs",
@@ -31,7 +33,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/liuh886/ownly.git",
+    "url": "https://github.com/liuh886/ownly.git",
     "directory": "packages/mcp"
   },
   "homepage": "https://github.com/liuh886/ownly#agent--mcp",

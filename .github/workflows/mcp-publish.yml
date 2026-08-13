@@ -1,0 +1,132 @@
+name: Publish Ownly MCP
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/mcp/**'
+      - 'server.json'
+      - '.github/workflows/mcp-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Validate release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(node -p "require('./packages/mcp/package.json').version")
+          PACKAGE_NAME=$(node -p "require('./packages/mcp/package.json').name")
+          MCP_NAME=$(node -p "require('./packages/mcp/package.json').mcpName")
+          SERVER_VERSION=$(node -p "require('./server.json').version")
+          SERVER_NAME=$(node -p "require('./server.json').name")
+          SERVER_PACKAGE=$(node -p "require('./server.json').packages[0].identifier")
+          SERVER_PACKAGE_VERSION=$(node -p "require('./server.json').packages[0].version")
+
+          test "$PACKAGE_VERSION" = "$SERVER_VERSION"
+          test "$PACKAGE_VERSION" = "$SERVER_PACKAGE_VERSION"
+          test "$PACKAGE_NAME" = "$SERVER_PACKAGE"
+          test "$MCP_NAME" = "$SERVER_NAME"
+
+      - name: Install MCP package dependencies
+        run: npm install --prefix packages/mcp --ignore-scripts --no-audit --no-fund
+
+      - name: Build MCP package
+        run: npm run build --prefix packages/mcp
+
+      - name: Package smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/mcp/dist/index.js --help
+          npm pack --prefix packages/mcp --dry-run
+
+      - name: Check npm release state
+        id: npm_state
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME=$(node -p "require('./packages/mcp/package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./packages/mcp/package.json').version")
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish package to npm
+        if: steps.npm_state.outputs.published != 'true'
+        working-directory: packages/mcp
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify clean npm install
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME=$(node -p "require('./packages/mcp/package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./packages/mcp/package.json').version")
+          npx -y "$PACKAGE_NAME@$PACKAGE_VERSION" --help
+
+      - name: Install MCP Registry publisher
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
+            | tar xz mcp-publisher
+          ./mcp-publisher --help >/dev/null
+
+      - name: Check Official MCP Registry state
+        id: registry_state
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVER_NAME=$(node -p "require('./server.json').name")
+          SERVER_VERSION=$(node -p "require('./server.json').version")
+          RESPONSE=$(curl --fail --silent --show-error \
+            "https://registry.modelcontextprotocol.io/v0.1/servers?search=${SERVER_NAME}")
+          if printf '%s' "$RESPONSE" | jq -e \
+            --arg name "$SERVER_NAME" --arg version "$SERVER_VERSION" \
+            '.servers[]? | select(.server.name == $name and .server.version == $version)' >/dev/null; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate to Official MCP Registry
+        if: steps.registry_state.outputs.published != 'true'
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to Official MCP Registry
+        if: steps.registry_state.outputs.published != 'true'
+        run: ./mcp-publisher publish
+
+      - name: Verify Official MCP Registry listing
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVER_NAME=$(node -p "require('./server.json').name")
+          SERVER_VERSION=$(node -p "require('./server.json').version")
+          RESPONSE=$(curl --fail --silent --show-error \
+            "https://registry.modelcontextprotocol.io/v0.1/servers?search=${SERVER_NAME}")
+          printf '%s' "$RESPONSE" | jq -e \
+            --arg name "$SERVER_NAME" --arg version "$SERVER_VERSION" \
+            '.servers[]? | select(.server.name == $name and .server.version == $version)' >/dev/null

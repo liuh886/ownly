@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.liuh886/ownly",
+  "title": "Ownly",
+  "description": "Read-only local access to validated Ownly ownership, subscription, review, history, and data-health evidence.",
+  "repository": {
+    "url": "https://github.com/liuh886/ownly",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@ownly/mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "OWNLY_DATA_DIR",
+          "description": "Absolute path to the directory containing the canonical Ownly/ data folder.",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
