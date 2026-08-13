@@ -55,12 +55,12 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
 
-  useEffect(() => {
-    if (!open) setCopiedKey(null);
-  }, [open]);
-
   async function copyCommand(key: string, value: string) {
-    await navigator.clipboard.writeText(value);
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      return;
+    }
     setCopiedKey(key);
     window.setTimeout(() => {
       setCopiedKey((current) => (current === key ? null : current));
