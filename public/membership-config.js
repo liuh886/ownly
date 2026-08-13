@@ -6,6 +6,7 @@
   window.HaoAccountConfig = Object.freeze({
     enabled: isOwnlyApp,
     billingEnabled: true,
+    referralEnabled: true,
     appName: 'Ownly',
     productCode: 'ownly',
     entitlementCode: 'ownly.pro',
