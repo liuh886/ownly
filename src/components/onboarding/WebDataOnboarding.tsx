@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
+
+type StorageIntent = 'local' | 'cloud';
 
 export function WebDataOnboarding({
   open,
@@ -21,6 +23,7 @@ export function WebDataOnboarding({
 }) {
   const { language } = useI18n();
   const copy = getOwnlyLocalDataCopy(language);
+  const [storageIntent, setStorageIntent] = useState<StorageIntent>('local');
 
   useEffect(() => {
     if (!open) return;
@@ -34,12 +37,12 @@ export function WebDataOnboarding({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-8 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-4 backdrop-blur-sm sm:py-8">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="ownly-onboarding-title"
-        className="w-full max-w-3xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[calc(100vh-4rem)]"
       >
         <div className="border-b border-stone-100 bg-gradient-to-br from-stone-50 to-emerald-50/40 px-6 py-6 sm:px-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
@@ -51,6 +54,55 @@ export function WebDataOnboarding({
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
             {copy.onboarding.description}
           </p>
+        </div>
+
+        <div className="px-6 pt-6 sm:px-8 sm:pt-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+            {copy.onboarding.storageQuestion}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={copy.onboarding.storageQuestion}>
+            {([
+              ['local', copy.onboarding.localTitle, copy.onboarding.localDescription, '⌂'],
+              ['cloud', copy.onboarding.cloudTitle, copy.onboarding.cloudDescription, '☁'],
+            ] as const).map(([value, title, description, icon]) => {
+              const selected = storageIntent === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setStorageIntent(value)}
+                  disabled={isLoading}
+                  className={`min-h-32 rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    selected
+                      ? 'border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200'
+                      : 'border-stone-200 bg-stone-50 hover:border-stone-300 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={`flex h-9 w-9 items-center justify-center rounded-lg text-base ${selected ? 'bg-emerald-600 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200'}`}>
+                      {icon}
+                    </span>
+                    {selected ? (
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-800">
+                        {copy.onboarding.selected}
+                      </span>
+                    ) : null}
+                  </div>
+                  <h3 className="mt-3 text-sm font-semibold text-stone-950">{title}</h3>
+                  <p className="mt-1.5 text-xs leading-5 text-stone-600">{description}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {storageIntent === 'cloud' ? (
+            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">
+              <p>{copy.onboarding.cloudNote}</p>
+              <p className="mt-1 font-semibold">{copy.onboarding.cloudRule}</p>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid gap-4 p-6 sm:grid-cols-2 sm:p-8">
