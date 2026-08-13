@@ -461,7 +461,7 @@ export function getOwnlyRecurringByAccount(
       account,
       totals: new Map(),
       nextBillingDate: null,
-      items: [],
+      items: [] as Array<Record<string, unknown>>,
     };
     const totals = group.totals.get(currency) ?? { monthly: 0, annualized: 0 };
     const monthlyCost = calculateMonthlyCost(recurring);
