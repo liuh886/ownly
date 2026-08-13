@@ -21,11 +21,13 @@ export function AppHeader({
   objectCount,
   snapshotCount,
   onConnectVault,
+  onOpenAgentGuide,
 }: {
   activeTab: AppTab;
   objectCount: number;
   snapshotCount: number;
   onConnectVault: () => void;
+  onOpenAgentGuide: () => void;
 }) {
   const { t, language, setLanguage, currency, setCurrency } = useI18n();
   const { runtimeTarget, isConnected, isLoading, membership, openLicenseModal } = useOwnlyWorkspace();
@@ -91,6 +93,14 @@ export function AppHeader({
           </span>
           <span className="mx-0.5 h-3 w-px bg-stone-200" aria-hidden="true" />
           <div className="ownly-account-slot" data-account-slot aria-label={t('membership')} />
+          <button
+            type="button"
+            onClick={onOpenAgentGuide}
+            title="Agent / MCP"
+            className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-900"
+          >
+            Agent
+          </button>
           <button
             type="button"
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}

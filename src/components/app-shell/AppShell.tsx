@@ -24,6 +24,7 @@ import {
   EmptyOwnlyDataBanner,
   FirstObjectOnboarding,
 } from '@/components/onboarding/FirstObjectOnboarding';
+import { AgentMcpGuide } from '@/components/agent/AgentMcpGuide';
 
 export function AppShell() {
   const { t } = useI18n();
@@ -50,6 +51,7 @@ export function AppShell() {
   const [firstObjectForcedOpen, setFirstObjectForcedOpen] = useState(false);
   const [firstObjectPromptHandled, setFirstObjectPromptHandled] = useState(false);
   const [firstObjectRequest, setFirstObjectRequest] = useState<FirstObjectRequest | undefined>();
+  const [agentGuideOpen, setAgentGuideOpen] = useState(false);
 
   const data = useOwnlyData();
 
@@ -124,6 +126,7 @@ export function AppShell() {
           objectCount={data.storedObjects.length}
           snapshotCount={data.storedSnapshots.length}
           onConnectVault={() => void connectVault()}
+          onOpenAgentGuide={() => setAgentGuideOpen(true)}
         />
 
         {!isConnected || error ? (
@@ -197,6 +200,7 @@ export function AppShell() {
         onChoose={chooseFirstObject}
         onDismiss={dismissFirstObject}
       />
+      <AgentMcpGuide open={agentGuideOpen} onClose={() => setAgentGuideOpen(false)} />
     </main>
   );
 }
