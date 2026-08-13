@@ -15,7 +15,9 @@
 
 Ownly helps you record what you own, what it costs, how you used it, and what you learned. Personal data stays in an **Ownly data folder** as plain Markdown with YAML frontmatter.
 
-Obsidian is recommended as a convenient place to store and inspect the files, but it is **not required** for the hosted Web app, installed PWA, Agent CLI, or local MCP server.
+> **Ownly doesn't host your data. You choose where your files live.**
+
+The Ownly data folder can live in a normal local directory or inside a local folder synchronized by a personal cloud provider you control. Obsidian is useful for inspecting the Markdown, but it is **not required** for the hosted Web app, installed PWA, Agent CLI, or local MCP server.
 
 ## Open Ownly
 
@@ -33,13 +35,25 @@ Obsidian is recommended as a convenient place to store and inspect the files, bu
 
 The Web app and PWA are the same browser runtime. Installation changes the launch experience, not the data model. The product homepage itself is not a PWA surface.
 
-## First use: create or open local data
+## First use: choose where your data lives
 
-When Ownly starts without an existing folder permission, choose one of two paths.
+When Ownly starts without an existing folder permission, choose a storage location and then create new data or open an existing Ownly data folder.
 
-### Create new local data
+### On this device
 
-Select a parent location such as `Documents`, an Obsidian Vault root, or an empty folder already named `Ownly`.
+Choose a normal local filesystem folder. Ownly reads and writes that folder directly. Nothing is synchronized unless you configure synchronization outside Ownly.
+
+### In your personal cloud folder
+
+Choose a local folder already synchronized by Dropbox, Google Drive, OneDrive, iCloud Drive, or another provider you control.
+
+Ownly still works with normal local files. It does not use provider APIs, OAuth, provider credentials, an Ownly cloud mirror, or a separate remote filesystem. Your provider handles synchronization under its own privacy and security policies.
+
+Keep the folder available offline when the provider supports online-only placeholders, and use **one sync provider per Ownly data folder** to reduce conflicting copies.
+
+### Create new data
+
+Select a parent location such as `Documents`, an Obsidian Vault root, a local personal-cloud folder, or an empty folder already named `Ownly`.
 
 Ownly initializes:
 
@@ -63,33 +77,21 @@ If the selected folder is already named `Ownly`, Ownly uses it directly and does
 
 ### Open existing data
 
-Select any supported location:
+Select any supported filesystem location:
 
 - an initialized Ownly data root containing `Objects/`;
 - an empty or initialized folder named `Ownly`;
 - an Obsidian Vault containing an `Ownly/` child folder;
-- an Obsidian Vault using the plugin's configured Ownly data folder.
+- an Obsidian Vault using the plugin's configured Ownly data folder;
+- any of the above inside a local folder synchronized by the user's own provider.
 
-The browser asks for explicit local read/write permission. Personal Markdown files are not uploaded to GitHub Pages and are not copied into the PWA service-worker cache.
+The browser asks for explicit read/write permission. Personal Markdown files are not uploaded to GitHub Pages and are not copied into the PWA service-worker cache. If the selected folder is synchronized by a third-party provider, that provider may upload and synchronize those files independently of Ownly.
 
-The hosted Web/PWA runtime uses Google Analytics 4 measurement ID `G-KXXVS33FQ2` for product adoption and can also load Cloudflare Web Analytics for aggregate traffic and Web Vitals when `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` is configured at build time. GA4 custom events are limited to local-data connection (`create` or `open`) and entering demo mode. Ownly never sends Markdown contents, local file names, form values, object records, reviews, account snapshots, or selected-folder data as analytics events. The Obsidian plugin, Agent CLI and MCP runtime do not load either web analytics provider.
+The hosted Web/PWA runtime uses Google Analytics 4 measurement ID `G-KXXVS33FQ2` for product adoption and can also load Cloudflare Web Analytics for aggregate traffic and Web Vitals when `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` is configured at build time. Ownly custom analytics events never include Markdown contents, local file names, form values, object records, reviews, account snapshots, selected-folder data, local paths, inferred provider names, or MCP tool results. The Obsidian plugin, Agent CLI and MCP runtime do not load either web analytics provider.
 
 ## Recommended storage
 
-Recommended layout:
-
-```text
-<My Obsidian Vault>/
-  Ownly/
-    Objects/
-    Accounts/
-    Snapshots/
-    Reviews/
-    Logs/
-    Archive/
-```
-
-Standalone use without Obsidian is also supported:
+Standalone local use:
 
 ```text
 <My local folder>/
@@ -102,11 +104,38 @@ Standalone use without Obsidian is also supported:
     Archive/
 ```
 
-Keeping `Ownly/` inside an Obsidian Vault makes the Markdown easy to read, search, edit, version, and reuse across the Web/PWA, Obsidian plugin, Agent CLI and MCP adapter.
+Inside an Obsidian Vault:
+
+```text
+<My Obsidian Vault>/
+  Ownly/
+    Objects/
+    Accounts/
+    Snapshots/
+    Reviews/
+    Logs/
+    Archive/
+```
+
+Inside a personal cloud-synced local folder:
+
+```text
+<My Dropbox / Google Drive / OneDrive / iCloud Drive folder>/
+  Ownly/
+    Objects/
+    Accounts/
+    Snapshots/
+    Reviews/
+    Logs/
+    Archive/
+```
+
+All three layouts use the same Ownly data model. The personal-cloud option does not introduce a second storage backend; the external provider synchronizes the normal filesystem folder.
 
 ## Product principles
 
-- **Local first** — no required cloud account, hosted database, or mandatory synchronization. Hosted Web/PWA may use aggregate and product-adoption analytics; local Ownly records remain local.
+- **User-controlled storage** — Ownly does not host your personal ledger. You choose where the filesystem folder lives.
+- **Local by default** — no required cloud account, hosted database, provider OAuth, or mandatory synchronization.
 - **Markdown native** — records remain portable and human-readable.
 - **Decision led** — observe, acquire or pass, use, exit, and review.
 - **Recoverable mutations** — archive and restore are distinct from permanent deletion.
@@ -145,7 +174,7 @@ See:
 - [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md)
 - [Data Model](docs/DATA_MODEL.md)
 
-`OWNLY_VAULT` is retained as a legacy-compatible environment-variable name. It may point to an Obsidian Vault or another local location containing the Ownly data folder.
+The CLI data location may point to an Obsidian Vault or another filesystem location containing the Ownly data folder, including a user-controlled synchronized local folder.
 
 ## Agent / MCP
 
@@ -155,7 +184,7 @@ The MCP server is an adapter over the same validated Ownly data model. It does n
 
 The v0.1 tool surface covers:
 
-- local data summary and Doctor health checks;
+- data summary and Doctor health checks;
 - object search and bounded object facts;
 - object history with reviews and append-only experience logs;
 - active recurring costs;
@@ -163,33 +192,34 @@ The v0.1 tool surface covers:
 - recurring costs grouped by payment account with currencies kept separate;
 - deterministic review-needed records.
 
-The source-of-truth stays in local Markdown. Facts returned by an MCP tool can enter the connected external agent's context, so Ownly does not claim that every selected fact remains on-device during an agent session.
+The source-of-truth stays in the user-selected Ownly data folder. Facts returned by an MCP tool can enter the connected external agent's context, so Ownly does not claim that every selected fact remains on-device during an agent session.
 
-The publish-ready MCP package lives in [`packages/mcp`](packages/mcp). Until its first package release, it can be built from an Ownly source checkout. See the [Ownly MCP Guide](docs/MCP.md) for Codex and Claude Code setup, privacy boundaries and example prompts.
+The publish-ready MCP package lives in [`packages/mcp`](packages/mcp). See the [Ownly MCP Guide](docs/MCP.md) for Codex and Claude Code setup, privacy boundaries and example prompts.
 
 ## Current runtime status
 
 | Area | Status |
 |---|---|
 | Product homepage | Static bilingual product explanation with an embedded interactive preview |
-| Hosted Web app | Static GitHub Pages runtime with local-folder access |
+| Hosted Web app | Static GitHub Pages runtime with user-selected filesystem access |
 | Installed PWA | App-route-only install surface, standalone launch and cached app shell |
 | Obsidian plugin | Native Vault interface over the shared Ownly data model |
 | Agent CLI | Stable, strict-typed fact-ready JSON contract |
-| Local MCP | Read-only STDIO adapter over the canonical local evidence store |
-| Data storage | Plain local Markdown + YAML frontmatter |
+| Local MCP | Read-only STDIO adapter over the canonical Ownly evidence store |
+| Data storage | Plain Markdown + YAML frontmatter in a user-controlled filesystem folder |
 | Mutation safety | Repository create/update/archive/restore contract protected by CI; MCP v0.1 has no mutation tools |
 
 Current validation and known coverage gaps are documented in [Quality Baseline](docs/QUALITY_BASELINE.md).
 
 ## Browser support
 
-Direct local-folder access uses the File System Access API.
+Direct folder access uses the File System Access API.
 
 - Recommended: current desktop Chrome or Microsoft Edge.
-- Unsupported browsers can view the product page and embedded preview but cannot connect local data.
+- Unsupported browsers can view the product page and embedded preview but cannot connect a real Ownly data folder.
 - Mobile direct-folder access is not a production target.
 - Browser permission may need to be renewed after restart or permission reset.
+- A personal cloud folder must be exposed by its provider as a usable local filesystem folder; Ownly does not provide a remote-drive API fallback.
 
 See [Web Runtime](docs/WEB_RUNTIME.md) for privacy boundaries, PWA behavior, and deployment details.
 
@@ -212,13 +242,14 @@ Ownly includes deterministic Doctor checks for issues such as:
 - stale snapshots;
 - missing data directories.
 
-These checks operate on local facts and do not use AI.
+These checks operate on Ownly facts and filesystem accessibility. Doctor does not inspect cloud-provider accounts or use AI.
 
 ## Documentation
 
 - [User Guide](docs/USER_GUIDE.md)
 - [Web Runtime](docs/WEB_RUNTIME.md)
 - [Terminology Contract](docs/TERMINOLOGY.md)
+- [Product Governance](docs/PRODUCT_GOVERNANCE.md)
 - [Quality Baseline](docs/QUALITY_BASELINE.md)
 - [Agent CLI Contract](docs/AGENT_CLI_CONTRACT.md)
 - [Agent CLI Guide](docs/AGENT_CLI_GUIDE.md)
@@ -249,4 +280,4 @@ npm pack --prefix packages/mcp --dry-run
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Personal Ownly records stay local. Hosted Web/PWA may use GA4 for limited product-adoption events and Cloudflare Web Analytics for aggregate traffic and Web Vitals; the Obsidian plugin, CLI and MCP runtime do not load either provider.
+MIT. See [LICENSE](LICENSE). Ownly does not host personal ledger data. A user-selected filesystem-sync provider or external MCP client may process data under its own privacy and security policies. Hosted Web/PWA may use GA4 for limited product-adoption events and Cloudflare Web Analytics for aggregate traffic and Web Vitals; the Obsidian plugin, CLI and MCP runtime do not load either analytics provider.
