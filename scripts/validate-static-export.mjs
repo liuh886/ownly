@@ -83,7 +83,7 @@ if (!existsSync(indexPath)) {
   }
 
   if (!html.includes('id="preview"') || !html.includes('id="review"') || !html.includes('id="local"')) {
-    fail('The homepage must expose stable cost, review, and local-data anchors.');
+    fail('The homepage must expose stable cost, review, and user-data anchors.');
   }
 
   if (html.includes('/app/?demo=1')) {
@@ -96,7 +96,7 @@ if (!existsSync(appIndexPath)) {
 } else {
   const appHtml = readFileSync(appIndexPath, 'utf8');
   if (!appHtml.includes('noindex') || !appHtml.includes('nofollow')) {
-    fail('The local-data application route must remain outside search indexes.');
+    fail('The user-data application route must remain outside search indexes.');
   }
 }
 
@@ -124,7 +124,9 @@ if (!existsSync(staticDir)) {
       'Sample data',
       'Price is only the beginning.',
       'Review before the next purchase or renewal.',
-      'No hosted personal database',
+      'Your data, your folder, your choice.',
+      'No Ownly-hosted database',
+      'Your cloud if you want one',
       'local_data_connected',
       'demo_started',
     ]) {
@@ -151,4 +153,4 @@ if (process.exitCode) {
   process.exit(process.exitCode);
 }
 
-console.log(`[pages validation] three-scene homepage, dual analytics, local-data trust rail and app route are ready${basePath ? ` for ${basePath}` : ''}.`);
+console.log(`[pages validation] three-scene homepage, dual analytics, user-controlled storage trust rail and app route are ready${basePath ? ` for ${basePath}` : ''}.`);
