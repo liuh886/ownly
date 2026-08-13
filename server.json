@@ -11,7 +11,7 @@
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@ownly/mcp",
+      "identifier": "@ownly-app/mcp",
       "version": "0.1.0",
       "transport": {
         "type": "stdio"
