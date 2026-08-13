@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
@@ -17,6 +18,28 @@ import {
 
 const SERVER_NAME = 'ownly';
 const SERVER_VERSION = '0.1.0';
+const READ_ONLY_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+const OBJECT_STATUS = z.enum([
+  'seeded',
+  'observing',
+  'purchased',
+  'using',
+  'idle',
+  'transferred',
+  'discarded',
+  'active',
+  'paused',
+  'cancelled',
+  'planned',
+  'in_progress',
+  'completed',
+  'reviewed',
+]);
 
 function parseServerArgs(argv, env) {
   let dataDir = env.OWNLY_DATA_DIR;
@@ -92,6 +115,7 @@ export function createOwnlyMcpServer(dataLocation) {
       title: 'Ownly Summary',
       description: 'Return a compact overview of the local Ownly evidence store and its deterministic health status.',
       inputSchema: z.object({}),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(() => getOwnlySummary(dataLocation)),
   );
@@ -104,8 +128,9 @@ export function createOwnlyMcpServer(dataLocation) {
       inputSchema: z.object({
         query: z.string().min(1),
         object_type: z.enum(['physical', 'recurring_cost', 'one_time_experience']).optional(),
-        status: z.string().min(1).optional(),
+        status: OBJECT_STATUS.optional(),
       }),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(({ query, object_type, status }) => searchOwnly(dataLocation, query, {
       objectType: object_type,
@@ -119,6 +144,7 @@ export function createOwnlyMcpServer(dataLocation) {
       title: 'Get Ownly Object',
       description: 'Return bounded structured facts for one Ownly object identified by its stable Ownly ID.',
       inputSchema: z.object({ id: z.string().min(1) }),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(({ id }) => getOwnlyObject(dataLocation, id)),
   );
@@ -129,6 +155,7 @@ export function createOwnlyMcpServer(dataLocation) {
       title: 'Ownly Object History',
       description: 'Return one object with linked reviews and chronological append-only experience logs for evidence-grounded reasoning.',
       inputSchema: z.object({ id: z.string().min(1) }),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(({ id }) => getOwnlyObjectHistory(dataLocation, id)),
   );
@@ -143,6 +170,7 @@ export function createOwnlyMcpServer(dataLocation) {
         category: z.string().min(1).optional(),
         account: z.string().min(1).optional(),
       }),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(({ active_only, category, account }) => getOwnlyRecurringCosts(dataLocation, {
       activeOnly: active_only,
@@ -159,6 +187,7 @@ export function createOwnlyMcpServer(dataLocation) {
       inputSchema: z.object({
         days: z.number().int().min(0).max(365).default(30),
       }),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(({ days }) => getOwnlyRecurringDue(dataLocation, days)),
   );
@@ -169,6 +198,7 @@ export function createOwnlyMcpServer(dataLocation) {
       title: 'Ownly Recurring Costs by Account',
       description: 'Group active recurring costs by payment account. Monetary totals remain separated by currency instead of being silently combined.',
       inputSchema: z.object({}),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(() => getOwnlyRecurringByAccount(dataLocation)),
   );
@@ -179,6 +209,7 @@ export function createOwnlyMcpServer(dataLocation) {
       title: 'Ownly Review Needed',
       description: 'Return objects that deterministically require review under the existing Ownly lifecycle rules.',
       inputSchema: z.object({}),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(() => getOwnlyReviewNeeded(dataLocation)),
   );
@@ -189,6 +220,7 @@ export function createOwnlyMcpServer(dataLocation) {
       title: 'Ownly Doctor',
       description: 'Run deterministic, read-only integrity checks before an agent relies on the local evidence store.',
       inputSchema: z.object({}),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     safeHandler(() => getOwnlyDoctor(dataLocation)),
   );
@@ -226,7 +258,8 @@ async function main() {
   await serveStdio(() => createOwnlyMcpServer(dataLocation));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const entrypoint = process.argv[1] ? pathToFileURL(process.argv[1]).href : undefined;
+if (entrypoint && import.meta.url === entrypoint) {
   void main().catch((error) => {
     const payload = toOwnlyMcpErrorPayload(error);
     console.error(`Ownly MCP failed [${payload.code}]: ${payload.message}`);
