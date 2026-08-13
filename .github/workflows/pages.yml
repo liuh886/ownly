@@ -39,6 +39,7 @@ jobs:
             echo "shared=true" >> "$GITHUB_OUTPUT"
             echo "web=true" >> "$GITHUB_OUTPUT"
             echo "obsidian=true" >> "$GITHUB_OUTPUT"
+            echo "mcp=true" >> "$GITHUB_OUTPUT"
             echo "any=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -50,11 +51,16 @@ jobs:
           shared=false
           web=false
           obsidian=false
+          mcp=false
 
           if grep -Eq '^(package(-lock)?\.json|tsconfig.*\.json|eslint\.config\.|\.github/workflows/pages\.yml)' changed-files.txt; then
             full=true
           fi
-          if [[ "$full" == true ]] || grep -Eq '^(src/(core|services|types)/|scripts/cli/|scripts/wyqd-cli\.ts|tests/|docs/(DATA|WEB_RUNTIME|AGENT_CLI)|.*migration)' changed-files.txt; then
+          if [[ "$full" == true ]] || grep -Eq '^(src/(core|services|types)/|scripts/(cli|mcp)/|scripts/wyqd-cli\.ts|tests/|docs/(DATA|WEB_RUNTIME|AGENT_CLI|MCP)|.*migration)' changed-files.txt; then
+            shared=true
+          fi
+          if grep -Eq '^(packages/mcp/|scripts/mcp/|docs/MCP\.md)' changed-files.txt; then
+            mcp=true
             shared=true
           fi
           if [[ "$full" == true || "$shared" == true ]] || grep -Eq '^(src/(app|components|hooks|lib)/|public/|next\.config|postcss\.config|scripts/(gen-git-sha|validate-static-export|validate-pwa|validate-membership)\.mjs)' changed-files.txt; then
@@ -67,7 +73,8 @@ jobs:
           echo "shared=$shared" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
           echo "obsidian=$obsidian" >> "$GITHUB_OUTPUT"
-          if [[ "$shared" == true || "$web" == true || "$obsidian" == true ]]; then
+          echo "mcp=$mcp" >> "$GITHUB_OUTPUT"
+          if [[ "$shared" == true || "$web" == true || "$obsidian" == true || "$mcp" == true ]]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
           else
             echo "any=false" >> "$GITHUB_OUTPUT"
@@ -91,6 +98,19 @@ jobs:
       - name: Shared data, CLI and portability contracts
         if: steps.scope.outputs.shared == 'true'
         run: npm run validate:shared
+
+      - name: Install MCP package dependencies
+        if: steps.scope.outputs.mcp == 'true'
+        run: npm install --prefix packages/mcp --ignore-scripts --no-audit --no-fund --package-lock=false
+
+      - name: Build and validate MCP package
+        if: steps.scope.outputs.mcp == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build --prefix packages/mcp
+          node packages/mcp/dist/index.js --help | grep -F "Ownly MCP"
+          npm pack --prefix packages/mcp --dry-run
 
       - name: Web and PWA validation
         if: steps.scope.outputs.web == 'true'
