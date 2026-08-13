@@ -52,11 +52,16 @@ jobs:
         run: npm run build --prefix packages/mcp
 
       - name: Package smoke test
+        working-directory: packages/mcp
         shell: bash
         run: |
           set -euo pipefail
-          node packages/mcp/dist/index.js --help
-          npm pack --prefix packages/mcp --dry-run
+          test "$(head -n 1 dist/index.js)" = '#!/usr/bin/env node'
+          node dist/index.js --help
+          npm pack --dry-run
+          npm publish --dry-run --access public --provenance=false 2>&1 | tee /tmp/ownly-mcp-publish-dry-run.log
+          ! grep -F 'script name' /tmp/ownly-mcp-publish-dry-run.log
+          grep -F 'name: @ownly/mcp' /tmp/ownly-mcp-publish-dry-run.log
 
       - name: Check npm release state
         id: npm_state
