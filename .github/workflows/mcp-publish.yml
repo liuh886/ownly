@@ -76,12 +76,10 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish package to npm
+      - name: Publish package to npm with trusted publishing
         if: steps.npm_state.outputs.published != 'true'
         working-directory: packages/mcp
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
 
       - name: Verify clean npm install
         shell: bash
