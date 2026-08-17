@@ -22,7 +22,7 @@ export default function OwnlyAppLayout({ children }: Readonly<{ children: React.
       <link rel="stylesheet" href={`${HAO_ACCOUNT_ASSET_ROOT}/product-referral.css?v=3`} />
       {children}
       <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/account-shell.js?v=7`} strategy="afterInteractive" />
-      <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/product-referral.js?v=4`} strategy="afterInteractive" />
+      <Script src={`${HAO_ACCOUNT_ASSET_ROOT}/product-referral.js?v=5`} strategy="afterInteractive" />
     </>
   );
 }
