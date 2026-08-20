@@ -9,7 +9,7 @@ import type { AppTab } from './BottomNav';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import './account-integration.css';
 
-const tabHeadingKeys: Record<AppTab, { title: WYQDTranslationKey; description: WYQDTranslationKey }> = {
+const tabHeadingKeys: Record<Exclude<AppTab, 'planner'>, { title: WYQDTranslationKey; description: WYQDTranslationKey }> = {
   home: { title: 'tabHome', description: 'tabHomeDesc' },
   objects: { title: 'tabObjects', description: 'tabObjectsDesc' },
   accounts: { title: 'tabAccounts', description: 'tabAccountsDesc' },
@@ -34,6 +34,17 @@ export function AppHeader({
   const runtimeCapabilities = getWYQDRuntimeCapabilities(runtimeTarget);
   const usesBrowserLocalData = runtimeCapabilities.dataRuntime === 'browser';
   const localDataCopy = getOwnlyLocalDataCopy(language);
+  const heading = activeTab === 'planner'
+    ? {
+        title: 'Planner',
+        description: language === 'zh'
+          ? '把 Google Maps 研究候选填入可执行的日程骨架'
+          : 'Turn Google Maps research into an executable day plan',
+      }
+    : {
+        title: t(tabHeadingKeys[activeTab].title),
+        description: t(tabHeadingKeys[activeTab].description),
+      };
 
   return (
     <header className="mb-8 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
@@ -63,9 +74,9 @@ export function AppHeader({
       <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold tracking-tight text-stone-950 sm:text-xl">
-            {t(tabHeadingKeys[activeTab].title)}
+            {heading.title}
           </h1>
-          <p className="mt-0.5 text-xs text-stone-400">{t(tabHeadingKeys[activeTab].description)}</p>
+          <p className="mt-0.5 text-xs text-stone-400">{heading.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span
