@@ -82,6 +82,7 @@ export interface OwnlyCaptureState {
   trips: PlannerTrip[];
   activeTripId: string | null;
   pendingPlaces: PlannerTripPlace[];
+  knownPlaceIds: Record<string, string>;
 }
 
 export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
@@ -89,6 +90,7 @@ export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
   trips: [],
   activeTripId: null,
   pendingPlaces: [],
+  knownPlaceIds: {},
 };
 
 function parseDateOnly(value: string): Date | null {
