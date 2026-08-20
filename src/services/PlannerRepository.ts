@@ -1,5 +1,10 @@
 import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
-import type { PlannerTrip, PlannerTripBooking, PlannerTripPlace } from '@/domain/planner';
+import {
+  mergeCapturedPlaceResearch,
+  type PlannerTrip,
+  type PlannerTripBooking,
+  type PlannerTripPlace,
+} from '@/domain/planner';
 import { obsidianService } from './ObsidianFileSystemService';
 
 const PLANNER_DIRECTORIES = {
@@ -82,6 +87,13 @@ export class PlannerRepository {
   }
 
   async upsertPlace(place: PlannerTripPlace): Promise<void> {
+    if (place.locked === undefined) {
+      const existing = (await this.listPlaces()).find((item) => item.id === place.id);
+      if (existing) {
+        await this.upsert(mergeCapturedPlaceResearch(existing, place));
+        return;
+      }
+    }
     await this.upsert(place);
   }
 
