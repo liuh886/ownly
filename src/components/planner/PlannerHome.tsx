@@ -172,7 +172,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         setNotice(zh ? '未检测到 Ownly Capture 扩展。' : 'Ownly Capture extension was not detected.');
         return;
       }
-      for (const trip of state.trips) await plannerRepository.upsertTrip(trip);
+
+      await plannerRepository.initialize();
+      const existingTripIds = new Set(trips.map((trip) => trip.id));
+      for (const trip of state.trips) {
+        if (!existingTripIds.has(trip.id)) await plannerRepository.upsertTrip(trip);
+      }
       for (const place of state.pendingPlaces) await plannerRepository.upsertPlace(place);
       if (state.pendingPlaces.length > 0) {
         await ackCapturedPlaces(state.pendingPlaces.map((place) => place.id));
@@ -186,7 +191,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     } finally {
       setBusy(false);
     }
-  }, [load, zh]);
+  }, [load, trips, zh]);
 
   if (disabled) {
     return (
