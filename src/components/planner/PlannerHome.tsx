@@ -1,0 +1,406 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useI18n } from '@/core/i18n-context';
+import type { PlannerTrip, PlannerTripPlace } from '@/domain/planner';
+import {
+  buildGoogleMapsDirectionsSegments,
+  getTripAreaCounts,
+  listTripDates,
+  sortPlannerPlaces,
+} from '@/domain/planner';
+import { plannerRepository } from '@/services/PlannerRepository';
+import { ackCapturedPlaces, pullCaptureState } from './capture-bridge';
+
+interface PlannerHomeProps {
+  disabled: boolean;
+}
+
+const priorityRank: Record<PlannerTripPlace['priority'], number> = {
+  must: 0,
+  want: 1,
+  optional: 2,
+};
+
+function formatDay(date: string, language: 'en' | 'zh'): string {
+  const [, month, day] = date.split('-');
+  return language === 'zh' ? `${Number(month)}月${Number(day)}日` : `${month}/${day}`;
+}
+
+function placeMeta(place: PlannerTripPlace): string {
+  return [
+    place.area,
+    place.kind,
+    place.duration_minutes ? `${place.duration_minutes} min` : null,
+    place.preferred_window,
+  ].filter(Boolean).join(' · ');
+}
+
+export function PlannerHome({ disabled }: PlannerHomeProps) {
+  const { language } = useI18n();
+  const zh = language === 'zh';
+  const [trips, setTrips] = useState<PlannerTrip[]>([]);
+  const [places, setPlaces] = useState<PlannerTripPlace[]>([]);
+  const [selectedTripId, setSelectedTripId] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [capturePending, setCapturePending] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (disabled) return;
+    await plannerRepository.initialize();
+    const [nextTrips, nextPlaces] = await Promise.all([
+      plannerRepository.listTrips(),
+      plannerRepository.listPlaces(),
+    ]);
+    nextTrips.sort((left, right) => right.start_date.localeCompare(left.start_date));
+    setTrips(nextTrips);
+    setPlaces(nextPlaces);
+    setSelectedTripId((current) => current || nextTrips[0]?.id || '');
+  }, [disabled]);
+
+  const refreshCapture = useCallback(async () => {
+    const state = await pullCaptureState();
+    setCapturePending(state ? state.pendingPlaces.length : null);
+    return state;
+  }, []);
+
+  useEffect(() => {
+    void load();
+    void refreshCapture();
+  }, [load, refreshCapture]);
+
+  const selectedTrip = useMemo(
+    () => trips.find((trip) => trip.id === selectedTripId) ?? null,
+    [selectedTripId, trips],
+  );
+
+  const tripDates = useMemo(
+    () => selectedTrip ? listTripDates(selectedTrip.start_date, selectedTrip.end_date) : [],
+    [selectedTrip],
+  );
+
+  useEffect(() => {
+    if (!selectedTrip) {
+      setSelectedDate('');
+      return;
+    }
+    setSelectedDate((current) => tripDates.includes(current) ? current : tripDates[0] ?? '');
+  }, [selectedTrip, tripDates]);
+
+  const tripPlaces = useMemo(
+    () => places.filter((place) => place.trip_id === selectedTripId && place.state !== 'dropped'),
+    [places, selectedTripId],
+  );
+
+  const candidates = useMemo(
+    () => [...tripPlaces]
+      .filter((place) => !place.scheduled_date && place.state === 'candidate')
+      .sort((left, right) => priorityRank[left.priority] - priorityRank[right.priority] || left.title.localeCompare(right.title)),
+    [tripPlaces],
+  );
+
+  const scheduled = useMemo(
+    () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === selectedDate && place.state === 'scheduled')),
+    [selectedDate, tripPlaces],
+  );
+
+  const areaCounts = useMemo(() => getTripAreaCounts(tripPlaces), [tripPlaces]);
+  const maxAreaCount = Math.max(1, ...areaCounts.map((item) => item.count));
+  const mustTotal = tripPlaces.filter((place) => place.priority === 'must').length;
+  const mustScheduled = tripPlaces.filter((place) => place.priority === 'must' && place.scheduled_date).length;
+  const scheduledMinutes = scheduled.reduce((sum, place) => sum + (place.duration_minutes ?? 0), 0);
+  const routeSegments = selectedTrip
+    ? buildGoogleMapsDirectionsSegments(scheduled, selectedTrip.transport_mode ?? 'transit')
+    : [];
+
+  const persistPlace = useCallback(async (place: PlannerTripPlace) => {
+    await plannerRepository.upsertPlace(place);
+    setPlaces((current) => current.map((item) => item.id === place.id ? place : item));
+  }, []);
+
+  const schedulePlace = useCallback(async (placeId: string, date = selectedDate) => {
+    if (!date) return;
+    const place = places.find((item) => item.id === placeId);
+    if (!place) return;
+    const existing = places.filter((item) => item.trip_id === place.trip_id && item.scheduled_date === date);
+    const nextOrder = existing.reduce((max, item) => Math.max(max, item.sort_order ?? -1), -1) + 1;
+    await persistPlace({
+      ...place,
+      state: 'scheduled',
+      scheduled_date: date,
+      sort_order: nextOrder,
+      locked: true,
+      updated_at: new Date().toISOString(),
+    });
+  }, [persistPlace, places, selectedDate]);
+
+  const returnToPool = useCallback(async (place: PlannerTripPlace) => {
+    await persistPlace({
+      ...place,
+      state: 'candidate',
+      scheduled_date: undefined,
+      sort_order: undefined,
+      locked: true,
+      updated_at: new Date().toISOString(),
+    });
+  }, [persistPlace]);
+
+  const moveScheduled = useCallback(async (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= scheduled.length) return;
+    const current = scheduled[index];
+    const target = scheduled[targetIndex];
+    const currentOrder = current.sort_order ?? index;
+    const targetOrder = target.sort_order ?? targetIndex;
+    await Promise.all([
+      plannerRepository.upsertPlace({ ...current, sort_order: targetOrder, locked: true, updated_at: new Date().toISOString() }),
+      plannerRepository.upsertPlace({ ...target, sort_order: currentOrder, locked: true, updated_at: new Date().toISOString() }),
+    ]);
+    await load();
+  }, [load, scheduled]);
+
+  const syncCapture = useCallback(async () => {
+    setBusy(true);
+    setNotice('');
+    try {
+      const state = await pullCaptureState();
+      if (!state) {
+        setCapturePending(null);
+        setNotice(zh ? '未检测到 Ownly Capture 扩展。' : 'Ownly Capture extension was not detected.');
+        return;
+      }
+      for (const trip of state.trips) await plannerRepository.upsertTrip(trip);
+      for (const place of state.pendingPlaces) await plannerRepository.upsertPlace(place);
+      if (state.pendingPlaces.length > 0) {
+        await ackCapturedPlaces(state.pendingPlaces.map((place) => place.id));
+      }
+      setCapturePending(0);
+      await load();
+      setSelectedTripId((current) => current || state.activeTripId || state.trips[0]?.id || '');
+      setNotice(zh
+        ? `已同步 ${state.pendingPlaces.length} 个研究候选。`
+        : `Synced ${state.pendingPlaces.length} research candidates.`);
+    } finally {
+      setBusy(false);
+    }
+  }, [load, zh]);
+
+  if (disabled) {
+    return (
+      <section className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-500 shadow-sm">
+        {zh ? '连接 Ownly 本地数据目录后即可使用 Planner。' : 'Connect your Ownly data folder to use Planner.'}
+      </section>
+    );
+  }
+
+  if (!selectedTrip) {
+    return (
+      <section className="rounded-xl border border-stone-200 bg-white p-8 shadow-sm">
+        <h2 className="text-lg font-semibold tracking-tight text-stone-950">Planner</h2>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-stone-500">
+          {zh
+            ? '先在 Google Maps 的 Ownly Capture 侧栏创建 Trip 并采集候选地点。Planner 只负责把研究完成的地点排进日程。'
+            : 'Create a trip and capture researched places in the Ownly Capture side panel on Google Maps. Planner only turns that research into a schedule.'}
+        </p>
+        <button
+          type="button"
+          onClick={() => void syncCapture()}
+          disabled={busy}
+          className="mt-5 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50"
+        >
+          {busy ? (zh ? '同步中…' : 'Syncing…') : (zh ? '从 Capture 同步' : 'Sync from Capture')}
+        </button>
+        {notice ? <p className="mt-3 text-xs text-stone-500">{notice}</p> : null}
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedTripId}
+              onChange={(event) => setSelectedTripId(event.target.value)}
+              className="max-w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-900 outline-none focus:border-stone-400"
+              aria-label={zh ? '选择行程' : 'Select trip'}
+            >
+              {trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
+            </select>
+            <span className="text-xs text-stone-400">
+              {selectedTrip.start_date} → {selectedTrip.end_date}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-stone-400">{selectedTrip.destinations.join(' · ') || (zh ? '未填写目的地' : 'No destinations')}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500">
+            {capturePending === null
+              ? (zh ? 'Capture 未连接' : 'Capture offline')
+              : `${capturePending} ${zh ? '待同步' : 'pending'}`}
+          </span>
+          <button
+            type="button"
+            onClick={() => void syncCapture()}
+            disabled={busy}
+            className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50 disabled:opacity-50"
+          >
+            {busy ? '…' : (zh ? '同步 Capture' : 'Sync Capture')}
+          </button>
+        </div>
+      </div>
+
+      {notice ? <div aria-live="polite" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">{notice}</div> : null}
+
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {tripDates.map((date, index) => (
+          <button
+            key={date}
+            type="button"
+            onClick={() => setSelectedDate(date)}
+            className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition ${selectedDate === date ? 'bg-stone-950 text-white' : 'bg-white text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'}`}
+          >
+            {zh ? `第${index + 1}天 · ${formatDay(date, language)}` : `Day ${index + 1} · ${formatDay(date, language)}`}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)_minmax(220px,0.75fr)]">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-stone-900">Research Pool</h2>
+              <p className="text-[11px] text-stone-400">{zh ? 'Google Maps 研究完成的候选' : 'Researched in Google Maps'}</p>
+            </div>
+            <span className="text-xs font-medium text-stone-400">{candidates.length}</span>
+          </div>
+          <div className="space-y-2 p-3">
+            {candidates.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-stone-200 px-3 py-8 text-center text-xs text-stone-400">
+                {zh ? '候选池已清空。继续从 Google Maps 采集，或调整其他日期。' : 'No unscheduled candidates. Capture more in Google Maps or review other days.'}
+              </div>
+            ) : candidates.map((place) => (
+              <article
+                key={place.id}
+                draggable
+                onDragStart={() => setDraggingPlaceId(place.id)}
+                onDragEnd={() => setDraggingPlaceId(null)}
+                className="rounded-lg border border-stone-200 bg-stone-50/70 p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
+                    <p className="mt-1 text-[11px] text-stone-400">{placeMeta(place)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void schedulePlace(place.id)}
+                    className="shrink-0 rounded-md bg-stone-950 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-stone-800"
+                  >
+                    + {zh ? '当天' : 'Day'}
+                  </button>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${place.priority === 'must' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>{place.priority}</span>
+                  {place.observed_rating ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">★ {place.observed_rating}</span> : null}
+                  {place.observed_price ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">{place.observed_price}</span> : null}
+                  {place.signals.slice(0, 2).map((signal) => <span key={signal} className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">{signal}</span>)}
+                </div>
+                {place.why ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-600">{place.why}</p> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section
+          className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            if (draggingPlaceId) void schedulePlace(draggingPlaceId);
+            setDraggingPlaceId(null);
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-stone-900">Day Skeleton</h2>
+              <p className="text-[11px] text-stone-400">{selectedDate}</p>
+            </div>
+            {routeSegments.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {routeSegments.map((url, index) => (
+                  <a key={url} href={url} target="_blank" rel="noreferrer" className="rounded-md border border-stone-200 px-2.5 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50">
+                    {routeSegments.length === 1 ? (zh ? 'Google Maps 导航' : 'Open Google Maps') : `${zh ? '路线' : 'Route'} ${index + 1}`}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <div className="p-3">
+            {scheduled.length === 0 ? (
+              <div className={`rounded-xl border-2 border-dashed px-4 py-16 text-center text-sm ${draggingPlaceId ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700' : 'border-stone-200 text-stone-400'}`}>
+                {zh ? '把 Research Pool 的候选拖进这一天，或点击“+ 当天”。' : 'Drag a researched candidate here, or use “+ Day”.'}
+              </div>
+            ) : (
+              <ol className="space-y-2">
+                {scheduled.map((place, index) => (
+                  <li key={place.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-stone-200 p-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white">{index + 1}</div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
+                        {place.locked ? <span className="text-[10px] text-stone-400">locked</span> : null}
+                      </div>
+                      <p className="mt-1 text-[11px] text-stone-400">{placeMeta(place)}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 disabled:opacity-30">↑</button>
+                      <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 disabled:opacity-30">↓</button>
+                      <button type="button" aria-label={zh ? '放回候选池' : 'Return to pool'} onClick={() => void returnToPool(place)} className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-500">{zh ? '移出' : 'Pool'}</button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </section>
+
+        <aside className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-stone-900">Planner Context</h2>
+          <div className="mt-3 divide-y divide-stone-100 text-xs">
+            <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '当天已排' : 'Scheduled'}</span><strong>{scheduled.length}</strong></div>
+            <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '候选未排' : 'Unscheduled'}</span><strong>{candidates.length}</strong></div>
+            <div className="flex justify-between py-2"><span className="text-stone-400">Must</span><strong>{mustScheduled}/{mustTotal}</strong></div>
+            <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '地点时长' : 'Place time'}</span><strong>{Math.round(scheduledMinutes / 60 * 10) / 10}h</strong></div>
+          </div>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-stone-700">{zh ? '区域分布' : 'Area load'}</h3>
+              <span className="text-[10px] text-stone-400">{areaCounts.length}</span>
+            </div>
+            <div className="mt-2 space-y-2">
+              {areaCounts.slice(0, 6).map((item) => (
+                <div key={item.area}>
+                  <div className="mb-1 flex justify-between text-[10px] text-stone-500"><span>{item.area}</span><span>{item.count}</span></div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-stone-700" style={{ width: `${Math.max(12, item.count / maxAreaCount * 100)}%` }} /></div>
+                </div>
+              ))}
+              {areaCounts.length === 0 ? <p className="text-[11px] leading-5 text-stone-400">{zh ? '采集时填写区域，后续 AI 才能更好地做空间聚类。' : 'Add areas while researching so future AI planning can cluster places spatially.'}</p> : null}
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-lg bg-stone-50 p-3 text-[11px] leading-5 text-stone-500 ring-1 ring-stone-200">
+            {zh
+              ? '当前版本只做人工编排：研究在 Google Maps 完成，Planner 负责候选池、按天排程、顺序调整和回到 Google Maps 执行。AI Proposal 将建立在这份结构化研究数据之上。'
+              : 'This version is deliberately manual-first: research in Google Maps, then pool → day → order → Google Maps. AI proposals will build on the same structured research data.'}
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+}
