@@ -10,11 +10,15 @@ export function ObjectDetailPanel({
   stored,
   onClose,
   onSave,
+  onDelete,
+  deleting,
   disabled,
 }: {
   stored: WYQDStoredEntity<WYQDObject>;
   onClose: () => void;
   onSave?: (updatedObject: WYQDObject, body: string) => Promise<void>;
+  onDelete?: () => Promise<void>;
+  deleting?: boolean;
   disabled?: boolean;
 }) {
   const { t } = useI18n();
@@ -25,16 +29,13 @@ export function ObjectDetailPanel({
   const timelineRows = getTimelineRows(object, t).filter((row) => row.value);
   const body = stored.body.trim();
 
-  // Enter edit mode: initialize body draft
   const handleStartEdit = () => {
     setBodyDraft(body);
     setIsEditing(true);
   };
 
-  // Save structured fields via ObjectComposer, then save body
   const handleComposerSubmit = async (updatedObject: WYQDObject) => {
     if (!onSave) return;
-    // Save structured fields + user-edited body
     await onSave(updatedObject, bodyDraft);
     setIsEditing(false);
   };
@@ -55,14 +56,13 @@ export function ObjectDetailPanel({
           onSubmit={handleComposerSubmit}
         />
 
-        {/* Markdown body — editable alongside structured fields */}
         <div className="mt-4 border-t border-stone-200 pt-4">
           <label className="text-xs font-medium text-stone-500">{t('markdownBody')}</label>
           <textarea
             value={bodyDraft}
             onChange={(e) => setBodyDraft(e.target.value)}
             rows={6}
-            className="mt-2 w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-xs leading-5 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 resize-none font-mono"
+            className="mt-2 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2.5 font-mono text-xs leading-5 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
             disabled={disabled}
           />
           <p className="mt-1 text-[11px] text-stone-400">{t('markdownBodyLabel')}</p>
@@ -85,20 +85,32 @@ export function ObjectDetailPanel({
           <h2 className="mt-1 break-words text-xl font-semibold tracking-tight text-stone-950">{object.title}</h2>
           <p className="mt-1 break-all text-xs text-stone-400">{stored.fileName}</p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
           {onSave ? (
             <button
               type="button"
               onClick={handleStartEdit}
               className="h-10 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800"
+              disabled={disabled || deleting}
             >
               {t('edit')}
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button
+              type="button"
+              onClick={() => void onDelete()}
+              className="h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={disabled || deleting}
+            >
+              {deleting ? '…' : t('delete')}
             </button>
           ) : null}
           <button
             type="button"
             onClick={onClose}
-            className="h-10 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
+            className="h-10 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={deleting}
           >
             {t('close')}
           </button>
