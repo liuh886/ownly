@@ -14,6 +14,9 @@ async function loadState(): Promise<OwnlyCaptureState> {
     trips: Array.isArray(state.trips) ? state.trips : [],
     activeTripId: typeof state.activeTripId === 'string' ? state.activeTripId : null,
     pendingPlaces: Array.isArray(state.pendingPlaces) ? state.pendingPlaces : [],
+    knownPlaceIds: state.knownPlaceIds && typeof state.knownPlaceIds === 'object'
+      ? state.knownPlaceIds as Record<string, string>
+      : {},
   };
 }
 
