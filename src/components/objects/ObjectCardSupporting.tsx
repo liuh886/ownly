@@ -155,6 +155,23 @@ export function ObjectCardSupporting({
             onSave={async (updatedObject, body) => {
               await onUpdate(stored.fileName, updatedObject, body);
             }}
+            onDelete={async () => {
+              const confirmed = await confirm({
+                title: t('delete'),
+                message: t('deleteConfirm').replace('{title}', object.title),
+                destructive: true,
+              });
+              if (!confirmed) return;
+
+              setDeletingFileName(stored.fileName);
+              try {
+                await onDelete(stored.fileName);
+                setSelectedFileName(null);
+              } finally {
+                setDeletingFileName(null);
+              }
+            }}
+            deleting={deletingFileName === stored.fileName}
             disabled={disabled}
           />
         </div>
@@ -262,27 +279,28 @@ export function ObjectCardSupporting({
                 </div>
               ) : null}
               
-              <div 
-                className="relative z-10 ml-2"
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-              >
-                <MoreActionsButton
-                  objectTitle={object.title}
-                  menuId={`object-actions-${stored.fileName}`}
-                  open={openActionMenuFileName === stored.fileName}
-                  onToggle={() =>
-                    setOpenActionMenuFileName((current) =>
-                      current === stored.fileName ? null : stored.fileName,
-                    )
-                  }
-                  t={t}
-                />
-                {openActionMenuFileName === stored.fileName ? (
-                  <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
-                    {canCancelRecurringCost(object) ? (
+              {canCancelRecurringCost(object) ? (
+                <div 
+                  className="relative z-10 ml-2"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <MoreActionsButton
+                    objectTitle={object.title}
+                    menuId={`object-actions-${stored.fileName}`}
+                    open={openActionMenuFileName === stored.fileName}
+                    onToggle={() =>
+                      setOpenActionMenuFileName((current) =>
+                        current === stored.fileName ? null : stored.fileName,
+                      )
+                    }
+                    t={t}
+                  />
+                  {openActionMenuFileName === stored.fileName ? (
+                    <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
                       <button
-                        type="button" role="menuitem"
+                        type="button"
+                        role="menuitem"
                         onClick={() => void (async () => {
                           const reason = await prompt({
                             title: t('cancelSubscription'),
@@ -313,149 +331,124 @@ export function ObjectCardSupporting({
                         <span>{t('cancelSubscription')}</span>
                         <span aria-hidden="true">🚫</span>
                       </button>
-                    ) : null}
-                    <button
-                      type="button" role="menuitem"
-                      onClick={() => void (async () => {
-                        const confirmed = await confirm({
-                          title: t('delete'),
-                          message: t('deleteConfirm').replace('{title}', object.title),
-                          destructive: true,
-                        });
-                        if (!confirmed) return;
-                        setOpenActionMenuFileName(null);
-                        setDeletingFileName(stored.fileName);
-                        try {
-                          await onDelete(stored.fileName);
-                        } finally {
-                          setDeletingFileName(null);
-                        }
-                      })()}
-                      className={`${menuItemClass} text-red-600 hover:bg-red-50`}
-                      disabled={disabled || deletingFileName === stored.fileName}
-                    >
-                      <span>{t('delete')}</span>
-                      <span aria-hidden="true">
-                        {deletingFileName === stored.fileName ? '…' : '🗑️'}
-                      </span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {!supportingActionLabel ? (
-                <div className="text-stone-300 ml-1">
+                <div className="ml-1 text-stone-300">
                   <span aria-hidden="true">→</span>
                 </div>
               ) : null}
             </div>
           </div>
 
-            {isReviewing ? (
-              <form
-                className="mt-4 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3"
-                onSubmit={(event) => void (async () => {
-                  event.preventDefault();
-                  const summary = reviewSummary.trim();
-                  if (!summary) return;
+          {isReviewing ? (
+            <form
+              className="mt-4 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3"
+              onSubmit={(event) => void (async () => {
+                event.preventDefault();
+                const summary = reviewSummary.trim();
+                if (!summary) return;
 
-                  setExitingFileName(stored.fileName);
-                  try {
-                    await onCreateObjectReview(
-                      stored.fileName,
-                      object,
-                      summary,
-                      {
-                        foodScore: parseScore(reviewFoodScore),
-                        sceneryScore: parseScore(reviewSceneryScore),
-                        experienceScore: parseScore(reviewExperienceScore),
-                      },
-                      stored.body,
-                    );
-                    cancelObjectReview();
-                  } finally {
-                    setExitingFileName(null);
-                  }
-                })()}
-              >
-                <div>
-                  <label className="block text-xs font-medium text-stone-500">
-                    {t('experienceReview')}
-                  </label>
-                  <textarea
-                    value={reviewSummary}
-                    onChange={(event) => setReviewSummary(event.target.value)}
-                    rows={3}
-                    placeholder={t('reviewSummaryPlaceholder')}
-                    className="mt-1.5 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
+                setExitingFileName(stored.fileName);
+                try {
+                  await onCreateObjectReview(
+                    stored.fileName,
+                    object,
+                    summary,
+                    {
+                      foodScore: parseScore(reviewFoodScore),
+                      sceneryScore: parseScore(reviewSceneryScore),
+                      experienceScore: parseScore(reviewExperienceScore),
+                    },
+                    stored.body,
+                  );
+                  cancelObjectReview();
+                } finally {
+                  setExitingFileName(null);
+                }
+              })()}
+            >
+              <div>
+                <label className="block text-xs font-medium text-stone-500">
+                  {t('experienceReview')}
+                </label>
+                <textarea
+                  value={reviewSummary}
+                  onChange={(event) => setReviewSummary(event.target.value)}
+                  rows={3}
+                  placeholder={t('reviewSummaryPlaceholder')}
+                  className="mt-1.5 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
+                  disabled={disabled || exitingFileName === stored.fileName}
+                />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-stone-500">{t('rankingLabel')}</div>
+                <div className="mt-1.5 grid grid-cols-3 gap-2">
+                  <input
+                    value={reviewFoodScore}
+                    onChange={(event) => setReviewFoodScore(event.target.value)}
+                    type="number"
+                    min="0"
+                    max="100"
+                    inputMode="numeric"
+                    placeholder={t('foodRank')}
+                    aria-label={t('foodRank')}
+                    className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
+                    disabled={disabled || exitingFileName === stored.fileName}
+                  />
+                  <input
+                    value={reviewSceneryScore}
+                    onChange={(event) => setReviewSceneryScore(event.target.value)}
+                    type="number"
+                    min="0"
+                    max="100"
+                    inputMode="numeric"
+                    placeholder={t('sceneryRank')}
+                    aria-label={t('sceneryRank')}
+                    className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
+                    disabled={disabled || exitingFileName === stored.fileName}
+                  />
+                  <input
+                    value={reviewExperienceScore}
+                    onChange={(event) => setReviewExperienceScore(event.target.value)}
+                    type="number"
+                    min="0"
+                    max="100"
+                    inputMode="numeric"
+                    placeholder={t('experienceRank')}
+                    aria-label={t('experienceRank')}
+                    className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
                     disabled={disabled || exitingFileName === stored.fileName}
                   />
                 </div>
-                <div>
-                  <div className="text-xs font-medium text-stone-500">{t('rankingLabel')}</div>
-                  <div className="mt-1.5 grid grid-cols-3 gap-2">
-                    <input
-                      value={reviewFoodScore}
-                      onChange={(event) => setReviewFoodScore(event.target.value)}
-                      type="number"
-                      min="0"
-                      max="100"
-                      inputMode="numeric"
-                      placeholder={t('foodRank')}
-                      aria-label={t('foodRank')}
-                      className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
-                      disabled={disabled || exitingFileName === stored.fileName}
-                    />
-                    <input
-                      value={reviewSceneryScore}
-                      onChange={(event) => setReviewSceneryScore(event.target.value)}
-                      type="number"
-                      min="0"
-                      max="100"
-                      inputMode="numeric"
-                      placeholder={t('sceneryRank')}
-                      aria-label={t('sceneryRank')}
-                      className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
-                      disabled={disabled || exitingFileName === stored.fileName}
-                    />
-                    <input
-                      value={reviewExperienceScore}
-                      onChange={(event) => setReviewExperienceScore(event.target.value)}
-                      type="number"
-                      min="0"
-                      max="100"
-                      inputMode="numeric"
-                      placeholder={t('experienceRank')}
-                      aria-label={t('experienceRank')}
-                      className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-100"
-                      disabled={disabled || exitingFileName === stored.fileName}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={cancelObjectReview}
-                    className="rounded-md border border-stone-200 bg-white px-2 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
-                    disabled={exitingFileName === stored.fileName}
-                  >
-                    {t('cancel')}
-                  </button>
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
-                    disabled={
-                      disabled ||
-                      exitingFileName === stored.fileName ||
-                      reviewSummary.trim().length === 0
-                    }
-                  >
-                    {exitingFileName === stored.fileName ? t('writing') : t('writeInReview')}
-                  </button>
-                </div>
-              </form>
-            ) : null}
-          </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={cancelObjectReview}
+                  className="rounded-md border border-stone-200 bg-white px-2 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
+                  disabled={exitingFileName === stored.fileName}
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                  disabled={
+                    disabled ||
+                    exitingFileName === stored.fileName ||
+                    reviewSummary.trim().length === 0
+                  }
+                >
+                  {exitingFileName === stored.fileName ? t('writing') : t('writeInReview')}
+                </button>
+              </div>
+            </form>
+          ) : null}
+        </div>
       )}
     </article>
   );
