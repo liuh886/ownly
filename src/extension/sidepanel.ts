@@ -96,6 +96,9 @@ async function loadState(): Promise<void> {
       trips: Array.isArray(saved.trips) ? saved.trips : [],
       activeTripId: typeof saved.activeTripId === 'string' ? saved.activeTripId : null,
       pendingPlaces: Array.isArray(saved.pendingPlaces) ? saved.pendingPlaces : [],
+      knownPlaceIds: saved.knownPlaceIds && typeof saved.knownPlaceIds === 'object'
+        ? saved.knownPlaceIds as Record<string, string>
+        : {},
     };
   }
 }
@@ -216,13 +219,13 @@ el.captureForm.addEventListener('submit', (event) => {
   const duration = Number(el.duration.value);
   const rating = Number(el.rating.value);
   const now = new Date().toISOString();
-  const existing = state.pendingPlaces.find(
-    (place) => place.trip_id === state.activeTripId && place.source_url === currentPlace?.sourceUrl,
-  );
+  const placeKey = `${state.activeTripId}::${currentPlace.sourceUrl}`;
+  const stableId = state.knownPlaceIds[placeKey] ?? crypto.randomUUID();
+  const existing = state.pendingPlaces.find((place) => place.id === stableId);
   const place: PlannerTripPlace = {
     schema_version: '0.1',
     type: 'trip_place',
-    id: existing?.id ?? crypto.randomUUID(),
+    id: stableId,
     trip_id: state.activeTripId,
     title: currentPlace.title,
     source_provider: 'google_maps',
@@ -248,6 +251,7 @@ el.captureForm.addEventListener('submit', (event) => {
 
   state = {
     ...state,
+    knownPlaceIds: { ...state.knownPlaceIds, [placeKey]: place.id },
     pendingPlaces: [...state.pendingPlaces.filter((item) => item.id !== place.id), place],
   };
   void saveState().then(() => {
