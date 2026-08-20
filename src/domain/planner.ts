@@ -138,6 +138,33 @@ export function sortPlannerPlaces(places: PlannerTripPlace[]): PlannerTripPlace[
   });
 }
 
+export function mergeCapturedPlaceResearch(
+  existing: PlannerTripPlace,
+  captured: PlannerTripPlace,
+): PlannerTripPlace {
+  return {
+    ...existing,
+    title: captured.title,
+    source_provider: captured.source_provider,
+    source_url: captured.source_url,
+    source_place_id: captured.source_place_id,
+    kind: captured.kind,
+    area: captured.area,
+    priority: captured.priority,
+    tags: captured.tags,
+    why: captured.why,
+    signals: captured.signals,
+    risks: captured.risks,
+    notes: captured.notes,
+    observed_rating: captured.observed_rating,
+    observed_price: captured.observed_price,
+    observed_at: captured.observed_at,
+    preferred_window: captured.preferred_window,
+    duration_minutes: captured.duration_minutes,
+    updated_at: captured.updated_at,
+  };
+}
+
 export function getTripAreaCounts(places: PlannerTripPlace[]): Array<{ area: string; count: number }> {
   const counts = new Map<string, number>();
   for (const place of places) {
