@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ownly Capture</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <strong>Ownly Capture</strong>
+        <p>Google Maps research → Ownly Planner</p>
+      </div>
+      <span id="pending" class="counter">0 pending</span>
+    </header>
+
+    <section class="panel">
+      <label class="label" for="tripSelect">Active trip</label>
+      <select id="tripSelect"></select>
+      <details class="new-trip" open>
+        <summary>Create trip</summary>
+        <form id="tripForm" class="stack">
+          <label>Title<input id="tripTitle" required placeholder="Thailand 2026" /></label>
+          <div class="two"><label>Start<input id="tripStart" type="date" required /></label><label>End<input id="tripEnd" type="date" required /></label></div>
+          <label>Destinations<input id="tripDestinations" placeholder="Bangkok, Chiang Mai" /></label>
+          <div class="two"><label>Currency<input id="tripCurrency" value="CNY" /></label><label>Transport<select id="tripTransport"><option value="transit">Transit</option><option value="walking">Walking</option><option value="driving">Driving</option><option value="bicycling">Bicycling</option></select></label></div>
+          <button class="secondary" type="submit">Create & activate</button>
+        </form>
+      </details>
+    </section>
+
+    <section class="panel current">
+      <div class="row"><span class="label">Current place</span><button id="refreshPlace" class="link" type="button">Refresh</button></div>
+      <h1 id="placeTitle">Open a place in Google Maps</h1>
+      <p id="placeUrl" class="url">Ownly Capture only saves a place after you choose it.</p>
+    </section>
+
+    <form id="captureForm" class="panel stack">
+      <div class="two"><label>Kind<select id="kind"><option value="attraction">Attraction</option><option value="food">Food</option><option value="cafe">Cafe</option><option value="stay">Stay</option><option value="shopping">Shopping</option><option value="transit">Transit</option><option value="experience">Experience</option><option value="other">Other</option></select></label><label>Priority<select id="priority"><option value="must">Must</option><option value="want" selected>Want</option><option value="optional">Optional</option></select></label></div>
+      <label>Area<input id="area" placeholder="Asakusa / Nimman / Old City" /></label>
+      <div class="two"><label>Duration (min)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label><label>Preferred window<input id="window" placeholder="early morning" /></label></div>
+      <div class="two"><label>Observed rating<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label><label>Observed price<input id="price" placeholder="~THB 900 / night" /></label></div>
+      <label>Why it matters<textarea id="why" rows="2" placeholder="Why this survived your research"></textarea></label>
+      <label>Research signals<input id="signals" placeholder="sunset, quiet morning, strong breakfast" /></label>
+      <label>Risks / caveats<input id="risks" placeholder="weekend queue, rain sensitive" /></label>
+      <label>Personal note<textarea id="notes" rows="2" placeholder="Your own judgment, not a copy of Google reviews"></textarea></label>
+      <button class="primary" type="submit">Add to research pool</button>
+    </form>
+
+    <p id="status" class="status" aria-live="polite">Ready.</p>
+  </main>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
