@@ -4,13 +4,17 @@ import { motion } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
 
-export type AppTab = 'home' | 'objects' | 'accounts' | 'reviews';
+export type AppTab = 'home' | 'objects' | 'accounts' | 'reviews' | 'planner';
 
-const tabs: { id: AppTab; labelKey: WYQDTranslationKey }[] = [
+const tabs: Array<
+  | { id: Exclude<AppTab, 'planner'>; labelKey: WYQDTranslationKey }
+  | { id: 'planner'; labelKey: null }
+> = [
   { id: 'home', labelKey: 'tabHome' },
   { id: 'objects', labelKey: 'tabObjects' },
   { id: 'accounts', labelKey: 'tabAccounts' },
   { id: 'reviews', labelKey: 'tabReviews' },
+  { id: 'planner', labelKey: null },
 ];
 
 interface BottomNavProps {
@@ -19,12 +23,13 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ activeTab, onChange }: BottomNavProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   return (
     <nav className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/90 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl">
-      <div className="relative mx-auto grid max-w-3xl grid-cols-4 gap-1 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-200">
+      <div className="relative mx-auto grid max-w-3xl grid-cols-5 gap-1 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-200">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
+          const label = tab.id === 'planner' ? (language === 'zh' ? '规划' : 'Planner') : t(tab.labelKey);
           return (
             <button
               key={tab.id}
@@ -41,11 +46,11 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
                 />
               )}
               <span
-                className={`relative z-10 text-xs font-medium tracking-tight transition-colors duration-300 ${
+                className={`relative z-10 text-[11px] font-medium tracking-tight transition-colors duration-300 sm:text-xs ${
                   isActive ? 'text-white' : 'text-stone-500 hover:text-stone-700'
                 }`}
               >
-                {t(tab.labelKey)}
+                {label}
               </span>
             </button>
           );
