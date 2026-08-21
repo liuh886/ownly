@@ -403,6 +403,59 @@ function extractGoogleMapsListId(): string | null {
 let cachedEntityList: DetectedSavedList | null = null;
 let lastScannedListId: string | null = null;
 
+async function fetchGoogleMapsEntityList(listId: string): Promise<DetectedSavedList | null> {
+  try {
+    const fetchUrl = `/maps/preview/entitylist/getlist?authuser=0&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
+    const res = await fetch(fetchUrl);
+    if (res.ok) {
+      const raw = await res.text();
+      const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
+      const data = JSON.parse(cleanJson);
+      const listName = data[0]?.[4] || 'Google Maps 收藏列表';
+      const rawItems = data[0]?.[8];
+      if (Array.isArray(rawItems)) {
+        const places: CurrentResearchPlace[] = [];
+        for (const item of rawItems) {
+          const placeInfo = item[1];
+          const title = item[2] || (placeInfo && placeInfo[2]);
+          if (!title) continue;
+
+          const address = placeInfo ? placeInfo[4] : undefined;
+          const userNote = item[3] || undefined;
+          const lat = placeInfo?.[5]?.[2];
+          const lng = placeInfo?.[5]?.[3];
+          const sourceUrl = (lat && lng)
+            ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`
+            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+
+          places.push({
+            title: String(title).trim(),
+            sourceUrl,
+            sourceProvider: 'google_maps',
+            address,
+            userNote,
+            summary: userNote,
+            category: 'Google Maps 收藏地点',
+            detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
+          });
+        }
+
+        if (places.length > 0) {
+          return {
+            listName,
+            listUrl: window.location.href,
+            detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
+            places,
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Entitylist direct fetch failed:', e);
+  }
+  return null;
+}
+
 async function resolveGoogleMapsList(): Promise<DetectedSavedList | null> {
   const listId = extractGoogleMapsListId();
   if (listId && listId === lastScannedListId && cachedEntityList) {
@@ -410,56 +463,11 @@ async function resolveGoogleMapsList(): Promise<DetectedSavedList | null> {
   }
 
   if (listId) {
-    try {
-      const fetchUrl = `/maps/preview/entitylist/getlist?authuser=0&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
-      const res = await fetch(fetchUrl);
-      if (res.ok) {
-        const raw = await res.text();
-        const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
-        const data = JSON.parse(cleanJson);
-        const listName = data[0]?.[4] || 'Google Maps 收藏列表';
-        const rawItems = data[0]?.[8];
-        if (Array.isArray(rawItems)) {
-          const places: CurrentResearchPlace[] = [];
-          for (const item of rawItems) {
-            const placeInfo = item[1];
-            const title = item[2] || (placeInfo && placeInfo[2]);
-            if (!title) continue;
-
-            const address = placeInfo ? placeInfo[4] : undefined;
-            const userNote = item[3] || undefined;
-            const lat = placeInfo?.[5]?.[2];
-            const lng = placeInfo?.[5]?.[3];
-            const sourceUrl = (lat && lng)
-              ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`
-              : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
-
-            places.push({
-              title: String(title).trim(),
-              sourceUrl,
-              sourceProvider: 'google_maps',
-              address,
-              userNote,
-              summary: userNote,
-              category: 'Google Maps 收藏地点',
-              detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
-            });
-          }
-
-          if (places.length > 0) {
-            cachedEntityList = {
-              listName,
-              listUrl: window.location.href,
-              detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
-              places,
-            };
-            lastScannedListId = listId;
-            return cachedEntityList;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Entitylist direct fetch failed:', e);
+    const entityList = await fetchGoogleMapsEntityList(listId);
+    if (entityList) {
+      cachedEntityList = entityList;
+      lastScannedListId = listId;
+      return cachedEntityList;
     }
   }
 
@@ -585,16 +593,84 @@ function currentPlace(): CurrentResearchPlace | null {
   return extractGoogleMapsPlace();
 }
 
+export interface SavedListCardSummary {
+  listId?: string;
+  listName: string;
+  count?: number;
+  url?: string;
+}
+
+function scanAllSavedListsOnPage(): SavedListCardSummary[] {
+  const listsMap = new Map<string, SavedListCardSummary>();
+
+  // Look for any elements that represent a saved list
+  const listElements = document.querySelectorAll<HTMLElement>(
+    'a[href*="/placelists/list/"], a[href*="!2s"], div.THL29e, div.jANrlb, div.Nv2PK, div[role="listitem"], div.m6QErb > div, div[role="article"]'
+  );
+
+  for (const el of Array.from(listElements)) {
+    const anchor = el instanceof HTMLAnchorElement ? el : el.querySelector<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!2s"], a');
+    const href = anchor?.href || '';
+    const listIdMatch = href.match(/!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/);
+    const listId = listIdMatch?.[1] || listIdMatch?.[2];
+
+    const titleEl = el.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, .OSrXXb, [role="heading"], h2, h3, div.fontBodyLarge, div.fontHeadlineMedium');
+    const title = titleEl?.textContent?.trim() || anchor?.getAttribute('aria-label')?.trim() || '';
+    if (!title || title.length < 2 || isGenericNavigationTitle(title)) continue;
+
+    // Check count (e.g. "19 places" or "19 个地点")
+    const countText = el.textContent || '';
+    const countMatch = /(\d+)\s*(places|个地点|个地点|项|items)/i.exec(countText);
+    const count = countMatch ? parseInt(countMatch[1], 10) : undefined;
+
+    const key = (listId || title).toLowerCase();
+    if (!listsMap.has(key)) {
+      listsMap.set(key, {
+        listId,
+        listName: title,
+        count,
+        url: href || window.location.href,
+      });
+    }
+  }
+
+  return Array.from(listsMap.values());
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const msgType = (message as { type?: string }).type;
   if (msgType === 'OWNLY_GET_CURRENT_PLACE') {
     void (async () => {
-      const savedList = await resolveGoogleMapsList();
+      let savedList = await resolveGoogleMapsList();
+      const allLists = scanAllSavedListsOnPage();
+      const targetTags = ((message as { targetTags?: string[] }).targetTags || []).map((t) => t.trim().toLowerCase());
+
+      // If page has multiple lists and no single list is currently open, auto-fetch the list matching the target trip tag
+      if ((!savedList || savedList.places.length === 0) && targetTags.length > 0 && allLists.length > 0) {
+        const matched = allLists.find((l) => {
+          const name = l.listName.toLowerCase();
+          return targetTags.some((t) => t && (name === t || name.includes(t) || t.includes(name)));
+        });
+        if (matched?.listId) {
+          savedList = await fetchGoogleMapsEntityList(matched.listId);
+        }
+      }
+
       const place = currentPlace();
-      sendResponse({ place, savedList });
+      sendResponse({ place, savedList, allLists });
     })();
     return true;
+  }
+  if (msgType === 'OWNLY_FETCH_LIST_BY_ID') {
+    const listId = (message as { listId?: string }).listId;
+    if (listId) {
+      void (async () => {
+        const listData = await fetchGoogleMapsEntityList(listId);
+        sendResponse({ savedList: listData });
+      })();
+      return true;
+    }
   }
   if (msgType === 'OWNLY_GET_VISIBLE_LIST_PLACES') {
     void (async () => {

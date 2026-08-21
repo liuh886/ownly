@@ -780,8 +780,11 @@ async function readCurrentPlace(): Promise<void> {
   let placeResp: PlaceMessageResponse | null = null;
   let listResp: ListMessageResponse | null = null;
 
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  const targetTags = (activeTrip?.tags || []).filter(Boolean);
+
   try {
-    placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' })) as PlaceMessageResponse;
+    placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags })) as PlaceMessageResponse;
     listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' })) as ListMessageResponse;
   } catch {
     // If message failed (e.g. content script was disconnected after extension reload), dynamically inject it
@@ -793,7 +796,7 @@ async function readCurrentPlace(): Promise<void> {
           files: ['content.js'],
         });
         await new Promise((r) => setTimeout(r, 150));
-        placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' })) as PlaceMessageResponse;
+        placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags })) as PlaceMessageResponse;
         listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' })) as ListMessageResponse;
       }
     } catch (err) {
@@ -1318,56 +1321,136 @@ el.btnSyncSavedListAll.addEventListener('click', () => {
   });
 });
 
+async function resolveGoogleMapsListByUrl(rawUrl: string): Promise<PlannerTripPlace[]> {
+  try {
+    let finalUrl = rawUrl;
+    if (rawUrl.includes('maps.app.goo.gl') || rawUrl.includes('goo.gl/maps')) {
+      try {
+        const res = await fetch(rawUrl, { redirect: 'follow' });
+        finalUrl = res.url;
+      } catch {}
+    }
+    const listIdMatch = /!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(finalUrl);
+    const listId = listIdMatch?.[1] || listIdMatch?.[2];
+    if (listId) {
+      const fetchUrl = `https://www.google.com/maps/preview/entitylist/getlist?authuser=0&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
+      const res = await fetch(fetchUrl);
+      if (res.ok) {
+        const raw = await res.text();
+        const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
+        const data = JSON.parse(cleanJson);
+        const listName = data[0]?.[4] || 'Google Maps 收藏列表';
+        const rawItems = data[0]?.[8];
+        if (Array.isArray(rawItems)) {
+          const now = new Date().toISOString();
+          const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+          const combinedTags = Array.from(new Set([...(activeTrip?.tags ?? []), listName]));
+          const places: PlannerTripPlace[] = [];
+          for (const item of rawItems) {
+            const placeInfo = item[1];
+            const title = item[2] || (placeInfo && placeInfo[2]);
+            if (!title) continue;
+            const address = placeInfo ? placeInfo[4] : undefined;
+            const userNote = item[3] || undefined;
+            const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+            places.push({
+              schema_version: '0.1',
+              type: 'trip_place',
+              id: crypto.randomUUID(),
+              trip_id: state.activeTripId!,
+              title: String(title).trim(),
+              source_provider: 'google_maps',
+              source_url: sourceUrl,
+              kind: inferPlaceKind(undefined),
+              priority: 'want',
+              tags: combinedTags,
+              why: userNote,
+              signals: [],
+              risks: [],
+              notes: userNote,
+              address,
+              observed_at: today(),
+              reservation_status: 'none',
+              state: 'candidate',
+              created_at: now,
+              updated_at: now,
+            });
+          }
+          return places;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not resolve google maps list link:', err);
+  }
+  return [];
+}
+
 // Bulk Text / Links Parser
 el.btnParseBulkImport.addEventListener('click', () => {
-  const dict = t();
-  if (!state.activeTripId) {
-    setStatus(dict.tripRequiredError, 'error');
-    return;
-  }
-  const text = el.bulkInputText.value.trim();
-  if (!text) {
-    setStatus(dict.bulkImportEmpty, 'error');
-    return;
-  }
+  void (async () => {
+    const dict = t();
+    if (!state.activeTripId) {
+      setStatus(dict.tripRequiredError, 'error');
+      return;
+    }
+    const text = el.bulkInputText.value.trim();
+    if (!text) {
+      setStatus(dict.bulkImportEmpty, 'error');
+      return;
+    }
 
-  const lines = text.split(/[\n;]+/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length === 0) return;
+    const lines = text.split(/[\n;]+/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return;
 
-  const now = new Date().toISOString();
-  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
-  const updatedKnown = { ...state.knownPlaceIds };
-  const newPlaces: PlannerTripPlace[] = [];
+    setStatus('正在解析地点与列表链接…');
+    const now = new Date().toISOString();
+    const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+    const updatedKnown = { ...state.knownPlaceIds };
+    const newPlaces: PlannerTripPlace[] = [];
 
-  for (const line of lines) {
-    const isUrl = /^https?:\/\//i.test(line);
-    const sourceUrl = isUrl ? line : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(line)}`;
-    const title = isUrl ? (line.match(/\/maps\/place\/([^/?#]+)/)?.[1]?.replace(/\+/g, ' ') || line) : line;
-    const placeKey = `${state.activeTripId}::${sourceUrl}`;
-    const stableId = updatedKnown[placeKey] ?? crypto.randomUUID();
-    updatedKnown[placeKey] = stableId;
+    for (const line of lines) {
+      const isUrl = /^https?:\/\//i.test(line);
+      if (isUrl && (line.includes('maps.app.goo.gl') || line.includes('!2s') || line.includes('placelists/list'))) {
+        const listItems = await resolveGoogleMapsListByUrl(line);
+        if (listItems.length > 0) {
+          for (const item of listItems) {
+            const placeKey = `${state.activeTripId}::${item.source_url}`;
+            item.id = updatedKnown[placeKey] ?? crypto.randomUUID();
+            updatedKnown[placeKey] = item.id;
+            newPlaces.push(item);
+          }
+          continue;
+        }
+      }
 
-    const place: PlannerTripPlace = {
-      schema_version: '0.1',
-      type: 'trip_place',
-      id: stableId,
-      trip_id: state.activeTripId,
-      title: decodeURIComponent(title),
-      source_provider: inferSourceProvider(sourceUrl),
-      source_url: sourceUrl,
-      kind: 'attraction',
-      priority: 'want',
-      tags: activeTrip?.tags ?? [],
-      signals: [],
-      risks: [],
-      observed_at: today(),
-      reservation_status: 'none',
-      state: 'candidate',
-      created_at: now,
-      updated_at: now,
-    };
-    newPlaces.push(place);
-  }
+      const sourceUrl = isUrl ? line : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(line)}`;
+      const title = isUrl ? (line.match(/\/maps\/place\/([^/?#]+)/)?.[1]?.replace(/\+/g, ' ') || line) : line;
+      const placeKey = `${state.activeTripId}::${sourceUrl}`;
+      const stableId = updatedKnown[placeKey] ?? crypto.randomUUID();
+      updatedKnown[placeKey] = stableId;
+
+      const place: PlannerTripPlace = {
+        schema_version: '0.1',
+        type: 'trip_place',
+        id: stableId,
+        trip_id: state.activeTripId,
+        title: decodeURIComponent(title),
+        source_provider: inferSourceProvider(sourceUrl),
+        source_url: sourceUrl,
+        kind: 'attraction',
+        priority: 'want',
+        tags: activeTrip?.tags ?? [],
+        signals: [],
+        risks: [],
+        observed_at: today(),
+        reservation_status: 'none',
+        state: 'candidate',
+        created_at: now,
+        updated_at: now,
+      };
+      newPlaces.push(place);
+    }
 
   const existingIds = new Set(newPlaces.map((p) => p.id));
   state = {
@@ -1376,10 +1459,11 @@ el.btnParseBulkImport.addEventListener('click', () => {
     pendingPlaces: [...state.pendingPlaces.filter((p) => !existingIds.has(p.id)), ...newPlaces],
   };
 
-  void saveState().then(() => {
-    el.bulkInputText.value = '';
-    setStatus(dict.bulkImportSuccess(newPlaces.length), 'success');
-  });
+    void saveState().then(() => {
+      el.bulkInputText.value = '';
+      setStatus(dict.bulkImportSuccess(newPlaces.length), 'success');
+    });
+  })();
 });
 
 el.btnToggleSelectAll.addEventListener('click', () => {
