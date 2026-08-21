@@ -28,9 +28,11 @@
     ".next",
     "src/app/**",
     "src/components/data-safety/**",
+    "src/components/planner/**",
     "src/components/shells/WebShell.tsx",
     "src/services/BrowserDataPortabilityService.ts",
     "src/services/BrowserOwnlyTextFileAdapter.ts",
-    "src/services/ObsidianFileSystemService.ts"
+    "src/services/ObsidianFileSystemService.ts",
+    "src/services/PlannerRepository.ts"
   ]
 }
