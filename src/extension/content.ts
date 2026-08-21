@@ -108,70 +108,65 @@ function extractWebsite(): string | undefined {
   return undefined;
 }
 
-export function detectCurrencyFromContext(sourceUrl: string, address?: string, priceText?: string): string | undefined {
-  const combined = `${sourceUrl} ${address || ''} ${priceText || ''} ${document.title || ''} ${document.documentElement.lang || ''}`.toLowerCase();
+export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): string | undefined {
+  // 1. Gather all actual price strings rendered on the user's active page
+  const pricesToScan: string[] = [];
+  if (priceText) pricesToScan.push(priceText);
 
-  // 1. Explicit symbols and codes
-  if (priceText) {
-    if (/฿|thb|บาท/i.test(priceText)) return 'THB';
-    if (/nt\$|twd|新台币/i.test(priceText)) return 'TWD';
-    if (/hk\$|hkd|港币/i.test(priceText)) return 'HKD';
-    if (/₩|krw|원/i.test(priceText)) return 'KRW';
-    if (/s\$|sgd/i.test(priceText)) return 'SGD';
-    if (/rm|myr/i.test(priceText)) return 'MYR';
-    if (/₫|vnd|đ/i.test(priceText)) return 'VND';
-    if (/€|eur/i.test(priceText)) return 'EUR';
-    if (/£|gbp/i.test(priceText)) return 'GBP';
+  // Scan visible price elements on the page (place card, hotels, menu, reviews, footer)
+  const priceElements = document.querySelectorAll<HTMLElement>(
+    'span[aria-label*="价格"], span[aria-label*="Price"], span.fontBodyMedium, div.fontHeadlineSmall, span[class*="price"], div[aria-label*="per night"], div[aria-label*="每晚"]'
+  );
+  for (const el of Array.from(priceElements).slice(0, 15)) {
+    const text = (el.getAttribute('aria-label') || el.textContent || '').trim();
+    if (text && text.length < 50 && /[\$¥฿€£₩₫₹]|\b(sgd|hkd|twd|thb|usd|jpy|cny|eur|gbp|aud|cad|krw|vnd|myr|chf|inr)\b/i.test(text)) {
+      pricesToScan.push(text);
+    }
   }
 
-  // 2. Region / TLD / Address Analysis
-  if (/google\.co\.th|google\.th|thailand|bangkok|chiang mai|phuket|pattaya|泰国|曼谷|清迈|普吉|芭提雅/i.test(combined)) {
-    return 'THB';
-  }
-  if (/google\.co\.jp|google\.jp|tabelog\.com|japan|tokyo|kyoto|osaka|hokkaido|okinawa|日本|东京|京都|大阪|北海道|冲绳/i.test(combined)) {
-    return 'JPY';
-  }
-  if (/google\.com\.tw|google\.tw|taiwan|taipei|kaohsiung|taichung|台湾|台北|高雄|台中/i.test(combined)) {
-    return 'TWD';
-  }
-  if (/google\.com\.hk|google\.hk|hong kong|kowloon|香港|九龙/i.test(combined)) {
-    return 'HKD';
-  }
-  if (/google\.co\.kr|google\.kr|korea|seoul|busan|韩国|首尔|釜山/i.test(combined)) {
-    return 'KRW';
-  }
-  if (/google\.com\.sg|google\.sg|singapore|新加坡/i.test(combined)) {
-    return 'SGD';
-  }
-  if (/google\.com\.my|malaysia|kuala lumpur|penang|马来西亚|吉隆坡|槟城/i.test(combined)) {
-    return 'MYR';
-  }
-  if (/google\.com\.vn|vietnam|hanoi|ho chi minh|da nang|越南|河内|胡志明|岘港/i.test(combined)) {
-    return 'VND';
-  }
-  if (/google\.co\.uk|google\.uk|united kingdom|london|edinburgh|英国|伦敦|爱丁堡/i.test(combined)) {
-    return 'GBP';
-  }
-  if (/google\.fr|google\.de|google\.it|google\.es|france|germany|italy|spain|paris|berlin|rome|madrid|barcelona|欧洲|法国|德国|意大利|西班牙|巴黎/i.test(combined)) {
-    return 'EUR';
-  }
-  if (/google\.com\.au|australia|sydney|melbourne|澳大利亚|悉尼|墨尔本/i.test(combined)) {
-    return 'AUD';
-  }
-  if (/google\.ca|canada|toronto|vancouver|加拿大|多伦多|温哥华/i.test(combined)) {
-    return 'CAD';
-  }
-  if (/china|beijing|shanghai|guangzhou|shenzhen|chengdu|hangzhou|中国|北京|上海|广州|深圳|成都|杭州/i.test(combined)) {
+  const combinedPrices = pricesToScan.join(' ');
+
+  // 2. High-precision explicit currency symbol matching from what is literally on screen
+  if (/s\$|\bsgd\b/i.test(combinedPrices)) return 'SGD';
+  if (/hk\$|\bhkd\b/i.test(combinedPrices)) return 'HKD';
+  if (/nt\$|\btwd\b|\bntd\b|新台币/i.test(combinedPrices)) return 'TWD';
+  if (/au\$|a\$|\baud\b/i.test(combinedPrices)) return 'AUD';
+  if (/ca\$|c\$|\bcad\b/i.test(combinedPrices)) return 'CAD';
+  if (/nz\$|\bnzd\b/i.test(combinedPrices)) return 'NZD';
+  if (/us\$|\busd\b/i.test(combinedPrices)) return 'USD';
+  if (/฿|\bthb\b|บาท/i.test(combinedPrices)) return 'THB';
+  if (/₩|\bkrw\b|원/i.test(combinedPrices)) return 'KRW';
+  if (/\brm\b|\bmyr\b/i.test(combinedPrices)) return 'MYR';
+  if (/₫|\bvnd\b|đ/i.test(combinedPrices)) return 'VND';
+  if (/€|\beur\b/i.test(combinedPrices)) return 'EUR';
+  if (/£|\bgbp\b/i.test(combinedPrices)) return 'GBP';
+  if (/₹|\binr\b/i.test(combinedPrices)) return 'INR';
+  if (/\bchf\b/i.test(combinedPrices)) return 'CHF';
+  if (/cn¥|\brmb\b|\bcny\b|人民币/i.test(combinedPrices)) return 'CNY';
+  if (/jp¥|\bjpy\b|円/i.test(combinedPrices)) return 'JPY';
+
+  // 3. Domain / TLD the user's browser is currently connected to (e.g. google.com.sg)
+  try {
+    const urlObj = new URL(sourceUrl || window.location.href);
+    const host = urlObj.hostname.toLowerCase();
+    if (host.endsWith('.com.sg') || host.endsWith('.sg')) return 'SGD';
+    if (host.endsWith('.com.hk') || host.endsWith('.hk')) return 'HKD';
+    if (host.endsWith('.com.tw') || host.endsWith('.tw')) return 'TWD';
+    if (host.endsWith('.co.jp') || host.endsWith('.jp')) return 'JPY';
+    if (host.endsWith('.co.th') || host.endsWith('.th')) return 'THB';
+    if (host.endsWith('.co.uk') || host.endsWith('.uk')) return 'GBP';
+    if (host.endsWith('.com.au') || host.endsWith('.au')) return 'AUD';
+    if (host.endsWith('.ca')) return 'CAD';
+    if (host.endsWith('.fr') || host.endsWith('.de') || host.endsWith('.it') || host.endsWith('.es') || host.endsWith('.nl')) return 'EUR';
+  } catch {}
+
+  // 4. Ambiguous symbols: bare ¥ or $
+  if (combinedPrices.includes('¥')) {
+    if (/円/i.test(document.title) || document.documentElement.lang.startsWith('ja')) return 'JPY';
     return 'CNY';
   }
-  if (/united states|usa|new york|los angeles|san francisco|california|美国|纽约|旧金山|洛杉矶/i.test(combined)) {
+  if (combinedPrices.includes('$')) {
     return 'USD';
-  }
-
-  // 3. Fallback price symbol interpretation
-  if (priceText) {
-    if (/¥|円/i.test(priceText)) return 'JPY';
-    if (/\$|usd/i.test(priceText)) return 'USD';
   }
 
   return undefined;
@@ -194,7 +189,7 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
 
   const priceLevel = extractPrice();
   const address = extractAddress();
-  const detectedCurrency = detectCurrencyFromContext(sourceUrl, address, priceLevel);
+  const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel);
 
   return {
     title,
@@ -259,7 +254,7 @@ function detectGoogleMapsSavedList(): DetectedSavedList | null {
     const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea')?.textContent?.trim();
 
     const placeKey = sourceUrl.split('?')[0];
-    const itemCurrency = detectCurrencyFromContext(sourceUrl, address, undefined);
+    const itemCurrency = detectCurrencyFromPage(sourceUrl, undefined);
     if (!placesMap.has(placeKey)) {
       placesMap.set(placeKey, {
         title,
@@ -277,7 +272,7 @@ function detectGoogleMapsSavedList(): DetectedSavedList | null {
   const places = Array.from(placesMap.values());
   if (!listName && places.length === 0) return null;
 
-  const listCurrency = detectCurrencyFromContext(window.location.href, places[0]?.address, undefined);
+  const listCurrency = detectCurrencyFromPage(window.location.href, undefined);
 
   return {
     listName: listName || 'Google Maps 收藏列表',
