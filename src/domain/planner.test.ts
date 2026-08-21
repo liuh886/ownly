@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGoogleMapsDirectionsSegments,
+  inferPlaceKind,
   listTripDates,
   mergeCapturedPlaceResearch,
+  normalizeDelimitedText,
   type PlannerTripPlace,
 } from './planner';
 
@@ -83,5 +85,24 @@ describe('Ownly Planner domain', () => {
     expect(merged.sort_order).toBe(2);
     expect(merged.locked).toBe(true);
     expect(merged.reservation_status).toBe('booked');
+  });
+
+  it('infers place kind from Chinese and English categories', () => {
+    expect(inferPlaceKind('日本料理店')).toBe('food');
+    expect(inferPlaceKind('Coffee Shop')).toBe('cafe');
+    expect(inferPlaceKind('Luxury Hotel & Resort')).toBe('stay');
+    expect(inferPlaceKind('Outlet Shopping Mall')).toBe('shopping');
+    expect(inferPlaceKind('Subway Station')).toBe('transit');
+    expect(inferPlaceKind('Historical Temple & Museum')).toBe('attraction');
+    expect(inferPlaceKind(undefined)).toBe('attraction');
+  });
+
+  it('normalizes tags and delimited values cleanly', () => {
+    expect(normalizeDelimitedText('Tokyo 2026, 美食清单， Want to go ; 浅草')).toEqual([
+      'Tokyo 2026',
+      '美食清单',
+      'Want to go',
+      '浅草',
+    ]);
   });
 });

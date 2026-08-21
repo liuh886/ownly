@@ -21,6 +21,8 @@ export interface PlannerTrip {
   start_date: string;
   end_date: string;
   destinations: string[];
+  tags?: string[];
+  saved_list_name?: string;
   currency?: string;
   transport_mode?: 'driving' | 'walking' | 'bicycling' | 'transit';
   travel_preferences?: string[];
@@ -217,4 +219,26 @@ export function normalizeDelimitedText(value: string): string[] {
     .map((item) => item.trim())
     .filter(Boolean)
     .filter((item, index, all) => all.indexOf(item) === index);
+}
+
+export function inferPlaceKind(category?: string): PlannerPlaceKind {
+  if (!category) return 'attraction';
+  const lower = category.toLowerCase();
+  if (/restaurant|food|diner|ramen|sushi|izakaya|bar|pub|bistro|steak|grill|noodle|bakery|dessert|cafe|coffee|tea|餐厅|饭店|美食|料理|小吃|拉面|火锅|烤肉|甜品|面包|咖啡|酒吧|居酒屋/.test(lower)) {
+    if (/cafe|coffee|tea|dessert|bakery|咖啡|甜品|面包|茶/.test(lower)) return 'cafe';
+    return 'food';
+  }
+  if (/hotel|resort|hostel|inn|ryokan|stay|motel|guesthouse|酒店|旅馆|民宿|饭店|度假村/.test(lower)) {
+    return 'stay';
+  }
+  if (/store|mall|market|shopping|bazaar|outlet|plaza|商场|超市|购物|市场|商店|奥特莱斯/.test(lower)) {
+    return 'shopping';
+  }
+  if (/station|subway|bus|airport|terminal|ferry|transit|车站|地铁|机场|码头|交通/.test(lower)) {
+    return 'transit';
+  }
+  if (/museum|temple|shrine|park|attraction|landmark|castle|garden|tower|tourist|historic|gallery|beach|viewpoint|景点|寺|神社|博物馆|公园|观光|古迹|城堡|塔|美术馆|沙滩|观景台/.test(lower)) {
+    return 'attraction';
+  }
+  return 'experience';
 }

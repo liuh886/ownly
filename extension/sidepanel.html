@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -11,45 +11,105 @@
     <header class="topbar">
       <div>
         <strong>Ownly Capture</strong>
-        <p>Google Maps research → Ownly Planner</p>
+        <p id="topbarSubtitle">Google Maps 灵感采集 → Ownly Planner</p>
       </div>
-      <span id="pending" class="counter">0 pending</span>
+      <div class="topbar-actions">
+        <button id="langToggle" class="lang-btn" type="button" title="切换语言 / Switch Language">EN</button>
+        <span id="pending" class="counter">0 待同步</span>
+      </div>
     </header>
 
     <section class="panel">
-      <label class="label" for="tripSelect">Active trip</label>
+      <label id="lblActiveTrip" class="label" for="tripSelect">当前行程</label>
       <select id="tripSelect"></select>
-      <details class="new-trip" open>
-        <summary>Create trip</summary>
+      <details class="new-trip">
+        <summary id="sumCreateTrip">➕ 新建行程</summary>
         <form id="tripForm" class="stack">
-          <label>Title<input id="tripTitle" required placeholder="Thailand 2026" /></label>
-          <div class="two"><label>Start<input id="tripStart" type="date" required /></label><label>End<input id="tripEnd" type="date" required /></label></div>
-          <label>Destinations<input id="tripDestinations" placeholder="Bangkok, Chiang Mai" /></label>
-          <div class="two"><label>Currency<input id="tripCurrency" value="CNY" /></label><label>Transport<select id="tripTransport"><option value="transit">Transit</option><option value="walking">Walking</option><option value="driving">Driving</option><option value="bicycling">Bicycling</option></select></label></div>
-          <button class="secondary" type="submit">Create & activate</button>
+          <label id="lblTripTitle">行程名称<input id="tripTitle" required placeholder="例如：东京赏樱 2026" /></label>
+          <div class="two">
+            <label id="lblTripStart">开始日期<input id="tripStart" type="date" required /></label>
+            <label id="lblTripEnd">结束日期<input id="tripEnd" type="date" required /></label>
+          </div>
+          <label id="lblTripDestinations">目的地<input id="tripDestinations" placeholder="例如：东京, 浅草, 涩谷" /></label>
+          <label id="lblTripTags">行程标签 / 收藏夹名<input id="tripTags" placeholder="例如：东京2026, 美食清单, Want to go" /></label>
+          <div class="two">
+            <label id="lblTripCurrency">货币<input id="tripCurrency" value="CNY" /></label>
+            <label id="lblTripTransport">主要交通
+              <select id="tripTransport">
+                <option value="transit">公共交通 (Transit)</option>
+                <option value="walking">步行 (Walking)</option>
+                <option value="driving">自驾 (Driving)</option>
+                <option value="bicycling">骑行 (Bicycling)</option>
+              </select>
+            </label>
+          </div>
+          <button id="btnCreateTrip" class="secondary" type="submit">创建并设为当前行程</button>
         </form>
       </details>
     </section>
 
     <section class="panel current">
-      <div class="row"><span class="label">Current place</span><button id="refreshPlace" class="link" type="button">Refresh</button></div>
-      <h1 id="placeTitle">Open a place in Google Maps</h1>
-      <p id="placeUrl" class="url">Ownly Capture only saves a place after you choose it.</p>
+      <div class="row">
+        <span id="lblCurrentPlace" class="label">Google Maps 当前地点</span>
+        <button id="refreshPlace" class="link" type="button">🔄 刷新</button>
+      </div>
+      <h1 id="placeTitle">请在 Google Maps 中打开地点</h1>
+      <p id="placeUrl" class="url">在地图中点击任意地点即可自动识别</p>
+      <div id="placeMetaBadges" class="meta-badges"></div>
     </section>
 
     <form id="captureForm" class="panel stack">
-      <div class="two"><label>Kind<select id="kind"><option value="attraction">Attraction</option><option value="food">Food</option><option value="cafe">Cafe</option><option value="stay">Stay</option><option value="shopping">Shopping</option><option value="transit">Transit</option><option value="experience">Experience</option><option value="other">Other</option></select></label><label>Priority<select id="priority"><option value="must">Must</option><option value="want" selected>Want</option><option value="optional">Optional</option></select></label></div>
-      <label>Area<input id="area" placeholder="Asakusa / Nimman / Old City" /></label>
-      <div class="two"><label>Duration (min)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label><label>Preferred window<input id="window" placeholder="early morning" /></label></div>
-      <div class="two"><label>Observed rating<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label><label>Observed price<input id="price" placeholder="~THB 900 / night" /></label></div>
-      <label>Why it matters<textarea id="why" rows="2" placeholder="Why this survived your research"></textarea></label>
-      <label>Research signals<input id="signals" placeholder="sunset, quiet morning, strong breakfast" /></label>
-      <label>Risks / caveats<input id="risks" placeholder="weekend queue, rain sensitive" /></label>
-      <label>Personal note<textarea id="notes" rows="2" placeholder="Your own judgment, not a copy of Google reviews"></textarea></label>
-      <button class="primary" type="submit">Add to research pool</button>
+      <div class="two">
+        <label id="lblKind">地点类别
+          <select id="kind">
+            <option value="attraction">观光景点 (Attraction)</option>
+            <option value="food">餐厅美食 (Food)</option>
+            <option value="cafe">咖啡甜品 (Cafe)</option>
+            <option value="stay">酒店住宿 (Stay)</option>
+            <option value="shopping">购物商场 (Shopping)</option>
+            <option value="transit">交通中转 (Transit)</option>
+            <option value="experience">体验活动 (Experience)</option>
+            <option value="other">其它 (Other)</option>
+          </select>
+        </label>
+        <label id="lblPriority">优先级
+          <select id="priority">
+            <option value="must">必去 (Must)</option>
+            <option value="want" selected>想去 (Want)</option>
+            <option value="optional">可选 (Optional)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="two">
+        <label id="lblArea">区域 / 街区<input id="area" placeholder="例如：浅草 / 涩谷 / 新宿" /></label>
+        <label id="lblTags">地点标签<input id="tags" placeholder="例如：夜景, 必吃, 需预约" /></label>
+      </div>
+
+      <div class="two">
+        <label id="lblDuration">预计停留 (分钟)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label>
+        <label id="lblWindow">偏好时段<input id="window" placeholder="例如：上午 / 傍晚日落 / 晚上" /></label>
+      </div>
+
+      <div class="two">
+        <label id="lblRating">Google 评分<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label>
+        <label id="lblPrice">人均价格 / 价格区间<input id="price" placeholder="例如：¥2,000 / 人" /></label>
+      </div>
+
+      <div>
+        <label id="lblQuickChips">快捷标签</label>
+        <div id="quickChips" class="chips"></div>
+      </div>
+
+      <label id="lblWhy">选择理由 (Why)<textarea id="why" rows="2" placeholder="为什么选这个地点？有哪些吸引你的亮点？"></textarea></label>
+      <label id="lblSignals">正向信号<input id="signals" placeholder="例如：绝美日落, 地道当地人多, 早餐很赞" /></label>
+      <label id="lblRisks">风险提醒 / 避坑<input id="risks" placeholder="例如：周末排队极长, 需提前2周预约, 雨天不宜" /></label>
+      <label id="lblNotes">个人备忘笔记<textarea id="notes" rows="2" placeholder="你自己的游玩心得或计划备忘，而非直接复制评论"></textarea></label>
+
+      <button id="btnCaptureSubmit" class="primary" type="submit">➕ 加入行程候选池</button>
     </form>
 
-    <p id="status" class="status" aria-live="polite">Ready.</p>
+    <p id="status" class="status" aria-live="polite">就绪。</p>
   </main>
   <script src="sidepanel.js"></script>
 </body>
