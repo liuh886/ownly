@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { resolveOwnlyDataRoot } from '../shared/data-root';
 import { validateEntity } from '../../src/domain/schema';
 import type {
   RecurringCostObject,
@@ -37,7 +38,11 @@ export type OwnlyMcpErrorCode =
   | 'INVALID_INPUT'
   | 'NOT_FOUND'
   | 'DATA_INVALID'
-  | 'IO_ERROR';
+  | 'IO_ERROR'
+  | 'WRITE_DISABLED'
+  | 'OPERATION_NOT_FOUND'
+  | 'OPERATION_EXPIRED'
+  | 'CONFLICT';
 
 export class OwnlyMcpError extends Error {
   readonly code: OwnlyMcpErrorCode;
@@ -108,7 +113,15 @@ export function toOwnlyMcpErrorPayload(error: unknown): OwnlyMcpErrorPayload {
     }
     return { code: 'DATA_INVALID', message: 'Ownly local data failed validation.' };
   }
-  return { code: 'IO_ERROR', message: 'Ownly could not complete the local read.' };
+  if (typeof error === 'object' && error !== null && 'code' in error && 'message' in error) {
+    const code = String(error.code) as OwnlyMcpErrorCode;
+    if ([
+      'WRITE_DISABLED', 'OPERATION_NOT_FOUND', 'OPERATION_EXPIRED', 'CONFLICT', 'INVALID_INPUT',
+    ].includes(code)) {
+      return { code, message: String(error.message) };
+    }
+  }
+  return { code: 'IO_ERROR', message: 'Ownly could not complete the local operation.' };
 }
 
 export function resolveOwnlyDataLocation(input: string | undefined): string {
@@ -120,27 +133,20 @@ export function resolveOwnlyDataLocation(input: string | undefined): string {
     );
   }
 
-  const dataLocation = resolve(trimmed);
-  const ownlyRoot = join(dataLocation, 'Ownly');
+  const dataLocation = resolveOwnlyDataRoot(resolve(trimmed));
   const objectsDirectory = join(dataLocation, CLI_DIRECTORIES.object);
 
   try {
-    if (!existsSync(ownlyRoot) || !statSync(ownlyRoot).isDirectory()) {
-      throw new OwnlyMcpError(
-        'The configured location does not contain an Ownly data folder.',
-        'OWNLY_FOLDER_NOT_FOUND',
-      );
-    }
     if (!existsSync(objectsDirectory) || !statSync(objectsDirectory).isDirectory()) {
       throw new OwnlyMcpError(
-        'The configured Ownly data folder is missing its Objects directory.',
+        'The configured location is not an Ownly data root and does not contain Ownly/Objects.',
         'OWNLY_FOLDER_NOT_FOUND',
       );
     }
     readdirSync(objectsDirectory);
   } catch (error) {
     if (error instanceof OwnlyMcpError) throw error;
-    throw wrapFsError(error, 'read the configured Ownly data folder');
+    throw wrapFsError(error, 'read the configured Ownly data root');
   }
 
   return dataLocation;

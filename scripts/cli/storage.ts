@@ -20,17 +20,17 @@ import type {
 import { CliError, type EntityByType, type StoredEntry, type SupportedCliEntityType } from './types';
 
 export const CLI_DIRECTORIES: Record<SupportedCliEntityType, string> = {
-  object: 'Ownly/Objects',
-  snapshot: 'Ownly/Snapshots',
-  review: 'Ownly/Reviews',
-  object_log: 'Ownly/Logs/Object Experiences',
+  object: 'Objects',
+  snapshot: 'Snapshots',
+  review: 'Reviews',
+  object_log: 'Logs/Object Experiences',
 };
 
 export const CLI_ARCHIVE_DIRECTORIES: Record<SupportedCliEntityType, string> = {
-  object: 'Ownly/Archive/Objects',
-  snapshot: 'Ownly/Archive/Snapshots',
-  review: 'Ownly/Archive/Reviews',
-  object_log: 'Ownly/Archive/Object Logs',
+  object: 'Archive/Objects',
+  snapshot: 'Archive/Snapshots',
+  review: 'Archive/Reviews',
+  object_log: 'Archive/Object Logs',
 };
 
 function isExpectedEntity<K extends SupportedCliEntityType>(
@@ -323,7 +323,7 @@ export function writeAgentLog(
   before: unknown,
   after: unknown,
 ): void {
-  const directory = ensureDirectoryPath(dataLocation, 'Ownly/Logs');
+  const directory = ensureDirectoryPath(dataLocation, 'Logs');
   const logFile = join(directory, 'agent_operations.log');
   const entry = {
     timestamp: new Date().toISOString(),

@@ -31,7 +31,7 @@ Ownly 数据目录既可以放在普通本地目录中，也可以放进由你�
 | 安装为 PWA | 否 | 否 | 独立应用窗口，并支持离线启动应用界面 |
 | Obsidian 插件 | 是 | 否 | 原生 Vault 集成与 Markdown 工作流 |
 | Agent CLI | 否 | 是 | 确定性脚本与经过验证的本地写入 |
-| 本地 MCP | 否 | 是 | 为 Codex、Claude Code 等 Agent 提供只读 Ownly 证据 |
+| 本地 MCP | 否 | 是 | 提供有边界的读取，以及可选的“预览后提交”维护能力 |
 
 Web App 和 PWA 是同一个浏览器运行时。安装 PWA 只改变启动方式，不改变数据模型。
 
@@ -155,7 +155,7 @@ Ownly/
 
 ## Agent CLI 与 MCP
 
-Ownly 为脚本和外部 Agent 提供确定性的 JSON CLI；同时提供只读本地 MCP server，让支持 stdio MCP 的 Agent 查询同一份 Ownly 数据。
+Ownly 为脚本和外部 Agent 提供确定性的 JSON CLI；同时提供本地 MCP server，让支持 stdio MCP 的 Agent 查询和维护同一份 Ownly 数据。MCP 默认只读；只有显式启用写入并完成“预览 → 用户确认 → 提交”后，才会修改文件。每次提交前都会在数据目录外创建安全备份。
 
 MCP 不建立第二数据库，也不托管你的 Markdown。source of truth 始终是你选择的 Ownly 数据目录。通过 MCP 明确返回给外部 Agent 的事实可能进入该 Agent / 模型服务商的上下文，因此 Ownly 不声称 Agent 会话中的所有数据都永远留在本机。
 
@@ -175,9 +175,9 @@ MCP 不建立第二数据库，也不托管你的 Markdown。source of truth 始
 | 安装版 PWA | 独立启动和应用界面离线缓存，与 Web 使用同一数据行为 |
 | Obsidian 插件 | 基于共享 Ownly 数据模型的原生 Vault 界面 |
 | Agent CLI | 稳定、严格类型化的 fact-ready JSON 契约 |
-| 本地 MCP | 基于同一 Ownly evidence store 的只读 STDIO adapter |
+| 本地 MCP | 默认只读；可显式启用基于同一数据源的两阶段写入 |
 | 数据存储 | 用户控制文件系统目录中的纯 Markdown + YAML frontmatter |
-| 数据操作安全 | 创建、修改、归档和恢复的 repository 契约由 CI 保护；MCP v0.1 无写入工具 |
+| 数据操作安全 | 校验、预览确认、原子写入、安全备份、审计日志、冲突检测、归档恢复和 CI 契约 |
 
 ## 浏览器支持
 

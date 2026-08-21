@@ -6,7 +6,7 @@ The CLI does not provide AI chat, model calls, embeddings, natural-language inte
 
 ## Setup
 
-Pass a local location containing the `Ownly/` data folder:
+Pass either a local location containing the default `Ownly/` data folder or a custom data root containing `Objects/` directly:
 
 ```bash
 export OWNLY_VAULT=/path/to/local/location
@@ -19,7 +19,7 @@ Or pass the compatibility flag explicitly:
 npm run --silent wyqd -- --vault /path/to/local/location object list --json
 ```
 
-`OWNLY_VAULT`, `WYQD_VAULT`, and `--vault` remain backward-compatible names. The path may be an Obsidian Vault or another local directory containing `Ownly/`.
+`OWNLY_VAULT`, `WYQD_VAULT`, and `--vault` remain backward-compatible names. Resolution prefers the supplied path itself when it contains `Objects/`; otherwise it uses the `Ownly/` child. This supports an Obsidian Vault with the default folder and custom roots such as `D:\Data\MyOwnlyLedger`.
 
 ## Process contract
 

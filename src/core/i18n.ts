@@ -662,6 +662,19 @@ const translations = {
     usageLog: 'Usage log',
     reviewAndRanking: 'Review & score',
 
+    // Object experience logs
+    objectExperienceLogs: 'Experience & lifecycle logs',
+    objectExperienceLogsEmpty: 'No experience logs recorded for this object yet. Use Agent or CLI to add logs.',
+    logEventUsage: 'Usage',
+    logEventMaintenance: 'Maintenance',
+    logEventIssue: 'Issue',
+    logEventRegret: 'Regret',
+    logEventLesson: 'Lesson',
+    logEventExitNote: 'Exit note',
+    logEventComparison: 'Comparison',
+    logOccurredAt: 'Occurred on',
+    logLessonTitle: 'Key lesson',
+
     // Review template
     reviewTitlePrefix: 'Review',
     reviewExperienceSection: 'Experience review',
@@ -1356,6 +1369,19 @@ const translations = {
     purchaseReason: '购买理由',
     usageLog: '使用记录',
     reviewAndRanking: '复盘与评分',
+
+    // Object experience logs
+    objectExperienceLogs: '使用与体验日志',
+    objectExperienceLogsEmpty: '暂无此对象的体验日志。可通过 Agent 或 CLI 记录维护、使用心得与避坑笔记。',
+    logEventUsage: '使用记录',
+    logEventMaintenance: '维护保养',
+    logEventIssue: '遇到问题',
+    logEventRegret: '避坑教训',
+    logEventLesson: '心得体会',
+    logEventExitNote: '弃用转让',
+    logEventComparison: '对比体验',
+    logOccurredAt: '记录日期',
+    logLessonTitle: '经验心得',
 
     // Review template
     reviewTitlePrefix: '复盘',

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -49,7 +49,20 @@ afterEach(() => {
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe('Ownly CLI process contract', () => {
+describe('Ownly CLI process contract', { timeout: 30000 }, () => {
+  it('uses a custom data root directly when it already contains Objects', () => {
+    const root = createDataLocation();
+    mkdirSync(join(root, 'Objects'));
+    const add = runCli(root, [
+      'object', 'add', '--title', 'Custom Root Item', '--amount', '100', '--json',
+    ]);
+
+    expect(add.status).toBe(0);
+    const created = JSON.parse(add.stdout) as { fileName: string };
+    expect(existsSync(join(root, 'Objects', created.fileName))).toBe(true);
+    expect(existsSync(join(root, 'Ownly'))).toBe(false);
+  });
+
   it('creates, reads, updates, archives, and restores a physical object', () => {
     const root = createDataLocation();
     const add = runCli(root, [

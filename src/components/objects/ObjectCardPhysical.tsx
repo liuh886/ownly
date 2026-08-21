@@ -6,7 +6,7 @@ import { ObjectDetailPanel } from './ObjectDetailPanel';
 import { getDailyCost, getPhysicalAccentClasses, getStatusLabel, formatDateRange, type TranslateFn } from './ObjectListUtils';
 import { getPhysicalBucket } from './useObjectFilterSort';
 import type { WYQDStoredEntity } from '@/core/repository';
-import type { PhysicalObject, WYQDObject } from '@/domain/types';
+import type { ObjectLogEntry, PhysicalObject, WYQDObject } from '@/domain/types';
 import { todayISO } from '@/lib/format';
 
 function MoreActionsButton({
@@ -38,6 +38,7 @@ function MoreActionsButton({
 
 export function ObjectCardPhysical({
   stored,
+  logs,
   isEditing,
   isDetailing,
   disabled,
@@ -55,6 +56,7 @@ export function ObjectCardPhysical({
   menuItemClass,
 }: {
   stored: WYQDStoredEntity<WYQDObject>;
+  logs?: WYQDStoredEntity<ObjectLogEntry>[];
   isEditing: boolean;
   isDetailing: boolean;
   disabled?: boolean;
@@ -99,6 +101,7 @@ export function ObjectCardPhysical({
         <div className="p-1">
           <ObjectDetailPanel
             stored={stored as WYQDStoredEntity<WYQDObject>}
+            logs={logs}
             onClose={() => setSelectedFileName(null)}
             onSave={async (updatedObject, body) => {
               await onUpdate(stored.fileName, updatedObject, body);

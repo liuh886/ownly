@@ -13,7 +13,7 @@ export interface OwnlyDatasetMetadata {
 }
 
 export interface OwnlyBackupSource {
-  runtime: 'cli' | 'web' | 'pwa' | 'obsidian' | 'test' | 'restore-safety';
+  runtime: 'cli' | 'mcp' | 'web' | 'pwa' | 'obsidian' | 'test' | 'restore-safety';
   ownly_version: string;
 }
 

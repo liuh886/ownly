@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -20,9 +21,11 @@
 # production
 /build
 /dist
+/packages/mcp/dist/
 
 # obsidian plugin build artifacts
 /main.js
+/main.css
 /styles.css
 
 # misc

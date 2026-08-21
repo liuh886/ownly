@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { resolveOwnlyDataRoot } from '../shared/data-root';
 import {
   CliError,
   type CliErrorCode,
@@ -137,7 +138,7 @@ export function getDataLocation(options: CliOptions, env: NodeJS.ProcessEnv): st
       'VAULT_NOT_FOUND',
     );
   }
-  return resolve(root);
+  return resolveOwnlyDataRoot(resolve(root), { allowCreateDefault: true });
 }
 
 export function asCliError(
