@@ -904,8 +904,11 @@ function autoFillPlaceForm(place: CurrentResearchPlace) {
     const parts = place.address.split(/[,，·]/).map((p) => p.trim()).filter(Boolean);
     el.area.value = parts[0] || place.address;
   }
-  if (place.summary && !el.why.value) {
-    el.why.value = place.summary;
+  if ((place.userNote || place.summary) && !el.why.value) {
+    el.why.value = place.userNote || place.summary || '';
+  }
+  if (place.userNote && !el.notes.value) {
+    el.notes.value = place.userNote;
   }
   const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
   if (activeTrip?.tags?.length && !el.tags.value) {
@@ -1209,9 +1212,10 @@ el.btnSyncSavedListAll.addEventListener('click', () => {
       area: item.address?.split(/[,，·]/)[0]?.trim() || undefined,
       priority: 'want',
       tags: combinedTags,
-      why: item.summary,
+      why: item.userNote || item.summary,
       signals: item.category ? [item.category] : [],
       risks: [],
+      notes: item.userNote,
       observed_rating: item.rating,
       observed_price: item.priceLevel,
       observed_at: today(),

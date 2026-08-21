@@ -11,6 +11,7 @@ export interface CurrentResearchPlace {
   detectedCurrency?: string;
   address?: string;
   summary?: string;
+  userNote?: string;
   openStatus?: string;
   website?: string;
 }
@@ -89,6 +90,17 @@ function extractSummary(): string | undefined {
   if (summaryEl?.textContent) {
     const sum = summaryEl.textContent.trim();
     if (sum && sum.length < 300) return sum;
+  }
+  return undefined;
+}
+
+function extractUserNote(): string | undefined {
+  const noteEl = document.querySelector<HTMLElement>(
+    'button[data-item-id="note"] div.fontBodyMedium, div[aria-label*="备注"], div[aria-label*="备忘"], div[aria-label*="Note"], div.P34g2b, div.bJzME, textarea[aria-label*="note"]'
+  );
+  if (noteEl) {
+    const text = (noteEl.textContent || (noteEl as HTMLTextAreaElement).value || '').trim();
+    if (text && text.length < 500 && !/^(添加备注|add a note|edit note|编辑备注)$/i.test(text)) return text;
   }
   return undefined;
 }
@@ -190,6 +202,8 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const priceLevel = extractPrice();
   const address = extractAddress();
   const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel);
+  const userNote = extractUserNote();
+  const summary = extractSummary();
 
   return {
     title,
@@ -201,7 +215,8 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     priceLevel,
     detectedCurrency,
     address,
-    summary: extractSummary(),
+    summary,
+    userNote,
     openStatus: extractOpenStatus(),
     website: extractWebsite(),
   };
@@ -265,6 +280,7 @@ function detectGoogleMapsSavedList(): DetectedSavedList | null {
         address,
         detectedCurrency: itemCurrency,
         summary: userNote,
+        userNote,
       });
     }
   }
