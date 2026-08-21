@@ -606,6 +606,29 @@ function applyI18n() {
 function renderChips() {
   const dict = t();
   el.quickChips.innerHTML = '';
+
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  const customTags = activeTrip?.tags || [];
+
+  // Render custom trip sub-tags first (e.g. 曼谷, 清迈, 普吉)
+  for (const tag of customTags) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip';
+    btn.style.borderColor = '#6ee7b7';
+    btn.style.background = '#ecfdf5';
+    btn.style.color = '#047857';
+    btn.style.fontWeight = '600';
+    btn.textContent = `🏷️ + ${tag}`;
+    btn.addEventListener('click', () => {
+      const existing = normalizeDelimitedText(el.tags.value);
+      if (!existing.includes(tag)) {
+        el.tags.value = [...existing, tag].join(', ');
+      }
+    });
+    el.quickChips.append(btn);
+  }
+
   for (const chip of dict.chips) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -625,7 +648,10 @@ function renderChips() {
 
 function renderFilters() {
   const dict = t();
-  const filters = [
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  const tripPlaces = state.pendingPlaces.filter((p) => p.trip_id === state.activeTripId);
+
+  const filters: { id: string; label: string }[] = [
     { id: 'all', label: dict.allFilter },
     { id: 'must', label: dict.mustFilter },
     { id: 'want', label: dict.wantFilter },
@@ -633,6 +659,13 @@ function renderFilters() {
     { id: 'attraction', label: dict.attractionFilter },
     { id: 'stay', label: dict.stayFilter },
   ];
+
+  // Dynamically add trip tags and place tags as filter chips (e.g. 曼谷, 清迈, 普吉)
+  const allTags = Array.from(new Set([...(activeTrip?.tags || []), ...tripPlaces.flatMap((p) => p.tags)])).filter(Boolean);
+  for (const tag of allTags) {
+    filters.push({ id: `tag:${tag}`, label: `🏷️ ${tag}` });
+  }
+
   el.candidatesFilterBar.innerHTML = '';
   for (const item of filters) {
     const btn = document.createElement('button');
@@ -965,6 +998,10 @@ function renderCandidatesList() {
   if (activeFilter === 'food') candidates = candidates.filter((p) => p.kind === 'food' || p.kind === 'cafe');
   if (activeFilter === 'attraction') candidates = candidates.filter((p) => p.kind === 'attraction');
   if (activeFilter === 'stay') candidates = candidates.filter((p) => p.kind === 'stay');
+  if (activeFilter.startsWith('tag:')) {
+    const filterTag = activeFilter.slice(4).trim().toLowerCase();
+    candidates = candidates.filter((p) => p.tags.some((t) => t.trim().toLowerCase() === filterTag));
+  }
 
   if (searchQuery.trim()) {
     const query = searchQuery.trim().toLowerCase();

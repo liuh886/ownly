@@ -44,6 +44,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [places, setPlaces] = useState<PlannerTripPlace[]>([]);
   const [selectedTripId, setSelectedTripId] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
+  const [activeTag, setActiveTag] = useState<string>('all');
   const [capturePending, setCapturePending] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -106,12 +107,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [places, selectedTripId],
   );
 
+  const tripTags = useMemo(
+    () => Array.from(new Set([...(selectedTrip?.tags || []), ...tripPlaces.flatMap((p) => p.tags)])).filter(Boolean),
+    [selectedTrip, tripPlaces],
+  );
+
   const candidates = useMemo(
     () => [...tripPlaces]
       .filter((place) => !place.scheduled_date && place.state === 'candidate')
       .sort((left, right) => priorityRank[left.priority] - priorityRank[right.priority] || left.title.localeCompare(right.title)),
     [tripPlaces],
   );
+
+  const filteredCandidates = useMemo(() => {
+    if (activeTag === 'all') return candidates;
+    return candidates.filter((p) => p.tags.some((t) => t.trim().toLowerCase() === activeTag.trim().toLowerCase()));
+  }, [candidates, activeTag]);
 
   const scheduled = useMemo(
     () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === activeDate && place.state === 'scheduled')),
@@ -301,14 +312,41 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <h2 className="text-sm font-semibold text-stone-900">Research Pool</h2>
               <p className="text-[11px] text-stone-400">{zh ? 'Google Maps 研究完成的候选' : 'Researched in Google Maps'}</p>
             </div>
-            <span className="text-xs font-medium text-stone-400">{candidates.length}</span>
+            <span className="text-xs font-medium text-stone-400">{filteredCandidates.length}/{candidates.length}</span>
           </div>
+
+          {tripTags.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 border-b border-stone-100 bg-stone-50/70 px-3 py-2">
+              <button
+                type="button"
+                onClick={() => setActiveTag('all')}
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold transition ${activeTag === 'all' ? 'bg-stone-900 text-white' : 'border border-stone-200 bg-white text-stone-600 hover:bg-stone-100'}`}
+              >
+                {zh ? '全部' : 'All'} ({candidates.length})
+              </button>
+              {tripTags.map((tag) => {
+                const count = candidates.filter((p) => p.tags.some((t) => t.trim().toLowerCase() === tag.trim().toLowerCase())).length;
+                const isSelected = activeTag.trim().toLowerCase() === tag.trim().toLowerCase();
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setActiveTag(isSelected ? 'all' : tag)}
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold transition ${isSelected ? 'bg-emerald-700 text-white' : 'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}
+                  >
+                    🏷️ {tag} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
           <div className="space-y-2 p-3">
-            {candidates.length === 0 ? (
+            {filteredCandidates.length === 0 ? (
               <div className="rounded-lg border border-dashed border-stone-200 px-3 py-8 text-center text-xs text-stone-400">
-                {zh ? '候选池已清空。继续从 Google Maps 采集，或调整其他日期。' : 'No unscheduled candidates. Capture more in Google Maps or review other days.'}
+                {zh ? '当前筛选下暂无候选地点。' : 'No unscheduled candidates matching filter.'}
               </div>
-            ) : candidates.map((place) => (
+            ) : filteredCandidates.map((place) => (
               <article
                 key={place.id}
                 draggable
@@ -333,6 +371,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${place.priority === 'must' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>{place.priority}</span>
                   {place.observed_rating ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">★ {place.observed_rating}</span> : null}
                   {place.observed_price ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">{place.observed_price}</span> : null}
+                  {place.tags.map((tag) => (
+                    <span key={tag} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                      🏷️ {tag}
+                    </span>
+                  ))}
                   {place.signals.slice(0, 2).map((signal) => <span key={signal} className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">{signal}</span>)}
                 </div>
                 {place.why ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-600">{place.why}</p> : null}
