@@ -299,6 +299,44 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
     }
   }
 
+  // Strategy 3: Scan all list item cards and rows inside feed/pane
+  const feedItems = document.querySelectorAll<HTMLElement>(
+    'div[role="feed"] > div, div[role="main"] div[jsaction], div.m6QErb > div[jsaction], div.m6QErb > div'
+  );
+  for (const card of Array.from(feedItems)) {
+    const titleEl = card.querySelector<HTMLElement>(
+      'h1, h2, h3, .fontHeadlineSmall, .qBF1Pd, .OSrXXb, div.bJzME, [role="heading"], div[class*="headline"], span[class*="headline"]'
+    );
+    const title = titleEl?.textContent?.trim() || card.querySelector('[aria-label]')?.getAttribute('aria-label') || '';
+    if (!title || title.length < 2 || title.length > 80 || isGenericNavigationTitle(title)) continue;
+
+    const linkEl = card.querySelector<HTMLAnchorElement>('a[href*="/maps/place/"], a[href*="/place/"], a.hfpxzc, a');
+    const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+
+    const ratingText = card.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
+    const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
+
+    const infoText = card.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
+    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
+    const address = card.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
+    const userNote = card.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea, div.P34g2b')?.textContent?.trim();
+
+    const titleKey = title.trim().toLowerCase();
+    if (!scavengedListPlaces.has(titleKey)) {
+      scavengedListPlaces.set(titleKey, {
+        title: title.trim(),
+        sourceUrl,
+        sourceProvider: 'google_maps',
+        rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
+        category,
+        address,
+        detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined),
+        summary: userNote,
+        userNote,
+      });
+    }
+  }
+
   return Array.from(scavengedListPlaces.values());
 }
 

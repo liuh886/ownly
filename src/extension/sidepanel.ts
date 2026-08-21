@@ -768,22 +768,46 @@ async function readCurrentPlace(): Promise<void> {
     renderCurrencyPill();
     return;
   }
+
+  type PlaceMessageResponse = {
+    place?: CurrentResearchPlace | null;
+    savedList?: DetectedSavedList | null;
+  };
+  type ListMessageResponse = {
+    listPlaces?: CurrentResearchPlace[];
+  };
+
+  let placeResp: PlaceMessageResponse | null = null;
+  let listResp: ListMessageResponse | null = null;
+
   try {
-    const placeResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' }) as { place?: CurrentResearchPlace | null; savedList?: DetectedSavedList | null };
-    currentPlace = placeResp?.place ?? null;
-    detectedSavedList = placeResp?.savedList ?? null;
-    pageDetectedCurrency = currentPlace?.detectedCurrency || detectedSavedList?.detectedCurrency;
+    placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' })) as PlaceMessageResponse;
+    listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' })) as ListMessageResponse;
   } catch {
-    currentPlace = null;
-    detectedSavedList = null;
-    pageDetectedCurrency = undefined;
+    // If message failed (e.g. content script was disconnected after extension reload), dynamically inject it
+    try {
+      const scripting = (chrome as unknown as { scripting?: { executeScript: (opts: unknown) => Promise<unknown> } }).scripting;
+      if (scripting && tab.id) {
+        await scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+        await new Promise((r) => setTimeout(r, 150));
+        placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' })) as PlaceMessageResponse;
+        listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' })) as ListMessageResponse;
+      }
+    } catch (err) {
+      console.warn('Could not inject content script:', err);
+    }
   }
-  try {
-    const listResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' }) as { listPlaces?: CurrentResearchPlace[] };
-    detectedListPlaces = Array.isArray(listResp?.listPlaces) ? listResp.listPlaces : [];
-  } catch {
-    detectedListPlaces = [];
-  }
+
+  currentPlace = placeResp?.place ?? null;
+  detectedSavedList = placeResp?.savedList ?? null;
+  const directListPlaces = Array.isArray(listResp?.listPlaces) ? listResp.listPlaces : [];
+  detectedListPlaces = (detectedSavedList?.places && detectedSavedList.places.length > 0)
+    ? detectedSavedList.places
+    : directListPlaces;
+  pageDetectedCurrency = currentPlace?.detectedCurrency || detectedSavedList?.detectedCurrency;
 
   renderCurrentPlace();
   renderSavedListMatch();

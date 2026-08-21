@@ -3,7 +3,7 @@
   "name": "Ownly Capture",
   "version": "0.1.0",
   "description": "Capture personal travel research from Google Maps into Ownly Planner.",
-  "permissions": ["sidePanel", "storage"],
+  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
   "host_permissions": [
     "https://*.google.com/maps/*",
     "https://maps.google.com/*",
