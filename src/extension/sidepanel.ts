@@ -772,6 +772,7 @@ async function readCurrentPlace(): Promise<void> {
   type PlaceMessageResponse = {
     place?: CurrentResearchPlace | null;
     savedList?: DetectedSavedList | null;
+    allLists?: Array<{ listId?: string; listName: string; count?: number; url?: string }>;
   };
   type ListMessageResponse = {
     listPlaces?: CurrentResearchPlace[];
@@ -806,6 +807,32 @@ async function readCurrentPlace(): Promise<void> {
 
   currentPlace = placeResp?.place ?? null;
   detectedSavedList = placeResp?.savedList ?? null;
+  detectedAllLists = Array.isArray(placeResp?.allLists) ? placeResp.allLists : [];
+
+  // If no single savedList was directly detected, but we have lists in detectedAllLists, try to fetch matching or first list
+  if ((!detectedSavedList || detectedSavedList.places.length === 0) && detectedAllLists.length > 0 && tab.id) {
+    const tripTags = (activeTrip?.tags || []).map((t) => t.trim().toLowerCase());
+    const tripTitle = (activeTrip?.title || '').trim().toLowerCase();
+
+    const targetList = detectedAllLists.find((l) => {
+      const name = l.listName.toLowerCase();
+      return tripTags.some((t) => t && (name === t || name.includes(t) || t.includes(name)))
+        || (tripTitle && (name.includes(tripTitle) || tripTitle.includes(name)));
+    }) || (detectedAllLists.length === 1 ? detectedAllLists[0] : undefined);
+
+    if (targetList?.listId) {
+      try {
+        const fetched = (await chrome.tabs.sendMessage(tab.id, {
+          type: 'OWNLY_FETCH_LIST_BY_ID',
+          listId: targetList.listId,
+        })) as { savedList?: DetectedSavedList | null };
+        if (fetched?.savedList && fetched.savedList.places.length > 0) {
+          detectedSavedList = fetched.savedList;
+        }
+      } catch {}
+    }
+  }
+
   const directListPlaces = Array.isArray(listResp?.listPlaces) ? listResp.listPlaces : [];
   detectedListPlaces = (detectedSavedList?.places && detectedSavedList.places.length > 0)
     ? detectedSavedList.places
@@ -836,14 +863,52 @@ function renderCurrencyPill() {
   }
 }
 
+let detectedAllLists: Array<{ listId?: string; listName: string; count?: number; url?: string }> = [];
+
 function renderSavedListMatch() {
   const dict = t();
   const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+
+  if ((!detectedSavedList || detectedSavedList.places.length === 0) && detectedAllLists.length > 0) {
+    el.savedListMatchBanner.style.display = 'block';
+    el.savedListNameTitle.textContent = `检测到 ${detectedAllLists.length} 个收藏列表`;
+    el.savedListCountBadge.textContent = '点击载入';
+    el.savedListMatchDesc.innerHTML = '页面中发现以下收藏列表，请点击要导入的列表：<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">' +
+      detectedAllLists.map((l) => `<button type="button" class="btn-list-chip" data-list-id="${l.listId || ''}" style="padding:4px 8px; font-size:11px; background:#fff; border:1px solid #10b981; color:#065f46; border-radius:12px; cursor:pointer;">📁 ${l.listName}${l.count ? ` (${l.count})` : ''}</button>`).join('') +
+      '</div>';
+    el.btnSyncSavedListAll.style.display = 'none';
+
+    // Add click listeners to list chips
+    const chips = el.savedListMatchDesc.querySelectorAll<HTMLButtonElement>('.btn-list-chip');
+    chips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const listId = chip.dataset.listId;
+        if (listId) {
+          setStatus('正在获取列表地点…');
+          void chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
+            if (activeTab?.id) {
+              void (chrome.tabs.sendMessage(activeTab.id, { type: 'OWNLY_FETCH_LIST_BY_ID', listId }) as Promise<{ savedList?: DetectedSavedList | null }>).then((resp) => {
+                if (resp?.savedList) {
+                  detectedSavedList = resp.savedList;
+                  renderSavedListMatch();
+                  renderBatchList();
+                  setStatus(`已载入「${resp.savedList.listName}」（${resp.savedList.places.length} 个地点）`, 'success');
+                }
+              });
+            }
+          });
+        }
+      });
+    });
+    return;
+  }
+
   if (!detectedSavedList || detectedSavedList.places.length === 0) {
     el.savedListMatchBanner.style.display = 'none';
     return;
   }
 
+  el.btnSyncSavedListAll.style.display = 'block';
   el.savedListMatchBanner.style.display = 'block';
   el.savedListNameTitle.textContent = detectedSavedList.listName;
   el.savedListCountBadge.textContent = `${detectedSavedList.places.length} 个地点`;

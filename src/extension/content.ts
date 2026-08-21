@@ -390,11 +390,23 @@ function extractGoogleMapsListId(): string | null {
   const placeListMatch = /\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(window.location.href);
   if (placeListMatch?.[1]) return placeListMatch[1];
 
-  // Check preload link
-  const preloadEl = document.querySelector<HTMLLinkElement>('link[href*="entitylist/getlist"]');
-  if (preloadEl?.href) {
-    const pbMatch = /!1s([A-Za-z0-9_-]{20,})/.exec(preloadEl.href);
-    if (pbMatch?.[1]) return pbMatch[1];
+  // Check preload/fetch links and all anchors in document
+  const links = document.querySelectorAll<HTMLLinkElement | HTMLAnchorElement>(
+    'link[href*="getlist"], link[href*="entitylist"], a[href*="!2s"], a[href*="/placelists/list/"]'
+  );
+  for (const l of Array.from(links)) {
+    const href = l.href || '';
+    const m = /!1s([A-Za-z0-9_-]{20,})|!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(href);
+    if (m?.[1] || m?.[2] || m?.[3]) {
+      return m[1] || m[2] || m[3];
+    }
+  }
+
+  // Check document head / scripts
+  if (document.head) {
+    const headHtml = document.head.innerHTML;
+    const m = /entitylist\/getlist[^\"]*pb=[^\"]*!1s([A-Za-z0-9_-]{20,})/.exec(headHtml);
+    if (m?.[1]) return m[1];
   }
 
   return null;
