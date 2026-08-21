@@ -20,9 +20,39 @@
     </header>
 
     <section class="panel">
-      <label id="lblActiveTrip" class="label" for="tripSelect">当前行程</label>
+      <div class="row">
+        <label id="lblActiveTrip" class="label" for="tripSelect">当前行程</label>
+        <button id="btnDetectedCurrencyPill" class="chip" type="button" style="display: none; padding: 1px 6px; font-size: 9.5px; border-color: #6ee7b7; color: #047857; background: #ecfdf5;">🗺️ 地图货币: THB</button>
+      </div>
       <select id="tripSelect"></select>
-      <details class="new-trip">
+      <details id="editTripSection" class="new-trip" style="display: none;">
+        <summary id="sumEditTrip">✏️ 编辑当前行程设置</summary>
+        <form id="editTripForm" class="stack" style="margin-top: 8px;">
+          <label id="lblEditTripTitle">行程名称<input id="editTripTitle" required placeholder="例如：东京赏樱 2026" /></label>
+          <div class="two">
+            <label id="lblEditTripStart">开始日期<input id="editTripStart" type="date" required /></label>
+            <label id="lblEditTripEnd">结束日期<input id="editTripEnd" type="date" required /></label>
+          </div>
+          <label id="lblEditTripDestinations">目的地<input id="editTripDestinations" placeholder="例如：东京, 浅草, 涩谷" /></label>
+          <label id="lblEditTripTags">行程标签 / 收藏夹名<input id="editTripTags" placeholder="例如：TH26, 美食清单" /></label>
+          <div class="two">
+            <label id="lblEditTripCurrency">货币<input id="editTripCurrency" placeholder="THB / JPY / CNY" /></label>
+            <label id="lblEditTripTransport">主要交通
+              <select id="editTripTransport">
+                <option value="transit">公共交通 (Transit)</option>
+                <option value="walking">步行 (Walking)</option>
+                <option value="driving">自驾 (Driving)</option>
+                <option value="bicycling">骑行 (Bicycling)</option>
+              </select>
+            </label>
+          </div>
+          <div class="row" style="gap: 8px; margin-top: 4px;">
+            <button id="btnSaveTripEdit" class="primary" type="submit" style="flex: 2; min-height: 32px; font-size: 11px;">✓ 保存行程修改</button>
+            <button id="btnDeleteTrip" class="card-btn del" type="button" style="flex: 1; min-height: 32px; border: 1px solid #fecaca; background: #fff; border-radius: 6px; font-size: 11px;">🗑️ 删除行程</button>
+          </div>
+        </form>
+      </details>
+      <details id="createTripSection" class="new-trip">
         <summary id="sumCreateTrip">➕ 新建行程</summary>
         <form id="tripForm" class="stack">
           <label id="lblTripTitle">行程名称<input id="tripTitle" required placeholder="例如：东京赏樱 2026" /></label>
@@ -31,7 +61,7 @@
             <label id="lblTripEnd">结束日期<input id="tripEnd" type="date" required /></label>
           </div>
           <label id="lblTripDestinations">目的地<input id="tripDestinations" placeholder="例如：东京, 浅草, 涩谷" /></label>
-          <label id="lblTripTags">行程标签 / 收藏夹名<input id="tripTags" placeholder="例如：东京2026, 美食清单, Want to go" /></label>
+          <label id="lblTripTags">行程标签 / 收藏夹名<input id="tripTags" placeholder="例如：TH26, 美食清单, Want to go" /></label>
           <div class="two">
             <label id="lblTripCurrency">货币<input id="tripCurrency" value="CNY" /></label>
             <label id="lblTripTransport">主要交通

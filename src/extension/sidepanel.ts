@@ -35,6 +35,7 @@ const I18N = {
     activeTrip: '当前行程',
     noTripOption: '请在下方新建行程',
     createTripSummary: '➕ 新建行程',
+    editTripSummary: '✏️ 编辑当前行程设置',
     tripTitleLabel: '行程名称',
     tripTitlePlaceholder: '例如：东京赏樱 2026',
     tripStartLabel: '开始日期',
@@ -42,10 +43,17 @@ const I18N = {
     tripDestinationsLabel: '目的地',
     tripDestinationsPlaceholder: '例如：东京, 浅草, 涩谷',
     tripTagsLabel: '行程标签 / 收藏夹名',
-    tripTagsPlaceholder: '例如：TH26, 东京2026, Want to go',
-    tripCurrencyLabel: '货币',
+    tripTagsPlaceholder: '例如：TH26, 美食清单, Want to go',
+    tripCurrencyLabel: '货币单位',
     tripTransportLabel: '主要交通',
     btnCreateTrip: '创建并设为当前行程',
+    btnSaveTripEdit: '✓ 保存行程修改',
+    btnDeleteTrip: '🗑️ 删除行程',
+    tripSavedSuccess: '已保存行程设置与修改。',
+    tripDeletedSuccess: '已删除该行程及关联候选项。',
+    confirmDeleteTrip: (title: string) => `确定要删除行程「${title}」及其所有候选地点吗？`,
+    detectedCurrencyPill: (curr: string) => `🗺️ 地图货币: ${curr} (点击应用)`,
+    currencyApplied: (curr: string) => `已将地图货币「${curr}」应用至行程与价格。`,
     sumBulkImport: '📥 批量导入 / 粘贴地点或列表链接',
     lblBulkText: '批量粘贴链接或地点名 (每行一个)',
     bulkPlaceholder: '支持批量粘贴：\nhttps://maps.google.com/...\n浅草寺\n东京晴空塔',
@@ -78,7 +86,7 @@ const I18N = {
     ratingLabel: '评分',
     ratingPlaceholder: '4.6',
     priceLabel: '人均价格 / 预算',
-    pricePlaceholder: '例如：¥2,000 / 人',
+    pricePlaceholder: '例如：¥2,000 / ฿150',
     quickChipsLabel: '快捷标签',
     whyLabel: '选择理由 (Why)',
     whyPlaceholder: '为什么选这个地点？有哪些吸引你的亮点？',
@@ -144,6 +152,7 @@ const I18N = {
     activeTrip: 'Active trip',
     noTripOption: 'Create a trip below',
     createTripSummary: '➕ Create trip',
+    editTripSummary: '✏️ Edit active trip settings',
     tripTitleLabel: 'Trip title',
     tripTitlePlaceholder: 'e.g. Tokyo Sakura 2026',
     tripStartLabel: 'Start date',
@@ -152,9 +161,16 @@ const I18N = {
     tripDestinationsPlaceholder: 'e.g. Tokyo, Asakusa, Shibuya',
     tripTagsLabel: 'Trip tags / Google List name',
     tripTagsPlaceholder: 'e.g. TH26, Foodie, Want to go',
-    tripCurrencyLabel: 'Currency',
+    tripCurrencyLabel: 'Currency unit',
     tripTransportLabel: 'Primary transport',
     btnCreateTrip: 'Create & activate',
+    btnSaveTripEdit: '✓ Save trip changes',
+    btnDeleteTrip: '🗑️ Delete trip',
+    tripSavedSuccess: 'Trip settings updated.',
+    tripDeletedSuccess: 'Trip and associated candidates deleted.',
+    confirmDeleteTrip: (title: string) => `Delete trip "${title}" and all its candidate places?`,
+    detectedCurrencyPill: (curr: string) => `🗺️ Map currency: ${curr} (click to apply)`,
+    currencyApplied: (curr: string) => `Applied map currency "${curr}" to trip & place price.`,
     sumBulkImport: '📥 Bulk Import / Paste Places & Links',
     lblBulkText: 'Paste links or place names (one per line)',
     bulkPlaceholder: 'Paste links or names:\nhttps://maps.google.com/...\nAsakusa Temple\nTokyo Tower',
@@ -187,7 +203,7 @@ const I18N = {
     ratingLabel: 'Rating',
     ratingPlaceholder: '4.6',
     priceLabel: 'Observed price / budget',
-    pricePlaceholder: 'e.g. ~$25 / person',
+    pricePlaceholder: 'e.g. ~$25 / ฿150',
     quickChipsLabel: 'Quick tags',
     whyLabel: 'Why it matters (Why)',
     whyPlaceholder: 'Why did this place survive your research? Key highlights?',
@@ -253,7 +269,28 @@ type ElementMap = {
   langToggle: HTMLButtonElement;
   topbarSubtitle: HTMLElement;
   lblActiveTrip: HTMLElement;
+  btnDetectedCurrencyPill: HTMLButtonElement;
   tripSelect: HTMLSelectElement;
+  editTripSection: HTMLElement;
+  sumEditTrip: HTMLElement;
+  editTripForm: HTMLFormElement;
+  lblEditTripTitle: HTMLElement;
+  editTripTitle: HTMLInputElement;
+  lblEditTripStart: HTMLElement;
+  editTripStart: HTMLInputElement;
+  lblEditTripEnd: HTMLElement;
+  editTripEnd: HTMLInputElement;
+  lblEditTripDestinations: HTMLElement;
+  editTripDestinations: HTMLInputElement;
+  lblEditTripTags: HTMLElement;
+  editTripTags: HTMLInputElement;
+  lblEditTripCurrency: HTMLElement;
+  editTripCurrency: HTMLInputElement;
+  lblEditTripTransport: HTMLElement;
+  editTripTransport: HTMLSelectElement;
+  btnSaveTripEdit: HTMLButtonElement;
+  btnDeleteTrip: HTMLButtonElement;
+  createTripSection: HTMLElement;
   sumCreateTrip: HTMLElement;
   tripForm: HTMLFormElement;
   lblTripTitle: HTMLElement;
@@ -342,7 +379,28 @@ const el: ElementMap = {
   langToggle: required('langToggle'),
   topbarSubtitle: required('topbarSubtitle'),
   lblActiveTrip: required('lblActiveTrip'),
+  btnDetectedCurrencyPill: required('btnDetectedCurrencyPill'),
   tripSelect: required('tripSelect'),
+  editTripSection: required('editTripSection'),
+  sumEditTrip: required('sumEditTrip'),
+  editTripForm: required('editTripForm'),
+  lblEditTripTitle: required('lblEditTripTitle'),
+  editTripTitle: required('editTripTitle'),
+  lblEditTripStart: required('lblEditTripStart'),
+  editTripStart: required('editTripStart'),
+  lblEditTripEnd: required('lblEditTripEnd'),
+  editTripEnd: required('editTripEnd'),
+  lblEditTripDestinations: required('lblEditTripDestinations'),
+  editTripDestinations: required('editTripDestinations'),
+  lblEditTripTags: required('lblEditTripTags'),
+  editTripTags: required('editTripTags'),
+  lblEditTripCurrency: required('lblEditTripCurrency'),
+  editTripCurrency: required('editTripCurrency'),
+  lblEditTripTransport: required('lblEditTripTransport'),
+  editTripTransport: required('editTripTransport'),
+  btnSaveTripEdit: required('btnSaveTripEdit'),
+  btnDeleteTrip: required('btnDeleteTrip'),
+  createTripSection: required('createTripSection'),
   sumCreateTrip: required('sumCreateTrip'),
   tripForm: required('tripForm'),
   lblTripTitle: required('lblTripTitle'),
@@ -428,6 +486,7 @@ let detectedSavedList: DetectedSavedList | null = null;
 let detectedListPlaces: CurrentResearchPlace[] = [];
 let activeFilter = 'all';
 let searchQuery = '';
+let pageDetectedCurrency: string | undefined = undefined;
 
 function t() {
   return I18N[currentLang];
@@ -448,6 +507,7 @@ function applyI18n() {
   el.topbarSubtitle.textContent = dict.subtitle;
   el.lblActiveTrip.textContent = dict.activeTrip;
   el.sumCreateTrip.textContent = dict.createTripSummary;
+  el.sumEditTrip.textContent = dict.editTripSummary;
 
   el.lblTripTitle.childNodes[0].nodeValue = dict.tripTitleLabel;
   el.tripTitle.placeholder = dict.tripTitlePlaceholder;
@@ -460,6 +520,19 @@ function applyI18n() {
   el.lblTripCurrency.childNodes[0].nodeValue = dict.tripCurrencyLabel;
   el.lblTripTransport.childNodes[0].nodeValue = dict.tripTransportLabel;
   el.btnCreateTrip.textContent = dict.btnCreateTrip;
+
+  el.lblEditTripTitle.childNodes[0].nodeValue = dict.tripTitleLabel;
+  el.editTripTitle.placeholder = dict.tripTitlePlaceholder;
+  el.lblEditTripStart.childNodes[0].nodeValue = dict.tripStartLabel;
+  el.lblEditTripEnd.childNodes[0].nodeValue = dict.tripEndLabel;
+  el.lblEditTripDestinations.childNodes[0].nodeValue = dict.tripDestinationsLabel;
+  el.editTripDestinations.placeholder = dict.tripDestinationsPlaceholder;
+  el.lblEditTripTags.childNodes[0].nodeValue = dict.tripTagsLabel;
+  el.editTripTags.placeholder = dict.tripTagsPlaceholder;
+  el.lblEditTripCurrency.childNodes[0].nodeValue = dict.tripCurrencyLabel;
+  el.lblEditTripTransport.childNodes[0].nodeValue = dict.tripTransportLabel;
+  el.btnSaveTripEdit.textContent = dict.btnSaveTripEdit;
+  el.btnDeleteTrip.textContent = dict.btnDeleteTrip;
 
   el.sumBulkImport.textContent = dict.sumBulkImport;
   el.lblBulkText.childNodes[0].nodeValue = dict.lblBulkText;
@@ -486,6 +559,11 @@ function applyI18n() {
   }
 
   for (const opt of Array.from(el.tripTransport.options)) {
+    const val = opt.value as keyof typeof dict.transport;
+    if (dict.transport[val]) opt.textContent = dict.transport[val];
+  }
+
+  for (const opt of Array.from(el.editTripTransport.options)) {
     const val = opt.value as keyof typeof dict.transport;
     if (dict.transport[val]) opt.textContent = dict.transport[val];
   }
@@ -599,6 +677,22 @@ async function saveState(): Promise<void> {
   renderCandidatesList();
 }
 
+function populateEditTripForm() {
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  if (!activeTrip) {
+    el.editTripSection.style.display = 'none';
+    return;
+  }
+  el.editTripSection.style.display = 'block';
+  el.editTripTitle.value = activeTrip.title;
+  el.editTripStart.value = activeTrip.start_date;
+  el.editTripEnd.value = activeTrip.end_date;
+  el.editTripDestinations.value = activeTrip.destinations?.join(', ') || '';
+  el.editTripTags.value = activeTrip.tags?.join(', ') || '';
+  el.editTripCurrency.value = activeTrip.currency || pageDetectedCurrency || 'CNY';
+  el.editTripTransport.value = activeTrip.transport_mode || 'transit';
+}
+
 function renderState() {
   const dict = t();
   el.tripSelect.innerHTML = '';
@@ -607,11 +701,13 @@ function renderState() {
     option.value = '';
     option.textContent = dict.noTripOption;
     el.tripSelect.append(option);
+    el.editTripSection.style.display = 'none';
   } else {
     for (const trip of state.trips) {
       const option = document.createElement('option');
       option.value = trip.id;
-      option.textContent = trip.tags?.length ? `${trip.title} [${trip.tags.join(', ')}]` : trip.title;
+      const currencyBadge = trip.currency ? ` [${trip.currency}]` : '';
+      option.textContent = trip.tags?.length ? `${trip.title} (${trip.tags.join(', ')})${currencyBadge}` : `${trip.title}${currencyBadge}`;
       el.tripSelect.append(option);
     }
     const active = state.trips.some((trip) => trip.id === state.activeTripId)
@@ -619,6 +715,7 @@ function renderState() {
       : state.trips[0].id;
     state.activeTripId = active;
     el.tripSelect.value = active ?? '';
+    populateEditTripForm();
   }
   el.pending.textContent = `${state.pendingPlaces.length} ${dict.pendingSuffix}`;
 }
@@ -630,18 +727,22 @@ async function readCurrentPlace(): Promise<void> {
     currentPlace = null;
     detectedSavedList = null;
     detectedListPlaces = [];
+    pageDetectedCurrency = undefined;
     renderCurrentPlace();
     renderSavedListMatch();
     renderBatchList();
+    renderCurrencyPill();
     return;
   }
   try {
     const placeResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' }) as { place?: CurrentResearchPlace | null; savedList?: DetectedSavedList | null };
     currentPlace = placeResp?.place ?? null;
     detectedSavedList = placeResp?.savedList ?? null;
+    pageDetectedCurrency = currentPlace?.detectedCurrency || detectedSavedList?.detectedCurrency;
   } catch {
     currentPlace = null;
     detectedSavedList = null;
+    pageDetectedCurrency = undefined;
   }
   try {
     const listResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' }) as { listPlaces?: CurrentResearchPlace[] };
@@ -653,8 +754,24 @@ async function readCurrentPlace(): Promise<void> {
   renderCurrentPlace();
   renderSavedListMatch();
   renderBatchList();
+  renderCurrencyPill();
   if (currentPlace) {
     autoFillPlaceForm(currentPlace);
+  }
+}
+
+function renderCurrencyPill() {
+  const dict = t();
+  if (pageDetectedCurrency) {
+    el.btnDetectedCurrencyPill.style.display = 'inline-block';
+    el.btnDetectedCurrencyPill.textContent = dict.detectedCurrencyPill(pageDetectedCurrency);
+
+    // If active trip has no currency set or is default CNY and we are browsing THB/JPY, offer suggestion
+    if (!el.tripCurrency.value || el.tripCurrency.value === 'CNY') {
+      el.tripCurrency.value = pageDetectedCurrency;
+    }
+  } else {
+    el.btnDetectedCurrencyPill.style.display = 'none';
   }
 }
 
@@ -744,6 +861,8 @@ function autoFillPlaceForm(place: CurrentResearchPlace) {
   }
   if (place.priceLevel) {
     el.price.value = place.priceLevel;
+  } else if (place.detectedCurrency) {
+    el.price.placeholder = `${place.detectedCurrency} 价格预算`;
   }
   if (place.category) {
     el.kind.value = inferPlaceKind(place.category);
@@ -810,6 +929,11 @@ function renderCurrentPlace() {
     const b = document.createElement('span');
     b.className = 'badge';
     b.textContent = `💰 ${currentPlace.priceLevel}`;
+    el.placeMetaBadges.append(b);
+  } else if (currentPlace.detectedCurrency) {
+    const b = document.createElement('span');
+    b.className = 'badge highlight';
+    b.textContent = `💱 ${currentPlace.detectedCurrency}`;
     el.placeMetaBadges.append(b);
   }
   if (currentPlace.openStatus) {
@@ -883,6 +1007,7 @@ function renderCandidatesList() {
     details.className = 'candidate-details';
     if (place.area) details.innerHTML += `<span>📍 ${place.area}</span>`;
     if (place.observed_rating) details.innerHTML += `<span>★ ${place.observed_rating}</span>`;
+    if (place.observed_price) details.innerHTML += `<span>💰 ${place.observed_price}</span>`;
     if (place.duration_minutes) details.innerHTML += `<span>⏱️ ${place.duration_minutes}m</span>`;
     if (place.tags.length) details.innerHTML += `<span>🏷️ ${place.tags.join(', ')}</span>`;
 
@@ -980,7 +1105,7 @@ function createTripFromForm(): PlannerTrip | null {
     destinations: normalizeDelimitedText(el.tripDestinations.value),
     tags: tripTags.length ? tripTags : undefined,
     saved_list_name: tripTags[0],
-    currency: el.tripCurrency.value.trim() || undefined,
+    currency: el.tripCurrency.value.trim() || pageDetectedCurrency || undefined,
     transport_mode: el.tripTransport.value as PlannerTrip['transport_mode'],
     created_at: now,
     updated_at: now,
@@ -996,6 +1121,26 @@ el.langToggle.addEventListener('click', () => {
 el.candidatesSearch.addEventListener('input', () => {
   searchQuery = el.candidatesSearch.value;
   renderCandidatesList();
+});
+
+// Click detected currency pill to apply to active trip & place form
+el.btnDetectedCurrencyPill.addEventListener('click', () => {
+  const dict = t();
+  if (!pageDetectedCurrency) return;
+  el.tripCurrency.value = pageDetectedCurrency;
+  el.editTripCurrency.value = pageDetectedCurrency;
+
+  if (state.activeTripId) {
+    state = {
+      ...state,
+      trips: state.trips.map((trip) =>
+        trip.id === state.activeTripId ? { ...trip, currency: pageDetectedCurrency, updated_at: new Date().toISOString() } : trip
+      ),
+    };
+    void saveState().then(() => {
+      setStatus(dict.currencyApplied(pageDetectedCurrency!), 'success');
+    });
+  }
 });
 
 // ⚡ 1-Click Sync Matched Saved List (e.g. TH26)
@@ -1031,6 +1176,7 @@ el.btnSyncSavedListAll.addEventListener('click', () => {
       signals: item.category ? [item.category] : [],
       risks: [],
       observed_rating: item.rating,
+      observed_price: item.priceLevel,
       observed_at: today(),
       reservation_status: 'none',
       state: 'candidate',
@@ -1157,6 +1303,7 @@ el.btnBatchAdd.addEventListener('click', () => {
       signals: [],
       risks: [],
       observed_rating: item.rating,
+      observed_price: item.priceLevel,
       observed_at: today(),
       reservation_status: 'none',
       state: 'candidate',
@@ -1178,6 +1325,72 @@ el.btnBatchAdd.addEventListener('click', () => {
   });
 });
 
+// Edit active trip form submission
+el.editTripForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const dict = t();
+  if (!state.activeTripId) return;
+
+  const title = el.editTripTitle.value.trim();
+  const start = el.editTripStart.value;
+  const end = el.editTripEnd.value;
+  if (!title || !start || !end || end < start) {
+    setStatus(dict.tripValidateError, 'error');
+    return;
+  }
+
+  const tripTags = normalizeDelimitedText(el.editTripTags.value);
+  const now = new Date().toISOString();
+
+  state = {
+    ...state,
+    trips: state.trips.map((trip) => {
+      if (trip.id !== state.activeTripId) return trip;
+      return {
+        ...trip,
+        title,
+        start_date: start,
+        end_date: end,
+        destinations: normalizeDelimitedText(el.editTripDestinations.value),
+        tags: tripTags.length ? tripTags : undefined,
+        saved_list_name: tripTags[0] || undefined,
+        currency: el.editTripCurrency.value.trim() || undefined,
+        transport_mode: el.editTripTransport.value as PlannerTrip['transport_mode'],
+        updated_at: now,
+      };
+    }),
+  };
+
+  void saveState().then(() => {
+    setStatus(dict.tripSavedSuccess, 'success');
+  });
+});
+
+// Delete active trip
+el.btnDeleteTrip.addEventListener('click', () => {
+  const dict = t();
+  if (!state.activeTripId) return;
+  const trip = state.trips.find((t) => t.id === state.activeTripId);
+  if (!trip) return;
+
+  if (!window.confirm(dict.confirmDeleteTrip(trip.title))) return;
+
+  const deletedTripId = state.activeTripId;
+  const remainingTrips = state.trips.filter((t) => t.id !== deletedTripId);
+  const nextActiveId = remainingTrips[0]?.id || null;
+
+  state = {
+    ...state,
+    trips: remainingTrips,
+    activeTripId: nextActiveId,
+    pendingPlaces: state.pendingPlaces.filter((p) => p.trip_id !== deletedTripId),
+  };
+
+  void saveState().then(() => {
+    setStatus(dict.tripDeletedSuccess, 'success');
+  });
+});
+
 el.tripForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const trip = createTripFromForm();
@@ -1185,7 +1398,7 @@ el.tripForm.addEventListener('submit', (event) => {
   state = { ...state, trips: [...state.trips, trip], activeTripId: trip.id };
   void saveState().then(() => {
     el.tripForm.reset();
-    el.tripCurrency.value = 'CNY';
+    el.tripCurrency.value = pageDetectedCurrency || 'CNY';
     el.tripTransport.value = 'transit';
     setStatus(t().tripCreated(trip.title), 'success');
   });
@@ -1194,6 +1407,7 @@ el.tripForm.addEventListener('submit', (event) => {
 el.tripSelect.addEventListener('change', () => {
   state = { ...state, activeTripId: el.tripSelect.value || null };
   void saveState();
+  populateEditTripForm();
   const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
   if (activeTrip?.tags?.length && !el.tags.value) {
     el.tags.value = activeTrip.tags.join(', ');
@@ -1286,6 +1500,7 @@ void (async () => {
   applyI18n();
   await readCurrentPlace();
 })();
+
 
 
 

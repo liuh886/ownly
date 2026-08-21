@@ -8,6 +8,7 @@ export interface CurrentResearchPlace {
   reviewCount?: number;
   category?: string;
   priceLevel?: string;
+  detectedCurrency?: string;
   address?: string;
   summary?: string;
   openStatus?: string;
@@ -107,9 +108,79 @@ function extractWebsite(): string | undefined {
   return undefined;
 }
 
+export function detectCurrencyFromContext(sourceUrl: string, address?: string, priceText?: string): string | undefined {
+  const combined = `${sourceUrl} ${address || ''} ${priceText || ''} ${document.title || ''} ${document.documentElement.lang || ''}`.toLowerCase();
+
+  // 1. Explicit symbols and codes
+  if (priceText) {
+    if (/฿|thb|บาท/i.test(priceText)) return 'THB';
+    if (/nt\$|twd|新台币/i.test(priceText)) return 'TWD';
+    if (/hk\$|hkd|港币/i.test(priceText)) return 'HKD';
+    if (/₩|krw|원/i.test(priceText)) return 'KRW';
+    if (/s\$|sgd/i.test(priceText)) return 'SGD';
+    if (/rm|myr/i.test(priceText)) return 'MYR';
+    if (/₫|vnd|đ/i.test(priceText)) return 'VND';
+    if (/€|eur/i.test(priceText)) return 'EUR';
+    if (/£|gbp/i.test(priceText)) return 'GBP';
+  }
+
+  // 2. Region / TLD / Address Analysis
+  if (/google\.co\.th|google\.th|thailand|bangkok|chiang mai|phuket|pattaya|泰国|曼谷|清迈|普吉|芭提雅/i.test(combined)) {
+    return 'THB';
+  }
+  if (/google\.co\.jp|google\.jp|tabelog\.com|japan|tokyo|kyoto|osaka|hokkaido|okinawa|日本|东京|京都|大阪|北海道|冲绳/i.test(combined)) {
+    return 'JPY';
+  }
+  if (/google\.com\.tw|google\.tw|taiwan|taipei|kaohsiung|taichung|台湾|台北|高雄|台中/i.test(combined)) {
+    return 'TWD';
+  }
+  if (/google\.com\.hk|google\.hk|hong kong|kowloon|香港|九龙/i.test(combined)) {
+    return 'HKD';
+  }
+  if (/google\.co\.kr|google\.kr|korea|seoul|busan|韩国|首尔|釜山/i.test(combined)) {
+    return 'KRW';
+  }
+  if (/google\.com\.sg|google\.sg|singapore|新加坡/i.test(combined)) {
+    return 'SGD';
+  }
+  if (/google\.com\.my|malaysia|kuala lumpur|penang|马来西亚|吉隆坡|槟城/i.test(combined)) {
+    return 'MYR';
+  }
+  if (/google\.com\.vn|vietnam|hanoi|ho chi minh|da nang|越南|河内|胡志明|岘港/i.test(combined)) {
+    return 'VND';
+  }
+  if (/google\.co\.uk|google\.uk|united kingdom|london|edinburgh|英国|伦敦|爱丁堡/i.test(combined)) {
+    return 'GBP';
+  }
+  if (/google\.fr|google\.de|google\.it|google\.es|france|germany|italy|spain|paris|berlin|rome|madrid|barcelona|欧洲|法国|德国|意大利|西班牙|巴黎/i.test(combined)) {
+    return 'EUR';
+  }
+  if (/google\.com\.au|australia|sydney|melbourne|澳大利亚|悉尼|墨尔本/i.test(combined)) {
+    return 'AUD';
+  }
+  if (/google\.ca|canada|toronto|vancouver|加拿大|多伦多|温哥华/i.test(combined)) {
+    return 'CAD';
+  }
+  if (/china|beijing|shanghai|guangzhou|shenzhen|chengdu|hangzhou|中国|北京|上海|广州|深圳|成都|杭州/i.test(combined)) {
+    return 'CNY';
+  }
+  if (/united states|usa|new york|los angeles|san francisco|california|美国|纽约|旧金山|洛杉矶/i.test(combined)) {
+    return 'USD';
+  }
+
+  // 3. Fallback price symbol interpretation
+  if (priceText) {
+    if (/¥|円/i.test(priceText)) return 'JPY';
+    if (/\$|usd/i.test(priceText)) return 'USD';
+  }
+
+  return undefined;
+}
+
 export interface DetectedSavedList {
   listName: string;
   listUrl: string;
+  detectedCurrency?: string;
   places: CurrentResearchPlace[];
 }
 
@@ -121,6 +192,10 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const title = heading?.textContent?.trim() || titleFromUrl(sourceUrl);
   if (!title || (!/\/maps\/(place|search|dir|saved|@)\//.test(window.location.pathname) && !window.location.pathname.includes('/maps/'))) return null;
 
+  const priceLevel = extractPrice();
+  const address = extractAddress();
+  const detectedCurrency = detectCurrencyFromContext(sourceUrl, address, priceLevel);
+
   return {
     title,
     sourceUrl,
@@ -128,8 +203,9 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     rating: extractRating(),
     reviewCount: extractReviewCount(),
     category: extractCategory(),
-    priceLevel: extractPrice(),
-    address: extractAddress(),
+    priceLevel,
+    detectedCurrency,
+    address,
     summary: extractSummary(),
     openStatus: extractOpenStatus(),
     website: extractWebsite(),
@@ -183,6 +259,7 @@ function detectGoogleMapsSavedList(): DetectedSavedList | null {
     const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea')?.textContent?.trim();
 
     const placeKey = sourceUrl.split('?')[0];
+    const itemCurrency = detectCurrencyFromContext(sourceUrl, address, undefined);
     if (!placesMap.has(placeKey)) {
       placesMap.set(placeKey, {
         title,
@@ -191,6 +268,7 @@ function detectGoogleMapsSavedList(): DetectedSavedList | null {
         rating,
         category,
         address,
+        detectedCurrency: itemCurrency,
         summary: userNote,
       });
     }
@@ -199,9 +277,12 @@ function detectGoogleMapsSavedList(): DetectedSavedList | null {
   const places = Array.from(placesMap.values());
   if (!listName && places.length === 0) return null;
 
+  const listCurrency = detectCurrencyFromContext(window.location.href, places[0]?.address, undefined);
+
   return {
     listName: listName || 'Google Maps 收藏列表',
     listUrl: window.location.href,
+    detectedCurrency: listCurrency,
     places,
   };
 }

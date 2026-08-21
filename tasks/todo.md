@@ -1,8 +1,8 @@
-# Todo: Auto-Sync Google Maps Saved Lists & Match Tags (TH26)
+# Todo: Trip Details Editing & Auto Google Maps Currency Detection
 
 ## Tasks
-- [ ] 1. Enhance content.ts to detect Google Maps Saved List name, URL, and all list items <!-- id: 1 -->
-- [ ] 2. Update sidepanel.html & sidepanel.css with Matched Saved List Banner and Bulk Import Tool <!-- id: 2 -->
-- [ ] 3. Update sidepanel.ts with tag matching logic, 1-click full list sync, and bulk paste parser <!-- id: 3 -->
-- [ ] 4. Rebuild extension and run all validation test suites <!-- id: 4 -->
-- [ ] 5. Explain to user how to test automatic Saved List sync <!-- id: 5 -->
+- [ ] 1. Add intelligent Google Maps currency detection in content.ts <!-- id: 1 -->
+- [ ] 2. Add Edit Active Trip UI and auto-currency suggestion in sidepanel.html & sidepanel.css <!-- id: 2 -->
+- [ ] 3. Implement trip details update, delete trip, and currency auto-fill in sidepanel.ts <!-- id: 3 -->
+- [ ] 4. Rebuild extension and run full validation suite <!-- id: 4 -->
+- [ ] 5. Commit, push, and present solution to user <!-- id: 5 -->
