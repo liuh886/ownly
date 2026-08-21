@@ -5,7 +5,7 @@ import { ObjectComposer } from './ObjectComposer';
 import { ObjectDetailPanel } from './ObjectDetailPanel';
 import { getSupportingVisuals, getSupportingActionLabel, getSupportingActionIcon, canCancelRecurringCost, getSupportingMeta, getPrimaryAmount, getStatusLabel, transitionSupportingObject, type TranslateFn } from './ObjectListUtils';
 import type { WYQDStoredEntity } from '@/core/repository';
-import type { WYQDObject, RecurringCostObject, ReviewEntry } from '@/domain/types';
+import type { WYQDObject, RecurringCostObject, ReviewEntry, ObjectLogEntry } from '@/domain/types';
 import { calculateNextBillingDate } from '@/domain/calculations';
 import { parseScore, formatDueLabel, todayISO } from '@/lib/format';
 
@@ -39,6 +39,7 @@ function MoreActionsButton({
 export function ObjectCardSupporting({
   stored,
   reviews,
+  logs,
   isEditing,
   isDetailing,
   isReviewing,
@@ -70,6 +71,7 @@ export function ObjectCardSupporting({
 }: {
   stored: WYQDStoredEntity<WYQDObject>;
   reviews: WYQDStoredEntity<ReviewEntry>[];
+  logs?: WYQDStoredEntity<ObjectLogEntry>[];
   isEditing: boolean;
   isDetailing: boolean;
   isReviewing: boolean;
@@ -151,6 +153,7 @@ export function ObjectCardSupporting({
         <div className="p-1">
           <ObjectDetailPanel
             stored={stored}
+            logs={logs}
             onClose={() => setSelectedFileName(null)}
             onSave={async (updatedObject, body) => {
               await onUpdate(stored.fileName, updatedObject, body);

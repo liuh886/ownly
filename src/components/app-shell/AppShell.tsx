@@ -173,6 +173,7 @@ export function AppShell() {
                 storedObjects={data.storedObjects}
                 storedReviews={data.storedReviews}
                 storedSnapshots={data.storedSnapshots}
+                storedLogs={data.storedLogs}
                 archivedEntities={data.archivedEntities}
                 objectListFocus={objectListFocus}
                 autoFocusComposer={autoFocusComposer}

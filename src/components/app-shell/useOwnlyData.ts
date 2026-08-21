@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { WYQDStoredEntity, WYQDArchivedStoredEntity } from '@/core/repository';
-import type { WYQDObject, AccountSnapshot, ReviewEntry } from '@/domain/types';
+import type { WYQDObject, AccountSnapshot, ReviewEntry, ObjectLogEntry } from '@/domain/types';
 import { calculateHomeMetrics } from '@/domain/calculations';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 
@@ -10,6 +10,7 @@ export function useOwnlyData() {
   const [storedObjects, setStoredObjects] = useState<WYQDStoredEntity<WYQDObject>[]>([]);
   const [storedSnapshots, setStoredSnapshots] = useState<WYQDStoredEntity<AccountSnapshot>[]>([]);
   const [storedReviews, setStoredReviews] = useState<WYQDStoredEntity<ReviewEntry>[]>([]);
+  const [storedLogs, setStoredLogs] = useState<WYQDStoredEntity<ObjectLogEntry>[]>([]);
   const [archivedEntities, setArchivedEntities] = useState<WYQDArchivedStoredEntity[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -18,15 +19,17 @@ export function useOwnlyData() {
   const metrics = useMemo(() => calculateHomeMetrics(objects, snapshots), [objects, snapshots]);
 
   const loadVaultData = useCallback(async () => {
-    const [nextObjects, nextSnapshots, nextReviews, nextArchivedEntities] = await Promise.all([
+    const [nextObjects, nextSnapshots, nextReviews, nextLogs, nextArchivedEntities] = await Promise.all([
       repository.listObjects(),
       repository.listSnapshots(),
       repository.listReviews(),
+      repository.listObjectLogs(),
       repository.listArchivedEntities(),
     ]);
     setStoredObjects([...nextObjects]);
     setStoredSnapshots([...nextSnapshots]);
     setStoredReviews([...nextReviews]);
+    setStoredLogs([...nextLogs]);
     setArchivedEntities([...nextArchivedEntities]);
     setDataLoaded(true);
   }, [repository]);
@@ -38,10 +41,11 @@ export function useOwnlyData() {
 
     async function refreshLocalData() {
       try {
-        const [nextObjects, nextSnapshots, nextReviews, nextArchivedEntities] = await Promise.all([
+        const [nextObjects, nextSnapshots, nextReviews, nextLogs, nextArchivedEntities] = await Promise.all([
           repository.listObjects(),
           repository.listSnapshots(),
           repository.listReviews(),
+          repository.listObjectLogs(),
           repository.listArchivedEntities(),
         ]);
 
@@ -49,6 +53,7 @@ export function useOwnlyData() {
         setStoredObjects([...nextObjects]);
         setStoredSnapshots([...nextSnapshots]);
         setStoredReviews([...nextReviews]);
+        setStoredLogs([...nextLogs]);
         setArchivedEntities([...nextArchivedEntities]);
         setDataLoaded(true);
       } catch (error) {
@@ -57,6 +62,7 @@ export function useOwnlyData() {
           setStoredObjects([]);
           setStoredSnapshots([]);
           setStoredReviews([]);
+          setStoredLogs([]);
           setArchivedEntities([]);
           setDataLoaded(true);
         }
@@ -74,6 +80,7 @@ export function useOwnlyData() {
     storedObjects,
     storedSnapshots,
     storedReviews,
+    storedLogs,
     archivedEntities,
     objects,
     snapshots,

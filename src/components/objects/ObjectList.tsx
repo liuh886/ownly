@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type { WYQDStoredEntity } from '@/core/repository';
-import type { ReviewEntry, WYQDObject } from '@/domain/types';
+import type { ObjectLogEntry, ReviewEntry, WYQDObject } from '@/domain/types';
 import { useI18n } from '@/core/i18n-context';
 
 import { useObjectListStats } from './useObjectListStats';
@@ -46,6 +46,7 @@ export interface ObjectListFocus {
 interface ObjectListProps {
   objects: WYQDStoredEntity<WYQDObject>[];
   reviews?: WYQDStoredEntity<ReviewEntry>[];
+  logs?: WYQDStoredEntity<ObjectLogEntry>[];
   focus?: ObjectListFocus | null;
   disabled?: boolean;
   onUpdate: (fileName: string, object: WYQDObject, body: string) => Promise<void>;
@@ -66,6 +67,7 @@ interface ObjectListProps {
 export function ObjectList({
   objects,
   reviews = [],
+  logs = [],
   focus,
   disabled,
   onUpdate,
@@ -259,6 +261,7 @@ export function ObjectList({
             <ObjectCardPhysical
               key={stored.fileName}
               stored={stored}
+              logs={logs}
               isEditing={editingFileName === stored.fileName}
               isDetailing={selectedFileName === stored.fileName}
               disabled={disabled}
@@ -286,6 +289,7 @@ export function ObjectList({
               key={stored.fileName}
               stored={stored}
               reviews={reviews}
+              logs={logs}
               isEditing={editingFileName === stored.fileName}
               isDetailing={selectedFileName === stored.fileName}
               isReviewing={reviewingFileName === stored.fileName}
