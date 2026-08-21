@@ -61,16 +61,28 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     setSelectedTripId((current) => current || nextTrips[0]?.id || '');
   }, [disabled]);
 
-  const refreshCapture = useCallback(async () => {
-    const state = await pullCaptureState();
-    setCapturePending(state ? state.pendingPlaces.length : null);
-    return state;
-  }, []);
-
   useEffect(() => {
-    void load();
-    void refreshCapture();
-  }, [load, refreshCapture]);
+    let active = true;
+    async function init() {
+      if (disabled) return;
+      await plannerRepository.initialize();
+      const [nextTrips, nextPlaces, state] = await Promise.all([
+        plannerRepository.listTrips(),
+        plannerRepository.listPlaces(),
+        pullCaptureState(),
+      ]);
+      if (!active) return;
+      nextTrips.sort((left, right) => right.start_date.localeCompare(left.start_date));
+      setTrips(nextTrips);
+      setPlaces(nextPlaces);
+      setSelectedTripId((current) => current || nextTrips[0]?.id || '');
+      setCapturePending(state ? state.pendingPlaces.length : null);
+    }
+    void init();
+    return () => {
+      active = false;
+    };
+  }, [disabled]);
 
   const selectedTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
@@ -82,13 +94,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [selectedTrip],
   );
 
-  useEffect(() => {
-    if (!selectedTrip) {
-      setSelectedDate('');
-      return;
-    }
-    setSelectedDate((current) => tripDates.includes(current) ? current : tripDates[0] ?? '');
-  }, [selectedTrip, tripDates]);
+  const activeDate = useMemo(() => {
+    if (!selectedTrip) return '';
+    return tripDates.includes(selectedDate) ? selectedDate : (tripDates[0] ?? '');
+  }, [selectedDate, selectedTrip, tripDates]);
 
   const tripPlaces = useMemo(
     () => places.filter((place) => place.trip_id === selectedTripId && place.state !== 'dropped'),
@@ -103,8 +112,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   );
 
   const scheduled = useMemo(
-    () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === selectedDate && place.state === 'scheduled')),
-    [selectedDate, tripPlaces],
+    () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === activeDate && place.state === 'scheduled')),
+    [activeDate, tripPlaces],
   );
 
   const areaCounts = useMemo(() => getTripAreaCounts(tripPlaces), [tripPlaces]);
@@ -121,7 +130,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     setPlaces((current) => current.map((item) => item.id === place.id ? place : item));
   }, []);
 
-  const schedulePlace = useCallback(async (placeId: string, date = selectedDate) => {
+  const schedulePlace = useCallback(async (placeId: string, date = activeDate) => {
     if (!date) return;
     const place = places.find((item) => item.id === placeId);
     if (!place) return;
@@ -135,7 +144,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       locked: true,
       updated_at: new Date().toISOString(),
     });
-  }, [persistPlace, places, selectedDate]);
+  }, [activeDate, persistPlace, places]);
 
   const returnToPool = useCallback(async (place: PlannerTripPlace) => {
     await persistPlace({
@@ -267,7 +276,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             key={date}
             type="button"
             onClick={() => setSelectedDate(date)}
-            className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition ${selectedDate === date ? 'bg-stone-950 text-white' : 'bg-white text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'}`}
+            className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition ${activeDate === date ? 'bg-stone-950 text-white' : 'bg-white text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'}`}
           >
             {zh ? `第${index + 1}天 · ${formatDay(date, language)}` : `Day ${index + 1} · ${formatDay(date, language)}`}
           </button>
@@ -333,7 +342,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold text-stone-900">Day Skeleton</h2>
-              <p className="text-[11px] text-stone-400">{selectedDate}</p>
+              <p className="text-[11px] text-stone-400">{activeDate}</p>
             </div>
             {routeSegments.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
