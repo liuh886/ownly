@@ -812,31 +812,37 @@ function renderCurrencyPill() {
 function renderSavedListMatch() {
   const dict = t();
   const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
-  if (!detectedSavedList || detectedSavedList.places.length === 0 || !activeTrip) {
+  if (!detectedSavedList || detectedSavedList.places.length === 0) {
     el.savedListMatchBanner.style.display = 'none';
     return;
   }
 
-  const listNameNorm = detectedSavedList.listName.trim().toLowerCase();
-  const tripTags = (activeTrip.tags || []).map((t) => t.trim().toLowerCase());
-  const tripTitleNorm = activeTrip.title.trim().toLowerCase();
-  const savedListNameNorm = (activeTrip.saved_list_name || '').trim().toLowerCase();
-
-  // Match condition: list name is in tags (e.g. 'th26'), or tag is in list name, or title matches
-  const isMatched =
-    tripTags.includes(listNameNorm) ||
-    tripTags.some((tag) => tag && listNameNorm.includes(tag)) ||
-    listNameNorm === savedListNameNorm ||
-    listNameNorm.includes(tripTitleNorm) ||
-    tripTitleNorm.includes(listNameNorm);
-
   el.savedListMatchBanner.style.display = 'block';
   el.savedListNameTitle.textContent = detectedSavedList.listName;
   el.savedListCountBadge.textContent = `${detectedSavedList.places.length} 个地点`;
-  el.savedListMatchDesc.textContent = isMatched
-    ? dict.savedListMatchDesc(detectedSavedList.listName, activeTrip.title)
-    : `Google 收藏列表「${detectedSavedList.listName}」包含 ${detectedSavedList.places.length} 个地点`;
-  el.btnSyncSavedListAll.textContent = dict.btnSyncSavedListAll(detectedSavedList.listName, detectedSavedList.places.length);
+
+  if (activeTrip) {
+    const listNameNorm = detectedSavedList.listName.trim().toLowerCase();
+    const tripTags = (activeTrip.tags || []).map((t) => t.trim().toLowerCase());
+    const tripTitleNorm = activeTrip.title.trim().toLowerCase();
+    const savedListNameNorm = (activeTrip.saved_list_name || '').trim().toLowerCase();
+
+    // Match condition: list name is in tags (e.g. 'th26'), or tag is in list name, or title matches
+    const isMatched =
+      tripTags.includes(listNameNorm) ||
+      tripTags.some((tag) => tag && (listNameNorm.includes(tag) || tag.includes(listNameNorm))) ||
+      listNameNorm === savedListNameNorm ||
+      listNameNorm.includes(tripTitleNorm) ||
+      tripTitleNorm.includes(listNameNorm);
+
+    el.savedListMatchDesc.textContent = isMatched
+      ? dict.savedListMatchDesc(detectedSavedList.listName, activeTrip.title)
+      : `Google 收藏列表「${detectedSavedList.listName}」包含 ${detectedSavedList.places.length} 个地点，可一键导入至当前行程「${activeTrip.title}」`;
+    el.btnSyncSavedListAll.textContent = dict.btnSyncSavedListAll(detectedSavedList.listName, detectedSavedList.places.length);
+  } else {
+    el.savedListMatchDesc.textContent = `检测到 Google 收藏列表「${detectedSavedList.listName}」（${detectedSavedList.places.length} 个地点），请先在上方创建行程即可一键导入！`;
+    el.btnSyncSavedListAll.textContent = `⚡ 导入全部 ${detectedSavedList.places.length} 个地点`;
+  }
 }
 
 function renderBatchList() {
@@ -1195,10 +1201,39 @@ el.btnDetectedCurrencyPill.addEventListener('click', () => {
 // ⚡ 1-Click Sync Matched Saved List (e.g. TH26)
 el.btnSyncSavedListAll.addEventListener('click', () => {
   const dict = t();
-  if (!state.activeTripId || !detectedSavedList || detectedSavedList.places.length === 0) return;
+  if (!detectedSavedList || detectedSavedList.places.length === 0) return;
 
   const now = new Date().toISOString();
-  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  let activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+
+  // If no active trip is selected, pick the first trip or create a new one automatically
+  if (!activeTrip) {
+    if (state.trips.length > 0) {
+      activeTrip = state.trips[0];
+      state.activeTripId = activeTrip.id;
+    } else {
+      const newTripId = crypto.randomUUID();
+      activeTrip = {
+        schema_version: '0.1',
+        type: 'trip',
+        id: newTripId,
+        title: detectedSavedList.listName || 'TH26 探索之旅',
+        status: 'planning',
+        start_date: today(),
+        end_date: today(),
+        destinations: [detectedSavedList.listName || '旅行目的地'],
+        tags: [detectedSavedList.listName || 'TH26'],
+        saved_list_name: detectedSavedList.listName,
+        currency: pageDetectedCurrency || 'THB',
+        transport_mode: 'transit',
+        created_at: now,
+        updated_at: now,
+      };
+      state.trips = [activeTrip];
+      state.activeTripId = newTripId;
+    }
+  }
+
   const updatedKnown = { ...state.knownPlaceIds };
   const newPlaces: PlannerTripPlace[] = [];
   const listTag = detectedSavedList.listName;
@@ -1213,7 +1248,7 @@ el.btnSyncSavedListAll.addEventListener('click', () => {
       schema_version: '0.1',
       type: 'trip_place',
       id: stableId,
-      trip_id: state.activeTripId,
+      trip_id: state.activeTripId!,
       title: item.title,
       source_provider: item.sourceProvider || 'google_maps',
       source_url: item.sourceUrl,
@@ -1225,6 +1260,8 @@ el.btnSyncSavedListAll.addEventListener('click', () => {
       signals: item.category ? [item.category] : [],
       risks: [],
       notes: item.userNote,
+      open_hours: item.openHours,
+      address: item.address,
       observed_rating: item.rating,
       observed_price: item.priceLevel,
       observed_at: today(),
@@ -1326,7 +1363,10 @@ el.btnBatchAdd.addEventListener('click', () => {
   }
   const checkboxes = el.batchListContainer.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked');
   const selectedUrls = new Set(Array.from(checkboxes).map((c) => c.dataset.url).filter(Boolean));
-  const toAdd = detectedListPlaces.filter((item) => selectedUrls.has(item.sourceUrl));
+  const allPlaces = (detectedSavedList?.places && detectedSavedList.places.length > 0)
+    ? detectedSavedList.places
+    : detectedListPlaces;
+  const toAdd = allPlaces.filter((item) => selectedUrls.has(item.sourceUrl));
   if (toAdd.length === 0) return;
 
   const now = new Date().toISOString();
@@ -1350,8 +1390,12 @@ el.btnBatchAdd.addEventListener('click', () => {
       kind: inferPlaceKind(item.category),
       priority: 'want',
       tags: activeTrip?.tags ?? [],
-      signals: [],
+      why: item.userNote || item.summary,
+      signals: item.category ? [item.category] : [],
       risks: [],
+      notes: item.userNote,
+      open_hours: item.openHours,
+      address: item.address,
       observed_rating: item.rating,
       observed_price: item.priceLevel,
       observed_at: today(),
