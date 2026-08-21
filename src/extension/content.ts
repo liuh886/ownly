@@ -617,22 +617,33 @@ function scanAllSavedListsOnPage(): SavedListCardSummary[] {
 
   // Look for any elements that represent a saved list
   const listElements = document.querySelectorAll<HTMLElement>(
-    'a[href*="/placelists/list/"], a[href*="!2s"], div.THL29e, div.jANrlb, div.Nv2PK, div[role="listitem"], div.m6QErb > div, div[role="article"]'
+    'a[href*="/placelists/list/"], a[href*="!2s"], div[data-list-id], div.THL29e, div.jANrlb, div.Nv2PK, div[role="listitem"], div.m6QErb > div, div[role="article"], div[jsaction*="list"]'
   );
 
   for (const el of Array.from(listElements)) {
     const anchor = el instanceof HTMLAnchorElement ? el : el.querySelector<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!2s"], a');
     const href = anchor?.href || '';
-    const listIdMatch = href.match(/!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/);
-    const listId = listIdMatch?.[1] || listIdMatch?.[2];
+    const listIdMatch = href.match(/!2s([A-Za-z0-9_-]{15,})|\/placelists\/list\/([A-Za-z0-9_-]{15,})/);
+    let listId = listIdMatch?.[1] || listIdMatch?.[2];
 
-    const titleEl = el.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, .OSrXXb, [role="heading"], h2, h3, div.fontBodyLarge, div.fontHeadlineMedium');
-    const title = titleEl?.textContent?.trim() || anchor?.getAttribute('aria-label')?.trim() || '';
+    if (!listId) {
+      const dataId = el.getAttribute('data-list-id') || el.dataset?.id || el.getAttribute('data-id');
+      if (dataId && dataId.length > 15) listId = dataId;
+    }
+
+    if (!listId) {
+      const jsaction = el.getAttribute('jsaction') || '';
+      const jsMatch = /list[:;]([A-Za-z0-9_-]{15,})/.exec(jsaction);
+      if (jsMatch) listId = jsMatch[1];
+    }
+
+    const titleEl = el.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, .OSrXXb, [role="heading"], h2, h3, div.fontBodyLarge, div.fontHeadlineMedium, div[class*="title"], span[class*="title"]');
+    const title = titleEl?.textContent?.trim() || anchor?.getAttribute('aria-label')?.trim() || el.getAttribute('aria-label')?.trim() || '';
     if (!title || title.length < 2 || isGenericNavigationTitle(title)) continue;
 
     // Check count (e.g. "19 places" or "19 个地点")
     const countText = el.textContent || '';
-    const countMatch = /(\d+)\s*(places|个地点|个地点|项|items)/i.exec(countText);
+    const countMatch = /(\d+)\s*(places|个地点|项|items)/i.exec(countText);
     const count = countMatch ? parseInt(countMatch[1], 10) : undefined;
 
     const key = (listId || title).toLowerCase();
@@ -654,23 +665,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const msgType = (message as { type?: string }).type;
   if (msgType === 'OWNLY_GET_CURRENT_PLACE') {
     void (async () => {
-      let savedList = await resolveGoogleMapsList();
-      const allLists = scanAllSavedListsOnPage();
-      const targetTags = ((message as { targetTags?: string[] }).targetTags || []).map((t) => t.trim().toLowerCase());
+      try {
+        let savedList = await resolveGoogleMapsList();
+        const allLists = scanAllSavedListsOnPage();
+        const targetTags = ((message as { targetTags?: string[] }).targetTags || []).map((t) => t.trim().toLowerCase());
 
-      // If page has multiple lists and no single list is currently open, auto-fetch the list matching the target trip tag
-      if ((!savedList || savedList.places.length === 0) && targetTags.length > 0 && allLists.length > 0) {
-        const matched = allLists.find((l) => {
-          const name = l.listName.toLowerCase();
-          return targetTags.some((t) => t && (name === t || name.includes(t) || t.includes(name)));
-        });
-        if (matched?.listId) {
-          savedList = await fetchGoogleMapsEntityList(matched.listId);
+        // If page has multiple lists and no single list is currently open, auto-fetch the list matching the target trip tag
+        if ((!savedList || savedList.places.length === 0) && targetTags.length > 0 && allLists.length > 0) {
+          const matched = allLists.find((l) => {
+            const name = l.listName.toLowerCase();
+            return targetTags.some((t) => t && (name === t || name.includes(t) || t.includes(name)));
+          });
+          if (matched?.listId) {
+            savedList = await fetchGoogleMapsEntityList(matched.listId);
+          }
         }
-      }
 
-      const place = currentPlace();
-      sendResponse({ place, savedList, allLists });
+        const place = currentPlace();
+        sendResponse({ place, savedList, allLists });
+      } catch (e: any) {
+        console.warn('OWNLY_GET_CURRENT_PLACE failed:', e);
+        sendResponse({ place: null, savedList: null, allLists: [] });
+      }
     })();
     return true;
   }

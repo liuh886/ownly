@@ -1393,20 +1393,26 @@ async function resolveGoogleMapsListByUrl(rawUrl: string): Promise<PlannerTripPl
       try {
         const res = await fetch(rawUrl, { redirect: 'follow' });
         finalUrl = res.url;
-      } catch {}
+      } catch (e: any) {
+        throw new Error(`短链接跳转失败: ${e.message}`);
+      }
     }
     const listIdMatch = /!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(finalUrl);
     const listId = listIdMatch?.[1] || listIdMatch?.[2];
-    if (listId) {
-      const fetchUrl = `https://www.google.com/maps/preview/entitylist/getlist?authuser=0&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
-      const res = await fetch(fetchUrl);
-      if (res.ok) {
-        const raw = await res.text();
-        const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
-        const data = JSON.parse(cleanJson);
-        const listName = data[0]?.[4] || 'Google Maps 收藏列表';
-        const rawItems = data[0]?.[8];
-        if (Array.isArray(rawItems)) {
+    if (!listId) {
+      throw new Error(`无法从链接中提取列表 ID: ${finalUrl}`);
+    }
+    const fetchUrl = `https://www.google.com/maps/preview/entitylist/getlist?authuser=0&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
+    const res = await fetch(fetchUrl);
+    if (!res.ok) {
+      throw new Error(`获取列表失败, HTTP ${res.status}`);
+    }
+    const raw = await res.text();
+    const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
+    const data = JSON.parse(cleanJson);
+    const listName = data[0]?.[4] || 'Google Maps 收藏列表';
+    const rawItems = data[0]?.[8];
+    if (Array.isArray(rawItems)) {
           const now = new Date().toISOString();
           const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
           const combinedTags = Array.from(new Set([...(activeTrip?.tags ?? []), listName]));
@@ -1442,13 +1448,13 @@ async function resolveGoogleMapsListByUrl(rawUrl: string): Promise<PlannerTripPl
             });
           }
           return places;
+        } else {
+          throw new Error('解析列表失败：接口未返回项目数据');
         }
-      }
-    }
-  } catch (err) {
+  } catch (err: any) {
     console.warn('Could not resolve google maps list link:', err);
+    throw err; // Propagate the error so caller can catch and log it
   }
-  return [];
 }
 
 // Bulk Text / Links Parser
@@ -1473,19 +1479,26 @@ el.btnParseBulkImport.addEventListener('click', () => {
     const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
     const updatedKnown = { ...state.knownPlaceIds };
     const newPlaces: PlannerTripPlace[] = [];
+    const errors: string[] = [];
 
     for (const line of lines) {
       const isUrl = /^https?:\/\//i.test(line);
-      if (isUrl && (line.includes('maps.app.goo.gl') || line.includes('!2s') || line.includes('placelists/list'))) {
-        const listItems = await resolveGoogleMapsListByUrl(line);
-        if (listItems.length > 0) {
-          for (const item of listItems) {
-            const placeKey = `${state.activeTripId}::${item.source_url}`;
-            item.id = updatedKnown[placeKey] ?? crypto.randomUUID();
-            updatedKnown[placeKey] = item.id;
-            newPlaces.push(item);
+      if (isUrl && (line.includes('maps.app.goo.gl') || line.includes('!2s') || line.includes('placelists/list') || line.includes('goo.gl/maps'))) {
+        try {
+          const listItems = await resolveGoogleMapsListByUrl(line);
+          if (listItems.length > 0) {
+            for (const item of listItems) {
+              const placeKey = `${state.activeTripId}::${item.source_url}`;
+              item.id = updatedKnown[placeKey] ?? crypto.randomUUID();
+              updatedKnown[placeKey] = item.id;
+              newPlaces.push(item);
+            }
+            continue;
+          } else {
+            errors.push(`[未找到地点: ${line}]`);
           }
-          continue;
+        } catch (e: any) {
+          errors.push(`[解析失败: ${line} - ${e?.message || '未知错误'}]`);
         }
       }
 
@@ -1526,7 +1539,15 @@ el.btnParseBulkImport.addEventListener('click', () => {
 
     void saveState().then(() => {
       el.bulkInputText.value = '';
-      setStatus(dict.bulkImportSuccess(newPlaces.length), 'success');
+      if (newPlaces.length > 0 || errors.length > 0) {
+        if (errors.length > 0) {
+          setStatus(`导入了 ${newPlaces.length} 个地点。存在错误: ${errors.join(', ')}`, newPlaces.length > 0 ? 'success' : 'error');
+        } else {
+          setStatus(dict.bulkImportSuccess(newPlaces.length), 'success');
+        }
+      } else if (errors.length > 0) {
+        setStatus(`解析失败或未找到有效数据: ${errors.join(', ')}`, 'error');
+      }
     });
   })();
 });
