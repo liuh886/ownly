@@ -382,6 +382,96 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   };
 }
 
+function extractGoogleMapsListId(): string | null {
+  // Check URL pathname and search parameters for list ID pattern !2s<ID>
+  const urlMatch = /!2s([A-Za-z0-9_-]{20,})/.exec(window.location.href);
+  if (urlMatch?.[1]) return urlMatch[1];
+
+  const placeListMatch = /\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(window.location.href);
+  if (placeListMatch?.[1]) return placeListMatch[1];
+
+  // Check preload link
+  const preloadEl = document.querySelector<HTMLLinkElement>('link[href*="entitylist/getlist"]');
+  if (preloadEl?.href) {
+    const pbMatch = /!1s([A-Za-z0-9_-]{20,})/.exec(preloadEl.href);
+    if (pbMatch?.[1]) return pbMatch[1];
+  }
+
+  return null;
+}
+
+let cachedEntityList: DetectedSavedList | null = null;
+let lastScannedListId: string | null = null;
+
+async function resolveGoogleMapsList(): Promise<DetectedSavedList | null> {
+  const listId = extractGoogleMapsListId();
+  if (listId && listId === lastScannedListId && cachedEntityList) {
+    return cachedEntityList;
+  }
+
+  if (listId) {
+    try {
+      const fetchUrl = `/maps/preview/entitylist/getlist?authuser=0&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
+      const res = await fetch(fetchUrl);
+      if (res.ok) {
+        const raw = await res.text();
+        const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
+        const data = JSON.parse(cleanJson);
+        const listName = data[0]?.[4] || 'Google Maps 收藏列表';
+        const rawItems = data[0]?.[8];
+        if (Array.isArray(rawItems)) {
+          const places: CurrentResearchPlace[] = [];
+          for (const item of rawItems) {
+            const placeInfo = item[1];
+            const title = item[2] || (placeInfo && placeInfo[2]);
+            if (!title) continue;
+
+            const address = placeInfo ? placeInfo[4] : undefined;
+            const userNote = item[3] || undefined;
+            const lat = placeInfo?.[5]?.[2];
+            const lng = placeInfo?.[5]?.[3];
+            const sourceUrl = (lat && lng)
+              ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`
+              : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+
+            places.push({
+              title: String(title).trim(),
+              sourceUrl,
+              sourceProvider: 'google_maps',
+              address,
+              userNote,
+              summary: userNote,
+              category: 'Google Maps 收藏地点',
+              detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
+            });
+          }
+
+          if (places.length > 0) {
+            cachedEntityList = {
+              listName,
+              listUrl: window.location.href,
+              detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
+              places,
+            };
+            lastScannedListId = listId;
+            return cachedEntityList;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Entitylist direct fetch failed:', e);
+    }
+  }
+
+  // Fallback to DOM scan
+  const domList = detectGoogleMapsSavedList();
+  if (domList) {
+    cachedEntityList = domList;
+    return domList;
+  }
+  return null;
+}
+
 function detectGoogleMapsSavedList(): DetectedSavedList | null {
   // Extract list name from Google Maps Saved / Lists page
   let listName = '';
@@ -499,16 +589,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const msgType = (message as { type?: string }).type;
   if (msgType === 'OWNLY_GET_CURRENT_PLACE') {
-    sendResponse({ place: currentPlace(), savedList: detectGoogleMapsSavedList() });
-    return;
+    void (async () => {
+      const savedList = await resolveGoogleMapsList();
+      const place = currentPlace();
+      sendResponse({ place, savedList });
+    })();
+    return true;
   }
   if (msgType === 'OWNLY_GET_VISIBLE_LIST_PLACES') {
-    sendResponse({ listPlaces: detectGoogleMapsListPlaces() });
-    return;
+    void (async () => {
+      const savedList = await resolveGoogleMapsList();
+      const listPlaces = savedList?.places ?? detectGoogleMapsListPlaces();
+      sendResponse({ listPlaces });
+    })();
+    return true;
   }
   if (msgType === 'OWNLY_GET_SAVED_LIST') {
-    sendResponse({ savedList: detectGoogleMapsSavedList() });
-    return;
+    void (async () => {
+      const savedList = await resolveGoogleMapsList();
+      sendResponse({ savedList });
+    })();
+    return true;
   }
 });
 
