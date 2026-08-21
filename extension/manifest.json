@@ -6,8 +6,11 @@
   "permissions": ["sidePanel", "storage"],
   "host_permissions": [
     "https://www.google.com/maps/*",
+    "https://maps.google.com/*",
     "https://liuh886.github.io/ownly/*",
-    "https://zhihaol.eu.org/*"
+    "https://zhihaol.eu.org/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -20,14 +23,19 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.google.com/maps/*"],
+      "matches": [
+        "https://www.google.com/maps/*",
+        "https://maps.google.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     },
     {
       "matches": [
         "https://liuh886.github.io/ownly/*",
-        "https://zhihaol.eu.org/*"
+        "https://zhihaol.eu.org/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
       ],
       "js": ["ownly-bridge.js"],
       "run_at": "document_start"
