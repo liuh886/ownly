@@ -1,6 +1,7 @@
 import {
   EMPTY_CAPTURE_STATE,
   inferPlaceKind,
+  listTripDates,
   normalizeDelimitedText,
   type OwnlyCaptureState,
   type PlannerPlaceKind,
@@ -8,16 +9,27 @@ import {
   type PlannerTrip,
   type PlannerTripPlace,
 } from '../domain/planner';
-import type { CurrentGoogleMapsPlace } from './content';
+import type { CurrentResearchPlace } from './content';
 
 const STORAGE_KEY = 'ownlyCaptureStateV1';
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 
 type Lang = 'zh' | 'en';
 
+const KIND_ICONS: Record<PlannerPlaceKind, string> = {
+  attraction: '🏰',
+  food: '🍜',
+  cafe: '☕',
+  stay: '🏨',
+  shopping: '🛍️',
+  transit: '🚇',
+  experience: '🧗',
+  other: '📍',
+};
+
 const I18N = {
   zh: {
-    subtitle: 'Google Maps 灵感采集 → Ownly Planner',
+    subtitle: '多源灵感采集 → Ownly Planner',
     pendingSuffix: '待同步',
     activeTrip: '当前行程',
     noTripOption: '请在下方新建行程',
@@ -33,10 +45,15 @@ const I18N = {
     tripCurrencyLabel: '货币',
     tripTransportLabel: '主要交通',
     btnCreateTrip: '创建并设为当前行程',
-    currentPlaceLabel: 'Google Maps 当前地点',
+    batchSummary: (count: number) => `📋 批量感知：当前地图列表 (${count} 个地点)`,
+    btnSelectAll: '全选 / 取消',
+    btnBatchAdd: '➕ 批量加入候选池',
+    batchAddedSuccess: (count: number) => `已成功批量添加 ${count} 个地点至候选池！`,
+    currentPlaceLabel: '当前识别地点',
     refreshBtn: '🔄 刷新',
-    noPlaceTitle: '请在 Google Maps 中打开地点',
-    noPlaceUrl: '在地图中点击任意地点即可自动识别',
+    noPlaceTitle: '请在地图或页面中打开地点',
+    noPlaceUrl: '在 Google Maps、Tabelog、小红书浏览时自动识别',
+    capturedBanner: '✓ 该地点已在当前行程候选池中',
     kindLabel: '地点类别',
     priorityLabel: '优先级',
     areaLabel: '区域 / 街区',
@@ -47,9 +64,9 @@ const I18N = {
     durationPlaceholder: '90',
     windowLabel: '偏好时段',
     windowPlaceholder: '例如：上午 / 傍晚日落 / 晚上',
-    ratingLabel: 'Google 评分',
+    ratingLabel: '评分',
     ratingPlaceholder: '4.6',
-    priceLabel: '人均价格 / 价格区间',
+    priceLabel: '人均价格 / 预算',
     pricePlaceholder: '例如：¥2,000 / 人',
     quickChipsLabel: '快捷标签',
     whyLabel: '选择理由 (Why)',
@@ -60,13 +77,29 @@ const I18N = {
     risksPlaceholder: '例如：周末排队极长, 需提前2周预约, 雨天不宜',
     notesLabel: '个人备忘笔记',
     notesPlaceholder: '你自己的游玩心得或计划备忘，而非直接复制评论',
-    btnCaptureSubmit: '➕ 加入行程候选池',
+    btnAddCandidate: '➕ 加入行程候选池',
+    btnUpdateCandidate: '✓ 更新候选心得',
+    btnRemoveCandidate: '🗑️ 移出',
+    candidateRemoved: '已从候选池中移出。',
+    drawerTitle: '🗂️ 当前行程候选池',
+    searchPlaceholder: '🔍 搜索候选地点、区域或标签...',
+    allFilter: '全部',
+    mustFilter: '必去 (Must)',
+    wantFilter: '想去 (Want)',
+    foodFilter: '美食',
+    attractionFilter: '景点',
+    stayFilter: '住宿',
+    unassignedDay: '候选池',
+    dayOption: (idx: number, date: string) => `第 ${idx} 天 (${date})`,
+    editAction: '编辑',
+    deleteAction: '删除',
+    emptyCandidates: '当前行程暂无候选地点，浏览地图即可快速添加。',
     readyStatus: '就绪。',
-    readingStatus: '正在读取 Google Maps 地点信息…',
-    noPlaceStatus: '未检测到地点，请在当前标签页打开 Google Maps 地点。',
+    readingStatus: '正在读取页面地点信息…',
+    noPlaceStatus: '未检测到地点，请在标签页中打开地点。',
     readyToCapture: '地点已识别，可直接调整或保存。',
     tripRequiredError: '请先创建或选择一个行程。',
-    placeRequiredError: '请先在 Google Maps 中打开一个地点。',
+    placeRequiredError: '请先打开一个地点页面。',
     candidateUpdated: '已更新该地点的研究心得。',
     candidateAdded: '已成功加入候选池！',
     tripCreated: (title: string) => `已激活行程：${title}`,
@@ -95,7 +128,7 @@ const I18N = {
     },
   },
   en: {
-    subtitle: 'Google Maps research → Ownly Planner',
+    subtitle: 'Multi-source research → Ownly Planner',
     pendingSuffix: 'pending',
     activeTrip: 'Active trip',
     noTripOption: 'Create a trip below',
@@ -111,10 +144,15 @@ const I18N = {
     tripCurrencyLabel: 'Currency',
     tripTransportLabel: 'Primary transport',
     btnCreateTrip: 'Create & activate',
-    currentPlaceLabel: 'Current place in Google Maps',
+    batchSummary: (count: number) => `📋 Batch Detected: Map List (${count} places)`,
+    btnSelectAll: 'Select All / None',
+    btnBatchAdd: '➕ Add Selected to Pool',
+    batchAddedSuccess: (count: number) => `Successfully batch added ${count} places to research pool!`,
+    currentPlaceLabel: 'Detected place',
     refreshBtn: '🔄 Refresh',
-    noPlaceTitle: 'Open a place in Google Maps',
-    noPlaceUrl: 'Click any place on Google Maps to detect automatically',
+    noPlaceTitle: 'Open a place page',
+    noPlaceUrl: 'Auto-detects while browsing Google Maps, Tabelog, Xiaohongshu',
+    capturedBanner: '✓ This place is already in your research pool',
     kindLabel: 'Place kind',
     priorityLabel: 'Priority',
     areaLabel: 'Area / District',
@@ -125,9 +163,9 @@ const I18N = {
     durationPlaceholder: '90',
     windowLabel: 'Preferred window',
     windowPlaceholder: 'e.g. early morning / sunset / evening',
-    ratingLabel: 'Google rating',
+    ratingLabel: 'Rating',
     ratingPlaceholder: '4.6',
-    priceLabel: 'Observed price / range',
+    priceLabel: 'Observed price / budget',
     pricePlaceholder: 'e.g. ~$25 / person',
     quickChipsLabel: 'Quick tags',
     whyLabel: 'Why it matters (Why)',
@@ -138,13 +176,29 @@ const I18N = {
     risksPlaceholder: 'e.g. long weekend queue, 2-week advance booking, rain sensitive',
     notesLabel: 'Personal note',
     notesPlaceholder: 'Your own judgment, not a copy of Google reviews',
-    btnCaptureSubmit: '➕ Add to research pool',
+    btnAddCandidate: '➕ Add to research pool',
+    btnUpdateCandidate: '✓ Update research note',
+    btnRemoveCandidate: '🗑️ Remove',
+    candidateRemoved: 'Removed from research pool.',
+    drawerTitle: '🗂️ Trip Candidates Pool',
+    searchPlaceholder: '🔍 Search places, areas, tags...',
+    allFilter: 'All',
+    mustFilter: 'Must',
+    wantFilter: 'Want',
+    foodFilter: 'Food',
+    attractionFilter: 'Attraction',
+    stayFilter: 'Stay',
+    unassignedDay: 'Candidate Pool',
+    dayOption: (idx: number, date: string) => `Day ${idx} (${date})`,
+    editAction: 'Edit',
+    deleteAction: 'Delete',
+    emptyCandidates: 'No candidates yet for this trip. Browse maps to add places.',
     readyStatus: 'Ready.',
-    readingStatus: 'Reading Google Maps place…',
-    noPlaceStatus: 'No place detected. Open a place on Google Maps first.',
+    readingStatus: 'Reading place details…',
+    noPlaceStatus: 'No place detected. Open a place on map or webpage.',
     readyToCapture: 'Place detected. Review details and save.',
     tripRequiredError: 'Create or select a trip first.',
-    placeRequiredError: 'Open a Google Maps place first.',
+    placeRequiredError: 'Open a place page first.',
     candidateUpdated: 'Research candidate updated.',
     candidateAdded: 'Added to research pool!',
     tripCreated: (title: string) => `Active trip: ${title}`,
@@ -196,9 +250,16 @@ type ElementMap = {
   lblTripTransport: HTMLElement;
   tripTransport: HTMLSelectElement;
   btnCreateTrip: HTMLButtonElement;
+  batchSection: HTMLElement;
+  sumBatchList: HTMLElement;
+  batchListContainer: HTMLElement;
+  btnToggleSelectAll: HTMLButtonElement;
+  btnBatchAdd: HTMLButtonElement;
   lblCurrentPlace: HTMLElement;
   placeTitle: HTMLElement;
   placeUrl: HTMLElement;
+  placeCapturedBanner: HTMLElement;
+  txtCapturedBanner: HTMLElement;
   placeMetaBadges: HTMLElement;
   refreshPlace: HTMLButtonElement;
   captureForm: HTMLFormElement;
@@ -229,6 +290,13 @@ type ElementMap = {
   lblNotes: HTMLElement;
   notes: HTMLTextAreaElement;
   btnCaptureSubmit: HTMLButtonElement;
+  btnRemoveCandidate: HTMLButtonElement;
+  candidatesDrawer: HTMLElement;
+  sumCandidatesDrawer: HTMLElement;
+  candidatesCountBadge: HTMLElement;
+  candidatesSearch: HTMLInputElement;
+  candidatesFilterBar: HTMLElement;
+  candidatesListContainer: HTMLElement;
   pending: HTMLElement;
   status: HTMLElement;
 };
@@ -261,9 +329,16 @@ const el: ElementMap = {
   lblTripTransport: required('lblTripTransport'),
   tripTransport: required('tripTransport'),
   btnCreateTrip: required('btnCreateTrip'),
+  batchSection: required('batchSection'),
+  sumBatchList: required('sumBatchList'),
+  batchListContainer: required('batchListContainer'),
+  btnToggleSelectAll: required('btnToggleSelectAll'),
+  btnBatchAdd: required('btnBatchAdd'),
   lblCurrentPlace: required('lblCurrentPlace'),
   placeTitle: required('placeTitle'),
   placeUrl: required('placeUrl'),
+  placeCapturedBanner: required('placeCapturedBanner'),
+  txtCapturedBanner: required('txtCapturedBanner'),
   placeMetaBadges: required('placeMetaBadges'),
   refreshPlace: required('refreshPlace'),
   captureForm: required('captureForm'),
@@ -294,13 +369,23 @@ const el: ElementMap = {
   lblNotes: required('lblNotes'),
   notes: required('notes'),
   btnCaptureSubmit: required('btnCaptureSubmit'),
+  btnRemoveCandidate: required('btnRemoveCandidate'),
+  candidatesDrawer: required('candidatesDrawer'),
+  sumCandidatesDrawer: required('sumCandidatesDrawer'),
+  candidatesCountBadge: required('candidatesCountBadge'),
+  candidatesSearch: required('candidatesSearch'),
+  candidatesFilterBar: required('candidatesFilterBar'),
+  candidatesListContainer: required('candidatesListContainer'),
   pending: required('pending'),
   status: required('status'),
 };
 
 let currentLang: Lang = 'zh';
 let state: OwnlyCaptureState = { ...EMPTY_CAPTURE_STATE };
-let currentPlace: CurrentGoogleMapsPlace | null = null;
+let currentPlace: CurrentResearchPlace | null = null;
+let detectedListPlaces: CurrentResearchPlace[] = [];
+let activeFilter = 'all';
+let searchQuery = '';
 
 function t() {
   return I18N[currentLang];
@@ -334,8 +419,12 @@ function applyI18n() {
   el.lblTripTransport.childNodes[0].nodeValue = dict.tripTransportLabel;
   el.btnCreateTrip.textContent = dict.btnCreateTrip;
 
+  el.btnToggleSelectAll.textContent = dict.btnSelectAll;
+  el.btnBatchAdd.textContent = dict.btnBatchAdd;
+
   el.lblCurrentPlace.textContent = dict.currentPlaceLabel;
   el.refreshPlace.textContent = dict.refreshBtn;
+  el.txtCapturedBanner.textContent = dict.capturedBanner;
 
   el.lblKind.childNodes[0].nodeValue = dict.kindLabel;
   for (const opt of Array.from(el.kind.options)) {
@@ -376,11 +465,16 @@ function applyI18n() {
   el.risks.placeholder = dict.risksPlaceholder;
   el.lblNotes.childNodes[0].nodeValue = dict.notesLabel;
   el.notes.placeholder = dict.notesPlaceholder;
-  el.btnCaptureSubmit.textContent = dict.btnCaptureSubmit;
+  el.btnRemoveCandidate.textContent = dict.btnRemoveCandidate;
+
+  el.sumCandidatesDrawer.textContent = dict.drawerTitle;
+  el.candidatesSearch.placeholder = dict.searchPlaceholder;
 
   renderChips();
+  renderFilters();
   renderState();
   renderCurrentPlace();
+  renderCandidatesList();
 }
 
 function renderChips() {
@@ -400,6 +494,31 @@ function renderChips() {
       }
     });
     el.quickChips.append(btn);
+  }
+}
+
+function renderFilters() {
+  const dict = t();
+  const filters = [
+    { id: 'all', label: dict.allFilter },
+    { id: 'must', label: dict.mustFilter },
+    { id: 'want', label: dict.wantFilter },
+    { id: 'food', label: dict.foodFilter },
+    { id: 'attraction', label: dict.attractionFilter },
+    { id: 'stay', label: dict.stayFilter },
+  ];
+  el.candidatesFilterBar.innerHTML = '';
+  for (const item of filters) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `filter-btn ${activeFilter === item.id ? 'active' : ''}`;
+    btn.textContent = item.label;
+    btn.addEventListener('click', () => {
+      activeFilter = item.id;
+      renderFilters();
+      renderCandidatesList();
+    });
+    el.candidatesFilterBar.append(btn);
   }
 }
 
@@ -427,6 +546,8 @@ async function loadState(): Promise<void> {
 async function saveState(): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEY]: state });
   renderState();
+  renderCurrentPlace();
+  renderCandidatesList();
 }
 
 function renderState() {
@@ -458,22 +579,77 @@ async function readCurrentPlace(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     currentPlace = null;
+    detectedListPlaces = [];
     renderCurrentPlace();
+    renderBatchList();
     return;
   }
   try {
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' }) as { place?: CurrentGoogleMapsPlace | null };
-    currentPlace = response?.place ?? null;
+    const placeResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' }) as { place?: CurrentResearchPlace | null };
+    currentPlace = placeResp?.place ?? null;
   } catch {
     currentPlace = null;
   }
+  try {
+    const listResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' }) as { listPlaces?: CurrentResearchPlace[] };
+    detectedListPlaces = Array.isArray(listResp?.listPlaces) ? listResp.listPlaces : [];
+  } catch {
+    detectedListPlaces = [];
+  }
+
   renderCurrentPlace();
+  renderBatchList();
   if (currentPlace) {
     autoFillPlaceForm(currentPlace);
   }
 }
 
-function autoFillPlaceForm(place: CurrentGoogleMapsPlace) {
+function renderBatchList() {
+  const dict = t();
+  if (detectedListPlaces.length <= 1) {
+    el.batchSection.style.display = 'none';
+    return;
+  }
+  el.batchSection.style.display = 'block';
+  el.sumBatchList.textContent = dict.batchSummary(detectedListPlaces.length);
+  el.batchListContainer.innerHTML = '';
+
+  for (const item of detectedListPlaces) {
+    const row = document.createElement('div');
+    row.className = 'batch-item';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = true;
+    chk.dataset.url = item.sourceUrl;
+
+    const info = document.createElement('div');
+    info.className = 'batch-item-info';
+    info.innerHTML = `<div class="batch-item-title">${item.title}</div><div class="batch-item-sub">${item.category || ''} ${item.rating ? `★ ${item.rating}` : ''}</div>`;
+
+    row.append(chk, info);
+    el.batchListContainer.append(row);
+  }
+}
+
+function autoFillPlaceForm(place: CurrentResearchPlace) {
+  const existing = getExistingPlaceForUrl(place.sourceUrl);
+  if (existing) {
+    el.kind.value = existing.kind;
+    el.priority.value = existing.priority;
+    el.area.value = existing.area || '';
+    el.tags.value = existing.tags?.join(', ') || '';
+    el.duration.value = existing.duration_minutes ? String(existing.duration_minutes) : '';
+    el.window.value = existing.preferred_window || '';
+    el.rating.value = existing.observed_rating ? String(existing.observed_rating) : (place.rating ? String(place.rating) : '');
+    el.price.value = existing.observed_price || place.priceLevel || '';
+    el.why.value = existing.why || place.summary || '';
+    el.signals.value = existing.signals?.join(', ') || '';
+    el.risks.value = existing.risks?.join(', ') || '';
+    el.notes.value = existing.notes || '';
+    return;
+  }
+
   if (place.rating) {
     el.rating.value = String(place.rating);
   }
@@ -496,17 +672,38 @@ function autoFillPlaceForm(place: CurrentGoogleMapsPlace) {
   }
 }
 
+function getExistingPlaceForUrl(sourceUrl: string): PlannerTripPlace | undefined {
+  if (!state.activeTripId) return undefined;
+  const placeKey = `${state.activeTripId}::${sourceUrl}`;
+  const stableId = state.knownPlaceIds[placeKey];
+  return state.pendingPlaces.find((p) => p.id === stableId || p.source_url === sourceUrl);
+}
+
 function renderCurrentPlace() {
   const dict = t();
   el.placeMetaBadges.innerHTML = '';
   if (!currentPlace) {
     el.placeTitle.textContent = dict.noPlaceTitle;
     el.placeUrl.textContent = dict.noPlaceUrl;
+    el.placeCapturedBanner.style.display = 'none';
+    el.btnCaptureSubmit.textContent = dict.btnAddCandidate;
+    el.btnRemoveCandidate.style.display = 'none';
     setStatus(dict.noPlaceStatus);
     return;
   }
   el.placeTitle.textContent = currentPlace.title;
   el.placeUrl.textContent = currentPlace.sourceUrl;
+
+  const existing = getExistingPlaceForUrl(currentPlace.sourceUrl);
+  if (existing) {
+    el.placeCapturedBanner.style.display = 'flex';
+    el.btnCaptureSubmit.textContent = dict.btnUpdateCandidate;
+    el.btnRemoveCandidate.style.display = 'inline-block';
+  } else {
+    el.placeCapturedBanner.style.display = 'none';
+    el.btnCaptureSubmit.textContent = dict.btnAddCandidate;
+    el.btnRemoveCandidate.style.display = 'none';
+  }
 
   if (currentPlace.rating) {
     const b = document.createElement('span');
@@ -540,6 +737,137 @@ function renderCurrentPlace() {
   }
 
   setStatus(dict.readyToCapture);
+}
+
+function renderCandidatesList() {
+  const dict = t();
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  const tripDays = activeTrip ? listTripDates(activeTrip.start_date, activeTrip.end_date) : [];
+
+  let candidates = state.pendingPlaces.filter((p) => p.trip_id === state.activeTripId);
+  el.candidatesCountBadge.textContent = String(candidates.length);
+
+  if (activeFilter === 'must') candidates = candidates.filter((p) => p.priority === 'must');
+  if (activeFilter === 'want') candidates = candidates.filter((p) => p.priority === 'want');
+  if (activeFilter === 'food') candidates = candidates.filter((p) => p.kind === 'food' || p.kind === 'cafe');
+  if (activeFilter === 'attraction') candidates = candidates.filter((p) => p.kind === 'attraction');
+  if (activeFilter === 'stay') candidates = candidates.filter((p) => p.kind === 'stay');
+
+  if (searchQuery.trim()) {
+    const query = searchQuery.trim().toLowerCase();
+    candidates = candidates.filter((p) =>
+      p.title.toLowerCase().includes(query) ||
+      p.area?.toLowerCase().includes(query) ||
+      p.tags.some((tag) => tag.toLowerCase().includes(query))
+    );
+  }
+
+  el.candidatesListContainer.innerHTML = '';
+  if (candidates.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.color = '#a8a29e';
+    empty.style.fontSize = '11px';
+    empty.style.padding = '8px 4px';
+    empty.textContent = dict.emptyCandidates;
+    el.candidatesListContainer.append(empty);
+    return;
+  }
+
+  for (const place of candidates) {
+    const card = document.createElement('div');
+    card.className = 'candidate-card';
+
+    const header = document.createElement('div');
+    header.className = 'candidate-header';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'candidate-title';
+    titleEl.textContent = `${KIND_ICONS[place.kind] || '📍'} ${place.title}`;
+
+    const priorityBadge = document.createElement('span');
+    priorityBadge.className = `badge ${place.priority}`;
+    priorityBadge.textContent = dict.priorities[place.priority] || place.priority;
+
+    header.append(titleEl, priorityBadge);
+
+    const details = document.createElement('div');
+    details.className = 'candidate-details';
+    if (place.area) details.innerHTML += `<span>📍 ${place.area}</span>`;
+    if (place.observed_rating) details.innerHTML += `<span>★ ${place.observed_rating}</span>`;
+    if (place.duration_minutes) details.innerHTML += `<span>⏱️ ${place.duration_minutes}m</span>`;
+    if (place.tags.length) details.innerHTML += `<span>🏷️ ${place.tags.join(', ')}</span>`;
+
+    const actions = document.createElement('div');
+    actions.className = 'candidate-actions';
+
+    const daySelect = document.createElement('select');
+    daySelect.className = 'day-select';
+    const optPool = document.createElement('option');
+    optPool.value = '';
+    optPool.textContent = dict.unassignedDay;
+    daySelect.append(optPool);
+
+    tripDays.forEach((d, idx) => {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = dict.dayOption(idx + 1, d.slice(5));
+      daySelect.append(opt);
+    });
+    daySelect.value = place.scheduled_date || '';
+
+    daySelect.addEventListener('change', () => {
+      const selectedDate = daySelect.value;
+      const updatedPlaces = state.pendingPlaces.map((p) => {
+        if (p.id !== place.id) return p;
+        return {
+          ...p,
+          scheduled_date: selectedDate || undefined,
+          state: selectedDate ? ('scheduled' as const) : ('candidate' as const),
+          updated_at: new Date().toISOString(),
+        };
+      });
+      state = { ...state, pendingPlaces: updatedPlaces };
+      void saveState();
+    });
+
+    const btnGroup = document.createElement('div');
+    btnGroup.className = 'card-btns';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'card-btn';
+    editBtn.textContent = `✏️ ${dict.editAction}`;
+    editBtn.addEventListener('click', () => {
+      currentPlace = {
+        title: place.title,
+        sourceUrl: place.source_url,
+        sourceProvider: place.source_provider,
+        rating: place.observed_rating,
+        priceLevel: place.observed_price,
+        summary: place.why,
+      };
+      autoFillPlaceForm(currentPlace);
+      renderCurrentPlace();
+      window.scrollTo({ top: 120, behavior: 'smooth' });
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'card-btn del';
+    delBtn.textContent = `🗑️ ${dict.deleteAction}`;
+    delBtn.addEventListener('click', () => {
+      state = { ...state, pendingPlaces: state.pendingPlaces.filter((p) => p.id !== place.id) };
+      void saveState().then(() => {
+        renderCurrentPlace();
+      });
+    });
+
+    btnGroup.append(editBtn, delBtn);
+    actions.append(daySelect, btnGroup);
+
+    card.append(header, details, actions);
+    el.candidatesListContainer.append(card);
+  }
 }
 
 function createTripFromForm(): PlannerTrip | null {
@@ -576,6 +904,73 @@ el.langToggle.addEventListener('click', () => {
   applyI18n();
 });
 
+el.candidatesSearch.addEventListener('input', () => {
+  searchQuery = el.candidatesSearch.value;
+  renderCandidatesList();
+});
+
+el.btnToggleSelectAll.addEventListener('click', () => {
+  const checkboxes = el.batchListContainer.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+  const allChecked = Array.from(checkboxes).every((c) => c.checked);
+  checkboxes.forEach((c) => { c.checked = !allChecked; });
+});
+
+el.btnBatchAdd.addEventListener('click', () => {
+  const dict = t();
+  if (!state.activeTripId) {
+    setStatus(dict.tripRequiredError, 'error');
+    return;
+  }
+  const checkboxes = el.batchListContainer.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked');
+  const selectedUrls = new Set(Array.from(checkboxes).map((c) => c.dataset.url).filter(Boolean));
+  const toAdd = detectedListPlaces.filter((item) => selectedUrls.has(item.sourceUrl));
+  if (toAdd.length === 0) return;
+
+  const now = new Date().toISOString();
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  const updatedKnown = { ...state.knownPlaceIds };
+  const newPlaces: PlannerTripPlace[] = [];
+
+  for (const item of toAdd) {
+    const placeKey = `${state.activeTripId}::${item.sourceUrl}`;
+    const stableId = updatedKnown[placeKey] ?? crypto.randomUUID();
+    updatedKnown[placeKey] = stableId;
+
+    const place: PlannerTripPlace = {
+      schema_version: '0.1',
+      type: 'trip_place',
+      id: stableId,
+      trip_id: state.activeTripId,
+      title: item.title,
+      source_provider: item.sourceProvider || 'google_maps',
+      source_url: item.sourceUrl,
+      kind: inferPlaceKind(item.category),
+      priority: 'want',
+      tags: activeTrip?.tags ?? [],
+      signals: [],
+      risks: [],
+      observed_rating: item.rating,
+      observed_at: today(),
+      reservation_status: 'none',
+      state: 'candidate',
+      created_at: now,
+      updated_at: now,
+    };
+    newPlaces.push(place);
+  }
+
+  const existingIds = new Set(newPlaces.map((p) => p.id));
+  state = {
+    ...state,
+    knownPlaceIds: updatedKnown,
+    pendingPlaces: [...state.pendingPlaces.filter((p) => !existingIds.has(p.id)), ...newPlaces],
+  };
+
+  void saveState().then(() => {
+    setStatus(dict.batchAddedSuccess(newPlaces.length), 'success');
+  });
+});
+
 el.tripForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const trip = createTripFromForm();
@@ -599,6 +994,21 @@ el.tripSelect.addEventListener('change', () => {
 });
 
 el.refreshPlace.addEventListener('click', () => { void readCurrentPlace(); });
+
+el.btnRemoveCandidate.addEventListener('click', () => {
+  const dict = t();
+  if (!currentPlace || !state.activeTripId) return;
+  const existing = getExistingPlaceForUrl(currentPlace.sourceUrl);
+  if (!existing) return;
+
+  state = { ...state, pendingPlaces: state.pendingPlaces.filter((p) => p.id !== existing.id) };
+  void saveState().then(() => {
+    el.captureForm.reset();
+    el.kind.value = 'attraction';
+    el.priority.value = 'want';
+    setStatus(dict.candidateRemoved, 'success');
+  });
+});
 
 el.captureForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -629,7 +1039,7 @@ el.captureForm.addEventListener('submit', (event) => {
     id: stableId,
     trip_id: state.activeTripId,
     title: currentPlace.title,
-    source_provider: 'google_maps',
+    source_provider: currentPlace.sourceProvider || 'google_maps',
     source_url: currentPlace.sourceUrl,
     kind: el.kind.value as PlannerPlaceKind,
     area: el.area.value.trim() || undefined,
@@ -644,8 +1054,9 @@ el.captureForm.addEventListener('submit', (event) => {
     observed_at: today(),
     preferred_window: el.window.value.trim() || undefined,
     duration_minutes: Number.isFinite(duration) && duration > 0 ? Math.min(1440, Math.round(duration)) : undefined,
-    reservation_status: 'none',
-    state: 'candidate',
+    reservation_status: existing?.reservation_status ?? 'none',
+    state: existing?.state ?? 'candidate',
+    scheduled_date: existing?.scheduled_date,
     created_at: existing?.created_at ?? now,
     updated_at: now,
   };
@@ -656,9 +1067,6 @@ el.captureForm.addEventListener('submit', (event) => {
     pendingPlaces: [...state.pendingPlaces.filter((item) => item.id !== place.id), place],
   };
   void saveState().then(() => {
-    el.captureForm.reset();
-    el.kind.value = 'attraction';
-    el.priority.value = 'want';
     setStatus(existing ? dict.candidateUpdated : dict.candidateAdded, 'success');
   });
 });
@@ -668,4 +1076,5 @@ void (async () => {
   applyI18n();
   await readCurrentPlace();
 })();
+
 

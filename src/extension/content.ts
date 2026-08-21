@@ -1,6 +1,9 @@
-export interface CurrentGoogleMapsPlace {
+import { inferSourceProvider, type PlannerPlaceSourceProvider } from '../domain/planner';
+
+export interface CurrentResearchPlace {
   title: string;
   sourceUrl: string;
+  sourceProvider: PlannerPlaceSourceProvider;
   rating?: number;
   reviewCount?: number;
   category?: string;
@@ -104,7 +107,7 @@ function extractWebsite(): string | undefined {
   return undefined;
 }
 
-function currentPlace(): CurrentGoogleMapsPlace | null {
+function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const heading = document.querySelector<HTMLElement>('h1.DUwDvf')
     ?? document.querySelector<HTMLElement>('main h1')
@@ -115,6 +118,7 @@ function currentPlace(): CurrentGoogleMapsPlace | null {
   return {
     title,
     sourceUrl,
+    sourceProvider: 'google_maps',
     rating: extractRating(),
     reviewCount: extractReviewCount(),
     category: extractCategory(),
@@ -126,8 +130,124 @@ function currentPlace(): CurrentGoogleMapsPlace | null {
   };
 }
 
+function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {
+  const items: CurrentResearchPlace[] = [];
+  const cards = document.querySelectorAll<HTMLElement>('div.Nv2PK, div[role="article"]');
+  for (const card of Array.from(cards)) {
+    if (items.length >= 20) break;
+    const linkEl = card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[href*="/maps/place/"]');
+    const sourceUrl = linkEl?.href;
+    const title = linkEl?.getAttribute('aria-label') || card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall')?.textContent?.trim();
+    if (!title || !sourceUrl) continue;
+
+    const ratingText = card.querySelector<HTMLElement>('span.MW4etd')?.textContent?.trim();
+    const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
+
+    const infoText = card.querySelector<HTMLElement>('div.W4Efsd')?.textContent?.trim();
+    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
+
+    items.push({
+      title,
+      sourceUrl,
+      sourceProvider: 'google_maps',
+      rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
+      category,
+    });
+  }
+  return items;
+}
+
+function extractTabelogPlace(): CurrentResearchPlace | null {
+  const sourceUrl = window.location.href;
+  const titleEl = document.querySelector<HTMLElement>('h2.display-name span, h1.rstinfo-table__name, h1');
+  const title = titleEl?.textContent?.trim();
+  if (!title) return null;
+
+  const ratingEl = document.querySelector<HTMLElement>('span.c-rating__val, b.c-rating__val');
+  const rating = ratingEl?.textContent ? parseFloat(ratingEl.textContent.trim()) : undefined;
+
+  const catEl = document.querySelector<HTMLElement>('span.rstinfo-table__badge, span.rstinfo-table__subject-text, div.rdhead-subinfo dl dd');
+  const category = catEl?.textContent?.trim();
+
+  const priceEl = document.querySelector<HTMLElement>('p.c-rating-v3__time span, span.c-rating-v3__val');
+  const priceLevel = priceEl?.textContent?.trim();
+
+  const addrEl = document.querySelector<HTMLElement>('p.rstinfo-table__address, p.rdhead-subinfo__address');
+  const address = addrEl?.textContent?.trim();
+
+  return {
+    title,
+    sourceUrl,
+    sourceProvider: 'tabelog',
+    rating: Number.isFinite(rating) && rating ? rating : undefined,
+    category: category ? `Tabelog: ${category}` : 'Tabelog 美食',
+    priceLevel,
+    address,
+  };
+}
+
+function extractXiaohongshuPlace(): CurrentResearchPlace | null {
+  const sourceUrl = window.location.href;
+  const titleEl = document.querySelector<HTMLElement>('#detail-title, .title, meta[property="og:title"]');
+  const title = titleEl instanceof HTMLMetaElement ? titleEl.content : titleEl?.textContent?.trim();
+  if (!title) return null;
+
+  const descEl = document.querySelector<HTMLElement>('#detail-desc, .desc, .content');
+  const summary = descEl?.textContent?.trim().slice(0, 200);
+
+  const locEl = document.querySelector<HTMLElement>('.location-item, .geo, a[href*="/search_result?keyword="]');
+  const address = locEl?.textContent?.trim();
+
+  return {
+    title: title.slice(0, 50),
+    sourceUrl,
+    sourceProvider: 'xiaohongshu',
+    category: '小红书灵感',
+    summary,
+    address,
+  };
+}
+
+function extractBookingPlace(): CurrentResearchPlace | null {
+  const sourceUrl = window.location.href;
+  const titleEl = document.querySelector<HTMLElement>('h2.d2fee87e0b, h2.pp-header__title, h1');
+  const title = titleEl?.textContent?.trim();
+  if (!title) return null;
+
+  const ratingEl = document.querySelector<HTMLElement>('div.a3b8729ab1, div.d10a0e9803');
+  const rating = ratingEl?.textContent ? parseFloat(ratingEl.textContent.trim()) : undefined;
+
+  const addrEl = document.querySelector<HTMLElement>('span.hp_address_subtitle');
+  const address = addrEl?.textContent?.trim();
+
+  return {
+    title,
+    sourceUrl,
+    sourceProvider: 'booking',
+    rating: Number.isFinite(rating) && rating ? Math.min(5, Math.round((rating / 2) * 10) / 10) : undefined,
+    category: 'Booking 住宿',
+    address,
+  };
+}
+
+function currentPlace(): CurrentResearchPlace | null {
+  const provider = inferSourceProvider(window.location.href);
+  if (provider === 'google_maps') return extractGoogleMapsPlace();
+  if (provider === 'tabelog') return extractTabelogPlace();
+  if (provider === 'xiaohongshu') return extractXiaohongshuPlace();
+  if (provider === 'booking') return extractBookingPlace();
+  return extractGoogleMapsPlace();
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
-  if ((message as { type?: string }).type !== 'OWNLY_GET_CURRENT_PLACE') return;
-  sendResponse({ place: currentPlace() });
+  const msgType = (message as { type?: string }).type;
+  if (msgType === 'OWNLY_GET_CURRENT_PLACE') {
+    sendResponse({ place: currentPlace() });
+    return;
+  }
+  if (msgType === 'OWNLY_GET_VISIBLE_LIST_PLACES') {
+    sendResponse({ listPlaces: detectGoogleMapsListPlaces() });
+    return;
+  }
 });

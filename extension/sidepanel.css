@@ -24,11 +24,14 @@ textarea { resize: vertical; }
 .new-trip { margin-top: 8px; border-top: 1px solid #f5f5f4; padding-top: 8px; }
 .new-trip summary { cursor: pointer; color: #78716c; font-size: 11px; font-weight: 700; }
 .new-trip form { margin-top: 10px; }
-.primary, .secondary { min-height: 38px; border: 0; border-radius: 8px; padding: 0 12px; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; transition: background 0.15s ease; }
-.primary { background: #1c1917; color: #fff; }
+.primary, .secondary, .danger-btn { min-height: 38px; border: 0; border-radius: 8px; padding: 0 12px; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; transition: background 0.15s ease; }
+.primary { background: #1c1917; color: #fff; flex: 1; }
 .primary:hover { background: #292524; }
 .secondary { border: 1px solid #d6d3d1; background: #fafaf9; color: #44403c; }
 .secondary:hover { background: #f5f5f4; }
+.danger-btn { border: 1px solid #fecaca; background: #fef2f2; color: #b91c1c; }
+.danger-btn:hover { background: #fee2e2; }
+.btn-row { display: flex; align-items: center; gap: 8px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .link { border: 0; background: transparent; color: #047857; padding: 4px; font-size: 11px; font-weight: 700; cursor: pointer; }
 .link:hover { text-decoration: underline; }
@@ -37,10 +40,43 @@ textarea { resize: vertical; }
 .meta-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .badge { display: inline-flex; align-items: center; gap: 3px; border-radius: 999px; background: #f5f5f4; border: 1px solid #e7e5e4; padding: 2px 7px; font-size: 10px; font-weight: 600; color: #57534e; }
 .badge.highlight { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.badge.must { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.badge.want { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.badge.optional { background: #f5f5f4; border-color: #e7e5e4; color: #78716c; }
+.status-banner { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; color: #047857; font-size: 11px; font-weight: 650; margin-top: 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
 .chip { border: 1px dashed #d6d3d1; border-radius: 999px; background: #fafaf9; padding: 3px 8px; font-size: 10px; color: #57534e; cursor: pointer; transition: all 0.12s ease; }
 .chip:hover { border-color: #1c1917; background: #1c1917; color: #fff; }
 .status { margin: 0; padding: 2px 4px 6px; color: #78716c; font-size: 11px; }
 .status[data-tone="success"] { color: #047857; font-weight: 600; }
 .status[data-tone="error"] { color: #b91c1c; font-weight: 600; }
+
+/* Batch list styles */
+.batch-section summary { cursor: pointer; color: #1c1917; font-size: 12px; font-weight: 700; }
+.batch-list { max-height: 180px; overflow-y: auto; display: grid; gap: 6px; padding: 4px 0; }
+.batch-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 6px; font-size: 11px; }
+.batch-item input[type="checkbox"] { width: auto; margin: 0; cursor: pointer; }
+.batch-item-info { flex: 1; min-width: 0; }
+.batch-item-title { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-item-sub { color: #a8a29e; font-size: 10px; }
+.batch-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 6px; }
+
+/* Candidates drawer */
+.drawer summary { cursor: pointer; color: #1c1917; font-size: 12px; font-weight: 750; display: flex; align-items: center; justify-content: space-between; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
+.filter-btn { border: 1px solid #e7e5e4; border-radius: 999px; background: #fff; padding: 2px 7px; font-size: 10px; font-weight: 600; color: #78716c; cursor: pointer; }
+.filter-btn.active { background: #1c1917; color: #fff; border-color: #1c1917; }
+.candidates-list { max-height: 240px; overflow-y: auto; display: grid; gap: 8px; padding: 4px 0; }
+.candidate-card { padding: 8px 10px; background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 8px; display: grid; gap: 6px; font-size: 11px; transition: border-color 0.15s ease; }
+.candidate-card:hover { border-color: #a8a29e; }
+.candidate-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.candidate-title { font-weight: 700; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.candidate-details { display: flex; align-items: center; gap: 6px; color: #78716c; font-size: 10px; flex-wrap: wrap; }
+.candidate-actions { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-top: 4px; border-top: 1px solid #f5f5f4; }
+.day-select { width: auto; font-size: 10px; padding: 3px 6px; border-radius: 4px; height: 24px; border: 1px solid #d6d3d1; }
+.card-btns { display: flex; align-items: center; gap: 4px; }
+.card-btn { border: 0; background: transparent; padding: 2px 5px; font-size: 10px; font-weight: 650; color: #57534e; cursor: pointer; border-radius: 4px; }
+.card-btn:hover { background: #e7e5e4; color: #1c1917; }
+.card-btn.del { color: #b91c1c; }
+.card-btn.del:hover { background: #fee2e2; }
 @media (max-width: 320px) { .two { grid-template-columns: 1fr; } }

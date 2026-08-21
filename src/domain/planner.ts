@@ -30,13 +30,20 @@ export interface PlannerTrip {
   updated_at?: string;
 }
 
+export type PlannerPlaceSourceProvider =
+  | 'google_maps'
+  | 'tabelog'
+  | 'xiaohongshu'
+  | 'booking'
+  | 'other';
+
 export interface PlannerTripPlace {
   schema_version: '0.1';
   type: 'trip_place';
   id: string;
   trip_id: string;
   title: string;
-  source_provider: 'google_maps';
+  source_provider: PlannerPlaceSourceProvider;
   source_url: string;
   source_place_id?: string;
   kind: PlannerPlaceKind;
@@ -241,4 +248,12 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
     return 'attraction';
   }
   return 'experience';
+}
+
+export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
+  if (/google\.[a-z.]+\/maps|maps\.google\./i.test(url)) return 'google_maps';
+  if (/tabelog\.com/i.test(url)) return 'tabelog';
+  if (/xiaohongshu\.com|xhslink\.com/i.test(url)) return 'xiaohongshu';
+  if (/booking\.com/i.test(url)) return 'booking';
+  return 'other';
 }

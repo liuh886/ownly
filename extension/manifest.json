@@ -7,6 +7,10 @@
   "host_permissions": [
     "https://www.google.com/maps/*",
     "https://maps.google.com/*",
+    "https://*.google.com/maps/*",
+    "https://*.tabelog.com/*",
+    "https://*.xiaohongshu.com/*",
+    "https://*.booking.com/*",
     "https://liuh886.github.io/ownly/*",
     "https://zhihaol.eu.org/*",
     "http://localhost/*",
@@ -18,6 +22,15 @@
   "action": {
     "default_title": "Ownly Capture"
   },
+  "commands": {
+    "quick-capture-place": {
+      "suggested_key": {
+        "default": "Alt+Shift+C",
+        "mac": "Alt+Shift+C"
+      },
+      "description": "Quickly capture current place to active trip"
+    }
+  },
   "side_panel": {
     "default_path": "sidepanel.html"
   },
@@ -25,7 +38,11 @@
     {
       "matches": [
         "https://www.google.com/maps/*",
-        "https://maps.google.com/*"
+        "https://maps.google.com/*",
+        "https://*.google.com/maps/*",
+        "https://*.tabelog.com/*",
+        "https://*.xiaohongshu.com/*",
+        "https://*.booking.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

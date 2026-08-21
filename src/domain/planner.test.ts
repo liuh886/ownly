@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildGoogleMapsDirectionsSegments,
   inferPlaceKind,
+  inferSourceProvider,
   listTripDates,
   mergeCapturedPlaceResearch,
   normalizeDelimitedText,
@@ -104,5 +105,14 @@ describe('Ownly Planner domain', () => {
       'Want to go',
       '浅草',
     ]);
+  });
+
+  it('infers source provider correctly from travel research URLs', () => {
+    expect(inferSourceProvider('https://www.google.com/maps/place/Tokyo+Tower')).toBe('google_maps');
+    expect(inferSourceProvider('https://maps.google.co.jp/maps?q=Shibuya')).toBe('google_maps');
+    expect(inferSourceProvider('https://tabelog.com/tokyo/A1301/A130101/13002243/')).toBe('tabelog');
+    expect(inferSourceProvider('https://www.xiaohongshu.com/explore/64a1b2c3')).toBe('xiaohongshu');
+    expect(inferSourceProvider('https://www.booking.com/hotel/jp/tokyo-station.html')).toBe('booking');
+    expect(inferSourceProvider('https://example.com/blog/travel')).toBe('other');
   });
 });

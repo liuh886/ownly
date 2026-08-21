@@ -48,13 +48,26 @@
       </details>
     </section>
 
+    <!-- Batch List Section -->
+    <details id="batchSection" class="panel stack batch-section" style="display: none;">
+      <summary id="sumBatchList">📋 批量感知：当前地图列表 (0 个地点)</summary>
+      <div id="batchListContainer" class="batch-list"></div>
+      <div class="batch-controls">
+        <button id="btnToggleSelectAll" class="secondary" type="button" style="min-height: 30px; font-size: 11px; padding: 0 8px;">全选 / 取消</button>
+        <button id="btnBatchAdd" class="primary" type="button" style="min-height: 30px; font-size: 11px; padding: 0 10px;">➕ 批量加入候选池</button>
+      </div>
+    </details>
+
     <section class="panel current">
       <div class="row">
-        <span id="lblCurrentPlace" class="label">Google Maps 当前地点</span>
+        <span id="lblCurrentPlace" class="label">当前地点</span>
         <button id="refreshPlace" class="link" type="button">🔄 刷新</button>
       </div>
-      <h1 id="placeTitle">请在 Google Maps 中打开地点</h1>
-      <p id="placeUrl" class="url">在地图中点击任意地点即可自动识别</p>
+      <h1 id="placeTitle">请在地图或页面中打开地点</h1>
+      <p id="placeUrl" class="url">在 Google Maps、Tabelog、小红书浏览时自动识别</p>
+      <div id="placeCapturedBanner" class="status-banner" style="display: none;">
+        <span id="txtCapturedBanner">✓ 该地点已在候选池中</span>
+      </div>
       <div id="placeMetaBadges" class="meta-badges"></div>
     </section>
 
@@ -92,8 +105,8 @@
       </div>
 
       <div class="two">
-        <label id="lblRating">Google 评分<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label>
-        <label id="lblPrice">人均价格 / 价格区间<input id="price" placeholder="例如：¥2,000 / 人" /></label>
+        <label id="lblRating">评分<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label>
+        <label id="lblPrice">人均价格 / 预算<input id="price" placeholder="例如：¥2,000 / 人" /></label>
       </div>
 
       <div>
@@ -106,8 +119,22 @@
       <label id="lblRisks">风险提醒 / 避坑<input id="risks" placeholder="例如：周末排队极长, 需提前2周预约, 雨天不宜" /></label>
       <label id="lblNotes">个人备忘笔记<textarea id="notes" rows="2" placeholder="你自己的游玩心得或计划备忘，而非直接复制评论"></textarea></label>
 
-      <button id="btnCaptureSubmit" class="primary" type="submit">➕ 加入行程候选池</button>
+      <div class="btn-row">
+        <button id="btnCaptureSubmit" class="primary" type="submit">➕ 加入行程候选池</button>
+        <button id="btnRemoveCandidate" class="danger-btn" type="button" style="display: none;">🗑️ 移出</button>
+      </div>
     </form>
+
+    <!-- Candidates Drawer -->
+    <details id="candidatesDrawer" class="panel stack drawer" open>
+      <summary>
+        <span id="sumCandidatesDrawer">🗂️ 当前行程候选池</span>
+        <span id="candidatesCountBadge" class="badge">0</span>
+      </summary>
+      <input id="candidatesSearch" placeholder="🔍 搜索候选地点、区域或标签..." />
+      <div id="candidatesFilterBar" class="filter-bar"></div>
+      <div id="candidatesListContainer" class="candidates-list"></div>
+    </details>
 
     <p id="status" class="status" aria-live="polite">就绪。</p>
   </main>
