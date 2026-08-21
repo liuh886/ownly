@@ -62,7 +62,6 @@ describe('Ownly CLI process contract', { timeout: 30000 }, () => {
     expect(existsSync(join(root, 'Objects', created.fileName))).toBe(true);
     expect(existsSync(join(root, 'Ownly'))).toBe(false);
   });
-
   it('creates, reads, updates, archives, and restores a physical object', () => {
     const root = createDataLocation();
     const add = runCli(root, [

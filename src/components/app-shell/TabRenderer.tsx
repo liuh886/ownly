@@ -5,6 +5,7 @@ import { ObjectComposer } from '@/components/objects/ObjectComposer';
 import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
+import { PlannerHome } from '@/components/planner/PlannerHome';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import type { FirstObjectChoice } from '@/core/first-object-copy';
@@ -177,6 +178,10 @@ export function TabRenderer({
         />
       </div>
     );
+  }
+
+  if (activeTab === 'planner') {
+    return <PlannerHome disabled={!isConnected} />;
   }
 
   if (activeTab === 'reviews') {

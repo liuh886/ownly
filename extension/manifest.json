@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Ownly Capture",
+  "version": "0.1.0",
+  "description": "Capture personal travel research from Google Maps into Ownly Planner.",
+  "permissions": ["sidePanel", "storage"],
+  "host_permissions": [
+    "https://www.google.com/maps/*",
+    "https://liuh886.github.io/ownly/*",
+    "https://zhihaol.eu.org/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Ownly Capture"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.google.com/maps/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://liuh886.github.io/ownly/*",
+        "https://zhihaol.eu.org/*"
+      ],
+      "js": ["ownly-bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
