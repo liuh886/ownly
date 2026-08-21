@@ -10,6 +10,7 @@ import {
   sortPlannerPlaces,
 } from '@/domain/planner';
 import { plannerRepository } from '@/services/PlannerRepository';
+import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState } from './capture-bridge';
 
 interface PlannerHomeProps {
@@ -46,6 +47,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [capturePending, setCapturePending] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -252,11 +254,20 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           <p className="mt-1 text-xs text-stone-400">{selectedTrip.destinations.join(' · ') || (zh ? '未填写目的地' : 'No destinations')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500">
-            {capturePending === null
-              ? (zh ? 'Capture 未连接' : 'Capture offline')
-              : `${capturePending} ${zh ? '待同步' : 'pending'}`}
-          </span>
+          {capturePending === null ? (
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100"
+              title={zh ? '未检测到扩展，点击查看安装步骤' : 'Extension offline, click to view installation guide'}
+            >
+              {zh ? 'Capture 未连接 · 安装扩展' : 'Capture offline · Install guide'}
+            </button>
+          ) : (
+            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500">
+              {`${capturePending} ${zh ? '待同步' : 'pending'}`}
+            </span>
+          )}
           <button
             type="button"
             onClick={() => void syncCapture()}
@@ -415,6 +426,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           </div>
         </aside>
       </div>
+
+      <AppInstallGuideModal
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        defaultTab="extension"
+      />
     </section>
   );
 }

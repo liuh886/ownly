@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
+import { AppInstallGuideModal } from './AppInstallGuideModal';
 
 type InstallChoice = {
   outcome: 'accepted' | 'dismissed';
@@ -19,9 +20,11 @@ const INSTALL_NUDGE_DISMISSED_KEY = 'ownly_pwa_install_nudge_dismissed';
 
 export function PwaInstallButton() {
   const { language } = useI18n();
+  const zh = language === 'zh';
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [showNudge, setShowNudge] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
@@ -68,28 +71,26 @@ export function PwaInstallButton() {
     setShowNudge(false);
   }
 
-  if (installed || !installPrompt) return null;
-
-  const label = language === 'zh' ? '安装应用' : 'Install app';
-  const title = language === 'zh' ? '将 Ownly 安装到当前设备' : 'Install Ownly on this device';
-  const nudgeTitle = language === 'zh' ? '把 Ownly 安装为独立应用' : 'Install Ownly as a standalone app';
-  const nudgeText = language === 'zh'
+  const label = zh ? '安装应用与扩展' : 'Install App';
+  const title = zh ? '安装 Ownly 客户端或 Capture 采集扩展' : 'Install Ownly App or Capture Extension';
+  const nudgeTitle = zh ? '把 Ownly 安装为独立应用' : 'Install Ownly as a standalone app';
+  const nudgeText = zh
     ? '获得更专注的启动方式和离线应用壳；你的个人记录仍只保存在本地文件夹。'
     : 'Get a focused launch experience and offline app shell. Your personal records still remain in the local folder you choose.';
-  const later = language === 'zh' ? '以后再说' : 'Maybe later';
+  const later = zh ? '以后再说' : 'Maybe later';
 
   return (
     <>
       <button
         type="button"
-        onClick={() => void installApp()}
+        onClick={() => setShowModal(true)}
         className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-900"
         title={title}
       >
         {label}
       </button>
 
-      {showNudge ? (
+      {showNudge && !installed ? (
         <aside className="fixed bottom-24 left-4 right-4 z-50 mx-auto max-w-md rounded-2xl border border-stone-200 bg-white/95 p-4 shadow-[0_24px_70px_-28px_rgba(28,25,23,0.55)] backdrop-blur-xl sm:left-auto sm:right-6" aria-label={nudgeTitle}>
           <div className="flex gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-950 text-sm font-semibold text-white">O</span>
@@ -103,11 +104,19 @@ export function PwaInstallButton() {
               {later}
             </button>
             <button type="button" onClick={() => void installApp()} className="rounded-full bg-stone-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-stone-800">
-              {label}
+              {zh ? '安装应用' : 'Install app'}
             </button>
           </div>
         </aside>
       ) : null}
+
+      <AppInstallGuideModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        defaultTab={installPrompt ? 'pwa' : 'extension'}
+        canPromptPwa={Boolean(installPrompt)}
+        onPromptPwa={() => void installApp()}
+      />
     </>
   );
 }
