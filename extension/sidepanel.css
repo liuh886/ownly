@@ -79,4 +79,48 @@ textarea { resize: vertical; }
 .card-btn:hover { background: #e7e5e4; color: #1c1917; }
 .card-btn.del { color: #b91c1c; }
 .card-btn.del:hover { background: #fee2e2; }
+
+/* Matched Saved List Banner */
+.match-banner {
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+  border: 1.5px solid #6ee7b7;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.08);
+}
+.match-badge {
+  font-size: 11px;
+  font-weight: 750;
+  color: #047857;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.match-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #065f46;
+  margin: 2px 0;
+}
+.match-desc {
+  font-size: 11px;
+  color: #047857;
+  margin: 0;
+  line-height: 1.4;
+}
+.sync-btn {
+  background: #047857;
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 750;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s ease;
+}
+.sync-btn:hover {
+  background: #065f46;
+}
+
 @media (max-width: 320px) { .two { grid-template-columns: 1fr; } }

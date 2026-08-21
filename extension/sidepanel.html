@@ -46,7 +46,27 @@
           <button id="btnCreateTrip" class="secondary" type="submit">创建并设为当前行程</button>
         </form>
       </details>
+      <details id="bulkImportSection" class="new-trip">
+        <summary id="sumBulkImport">📥 批量导入 / 粘贴地点或列表链接</summary>
+        <div class="stack" style="margin-top: 8px;">
+          <label id="lblBulkText">批量粘贴链接或地点名
+            <textarea id="bulkInputText" rows="3" placeholder="每行一个链接或地点名：&#10;https://maps.google.com/...&#10;浅草寺&#10;东京塔"></textarea>
+          </label>
+          <button id="btnParseBulkImport" class="secondary" type="button">📥 解析并快速加入候选池</button>
+        </div>
+      </details>
     </section>
+
+    <!-- Matched Saved List Banner (TH26 Auto-Sync) -->
+    <div id="savedListMatchBanner" class="panel stack match-banner" style="display: none;">
+      <div class="row">
+        <span class="match-badge">🌟 自动匹配收藏夹</span>
+        <span id="savedListCountBadge" class="badge highlight">0 个地点</span>
+      </div>
+      <div id="savedListNameTitle" class="match-title">TH26</div>
+      <p id="savedListMatchDesc" class="match-desc">检测到当前 Google 收藏夹与行程标签完全一致</p>
+      <button id="btnSyncSavedListAll" class="sync-btn" type="button">⚡ 一键同步收藏夹全部地点至候选池</button>
+    </div>
 
     <!-- Batch List Section -->
     <details id="batchSection" class="panel stack batch-section" style="display: none;">

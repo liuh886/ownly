@@ -1,6 +1,7 @@
 import {
   EMPTY_CAPTURE_STATE,
   inferPlaceKind,
+  inferSourceProvider,
   listTripDates,
   normalizeDelimitedText,
   type OwnlyCaptureState,
@@ -9,7 +10,7 @@ import {
   type PlannerTrip,
   type PlannerTripPlace,
 } from '../domain/planner';
-import type { CurrentResearchPlace } from './content';
+import type { CurrentResearchPlace, DetectedSavedList } from './content';
 
 const STORAGE_KEY = 'ownlyCaptureStateV1';
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
@@ -41,10 +42,20 @@ const I18N = {
     tripDestinationsLabel: '目的地',
     tripDestinationsPlaceholder: '例如：东京, 浅草, 涩谷',
     tripTagsLabel: '行程标签 / 收藏夹名',
-    tripTagsPlaceholder: '例如：东京2026, 美食清单, Want to go',
+    tripTagsPlaceholder: '例如：TH26, 东京2026, Want to go',
     tripCurrencyLabel: '货币',
     tripTransportLabel: '主要交通',
     btnCreateTrip: '创建并设为当前行程',
+    sumBulkImport: '📥 批量导入 / 粘贴地点或列表链接',
+    lblBulkText: '批量粘贴链接或地点名 (每行一个)',
+    bulkPlaceholder: '支持批量粘贴：\nhttps://maps.google.com/...\n浅草寺\n东京晴空塔',
+    btnParseBulkImport: '📥 解析并快速加入候选池',
+    bulkImportSuccess: (count: number) => `已成功解析并导入 ${count} 个地点至候选池！`,
+    bulkImportEmpty: '请先输入或粘贴地点链接或名称。',
+    savedListMatchBadge: '🌟 自动匹配收藏夹',
+    savedListMatchDesc: (list: string, trip: string) => `检测到 Google 收藏夹「${list}」与当前行程「${trip}」的标签匹配`,
+    btnSyncSavedListAll: (list: string, count: number) => `⚡ 一键同步「${list}」全部 ${count} 个地点至候选池`,
+    savedListSynced: (count: number, list: string) => `已成功将「${list}」全部 ${count} 个地点一键同步至候选池！`,
     batchSummary: (count: number) => `📋 批量感知：当前地图列表 (${count} 个地点)`,
     btnSelectAll: '全选 / 取消',
     btnBatchAdd: '➕ 批量加入候选池',
@@ -93,9 +104,9 @@ const I18N = {
     dayOption: (idx: number, date: string) => `第 ${idx} 天 (${date})`,
     editAction: '编辑',
     deleteAction: '删除',
-    emptyCandidates: '当前行程暂无候选地点，浏览地图即可快速添加。',
+    emptyCandidates: '当前行程暂无候选地点，浏览地图或导入收藏夹即可快速添加。',
     readyStatus: '就绪。',
-    readingStatus: '正在读取页面地点信息…',
+    readingStatus: '正在读取页面地点与收藏夹…',
     noPlaceStatus: '未检测到地点，请在标签页中打开地点。',
     readyToCapture: '地点已识别，可直接调整或保存。',
     tripRequiredError: '请先创建或选择一个行程。',
@@ -140,10 +151,20 @@ const I18N = {
     tripDestinationsLabel: 'Destinations',
     tripDestinationsPlaceholder: 'e.g. Tokyo, Asakusa, Shibuya',
     tripTagsLabel: 'Trip tags / Google List name',
-    tripTagsPlaceholder: 'e.g. Tokyo 2026, Foodie, Want to go',
+    tripTagsPlaceholder: 'e.g. TH26, Foodie, Want to go',
     tripCurrencyLabel: 'Currency',
     tripTransportLabel: 'Primary transport',
     btnCreateTrip: 'Create & activate',
+    sumBulkImport: '📥 Bulk Import / Paste Places & Links',
+    lblBulkText: 'Paste links or place names (one per line)',
+    bulkPlaceholder: 'Paste links or names:\nhttps://maps.google.com/...\nAsakusa Temple\nTokyo Tower',
+    btnParseBulkImport: '📥 Parse & Add to Pool',
+    bulkImportSuccess: (count: number) => `Successfully parsed and imported ${count} places!`,
+    bulkImportEmpty: 'Please enter or paste place links or names first.',
+    savedListMatchBadge: '🌟 Auto-Matched Saved List',
+    savedListMatchDesc: (list: string, trip: string) => `Detected Google List "${list}" matching active trip "${trip}" tags`,
+    btnSyncSavedListAll: (list: string, count: number) => `⚡ Sync all ${count} places from "${list}" to Research Pool`,
+    savedListSynced: (count: number, list: string) => `Successfully synced all ${count} places from "${list}" to Research Pool!`,
     batchSummary: (count: number) => `📋 Batch Detected: Map List (${count} places)`,
     btnSelectAll: 'Select All / None',
     btnBatchAdd: '➕ Add Selected to Pool',
@@ -192,9 +213,9 @@ const I18N = {
     dayOption: (idx: number, date: string) => `Day ${idx} (${date})`,
     editAction: 'Edit',
     deleteAction: 'Delete',
-    emptyCandidates: 'No candidates yet for this trip. Browse maps to add places.',
+    emptyCandidates: 'No candidates yet for this trip. Browse maps or import list to add places.',
     readyStatus: 'Ready.',
-    readingStatus: 'Reading place details…',
+    readingStatus: 'Reading place details and saved lists…',
     noPlaceStatus: 'No place detected. Open a place on map or webpage.',
     readyToCapture: 'Place detected. Review details and save.',
     tripRequiredError: 'Create or select a trip first.',
@@ -250,6 +271,16 @@ type ElementMap = {
   lblTripTransport: HTMLElement;
   tripTransport: HTMLSelectElement;
   btnCreateTrip: HTMLButtonElement;
+  bulkImportSection: HTMLElement;
+  sumBulkImport: HTMLElement;
+  lblBulkText: HTMLElement;
+  bulkInputText: HTMLTextAreaElement;
+  btnParseBulkImport: HTMLButtonElement;
+  savedListMatchBanner: HTMLElement;
+  savedListCountBadge: HTMLElement;
+  savedListNameTitle: HTMLElement;
+  savedListMatchDesc: HTMLElement;
+  btnSyncSavedListAll: HTMLButtonElement;
   batchSection: HTMLElement;
   sumBatchList: HTMLElement;
   batchListContainer: HTMLElement;
@@ -329,6 +360,16 @@ const el: ElementMap = {
   lblTripTransport: required('lblTripTransport'),
   tripTransport: required('tripTransport'),
   btnCreateTrip: required('btnCreateTrip'),
+  bulkImportSection: required('bulkImportSection'),
+  sumBulkImport: required('sumBulkImport'),
+  lblBulkText: required('lblBulkText'),
+  bulkInputText: required('bulkInputText'),
+  btnParseBulkImport: required('btnParseBulkImport'),
+  savedListMatchBanner: required('savedListMatchBanner'),
+  savedListCountBadge: required('savedListCountBadge'),
+  savedListNameTitle: required('savedListNameTitle'),
+  savedListMatchDesc: required('savedListMatchDesc'),
+  btnSyncSavedListAll: required('btnSyncSavedListAll'),
   batchSection: required('batchSection'),
   sumBatchList: required('sumBatchList'),
   batchListContainer: required('batchListContainer'),
@@ -383,6 +424,7 @@ const el: ElementMap = {
 let currentLang: Lang = 'zh';
 let state: OwnlyCaptureState = { ...EMPTY_CAPTURE_STATE };
 let currentPlace: CurrentResearchPlace | null = null;
+let detectedSavedList: DetectedSavedList | null = null;
 let detectedListPlaces: CurrentResearchPlace[] = [];
 let activeFilter = 'all';
 let searchQuery = '';
@@ -418,6 +460,11 @@ function applyI18n() {
   el.lblTripCurrency.childNodes[0].nodeValue = dict.tripCurrencyLabel;
   el.lblTripTransport.childNodes[0].nodeValue = dict.tripTransportLabel;
   el.btnCreateTrip.textContent = dict.btnCreateTrip;
+
+  el.sumBulkImport.textContent = dict.sumBulkImport;
+  el.lblBulkText.childNodes[0].nodeValue = dict.lblBulkText;
+  el.bulkInputText.placeholder = dict.bulkPlaceholder;
+  el.btnParseBulkImport.textContent = dict.btnParseBulkImport;
 
   el.btnToggleSelectAll.textContent = dict.btnSelectAll;
   el.btnBatchAdd.textContent = dict.btnBatchAdd;
@@ -474,6 +521,7 @@ function applyI18n() {
   renderFilters();
   renderState();
   renderCurrentPlace();
+  renderSavedListMatch();
   renderCandidatesList();
 }
 
@@ -547,6 +595,7 @@ async function saveState(): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEY]: state });
   renderState();
   renderCurrentPlace();
+  renderSavedListMatch();
   renderCandidatesList();
 }
 
@@ -579,16 +628,20 @@ async function readCurrentPlace(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     currentPlace = null;
+    detectedSavedList = null;
     detectedListPlaces = [];
     renderCurrentPlace();
+    renderSavedListMatch();
     renderBatchList();
     return;
   }
   try {
-    const placeResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' }) as { place?: CurrentResearchPlace | null };
+    const placeResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE' }) as { place?: CurrentResearchPlace | null; savedList?: DetectedSavedList | null };
     currentPlace = placeResp?.place ?? null;
+    detectedSavedList = placeResp?.savedList ?? null;
   } catch {
     currentPlace = null;
+    detectedSavedList = null;
   }
   try {
     const listResp = await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' }) as { listPlaces?: CurrentResearchPlace[] };
@@ -598,14 +651,50 @@ async function readCurrentPlace(): Promise<void> {
   }
 
   renderCurrentPlace();
+  renderSavedListMatch();
   renderBatchList();
   if (currentPlace) {
     autoFillPlaceForm(currentPlace);
   }
 }
 
+function renderSavedListMatch() {
+  const dict = t();
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  if (!detectedSavedList || detectedSavedList.places.length === 0 || !activeTrip) {
+    el.savedListMatchBanner.style.display = 'none';
+    return;
+  }
+
+  const listNameNorm = detectedSavedList.listName.trim().toLowerCase();
+  const tripTags = (activeTrip.tags || []).map((t) => t.trim().toLowerCase());
+  const tripTitleNorm = activeTrip.title.trim().toLowerCase();
+  const savedListNameNorm = (activeTrip.saved_list_name || '').trim().toLowerCase();
+
+  // Match condition: list name is in tags (e.g. 'th26'), or tag is in list name, or title matches
+  const isMatched =
+    tripTags.includes(listNameNorm) ||
+    tripTags.some((tag) => tag && listNameNorm.includes(tag)) ||
+    listNameNorm === savedListNameNorm ||
+    listNameNorm.includes(tripTitleNorm) ||
+    tripTitleNorm.includes(listNameNorm);
+
+  el.savedListMatchBanner.style.display = 'block';
+  el.savedListNameTitle.textContent = detectedSavedList.listName;
+  el.savedListCountBadge.textContent = `${detectedSavedList.places.length} 个地点`;
+  el.savedListMatchDesc.textContent = isMatched
+    ? dict.savedListMatchDesc(detectedSavedList.listName, activeTrip.title)
+    : `Google 收藏列表「${detectedSavedList.listName}」包含 ${detectedSavedList.places.length} 个地点`;
+  el.btnSyncSavedListAll.textContent = dict.btnSyncSavedListAll(detectedSavedList.listName, detectedSavedList.places.length);
+}
+
 function renderBatchList() {
   const dict = t();
+  // If saved list match banner is already showing the list, hide the secondary batch section
+  if (detectedSavedList && detectedSavedList.places.length > 0) {
+    el.batchSection.style.display = 'none';
+    return;
+  }
   if (detectedListPlaces.length <= 1) {
     el.batchSection.style.display = 'none';
     return;
@@ -909,6 +998,124 @@ el.candidatesSearch.addEventListener('input', () => {
   renderCandidatesList();
 });
 
+// ⚡ 1-Click Sync Matched Saved List (e.g. TH26)
+el.btnSyncSavedListAll.addEventListener('click', () => {
+  const dict = t();
+  if (!state.activeTripId || !detectedSavedList || detectedSavedList.places.length === 0) return;
+
+  const now = new Date().toISOString();
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  const updatedKnown = { ...state.knownPlaceIds };
+  const newPlaces: PlannerTripPlace[] = [];
+  const listTag = detectedSavedList.listName;
+
+  for (const item of detectedSavedList.places) {
+    const placeKey = `${state.activeTripId}::${item.sourceUrl}`;
+    const stableId = updatedKnown[placeKey] ?? crypto.randomUUID();
+    updatedKnown[placeKey] = stableId;
+
+    const combinedTags = Array.from(new Set([...(activeTrip?.tags ?? []), listTag]));
+    const place: PlannerTripPlace = {
+      schema_version: '0.1',
+      type: 'trip_place',
+      id: stableId,
+      trip_id: state.activeTripId,
+      title: item.title,
+      source_provider: item.sourceProvider || 'google_maps',
+      source_url: item.sourceUrl,
+      kind: inferPlaceKind(item.category),
+      area: item.address?.split(/[,，·]/)[0]?.trim() || undefined,
+      priority: 'want',
+      tags: combinedTags,
+      why: item.summary,
+      signals: item.category ? [item.category] : [],
+      risks: [],
+      observed_rating: item.rating,
+      observed_at: today(),
+      reservation_status: 'none',
+      state: 'candidate',
+      created_at: now,
+      updated_at: now,
+    };
+    newPlaces.push(place);
+  }
+
+  const existingIds = new Set(newPlaces.map((p) => p.id));
+  state = {
+    ...state,
+    knownPlaceIds: updatedKnown,
+    pendingPlaces: [...state.pendingPlaces.filter((p) => !existingIds.has(p.id)), ...newPlaces],
+  };
+
+  void saveState().then(() => {
+    setStatus(dict.savedListSynced(newPlaces.length, listTag), 'success');
+  });
+});
+
+// Bulk Text / Links Parser
+el.btnParseBulkImport.addEventListener('click', () => {
+  const dict = t();
+  if (!state.activeTripId) {
+    setStatus(dict.tripRequiredError, 'error');
+    return;
+  }
+  const text = el.bulkInputText.value.trim();
+  if (!text) {
+    setStatus(dict.bulkImportEmpty, 'error');
+    return;
+  }
+
+  const lines = text.split(/[\n;]+/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return;
+
+  const now = new Date().toISOString();
+  const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
+  const updatedKnown = { ...state.knownPlaceIds };
+  const newPlaces: PlannerTripPlace[] = [];
+
+  for (const line of lines) {
+    const isUrl = /^https?:\/\//i.test(line);
+    const sourceUrl = isUrl ? line : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(line)}`;
+    const title = isUrl ? (line.match(/\/maps\/place\/([^/?#]+)/)?.[1]?.replace(/\+/g, ' ') || line) : line;
+    const placeKey = `${state.activeTripId}::${sourceUrl}`;
+    const stableId = updatedKnown[placeKey] ?? crypto.randomUUID();
+    updatedKnown[placeKey] = stableId;
+
+    const place: PlannerTripPlace = {
+      schema_version: '0.1',
+      type: 'trip_place',
+      id: stableId,
+      trip_id: state.activeTripId,
+      title: decodeURIComponent(title),
+      source_provider: inferSourceProvider(sourceUrl),
+      source_url: sourceUrl,
+      kind: 'attraction',
+      priority: 'want',
+      tags: activeTrip?.tags ?? [],
+      signals: [],
+      risks: [],
+      observed_at: today(),
+      reservation_status: 'none',
+      state: 'candidate',
+      created_at: now,
+      updated_at: now,
+    };
+    newPlaces.push(place);
+  }
+
+  const existingIds = new Set(newPlaces.map((p) => p.id));
+  state = {
+    ...state,
+    knownPlaceIds: updatedKnown,
+    pendingPlaces: [...state.pendingPlaces.filter((p) => !existingIds.has(p.id)), ...newPlaces],
+  };
+
+  void saveState().then(() => {
+    el.bulkInputText.value = '';
+    setStatus(dict.bulkImportSuccess(newPlaces.length), 'success');
+  });
+});
+
 el.btnToggleSelectAll.addEventListener('click', () => {
   const checkboxes = el.batchListContainer.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
   const allChecked = Array.from(checkboxes).every((c) => c.checked);
@@ -1071,10 +1278,14 @@ el.captureForm.addEventListener('submit', (event) => {
   });
 });
 
+// Auto-refresh when tab updates or gains focus
+window.addEventListener('focus', () => { void readCurrentPlace(); });
+
 void (async () => {
   await loadState();
   applyI18n();
   await readCurrentPlace();
 })();
+
 
 

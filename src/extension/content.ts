@@ -107,13 +107,19 @@ function extractWebsite(): string | undefined {
   return undefined;
 }
 
+export interface DetectedSavedList {
+  listName: string;
+  listUrl: string;
+  places: CurrentResearchPlace[];
+}
+
 function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const heading = document.querySelector<HTMLElement>('h1.DUwDvf')
     ?? document.querySelector<HTMLElement>('main h1')
     ?? document.querySelector<HTMLElement>('h1');
   const title = heading?.textContent?.trim() || titleFromUrl(sourceUrl);
-  if (!title || !/\/maps\/(place|search|dir)\//.test(window.location.pathname)) return null;
+  if (!title || (!/\/maps\/(place|search|dir|saved|@)\//.test(window.location.pathname) && !window.location.pathname.includes('/maps/'))) return null;
 
   return {
     title,
@@ -130,11 +136,86 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   };
 }
 
+function detectGoogleMapsSavedList(): DetectedSavedList | null {
+  // Extract list name from Google Maps Saved / Lists page
+  let listName = '';
+  const heading = document.querySelector<HTMLElement>('h1.DUwDvf, div.fontHeadlineLarge, div.m6QErb h1, h1');
+  if (heading?.textContent?.trim()) {
+    listName = heading.textContent.trim();
+  } else {
+    const docTitle = document.title || '';
+    const match = /^(.*?)\s*[-–—·]\s*Google/i.exec(docTitle);
+    if (match?.[1]) {
+      listName = match[1].trim();
+    }
+  }
+
+  // Find all place items inside the list
+  const placesMap = new Map<string, CurrentResearchPlace>();
+  const linkElements = document.querySelectorAll<HTMLAnchorElement>('a[href*="/maps/place/"], a.hfpxzc');
+
+  for (const linkEl of Array.from(linkElements)) {
+    if (placesMap.size >= 100) break;
+    const sourceUrl = linkEl.href;
+    if (!sourceUrl) continue;
+
+    const card = linkEl.closest<HTMLElement>('div.Nv2PK, div[role="article"], div.m6QErb, div[jsaction], li') || linkEl.parentElement;
+
+    let title = linkEl.getAttribute('aria-label') || '';
+    if (!title && card) {
+      title = card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, .OSrXXb, h3, h2, .fontBodyMedium')?.textContent?.trim() || '';
+    }
+    if (!title) {
+      title = titleFromUrl(sourceUrl);
+    }
+    if (!title) continue;
+
+    let rating: number | undefined;
+    const ratingText = card?.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
+    if (ratingText) {
+      const parsed = parseFloat(ratingText.replace(',', '.'));
+      if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 5) rating = parsed;
+    }
+
+    const infoText = card?.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
+    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
+    const address = card?.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
+    const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea')?.textContent?.trim();
+
+    const placeKey = sourceUrl.split('?')[0];
+    if (!placesMap.has(placeKey)) {
+      placesMap.set(placeKey, {
+        title,
+        sourceUrl,
+        sourceProvider: 'google_maps',
+        rating,
+        category,
+        address,
+        summary: userNote,
+      });
+    }
+  }
+
+  const places = Array.from(placesMap.values());
+  if (!listName && places.length === 0) return null;
+
+  return {
+    listName: listName || 'Google Maps 收藏列表',
+    listUrl: window.location.href,
+    places,
+  };
+}
+
 function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {
+  const saved = detectGoogleMapsSavedList();
+  if (saved && saved.places.length > 0) {
+    return saved.places;
+  }
+
   const items: CurrentResearchPlace[] = [];
   const cards = document.querySelectorAll<HTMLElement>('div.Nv2PK, div[role="article"]');
   for (const card of Array.from(cards)) {
-    if (items.length >= 20) break;
+    if (items.length >= 50) break;
     const linkEl = card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[href*="/maps/place/"]');
     const sourceUrl = linkEl?.href;
     const title = linkEl?.getAttribute('aria-label') || card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall')?.textContent?.trim();
@@ -243,11 +324,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const msgType = (message as { type?: string }).type;
   if (msgType === 'OWNLY_GET_CURRENT_PLACE') {
-    sendResponse({ place: currentPlace() });
+    sendResponse({ place: currentPlace(), savedList: detectGoogleMapsSavedList() });
     return;
   }
   if (msgType === 'OWNLY_GET_VISIBLE_LIST_PLACES') {
     sendResponse({ listPlaces: detectGoogleMapsListPlaces() });
+    return;
+  }
+  if (msgType === 'OWNLY_GET_SAVED_LIST') {
+    sendResponse({ savedList: detectGoogleMapsSavedList() });
     return;
   }
 });
