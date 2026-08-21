@@ -936,14 +936,23 @@ function renderCurrentPlace() {
   const dict = t();
   el.placeMetaBadges.innerHTML = '';
   if (!currentPlace) {
-    el.placeTitle.textContent = dict.noPlaceTitle;
-    el.placeUrl.textContent = dict.noPlaceUrl;
+    if (detectedSavedList && detectedSavedList.places.length > 0) {
+      el.placeTitle.textContent = `📋 正在浏览列表：「${detectedSavedList.listName}」`;
+      el.placeUrl.textContent = `已自动提取当前列表全部 ${detectedSavedList.places.length} 个地点，请在上方点击一键同步或在下方批量列表中查看。`;
+      el.captureForm.style.display = 'none';
+      setStatus(currentLang === 'zh' ? `已感知列表（共 ${detectedSavedList.places.length} 个地点）` : `List detected (${detectedSavedList.places.length} places)`);
+    } else {
+      el.placeTitle.textContent = dict.noPlaceTitle;
+      el.placeUrl.textContent = dict.noPlaceUrl;
+      el.captureForm.style.display = 'block';
+      setStatus(dict.noPlaceStatus);
+    }
     el.placeCapturedBanner.style.display = 'none';
     el.btnCaptureSubmit.textContent = dict.btnAddCandidate;
     el.btnRemoveCandidate.style.display = 'none';
-    setStatus(dict.noPlaceStatus);
     return;
   }
+  el.captureForm.style.display = 'block';
   el.placeTitle.textContent = currentPlace.title;
   el.placeUrl.textContent = currentPlace.sourceUrl;
 

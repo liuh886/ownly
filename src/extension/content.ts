@@ -215,19 +215,27 @@ export interface DetectedSavedList {
 
 const scavengedListPlaces = new Map<string, CurrentResearchPlace>();
 
+function isGenericNavigationTitle(text: string): boolean {
+  const norm = text.trim().toLowerCase();
+  return /^(google|google maps|google 地图|directions|路线|保存|已保存|saved|share|分享|搜索|search|返回|back|菜单|menu|overview|概览|reviews|评价|photos|照片|about|关于)$/i.test(norm);
+}
+
 function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
-  // Strategy 1: Find all place anchor links
-  const links = document.querySelectorAll<HTMLAnchorElement>('a[href*="/maps/place/"], a[href*="/place/"], a.hfpxzc, a[data-place-id]');
-  for (const link of Array.from(links)) {
-    const href = link.href;
-    if (!href) continue;
-    const card = link.closest<HTMLElement>('div.Nv2PK, div[role="article"], div[role="listitem"], div.m6QErb, div[jsaction], li') || link.parentElement;
-    let title = link.getAttribute('aria-label') || '';
-    if (!title && card) {
-      title = card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, .OSrXXb, h3, h2, .fontBodyMedium')?.textContent?.trim() || '';
+  // Strategy 1: Scan all place link anchors directly
+  const linkAnchors = document.querySelectorAll<HTMLAnchorElement>(
+    'a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]'
+  );
+  for (const anchor of Array.from(linkAnchors)) {
+    let title = anchor.getAttribute('aria-label') || '';
+    const href = anchor.href || '';
+    if (!title && href) {
+      title = titleFromUrl(href);
     }
-    if (!title) title = titleFromUrl(href);
-    if (!title || /^(google|directions|路线|保存|已保存|saved|share|分享)$/i.test(title)) continue;
+    if (!title || title.length < 2 || isGenericNavigationTitle(title)) continue;
+
+    const card = anchor.closest<HTMLElement>(
+      'div.Nv2PK, div[role="article"], div[role="listitem"], div.THL29e, div.jANrlb, div.k77Iif, div.w7l8eb, div[jsaction*="placeCard"], li'
+    ) || anchor.parentElement;
 
     const ratingText = card?.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
     const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
@@ -235,13 +243,13 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
     const infoText = card?.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
     const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
     const address = card?.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
-    const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea')?.textContent?.trim();
+    const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea, div.P34g2b')?.textContent?.trim();
 
-    const key = href.split('?')[0] || title;
-    if (!scavengedListPlaces.has(key)) {
-      scavengedListPlaces.set(key, {
-        title,
-        sourceUrl: href,
+    const titleKey = title.trim().toLowerCase();
+    if (!scavengedListPlaces.has(titleKey)) {
+      scavengedListPlaces.set(titleKey, {
+        title: title.trim(),
+        sourceUrl: href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`,
         sourceProvider: 'google_maps',
         rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
         category,
@@ -253,31 +261,32 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
     }
   }
 
-  // Strategy 2: Find all card elements by headline/title
-  const cardHeadlines = document.querySelectorAll<HTMLElement>(
-    '.qBF1Pd, div.fontHeadlineSmall, span.fontHeadlineSmall, h3.fontHeadlineSmall, div.OSrXXb, div.THL29e .fontHeadlineSmall'
+  // Strategy 2: Scan all distinct item card containers inside lists
+  const cardElements = document.querySelectorAll<HTMLElement>(
+    'div.Nv2PK, div[role="article"], div[role="listitem"], div.THL29e, div.jANrlb, div.k77Iif, div.w7l8eb, div[jsaction*="placeCard"], div[role="feed"] > div'
   );
-  for (const headEl of Array.from(cardHeadlines)) {
-    const title = headEl.textContent?.trim();
-    if (!title || title.length < 2 || title.length > 80) continue;
-    if (/^(google|directions|路线|保存|已保存|saved|share|分享)$/i.test(title)) continue;
+  for (const card of Array.from(cardElements)) {
+    const headEl = card.querySelector<HTMLElement>(
+      '.qBF1Pd, div.fontHeadlineSmall, span.fontHeadlineSmall, h3, h2, div.OSrXXb, div.fontBodyMedium.bJzME, div[class*="title"]'
+    );
+    const title = headEl?.textContent?.trim() || card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[aria-label]')?.getAttribute('aria-label') || '';
+    if (!title || title.length < 2 || title.length > 80 || isGenericNavigationTitle(title)) continue;
 
-    const card = headEl.closest<HTMLElement>('div.Nv2PK, div[role="article"], div[role="listitem"], div.m6QErb, div[jsaction], li') || headEl.parentElement;
-    const linkEl = card?.querySelector<HTMLAnchorElement>('a[href*="/maps/place/"], a.hfpxzc, a');
+    const linkEl = card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]');
     const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
 
-    const ratingText = card?.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
+    const ratingText = card.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
     const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
 
-    const infoText = card?.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
+    const infoText = card.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
     const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
-    const address = card?.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
-    const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea')?.textContent?.trim();
+    const address = card.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
+    const userNote = card.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea, div.P34g2b')?.textContent?.trim();
 
-    const key = sourceUrl.split('?')[0] || title;
-    if (!scavengedListPlaces.has(key)) {
-      scavengedListPlaces.set(key, {
-        title,
+    const titleKey = title.trim().toLowerCase();
+    if (!scavengedListPlaces.has(titleKey)) {
+      scavengedListPlaces.set(titleKey, {
+        title: title.trim(),
         sourceUrl,
         sourceProvider: 'google_maps',
         rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
