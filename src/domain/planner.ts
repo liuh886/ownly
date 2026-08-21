@@ -59,6 +59,10 @@ export interface PlannerTripPlace {
   observed_at?: string;
   preferred_window?: string;
   duration_minutes?: number;
+  open_hours?: string;
+  is_anchor?: boolean;
+  anchor_type?: 'flight' | 'stay_checkin' | 'stay_checkout' | 'transit' | 'reservation';
+  address?: string;
   reservation_status: PlannerReservationStatus;
   state: PlannerPlaceState;
   scheduled_date?: string;
@@ -256,4 +260,106 @@ export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
   if (/xiaohongshu\.com|xhslink\.com/i.test(url)) return 'xiaohongshu';
   if (/booking\.com/i.test(url)) return 'booking';
   return 'other';
+}
+
+export function checkOpeningHoursCollision(openHours?: string, scheduledDate?: string): { isCollision: boolean; reason?: string } {
+  if (!openHours || !scheduledDate) return { isCollision: false };
+  const date = parseDateOnly(scheduledDate);
+  if (!date) return { isCollision: false };
+
+  const dayIndex = date.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  const dayNamesEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayNamesZh = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+  const currentDayEn = dayNamesEn[dayIndex];
+  const currentDayZh = dayNamesZh[dayIndex];
+  const lowerHours = openHours.toLowerCase();
+
+  const isMonClosed = dayIndex === 1 && (/mon(day)?:\s*(closed|休)|周一(闭馆|休息|休)|星期一(闭馆|休息|休)|定休日[：:]?\s*月/i.test(lowerHours));
+  const isTueClosed = dayIndex === 2 && (/tue(sday)?:\s*(closed|休)|周二(闭馆|休息|休)|星期二(闭馆|休息|休)|定休日[：:]?\s*火/i.test(lowerHours));
+  const isWedClosed = dayIndex === 3 && (/wed(nesday)?:\s*(closed|休)|周三(闭馆|休息|休)|星期三(闭馆|休息|休)|定休日[：:]?\s*水/i.test(lowerHours));
+  const isThuClosed = dayIndex === 4 && (/thu(rsday)?:\s*(closed|休)|周四(闭馆|休息|休)|星期四(闭馆|休息|休)|定休日[：:]?\s*木/i.test(lowerHours));
+  const isFriClosed = dayIndex === 5 && (/fri(day)?:\s*(closed|休)|周五(闭馆|休息|休)|星期五(闭馆|休息|休)|定休日[：:]?\s*金/i.test(lowerHours));
+  const isSatClosed = dayIndex === 6 && (/sat(urday)?:\s*(closed|休)|周六(闭馆|休息|休)|星期六(闭馆|休息|休)|定休日[：:]?\s*土/i.test(lowerHours));
+  const isSunClosed = dayIndex === 0 && (/sun(day)?:\s*(closed|休)|周日(闭馆|休息|休)|星期日(闭馆|休息|休)|定休日[：:]?\s*日/i.test(lowerHours));
+
+  if (isMonClosed || isTueClosed || isWedClosed || isThuClosed || isFriClosed || isSatClosed || isSunClosed) {
+    return {
+      isCollision: true,
+      reason: `${currentDayZh}通常休息 (${currentDayEn} Closed)`,
+    };
+  }
+
+  return { isCollision: false };
+}
+
+export function buildGoogleMapsRouteUrl(
+  stops: PlannerTripPlace[],
+  travelMode: PlannerTrip['transport_mode'] = 'transit',
+): string {
+  if (stops.length === 0) return '';
+  if (stops.length === 1) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stops[0].address || stops[0].title)}`;
+  }
+  const origin = encodeURIComponent(stops[0].address || stops[0].title);
+  const destination = encodeURIComponent(stops[stops.length - 1].address || stops[stops.length - 1].title);
+  const waypoints = stops.slice(1, -1).map((p) => encodeURIComponent(p.address || p.title)).join('|');
+
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=${travelMode}`;
+  if (waypoints) {
+    url += `&waypoints=${waypoints}`;
+  }
+  return url;
+}
+
+function escapeXml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: PlannerTripPlace[]): string {
+  const placemarks = places.map((place, index) => `
+    <Placemark>
+      <name>${index + 1}. ${escapeXml(place.title)}</name>
+      <description><![CDATA[
+        <p><b>类别:</b> ${place.kind}</p>
+        ${place.observed_rating ? `<p><b>评分:</b> ★ ${place.observed_rating}</p>` : ''}
+        ${place.observed_price ? `<p><b>人均:</b> ${place.observed_price}</p>` : ''}
+        ${place.why ? `<p><b>理由:</b> ${place.why}</p>` : ''}
+        ${place.notes ? `<p><b>备注:</b> ${place.notes}</p>` : ''}
+        ${place.address ? `<p><b>地址:</b> ${place.address}</p>` : ''}
+        ${place.source_url ? `<p><a href="${place.source_url}">Google Maps 链接</a></p>` : ''}
+      ]]></description>
+      ${place.address ? `<address>${escapeXml(place.address)}</address>` : ''}
+    </Placemark>`).join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${escapeXml(tripTitle)} - ${escapeXml(dateOrDay)}</name>
+    <description>Ownly Travel Planner Route Export</description>
+    ${placemarks}
+  </Document>
+</kml>`;
+}
+
+export function exportPlacesToCSV(places: PlannerTripPlace[]): string {
+  const headers = ['Order', 'Title', 'Kind', 'Rating', 'Price', 'Address', 'Why', 'Notes', 'Tags', 'Google_Maps_URL'];
+  const rows = places.map((p, i) => [
+    i + 1,
+    `"${(p.title || '').replace(/"/g, '""')}"`,
+    `"${p.kind}"`,
+    p.observed_rating ?? '',
+    `"${(p.observed_price || '').replace(/"/g, '""')}"`,
+    `"${(p.address || '').replace(/"/g, '""')}"`,
+    `"${(p.why || '').replace(/"/g, '""')}"`,
+    `"${(p.notes || '').replace(/"/g, '""')}"`,
+    `"${(p.tags || []).join(';')}"`,
+    `"${p.source_url || ''}"`,
+  ].join(','));
+  return [headers.join(','), ...rows].join('\n');
 }

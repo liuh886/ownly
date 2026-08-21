@@ -1,5 +1,6 @@
 import {
   EMPTY_CAPTURE_STATE,
+  checkOpeningHoursCollision,
   inferPlaceKind,
   inferSourceProvider,
   listTripDates,
@@ -840,20 +841,21 @@ function renderSavedListMatch() {
 
 function renderBatchList() {
   const dict = t();
-  // If saved list match banner is already showing the list, hide the secondary batch section
-  if (detectedSavedList && detectedSavedList.places.length > 0) {
+  const places = (detectedSavedList?.places && detectedSavedList.places.length > 0)
+    ? detectedSavedList.places
+    : detectedListPlaces;
+
+  if (places.length === 0) {
     el.batchSection.style.display = 'none';
     return;
   }
-  if (detectedListPlaces.length <= 1) {
-    el.batchSection.style.display = 'none';
-    return;
-  }
+
   el.batchSection.style.display = 'block';
-  el.sumBatchList.textContent = dict.batchSummary(detectedListPlaces.length);
+  el.batchSection.setAttribute('open', '');
+  el.sumBatchList.textContent = dict.batchSummary(places.length);
   el.batchListContainer.innerHTML = '';
 
-  for (const item of detectedListPlaces) {
+  for (const item of places) {
     const row = document.createElement('div');
     row.className = 'batch-item';
 
@@ -864,7 +866,8 @@ function renderBatchList() {
 
     const info = document.createElement('div');
     info.className = 'batch-item-info';
-    info.innerHTML = `<div class="batch-item-title">${item.title}</div><div class="batch-item-sub">${item.category || ''} ${item.rating ? `★ ${item.rating}` : ''}</div>`;
+    const sub = [item.category, item.rating ? `★ ${item.rating}` : '', item.userNote ? `📝 ${item.userNote}` : ''].filter(Boolean).join(' · ');
+    info.innerHTML = `<div class="batch-item-title">${item.title}</div><div class="batch-item-sub">${sub}</div>`;
 
     row.append(chk, info);
     el.batchListContainer.append(row);
@@ -1050,6 +1053,12 @@ function renderCandidatesList() {
     if (place.observed_price) details.innerHTML += `<span>💰 ${place.observed_price}</span>`;
     if (place.duration_minutes) details.innerHTML += `<span>⏱️ ${place.duration_minutes}m</span>`;
     if (place.tags.length) details.innerHTML += `<span>🏷️ ${place.tags.join(', ')}</span>`;
+    if (place.scheduled_date && place.open_hours) {
+      const col = checkOpeningHoursCollision(place.open_hours, place.scheduled_date);
+      if (col.isCollision) {
+        details.innerHTML += `<span style="color:#b45309;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:1px 5px;font-weight:600;">⚠️ ${col.reason}</span>`;
+      }
+    }
 
     const actions = document.createElement('div');
     actions.className = 'candidate-actions';
@@ -1516,6 +1525,8 @@ el.captureForm.addEventListener('submit', (event) => {
     observed_at: today(),
     preferred_window: el.window.value.trim() || undefined,
     duration_minutes: Number.isFinite(duration) && duration > 0 ? Math.min(1440, Math.round(duration)) : undefined,
+    open_hours: currentPlace.openHours ?? existing?.open_hours,
+    address: currentPlace.address ?? existing?.address,
     reservation_status: existing?.reservation_status ?? 'none',
     state: existing?.state ?? 'candidate',
     scheduled_date: existing?.scheduled_date,

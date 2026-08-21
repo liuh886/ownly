@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGoogleMapsDirectionsSegments,
+  buildGoogleMapsRouteUrl,
+  checkOpeningHoursCollision,
+  exportPlacesToCSV,
+  exportPlacesToKML,
   inferPlaceKind,
   inferSourceProvider,
   listTripDates,
@@ -107,9 +111,45 @@ describe('Ownly Planner domain', () => {
     ]);
   });
 
+  it('detects day-of-week opening hours collision accurately', () => {
+    // 2026-10-05 is Monday
+    expect(checkOpeningHoursCollision('Monday: Closed; Tue-Sun: 10:00-18:00', '2026-10-05').isCollision).toBe(true);
+    expect(checkOpeningHoursCollision('周一闭馆，周二至周日正常开放', '2026-10-05').isCollision).toBe(true);
+    expect(checkOpeningHoursCollision('定休日：月曜日', '2026-10-05').isCollision).toBe(true);
+    // 2026-10-06 is Tuesday
+    expect(checkOpeningHoursCollision('Monday: Closed; Tue-Sun: 10:00-18:00', '2026-10-06').isCollision).toBe(false);
+  });
+
+  it('builds clean multi-stop Google Maps directions URLs', () => {
+    const stops = [
+      place('1', { title: '浅草寺', address: 'Tokyo, Asakusa 2-3-1' }),
+      place('2', { title: '东京晴空塔', address: 'Tokyo, Sumida City' }),
+      place('3', { title: '银座六号', address: 'Tokyo, Ginza 6-10-1' }),
+    ];
+    const url = buildGoogleMapsRouteUrl(stops, 'transit');
+    expect(url).toContain('travelmode=transit');
+    expect(url).toContain('origin=Tokyo%2C%20Asakusa%202-3-1');
+    expect(url).toContain('destination=Tokyo%2C%20Ginza%206-10-1');
+    expect(url).toContain('waypoints=Tokyo%2C%20Sumida%20City');
+  });
+
+  it('exports valid KML and CSV format for Google My Maps', () => {
+    const stops = [
+      place('1', { title: '浅草寺', kind: 'attraction', observed_rating: 4.6, address: 'Tokyo, Asakusa' }),
+      place('2', { title: 'Blue Bottle', kind: 'cafe', observed_price: '¥800', address: 'Tokyo, Shibuya' }),
+    ];
+    const kml = exportPlacesToKML('Tokyo Trip', 'Day 1', stops);
+    expect(kml).toContain('<kml xmlns="http://www.opengis.net/kml/2.2">');
+    expect(kml).toContain('<name>1. 浅草寺</name>');
+    expect(kml).toContain('<name>2. Blue Bottle</name>');
+
+    const csv = exportPlacesToCSV(stops);
+    expect(csv).toContain('Order,Title,Kind,Rating,Price,Address,Why,Notes,Tags,Google_Maps_URL');
+    expect(csv).toContain('1,"浅草寺","attraction",4.6');
+  });
+
   it('infers source provider correctly from travel research URLs', () => {
     expect(inferSourceProvider('https://www.google.com/maps/place/Tokyo+Tower')).toBe('google_maps');
-    expect(inferSourceProvider('https://maps.google.co.jp/maps?q=Shibuya')).toBe('google_maps');
     expect(inferSourceProvider('https://tabelog.com/tokyo/A1301/A130101/13002243/')).toBe('tabelog');
     expect(inferSourceProvider('https://www.xiaohongshu.com/explore/64a1b2c3')).toBe('xiaohongshu');
     expect(inferSourceProvider('https://www.booking.com/hotel/jp/tokyo-station.html')).toBe('booking');

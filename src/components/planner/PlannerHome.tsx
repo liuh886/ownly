@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import type { PlannerTrip, PlannerTripPlace } from '@/domain/planner';
 import {
-  buildGoogleMapsDirectionsSegments,
+  buildGoogleMapsRouteUrl,
+  checkOpeningHoursCollision,
+  exportPlacesToCSV,
+  exportPlacesToKML,
   getTripAreaCounts,
   listTripDates,
   sortPlannerPlaces,
@@ -134,9 +137,42 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const mustTotal = tripPlaces.filter((place) => place.priority === 'must').length;
   const mustScheduled = tripPlaces.filter((place) => place.priority === 'must' && place.scheduled_date).length;
   const scheduledMinutes = scheduled.reduce((sum, place) => sum + (place.duration_minutes ?? 0), 0);
-  const routeSegments = selectedTrip
-    ? buildGoogleMapsDirectionsSegments(scheduled, selectedTrip.transport_mode ?? 'transit')
-    : [];
+
+  const downloadKML = useCallback(() => {
+    if (!selectedTrip || scheduled.length === 0) return;
+    const kmlContent = exportPlacesToKML(selectedTrip.title, activeDate, scheduled);
+    const blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedTrip.title}_${activeDate}.kml`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(zh ? '已导出 Google My Maps (KML) 路线文件！' : 'Exported Google My Maps (KML) route file!');
+  }, [selectedTrip, scheduled, activeDate, zh]);
+
+  const downloadCSV = useCallback(() => {
+    if (!selectedTrip || scheduled.length === 0) return;
+    const csvContent = exportPlacesToCSV(scheduled);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedTrip.title}_${activeDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(zh ? '已导出 Google Maps (CSV) 路线文件！' : 'Exported Google Maps (CSV) file!');
+  }, [selectedTrip, scheduled, activeDate, zh]);
+
+  const copyItineraryText = useCallback(async () => {
+    if (!selectedTrip || scheduled.length === 0) return;
+    const lines = [
+      `📅 ${selectedTrip.title} · ${activeDate}`,
+      ...scheduled.map((p, i) => `${i + 1}. ${p.title}${p.area ? ` (${p.area})` : ''}${p.why ? `\n   💡 理由: ${p.why}` : ''}${p.notes ? `\n   📝 备注: ${p.notes}` : ''}${p.address ? `\n   📍 地址: ${p.address}` : ''}`),
+    ];
+    await navigator.clipboard.writeText(lines.join('\n\n'));
+    setNotice(zh ? '已复制当天路线清单至剪贴板！' : 'Copied day itinerary to clipboard!');
+  }, [selectedTrip, scheduled, activeDate, zh]);
 
   const persistPlace = useCallback(async (place: PlannerTripPlace) => {
     await plannerRepository.upsertPlace(place);
@@ -396,15 +432,61 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold text-stone-900">Day Skeleton</h2>
-              <p className="text-[11px] text-stone-400">{activeDate}</p>
+              <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
             </div>
-            {routeSegments.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {routeSegments.map((url, index) => (
-                  <a key={url} href={url} target="_blank" rel="noreferrer" className="rounded-md border border-stone-200 px-2.5 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50">
-                    {routeSegments.length === 1 ? (zh ? 'Google Maps 导航' : 'Open Google Maps') : `${zh ? '路线' : 'Route'} ${index + 1}`}
-                  </a>
-                ))}
+            {scheduled.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <a
+                  href={buildGoogleMapsRouteUrl(scheduled, selectedTrip.transport_mode ?? 'transit')}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md bg-stone-950 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-stone-800 transition"
+                  title={zh ? '在 Google Maps 中打开全天完整路线' : 'Open full day route in Google Maps'}
+                >
+                  🗺️ {zh ? 'Google Maps 完整路线' : 'Google Maps Route'}
+                </a>
+                <a
+                  href={buildGoogleMapsRouteUrl(scheduled, 'driving')}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  title={zh ? '驾车路线' : 'Driving Route'}
+                >
+                  🚗
+                </a>
+                <a
+                  href={buildGoogleMapsRouteUrl(scheduled, 'walking')}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  title={zh ? '步行路线' : 'Walking Route'}
+                >
+                  🚶
+                </a>
+                <button
+                  type="button"
+                  onClick={downloadKML}
+                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  title={zh ? '导出 KML (用于导入 Google 我的地图)' : 'Export KML for Google My Maps'}
+                >
+                  📍 KML
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadCSV}
+                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  title={zh ? '导出 CSV (用于导入 Google 表格或自定义地图)' : 'Export CSV'}
+                >
+                  📊 CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyItineraryText()}
+                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  title={zh ? '复制路线文字清单' : 'Copy itinerary text'}
+                >
+                  📋
+                </button>
               </div>
             ) : null}
           </div>
@@ -414,24 +496,50 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 {zh ? '把 Research Pool 的候选拖进这一天，或点击“+ 当天”。' : 'Drag a researched candidate here, or use “+ Day”.'}
               </div>
             ) : (
-              <ol className="space-y-2">
-                {scheduled.map((place, index) => (
-                  <li key={place.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-stone-200 p-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white">{index + 1}</div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
-                        {place.locked ? <span className="text-[10px] text-stone-400">locked</span> : null}
+              <ol className="space-y-1.5">
+                {scheduled.map((place, index) => {
+                  const col = checkOpeningHoursCollision(place.open_hours, activeDate);
+                  return (
+                    <li key={place.id} className="space-y-1.5">
+                      <div className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-stone-200 bg-white p-3 shadow-xs">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white shrink-0">{index + 1}</div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
+                            {place.locked ? <span className="text-[10px] text-stone-400">locked</span> : null}
+                            {place.observed_price ? <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[10px] text-stone-500">{place.observed_price}</span> : null}
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-stone-400">{placeMeta(place)}</p>
+                          {col.isCollision ? (
+                            <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                              ⚠️ {col.reason}
+                            </div>
+                          ) : null}
+                          {place.why ? <p className="mt-1 line-clamp-1 text-xs text-stone-600">💡 {place.why}</p> : null}
+                          {place.notes ? <p className="mt-0.5 line-clamp-1 text-xs text-stone-500 italic">📝 {place.notes}</p> : null}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↑</button>
+                          <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↓</button>
+                          <button type="button" aria-label={zh ? '放回候选池' : 'Return to pool'} onClick={() => void returnToPool(place)} className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-500 hover:bg-stone-50">{zh ? '移出' : 'Pool'}</button>
+                        </div>
                       </div>
-                      <p className="mt-1 text-[11px] text-stone-400">{placeMeta(place)}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 disabled:opacity-30">↑</button>
-                      <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 disabled:opacity-30">↓</button>
-                      <button type="button" aria-label={zh ? '放回候选池' : 'Return to pool'} onClick={() => void returnToPool(place)} className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-500">{zh ? '移出' : 'Pool'}</button>
-                    </div>
-                  </li>
-                ))}
+                      {index < scheduled.length - 1 ? (
+                        <div className="flex items-center justify-center py-0.5">
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(scheduled[index + 1].address || scheduled[index + 1].title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded-full bg-stone-100 hover:bg-stone-200 px-2.5 py-0.5 text-[10px] font-medium text-stone-600 transition"
+                            title={zh ? '在 Google Maps 中查看两站之间的导航' : 'View directions between stops in Google Maps'}
+                          >
+                            ↓ {zh ? 'Google Maps 站间路线' : 'Directions to next stop'}
+                          </a>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </div>

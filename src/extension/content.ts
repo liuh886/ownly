@@ -13,6 +13,7 @@ export interface CurrentResearchPlace {
   summary?: string;
   userNote?: string;
   openStatus?: string;
+  openHours?: string;
   website?: string;
 }
 
@@ -114,6 +115,27 @@ function extractOpenStatus(): string | undefined {
   return undefined;
 }
 
+function extractOpenHours(): string | undefined {
+  const hoursTable = document.querySelector<HTMLElement>('table.eKjhWe, div[aria-label*="营业时间"], div[aria-label*="Opening hours"]');
+  if (hoursTable) {
+    const rows = Array.from(hoursTable.querySelectorAll('tr, div.y0skZc, div.t39EBf'));
+    if (rows.length > 0) {
+      const text = rows.map((r) => r.textContent?.replace(/\s+/g, ' ').trim()).filter(Boolean).join('; ');
+      if (text && text.length < 300) return text;
+    }
+  }
+
+  const hoursEl = document.querySelector<HTMLElement>('div[data-item-id*="oh"]');
+  if (hoursEl) {
+    const aria = hoursEl.getAttribute('aria-label');
+    if (aria && aria.length < 300) return aria.trim();
+    const text = hoursEl.textContent?.replace(/\s+/g, ' ').trim();
+    if (text && text.length < 300) return text;
+  }
+
+  return undefined;
+}
+
 function extractWebsite(): string | undefined {
   const webEl = document.querySelector<HTMLAnchorElement>('a[data-item-id="authority"]');
   if (webEl?.href) return webEl.href;
@@ -191,8 +213,96 @@ export interface DetectedSavedList {
   places: CurrentResearchPlace[];
 }
 
+const scavengedListPlaces = new Map<string, CurrentResearchPlace>();
+
+function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
+  // Strategy 1: Find all place anchor links
+  const links = document.querySelectorAll<HTMLAnchorElement>('a[href*="/maps/place/"], a[href*="/place/"], a.hfpxzc, a[data-place-id]');
+  for (const link of Array.from(links)) {
+    const href = link.href;
+    if (!href) continue;
+    const card = link.closest<HTMLElement>('div.Nv2PK, div[role="article"], div[role="listitem"], div.m6QErb, div[jsaction], li') || link.parentElement;
+    let title = link.getAttribute('aria-label') || '';
+    if (!title && card) {
+      title = card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, .OSrXXb, h3, h2, .fontBodyMedium')?.textContent?.trim() || '';
+    }
+    if (!title) title = titleFromUrl(href);
+    if (!title || /^(google|directions|路线|保存|已保存|saved|share|分享)$/i.test(title)) continue;
+
+    const ratingText = card?.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
+    const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
+
+    const infoText = card?.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
+    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
+    const address = card?.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
+    const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea')?.textContent?.trim();
+
+    const key = href.split('?')[0] || title;
+    if (!scavengedListPlaces.has(key)) {
+      scavengedListPlaces.set(key, {
+        title,
+        sourceUrl: href,
+        sourceProvider: 'google_maps',
+        rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
+        category,
+        address,
+        detectedCurrency: detectCurrencyFromPage(href, undefined),
+        summary: userNote,
+        userNote,
+      });
+    }
+  }
+
+  // Strategy 2: Find all card elements by headline/title
+  const cardHeadlines = document.querySelectorAll<HTMLElement>(
+    '.qBF1Pd, div.fontHeadlineSmall, span.fontHeadlineSmall, h3.fontHeadlineSmall, div.OSrXXb, div.THL29e .fontHeadlineSmall'
+  );
+  for (const headEl of Array.from(cardHeadlines)) {
+    const title = headEl.textContent?.trim();
+    if (!title || title.length < 2 || title.length > 80) continue;
+    if (/^(google|directions|路线|保存|已保存|saved|share|分享)$/i.test(title)) continue;
+
+    const card = headEl.closest<HTMLElement>('div.Nv2PK, div[role="article"], div[role="listitem"], div.m6QErb, div[jsaction], li') || headEl.parentElement;
+    const linkEl = card?.querySelector<HTMLAnchorElement>('a[href*="/maps/place/"], a.hfpxzc, a');
+    const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+
+    const ratingText = card?.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
+    const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
+
+    const infoText = card?.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
+    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
+    const address = card?.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
+    const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea')?.textContent?.trim();
+
+    const key = sourceUrl.split('?')[0] || title;
+    if (!scavengedListPlaces.has(key)) {
+      scavengedListPlaces.set(key, {
+        title,
+        sourceUrl,
+        sourceProvider: 'google_maps',
+        rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
+        category,
+        address,
+        detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined),
+        summary: userNote,
+        userNote,
+      });
+    }
+  }
+
+  return Array.from(scavengedListPlaces.values());
+}
+
 function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
+  const listPlaces = scanAllGoogleMapsPlaces();
+  const isDedicatedPlacePage = /\/maps\/place\/[^/?#]+/.test(window.location.pathname) || /data=.*!1s0x/.test(window.location.href);
+
+  // If there are multiple places in a list, don't falsely recognize the list header as a single place
+  if (listPlaces.length > 1 && !isDedicatedPlacePage) {
+    return null;
+  }
+
   const heading = document.querySelector<HTMLElement>('h1.DUwDvf')
     ?? document.querySelector<HTMLElement>('main h1')
     ?? document.querySelector<HTMLElement>('h1');
@@ -204,6 +314,8 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel);
   const userNote = extractUserNote();
   const summary = extractSummary();
+  const openHours = extractOpenHours();
+  const openStatus = extractOpenStatus();
 
   return {
     title,
@@ -217,7 +329,8 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     address,
     summary,
     userNote,
-    openStatus: extractOpenStatus(),
+    openStatus,
+    openHours,
     website: extractWebsite(),
   };
 }
@@ -236,56 +349,7 @@ function detectGoogleMapsSavedList(): DetectedSavedList | null {
     }
   }
 
-  // Find all place items inside the list
-  const placesMap = new Map<string, CurrentResearchPlace>();
-  const linkElements = document.querySelectorAll<HTMLAnchorElement>('a[href*="/maps/place/"], a.hfpxzc');
-
-  for (const linkEl of Array.from(linkElements)) {
-    if (placesMap.size >= 100) break;
-    const sourceUrl = linkEl.href;
-    if (!sourceUrl) continue;
-
-    const card = linkEl.closest<HTMLElement>('div.Nv2PK, div[role="article"], div.m6QErb, div[jsaction], li') || linkEl.parentElement;
-
-    let title = linkEl.getAttribute('aria-label') || '';
-    if (!title && card) {
-      title = card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, .OSrXXb, h3, h2, .fontBodyMedium')?.textContent?.trim() || '';
-    }
-    if (!title) {
-      title = titleFromUrl(sourceUrl);
-    }
-    if (!title) continue;
-
-    let rating: number | undefined;
-    const ratingText = card?.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
-    if (ratingText) {
-      const parsed = parseFloat(ratingText.replace(',', '.'));
-      if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 5) rating = parsed;
-    }
-
-    const infoText = card?.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
-    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
-    const address = card?.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
-    const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea')?.textContent?.trim();
-
-    const placeKey = sourceUrl.split('?')[0];
-    const itemCurrency = detectCurrencyFromPage(sourceUrl, undefined);
-    if (!placesMap.has(placeKey)) {
-      placesMap.set(placeKey, {
-        title,
-        sourceUrl,
-        sourceProvider: 'google_maps',
-        rating,
-        category,
-        address,
-        detectedCurrency: itemCurrency,
-        summary: userNote,
-        userNote,
-      });
-    }
-  }
-
-  const places = Array.from(placesMap.values());
+  const places = scanAllGoogleMapsPlaces();
   if (!listName && places.length === 0) return null;
 
   const listCurrency = detectCurrencyFromPage(window.location.href, undefined);
@@ -299,35 +363,7 @@ function detectGoogleMapsSavedList(): DetectedSavedList | null {
 }
 
 function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {
-  const saved = detectGoogleMapsSavedList();
-  if (saved && saved.places.length > 0) {
-    return saved.places;
-  }
-
-  const items: CurrentResearchPlace[] = [];
-  const cards = document.querySelectorAll<HTMLElement>('div.Nv2PK, div[role="article"]');
-  for (const card of Array.from(cards)) {
-    if (items.length >= 50) break;
-    const linkEl = card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[href*="/maps/place/"]');
-    const sourceUrl = linkEl?.href;
-    const title = linkEl?.getAttribute('aria-label') || card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall')?.textContent?.trim();
-    if (!title || !sourceUrl) continue;
-
-    const ratingText = card.querySelector<HTMLElement>('span.MW4etd')?.textContent?.trim();
-    const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
-
-    const infoText = card.querySelector<HTMLElement>('div.W4Efsd')?.textContent?.trim();
-    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
-
-    items.push({
-      title,
-      sourceUrl,
-      sourceProvider: 'google_maps',
-      rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
-      category,
-    });
-  }
-  return items;
+  return scanAllGoogleMapsPlaces();
 }
 
 function extractTabelogPlace(): CurrentResearchPlace | null {
@@ -428,3 +464,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
 });
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.addEventListener('scroll', () => { scanAllGoogleMapsPlaces(); }, { passive: true });
+  try {
+    const observer = new MutationObserver(() => { scanAllGoogleMapsPlaces(); });
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  } catch {}
+}
