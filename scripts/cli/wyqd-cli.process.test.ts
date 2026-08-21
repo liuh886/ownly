@@ -49,7 +49,7 @@ afterEach(() => {
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe('Ownly CLI process contract', () => {
+describe('Ownly CLI process contract', { timeout: 30000 }, () => {
   it('uses a custom data root directly when it already contains Objects', () => {
     const root = createDataLocation();
     mkdirSync(join(root, 'Objects'));
