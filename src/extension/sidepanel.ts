@@ -1,3 +1,5 @@
+import { resolveGoogleMapsListByUrl } from './api';
+import { today } from './utils';
 import {
   EMPTY_CAPTURE_STATE,
   checkOpeningHoursCollision,
@@ -16,8 +18,7 @@ import type { CurrentResearchPlace, DetectedSavedList } from './content';
 const STORAGE_KEY = 'ownlyCaptureStateV1';
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 
-type Lang = 'zh' | 'en';
-
+import { I18N, type Lang } from './i18n';
 const KIND_ICONS: Record<PlannerPlaceKind, string> = {
   attraction: '🏰',
   food: '🍜',
@@ -29,242 +30,6 @@ const KIND_ICONS: Record<PlannerPlaceKind, string> = {
   other: '📍',
 };
 
-const I18N = {
-  zh: {
-    subtitle: '多源灵感采集 → Ownly Planner',
-    pendingSuffix: '待同步',
-    activeTrip: '当前行程',
-    noTripOption: '请在下方新建行程',
-    createTripSummary: '➕ 新建行程',
-    editTripSummary: '✏️ 编辑当前行程设置',
-    tripTitleLabel: '行程名称',
-    tripTitlePlaceholder: '例如：东京赏樱 2026',
-    tripStartLabel: '开始日期',
-    tripEndLabel: '结束日期',
-    tripDestinationsLabel: '目的地',
-    tripDestinationsPlaceholder: '例如：东京, 浅草, 涩谷',
-    tripTagsLabel: '行程标签 / 收藏夹名',
-    tripTagsPlaceholder: '例如：TH26, 美食清单, Want to go',
-    tripCurrencyLabel: '货币单位',
-    tripTransportLabel: '主要交通',
-    btnCreateTrip: '创建并设为当前行程',
-    btnSaveTripEdit: '✓ 保存行程修改',
-    btnDeleteTrip: '🗑️ 删除行程',
-    tripSavedSuccess: '已保存行程设置与修改。',
-    tripDeletedSuccess: '已删除该行程及关联候选项。',
-    confirmDeleteTrip: (title: string) => `确定要删除行程「${title}」及其所有候选地点吗？`,
-    detectedCurrencyPill: (curr: string) => `🗺️ 地图货币: ${curr} (点击应用)`,
-    currencyApplied: (curr: string) => `已将地图货币「${curr}」应用至行程与价格。`,
-    sumBulkImport: '📥 批量导入 / 粘贴地点或列表链接',
-    lblBulkText: '批量粘贴链接或地点名 (每行一个)',
-    bulkPlaceholder: '支持批量粘贴：\nhttps://maps.google.com/...\n浅草寺\n东京晴空塔',
-    btnParseBulkImport: '📥 解析并快速加入候选池',
-    bulkImportSuccess: (count: number) => `已成功解析并导入 ${count} 个地点至候选池！`,
-    bulkImportEmpty: '请先输入或粘贴地点链接或名称。',
-    savedListMatchBadge: '🌟 自动匹配收藏夹',
-    savedListMatchDesc: (list: string, trip: string) => `检测到 Google 收藏夹「${list}」与当前行程「${trip}」的标签匹配`,
-    btnSyncSavedListAll: (list: string, count: number) => `⚡ 一键同步「${list}」全部 ${count} 个地点至候选池`,
-    savedListSynced: (count: number, list: string) => `已成功将「${list}」全部 ${count} 个地点一键同步至候选池！`,
-    batchSummary: (count: number) => `📋 批量感知：当前地图列表 (${count} 个地点)`,
-    btnSelectAll: '全选 / 取消',
-    btnBatchAdd: '➕ 批量加入候选池',
-    batchAddedSuccess: (count: number) => `已成功批量添加 ${count} 个地点至候选池！`,
-    currentPlaceLabel: '当前识别地点',
-    refreshBtn: '🔄 刷新',
-    noPlaceTitle: '请在地图或页面中打开地点',
-    noPlaceUrl: '在 Google Maps、Tabelog、小红书浏览时自动识别',
-    capturedBanner: '✓ 该地点已在当前行程候选池中',
-    kindLabel: '地点类别',
-    priorityLabel: '优先级',
-    areaLabel: '区域 / 街区',
-    areaPlaceholder: '例如：浅草 / 涩谷 / 新宿',
-    tagsLabel: '地点标签',
-    tagsPlaceholder: '例如：夜景, 必吃, 需预约',
-    durationLabel: '预计停留 (分钟)',
-    durationPlaceholder: '90',
-    windowLabel: '偏好时段',
-    windowPlaceholder: '例如：上午 / 傍晚日落 / 晚上',
-    ratingLabel: '评分',
-    ratingPlaceholder: '4.6',
-    priceLabel: '人均价格 / 预算',
-    pricePlaceholder: '例如：¥2,000 / ฿150',
-    quickChipsLabel: '快捷标签',
-    whyLabel: '选择理由 (Why)',
-    whyPlaceholder: '为什么选这个地点？有哪些吸引你的亮点？',
-    signalsLabel: '正向信号',
-    signalsPlaceholder: '例如：绝美日落, 地道当地人多, 早餐很赞',
-    risksLabel: '风险提醒 / 避坑',
-    risksPlaceholder: '例如：周末排队极长, 需提前2周预约, 雨天不宜',
-    notesLabel: '个人备忘笔记',
-    notesPlaceholder: '你自己的游玩心得或计划备忘，而非直接复制评论',
-    btnAddCandidate: '➕ 加入行程候选池',
-    btnUpdateCandidate: '✓ 更新候选心得',
-    btnRemoveCandidate: '🗑️ 移出',
-    candidateRemoved: '已从候选池中移出。',
-    drawerTitle: '🗂️ 当前行程候选池',
-    searchPlaceholder: '🔍 搜索候选地点、区域或标签...',
-    allFilter: '全部',
-    mustFilter: '必去 (Must)',
-    wantFilter: '想去 (Want)',
-    foodFilter: '美食',
-    attractionFilter: '景点',
-    stayFilter: '住宿',
-    unassignedDay: '候选池',
-    dayOption: (idx: number, date: string) => `第 ${idx} 天 (${date})`,
-    editAction: '编辑',
-    deleteAction: '删除',
-    emptyCandidates: '当前行程暂无候选地点，浏览地图或导入收藏夹即可快速添加。',
-    readyStatus: '就绪。',
-    readingStatus: '正在读取页面地点与收藏夹…',
-    noPlaceStatus: '未检测到地点，请在标签页中打开地点。',
-    readyToCapture: '地点已识别，可直接调整或保存。',
-    tripRequiredError: '请先创建或选择一个行程。',
-    placeRequiredError: '请先打开一个地点页面。',
-    candidateUpdated: '已更新该地点的研究心得。',
-    candidateAdded: '已成功加入候选池！',
-    tripCreated: (title: string) => `已激活行程：${title}`,
-    tripValidateError: '行程名称与起止日期为必填项，且结束日期不能早于开始日期。',
-    chips: ['必去', '必吃', '需排队', '建议预约', '绝美夜景', '日落机位', '避开雨天', '交通便利', '只收现金', '安静惬意'],
-    kinds: {
-      attraction: '观光景点 (Attraction)',
-      food: '餐厅美食 (Food)',
-      cafe: '咖啡甜品 (Cafe)',
-      stay: '酒店住宿 (Stay)',
-      shopping: '购物商场 (Shopping)',
-      transit: '交通中转 (Transit)',
-      experience: '体验活动 (Experience)',
-      other: '其它 (Other)',
-    },
-    priorities: {
-      must: '必去 (Must)',
-      want: '想去 (Want)',
-      optional: '可选 (Optional)',
-    },
-    transport: {
-      transit: '公共交通 (Transit)',
-      walking: '步行 (Walking)',
-      driving: '自驾 (Driving)',
-      bicycling: '骑行 (Bicycling)',
-    },
-  },
-  en: {
-    subtitle: 'Multi-source research → Ownly Planner',
-    pendingSuffix: 'pending',
-    activeTrip: 'Active trip',
-    noTripOption: 'Create a trip below',
-    createTripSummary: '➕ Create trip',
-    editTripSummary: '✏️ Edit active trip settings',
-    tripTitleLabel: 'Trip title',
-    tripTitlePlaceholder: 'e.g. Tokyo Sakura 2026',
-    tripStartLabel: 'Start date',
-    tripEndLabel: 'End date',
-    tripDestinationsLabel: 'Destinations',
-    tripDestinationsPlaceholder: 'e.g. Tokyo, Asakusa, Shibuya',
-    tripTagsLabel: 'Trip tags / Google List name',
-    tripTagsPlaceholder: 'e.g. TH26, Foodie, Want to go',
-    tripCurrencyLabel: 'Currency unit',
-    tripTransportLabel: 'Primary transport',
-    btnCreateTrip: 'Create & activate',
-    btnSaveTripEdit: '✓ Save trip changes',
-    btnDeleteTrip: '🗑️ Delete trip',
-    tripSavedSuccess: 'Trip settings updated.',
-    tripDeletedSuccess: 'Trip and associated candidates deleted.',
-    confirmDeleteTrip: (title: string) => `Delete trip "${title}" and all its candidate places?`,
-    detectedCurrencyPill: (curr: string) => `🗺️ Map currency: ${curr} (click to apply)`,
-    currencyApplied: (curr: string) => `Applied map currency "${curr}" to trip & place price.`,
-    sumBulkImport: '📥 Bulk Import / Paste Places & Links',
-    lblBulkText: 'Paste links or place names (one per line)',
-    bulkPlaceholder: 'Paste links or names:\nhttps://maps.google.com/...\nAsakusa Temple\nTokyo Tower',
-    btnParseBulkImport: '📥 Parse & Add to Pool',
-    bulkImportSuccess: (count: number) => `Successfully parsed and imported ${count} places!`,
-    bulkImportEmpty: 'Please enter or paste place links or names first.',
-    savedListMatchBadge: '🌟 Auto-Matched Saved List',
-    savedListMatchDesc: (list: string, trip: string) => `Detected Google List "${list}" matching active trip "${trip}" tags`,
-    btnSyncSavedListAll: (list: string, count: number) => `⚡ Sync all ${count} places from "${list}" to Research Pool`,
-    savedListSynced: (count: number, list: string) => `Successfully synced all ${count} places from "${list}" to Research Pool!`,
-    batchSummary: (count: number) => `📋 Batch Detected: Map List (${count} places)`,
-    btnSelectAll: 'Select All / None',
-    btnBatchAdd: '➕ Add Selected to Pool',
-    batchAddedSuccess: (count: number) => `Successfully batch added ${count} places to research pool!`,
-    currentPlaceLabel: 'Detected place',
-    refreshBtn: '🔄 Refresh',
-    noPlaceTitle: 'Open a place page',
-    noPlaceUrl: 'Auto-detects while browsing Google Maps, Tabelog, Xiaohongshu',
-    capturedBanner: '✓ This place is already in your research pool',
-    kindLabel: 'Place kind',
-    priorityLabel: 'Priority',
-    areaLabel: 'Area / District',
-    areaPlaceholder: 'e.g. Asakusa / Shibuya / Nimman',
-    tagsLabel: 'Place tags',
-    tagsPlaceholder: 'e.g. Night view, Must try, Booking needed',
-    durationLabel: 'Duration (min)',
-    durationPlaceholder: '90',
-    windowLabel: 'Preferred window',
-    windowPlaceholder: 'e.g. early morning / sunset / evening',
-    ratingLabel: 'Rating',
-    ratingPlaceholder: '4.6',
-    priceLabel: 'Observed price / budget',
-    pricePlaceholder: 'e.g. ~$25 / ฿150',
-    quickChipsLabel: 'Quick tags',
-    whyLabel: 'Why it matters (Why)',
-    whyPlaceholder: 'Why did this place survive your research? Key highlights?',
-    signalsLabel: 'Research signals',
-    signalsPlaceholder: 'e.g. sunset view, authentic local crowd, great breakfast',
-    risksLabel: 'Risks / caveats',
-    risksPlaceholder: 'e.g. long weekend queue, 2-week advance booking, rain sensitive',
-    notesLabel: 'Personal note',
-    notesPlaceholder: 'Your own judgment, not a copy of Google reviews',
-    btnAddCandidate: '➕ Add to research pool',
-    btnUpdateCandidate: '✓ Update research note',
-    btnRemoveCandidate: '🗑️ Remove',
-    candidateRemoved: 'Removed from research pool.',
-    drawerTitle: '🗂️ Trip Candidates Pool',
-    searchPlaceholder: '🔍 Search places, areas, tags...',
-    allFilter: 'All',
-    mustFilter: 'Must',
-    wantFilter: 'Want',
-    foodFilter: 'Food',
-    attractionFilter: 'Attraction',
-    stayFilter: 'Stay',
-    unassignedDay: 'Candidate Pool',
-    dayOption: (idx: number, date: string) => `Day ${idx} (${date})`,
-    editAction: 'Edit',
-    deleteAction: 'Delete',
-    emptyCandidates: 'No candidates yet for this trip. Browse maps or import list to add places.',
-    readyStatus: 'Ready.',
-    readingStatus: 'Reading place details and saved lists…',
-    noPlaceStatus: 'No place detected. Open a place on map or webpage.',
-    readyToCapture: 'Place detected. Review details and save.',
-    tripRequiredError: 'Create or select a trip first.',
-    placeRequiredError: 'Open a place page first.',
-    candidateUpdated: 'Research candidate updated.',
-    candidateAdded: 'Added to research pool!',
-    tripCreated: (title: string) => `Active trip: ${title}`,
-    tripValidateError: 'Trip title and valid date range are required.',
-    chips: ['Must visit', 'Foodie', 'Queue alert', 'Booking needed', 'Night view', 'Sunset spot', 'Avoid rain', 'Near transit', 'Cash only', 'Quiet vibe'],
-    kinds: {
-      attraction: 'Attraction',
-      food: 'Food / Dining',
-      cafe: 'Cafe / Dessert',
-      stay: 'Stay / Hotel',
-      shopping: 'Shopping',
-      transit: 'Transit / Station',
-      experience: 'Experience',
-      other: 'Other',
-    },
-    priorities: {
-      must: 'Must',
-      want: 'Want',
-      optional: 'Optional',
-    },
-    transport: {
-      transit: 'Transit',
-      walking: 'Walking',
-      driving: 'Driving',
-      bicycling: 'Bicycling',
-    },
-  },
-};
 
 type ElementMap = {
   langToggle: HTMLButtonElement;
@@ -506,9 +271,6 @@ function t() {
   return I18N[currentLang];
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function setStatus(message: string, tone: 'muted' | 'success' | 'error' = 'muted') {
   el.status.textContent = message;
@@ -1399,76 +1161,6 @@ el.btnSyncSavedListAll.addEventListener('click', () => {
   });
 });
 
-async function resolveGoogleMapsListByUrl(rawUrl: string): Promise<PlannerTripPlace[]> {
-  try {
-    let finalUrl = rawUrl;
-    if (rawUrl.includes('maps.app.goo.gl') || rawUrl.includes('goo.gl/maps')) {
-      try {
-        const res = await fetch(rawUrl, { redirect: 'follow' });
-        finalUrl = res.url;
-      } catch (e: any) {
-        throw new Error(`短链接跳转失败: ${e.message}`);
-      }
-    }
-    const listIdMatch = /!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(finalUrl);
-    const listId = listIdMatch?.[1] || listIdMatch?.[2];
-    if (!listId) {
-      throw new Error(`无法从链接中提取列表 ID: ${finalUrl}`);
-    }
-    const fetchUrl = `https://www.google.com/maps/preview/entitylist/getlist?authuser=0&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
-    const res = await fetch(fetchUrl);
-    if (!res.ok) {
-      throw new Error(`获取列表失败, HTTP ${res.status}`);
-    }
-    const raw = await res.text();
-    const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
-    const data = JSON.parse(cleanJson);
-    const listName = data[0]?.[4] || 'Google Maps 收藏列表';
-    const rawItems = data[0]?.[8];
-    if (Array.isArray(rawItems)) {
-          const now = new Date().toISOString();
-          const activeTrip = state.trips.find((trip) => trip.id === state.activeTripId);
-          const combinedTags = Array.from(new Set([...(activeTrip?.tags ?? []), listName]));
-          const places: PlannerTripPlace[] = [];
-          for (const item of rawItems) {
-            const placeInfo = item[1];
-            const title = item[2] || (placeInfo && placeInfo[2]);
-            if (!title) continue;
-            const address = placeInfo ? placeInfo[4] : undefined;
-            const userNote = item[3] || undefined;
-            const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
-            places.push({
-              schema_version: '0.1',
-              type: 'trip_place',
-              id: crypto.randomUUID(),
-              trip_id: state.activeTripId!,
-              title: String(title).trim(),
-              source_provider: 'google_maps',
-              source_url: sourceUrl,
-              kind: inferPlaceKind(undefined),
-              priority: 'want',
-              tags: combinedTags,
-              why: userNote,
-              signals: [],
-              risks: [],
-              notes: userNote,
-              address,
-              observed_at: today(),
-              reservation_status: 'none',
-              state: 'candidate',
-              created_at: now,
-              updated_at: now,
-            });
-          }
-          return places;
-        } else {
-          throw new Error('解析列表失败：接口未返回项目数据');
-        }
-  } catch (err: any) {
-    console.warn('Could not resolve google maps list link:', err);
-    throw err; // Propagate the error so caller can catch and log it
-  }
-}
 
 // Bulk Text / Links Parser
 el.btnParseBulkImport.addEventListener('click', () => {
