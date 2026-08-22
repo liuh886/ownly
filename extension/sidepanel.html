@@ -111,7 +111,10 @@
     <section class="panel current">
       <div class="row">
         <span id="lblCurrentPlace" class="label">当前地点</span>
-        <button id="refreshPlace" class="link" type="button">🔄 刷新</button>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnDismissPlace" class="link" type="button" style="color: #ef4444; display: none;">❌ 取消选中</button>
+          <button id="refreshPlace" class="link" type="button">🔄 刷新</button>
+        </div>
       </div>
       <h1 id="placeTitle">请在地图或页面中打开地点</h1>
       <p id="placeUrl" class="url">在 Google Maps、Tabelog、小红书浏览时自动识别</p>

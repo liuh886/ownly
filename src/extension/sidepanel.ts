@@ -325,6 +325,7 @@ type ElementMap = {
   btnToggleSelectAll: HTMLButtonElement;
   btnBatchAdd: HTMLButtonElement;
   lblCurrentPlace: HTMLElement;
+  btnDismissPlace: HTMLButtonElement;
   placeTitle: HTMLElement;
   placeUrl: HTMLElement;
   placeCapturedBanner: HTMLElement;
@@ -435,6 +436,7 @@ const el: ElementMap = {
   btnToggleSelectAll: required('btnToggleSelectAll'),
   btnBatchAdd: required('btnBatchAdd'),
   lblCurrentPlace: required('lblCurrentPlace'),
+  btnDismissPlace: required('btnDismissPlace'),
   placeTitle: required('placeTitle'),
   placeUrl: required('placeUrl'),
   placeCapturedBanner: required('placeCapturedBanner'),
@@ -488,6 +490,17 @@ let detectedListPlaces: CurrentResearchPlace[] = [];
 let activeFilter = 'all';
 let searchQuery = '';
 let pageDetectedCurrency: string | undefined = undefined;
+let userDismissedPlaceUrl: string | null = null;
+
+el.btnDismissPlace.addEventListener('click', () => {
+  if (currentPlace) {
+    userDismissedPlaceUrl = currentPlace.sourceUrl;
+    currentPlace = null;
+    renderCurrentPlace();
+    renderSavedListMatch();
+    renderBatchList();
+  }
+});
 
 function t() {
   return I18N[currentLang];
@@ -1711,7 +1724,10 @@ el.tripSelect.addEventListener('change', () => {
   }
 });
 
-el.refreshPlace.addEventListener('click', () => { void readCurrentPlace(); });
+el.refreshPlace.addEventListener('click', () => {
+  userDismissedPlaceUrl = null;
+  void readCurrentPlace();
+});
 
 el.btnRemoveCandidate.addEventListener('click', () => {
   const dict = t();

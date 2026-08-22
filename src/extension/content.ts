@@ -349,6 +349,11 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   if (listPlaces.length > 1 && !isDedicatedPlacePage) {
     return null;
   }
+  
+  // Exclude explicitly known list URL patterns even if places are 0
+  if (!isDedicatedPlacePage && (sourceUrl.includes('!2s') || sourceUrl.includes('/placelists/'))) {
+    return null;
+  }
 
   const heading = document.querySelector<HTMLElement>('h1.DUwDvf')
     ?? document.querySelector<HTMLElement>('main h1')
@@ -417,7 +422,9 @@ let lastScannedListId: string | null = null;
 
 async function fetchGoogleMapsEntityList(listId: string): Promise<DetectedSavedList | null> {
   try {
-    const fetchUrl = `/maps/preview/entitylist/getlist?authuser=0&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
+    const authuserMatch = window.location.href.match(/authuser=(\d+)/);
+    const authuser = authuserMatch ? authuserMatch[1] : '0';
+    const fetchUrl = `/maps/preview/entitylist/getlist?authuser=${authuser}&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
     const res = await fetch(fetchUrl);
     if (res.ok) {
       const raw = await res.text();
