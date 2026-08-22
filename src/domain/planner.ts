@@ -363,3 +363,51 @@ export function exportPlacesToCSV(places: PlannerTripPlace[]): string {
   ].join(','));
   return [headers.join(','), ...rows].join('\n');
 }
+
+export type ResearchChipCategory = 'risk' | 'signal' | 'tag';
+
+export interface ResearchChipDefinition {
+  id: string;
+  label: string;
+  category: ResearchChipCategory;
+}
+
+const KNOWN_RISK_KEYWORDS = [
+  'queue', 'rain', 'advance', 'cash', 'wait', 'busy', 'crowded', 'booking', 'reservation',
+  '排队', '雨', '预约', '现金', '拥挤', '避雷', '避开', '不宜',
+];
+
+export function classifyResearchChip(chipText: string): ResearchChipCategory {
+  const normalized = chipText.trim().toLowerCase();
+  if (KNOWN_RISK_KEYWORDS.some((kw) => normalized.includes(kw))) {
+    return 'risk';
+  }
+  return 'signal';
+}
+
+export const STANDARD_RESEARCH_CHIPS: Record<'zh' | 'en', ResearchChipDefinition[]> = {
+  zh: [
+    { id: 'must_go', label: '必去', category: 'signal' },
+    { id: 'must_eat', label: '必吃', category: 'signal' },
+    { id: 'need_queue', label: '需排队', category: 'risk' },
+    { id: 'advise_booking', label: '建议预约', category: 'risk' },
+    { id: 'night_view', label: '绝美夜景', category: 'signal' },
+    { id: 'sunset_spot', label: '日落机位', category: 'signal' },
+    { id: 'avoid_rain', label: '避开雨天', category: 'risk' },
+    { id: 'convenient_transit', label: '交通便利', category: 'signal' },
+    { id: 'cash_only', label: '只收现金', category: 'risk' },
+    { id: 'quiet_cozy', label: '安静惬意', category: 'signal' },
+  ],
+  en: [
+    { id: 'must_go', label: 'Must Go', category: 'signal' },
+    { id: 'must_eat', label: 'Must Eat', category: 'signal' },
+    { id: 'long_queue', label: 'Long Queue', category: 'risk' },
+    { id: 'book_in_advance', label: 'Book in Advance', category: 'risk' },
+    { id: 'scenic_view', label: 'Scenic View', category: 'signal' },
+    { id: 'sunset_spot', label: 'Sunset Spot', category: 'signal' },
+    { id: 'avoid_rainy_days', label: 'Avoid Rainy Days', category: 'risk' },
+    { id: 'convenient_transit', label: 'Convenient Transit', category: 'signal' },
+    { id: 'cash_only', label: 'Cash Only', category: 'risk' },
+    { id: 'quiet_cozy', label: 'Quiet & Cozy', category: 'signal' },
+  ],
+};

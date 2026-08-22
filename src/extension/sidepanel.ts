@@ -3,6 +3,7 @@ import { today } from './utils';
 import {
   EMPTY_CAPTURE_STATE,
   checkOpeningHoursCollision,
+  classifyResearchChip,
   inferPlaceKind,
   inferSourceProvider,
   listTripDates,
@@ -19,6 +20,7 @@ const STORAGE_KEY = 'ownlyCaptureStateV1';
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 
 import { I18N, type Lang } from './i18n';
+
 const KIND_ICONS: Record<PlannerPlaceKind, string> = {
   attraction: '🏰',
   food: '🍜',
@@ -29,7 +31,6 @@ const KIND_ICONS: Record<PlannerPlaceKind, string> = {
   experience: '🧗',
   other: '📍',
 };
-
 
 type ElementMap = {
   langToggle: HTMLButtonElement;
@@ -411,7 +412,7 @@ function renderChips() {
     btn.className = 'chip';
     btn.textContent = `+ ${chip}`;
     btn.addEventListener('click', () => {
-      const isRisk = /queue|rain|advance|cash|排队|雨|预约|现金/i.test(chip);
+      const isRisk = classifyResearchChip(chip) === 'risk';
       const targetInput = isRisk ? el.risks : el.signals;
       const existing = normalizeDelimitedText(targetInput.value);
       if (!existing.includes(chip)) {
@@ -580,7 +581,11 @@ async function readCurrentPlace(): Promise<void> {
     }
   }
 
-  currentPlace = placeResp?.place ?? null;
+  if (placeResp?.place && placeResp.place.sourceUrl !== userDismissedPlaceUrl) {
+    currentPlace = placeResp.place;
+  } else {
+    currentPlace = null;
+  }
   detectedSavedList = placeResp?.savedList ?? null;
   detectedAllLists = Array.isArray(placeResp?.allLists) ? placeResp.allLists : [];
 
@@ -1202,8 +1207,8 @@ el.btnParseBulkImport.addEventListener('click', () => {
           } else {
             errors.push(`[未找到地点: ${line}]`);
           }
-        } catch (e: any) {
-          errors.push(`[解析失败: ${line} - ${e?.message || '未知错误'}]`);
+        } catch (e: unknown) {
+          errors.push(`[解析失败: ${line} - ${e instanceof Error ? e.message : '未知错误'}]`);
         }
       }
 

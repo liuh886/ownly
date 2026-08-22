@@ -106,8 +106,8 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
     setError(null);
     try {
       await action();
-    } catch (event) {
-      setError(event instanceof Error ? event.message : String(event));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }

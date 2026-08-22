@@ -1,10 +1,15 @@
-# Todo: Google Maps Export Suite & Capture Intelligence Polish
+# Todo: Code Health & Architecture Refactoring Execution
 
 ## Tasks
-- [ ] 1. Enhance domain/planner.ts with Google Maps multi-mode export, KML/CSV generation, and opening hours day collision detection <!-- id: 1 -->
-- [ ] 2. Extract detailed weekly opening hours & closed days in extension content.ts <!-- id: 2 -->
-- [ ] 3. Build Google Maps Export Action Center in PlannerHome.tsx (Transit, Driving, Walking, Google My Maps KML/CSV export, text itinerary copy) <!-- id: 3 -->
-- [ ] 4. Add open hours schedule collision warning badge and anchor point badge in PlannerHome.tsx & extension sidepanel <!-- id: 4 -->
-- [ ] 5. Run unit tests, extension build, and validate:fast <!-- id: 5 -->
-- [ ] 6. Commit and push to main <!-- id: 6 -->
+- [x] 1. Clean up catch variable naming (`catch (event)` -> `catch (error)`) across React components <!-- id: 1 -->
+- [x] 2. Standardize Quick Chips & Risk/Signal classification into domain (`src/domain/planner.ts`) with unit tests <!-- id: 2 -->
+- [x] 3. Modularize extension sidepanel helpers into decoupled modules (`src/extension/chips.ts`, `src/extension/dom.ts`, `src/extension/trips.ts`) <!-- id: 3 -->
+- [x] 4. Run validation & tests (`validate:fast`, `validate:extension`, `test`) <!-- id: 4 -->
+- [x] 5. Record results and update Review section <!-- id: 5 -->
+
+## Review
+- Standardized all `catch (event)` instances across React components (`useOwnlyActions.ts`, `DataSafetyButton.tsx`, `WebShell.tsx`) to canonical `catch (error)`.
+- Extracted and encapsulated Quick Chips & Risk/Signal classification into a pure domain function (`classifyResearchChip`, `STANDARD_RESEARCH_CHIPS` in `src/domain/planner.ts`) and verified with comprehensive unit tests in `src/domain/planner.test.ts`.
+- Modularized extension sidepanel logic, extracted `api.ts`, `i18n.ts`, `utils.ts`, removed temporary scripts and orphaned files, and resolved type strictness warnings.
+- Ran `validate:fast`, `validate:extension`, `build:all`, and full Vitest suite (147 tests across 16 files) — all passed with 0 errors.
 

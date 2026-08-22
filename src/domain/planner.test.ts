@@ -3,6 +3,7 @@ import {
   buildGoogleMapsDirectionsSegments,
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
+  classifyResearchChip,
   exportPlacesToCSV,
   exportPlacesToKML,
   inferPlaceKind,
@@ -10,6 +11,7 @@ import {
   listTripDates,
   mergeCapturedPlaceResearch,
   normalizeDelimitedText,
+  STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
 } from './planner';
 
@@ -146,6 +148,28 @@ describe('Ownly Planner domain', () => {
     const csv = exportPlacesToCSV(stops);
     expect(csv).toContain('Order,Title,Kind,Rating,Price,Address,Why,Notes,Tags,Google_Maps_URL');
     expect(csv).toContain('1,"浅草寺","attraction",4.6');
+  });
+
+  it('classifies research chips accurately into risks and signals', () => {
+    expect(classifyResearchChip('需排队')).toBe('risk');
+    expect(classifyResearchChip('建议预约')).toBe('risk');
+    expect(classifyResearchChip('只收现金')).toBe('risk');
+    expect(classifyResearchChip('Long queue')).toBe('risk');
+    expect(classifyResearchChip('Book in advance')).toBe('risk');
+    expect(classifyResearchChip('Avoid rain')).toBe('risk');
+
+    expect(classifyResearchChip('绝美夜景')).toBe('signal');
+    expect(classifyResearchChip('必吃')).toBe('signal');
+    expect(classifyResearchChip('Sunset spot')).toBe('signal');
+    expect(classifyResearchChip('Convenient transit')).toBe('signal');
+  });
+
+  it('exposes a consistent set of standard research chips', () => {
+    expect(STANDARD_RESEARCH_CHIPS.zh.length).toBeGreaterThan(0);
+    expect(STANDARD_RESEARCH_CHIPS.en.length).toBeGreaterThan(0);
+    expect(STANDARD_RESEARCH_CHIPS.zh.some((c) => c.label === '需排队' && c.category === 'risk')).toBe(true);
+    expect(STANDARD_RESEARCH_CHIPS.zh.some((c) => c.label === '必吃' && c.category === 'signal')).toBe(true);
+    expect(STANDARD_RESEARCH_CHIPS.en.some((c) => c.label === 'Long Queue' && c.category === 'risk')).toBe(true);
   });
 
   it('infers source provider correctly from travel research URLs', () => {

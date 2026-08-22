@@ -690,7 +690,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         const place = currentPlace();
         sendResponse({ place, savedList, allLists });
-      } catch (e: any) {
+      } catch (e) {
         console.warn('OWNLY_GET_CURRENT_PLACE failed:', e);
         sendResponse({ place: null, savedList: null, allLists: [] });
       }
