@@ -92,6 +92,14 @@
               <button id="btnParseBulkImport" class="secondary" type="button">📥 解析并快速加入候选池</button>
             </div>
           </div>
+
+          <hr class="divider" />
+
+          <div class="manage-block" style="display: flex; gap: 6px; align-items: center;">
+            <button id="btnBackupState" class="link" type="button">⬇️ 备份</button>
+            <button id="btnRestoreState" class="link" type="button">⬆️ 恢复</button>
+            <input id="fileRestoreState" type="file" accept="application/json,.json" style="display: none;" />
+          </div>
         </div>
       </details>
     </section>
@@ -205,10 +213,24 @@
     <details id="candidatesDrawer" class="panel stack drawer" open>
       <summary>
         <span id="sumCandidatesDrawer">🗂️ 当前行程候选池</span>
-        <span id="candidatesCountBadge" class="badge">0</span>
+        <span class="row" style="gap: 6px;">
+          <span id="candidatesCountBadge" class="badge">0</span>
+          <button id="btnBulkToggle" class="link" type="button" title="批量操作">☑️</button>
+        </span>
       </summary>
       <input id="candidatesSearch" placeholder="🔍 搜索候选地点、区域或标签..." />
       <div id="candidatesFilterBar" class="filter-bar"></div>
+      <div id="bulkActionBar" class="bulk-bar" style="display: none;">
+        <select id="bulkDaySelect" class="day-select"></select>
+        <select id="bulkPrioritySelect" class="bulk-select">
+          <option value="">设为优先级…</option>
+          <option value="must">必去 (Must)</option>
+          <option value="want">想去 (Want)</option>
+          <option value="optional">可选 (Optional)</option>
+        </select>
+        <button id="btnBulkDelete" class="card-btn del" type="button">🗑️ 删除</button>
+        <button id="btnBulkExit" class="link" type="button">退出</button>
+      </div>
       <div id="candidatesListContainer" class="candidates-list"></div>
     </details>
 

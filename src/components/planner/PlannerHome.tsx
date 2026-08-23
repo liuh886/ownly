@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
-import type { PlannerTrip, PlannerTripPlace } from '@/domain/planner';
+import type { PlannerTrip, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
 import {
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
@@ -20,6 +20,7 @@ import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState } from './capture-bridge';
 import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
+import { PlannerBudgetLedger } from './PlannerBudgetLedger';
 
 interface PlannerHomeProps {
   disabled: boolean;
@@ -59,7 +60,79 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
   const [highlightedPlaceId, setHighlightedPlaceId] = useState<string | null>(null);
-  const [rightTab, setRightTab] = useState<'map' | 'context'>('map');
+  const [rightTab, setRightTab] = useState<'map' | 'context' | 'budget'>('map');
+  const [expensesByTrip, setExpensesByTrip] = useState<Record<string, TripExpenseItem[]>>({});
+  const [membersByTrip, setMembersByTrip] = useState<Record<string, string[]>>({});
+
+  const currentExpenses = useMemo(() => {
+    if (!selectedTripId) return [];
+    if (expensesByTrip[selectedTripId]) return expensesByTrip[selectedTripId];
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(`ownly_trip_expenses_${selectedTripId}`);
+      return raw ? (JSON.parse(raw) as TripExpenseItem[]) : [];
+    } catch {
+      return [];
+    }
+  }, [selectedTripId, expensesByTrip]);
+
+  const currentMembers = useMemo(() => {
+    if (!selectedTripId) return [zh ? '我' : 'Me'];
+    if (membersByTrip[selectedTripId]) return membersByTrip[selectedTripId];
+    if (typeof window === 'undefined') return [zh ? '我' : 'Me'];
+    try {
+      const raw = localStorage.getItem(`ownly_trip_members_${selectedTripId}`);
+      return raw ? (JSON.parse(raw) as string[]) : [zh ? '我' : 'Me'];
+    } catch {
+      return [zh ? '我' : 'Me'];
+    }
+  }, [selectedTripId, membersByTrip, zh]);
+
+  const handleAddExpense = useCallback(
+    (item: Omit<TripExpenseItem, 'id' | 'created_at'>) => {
+      if (!selectedTripId) return;
+      const newExp: TripExpenseItem = {
+        ...item,
+        id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        created_at: new Date().toISOString(),
+      };
+      const next = [newExp, ...currentExpenses];
+      setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: next }));
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`ownly_trip_expenses_${selectedTripId}`, JSON.stringify(next));
+        } catch {}
+      }
+    },
+    [selectedTripId, currentExpenses],
+  );
+
+  const handleDeleteExpense = useCallback(
+    (id: string) => {
+      if (!selectedTripId) return;
+      const next = currentExpenses.filter((e) => e.id !== id);
+      setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: next }));
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`ownly_trip_expenses_${selectedTripId}`, JSON.stringify(next));
+        } catch {}
+      }
+    },
+    [selectedTripId, currentExpenses],
+  );
+
+  const handleUpdateMembers = useCallback(
+    (nextMembers: string[]) => {
+      if (!selectedTripId) return;
+      setMembersByTrip((prev) => ({ ...prev, [selectedTripId]: nextMembers }));
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`ownly_trip_members_${selectedTripId}`, JSON.stringify(nextMembers));
+        } catch {}
+      }
+    },
+    [selectedTripId],
+  );
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
 
@@ -726,6 +799,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               >
                 📊 {zh ? '负荷统计' : 'Context'}
               </button>
+              <button
+                type="button"
+                onClick={() => setRightTab('budget')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                  rightTab === 'budget' ? 'bg-stone-900 text-white shadow-xs' : 'text-stone-600 hover:bg-stone-200/60'
+                }`}
+              >
+                💸 {zh ? '预算与账本' : 'Budget'}
+              </button>
             </div>
             <button
               type="button"
@@ -752,6 +834,17 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 language={language}
               />
             </div>
+          ) : rightTab === 'budget' ? (
+            <PlannerBudgetLedger
+              trip={selectedTrip}
+              scheduledPlaces={scheduled}
+              expenses={currentExpenses}
+              onAddExpense={handleAddExpense}
+              onDeleteExpense={handleDeleteExpense}
+              members={currentMembers}
+              onUpdateMembers={handleUpdateMembers}
+              language={language}
+            />
           ) : (
             <div className="p-4 overflow-y-auto">
               <h2 className="text-sm font-semibold text-stone-900">Planner Context</h2>

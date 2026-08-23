@@ -32,6 +32,8 @@ export const store = {
   smartListKey: '' as string,
   editingCandidateId: null as string | null,
   isListPreviewOpen: false,
+  bulkMode: false,
+  bulkSelected: new Set<string>(),
 };
 
 export function t() {

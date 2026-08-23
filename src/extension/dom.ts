@@ -49,6 +49,15 @@ export type ElementMap = {
   lblBulkText: HTMLElement;
   bulkInputText: HTMLTextAreaElement;
   btnParseBulkImport: HTMLButtonElement;
+  btnBackupState: HTMLButtonElement;
+  btnRestoreState: HTMLButtonElement;
+  fileRestoreState: HTMLInputElement;
+  btnBulkToggle: HTMLButtonElement;
+  bulkActionBar: HTMLElement;
+  bulkDaySelect: HTMLSelectElement;
+  bulkPrioritySelect: HTMLSelectElement;
+  btnBulkDelete: HTMLButtonElement;
+  btnBulkExit: HTMLButtonElement;
   smartListSection: HTMLElement;
   smartListBadge: HTMLElement;
   smartListCountBadge: HTMLElement;
@@ -169,6 +178,15 @@ export const el: ElementMap = {
   lblBulkText: required('lblBulkText'),
   bulkInputText: required('bulkInputText'),
   btnParseBulkImport: required('btnParseBulkImport'),
+  btnBackupState: required('btnBackupState'),
+  btnRestoreState: required('btnRestoreState'),
+  fileRestoreState: required<HTMLInputElement>('fileRestoreState'),
+  btnBulkToggle: required('btnBulkToggle'),
+  bulkActionBar: required('bulkActionBar'),
+  bulkDaySelect: required('bulkDaySelect'),
+  bulkPrioritySelect: required('bulkPrioritySelect'),
+  btnBulkDelete: required('btnBulkDelete'),
+  btnBulkExit: required('btnBulkExit'),
   smartListSection: required('smartListSection'),
   smartListBadge: required('smartListBadge'),
   smartListCountBadge: required('smartListCountBadge'),

@@ -21,6 +21,10 @@ import {
   calculateMultiDayHotelProximity,
   generateStaySpanPlaces,
   detectHotelTransferDays,
+  estimateTripBudget,
+  calculateTripSettlement,
+  parseNumericPrice,
+  type TripExpenseItem,
   STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
 } from './planner';
@@ -390,5 +394,81 @@ describe('Ownly Planner domain', () => {
     expect(transfers['2026-10-03'].isTransferDay).toBe(true);
     expect(transfers['2026-10-03'].checkoutHotel?.title).toBe('Hotel A (Old Town)');
     expect(transfers['2026-10-03'].checkinHotel?.title).toBe('Hotel B (Nimman)');
+  });
+
+  it('parses numeric prices from diverse currency and range strings', () => {
+    expect(parseNumericPrice('人均 ฿200-400')).toBe(300);
+    expect(parseNumericPrice('¥1,800/晚')).toBe(1800);
+    expect(parseNumericPrice('$25 per person')).toBe(25);
+    expect(parseNumericPrice('')).toBe(0);
+    expect(parseNumericPrice(null)).toBe(0);
+  });
+
+  it('estimates categorized trip budget based on scheduled places and traveler count', () => {
+    const hotel = place('h1', { kind: 'stay', observed_price: '฿1,800/晚' });
+    const restaurant = place('r1', { kind: 'food', observed_price: '人均 ฿300' });
+    const museum = place('m1', { kind: 'attraction', observed_price: '฿200' });
+
+    const estimate = estimateTripBudget([hotel, restaurant, museum], 4, 'THB');
+    // stay = 1800
+    // food = 300 * 4 = 1200
+    // ticket = 200 * 4 = 800
+    // total = 3800
+    expect(estimate.totalEstimated).toBe(3800);
+    expect(estimate.perPersonEstimated).toBe(950);
+    expect(estimate.categoryBreakdown.stay).toBe(1800);
+    expect(estimate.categoryBreakdown.food).toBe(1200);
+    expect(estimate.categoryBreakdown.ticket).toBe(800);
+  });
+
+  it('computes Minimum Cash Flow settlement with greedy debt clearance', () => {
+    // 3 travelers: Alice, Bob, Charlie
+    // Alice paid ¥300 for dinner split by [Alice, Bob, Charlie] (¥100 each)
+    // Bob paid ¥150 for taxi split by [Bob, Charlie] (¥75 each)
+    // Net:
+    // Alice: paid 300, share 100 -> net +200 (creditor)
+    // Bob: paid 150, share 175 -> net -25 (debtor)
+    // Charlie: paid 0, share 175 -> net -175 (debtor)
+    // Minimum transfers:
+    // Charlie -> Alice: 175
+    // Bob -> Alice: 25
+    const expenses: TripExpenseItem[] = [
+      {
+        id: 'e1',
+        trip_id: 't1',
+        title: 'Dinner',
+        category: 'food',
+        amount: 300,
+        currency: '¥',
+        paid_by: 'Alice',
+        split_members: ['Alice', 'Bob', 'Charlie'],
+        created_at: '2026-10-01',
+      },
+      {
+        id: 'e2',
+        trip_id: 't1',
+        title: 'Taxi',
+        category: 'transit',
+        amount: 150,
+        currency: '¥',
+        paid_by: 'Bob',
+        split_members: ['Bob', 'Charlie'],
+        created_at: '2026-10-01',
+      },
+    ];
+
+    const settlement = calculateTripSettlement(expenses, ['Alice', 'Bob', 'Charlie']);
+    expect(settlement.totalExpense).toBe(450);
+    expect(settlement.transfers).toHaveLength(2);
+
+    const charlieTransfer = settlement.transfers.find((t) => t.from === 'Charlie');
+    expect(charlieTransfer?.to).toBe('Alice');
+    expect(charlieTransfer?.amount).toBe(175);
+
+    const bobTransfer = settlement.transfers.find((t) => t.from === 'Bob');
+    expect(bobTransfer?.to).toBe('Alice');
+    expect(bobTransfer?.amount).toBe(25);
+
+    expect(settlement.summaryText).toContain('Charlie 👉 微信转账给 Alice');
   });
 });

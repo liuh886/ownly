@@ -22,6 +22,9 @@
 - [x] 19. Add domain helpers for Multi-Day Stay span assignment, stay night calculation, and hotel transfer day detection in `src/domain/planner.ts` with unit tests <!-- id: 19 -->
 - [x] 20. Update `HotelComparisonModal.tsx` with Stay Range Selector (`[ 仅当天 ]` / `[ 连住至第 X 天 (共 N 晚) ]` / `[ 全程连住 ]`) and multi-day combined proximity index <!-- id: 20 -->
 - [x] 21. Integrate Stay Range binding & Transfer Day luggage alerts into `PlannerHome.tsx`, Day Skeleton, and `PlannerMap` <!-- id: 21 -->
+- [x] 22. Implement Expense ledger domain types, Budget estimator (`estimateTripBudget`), and Minimum Cash Flow AA Splitter algorithm (`calculateTripSettlement`) in `src/domain/planner.ts` with comprehensive unit tests <!-- id: 22 -->
+- [x] 23. Create `PlannerBudgetLedger.tsx` component with budget vs actual progress, fast expense entry, member balance cards, minimum transfer path breakdown, and 1-click WeChat copy <!-- id: 23 -->
+- [x] 24. Integrate `PlannerBudgetLedger` into `PlannerHome.tsx` right-hand tab suite and verify test suite <!-- id: 24 -->
 
 ## Review
 - **Unified List Capture Card**: Replaced redundant banners with `#smartListSection` featuring 1-click sync all (`btnSmartSyncAll`) and expandable item picker drawer (`btnToggleListPreview` + `batchListContainer`).
@@ -47,4 +50,8 @@
   - **Multi-Day Spatial Proximity (`calculateMultiDayHotelProximity`)**: Calculated weighted average commute distance across all consecutive dates in a multi-night stay span, with per-day breakdown pills.
   - **Consecutive Stay Range Selector (`HotelComparisonModal.tsx`)**: Provided 1-click chips for `[ 仅当天 (1 晚) ]`, `[ 连住至第 X 天 (N 晚) ]`, and `[ 全程连住 ]`, assigning daily stay anchors with consecutive night notes.
   - **Transfer Day Luggage Logistics & Night Counter**: Automatically detected hotel transition days (`isTransferDay`) to render morning checkout ➔ daytime sightseeing ➔ evening checkin luggage flowcards and consecutive night badges in Day Skeleton.
-- **Code Modularization & Verification**: 38/38 Vitest unit tests passed (`planner.test.ts`, `utils.test.ts`, `capture-state.test.ts`), `npm run validate:fast` passed with 0 errors and 0 warnings on new files.
+- **Trip Budget Ledger & Minimum Cash Flow AA Splitter (Tasks 22-24)**:
+  - **Budget Auto-Estimator (`estimateTripBudget`)**: Analyzes scheduled stays, restaurants, and attractions along with traveler count to project categorized total and per-person trip budget.
+  - **Fast Expense Entry & Companions Management (`PlannerBudgetLedger.tsx`)**: Streamlined companion member management, currency selectors, category icons (`🏨`, `🍜`, `🚗`, `🎟️`, `🛍️`), and payer/split selection.
+  - **Greedy Minimum Cash Flow Algorithm (`calculateTripSettlement`)**: Computes exact net balances per member and derives the minimum payment transfer directives, with 1-click WeChat/WhatsApp group text copying.
+- **Code Modularization & Verification**: 41/41 Vitest unit tests passed (`planner.test.ts`, `utils.test.ts`, `capture-state.test.ts`), `npm run validate:fast` passed with 0 errors and 0 warnings on new files.
