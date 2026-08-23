@@ -38,6 +38,17 @@ export async function saveState(): Promise<void> {
   renderCandidatesList();
 }
 
+function scrollCardIntoView(placeId: string, focusEditor = false): void {
+  requestAnimationFrame(() => {
+    const card = el.candidatesListContainer.querySelector<HTMLElement>(`.candidate-card[data-place-id="${placeId}"]`);
+    if (!card) return;
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (focusEditor) {
+      card.querySelector<HTMLSelectElement>('.candidate-inline-editor select')?.focus({ preventScroll: true });
+    }
+  });
+}
+
 function initCandidateDelegation() {
   el.candidatesListContainer.addEventListener('change', (e) => {
     const target = e.target as HTMLElement;
@@ -61,6 +72,13 @@ function initCandidateDelegation() {
     }
   });
 
+  el.candidatesListContainer.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && store.editingCandidateId) {
+      store.editingCandidateId = null;
+      renderCandidatesList();
+    }
+  });
+
   el.candidatesListContainer.addEventListener('click', (e) => {
     const target = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
     if (!target) return;
@@ -72,6 +90,7 @@ function initCandidateDelegation() {
     if (action === 'edit') {
       store.editingCandidateId = store.editingCandidateId === placeId ? null : placeId;
       renderCandidatesList();
+      if (store.editingCandidateId === placeId) scrollCardIntoView(placeId, true);
     } else if (action === 'delete') {
       store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => p.id !== placeId) };
       if (store.editingCandidateId === placeId) store.editingCandidateId = null;
@@ -129,6 +148,7 @@ function initCandidateDelegation() {
         store.editingCandidateId = null;
         setStatus(dict.candidateUpdated, 'success');
         renderCandidatesList();
+        scrollCardIntoView(placeId);
       });
     }
   });

@@ -112,6 +112,7 @@ export function applyI18n() {
 
   el.lblWhy.childNodes[0].nodeValue = dict.whyLabel;
   el.why.placeholder = dict.whyPlaceholder;
+  el.captureAdvancedSummary.textContent = dict.advancedSettings;
   el.lblSignals.childNodes[0].nodeValue = dict.signalsLabel;
   el.signals.placeholder = dict.signalsPlaceholder;
   el.lblRisks.childNodes[0].nodeValue = dict.risksLabel;
@@ -168,6 +169,10 @@ function renderChips() {
       const existing = normalizeDelimitedText(targetInput.value);
       if (!existing.includes(chip)) {
         targetInput.value = [...existing, chip].join(', ');
+        if (!el.captureAdvanced.open) {
+          el.captureAdvanced.open = true;
+        }
+        targetInput.focus({ preventScroll: false });
       }
     });
     el.quickChips.append(btn);
@@ -423,6 +428,7 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
 export function renderCurrentPlace() {
   const dict = t();
   el.placeMetaBadges.innerHTML = '';
+  el.btnDismissPlace.style.display = store.currentPlace ? 'inline-block' : 'none';
   if (!store.currentPlace) {
     if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
       const dictLocal = t();

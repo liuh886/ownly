@@ -90,8 +90,17 @@ body {
   border-radius: 10px;
   background: #fff;
   padding: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
   box-shadow: 0 1px 3px rgba(28, 25, 23, 0.05), 0 1px 2px rgba(28, 25, 23, 0.03);
   transition: box-shadow 0.15s ease;
+}
+
+.shell,
+.panel,
+.candidate-card,
+form.stack {
+  max-width: 100%;
 }
 
 .stack {
@@ -390,7 +399,7 @@ textarea {
 
 /* Batch list styles */
 .batch-list {
-  max-height: 180px;
+  max-height: min(300px, 45vh);
   overflow-y: auto;
   display: grid;
   gap: 4px;
@@ -496,11 +505,12 @@ textarea {
 }
 
 .candidates-list {
-  max-height: 260px;
+  max-height: min(520px, 68vh);
   overflow-y: auto;
   display: grid;
   gap: 6px;
   padding: 2px 0;
+  scroll-behavior: smooth;
 }
 
 .candidate-card {
@@ -518,6 +528,12 @@ textarea {
   border-color: #cbd5e1;
   background: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.candidate-card:has(.candidate-inline-editor) {
+  border-color: #6ee7b7;
+  background: #f0fdf4;
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.12);
 }
 
 .candidate-header {
@@ -738,7 +754,6 @@ textarea {
 
 .candidate-inline-editor .inline-actions {
   display: flex;
-  justify-content: flex-end;
   gap: 6px;
   margin-top: 2px;
 }
@@ -747,11 +762,13 @@ textarea {
   background: #047857;
   color: #fff;
   border: 0;
-  border-radius: 5px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 700;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  font-weight: 750;
   cursor: pointer;
+  flex: 1.6;
+  min-height: 32px;
   transition: background 0.15s ease, transform 0.05s ease;
 }
 
@@ -767,11 +784,13 @@ textarea {
   background: #e7e5e4;
   color: #44403c;
   border: 0;
-  border-radius: 5px;
-  padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 600;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  font-weight: 650;
   cursor: pointer;
+  flex: 1;
+  min-height: 32px;
   transition: background 0.15s ease;
 }
 
