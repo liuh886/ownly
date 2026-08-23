@@ -24,9 +24,30 @@ const KIND_ICONS: Record<PlannerPlaceKind, string> = {
   other: '📍',
 };
 
+const PROVIDER_META: Record<string, { emoji: string; label: string }> = {
+  google_maps: { emoji: '🗺️', label: 'Maps' },
+  tabelog: { emoji: '🍜', label: 'Tabelog' },
+  xiaohongshu: { emoji: '📕', label: '小红书' },
+  booking: { emoji: '🏨', label: 'Booking' },
+  other: { emoji: '🔗', label: 'Link' },
+};
+
+let statusTimer: number | undefined;
+
 export function setStatus(message: string, tone: 'muted' | 'success' | 'error' = 'muted') {
+  if (statusTimer !== undefined) {
+    window.clearTimeout(statusTimer);
+    statusTimer = undefined;
+  }
   el.status.textContent = message;
   el.status.dataset.tone = tone;
+  el.status.classList.add('visible');
+  if (tone !== 'muted' && message) {
+    statusTimer = window.setTimeout(() => {
+      el.status.classList.remove('visible');
+      statusTimer = undefined;
+    }, 3200);
+  }
 }
 
 export function applyI18n() {
@@ -34,6 +55,7 @@ export function applyI18n() {
   el.langToggle.textContent = store.lang === 'zh' ? 'EN' : '中文';
   el.topbarSubtitle.textContent = dict.subtitle;
   el.lblActiveTrip.textContent = dict.activeTrip;
+  el.sumTripManage.textContent = dict.tripManage;
   el.sumCreateTrip.textContent = dict.createTripSummary;
   el.sumEditTrip.textContent = dict.editTripSummary;
 
@@ -130,6 +152,7 @@ export function applyI18n() {
   renderCurrentPlace();
   renderSmartListCard();
   renderCandidatesList();
+  syncQuickChipStates();
 }
 
 function renderChips() {
@@ -143,17 +166,20 @@ function renderChips() {
   for (const tag of customTags) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'chip';
-    btn.style.borderColor = '#6ee7b7';
-    btn.style.background = '#ecfdf5';
-    btn.style.color = '#047857';
-    btn.style.fontWeight = '600';
-    btn.textContent = `🏷️ + ${tag}`;
+    btn.className = 'chip custom-chip';
+    btn.dataset.chip = tag;
+    btn.dataset.kind = 'tag';
+    btn.textContent = `🏷️ ${tag}`;
     btn.addEventListener('click', () => {
       const existing = normalizeDelimitedText(el.tags.value);
-      if (!existing.includes(tag)) {
+      if (existing.includes(tag)) {
+        el.tags.value = existing.filter((item) => item !== tag).join(', ');
+      } else {
         el.tags.value = [...existing, tag].join(', ');
+        if (!el.captureAdvanced.open) el.captureAdvanced.open = true;
+        el.tags.focus({ preventScroll: false });
       }
+      syncQuickChipStates();
     });
     el.quickChips.append(btn);
   }
@@ -162,20 +188,40 @@ function renderChips() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'chip';
+    btn.dataset.chip = chip;
+    btn.dataset.kind = classifyResearchChip(chip);
     btn.textContent = `+ ${chip}`;
     btn.addEventListener('click', () => {
       const isRisk = classifyResearchChip(chip) === 'risk';
       const targetInput = isRisk ? el.risks : el.signals;
       const existing = normalizeDelimitedText(targetInput.value);
-      if (!existing.includes(chip)) {
+      if (existing.includes(chip)) {
+        targetInput.value = existing.filter((item) => item !== chip).join(', ');
+      } else {
         targetInput.value = [...existing, chip].join(', ');
         if (!el.captureAdvanced.open) {
           el.captureAdvanced.open = true;
         }
         targetInput.focus({ preventScroll: false });
       }
+      syncQuickChipStates();
     });
     el.quickChips.append(btn);
+  }
+  syncQuickChipStates();
+}
+
+export function syncQuickChipStates(): void {
+  const tags = new Set(normalizeDelimitedText(el.tags.value));
+  const signals = new Set(normalizeDelimitedText(el.signals.value));
+  const risks = new Set(normalizeDelimitedText(el.risks.value));
+  for (const btn of Array.from(el.quickChips.querySelectorAll<HTMLButtonElement>('.chip'))) {
+    const value = btn.dataset.chip || '';
+    const kind = btn.dataset.kind || 'signal';
+    const selected = kind === 'tag' ? tags.has(value) : kind === 'risk' ? risks.has(value) : signals.has(value);
+    btn.classList.toggle('selected', selected);
+    const baseLabel = kind === 'tag' ? `🏷️ ${value}` : `+ ${value}`;
+    btn.textContent = selected && kind !== 'tag' ? `✓ ${value}` : baseLabel;
   }
 }
 
@@ -232,6 +278,7 @@ export function populateEditTripForm() {
 
 export function renderState() {
   const dict = t();
+  el.pending.textContent = `${store.state.pendingPlaces.length} ${dict.pendingSuffix}`;
   el.tripSelect.innerHTML = '';
   if (store.state.trips.length === 0) {
     const option = document.createElement('option');
@@ -239,22 +286,28 @@ export function renderState() {
     option.textContent = dict.noTripOption;
     el.tripSelect.append(option);
     el.editTripSection.style.display = 'none';
-  } else {
-    for (const trip of store.state.trips) {
-      const option = document.createElement('option');
-      option.value = trip.id;
-      const currencyBadge = trip.currency ? ` [${trip.currency}]` : '';
-      option.textContent = trip.tags?.length ? `${trip.title} (${trip.tags.join(', ')})${currencyBadge}` : `${trip.title}${currencyBadge}`;
-      el.tripSelect.append(option);
-    }
-    const active = store.state.trips.some((trip) => trip.id === store.state.activeTripId)
-      ? store.state.activeTripId
-      : store.state.trips[0].id;
-    store.state.activeTripId = active;
-    el.tripSelect.value = active ?? '';
-    populateEditTripForm();
+    el.tripActiveRow.style.display = 'none';
+    el.tripSelect.style.display = 'none';
+    el.tripManageSection.classList.add('first-run');
+    el.tripManageSection.open = true;
+    return;
   }
-  el.pending.textContent = `${store.state.pendingPlaces.length} ${dict.pendingSuffix}`;
+  el.tripActiveRow.style.display = 'flex';
+  el.tripSelect.style.display = 'block';
+  el.tripManageSection.classList.remove('first-run');
+  for (const trip of store.state.trips) {
+    const option = document.createElement('option');
+    option.value = trip.id;
+    const currencyBadge = trip.currency ? ` [${trip.currency}]` : '';
+    option.textContent = trip.tags?.length ? `${trip.title} (${trip.tags.join(', ')})${currencyBadge}` : `${trip.title}${currencyBadge}`;
+    el.tripSelect.append(option);
+  }
+  const active = store.state.trips.some((trip) => trip.id === store.state.activeTripId)
+    ? store.state.activeTripId
+    : store.state.trips[0].id;
+  store.state.activeTripId = active;
+  el.tripSelect.value = active ?? '';
+  populateEditTripForm();
 }
 
 export function renderCurrencyPill() {
@@ -279,14 +332,14 @@ export function renderSmartListCard() {
     el.smartListTitle.textContent = dict.listsFoundTitle(store.detectedAllLists.length);
     el.smartListCountBadge.textContent = dict.clickToLoad;
     el.smartListDesc.innerHTML = `${escapeHtml(dict.loadListIntro)}<div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:5px;">` +
-      store.detectedAllLists.map((l) => `<button type="button" class="btn-list-chip" data-list-id="${escapeHtml(l.listId || '')}" style="padding:3px 7px; font-size:10.5px; background:#fff; border:1px solid #10b981; color:#065f46; border-radius:12px; cursor:pointer; font-weight:600;">📁 ${escapeHtml(l.listName)}${l.count ? ` (${l.count})` : ''}</button>`).join('') +
+      store.detectedAllLists.map((l) => `<button type="button" class="list-chip" data-list-id="${escapeHtml(l.listId || '')}">📁 ${escapeHtml(l.listName)}${l.count ? ` (${l.count})` : ''}</button>`).join('') +
       '</div>';
     el.btnSmartSyncAll.style.display = 'none';
     el.btnToggleListPreview.style.display = 'none';
     el.smartListPreviewContainer.style.display = 'none';
 
     // Add click listeners to list chips
-    const chips = el.smartListDesc.querySelectorAll<HTMLButtonElement>('.btn-list-chip');
+    const chips = el.smartListDesc.querySelectorAll<HTMLButtonElement>('.list-chip');
     chips.forEach((chip) => {
       chip.addEventListener('click', () => {
         const listId = chip.dataset.listId;
@@ -359,6 +412,10 @@ export function renderSmartListCard() {
     const row = document.createElement('div');
     row.className = 'batch-item';
 
+    const thumb = document.createElement('span');
+    thumb.className = 'batch-thumb';
+    thumb.textContent = KIND_ICONS[inferPlaceKind(item.category || item.title)] || '📍';
+
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.checked = true;
@@ -375,7 +432,7 @@ export function renderSmartListCard() {
     subEl.textContent = sub;
     info.append(titleEl, subEl);
 
-    row.append(chk, info);
+    row.append(thumb, chk, info);
     el.batchListContainer.append(row);
   }
 }
@@ -429,6 +486,14 @@ export function renderCurrentPlace() {
   const dict = t();
   el.placeMetaBadges.innerHTML = '';
   el.btnDismissPlace.style.display = store.currentPlace ? 'inline-block' : 'none';
+  const provider = store.currentPlace?.sourceProvider;
+  if (store.currentPlace && provider) {
+    el.placeProvider.textContent = `${PROVIDER_META[provider].emoji} ${PROVIDER_META[provider].label}`;
+    el.placeProvider.title = PROVIDER_META[provider].label;
+    el.placeProvider.style.display = 'inline-flex';
+  } else {
+    el.placeProvider.style.display = 'none';
+  }
   if (!store.currentPlace) {
     if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
       const dictLocal = t();
@@ -547,6 +612,12 @@ export function renderCandidatesList() {
     const header = document.createElement('div');
     header.className = 'candidate-header';
 
+    const grip = document.createElement('span');
+    grip.className = 'grip';
+    grip.draggable = true;
+    grip.textContent = '⠿';
+    grip.title = store.lang === 'zh' ? '拖动调整候选池顺序' : 'Drag to reorder the pool';
+
     const titleEl = document.createElement('div');
     titleEl.className = 'candidate-title';
     titleEl.textContent = `${KIND_ICONS[place.kind] || '📍'} ${place.title}`;
@@ -555,7 +626,7 @@ export function renderCandidatesList() {
     priorityBadge.className = `badge ${place.priority}`;
     priorityBadge.textContent = dict.priorities[place.priority] || place.priority;
 
-    header.append(titleEl, priorityBadge);
+    header.append(grip, titleEl, priorityBadge);
 
     if (store.editingCandidateId === place.id) {
       card.append(header, buildInlineEditor(place, dict));
@@ -726,12 +797,12 @@ function buildCandidateDetails(
   if (place.tags.length) details.innerHTML += `<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`;
   const noteText = place.notes || place.why;
   if (noteText) {
-    details.innerHTML += `<div style="color:#57534e;font-size:11px;line-height:1.3;margin-top:2px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">📝 ${escapeHtml(noteText)}</div>`;
+    details.innerHTML += `<div class="note-line">📝 ${escapeHtml(noteText)}</div>`;
   }
   if (place.scheduled_date && place.open_hours) {
     const col = checkOpeningHoursCollision(place.open_hours, place.scheduled_date);
     if (col.isCollision) {
-      details.innerHTML += `<span style="color:#b45309;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:1px 5px;font-weight:600;">⚠️ ${col.reason}</span>`;
+      details.innerHTML += `<span class="risk-flag">⚠️ ${escapeHtml(col.reason ?? '')}</span>`;
     }
   }
 

@@ -1,15 +1,18 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
+import { el } from '../dom';
 import { store, t } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
 
 export async function readCurrentPlace(): Promise<void> {
   setStatus(t().readingStatus);
+  el.placePanel.classList.add('is-loading');
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     store.currentPlace = null;
     store.detectedSavedList = null;
     store.detectedListPlaces = [];
     store.pageDetectedCurrency = undefined;
+    el.placePanel.classList.remove('is-loading');
     renderCurrentPlace();
     renderSmartListCard();
     renderCurrencyPill();
@@ -90,6 +93,7 @@ export async function readCurrentPlace(): Promise<void> {
     : directListPlaces;
   store.pageDetectedCurrency = store.currentPlace?.detectedCurrency || store.detectedSavedList?.detectedCurrency;
 
+  el.placePanel.classList.remove('is-loading');
   renderCurrentPlace();
   renderSmartListCard();
   renderCurrencyPill();

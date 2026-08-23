@@ -23,6 +23,7 @@ import {
   renderSmartListCard,
   renderState,
   setStatus,
+  syncQuickChipStates,
 } from './ui';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
@@ -45,6 +46,80 @@ function scrollCardIntoView(placeId: string, focusEditor = false): void {
     card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     if (focusEditor) {
       card.querySelector<HTMLSelectElement>('.candidate-inline-editor select')?.focus({ preventScroll: true });
+    }
+  });
+}
+
+function flashNewCandidate(placeId: string): void {
+  el.candidatesDrawer.open = true;
+  requestAnimationFrame(() => {
+    const card = el.candidatesListContainer.querySelector<HTMLElement>(`.candidate-card[data-place-id="${placeId}"]`);
+    if (!card) return;
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    card.classList.add('flash-new');
+    window.setTimeout(() => card.classList.remove('flash-new'), 950);
+  });
+}
+
+function initDragReorder(): void {
+  const list = el.candidatesListContainer;
+  let draggingId: string | null = null;
+
+  list.addEventListener('dragstart', (e) => {
+    const card = (e.target as HTMLElement).closest<HTMLElement>('.candidate-card');
+    if (!card) return;
+    draggingId = card.dataset.placeId || null;
+    card.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', draggingId || ''); } catch {}
+    }
+  });
+
+  list.addEventListener('dragover', (e) => {
+    if (!draggingId) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    for (const el2 of Array.from(list.querySelectorAll('.drop-above'))) el2.classList.remove('drop-above');
+    const over = (e.target as HTMLElement).closest<HTMLElement>('.candidate-card');
+    if (over && over.dataset.placeId !== draggingId) over.classList.add('drop-above');
+  });
+
+  list.addEventListener('drop', (e) => {
+    if (!draggingId) return;
+    e.preventDefault();
+    const over = (e.target as HTMLElement).closest<HTMLElement>('.candidate-card');
+    const srcId = draggingId;
+    draggingId = null;
+    for (const el2 of Array.from(list.querySelectorAll('.drop-above'))) el2.classList.remove('drop-above');
+    if (!over) return;
+    const overId = over.dataset.placeId;
+    if (!overId || overId === srcId) return;
+
+    const orderedIds = [...list.querySelectorAll<HTMLElement>('.candidate-card')]
+      .map((c) => c.dataset.placeId)
+      .filter((id): id is string => Boolean(id));
+    const fromIdx = orderedIds.indexOf(srcId);
+    if (fromIdx === -1) return;
+    orderedIds.splice(fromIdx, 1);
+    const toIdx = orderedIds.indexOf(overId);
+    orderedIds.splice(toIdx, 0, srcId);
+
+    const pending = [...store.state.pendingPlaces];
+    const slots: number[] = [];
+    pending.forEach((p, i) => { if (orderedIds.includes(p.id)) slots.push(i); });
+    const reordered = orderedIds
+      .map((id) => pending.find((p) => p.id === id))
+      .filter((p): p is PlannerTripPlace => Boolean(p));
+    slots.forEach((slotIdx, i) => { pending[slotIdx] = reordered[i]; });
+    store.state = { ...store.state, pendingPlaces: pending };
+    void saveState();
+  });
+
+  list.addEventListener('dragend', () => {
+    draggingId = null;
+    for (const el2 of Array.from(list.querySelectorAll('.candidate-card'))) {
+      el2.classList.remove('dragging', 'drop-above');
     }
   });
 }
@@ -627,6 +702,7 @@ export function initHandlers(): void {
       el.captureForm.reset();
       el.kind.value = 'attraction';
       el.priority.value = 'want';
+      syncQuickChipStates();
       setStatus(dict.candidateRemoved, 'success');
     });
   });
@@ -692,9 +768,19 @@ export function initHandlers(): void {
       pendingPlaces: [...store.state.pendingPlaces.filter((item) => item.id !== place.id), place],
     };
     void saveState().then(() => {
+      syncQuickChipStates();
       setStatus(existing ? dict.candidateUpdated : dict.candidateAdded, 'success');
+      if (!existing) flashNewCandidate(place.id);
     });
   });
 
+  el.captureForm.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      el.btnCaptureSubmit.click();
+    }
+  });
+
+  initDragReorder();
   initCandidateDelegation();
 }
