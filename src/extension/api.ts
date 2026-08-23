@@ -1,5 +1,5 @@
 import { inferPlaceKind, type PlannerTrip, type PlannerTripPlace } from '../domain/planner';
-import { today } from './utils';
+import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, parseEntityListCoordinates, today } from './utils';
 
 export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: PlannerTrip): Promise<PlannerTripPlace[]> {
   try {
@@ -25,7 +25,7 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: Pl
     const raw = await res.text();
     const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
     const data = JSON.parse(cleanJson);
-    const listName = data[0]?.[4] || 'Google Maps 收藏列表';
+    const listName = cleanExtractedText(data[0]?.[4] || 'Google Maps 收藏列表');
     const rawItems = data[0]?.[8];
     if (Array.isArray(rawItems)) {
       const now = new Date().toISOString();
@@ -33,20 +33,31 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: Pl
       const places: PlannerTripPlace[] = [];
       for (const item of rawItems) {
         const placeInfo = item[1];
-        const title = item[2] || (placeInfo && placeInfo[2]);
-        if (!title) continue;
-        const address = placeInfo ? placeInfo[4] : undefined;
-        const userNote = item[3] || undefined;
-        const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+        const rawTitle = item[2] || (placeInfo && placeInfo[2]);
+        if (!rawTitle) continue;
+        const placeTitle = cleanExtractedText(rawTitle);
+        if (!placeTitle || isJunkNavigationText(placeTitle)) continue;
+
+        const rawAddress = placeInfo ? placeInfo[4] : undefined;
+        const address = rawAddress ? cleanExtractedText(rawAddress) : undefined;
+        const rawNote = item[3] || undefined;
+        const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
+
+        const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(placeTitle)}`;
+        const placeArea = (address && address.includes(','))
+          ? address.split(/[,，]/).map((p: string) => p.trim()).filter(Boolean)[0]
+          : undefined;
+
         places.push({
           schema_version: '0.1',
           type: 'trip_place',
           id: crypto.randomUUID(),
           trip_id: activeTrip?.id || '',
-          title: String(title).trim(),
+          title: placeTitle,
           source_provider: 'google_maps',
           source_url: sourceUrl,
-          kind: inferPlaceKind(undefined),
+          kind: inferPlaceKind(placeTitle + ' ' + (address || '')),
+          area: placeArea,
           priority: 'want',
           tags: combinedTags,
           why: userNote,
@@ -54,6 +65,8 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: Pl
           risks: [],
           notes: userNote,
           address,
+          coordinates: parseEntityListCoordinates(placeInfo),
+          source_place_id: findEntityListPlaceId(item),
           observed_at: today(),
           reservation_status: 'none',
           state: 'candidate',

@@ -1,4 +1,5 @@
-import { inferSourceProvider, type PlannerPlaceSourceProvider } from '../domain/planner';
+import { inferSourceProvider, extractPlaceCoordinates, type PlannerPlaceSourceProvider } from '../domain/planner';
+import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, parseEntityListCoordinates, safeDecodeUri } from './utils';
 
 export interface CurrentResearchPlace {
   title: string;
@@ -15,6 +16,8 @@ export interface CurrentResearchPlace {
   openStatus?: string;
   openHours?: string;
   website?: string;
+  coordinates?: { lat: number; lng: number };
+  sourcePlaceId?: string;
 }
 
 function titleFromUrl(url: string): string {
@@ -22,7 +25,7 @@ function titleFromUrl(url: string): string {
     const parsed = new URL(url);
     const match = /\/maps\/place\/([^/]+)/.exec(parsed.pathname);
     if (!match?.[1]) return '';
-    return decodeURIComponent(match[1].replaceAll('+', ' ')).trim();
+    return safeDecodeUri(match[1]);
   } catch {
     return '';
   }
@@ -60,27 +63,49 @@ function extractReviewCount(): number | undefined {
 }
 
 function extractCategory(): string | undefined {
-  const catBtn = document.querySelector<HTMLElement>('button.DkEaL, button[jsaction*="category"], div.fontBodyMedium button[jsaction*="pane"]');
+  const catBtn = document.querySelector<HTMLElement>(
+    'button.DkEaL, button[jsaction*="category"], div.fontBodyMedium button[jsaction*="pane"], button[jsaction*="pane.rating.category"], div.skqShb, div.LBgpqf button, span.mgr77e span.fontBodyMedium, span[class*="category"]'
+  );
   if (catBtn?.textContent) {
-    const cat = catBtn.textContent.trim();
-    if (cat && cat.length < 50) return cat;
+    const cat = cleanExtractedText(catBtn.textContent);
+    if (cat && cat.length < 50 && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(cat)) return cat;
   }
   return undefined;
 }
 
 function extractPrice(): string | undefined {
-  const priceEl = document.querySelector<HTMLElement>('span[aria-label*="价格"], span[aria-label*="Price"], span.fontBodyMedium span[aria-label*="£"], span.fontBodyMedium span[aria-label*="$"], span.fontBodyMedium span[aria-label*="¥"]');
+  // 1. Direct price attributes or dedicated badges
+  const priceEl = document.querySelector<HTMLElement>(
+    'span[aria-label*="价格"], span[aria-label*="Price"], span.fontBodyMedium span[aria-label*="£"], span.fontBodyMedium span[aria-label*="$"], span.fontBodyMedium span[aria-label*="¥"], span[aria-label*="฿"], span.mgr77e span, div.mgr77e, span[class*="price"], div[aria-label*="per night"], div[aria-label*="每晚"], div[class*="price"]'
+  );
   if (priceEl) {
-    const text = (priceEl.getAttribute('aria-label') || priceEl.textContent || '').trim();
-    if (text) return text;
+    const text = cleanExtractedText(priceEl.getAttribute('aria-label') || priceEl.textContent || '');
+    if (text && text.length < 50 && !/^(路线|directions|save|保存)$/i.test(text)) return text;
   }
+
+  // 2. Scan per-person budget in header info (e.g. "人均 ฿200–400", "¥1,000–2,000 per person", "￥2,000〜￥3,000")
+  const infoSpans = document.querySelectorAll<HTMLElement>('div.fontBodyMedium span, div.W4Efsd span, div.mgr77e');
+  for (const span of Array.from(infoSpans).slice(0, 10)) {
+    const text = cleanExtractedText(span.textContent || '');
+    if (/(人均|per person|每人|每晚|per night|[¥฿$€£₩]\s*\d+)/i.test(text) && text.length < 60) {
+      return text;
+    }
+  }
+
+  // 3. Check for standalone price level ($$, $$$, ¥¥) in header pills
+  const levelSpans = document.querySelectorAll<HTMLElement>('span[aria-label*="Moderate"], span[aria-label*="Inexpensive"], span[aria-label*="Expensive"], span[aria-label*="适中"], span[aria-label*="实惠"]');
+  for (const span of Array.from(levelSpans)) {
+    const label = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
+    if (label) return label;
+  }
+
   return undefined;
 }
 
 function extractAddress(): string | undefined {
   const addrEl = document.querySelector<HTMLElement>('button[data-item-id="address"] div.fontBodyMedium, button[data-item-id="address"], div[aria-label*="地址"], div[aria-label*="Address"]');
   if (addrEl?.textContent) {
-    const addr = addrEl.textContent.trim();
+    const addr = cleanExtractedText(addrEl.textContent);
     if (addr && addr.length < 150) return addr;
   }
   return undefined;
@@ -89,19 +114,19 @@ function extractAddress(): string | undefined {
 function extractSummary(): string | undefined {
   const summaryEl = document.querySelector<HTMLElement>('div.PYvSYb, div.WeS02d, div[class*="editorialSummary"], div.fontBodyMedium div[class*="content"]');
   if (summaryEl?.textContent) {
-    const sum = summaryEl.textContent.trim();
-    if (sum && sum.length < 300) return sum;
+    const sum = cleanExtractedText(summaryEl.textContent);
+    if (sum && sum.length < 300 && !isJunkNavigationText(sum)) return sum;
   }
   return undefined;
 }
 
 function extractUserNote(): string | undefined {
   const noteEl = document.querySelector<HTMLElement>(
-    'button[data-item-id="note"] div.fontBodyMedium, div[aria-label*="备注"], div[aria-label*="备忘"], div[aria-label*="Note"], div.P34g2b, div.bJzME, textarea[aria-label*="note"]'
+    'button[data-item-id="note"] div.fontBodyMedium, button[data-item-id="note"], div[data-item-id="note"], textarea[aria-label*="note" i], textarea[aria-label*="备注" i]'
   );
   if (noteEl) {
-    const text = (noteEl.textContent || (noteEl as HTMLTextAreaElement).value || '').trim();
-    if (text && text.length < 500 && !/^(添加备注|add a note|edit note|编辑备注)$/i.test(text)) return text;
+    const text = cleanExtractedText(noteEl.textContent || (noteEl as HTMLTextAreaElement).value || '');
+    if (text && text.length < 500 && !isJunkNavigationText(text)) return text;
   }
   return undefined;
 }
@@ -109,7 +134,7 @@ function extractUserNote(): string | undefined {
 function extractOpenStatus(): string | undefined {
   const openEl = document.querySelector<HTMLElement>('div[data-item-id*="oh"] span.fontBodyMedium, span[aria-label*="营业"], span[aria-label*="Hours"]');
   if (openEl?.textContent) {
-    const status = openEl.textContent.trim();
+    const status = cleanExtractedText(openEl.textContent);
     if (status && status.length < 40) return status;
   }
   return undefined;
@@ -120,7 +145,7 @@ function extractOpenHours(): string | undefined {
   if (hoursTable) {
     const rows = Array.from(hoursTable.querySelectorAll('tr, div.y0skZc, div.t39EBf'));
     if (rows.length > 0) {
-      const text = rows.map((r) => r.textContent?.replace(/\s+/g, ' ').trim()).filter(Boolean).join('; ');
+      const text = cleanExtractedText(rows.map((r) => r.textContent?.replace(/\s+/g, ' ').trim()).filter(Boolean).join('; '));
       if (text && text.length < 300) return text;
     }
   }
@@ -128,8 +153,8 @@ function extractOpenHours(): string | undefined {
   const hoursEl = document.querySelector<HTMLElement>('div[data-item-id*="oh"]');
   if (hoursEl) {
     const aria = hoursEl.getAttribute('aria-label');
-    if (aria && aria.length < 300) return aria.trim();
-    const text = hoursEl.textContent?.replace(/\s+/g, ' ').trim();
+    if (aria && aria.length < 300) return cleanExtractedText(aria);
+    const text = cleanExtractedText(hoursEl.textContent || '');
     if (text && text.length < 300) return text;
   }
 
@@ -143,9 +168,9 @@ function extractWebsite(): string | undefined {
 }
 
 export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): string | undefined {
-  // 1. Gather all actual price strings rendered on the user's active page
-  const pricesToScan: string[] = [];
-  if (priceText) pricesToScan.push(priceText);
+  const currentUrl = sourceUrl || window.location.href;
+  const pageContentToScan: string[] = [];
+  if (priceText) pageContentToScan.push(priceText);
 
   // Scan visible price elements on the page (place card, hotels, menu, reviews, footer)
   const priceElements = document.querySelectorAll<HTMLElement>(
@@ -154,13 +179,13 @@ export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): s
   for (const el of Array.from(priceElements).slice(0, 15)) {
     const text = (el.getAttribute('aria-label') || el.textContent || '').trim();
     if (text && text.length < 50 && /[\$¥฿€£₩₫₹]|\b(sgd|hkd|twd|thb|usd|jpy|cny|eur|gbp|aud|cad|krw|vnd|myr|chf|inr)\b/i.test(text)) {
-      pricesToScan.push(text);
+      pageContentToScan.push(text);
     }
   }
 
-  const combinedPrices = pricesToScan.join(' ');
+  const combinedPrices = pageContentToScan.join(' ');
 
-  // 2. High-precision explicit currency symbol matching from what is literally on screen
+  // 1. High-precision explicit currency symbol matching from screen
   if (/s\$|\bsgd\b/i.test(combinedPrices)) return 'SGD';
   if (/hk\$|\bhkd\b/i.test(combinedPrices)) return 'HKD';
   if (/nt\$|\btwd\b|\bntd\b|新台币/i.test(combinedPrices)) return 'TWD';
@@ -179,27 +204,44 @@ export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): s
   if (/cn¥|\brmb\b|\bcny\b|人民币/i.test(combinedPrices)) return 'CNY';
   if (/jp¥|\bjpy\b|円/i.test(combinedPrices)) return 'JPY';
 
-  // 3. Domain / TLD the user's browser is currently connected to (e.g. google.com.sg)
-  try {
-    const urlObj = new URL(sourceUrl || window.location.href);
-    const host = urlObj.hostname.toLowerCase();
-    if (host.endsWith('.com.sg') || host.endsWith('.sg')) return 'SGD';
-    if (host.endsWith('.com.hk') || host.endsWith('.hk')) return 'HKD';
-    if (host.endsWith('.com.tw') || host.endsWith('.tw')) return 'TWD';
-    if (host.endsWith('.co.jp') || host.endsWith('.jp')) return 'JPY';
-    if (host.endsWith('.co.th') || host.endsWith('.th')) return 'THB';
-    if (host.endsWith('.co.uk') || host.endsWith('.uk')) return 'GBP';
-    if (host.endsWith('.com.au') || host.endsWith('.au')) return 'AUD';
-    if (host.endsWith('.ca')) return 'CAD';
-    if (host.endsWith('.fr') || host.endsWith('.de') || host.endsWith('.it') || host.endsWith('.es') || host.endsWith('.nl')) return 'EUR';
-  } catch {}
+  // 2. Geographic & Domain Context (TLD, URL keywords, Coordinates, Address context)
+  const fullContext = (currentUrl + ' ' + document.title + ' ' + (document.body?.innerText?.slice(0, 1500) || '')).toLowerCase();
 
-  // 4. Ambiguous symbols: bare ¥ or $
+  // Coordinates extraction e.g. @1.3521,103.8198
+  const coordMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(currentUrl);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    if (lat >= 1.15 && lat <= 1.48 && lng >= 103.55 && lng <= 104.08) return 'SGD'; // Singapore
+    if (lat >= 22.15 && lat <= 22.58 && lng >= 113.80 && lng <= 114.45) return 'HKD'; // Hong Kong
+    if (lat >= 21.80 && lat <= 25.40 && lng >= 119.80 && lng <= 122.10) return 'TWD'; // Taiwan
+    if (lat >= 24.00 && lat <= 45.60 && lng >= 122.90 && lng <= 153.98) return 'JPY'; // Japan
+    if (lat >= 5.60 && lat <= 20.50 && lng >= 97.30 && lng <= 105.70) return 'THB'; // Thailand
+    if (lat >= 0.80 && lat <= 7.50 && lng >= 99.50 && lng <= 119.50) return 'MYR'; // Malaysia
+  }
+
+  // Keywords & TLDs
+  if (/\.com\.sg|\.sg\b|singapore|新加坡|changi|sentosa|marina bay/i.test(fullContext)) return 'SGD';
+  if (/\.com\.hk|\.hk\b|hong kong|hongkong|香港|kowloon|九龙/i.test(fullContext)) return 'HKD';
+  if (/\.com\.tw|\.tw\b|taiwan|taipei|台湾|台北|高雄/i.test(fullContext)) return 'TWD';
+  if (/\.co\.th|\.th\b|thailand|bangkok|chiang mai|phuket|泰国|曼谷|清迈|普吉/i.test(fullContext)) return 'THB';
+  if (/\.co\.jp|\.jp\b|japan|tokyo|osaka|kyoto|hokkaido|日本|东京|大阪|京都|北海道/i.test(fullContext)) return 'JPY';
+  if (/\.com\.my|\.my\b|malaysia|kuala lumpur|penang|马来西亚|吉隆坡|槟城/i.test(fullContext)) return 'MYR';
+  if (/\.com\.au|\.au\b|australia|sydney|melbourne|brisbane|澳大利亚|悉尼|墨尔本/i.test(fullContext)) return 'AUD';
+  if (/\.ca\b|canada|toronto|vancouver|montreal|加拿大|多伦多|温哥华/i.test(fullContext)) return 'CAD';
+  if (/\.co\.uk|\.uk\b|london|united kingdom|英国|伦敦/i.test(fullContext)) return 'GBP';
+  if (/\.fr|\.de|\.it|\.es|\.nl|france|germany|italy|spain|paris|rome|berlin|欧洲|法国|德国|意大利/i.test(fullContext)) return 'EUR';
+
+  // 3. Ambiguous symbols fallback
   if (combinedPrices.includes('¥')) {
-    if (/円/i.test(document.title) || document.documentElement.lang.startsWith('ja')) return 'JPY';
+    if (/円|japan|tokyo|osaka/i.test(fullContext) || document.documentElement.lang.startsWith('ja')) return 'JPY';
     return 'CNY';
   }
   if (combinedPrices.includes('$')) {
+    if (/singapore|新加坡/i.test(fullContext)) return 'SGD';
+    if (/hong kong|香港/i.test(fullContext)) return 'HKD';
+    if (/australia|sydney|melbourne/i.test(fullContext)) return 'AUD';
+    if (/canada|toronto|vancouver/i.test(fullContext)) return 'CAD';
     return 'USD';
   }
 
@@ -213,7 +255,22 @@ export interface DetectedSavedList {
   places: CurrentResearchPlace[];
 }
 
+const MAX_SCAVENGED_PLACES = 600;
 const scavengedListPlaces = new Map<string, CurrentResearchPlace>();
+let lastScannedPageUrl = '';
+
+function pruneScavengedCache(pageUrl: string): void {
+  if (pageUrl !== lastScannedPageUrl) {
+    scavengedListPlaces.clear();
+    lastScannedPageUrl = pageUrl;
+    return;
+  }
+  if (scavengedListPlaces.size <= MAX_SCAVENGED_PLACES) return;
+  const dropCount = Math.floor(MAX_SCAVENGED_PLACES / 3);
+  for (const key of [...scavengedListPlaces.keys()].slice(0, dropCount)) {
+    scavengedListPlaces.delete(key);
+  }
+}
 
 function isGenericNavigationTitle(text: string): boolean {
   const norm = text.trim().toLowerCase();
@@ -221,6 +278,7 @@ function isGenericNavigationTitle(text: string): boolean {
 }
 
 function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
+  pruneScavengedCache(window.location.href);
   // Strategy 1: Scan all place link anchors directly
   const linkAnchors = document.querySelectorAll<HTMLAnchorElement>(
     'a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]'
@@ -241,15 +299,19 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
     const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
 
     const infoText = card?.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
-    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
-    const address = card?.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
-    const userNote = card?.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea, div.P34g2b')?.textContent?.trim();
+    const category = infoText ? cleanExtractedText(infoText.split(/·|•/)[0]?.trim()) : undefined;
+    const rawAddr = card?.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
+    const address = rawAddr ? cleanExtractedText(rawAddr) : undefined;
+    const rawNote = card?.querySelector<HTMLElement>('button[data-item-id="note"] div.fontBodyMedium, div[data-item-id="note"], textarea[aria-label*="note" i], div.ahS6Le')?.textContent?.trim();
+    const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
 
-    const titleKey = title.trim().toLowerCase();
+    const cleanTitle = cleanExtractedText(title);
+    if (!cleanTitle || cleanTitle.length < 2 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle)) continue;
+    const titleKey = cleanTitle.toLowerCase();
     if (!scavengedListPlaces.has(titleKey)) {
       scavengedListPlaces.set(titleKey, {
-        title: title.trim(),
-        sourceUrl: href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`,
+        title: cleanTitle,
+        sourceUrl: href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`,
         sourceProvider: 'google_maps',
         rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
         category,
@@ -257,6 +319,7 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
         detectedCurrency: detectCurrencyFromPage(href, undefined),
         summary: userNote,
         userNote,
+        coordinates: extractPlaceCoordinates(href || '') ?? undefined,
       });
     }
   }
@@ -267,26 +330,29 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
   );
   for (const card of Array.from(cardElements)) {
     const headEl = card.querySelector<HTMLElement>(
-      '.qBF1Pd, div.fontHeadlineSmall, span.fontHeadlineSmall, h3, h2, div.OSrXXb, div.fontBodyMedium.bJzME, div[class*="title"]'
+      '.qBF1Pd, div.fontHeadlineSmall, span.fontHeadlineSmall, h3, h2, div.OSrXXb, div[class*="title"]'
     );
     const title = headEl?.textContent?.trim() || card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[aria-label]')?.getAttribute('aria-label') || '';
-    if (!title || title.length < 2 || title.length > 80 || isGenericNavigationTitle(title)) continue;
+    const cleanTitle = cleanExtractedText(title);
+    if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle)) continue;
 
     const linkEl = card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]');
-    const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+    const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`;
 
     const ratingText = card.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
     const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
 
     const infoText = card.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
-    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
-    const address = card.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
-    const userNote = card.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea, div.P34g2b')?.textContent?.trim();
+    const category = infoText ? cleanExtractedText(infoText.split(/·|•/)[0]?.trim()) : undefined;
+    const rawAddr = card.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
+    const address = rawAddr ? cleanExtractedText(rawAddr) : undefined;
+    const rawNote = card.querySelector<HTMLElement>('button[data-item-id="note"] div.fontBodyMedium, div[data-item-id="note"], textarea[aria-label*="note" i], div.ahS6Le')?.textContent?.trim();
+    const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
 
-    const titleKey = title.trim().toLowerCase();
+    const titleKey = cleanTitle.toLowerCase();
     if (!scavengedListPlaces.has(titleKey)) {
       scavengedListPlaces.set(titleKey, {
-        title: title.trim(),
+        title: cleanTitle,
         sourceUrl,
         sourceProvider: 'google_maps',
         rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
@@ -295,6 +361,7 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
         detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined),
         summary: userNote,
         userNote,
+        coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
       });
     }
   }
@@ -305,26 +372,29 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
   );
   for (const card of Array.from(feedItems)) {
     const titleEl = card.querySelector<HTMLElement>(
-      'h1, h2, h3, .fontHeadlineSmall, .qBF1Pd, .OSrXXb, div.bJzME, [role="heading"], div[class*="headline"], span[class*="headline"]'
+      'h1, h2, h3, .fontHeadlineSmall, .qBF1Pd, .OSrXXb, [role="heading"], div[class*="headline"], span[class*="headline"]'
     );
     const title = titleEl?.textContent?.trim() || card.querySelector('[aria-label]')?.getAttribute('aria-label') || '';
-    if (!title || title.length < 2 || title.length > 80 || isGenericNavigationTitle(title)) continue;
+    const cleanTitle = cleanExtractedText(title);
+    if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle)) continue;
 
     const linkEl = card.querySelector<HTMLAnchorElement>('a[href*="/maps/place/"], a[href*="/place/"], a.hfpxzc, a');
-    const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+    const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`;
 
     const ratingText = card.querySelector<HTMLElement>('.MW4etd, span[aria-label*="star"], span[aria-label*="星"]')?.textContent?.trim();
     const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
 
     const infoText = card.querySelector<HTMLElement>('div.W4Efsd, div.fontBodyMedium')?.textContent?.trim();
-    const category = infoText ? infoText.split(/·|•/)[0]?.trim() : undefined;
-    const address = card.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
-    const userNote = card.querySelector<HTMLElement>('.fontBodySmall, .bJzME, div[class*="note"], textarea, div.P34g2b')?.textContent?.trim();
+    const category = infoText ? cleanExtractedText(infoText.split(/·|•/)[0]?.trim()) : undefined;
+    const rawAddr = card.querySelector<HTMLElement>('button[data-item-id="address"], div[aria-label*="地址"]')?.textContent?.trim();
+    const address = rawAddr ? cleanExtractedText(rawAddr) : undefined;
+    const rawNote = card.querySelector<HTMLElement>('button[data-item-id="note"] div.fontBodyMedium, div[data-item-id="note"], textarea[aria-label*="note" i], div.ahS6Le')?.textContent?.trim();
+    const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
 
-    const titleKey = title.trim().toLowerCase();
+    const titleKey = cleanTitle.toLowerCase();
     if (!scavengedListPlaces.has(titleKey)) {
       scavengedListPlaces.set(titleKey, {
-        title: title.trim(),
+        title: cleanTitle,
         sourceUrl,
         sourceProvider: 'google_maps',
         rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
@@ -333,6 +403,7 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
         detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined),
         summary: userNote,
         userNote,
+        coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
       });
     }
   }
@@ -384,6 +455,7 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     openStatus,
     openHours,
     website: extractWebsite(),
+    coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
   };
 }
 
@@ -430,32 +502,36 @@ async function fetchGoogleMapsEntityList(listId: string): Promise<DetectedSavedL
       const raw = await res.text();
       const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
       const data = JSON.parse(cleanJson);
-      const listName = data[0]?.[4] || 'Google Maps 收藏列表';
+      const rawListName = data[0]?.[4] || 'Google Maps 收藏列表';
+      const listName = cleanExtractedText(rawListName);
       const rawItems = data[0]?.[8];
       if (Array.isArray(rawItems)) {
         const places: CurrentResearchPlace[] = [];
         for (const item of rawItems) {
           const placeInfo = item[1];
-          const title = item[2] || (placeInfo && placeInfo[2]);
-          if (!title) continue;
+          const rawTitle = item[2] || (placeInfo && placeInfo[2]);
+          if (!rawTitle) continue;
+          const title = cleanExtractedText(rawTitle);
+          if (!title || isJunkNavigationText(title)) continue;
 
-          const address = placeInfo ? placeInfo[4] : undefined;
-          const userNote = item[3] || undefined;
-          const lat = placeInfo?.[5]?.[2];
-          const lng = placeInfo?.[5]?.[3];
-          const sourceUrl = (lat && lng)
-            ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`
-            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+          const rawAddress = placeInfo ? placeInfo[4] : undefined;
+          const address = rawAddress ? cleanExtractedText(rawAddress) : undefined;
+          const rawNote = item[3] || undefined;
+          const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
+          const coordinates = parseEntityListCoordinates(placeInfo);
+          const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
 
           places.push({
-            title: String(title).trim(),
+            title,
             sourceUrl,
             sourceProvider: 'google_maps',
             address,
             userNote,
             summary: userNote,
-            category: 'Google Maps 收藏地点',
+            category: (address && address.includes(',')) ? address.split(',').slice(-2, -1)[0]?.trim() : 'Google Maps 收藏地点',
             detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
+            coordinates,
+            sourcePlaceId: findEntityListPlaceId(item),
           });
         }
 
@@ -725,9 +801,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  window.addEventListener('scroll', () => { scanAllGoogleMapsPlaces(); }, { passive: true });
+  const SCAN_DEBOUNCE_MS = 400;
+  let scanTimer: number | undefined;
+  const scheduleScan = () => {
+    if (scanTimer !== undefined) window.clearTimeout(scanTimer);
+    scanTimer = window.setTimeout(() => {
+      scanTimer = undefined;
+      scanAllGoogleMapsPlaces();
+    }, SCAN_DEBOUNCE_MS);
+  };
+  window.addEventListener('scroll', scheduleScan, { passive: true });
   try {
-    const observer = new MutationObserver(() => { scanAllGoogleMapsPlaces(); });
+    const observer = new MutationObserver(scheduleScan);
     if (document.body) {
       observer.observe(document.body, { childList: true, subtree: true });
     }

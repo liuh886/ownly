@@ -11,3 +11,140 @@ export function escapeHtml(unsafe: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/**
+ * Decodes HTML entities, strips zero-width & control artifacts, normalizes Unicode (NFC),
+ * fixing garbled text for minor languages (Thai, Japanese, Vietnamese, Arabic, Cyrillic, etc.).
+ */
+export function cleanExtractedText(raw?: string | null): string {
+  if (!raw) return '';
+  let str = String(raw);
+
+  // 1. Decode HTML entities
+  str = str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, dec) => {
+      try {
+        return String.fromCodePoint(parseInt(dec, 10));
+      } catch {
+        return '';
+      }
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      try {
+        return String.fromCodePoint(parseInt(hex, 16));
+      } catch {
+        return '';
+      }
+    });
+
+  // 2. Unicode Normalization Form C (NFC) ensures composed characters (Thai vowels, Japanese kana diacritics, Vietnamese tones) are unified
+  try {
+    str = str.normalize('NFC');
+  } catch {}
+
+  // 3. Remove zero-width & non-printable control characters that cause rendering glitched boxes/gibberish
+  str = str
+    .replace(/[\u200B-\u200D\uFEFF\u00AD\u200E\u200F]/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/[\u00A0\u3000]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return str;
+}
+
+/**
+ * Safely decodes multi-layer or partial URL-encoded strings without crashing on malformed sequences,
+ * and restores non-Latin characters (Thai, CJK, etc.) cleanly.
+ */
+export function safeDecodeUri(urlOrSegment?: string | null): string {
+  if (!urlOrSegment) return '';
+  let str = String(urlOrSegment).replace(/\+/g, ' ');
+  // Try decoding up to 2 times to handle double percent-encoding
+  for (let i = 0; i < 2; i++) {
+    if (str.includes('%')) {
+      try {
+        const decoded = decodeURIComponent(str);
+        if (decoded === str) break;
+        str = decoded;
+      } catch {
+        try {
+          str = decodeURI(str);
+        } catch {
+          break;
+        }
+      }
+    } else {
+      break;
+    }
+  }
+  return cleanExtractedText(str);
+}
+
+export function parseEntityListCoordinates(placeInfo?: unknown): { lat: number; lng: number } | undefined {
+  if (!Array.isArray(placeInfo)) return undefined;
+  const raw = placeInfo[5] as unknown;
+  if (!Array.isArray(raw)) return undefined;
+  const lat = Number(raw[2]);
+  const lng = Number(raw[3]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+  if (lat === 0 && lng === 0) return undefined;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return undefined;
+  return { lat, lng };
+}
+
+const GOOGLE_FEATURE_ID_PATTERN = /0x[0-9a-f]{8,}:0x[0-9a-f]{6,}/i;
+
+export function findEntityListPlaceId(item?: unknown): string | undefined {
+  if (!Array.isArray(item)) return undefined;
+  let scanned = 0;
+  const queue: unknown[] = [item];
+  while (queue.length > 0 && scanned < 200) {
+    const current = queue.shift();
+    scanned += 1;
+    if (typeof current === 'string') {
+      const match = GOOGLE_FEATURE_ID_PATTERN.exec(current);
+      if (match?.[0]) return match[0];
+      continue;
+    }
+    if (Array.isArray(current)) {
+      for (const child of current.slice(0, 40)) queue.push(child);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Determines if an extracted note/text is Google Maps sidebar navigation junk
+ * (e.g. "SavedRecentsTH26Lampang4Chiang Mai17Bangkok2Hong KongView moreGet app")
+ */
+export function isJunkNavigationText(text?: string | null): boolean {
+  if (!text) return true;
+  const clean = text.trim();
+  if (clean.length === 0) return true;
+
+  // Exact matches for placeholder or navigation actions
+  if (/^(添加备注|add a note|edit note|编辑备注|saved|recents|view more|get app|directions|overview|photos|reviews|about)$/i.test(clean)) {
+    return true;
+  }
+
+  // Clustered Google Maps sidebar header string: "SavedRecents...", "View moreGet app", etc.
+  if (/SavedRecents|View more|Get app/i.test(clean)) {
+    return true;
+  }
+
+  // Heuristic: string starting with "Saved" followed immediately by "Recents" or containing numbers fused with city names
+  if (/(Saved|已保存)(Recents|最近)/i.test(clean) || /(Recents|最近).*(View more|查看更多)/i.test(clean)) {
+    return true;
+  }
+
+  return false;
+}
+

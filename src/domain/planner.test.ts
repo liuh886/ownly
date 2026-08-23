@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  acknowledgeCapturedPlaces,
   buildGoogleMapsDirectionsSegments,
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
   classifyResearchChip,
   exportPlacesToCSV,
   exportPlacesToKML,
+  extractPlaceCoordinates,
+  findExistingTripPlace,
   inferPlaceKind,
   inferSourceProvider,
   listTripDates,
   mergeCapturedPlaceResearch,
   normalizeDelimitedText,
+  normalizePlaceIdentity,
   STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
 } from './planner';
@@ -178,5 +182,75 @@ describe('Ownly Planner domain', () => {
     expect(inferSourceProvider('https://www.xiaohongshu.com/explore/64a1b2c3')).toBe('xiaohongshu');
     expect(inferSourceProvider('https://www.booking.com/hotel/jp/tokyo-station.html')).toBe('booking');
     expect(inferSourceProvider('https://example.com/blog/travel')).toBe('other');
+  });
+
+  it('extracts geographic coordinates accurately from diverse Google Maps URLs and place objects', () => {
+    // 1. Direct object coordinates
+    expect(extractPlaceCoordinates({ coordinates: { lat: 13.7437, lng: 100.4888 } })).toEqual({ lat: 13.7437, lng: 100.4888 });
+
+    // 2. @lat,lng format
+    expect(extractPlaceCoordinates('https://www.google.com/maps/place/Wat+Arun/@13.7437,100.4888,17z/data=...')).toEqual({ lat: 13.7437, lng: 100.4888 });
+
+    // 3. !3dlat!4dlng format
+    expect(extractPlaceCoordinates('https://www.google.com/maps/place/Sensoji/data=!4m2!3m1!1s0x0:0x0!3d35.7147!4d139.7966')).toEqual({ lat: 35.7147, lng: 139.7966 });
+
+    // 4. query parameter format
+    expect(extractPlaceCoordinates('https://www.google.com/maps/search/?api=1&query=35.6586,139.7454')).toEqual({ lat: 35.6586, lng: 139.7454 });
+
+    // 5. Invalid / missing URLs
+    expect(extractPlaceCoordinates('')).toBeNull();
+    expect(extractPlaceCoordinates(null)).toBeNull();
+    expect(extractPlaceCoordinates('https://example.com/not-maps')).toBeNull();
+  });
+
+  it('normalizes place identity across capture URL forms', () => {
+    const searchForm = 'https://www.google.com/maps/search/?api=1&query=%E6%B5%85%E8%8D%89%E5%AF%BA';
+    const placeForm = 'https://www.google.com/maps/place/%E6%B5%85%E8%8D%89%E5%AF%BA/@35.7147,139.7966,17z';
+    expect(normalizePlaceIdentity(searchForm)).toBe(normalizePlaceIdentity(placeForm));
+    expect(normalizePlaceIdentity('https://www.google.com/maps/search/?api=1&query=Blue+Bottle+Coffee')).toBe(
+      normalizePlaceIdentity('https://maps.google.com/maps/place/Blue+Bottle+Coffee'),
+    );
+    expect(normalizePlaceIdentity('https://tabelog.com/tokyo/A1301/')).toMatch(/^u:/);
+    expect(normalizePlaceIdentity('not a url')).toBe('u:not a url');
+  });
+
+  it('resolves stable places across capture forms with an ambiguity guard on place ids', () => {
+    const places = [
+      place('a', { source_url: 'https://www.google.com/maps/search/?api=1&query=Sensoji' }),
+      place('b', { source_url: 'https://www.google.com/maps/place/Sensoji/@35.7,139.79', source_place_id: 'pid-1' }),
+      place('c', { source_url: 'https://www.google.com/maps/search/?api=1&query=Other' }),
+    ];
+
+    expect(findExistingTripPlace({}, places, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=Sensoji%20')?.id).toBe('a');
+    expect(findExistingTripPlace({}, places, 'trip-1', 'https://maps.google.com/other-path', 'pid-1')?.id).toBe('b');
+
+    const poisoned = [
+      place('x', { source_url: 'https://www.google.com/maps/search/?api=1&query=A', source_place_id: 'same' }),
+      place('y', { source_url: 'https://www.google.com/maps/search/?api=1&query=B', source_place_id: 'same' }),
+    ];
+    expect(findExistingTripPlace({}, poisoned, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=a', 'same')?.id).toBe('x');
+  });
+
+  it('acknowledges captured places without touching other queue entries', () => {
+    const state = {
+      version: 1 as const,
+      trips: [],
+      activeTripId: null,
+      pendingPlaces: [place('keep'), place('drop')],
+      knownPlaceIds: {},
+    };
+    const next = acknowledgeCapturedPlaces(state, ['drop']);
+    expect(next.pendingPlaces.map((p) => p.id)).toEqual(['keep']);
+    expect(state.pendingPlaces).toHaveLength(2);
+  });
+
+  it('neutralizes CDATA breakout and CSV formula injection in exports', () => {
+    const sneaky = place('1', { title: 'Safe', notes: 'evil ]]><script>x</script>' });
+    const kml = exportPlacesToKML('T', 'Day 1', [sneaky]);
+    expect(kml).toContain('evil ]]&gt;&lt;script&gt;x&lt;/script&gt;');
+    expect(kml).not.toContain('<![CDATA[' + '\n        <p><b>备注:</b> evil ]]>');
+
+    const csv = exportPlacesToCSV([place('2', { why: '+SUM(A1)' })]);
+    expect(csv).toContain("\"'+SUM(A1)\"");
   });
 });

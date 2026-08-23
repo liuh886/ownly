@@ -11,7 +11,7 @@ interface BridgeResponse<T> {
   error?: string;
 }
 
-function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 900): Promise<T | null> {
+function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 2500): Promise<T | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
 
   return new Promise((resolve) => {

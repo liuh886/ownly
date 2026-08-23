@@ -87,14 +87,26 @@ export class PlannerRepository {
   }
 
   async upsertPlace(place: PlannerTripPlace): Promise<void> {
-    if (place.locked === undefined) {
-      const existing = (await this.listPlaces()).find((item) => item.id === place.id);
-      if (existing) {
-        await this.upsert(mergeCapturedPlaceResearch(existing, place));
-        return;
-      }
+    await this.upsertPlaces([place]);
+  }
+
+  async upsertPlaces(places: PlannerTripPlace[]): Promise<void> {
+    if (places.length === 0) return;
+    const needsMerge = places.some((place) => place.locked === undefined);
+    const existingMap = new Map<string, PlannerTripPlace>();
+    if (needsMerge) {
+      for (const existing of await this.listPlaces()) existingMap.set(existing.id, existing);
     }
-    await this.upsert(place);
+    for (const place of places) {
+      if (place.locked === undefined) {
+        const existing = existingMap.get(place.id);
+        if (existing) {
+          await this.upsert(mergeCapturedPlaceResearch(existing, place));
+          continue;
+        }
+      }
+      await this.upsert(place);
+    }
   }
 
   async upsertBooking(booking: PlannerTripBooking): Promise<void> {
