@@ -150,29 +150,35 @@
       </div>
 
       <div class="two">
-        <label id="lblArea">区域 / 街区<input id="area" placeholder="例如：浅草 / 涩谷 / 新宿" /></label>
-        <label id="lblTags">地点标签<input id="tags" placeholder="例如：夜景, 必吃, 需预约" /></label>
-      </div>
-
-      <div class="two">
-        <label id="lblDuration">预计停留 (分钟)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label>
-        <label id="lblWindow">偏好时段<input id="window" placeholder="例如：上午 / 傍晚日落 / 晚上" /></label>
-      </div>
-
-      <div class="two">
         <label id="lblRating">评分<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label>
         <label id="lblPrice">人均价格 / 预算<input id="price" placeholder="例如：¥2,000 / 人" /></label>
       </div>
+
+      <label id="lblWhy">选择理由 (Why)<textarea id="why" rows="2" placeholder="为什么选这个地点？有哪些吸引你的亮点？"></textarea></label>
 
       <div>
         <label id="lblQuickChips">快捷标签</label>
         <div id="quickChips" class="chips"></div>
       </div>
 
-      <label id="lblWhy">选择理由 (Why)<textarea id="why" rows="2" placeholder="为什么选这个地点？有哪些吸引你的亮点？"></textarea></label>
-      <label id="lblSignals">正向信号<input id="signals" placeholder="例如：绝美日落, 地道当地人多, 早餐很赞" /></label>
-      <label id="lblRisks">风险提醒 / 避坑<input id="risks" placeholder="例如：周末排队极长, 需提前2周预约, 雨天不宜" /></label>
-      <label id="lblNotes">个人备忘笔记<textarea id="notes" rows="2" placeholder="你自己的游玩心得或计划备忘，而非直接复制评论"></textarea></label>
+      <details id="captureAdvanced" class="new-trip">
+        <summary id="captureAdvancedSummary">⚙️ 更多设置</summary>
+        <div class="stack" style="margin-top: 8px;">
+          <div class="two">
+            <label id="lblArea">区域 / 街区<input id="area" placeholder="例如：浅草 / 涩谷 / 新宿" /></label>
+            <label id="lblTags">地点标签<input id="tags" placeholder="例如：夜景, 必吃, 需预约" /></label>
+          </div>
+
+          <div class="two">
+            <label id="lblDuration">预计停留 (分钟)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label>
+            <label id="lblWindow">偏好时段<input id="window" placeholder="例如：上午 / 傍晚日落 / 晚上" /></label>
+          </div>
+
+          <label id="lblSignals">正向信号<input id="signals" placeholder="例如：绝美日落, 地道当地人多, 早餐很赞" /></label>
+          <label id="lblRisks">风险提醒 / 避坑<input id="risks" placeholder="例如：周末排队极长, 需提前2周预约, 雨天不宜" /></label>
+          <label id="lblNotes">个人备忘笔记<textarea id="notes" rows="2" placeholder="你自己的游玩心得或计划备忘，而非直接复制评论"></textarea></label>
+        </div>
+      </details>
 
       <div class="btn-row">
         <button id="btnCaptureSubmit" class="primary" type="submit">➕ 加入行程候选池</button>

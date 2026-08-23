@@ -86,6 +86,8 @@ export type ElementMap = {
   quickChips: HTMLElement;
   lblWhy: HTMLElement;
   why: HTMLTextAreaElement;
+  captureAdvanced: HTMLDetailsElement;
+  captureAdvancedSummary: HTMLElement;
   lblSignals: HTMLElement;
   signals: HTMLInputElement;
   lblRisks: HTMLElement;
@@ -198,6 +200,8 @@ export const el: ElementMap = {
   quickChips: required('quickChips'),
   lblWhy: required('lblWhy'),
   why: required('why'),
+  captureAdvanced: required<HTMLDetailsElement>('captureAdvanced'),
+  captureAdvancedSummary: required('captureAdvancedSummary'),
   lblSignals: required('lblSignals'),
   signals: required('signals'),
   lblRisks: required('lblRisks'),
