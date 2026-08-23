@@ -9,12 +9,15 @@ import {
   exportPlacesToKML,
   extractPlaceCoordinates,
   findExistingTripPlace,
+  haversineDistanceKm,
   inferPlaceKind,
   inferSourceProvider,
   listTripDates,
   mergeCapturedPlaceResearch,
   normalizeDelimitedText,
   normalizePlaceIdentity,
+  optimizeStopsSequence,
+  calculateHotelProximity,
   STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
 } from './planner';
@@ -252,5 +255,53 @@ describe('Ownly Planner domain', () => {
 
     const csv = exportPlacesToCSV([place('2', { why: '+SUM(A1)' })]);
     expect(csv).toContain("\"'+SUM(A1)\"");
+  });
+
+  it('calculates Haversine spherical distance between coordinates', () => {
+    // Tokyo Tower (35.6586, 139.7454) to Sensoji (35.7147, 139.7966) is approx 7.8 km
+    const dist = haversineDistanceKm(
+      { lat: 35.6586, lng: 139.7454 },
+      { lat: 35.7147, lng: 139.7966 },
+    );
+    expect(dist).toBeGreaterThan(7.0);
+    expect(dist).toBeLessThan(8.5);
+  });
+
+  it('optimizes out-of-order itinerary stops into the shortest route', () => {
+    // 4 stops in a linear east-west line:
+    // P1 (lat 10.0, lng 100.0)
+    // P2 (lat 10.0, lng 100.1)
+    // P3 (lat 10.0, lng 100.2)
+    // P4 (lat 10.0, lng 100.3)
+    // Out of order: P1 -> P4 -> P2 -> P3 (zigzag)
+    const p1 = place('1', { title: 'Stop 1', coordinates: { lat: 10.0, lng: 100.0 }, sort_order: 0 });
+    const p2 = place('2', { title: 'Stop 2', coordinates: { lat: 10.0, lng: 100.1 }, sort_order: 1 });
+    const p3 = place('3', { title: 'Stop 3', coordinates: { lat: 10.0, lng: 100.2 }, sort_order: 2 });
+    const p4 = place('4', { title: 'Stop 4', coordinates: { lat: 10.0, lng: 100.3 }, sort_order: 3 });
+
+    const zigzag = [p1, p4, p2, p3];
+    const result = optimizeStopsSequence(zigzag, { fixStart: true });
+
+    expect(result.improved).toBe(true);
+    expect(result.savedKm).toBeGreaterThan(0);
+    expect(result.places.map((p) => p.id)).toEqual(['1', '2', '3', '4']);
+    expect(result.places[0].sort_order).toBe(0);
+    expect(result.places[3].sort_order).toBe(3);
+  });
+
+  it('computes hotel proximity metrics against scheduled attractions', () => {
+    const hotel = place('h1', {
+      title: 'City Center Hotel',
+      kind: 'stay',
+      coordinates: { lat: 13.7500, lng: 100.5000 },
+    });
+    const stop1 = place('s1', { title: 'Temple', coordinates: { lat: 13.7510, lng: 100.5010 } });
+    const stop2 = place('s2', { title: 'Museum', coordinates: { lat: 13.7550, lng: 100.5050 } });
+
+    const metrics = calculateHotelProximity(hotel, [stop1, stop2]);
+    expect(metrics.hasCoordinates).toBe(true);
+    expect(metrics.minDistanceKm).toBeGreaterThan(0);
+    expect(metrics.minDistanceKm).toBeLessThan(1.0); // very close (< 1km)
+    expect(metrics.closestPlaceTitle).toBe('Temple');
   });
 });

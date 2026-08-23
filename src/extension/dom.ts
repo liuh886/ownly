@@ -55,6 +55,7 @@ export type ElementMap = {
   smartListTitle: HTMLElement;
   smartListDesc: HTMLElement;
   btnSmartSyncAll: HTMLButtonElement;
+  btnCloseSmartList: HTMLButtonElement;
   btnToggleListPreview: HTMLButtonElement;
   smartListPreviewContainer: HTMLElement;
   batchListContainer: HTMLElement;
@@ -174,6 +175,7 @@ export const el: ElementMap = {
   smartListTitle: required('smartListTitle'),
   smartListDesc: required('smartListDesc'),
   btnSmartSyncAll: required('btnSmartSyncAll'),
+  btnCloseSmartList: required('btnCloseSmartList'),
   btnToggleListPreview: required('btnToggleListPreview'),
   smartListPreviewContainer: required('smartListPreviewContainer'),
   batchListContainer: required('batchListContainer'),

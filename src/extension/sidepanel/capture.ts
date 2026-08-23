@@ -93,6 +93,14 @@ export async function readCurrentPlace(): Promise<void> {
     : directListPlaces;
   store.pageDetectedCurrency = store.currentPlace?.detectedCurrency || store.detectedSavedList?.detectedCurrency;
 
+  const listKey = store.detectedSavedList
+    ? `${store.detectedSavedList.listName}|${store.detectedSavedList.listUrl}`
+    : '';
+  if (listKey !== store.smartListKey) {
+    store.smartListKey = listKey;
+    store.smartListDismissed = false;
+  }
+
   el.placePanel.classList.remove('is-loading');
   renderCurrentPlace();
   renderSmartListCard();

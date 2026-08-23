@@ -524,3 +524,192 @@ export function extractPlaceCoordinates(
 
   return null;
 }
+
+export function haversineDistanceKm(
+  c1: { lat: number; lng: number },
+  c2: { lat: number; lng: number },
+): number {
+  const R = 6371; // Earth's mean radius in km
+  const dLat = ((c2.lat - c1.lat) * Math.PI) / 180;
+  const dLng = ((c2.lng - c1.lng) * Math.PI) / 180;
+  const lat1 = (c1.lat * Math.PI) / 180;
+  const lat2 = (c2.lat * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 100) / 100;
+}
+
+export function calculateTotalRouteDistanceKm(places: PlannerTripPlace[]): number {
+  if (places.length < 2) return 0;
+  let total = 0;
+  for (let i = 0; i < places.length - 1; i++) {
+    const c1 = extractPlaceCoordinates(places[i]);
+    const c2 = extractPlaceCoordinates(places[i + 1]);
+    if (c1 && c2) {
+      total += haversineDistanceKm(c1, c2);
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
+
+export interface RouteOptimizationResult {
+  places: PlannerTripPlace[];
+  originalKm: number;
+  optimizedKm: number;
+  savedKm: number;
+  improved: boolean;
+}
+
+export function optimizeStopsSequence(
+  places: PlannerTripPlace[],
+  options: { fixStart?: boolean; fixEnd?: boolean } = { fixStart: true, fixEnd: false },
+): RouteOptimizationResult {
+  const currentList = [...places];
+  if (currentList.length <= 2) {
+    const d = calculateTotalRouteDistanceKm(currentList);
+    return { places: currentList, originalKm: d, optimizedKm: d, savedKm: 0, improved: false };
+  }
+
+  const originalKm = calculateTotalRouteDistanceKm(currentList);
+  const validCoordsCount = currentList.filter((p) => extractPlaceCoordinates(p) !== null).length;
+  if (validCoordsCount < 2) {
+    return { places: currentList, originalKm, optimizedKm: originalKm, savedKm: 0, improved: false };
+  }
+
+  const n = currentList.length;
+  let bestOrder = [...currentList];
+  let minDistance = originalKm;
+
+  // Exact Permutation for N <= 8
+  if (n <= 8) {
+    const startIdx = options.fixStart ? 1 : 0;
+    const endIdx = options.fixEnd ? n - 1 : n;
+    const toPermute = currentList.slice(startIdx, endIdx);
+
+    function permute(arr: PlannerTripPlace[], l: number, r: number) {
+      if (l === r) {
+        const candidate = [
+          ...(options.fixStart ? [currentList[0]] : []),
+          ...arr,
+          ...(options.fixEnd ? [currentList[n - 1]] : []),
+        ];
+        const dist = calculateTotalRouteDistanceKm(candidate);
+        if (dist < minDistance - 0.01) {
+          minDistance = dist;
+          bestOrder = candidate;
+        }
+        return;
+      }
+      for (let i = l; i <= r; i++) {
+        [arr[l], arr[i]] = [arr[i], arr[l]];
+        permute(arr, l + 1, r);
+        [arr[l], arr[i]] = [arr[i], arr[l]];
+      }
+    }
+
+    permute(toPermute, 0, toPermute.length - 1);
+  } else {
+    // 2-opt Local Search Heuristic for N > 8
+    let current = [...currentList];
+    let improved = true;
+    let iterations = 0;
+    const startIdx = options.fixStart ? 1 : 0;
+    const endBound = options.fixEnd ? n - 2 : n - 1;
+
+    while (improved && iterations < 50) {
+      improved = false;
+      iterations++;
+      for (let i = startIdx; i < endBound; i++) {
+        for (let k = i + 1; k <= (options.fixEnd ? n - 2 : n - 1); k++) {
+          const candidate = [
+            ...current.slice(0, i),
+            ...current.slice(i, k + 1).reverse(),
+            ...current.slice(k + 1),
+          ];
+          const dist = calculateTotalRouteDistanceKm(candidate);
+          if (dist < minDistance - 0.01) {
+            minDistance = dist;
+            bestOrder = candidate;
+            current = candidate;
+            improved = true;
+          }
+        }
+      }
+    }
+  }
+
+  const optimizedKm = Math.round(minDistance * 100) / 100;
+  const savedKm = Math.max(0, Math.round((originalKm - optimizedKm) * 100) / 100);
+
+  // Re-assign sort_order
+  const resultPlaces = bestOrder.map((place, index) => ({
+    ...place,
+    sort_order: index,
+  }));
+
+  return {
+    places: resultPlaces,
+    originalKm,
+    optimizedKm,
+    savedKm,
+    improved: savedKm > 0.05,
+  };
+}
+
+export interface HotelProximityMetrics {
+  hasCoordinates: boolean;
+  avgDistanceKm: number;
+  minDistanceKm: number;
+  centerDistanceKm: number;
+  closestPlaceTitle?: string;
+}
+
+export function calculateHotelProximity(
+  hotel: PlannerTripPlace,
+  scheduledPlaces: PlannerTripPlace[],
+): HotelProximityMetrics {
+  const hotelCoords = extractPlaceCoordinates(hotel);
+  if (!hotelCoords) {
+    return { hasCoordinates: false, avgDistanceKm: 0, minDistanceKm: 0, centerDistanceKm: 0 };
+  }
+
+  const validStops = scheduledPlaces
+    .map((p) => ({ place: p, coords: extractPlaceCoordinates(p) }))
+    .filter((item): item is { place: PlannerTripPlace; coords: { lat: number; lng: number } } => item.coords !== null);
+
+  if (validStops.length === 0) {
+    return { hasCoordinates: true, avgDistanceKm: 0, minDistanceKm: 0, centerDistanceKm: 0 };
+  }
+
+  let totalDist = 0;
+  let minDist = Infinity;
+  let closestTitle = '';
+  let sumLat = 0;
+  let sumLng = 0;
+
+  validStops.forEach(({ place, coords }) => {
+    const d = haversineDistanceKm(hotelCoords, coords);
+    totalDist += d;
+    if (d < minDist) {
+      minDist = d;
+      closestTitle = place.title;
+    }
+    sumLat += coords.lat;
+    sumLng += coords.lng;
+  });
+
+  const centerLat = sumLat / validStops.length;
+  const centerLng = sumLng / validStops.length;
+  const centerDist = haversineDistanceKm(hotelCoords, { lat: centerLat, lng: centerLng });
+
+  return {
+    hasCoordinates: true,
+    avgDistanceKm: Math.round((totalDist / validStops.length) * 10) / 10,
+    minDistanceKm: Math.round(minDist * 10) / 10,
+    centerDistanceKm: Math.round(centerDist * 10) / 10,
+    closestPlaceTitle: closestTitle,
+  };
+}

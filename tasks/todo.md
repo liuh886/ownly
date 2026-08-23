@@ -16,6 +16,9 @@
 - [x] 13. Add coordinate extraction & geocoding helpers (`extractCoordinates`) in `src/domain/planner.ts` with unit tests <!-- id: 13 -->
 - [x] 14. Create interactive Local-First `PlannerMap` component in `src/components/planner/PlannerMap.tsx` with numbered scheduled stops, candidate POIs, route line rendering, and popup actions <!-- id: 14 -->
 - [x] 15. Integrate `PlannerMap` into `PlannerHome.tsx` with two-way hover sync, responsive map toggle, and 1-click scheduling directly from map markers <!-- id: 15 -->
+- [x] 16. Implement exact Haversine distance, TSP route optimization (`optimizeStopsSequence`), and hotel proximity metrics in `src/domain/planner.ts` with comprehensive unit tests <!-- id: 16 -->
+- [x] 17. Create `HotelComparisonModal.tsx` multi-dimensional comparison matrix (Area, Price, Rating, Distance to today's POIs, Signals/Risks, 1-click stay assignment) <!-- id: 17 -->
+- [x] 18. Integrate 1-click `⚡ 顺路优化` and `🏨 酒店比选` into `PlannerHome.tsx` and verify test suite <!-- id: 18 -->
 
 ## Review
 - **Unified List Capture Card**: Replaced redundant banners with `#smartListSection` featuring 1-click sync all (`btnSmartSyncAll`) and expandable item picker drawer (`btnToggleListPreview` + `batchListContainer`).
@@ -33,4 +36,8 @@
   - **Micro Mercator Spatial Map**: Built `PlannerMap.tsx` with numbered stop pins (`1`, `2`, `3`...), connecting SVG route polylines, category emoji markers (`🏰`, `🍜`, `☕`), and interactive popup cards with 1-click `+ 当天` scheduling.
   - **Two-way Synchronized Focus**: Hovering any card in the Research Pool or Day Skeleton instantly pulses the map marker, and clicking map markers highlights the corresponding place.
   - **Full-Screen Expandable View**: Added full-screen `[ ⛶ 大地图 ]` modal view for dense multi-stop city itineraries.
-- **Code Modularization & Verification**: 19/19 Vitest unit tests passed (`planner.test.ts` & `utils.test.ts`), `npm run validate:fast` passed with 0 errors and 0 warnings on new files.
+- **TSP Route Optimization & Hotel Comparison Matrix (Tasks 16-18)**:
+  - **TSP Optimization Engine (`optimizeStopsSequence`)**: Implemented exact Permutation search ($N \le 8$) and 2-opt heuristic ($N > 8$) using Haversine spherical distance matrix to eliminate zigzag detours in < 1ms, returning calculated saved mileage.
+  - **Hotel Comparison Matrix (`HotelComparisonModal.tsx`)**: Created a dedicated multi-dimensional comparison view for candidate stays (`stay`), dynamically calculating proximity metrics to today's scheduled attractions centroid/closest stop, aligning price, rating, signals, risks, and notes, with 1-click day stay pinning (`[ ⭐ 选定为第 X 天住宿 ]`).
+  - **1-Click Day Integration**: Added `🏨 酒店比选` entry in Research Pool and `⚡ 顺路优化` action in Day Skeleton toolbar with instant feedback toast notifications.
+- **Code Modularization & Verification**: 35/35 Vitest unit tests passed (`planner.test.ts`, `utils.test.ts`, `capture-state.test.ts`), `npm run validate:fast` passed with 0 errors and 0 warnings on new files.

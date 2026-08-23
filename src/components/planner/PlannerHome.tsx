@@ -10,12 +10,14 @@ import {
   exportPlacesToKML,
   getTripAreaCounts,
   listTripDates,
+  optimizeStopsSequence,
   sortPlannerPlaces,
 } from '@/domain/planner';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState } from './capture-bridge';
 import { PlannerMap } from './PlannerMap';
+import { HotelComparisonModal } from './HotelComparisonModal';
 
 interface PlannerHomeProps {
   disabled: boolean;
@@ -57,6 +59,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [highlightedPlaceId, setHighlightedPlaceId] = useState<string | null>(null);
   const [rightTab, setRightTab] = useState<'map' | 'context'>('map');
   const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (disabled) return;
@@ -139,6 +142,64 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === activeDate && place.state === 'scheduled')),
     [activeDate, tripPlaces],
   );
+
+  const candidateHotels = useMemo(
+    () => candidates.filter((p) => p.kind === 'stay'),
+    [candidates],
+  );
+
+  const runRouteOptimization = useCallback(async () => {
+    if (scheduled.length < 3 || disabled) return;
+    setBusy(true);
+    try {
+      const result = optimizeStopsSequence(scheduled, { fixStart: true });
+      if (!result.improved) {
+        setNotice(zh ? '当前路线已经是最佳顺路顺序！' : 'Current sequence is already optimal!');
+        setTimeout(() => setNotice(''), 3000);
+        return;
+      }
+      for (const place of result.places) {
+        await plannerRepository.upsertPlace(place);
+      }
+      await load();
+      setNotice(zh ? `✓ 顺路优化完成！节省约 ${result.savedKm} km 绕路路程` : `✓ Optimized! Saved ~${result.savedKm} km`);
+      setTimeout(() => setNotice(''), 4000);
+    } finally {
+      setBusy(false);
+    }
+  }, [scheduled, disabled, zh, load]);
+
+  const handleSelectHotelForDay = useCallback(async (hotel: PlannerTripPlace) => {
+    if (disabled) return;
+    setBusy(true);
+    try {
+      const updated: PlannerTripPlace = {
+        ...hotel,
+        state: 'scheduled',
+        scheduled_date: activeDate,
+        is_anchor: true,
+        anchor_type: 'stay_checkin',
+        sort_order: 0,
+      };
+      await plannerRepository.upsertPlace(updated);
+      await load();
+      setNotice(zh ? `✓ 已将「${hotel.title}」设为当天的住宿驻点！` : `✓ Set "${hotel.title}" as active stay!`);
+      setTimeout(() => setNotice(''), 3500);
+    } finally {
+      setBusy(false);
+    }
+  }, [disabled, activeDate, zh, load]);
+
+  const handleDropHotel = useCallback(async (hotelId: string) => {
+    const hotel = tripPlaces.find((p) => p.id === hotelId);
+    if (!hotel || disabled) return;
+    const updated: PlannerTripPlace = {
+      ...hotel,
+      state: 'dropped',
+    };
+    await plannerRepository.upsertPlace(updated);
+    await load();
+  }, [tripPlaces, disabled, load]);
 
   const areaCounts = useMemo(() => getTripAreaCounts(tripPlaces), [tripPlaces]);
   const maxAreaCount = Math.max(1, ...areaCounts.map((item) => item.count));
@@ -362,6 +423,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <span className="text-xs font-medium text-stone-400">{filteredCandidates.length}/{candidates.length}</span>
           </div>
 
+          {candidateHotels.length > 0 ? (
+            <div className="flex items-center justify-between border-b border-stone-100 bg-amber-50/70 px-3 py-2 text-xs">
+              <div className="flex items-center gap-1.5 font-semibold text-amber-900">
+                <span>🏨</span>
+                <span>{zh ? `有 ${candidateHotels.length} 家备选住宿` : `${candidateHotels.length} candidate stays`}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHotelModalOpen(true)}
+                className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 shadow-2xs hover:bg-amber-100/60"
+              >
+                {zh ? '多维比选' : 'Compare'}
+              </button>
+            </div>
+          ) : null}
+
           {tripTags.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 border-b border-stone-100 bg-stone-50/70 px-3 py-2">
               <button
@@ -453,6 +530,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             </div>
             {scheduled.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void runRouteOptimization()}
+                  disabled={busy || scheduled.length < 3}
+                  className="rounded-md border border-emerald-300 bg-emerald-50/80 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 shadow-2xs transition"
+                  title={zh ? '基于真实经纬度一键顺路重排游览顺序 (消除折返跑)' : 'Optimize route sequence by shortest distance'}
+                >
+                  ⚡ {zh ? '顺路优化' : 'Optimize'}
+                </button>
                 <a
                   href={buildGoogleMapsRouteUrl(scheduled, selectedTrip.transport_mode ?? 'transit')}
                   target="_blank"
@@ -680,6 +766,19 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           </div>
         </div>
       ) : null}
+
+      <HotelComparisonModal
+        open={isHotelModalOpen}
+        onClose={() => setIsHotelModalOpen(false)}
+        candidateHotels={candidateHotels}
+        scheduledPlaces={scheduled}
+        activeDate={activeDate}
+        activeDayIndex={activeDayIndex}
+        onSelectHotelForDay={handleSelectHotelForDay}
+        onDropHotel={handleDropHotel}
+        onHoverHotel={setHighlightedPlaceId}
+        language={language}
+      />
 
       <AppInstallGuideModal
         open={guideOpen}
