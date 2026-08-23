@@ -63,6 +63,7 @@ export interface PlannerTripPlace {
   is_anchor?: boolean;
   anchor_type?: 'flight' | 'stay_checkin' | 'stay_checkout' | 'transit' | 'reservation';
   address?: string;
+  coordinates?: { lat: number; lng: number };
   reservation_status: PlannerReservationStatus;
   state: PlannerPlaceState;
   scheduled_date?: string;
@@ -105,6 +106,11 @@ export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
   pendingPlaces: [],
   knownPlaceIds: {},
 };
+
+export function acknowledgeCapturedPlaces(state: OwnlyCaptureState, placeIds: string[]): OwnlyCaptureState {
+  const ids = new Set(placeIds);
+  return { ...state, pendingPlaces: state.pendingPlaces.filter((place) => !ids.has(place.id)) };
+}
 
 function parseDateOnly(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -176,6 +182,65 @@ export function mergeCapturedPlaceResearch(
     duration_minutes: captured.duration_minutes,
     updated_at: captured.updated_at,
   };
+}
+
+function canonicalizePlaceName(value: string): string {
+  return value.replace(/\+/g, ' ').trim().toLowerCase();
+}
+
+export function normalizePlaceIdentity(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname === 'maps.google.com' || /(^|\.)google\.[a-z.]{2,}$/.test(parsed.hostname)) {
+      const query = parsed.searchParams.get('query') || parsed.searchParams.get('q');
+      if (query) return canonicalizePlaceName(query);
+      const placeMatch = /\/maps\/place\/([^/]+)/.exec(parsed.pathname);
+      if (placeMatch?.[1]) {
+        let name = placeMatch[1];
+        try { name = decodeURIComponent(name); } catch {}
+        return canonicalizePlaceName(name);
+      }
+    }
+  } catch {}
+  return `u:${trimmed.toLowerCase()}`;
+}
+
+export function placeIdentityKey(tripId: string, sourceUrl: string): string {
+  return `${tripId}::${normalizePlaceIdentity(sourceUrl)}`;
+}
+
+export function findExistingTripPlace(
+  knownPlaceIds: Record<string, string>,
+  places: PlannerTripPlace[],
+  tripId: string,
+  sourceUrl: string,
+  sourcePlaceId?: string,
+): PlannerTripPlace | undefined {
+  const tripPlaces = places.filter((place) => place.trip_id === tripId);
+
+  if (sourcePlaceId) {
+    const byPlaceId = tripPlaces.filter((place) => place.source_place_id === sourcePlaceId);
+    if (byPlaceId.length === 1) return byPlaceId[0];
+  }
+
+  const identity = normalizePlaceIdentity(sourceUrl);
+  const knownId = knownPlaceIds[placeIdentityKey(tripId, sourceUrl)] ?? knownPlaceIds[`${tripId}::${sourceUrl}`];
+  if (knownId) {
+    const byKnown = tripPlaces.find((place) => place.id === knownId);
+    if (byKnown) return byKnown;
+  }
+
+  return tripPlaces.find((place) => normalizePlaceIdentity(place.source_url) === identity)
+    ?? tripPlaces.find((place) => place.source_url === sourceUrl);
+}
+
+function escapeCdata(text: string): string {
+  return text.replace(/\]\]>/g, ']]]]><![CDATA[>');
+}
+
+function csvSafeCell(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
 export function getTripAreaCounts(places: PlannerTripPlace[]): Array<{ area: string; count: number }> {
@@ -322,20 +387,23 @@ function escapeXml(unsafe: string): string {
 }
 
 export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: PlannerTripPlace[]): string {
-  const placemarks = places.map((place, index) => `
+  const placemarks = places.map((place, index) => {
+    const description = escapeCdata(`
+        <p><b>类别:</b> ${escapeXml(place.kind)}</p>
+        ${place.observed_rating ? `<p><b>评分:</b> ★ ${place.observed_rating}</p>` : ''}
+        ${place.observed_price ? `<p><b>人均:</b> ${escapeXml(place.observed_price)}</p>` : ''}
+        ${place.why ? `<p><b>理由:</b> ${escapeXml(place.why)}</p>` : ''}
+        ${place.notes ? `<p><b>备注:</b> ${escapeXml(place.notes)}</p>` : ''}
+        ${place.address ? `<p><b>地址:</b> ${escapeXml(place.address)}</p>` : ''}
+        ${place.source_url ? `<p><a href="${escapeXml(place.source_url)}">Google Maps 链接</a></p>` : ''}
+      `);
+    return `
     <Placemark>
       <name>${index + 1}. ${escapeXml(place.title)}</name>
-      <description><![CDATA[
-        <p><b>类别:</b> ${place.kind}</p>
-        ${place.observed_rating ? `<p><b>评分:</b> ★ ${place.observed_rating}</p>` : ''}
-        ${place.observed_price ? `<p><b>人均:</b> ${place.observed_price}</p>` : ''}
-        ${place.why ? `<p><b>理由:</b> ${place.why}</p>` : ''}
-        ${place.notes ? `<p><b>备注:</b> ${place.notes}</p>` : ''}
-        ${place.address ? `<p><b>地址:</b> ${place.address}</p>` : ''}
-        ${place.source_url ? `<p><a href="${place.source_url}">Google Maps 链接</a></p>` : ''}
-      ]]></description>
+      <description><![CDATA[${description}]]></description>
       ${place.address ? `<address>${escapeXml(place.address)}</address>` : ''}
-    </Placemark>`).join('\n');
+    </Placemark>`;
+  }).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -349,17 +417,110 @@ export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: 
 
 export function exportPlacesToCSV(places: PlannerTripPlace[]): string {
   const headers = ['Order', 'Title', 'Kind', 'Rating', 'Price', 'Address', 'Why', 'Notes', 'Tags', 'Google_Maps_URL'];
+  const cell = (value: string) => `"${csvSafeCell(value.replace(/"/g, '""'))}"`;
   const rows = places.map((p, i) => [
     i + 1,
-    `"${(p.title || '').replace(/"/g, '""')}"`,
+    cell(p.title || ''),
     `"${p.kind}"`,
     p.observed_rating ?? '',
-    `"${(p.observed_price || '').replace(/"/g, '""')}"`,
-    `"${(p.address || '').replace(/"/g, '""')}"`,
-    `"${(p.why || '').replace(/"/g, '""')}"`,
-    `"${(p.notes || '').replace(/"/g, '""')}"`,
-    `"${(p.tags || []).join(';')}"`,
-    `"${p.source_url || ''}"`,
+    cell(p.observed_price || ''),
+    cell(p.address || ''),
+    cell(p.why || ''),
+    cell(p.notes || ''),
+    cell((p.tags || []).join(';')),
+    cell(p.source_url || ''),
   ].join(','));
   return [headers.join(','), ...rows].join('\n');
+}
+
+export type ResearchChipCategory = 'risk' | 'signal' | 'tag';
+
+export interface ResearchChipDefinition {
+  id: string;
+  label: string;
+  category: ResearchChipCategory;
+}
+
+const KNOWN_RISK_KEYWORDS = [
+  'queue', 'rain', 'advance', 'cash', 'wait', 'busy', 'crowded', 'booking', 'reservation',
+  '排队', '雨', '预约', '现金', '拥挤', '避雷', '避开', '不宜',
+];
+
+export function classifyResearchChip(chipText: string): ResearchChipCategory {
+  const normalized = chipText.trim().toLowerCase();
+  if (KNOWN_RISK_KEYWORDS.some((kw) => normalized.includes(kw))) {
+    return 'risk';
+  }
+  return 'signal';
+}
+
+export const STANDARD_RESEARCH_CHIPS: Record<'zh' | 'en', ResearchChipDefinition[]> = {
+  zh: [
+    { id: 'must_go', label: '必去', category: 'signal' },
+    { id: 'must_eat', label: '必吃', category: 'signal' },
+    { id: 'need_queue', label: '需排队', category: 'risk' },
+    { id: 'advise_booking', label: '建议预约', category: 'risk' },
+    { id: 'night_view', label: '绝美夜景', category: 'signal' },
+    { id: 'sunset_spot', label: '日落机位', category: 'signal' },
+    { id: 'avoid_rain', label: '避开雨天', category: 'risk' },
+    { id: 'convenient_transit', label: '交通便利', category: 'signal' },
+    { id: 'cash_only', label: '只收现金', category: 'risk' },
+    { id: 'quiet_cozy', label: '安静惬意', category: 'signal' },
+  ],
+  en: [
+    { id: 'must_go', label: 'Must Go', category: 'signal' },
+    { id: 'must_eat', label: 'Must Eat', category: 'signal' },
+    { id: 'long_queue', label: 'Long Queue', category: 'risk' },
+    { id: 'book_in_advance', label: 'Book in Advance', category: 'risk' },
+    { id: 'scenic_view', label: 'Scenic View', category: 'signal' },
+    { id: 'sunset_spot', label: 'Sunset Spot', category: 'signal' },
+    { id: 'avoid_rainy_days', label: 'Avoid Rainy Days', category: 'risk' },
+    { id: 'convenient_transit', label: 'Convenient Transit', category: 'signal' },
+    { id: 'cash_only', label: 'Cash Only', category: 'risk' },
+    { id: 'quiet_cozy', label: 'Quiet & Cozy', category: 'signal' },
+  ],
+};
+
+export function extractPlaceCoordinates(
+  place: Partial<PlannerTripPlace> | string | null | undefined,
+): { lat: number; lng: number } | null {
+  if (!place) return null;
+  if (typeof place === 'object' && place.coordinates && Number.isFinite(place.coordinates.lat) && Number.isFinite(place.coordinates.lng)) {
+    return { lat: place.coordinates.lat, lng: place.coordinates.lng };
+  }
+
+  const url = typeof place === 'string' ? place : place.source_url || '';
+  if (!url) return null;
+
+  // 1. @lat,lng e.g. @13.7437,100.4888 or @13.7437,100.4888,15z
+  const atMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(url);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  // 2. !3dlat!4dlng (Google Maps place data protobuf serialization)
+  const dMatch = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/.exec(url);
+  if (dMatch) {
+    const lat = parseFloat(dMatch[1]);
+    const lng = parseFloat(dMatch[2]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  // 3. query=lat,lng or q=lat,lng or ll=lat,lng
+  const queryMatch = /[?&](?:query|q|ll)=(-?\d+\.\d+),(-?\d+\.\d+)/.exec(url);
+  if (queryMatch) {
+    const lat = parseFloat(queryMatch[1]);
+    const lng = parseFloat(queryMatch[2]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  return null;
 }

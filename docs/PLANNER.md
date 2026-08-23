@@ -22,7 +22,7 @@ Ownly/
   Trip Bookings/
 ```
 
-The extension's `chrome.storage.local` state is only a pending handoff queue. After Planner writes pending places to Markdown it acknowledges those IDs and removes them from the queue.
+The extension's `chrome.storage.local` state is only a pending handoff queue. After Planner writes pending places to Markdown it acknowledges those IDs and removes them from the queue. All writers (side panel, background quick capture, website bridge) share one serialized state module with an in-context write queue, and the side panel live-reloads when another context writes.
 
 ### Trip
 
@@ -46,9 +46,11 @@ npm run build:extension
 
 Load `dist/extension` as an unpacked extension in Chromium. The action button opens the native Side Panel.
 
-The Google Maps adapter only extracts the current place name and URL. Rating, price, research signals and notes are explicit user-entered observations; this keeps the capture layer narrow and avoids turning Ownly into a Google Maps scraper.
+The Google Maps adapter auto-fills observation hints for the current place or saved list: title, URL, coordinates (when present in the URL or list payload), rating, price, address, opening hours and the user's own Maps notes. Research judgment — priority, area, signals, risks, why — remains explicit user input. Ownly does not scrape or archive raw Google reviews.
 
-The Ownly website bridge is injected only on the declared Ownly origins. Planner pulls the pending queue with `window.postMessage`; the bridge validates same-window and same-origin messages before accessing extension storage.
+Places are de-duplicated per trip with a stable identity: the Google place id when available, otherwise a normalized title/URL key (`knownPlaceIds`). Re-importing a saved list via one-click sync refreshes captured observations while preserving the user's edits and any scheduling state; bulk text/link paste only adds missing places and never overwrites existing ones.
+
+The Ownly website bridge is injected only on the declared Ownly origins. Planner pulls the pending queue with `window.postMessage`; the bridge validates same-window and same-origin messages before accessing extension storage. Content scripts are injected only on Google Maps paths and the supported provider hosts (Tabelog, Xiaohongshu, Booking), never across all of google.com.
 
 ## First usable loop
 

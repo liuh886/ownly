@@ -87,31 +87,36 @@
       </details>
     </section>
 
-    <!-- Matched Saved List Banner (TH26 Auto-Sync) -->
-    <div id="savedListMatchBanner" class="panel stack match-banner" style="display: none;">
+    <!-- Unified Smart List Capture Card -->
+    <section id="smartListSection" class="panel stack match-banner" style="display: none;">
       <div class="row">
-        <span class="match-badge">🌟 自动匹配收藏夹</span>
-        <span id="savedListCountBadge" class="badge highlight">0 个地点</span>
+        <span id="smartListBadge" class="match-badge">🌟 自动匹配收藏夹</span>
+        <span id="smartListCountBadge" class="badge highlight">0 个地点</span>
       </div>
-      <div id="savedListNameTitle" class="match-title">TH26</div>
-      <p id="savedListMatchDesc" class="match-desc">检测到当前 Google 收藏夹与行程标签完全一致</p>
-      <button id="btnSyncSavedListAll" class="sync-btn" type="button">⚡ 一键同步收藏夹全部地点至候选池</button>
-    </div>
+      <div id="smartListTitle" class="match-title">列表名称</div>
+      <p id="smartListDesc" class="match-desc">检测到当前 Google 收藏夹与行程匹配</p>
+      
+      <div class="row" style="gap: 6px; margin-top: 4px;">
+        <button id="btnSmartSyncAll" class="sync-btn" type="button" style="flex: 3;">⚡ 一键同步全部地点</button>
+        <button id="btnToggleListPreview" class="secondary" type="button" style="flex: 2; font-size: 11px; min-height: 36px; padding: 0 6px;">📋 挑选地点</button>
+      </div>
 
-    <!-- Batch List Section -->
-    <details id="batchSection" class="panel stack batch-section" style="display: none;">
-      <summary id="sumBatchList">📋 批量感知：当前地图列表 (0 个地点)</summary>
-      <div id="batchListContainer" class="batch-list"></div>
-      <div class="batch-controls">
-        <button id="btnToggleSelectAll" class="secondary" type="button" style="min-height: 30px; font-size: 11px; padding: 0 8px;">全选 / 取消</button>
-        <button id="btnBatchAdd" class="primary" type="button" style="min-height: 30px; font-size: 11px; padding: 0 10px;">➕ 批量加入候选池</button>
+      <div id="smartListPreviewContainer" class="stack" style="display: none; margin-top: 6px; border-top: 1px dashed #6ee7b7; padding-top: 8px;">
+        <div id="batchListContainer" class="batch-list"></div>
+        <div class="batch-controls">
+          <button id="btnToggleSelectAll" class="secondary" type="button" style="min-height: 28px; font-size: 11px; padding: 0 8px;">全选 / 取消</button>
+          <button id="btnBatchAdd" class="primary" type="button" style="min-height: 28px; font-size: 11px; padding: 0 10px;">➕ 添加所选</button>
+        </div>
       </div>
-    </details>
+    </section>
 
     <section class="panel current">
       <div class="row">
         <span id="lblCurrentPlace" class="label">当前地点</span>
-        <button id="refreshPlace" class="link" type="button">🔄 刷新</button>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnDismissPlace" class="link" type="button" style="color: #ef4444; display: none;">❌ 取消选中</button>
+          <button id="refreshPlace" class="link" type="button">🔄 刷新</button>
+        </div>
       </div>
       <h1 id="placeTitle">请在地图或页面中打开地点</h1>
       <p id="placeUrl" class="url">在 Google Maps、Tabelog、小红书浏览时自动识别</p>

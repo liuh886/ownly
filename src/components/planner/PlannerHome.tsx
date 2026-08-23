@@ -15,6 +15,7 @@ import {
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState } from './capture-bridge';
+import { PlannerMap } from './PlannerMap';
 
 interface PlannerHomeProps {
   disabled: boolean;
@@ -53,6 +54,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [notice, setNotice] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
+  const [highlightedPlaceId, setHighlightedPlaceId] = useState<string | null>(null);
+  const [rightTab, setRightTab] = useState<'map' | 'context'>('map');
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
 
   const load = useCallback(async () => {
     if (disabled) return;
@@ -104,6 +108,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     if (!selectedTrip) return '';
     return tripDates.includes(selectedDate) ? selectedDate : (tripDates[0] ?? '');
   }, [selectedDate, selectedTrip, tripDates]);
+
+  const activeDayIndex = useMemo(() => {
+    return Math.max(0, tripDates.indexOf(activeDate));
+  }, [activeDate, tripDates]);
 
   const tripPlaces = useMemo(
     () => places.filter((place) => place.trip_id === selectedTripId && place.state !== 'dropped'),
@@ -236,8 +244,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       for (const trip of state.trips) {
         if (!existingTripIds.has(trip.id)) await plannerRepository.upsertTrip(trip);
       }
-      for (const place of state.pendingPlaces) await plannerRepository.upsertPlace(place);
       if (state.pendingPlaces.length > 0) {
+        await plannerRepository.upsertPlaces(state.pendingPlaces);
         await ackCapturedPlaces(state.pendingPlaces.map((place) => place.id));
       }
       setCapturePending(0);
@@ -246,6 +254,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       setNotice(zh
         ? `已同步 ${state.pendingPlaces.length} 个研究候选。`
         : `Synced ${state.pendingPlaces.length} research candidates.`);
+    } catch {
+      setCapturePending(null);
+      setNotice(zh ? '同步失败：无法写入数据目录或扩展未响应。' : 'Sync failed: could not write data folder or extension unreachable.');
     } finally {
       setBusy(false);
     }
@@ -388,7 +399,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 draggable
                 onDragStart={() => setDraggingPlaceId(place.id)}
                 onDragEnd={() => setDraggingPlaceId(null)}
-                className="rounded-lg border border-stone-200 bg-stone-50/70 p-3"
+                onMouseEnter={() => setHighlightedPlaceId(place.id)}
+                onMouseLeave={() => setHighlightedPlaceId(null)}
+                className={`rounded-lg border bg-stone-50/70 p-3 transition-all duration-150 ${
+                  highlightedPlaceId === place.id
+                    ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/30'
+                    : 'border-stone-200 hover:border-stone-300'
+                }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -545,38 +562,124 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           </div>
         </section>
 
-        <aside className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-stone-900">Planner Context</h2>
-          <div className="mt-3 divide-y divide-stone-100 text-xs">
-            <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '当天已排' : 'Scheduled'}</span><strong>{scheduled.length}</strong></div>
-            <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '候选未排' : 'Unscheduled'}</span><strong>{candidates.length}</strong></div>
-            <div className="flex justify-between py-2"><span className="text-stone-400">Must</span><strong>{mustScheduled}/{mustTotal}</strong></div>
-            <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '地点时长' : 'Place time'}</span><strong>{Math.round(scheduledMinutes / 60 * 10) / 10}h</strong></div>
+        <aside className="min-w-0 flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+          {/* Header Tab Switcher */}
+          <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-stone-100 bg-stone-50/90 px-3 py-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setRightTab('map')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                  rightTab === 'map' ? 'bg-stone-900 text-white shadow-xs' : 'text-stone-600 hover:bg-stone-200/60'
+                }`}
+              >
+                🗺️ {zh ? '空间建议地图' : 'Spatial Map'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightTab('context')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                  rightTab === 'context' ? 'bg-stone-900 text-white shadow-xs' : 'text-stone-600 hover:bg-stone-200/60'
+                }`}
+              >
+                📊 {zh ? '负荷统计' : 'Context'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMapExpanded(true)}
+              className="rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-700 hover:bg-stone-100 shadow-2xs"
+              title={zh ? '展开全屏大地图' : 'Expand Map'}
+            >
+              ⛶ {zh ? '大地图' : 'Expand'}
+            </button>
           </div>
 
-          <div className="mt-5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-stone-700">{zh ? '区域分布' : 'Area load'}</h3>
-              <span className="text-[10px] text-stone-400">{areaCounts.length}</span>
+          {rightTab === 'map' ? (
+            <div className="flex-1 min-h-[380px] p-2 flex flex-col">
+              <PlannerMap
+                scheduledPlaces={scheduled}
+                candidatePlaces={filteredCandidates}
+                destinations={selectedTrip?.destinations}
+                activeDate={activeDate}
+                activeDayIndex={activeDayIndex}
+                highlightedPlaceId={highlightedPlaceId}
+                onSchedulePlace={schedulePlace}
+                onUnschedulePlace={returnToPool}
+                onHoverPlace={setHighlightedPlaceId}
+                language={language}
+              />
             </div>
-            <div className="mt-2 space-y-2">
-              {areaCounts.slice(0, 6).map((item) => (
-                <div key={item.area}>
-                  <div className="mb-1 flex justify-between text-[10px] text-stone-500"><span>{item.area}</span><span>{item.count}</span></div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-stone-700" style={{ width: `${Math.max(12, item.count / maxAreaCount * 100)}%` }} /></div>
+          ) : (
+            <div className="p-4 overflow-y-auto">
+              <h2 className="text-sm font-semibold text-stone-900">Planner Context</h2>
+              <div className="mt-3 divide-y divide-stone-100 text-xs">
+                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '当天已排' : 'Scheduled'}</span><strong>{scheduled.length}</strong></div>
+                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '候选未排' : 'Unscheduled'}</span><strong>{candidates.length}</strong></div>
+                <div className="flex justify-between py-2"><span className="text-stone-400">Must</span><strong>{mustScheduled}/{mustTotal}</strong></div>
+                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '地点时长' : 'Place time'}</span><strong>{Math.round(scheduledMinutes / 60 * 10) / 10}h</strong></div>
+              </div>
+
+              <div className="mt-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-stone-700">{zh ? '区域分布' : 'Area load'}</h3>
+                  <span className="text-[10px] text-stone-400">{areaCounts.length}</span>
                 </div>
-              ))}
-              {areaCounts.length === 0 ? <p className="text-[11px] leading-5 text-stone-400">{zh ? '采集时填写区域，后续 AI 才能更好地做空间聚类。' : 'Add areas while researching so future AI planning can cluster places spatially.'}</p> : null}
-            </div>
-          </div>
+                <div className="mt-2 space-y-2">
+                  {areaCounts.slice(0, 6).map((item) => (
+                    <div key={item.area}>
+                      <div className="mb-1 flex justify-between text-[10px] text-stone-500"><span>{item.area}</span><span>{item.count}</span></div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-stone-700" style={{ width: `${Math.max(12, item.count / maxAreaCount * 100)}%` }} /></div>
+                    </div>
+                  ))}
+                  {areaCounts.length === 0 ? <p className="text-[11px] leading-5 text-stone-400">{zh ? '采集时填写区域，后续 AI 才能更好地做空间聚类。' : 'Add areas while researching so future AI planning can cluster places spatially.'}</p> : null}
+                </div>
+              </div>
 
-          <div className="mt-5 rounded-lg bg-stone-50 p-3 text-[11px] leading-5 text-stone-500 ring-1 ring-stone-200">
-            {zh
-              ? '当前版本只做人工编排：研究在 Google Maps 完成，Planner 负责候选池、按天排程、顺序调整和回到 Google Maps 执行。AI Proposal 将建立在这份结构化研究数据之上。'
-              : 'This version is deliberately manual-first: research in Google Maps, then pool → day → order → Google Maps. AI proposals will build on the same structured research data.'}
-          </div>
+              <div className="mt-5 rounded-lg bg-stone-50 p-3 text-[11px] leading-5 text-stone-500 ring-1 ring-stone-200">
+                {zh
+                  ? '当前版本只做人工编排：研究在 Google Maps 完成，Planner 负责候选池、空间地图排程、顺序调整和回到 Google Maps 执行。'
+                  : 'Research in Google Maps, then pool → map → day skeleton → Google Maps.'}
+              </div>
+            </div>
+          )}
         </aside>
       </div>
+
+
+      {isMapExpanded && selectedTrip ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-stone-950/70 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in">
+          <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-stone-900">🗺️ {selectedTrip.title} · {zh ? `第${activeDayIndex + 1}天空间地图` : `Day ${activeDayIndex + 1} Spatial Map`}</span>
+                <span className="text-xs text-stone-400">({activeDate})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMapExpanded(false)}
+                className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+              >
+                ✕ {zh ? '退出大地图' : 'Close Map'}
+              </button>
+            </div>
+            <div className="flex-1 p-2">
+              <PlannerMap
+                scheduledPlaces={scheduled}
+                candidatePlaces={filteredCandidates}
+                destinations={selectedTrip?.destinations}
+                activeDate={activeDate}
+                activeDayIndex={activeDayIndex}
+                highlightedPlaceId={highlightedPlaceId}
+                onSchedulePlace={schedulePlace}
+                onUnschedulePlace={returnToPool}
+                onHoverPlace={setHighlightedPlaceId}
+                language={language}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <AppInstallGuideModal
         open={guideOpen}

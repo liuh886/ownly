@@ -1,24 +1,8 @@
-import { EMPTY_CAPTURE_STATE, type OwnlyCaptureState } from '../domain/planner';
+import { acknowledgeCapturedPlaces } from '../domain/planner';
+import { ackPlacesViaWorker, readCaptureState, updateCaptureState } from './capture-state';
 
-const STORAGE_KEY = 'ownlyCaptureStateV1';
 const REQUEST_SOURCE = 'ownly-planner-web';
 const RESPONSE_SOURCE = 'ownly-capture-extension';
-
-async function loadState(): Promise<OwnlyCaptureState> {
-  const result = await chrome.storage.local.get(STORAGE_KEY);
-  const value = result[STORAGE_KEY];
-  if (!value || typeof value !== 'object') return { ...EMPTY_CAPTURE_STATE };
-  const state = value as Partial<OwnlyCaptureState>;
-  return {
-    version: 1,
-    trips: Array.isArray(state.trips) ? state.trips : [],
-    activeTripId: typeof state.activeTripId === 'string' ? state.activeTripId : null,
-    pendingPlaces: Array.isArray(state.pendingPlaces) ? state.pendingPlaces : [],
-    knownPlaceIds: state.knownPlaceIds && typeof state.knownPlaceIds === 'object'
-      ? state.knownPlaceIds as Record<string, string>
-      : {},
-  };
-}
 
 window.addEventListener('message', (event) => {
   if (event.source !== window || event.origin !== window.location.origin) return;
@@ -28,21 +12,21 @@ window.addEventListener('message', (event) => {
   void (async () => {
     try {
       if (message.type === 'PULL_CAPTURE_STATE') {
-        const state = await loadState();
+        const state = await readCaptureState();
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'CAPTURE_STATE', payload: state }, window.location.origin);
         return;
       }
 
       if (message.type === 'ACK_CAPTURED_PLACES') {
         const payload = message.payload as { placeIds?: string[] } | undefined;
-        const ids = new Set(Array.isArray(payload?.placeIds) ? payload.placeIds : []);
-        const state = await loadState();
-        await chrome.storage.local.set({
-          [STORAGE_KEY]: {
-            ...state,
-            pendingPlaces: state.pendingPlaces.filter((place) => !ids.has(place.id)),
-          },
-        });
+        const ids = Array.isArray(payload?.placeIds) ? payload.placeIds : [];
+        const viaWorker = await ackPlacesViaWorker(ids);
+        if (!viaWorker?.ok) {
+          await updateCaptureState((current) => ({
+            state: acknowledgeCapturedPlaces(current, ids),
+            result: { ok: true },
+          }));
+        }
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'ACK_CAPTURED_PLACES_RESULT', payload: { ok: true } }, window.location.origin);
       }
     } catch (error) {

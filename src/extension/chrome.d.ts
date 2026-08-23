@@ -16,6 +16,7 @@ declare namespace chrome {
     const onStartup: {
       addListener(callback: () => void): void;
     };
+    function sendMessage(message: unknown): Promise<unknown>;
   }
 
   namespace tabs {
@@ -46,8 +47,15 @@ declare namespace chrome {
       remove(keys: string | string[]): Promise<void>;
       clear(): Promise<void>;
     }
+    interface StorageChange {
+      oldValue?: unknown;
+      newValue?: unknown;
+    }
     const local: StorageArea;
     const sync: StorageArea;
+    const onChanged: {
+      addListener(callback: (changes: Record<string, StorageChange>, areaName: string) => void): void;
+    };
   }
 
   namespace sidePanel {

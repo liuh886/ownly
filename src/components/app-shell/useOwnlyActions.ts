@@ -24,9 +24,9 @@ export function useOwnlyActions(
       await loadVaultData();
       onObjectCreated?.();
       showNotice(t('objectSaved'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('objectSaveFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('objectSaveFailed'));
+      throw error;
     }
   }
 
@@ -35,9 +35,9 @@ export function useOwnlyActions(
       await repository.updateObject(fileName, object, body);
       await loadVaultData();
       showNotice(t('objectUpdated'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('objectUpdateFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('objectUpdateFailed'));
+      throw error;
     }
   }
 
@@ -46,9 +46,9 @@ export function useOwnlyActions(
       await repository.archiveObject(fileName);
       await loadVaultData();
       showNotice(t('objectArchived'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('objectArchiveFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('objectArchiveFailed'));
+      throw error;
     }
   }
 
@@ -110,9 +110,9 @@ export function useOwnlyActions(
       await repository.saveSnapshot(snapshot, body);
       await loadVaultData();
       showNotice(t('snapshotSaved'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('snapshotSaveFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('snapshotSaveFailed'));
+      throw error;
     }
   }
 
@@ -121,9 +121,9 @@ export function useOwnlyActions(
       await repository.updateSnapshot(fileName, snapshot, body);
       await loadVaultData();
       showNotice(t('snapshotUpdated'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('snapshotUpdateFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('snapshotUpdateFailed'));
+      throw error;
     }
   }
 
@@ -132,9 +132,9 @@ export function useOwnlyActions(
       await repository.archiveSnapshot(fileName);
       await loadVaultData();
       showNotice(t('snapshotArchived'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('snapshotArchiveFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('snapshotArchiveFailed'));
+      throw error;
     }
   }
 
@@ -158,9 +158,9 @@ export function useOwnlyActions(
 
       await loadVaultData();
       showNotice(t('reviewSaved'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('reviewSaveFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('reviewSaveFailed'));
+      throw error;
     }
   }
 
@@ -169,9 +169,9 @@ export function useOwnlyActions(
       await repository.updateReview(fileName, review, body);
       await loadVaultData();
       showNotice(t('reviewUpdated'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('reviewUpdateFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('reviewUpdateFailed'));
+      throw error;
     }
   }
 
@@ -180,9 +180,9 @@ export function useOwnlyActions(
       await repository.archiveReview(fileName);
       await loadVaultData();
       showNotice(t('reviewArchived'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('reviewArchiveFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('reviewArchiveFailed'));
+      throw error;
     }
   }
 
@@ -191,9 +191,9 @@ export function useOwnlyActions(
       await repository.restoreArchivedEntity(archiveType, archiveFileName);
       await loadVaultData();
       showNotice(t('archivedRestored'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('archivedRestoreFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('archivedRestoreFailed'));
+      throw error;
     }
   }
 
@@ -202,9 +202,9 @@ export function useOwnlyActions(
       await repository.permanentlyDeleteArchivedEntity(archiveType, archiveFileName);
       await loadVaultData();
       showNotice(t('permanentlyDeleted'));
-    } catch (event) {
-      showNotice(event instanceof Error ? event.message : t('permanentlyDeleteFailed'));
-      throw event;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('permanentlyDeleteFailed'));
+      throw error;
     }
   }
 

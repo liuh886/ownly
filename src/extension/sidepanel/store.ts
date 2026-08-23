@@ -1,0 +1,54 @@
+import {
+  EMPTY_CAPTURE_STATE,
+  findExistingTripPlace,
+  type OwnlyCaptureState,
+  type PlannerTripPlace,
+} from '../../domain/planner';
+import type { CurrentResearchPlace, DetectedSavedList } from '../content';
+import { readCaptureState } from '../capture-state';
+import { I18N, type Lang } from '../i18n';
+
+const LANG_STORAGE_KEY = 'ownlyCaptureLang';
+
+export interface SavedListSummary {
+  listId?: string;
+  listName: string;
+  count?: number;
+  url?: string;
+}
+
+export const store = {
+  lang: 'zh' as Lang,
+  state: { ...EMPTY_CAPTURE_STATE } as OwnlyCaptureState,
+  currentPlace: null as CurrentResearchPlace | null,
+  detectedSavedList: null as DetectedSavedList | null,
+  detectedListPlaces: [] as CurrentResearchPlace[],
+  detectedAllLists: [] as SavedListSummary[],
+  activeFilter: 'all',
+  searchQuery: '',
+  pageDetectedCurrency: undefined as string | undefined,
+  userDismissedPlaceUrl: null as string | null,
+  editingCandidateId: null as string | null,
+  isListPreviewOpen: false,
+};
+
+export function t() {
+  return I18N[store.lang];
+}
+
+export async function loadState(): Promise<void> {
+  const [result, fresh] = await Promise.all([
+    chrome.storage.local.get(LANG_STORAGE_KEY),
+    readCaptureState(),
+  ]);
+  const langVal = result[LANG_STORAGE_KEY];
+  if (langVal === 'zh' || langVal === 'en') {
+    store.lang = langVal;
+  }
+  store.state = fresh;
+}
+
+export function getExistingPlaceForUrl(sourceUrl: string, sourcePlaceId?: string): PlannerTripPlace | undefined {
+  if (!store.state.activeTripId) return undefined;
+  return findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, sourceUrl, sourcePlaceId);
+}

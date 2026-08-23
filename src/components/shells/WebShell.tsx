@@ -80,8 +80,8 @@ export function WebShell() {
       showNotice(action === 'create' ? localDataCopy.createdNotice : localDataCopy.openedNotice);
       trackOwnlyEvent('local_data_connected', { action });
       return true;
-    } catch (event) {
-      setError(event instanceof Error ? event.message : localDataCopy.connectFailed);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : localDataCopy.connectFailed);
       return false;
     } finally {
       setIsLoading(false);
@@ -115,9 +115,9 @@ export function WebShell() {
             && window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
           setOnboardingOpen(shouldPrompt);
         }
-      } catch (event) {
+      } catch (error) {
         if (isMounted) {
-          setError(event instanceof Error ? event.message : localDataCopy.initializeFailed);
+          setError(error instanceof Error ? error.message : localDataCopy.initializeFailed);
           const shouldPrompt = window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
           setOnboardingOpen(shouldPrompt);
         }
