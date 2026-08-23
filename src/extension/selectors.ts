@@ -24,8 +24,12 @@ export const SELECTORS = {
   savedListHeading: 'h1.DUwDvf, div.fontHeadlineLarge, div.m6QErb h1, h1',
 } as const;
 
+const drifted = new Set<string>();
+
 export function driftCheck(key: keyof typeof SELECTORS, found: Element | null): void {
   if (found) return;
+  if (drifted.has(key)) return;
+  drifted.add(key);
   console.warn(`[Ownly Capture] selector drift detected for "${key}" — Google Maps markup may have changed.`);
   try {
     void chrome.runtime.sendMessage({ type: 'OWNLY_SELECTOR_DRIFT', selector: key }).catch(() => {});

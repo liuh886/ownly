@@ -112,6 +112,28 @@ export function acknowledgeCapturedPlaces(state: OwnlyCaptureState, placeIds: st
   return { ...state, pendingPlaces: state.pendingPlaces.filter((place) => !ids.has(place.id)) };
 }
 
+/**
+ * Reorders a visible subset of places (e.g. the filtered candidate pool) while
+ * keeping every hidden entry pinned to its original slot.
+ */
+export function reorderPendingPlaces(
+  pendingPlaces: PlannerTripPlace[],
+  orderedVisibleIds: string[],
+): PlannerTripPlace[] {
+  const visibleIds = orderedVisibleIds.filter((id) => pendingPlaces.some((p) => p.id === id));
+  if (visibleIds.length === 0) return [...pendingPlaces];
+  const slots: number[] = [];
+  pendingPlaces.forEach((place, index) => {
+    if (visibleIds.includes(place.id)) slots.push(index);
+  });
+  const next = [...pendingPlaces];
+  visibleIds.forEach((id, i) => {
+    const source = pendingPlaces.find((p) => p.id === id)!;
+    next[slots[i]] = source;
+  });
+  return next;
+}
+
 function parseDateOnly(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
@@ -713,3 +735,208 @@ export function calculateHotelProximity(
     closestPlaceTitle: closestTitle,
   };
 }
+
+export interface MultiDayHotelProximityResult {
+  hasCoordinates: boolean;
+  combinedAvgKm: number;
+  dayDetails: Array<{
+    date: string;
+    dayIndex: number;
+    avgKm: number;
+    centerKm: number;
+    spotCount: number;
+  }>;
+}
+
+export function calculateMultiDayHotelProximity(
+  hotel: PlannerTripPlace,
+  placesByDate: Record<string, PlannerTripPlace[]>,
+  stayDates: string[],
+): MultiDayHotelProximityResult {
+  const hotelCoords = extractPlaceCoordinates(hotel);
+  if (!hotelCoords) {
+    return {
+      hasCoordinates: false,
+      combinedAvgKm: 0,
+      dayDetails: stayDates.map((date, index) => ({
+        date,
+        dayIndex: index,
+        avgKm: 0,
+        centerKm: 0,
+        spotCount: 0,
+      })),
+    };
+  }
+
+  let totalDistSum = 0;
+  let totalValidSpots = 0;
+
+  const dayDetails = stayDates.map((date, index) => {
+    const dayPlaces = placesByDate[date] || [];
+    const validSpots = dayPlaces
+      .map((p) => ({ place: p, coords: extractPlaceCoordinates(p) }))
+      .filter(
+        (item): item is { place: PlannerTripPlace; coords: { lat: number; lng: number } } =>
+          item.coords !== null && item.place.kind !== 'stay',
+      );
+
+    if (validSpots.length === 0) {
+      return {
+        date,
+        dayIndex: index,
+        avgKm: 0,
+        centerKm: 0,
+        spotCount: 0,
+      };
+    }
+
+    let dayDist = 0;
+    let sumLat = 0;
+    let sumLng = 0;
+
+    validSpots.forEach(({ coords }) => {
+      const d = haversineDistanceKm(hotelCoords, coords);
+      dayDist += d;
+      sumLat += coords.lat;
+      sumLng += coords.lng;
+    });
+
+    totalDistSum += dayDist;
+    totalValidSpots += validSpots.length;
+
+    const centerLat = sumLat / validSpots.length;
+    const centerLng = sumLng / validSpots.length;
+    const centerDist = haversineDistanceKm(hotelCoords, { lat: centerLat, lng: centerLng });
+
+    return {
+      date,
+      dayIndex: index,
+      avgKm: Math.round((dayDist / validSpots.length) * 10) / 10,
+      centerKm: Math.round(centerDist * 10) / 10,
+      spotCount: validSpots.length,
+    };
+  });
+
+  const combinedAvgKm =
+    totalValidSpots > 0 ? Math.round((totalDistSum / totalValidSpots) * 10) / 10 : 0;
+
+  return {
+    hasCoordinates: true,
+    combinedAvgKm,
+    dayDetails,
+  };
+}
+
+export function generateStaySpanPlaces(
+  hotel: PlannerTripPlace,
+  stayDates: string[],
+): PlannerTripPlace[] {
+  return stayDates.map((date, index) => ({
+    ...hotel,
+    id: index === 0 ? hotel.id : `${hotel.id}__stay_${date}`,
+    state: 'scheduled' as const,
+    scheduled_date: date,
+    is_anchor: true,
+    anchor_type: 'stay_checkin' as const,
+    sort_order: 0,
+    notes:
+      stayDates.length > 1
+        ? `${hotel.notes ? `${hotel.notes} · ` : ''}连住第 ${index + 1} 晚 (共 ${stayDates.length} 晚)`
+        : hotel.notes,
+  }));
+}
+
+export interface DayHotelTransferInfo {
+  date: string;
+  dayIndex: number;
+  isTransferDay: boolean;
+  checkoutHotel?: PlannerTripPlace;
+  checkinHotel?: PlannerTripPlace;
+  stayHotel?: PlannerTripPlace;
+  stayNightIndex?: number;
+  totalStayNights?: number;
+}
+
+export function detectHotelTransferDays(
+  tripPlaces: PlannerTripPlace[],
+  tripDates: string[],
+): Record<string, DayHotelTransferInfo> {
+  const result: Record<string, DayHotelTransferInfo> = {};
+
+  const stayByDate: Record<string, PlannerTripPlace | undefined> = {};
+  tripDates.forEach((date) => {
+    const stays = tripPlaces.filter(
+      (p) =>
+        p.state === 'scheduled' &&
+        p.scheduled_date === date &&
+        (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin')),
+    );
+    stayByDate[date] = stays[0];
+  });
+
+  tripDates.forEach((date, index) => {
+    const todayStay = stayByDate[date];
+    const prevDate = index > 0 ? tripDates[index - 1] : null;
+    const prevStay = prevDate ? stayByDate[prevDate] : null;
+
+    if (
+      prevStay &&
+      todayStay &&
+      normalizePlaceIdentity(prevStay.source_url || prevStay.title) !==
+        normalizePlaceIdentity(todayStay.source_url || todayStay.title)
+    ) {
+      result[date] = {
+        date,
+        dayIndex: index,
+        isTransferDay: true,
+        checkoutHotel: prevStay,
+        checkinHotel: todayStay,
+        stayHotel: todayStay,
+        stayNightIndex: 1,
+        totalStayNights: 1,
+      };
+    } else {
+      let nightIndex = 1;
+      let totalNights = 1;
+
+      if (todayStay) {
+        const baseId = normalizePlaceIdentity(todayStay.source_url || todayStay.title);
+        let start = index;
+        while (
+          start > 0 &&
+          stayByDate[tripDates[start - 1]] &&
+          normalizePlaceIdentity(
+            stayByDate[tripDates[start - 1]]!.source_url || stayByDate[tripDates[start - 1]]!.title,
+          ) === baseId
+        ) {
+          start--;
+        }
+        nightIndex = index - start + 1;
+
+        let end = index;
+        while (
+          end < tripDates.length - 1 &&
+          stayByDate[tripDates[end + 1]] &&
+          normalizePlaceIdentity(
+            stayByDate[tripDates[end + 1]]!.source_url || stayByDate[tripDates[end + 1]]!.title,
+          ) === baseId
+        ) {
+          end++;
+        }
+        totalNights = end - start + 1;
+      }
+
+      result[date] = {
+        date,
+        dayIndex: index,
+        isTransferDay: false,
+        stayHotel: todayStay,
+        stayNightIndex: todayStay ? nightIndex : undefined,
+        totalStayNights: todayStay ? totalNights : undefined,
+      };
+    }
+  });
+
+  return result;
+}
+

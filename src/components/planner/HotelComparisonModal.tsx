@@ -1,17 +1,22 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { PlannerTripPlace } from '@/domain/planner';
-import { calculateHotelProximity } from '@/domain/planner';
+import {
+  calculateHotelProximity,
+  calculateMultiDayHotelProximity,
+} from '@/domain/planner';
 
 interface HotelComparisonModalProps {
   open: boolean;
   onClose: () => void;
   candidateHotels: PlannerTripPlace[];
   scheduledPlaces: PlannerTripPlace[];
+  placesByDate?: Record<string, PlannerTripPlace[]>;
+  tripDates?: string[];
   activeDate: string;
   activeDayIndex: number;
-  onSelectHotelForDay: (hotel: PlannerTripPlace) => void;
+  onSelectHotelForStaySpan: (hotel: PlannerTripPlace, stayDates: string[]) => void;
   onDropHotel: (hotelId: string) => void;
   onHoverHotel?: (hotelId: string | null) => void;
   language?: 'zh' | 'en';
@@ -22,17 +27,44 @@ export function HotelComparisonModal({
   onClose,
   candidateHotels,
   scheduledPlaces,
+  placesByDate = {},
+  tripDates = [],
   activeDate,
   activeDayIndex,
-  onSelectHotelForDay,
+  onSelectHotelForStaySpan,
   onDropHotel,
   onHoverHotel,
   language = 'zh',
 }: HotelComparisonModalProps) {
   const zh = language === 'zh';
+  const totalDays = tripDates.length || 1;
 
-  // Compute proximity metrics for each candidate hotel
-  const hotelMetrics = useMemo(() => {
+  // Stay Range Selection: end index (inclusive)
+  const [stayEndIndex, setStayEndIndex] = useState<number>(activeDayIndex);
+  const [isFullTripStay, setIsFullTripStay] = useState<boolean>(false);
+
+  // Derive target stay dates
+  const targetStayDates = useMemo(() => {
+    if (isFullTripStay && tripDates.length > 0) {
+      return tripDates;
+    }
+    const end = Math.min(Math.max(stayEndIndex, activeDayIndex), totalDays - 1);
+    return tripDates.length > 0 ? tripDates.slice(activeDayIndex, end + 1) : [activeDate];
+  }, [isFullTripStay, tripDates, stayEndIndex, activeDayIndex, totalDays, activeDate]);
+
+  const stayNightsCount = targetStayDates.length;
+
+  // Compute multi-day proximity metrics for each candidate hotel
+  const multiDayMetricsMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof calculateMultiDayHotelProximity>>();
+    candidateHotels.forEach((hotel) => {
+      map.set(hotel.id, calculateMultiDayHotelProximity(hotel, placesByDate, targetStayDates));
+    });
+    return map;
+  }, [candidateHotels, placesByDate, targetStayDates]);
+
+  // Single-day active day metrics
+  const singleDayMetricsMap = useMemo(() => {
     const map = new Map<string, ReturnType<typeof calculateHotelProximity>>();
     candidateHotels.forEach((hotel) => {
       map.set(hotel.id, calculateHotelProximity(hotel, scheduledPlaces));
@@ -50,35 +82,97 @@ export function HotelComparisonModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+        className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/90 px-5 py-4">
-          <div>
+        <div className="border-b border-stone-100 bg-stone-50/90 px-5 py-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-lg">🏨</span>
+              <span className="text-xl">🏨</span>
               <h3 className="text-base font-bold text-stone-900">
-                {zh ? '酒店多维比选 (Hotel Comparison Matrix)' : 'Hotel Comparison Matrix'}
+                {zh ? '酒店多维比选与连住排期' : 'Hotel Comparison & Stay Span'}
               </h3>
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
                 {candidateHotels.length} {zh ? '家备选' : 'candidates'}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-stone-500">
-              {zh
-                ? `针对 第 ${activeDayIndex + 1} 天 (${activeDate}) 游玩景点群的地理就近度、预算与口碑多维决策`
-                : `Compare candidate stays against Day ${activeDayIndex + 1} (${activeDate}) itinerary for proximity, budget & amenities`}
-            </p>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700"
+            >
+              ✕
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700"
-          >
-            ✕
-          </button>
+          {/* Stay Range Selector */}
+          {totalDays > 1 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-white p-2.5 border border-stone-200 shadow-2xs">
+              <span className="text-xs font-bold text-stone-700 flex items-center gap-1">
+                <span>📅</span> {zh ? '入住跨度:' : 'Stay Span:'}
+              </span>
+
+              {/* Single Active Day */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFullTripStay(false);
+                  setStayEndIndex(activeDayIndex);
+                }}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                  !isFullTripStay && stayEndIndex === activeDayIndex
+                    ? 'bg-stone-900 text-white shadow-2xs'
+                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                }`}
+              >
+                {zh ? `仅第 ${activeDayIndex + 1} 天 (1 晚)` : `Day ${activeDayIndex + 1} (1N)`}
+              </button>
+
+              {/* Multi-day consecutive buttons */}
+              {Array.from({ length: totalDays - activeDayIndex - 1 }, (_, i) => activeDayIndex + 1 + i).map(
+                (targetIdx) => {
+                  const nights = targetIdx - activeDayIndex + 1;
+                  const isSelected = !isFullTripStay && stayEndIndex === targetIdx;
+                  return (
+                    <button
+                      key={targetIdx}
+                      type="button"
+                      onClick={() => {
+                        setIsFullTripStay(false);
+                        setStayEndIndex(targetIdx);
+                      }}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                        isSelected
+                          ? 'bg-emerald-700 text-white shadow-2xs'
+                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                      }`}
+                    >
+                      {zh
+                        ? `连住至第 ${targetIdx + 1} 天 (${nights} 晚)`
+                        : `Stay through Day ${targetIdx + 1} (${nights}N)`}
+                    </button>
+                  );
+                },
+              )}
+
+              {/* Full Trip Stay */}
+              {activeDayIndex > 0 || totalDays > 2 ? (
+                <button
+                  type="button"
+                  onClick={() => setIsFullTripStay(true)}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    isFullTripStay
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  {zh ? `全程连住 (Day 1 ~ ${totalDays} 共 ${totalDays} 晚)` : `Full Trip (${totalDays}N)`}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {/* Modal Content */}
@@ -98,8 +192,9 @@ export function HotelComparisonModal({
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {candidateHotels.map((hotel) => {
-                const metrics = hotelMetrics.get(hotel.id);
-                const hasSpots = scheduledPlaces.length > 0;
+                const singleMetrics = singleDayMetricsMap.get(hotel.id);
+                const multiMetrics = multiDayMetricsMap.get(hotel.id);
+                const isMultiNight = stayNightsCount > 1;
 
                 return (
                   <div
@@ -137,48 +232,69 @@ export function HotelComparisonModal({
                       {/* Proximity Metrics */}
                       <div className="mt-3 space-y-1.5 rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 text-[11px] text-emerald-900">
                         <div className="font-semibold text-emerald-800 flex items-center justify-between">
-                          <span>🎯 {zh ? '距当日景点群距离' : 'Proximity to Day Stops'}</span>
-                          {metrics && metrics.hasCoordinates && hasSpots ? (
+                          <span>
+                            🎯 {isMultiNight ? (zh ? `连住 ${stayNightsCount} 晚综合通勤` : `${stayNightsCount}N Combined Distance`) : (zh ? '距当日景点群距离' : 'Proximity to Day Stops')}
+                          </span>
+                          {multiMetrics && multiMetrics.hasCoordinates ? (
                             <span
                               className={`rounded-full px-1.5 py-0.2 text-[9.5px] font-bold ${
-                                metrics.centerDistanceKm < 2.5
+                                multiMetrics.combinedAvgKm < 2.5
                                   ? 'bg-emerald-600 text-white'
-                                  : metrics.centerDistanceKm < 6
+                                  : multiMetrics.combinedAvgKm < 6
                                   ? 'bg-amber-500 text-white'
                                   : 'bg-stone-400 text-white'
                               }`}
                             >
-                              {metrics.centerDistanceKm < 2.5
+                              {multiMetrics.combinedAvgKm < 2.5
                                 ? (zh ? '🟢 极近顺路' : '🟢 Close')
-                                : metrics.centerDistanceKm < 6
+                                : multiMetrics.combinedAvgKm < 6
                                 ? (zh ? '🟡 适中' : '🟡 Moderate')
                                 : (zh ? '🔴 较远' : '🔴 Far')}
                             </span>
                           ) : null}
                         </div>
 
-                        {hasSpots && metrics && metrics.hasCoordinates ? (
+                        {multiMetrics && multiMetrics.hasCoordinates ? (
                           <div className="mt-1 space-y-1 text-[10.5px] text-stone-600">
-                            <div className="flex justify-between">
-                              <span className="text-stone-400">{zh ? '距景点中心:' : 'To Centroid:'}</span>
-                              <span className="font-semibold text-stone-800">{metrics.centerDistanceKm} km</span>
-                            </div>
-                            {metrics.closestPlaceTitle ? (
-                              <div className="flex justify-between truncate">
-                                <span className="text-stone-400">{zh ? '距最近点' : 'Closest'} ({metrics.closestPlaceTitle}):</span>
-                                <span className="font-semibold text-stone-800">{metrics.minDistanceKm} km</span>
-                              </div>
+                            {isMultiNight ? (
+                              <>
+                                <div className="flex justify-between font-semibold text-emerald-950">
+                                  <span>{zh ? '全程平均直线:' : 'Combined Avg:'}</span>
+                                  <span>{multiMetrics.combinedAvgKm} km</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1 pt-1 border-t border-emerald-200/60">
+                                  {multiMetrics.dayDetails.map((day) => (
+                                    <span
+                                      key={day.date}
+                                      className="rounded bg-white px-1.5 py-0.5 text-[10px] text-stone-600 border border-stone-200"
+                                    >
+                                      D{day.dayIndex + 1}: {day.spotCount > 0 ? `${day.avgKm}km` : (zh ? '无点' : 'none')}
+                                    </span>
+                                  ))}
+                                </div>
+                              </>
+                            ) : singleMetrics ? (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="text-stone-400">{zh ? '距景点中心:' : 'To Centroid:'}</span>
+                                  <span className="font-semibold text-stone-800">{singleMetrics.centerDistanceKm} km</span>
+                                </div>
+                                {singleMetrics.closestPlaceTitle ? (
+                                  <div className="flex justify-between truncate">
+                                    <span className="text-stone-400">{zh ? '距最近点' : 'Closest'}:</span>
+                                    <span className="font-semibold text-stone-800 truncate">{singleMetrics.closestPlaceTitle} ({singleMetrics.minDistanceKm}km)</span>
+                                  </div>
+                                ) : null}
+                                <div className="flex justify-between">
+                                  <span className="text-stone-400">{zh ? '平均直线:' : 'Avg Distance:'}</span>
+                                  <span className="font-semibold text-stone-800">{singleMetrics.avgDistanceKm} km</span>
+                                </div>
+                              </>
                             ) : null}
-                            <div className="flex justify-between">
-                              <span className="text-stone-400">{zh ? '平均直线:' : 'Avg Distance:'}</span>
-                              <span className="font-semibold text-stone-800">{metrics.avgDistanceKm} km</span>
-                            </div>
                           </div>
                         ) : (
                           <p className="text-[10px] text-stone-400 italic">
-                            {hasSpots
-                              ? (zh ? '未解析到经纬度' : 'No coordinates')
-                              : (zh ? '当天暂无安排景点，无法计算距离' : 'Add spots to active day to compute distance')}
+                            {zh ? '未解析到经纬度' : 'No coordinates available'}
                           </p>
                         )}
                       </div>
@@ -224,12 +340,23 @@ export function HotelComparisonModal({
                       <button
                         type="button"
                         onClick={() => {
-                          onSelectHotelForDay(hotel);
+                          onSelectHotelForStaySpan(hotel, targetStayDates);
                           onClose();
                         }}
-                        className="w-full rounded-lg bg-stone-950 px-3 py-2 text-xs font-semibold text-white hover:bg-stone-800 transition"
+                        className={`w-full rounded-lg px-3 py-2 text-xs font-semibold text-white transition ${
+                          isMultiNight
+                            ? 'bg-emerald-800 hover:bg-emerald-700 shadow-sm'
+                            : 'bg-stone-950 hover:bg-stone-800'
+                        }`}
                       >
-                        ⭐ {zh ? `选定为第 ${activeDayIndex + 1} 天住宿` : `Select for Day ${activeDayIndex + 1}`}
+                        ⭐{' '}
+                        {isMultiNight
+                          ? zh
+                            ? `设为 ${targetStayDates[0]} ~ ${targetStayDates[targetStayDates.length - 1]} 连住宿点 (${stayNightsCount} 晚)`
+                            : `Select for ${stayNightsCount} Nights (${targetStayDates[0]} ~ ${targetStayDates[targetStayDates.length - 1]})`
+                          : zh
+                          ? `选定为第 ${activeDayIndex + 1} 天住宿`
+                          : `Select for Day ${activeDayIndex + 1}`}
                       </button>
 
                       <div className="flex items-center justify-between text-[11px]">

@@ -9,6 +9,8 @@ import {
   exportPlacesToCSV,
   exportPlacesToKML,
   getTripAreaCounts,
+  detectHotelTransferDays,
+  generateStaySpanPlaces,
   listTripDates,
   optimizeStopsSequence,
   sortPlannerPlaces,
@@ -169,26 +171,44 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     }
   }, [scheduled, disabled, zh, load]);
 
-  const handleSelectHotelForDay = useCallback(async (hotel: PlannerTripPlace) => {
-    if (disabled) return;
-    setBusy(true);
-    try {
-      const updated: PlannerTripPlace = {
-        ...hotel,
-        state: 'scheduled',
-        scheduled_date: activeDate,
-        is_anchor: true,
-        anchor_type: 'stay_checkin',
-        sort_order: 0,
-      };
-      await plannerRepository.upsertPlace(updated);
-      await load();
-      setNotice(zh ? `✓ 已将「${hotel.title}」设为当天的住宿驻点！` : `✓ Set "${hotel.title}" as active stay!`);
-      setTimeout(() => setNotice(''), 3500);
-    } finally {
-      setBusy(false);
-    }
-  }, [disabled, activeDate, zh, load]);
+  const placesByDate = useMemo(() => {
+    const map: Record<string, PlannerTripPlace[]> = {};
+    tripDates.forEach((date) => {
+      map[date] = sortPlannerPlaces(
+        tripPlaces.filter((p) => p.state === 'scheduled' && p.scheduled_date === date),
+      );
+    });
+    return map;
+  }, [tripDates, tripPlaces]);
+
+  const transferDaysInfo = useMemo(() => {
+    return detectHotelTransferDays(tripPlaces, tripDates);
+  }, [tripPlaces, tripDates]);
+
+  const currentDayTransferInfo = activeDate ? transferDaysInfo[activeDate] : undefined;
+
+  const handleSelectHotelForStaySpan = useCallback(
+    async (hotel: PlannerTripPlace, stayDates: string[]) => {
+      if (disabled || stayDates.length === 0) return;
+      setBusy(true);
+      try {
+        const stayPlaces = generateStaySpanPlaces(hotel, stayDates);
+        for (const sp of stayPlaces) {
+          await plannerRepository.upsertPlace(sp);
+        }
+        await load();
+        setNotice(
+          zh
+            ? `✓ 已将「${hotel.title}」设为 ${stayDates.length} 晚连住宿点 (${stayDates[0]} ~ ${stayDates[stayDates.length - 1]})！`
+            : `✓ Set "${hotel.title}" as stay for ${stayDates.length} nights!`,
+        );
+        setTimeout(() => setNotice(''), 4000);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [disabled, zh, load],
+  );
 
   const handleDropHotel = useCallback(async (hotelId: string) => {
     const hotel = tripPlaces.find((p) => p.id === hotelId);
@@ -593,6 +613,42 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               </div>
             ) : null}
           </div>
+          {currentDayTransferInfo?.isTransferDay ? (
+            <div className="mx-4 mt-3 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50/90 p-3 text-xs text-amber-950 shadow-2xs">
+              <span className="text-base">🧳</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                  <span>{zh ? '今日为换宿日 (Hotel Transfer Day)' : 'Hotel Transfer Day'}</span>
+                </div>
+                <p className="mt-0.5 text-[11px] text-amber-800 leading-relaxed">
+                  {zh ? (
+                    <>
+                      🌅 <b>早上退房:</b> {currentDayTransferInfo.checkoutHotel?.title} (行李可寄放前台或直送新店) ➔ 🚶 <b>白天游览</b> ➔ 🌙 <b>傍晚入住:</b> {currentDayTransferInfo.checkinHotel?.title}
+                    </>
+                  ) : (
+                    <>
+                      🌅 <b>Morning Check-out:</b> {currentDayTransferInfo.checkoutHotel?.title} ➔ 🚶 <b>Sightseeing</b> ➔ 🌙 <b>Evening Check-in:</b> {currentDayTransferInfo.checkinHotel?.title}
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+          ) : currentDayTransferInfo?.stayHotel && currentDayTransferInfo.totalStayNights && currentDayTransferInfo.totalStayNights > 1 ? (
+            <div className="mx-4 mt-3 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-950 shadow-2xs">
+              <div className="flex items-center gap-1.5 font-medium truncate">
+                <span>🌙</span>
+                <span className="truncate">
+                  {zh ? '今晚住宿:' : 'Tonight Stay:'}{' '}
+                  <strong className="font-bold">{currentDayTransferInfo.stayHotel.title}</strong>
+                </span>
+              </div>
+              <span className="shrink-0 rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10.5px] font-bold text-emerald-900">
+                {zh
+                  ? `连住第 ${currentDayTransferInfo.stayNightIndex} 晚 / 共 ${currentDayTransferInfo.totalStayNights} 晚`
+                  : `Night ${currentDayTransferInfo.stayNightIndex} of ${currentDayTransferInfo.totalStayNights}`}
+              </span>
+            </div>
+          ) : null}
           <div className="p-3">
             {scheduled.length === 0 ? (
               <div className={`rounded-xl border-2 border-dashed px-4 py-16 text-center text-sm ${draggingPlaceId ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700' : 'border-stone-200 text-stone-400'}`}>
@@ -772,9 +828,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         onClose={() => setIsHotelModalOpen(false)}
         candidateHotels={candidateHotels}
         scheduledPlaces={scheduled}
+        placesByDate={placesByDate}
+        tripDates={tripDates}
         activeDate={activeDate}
         activeDayIndex={activeDayIndex}
-        onSelectHotelForDay={handleSelectHotelForDay}
+        onSelectHotelForStaySpan={handleSelectHotelForStaySpan}
         onDropHotel={handleDropHotel}
         onHoverHotel={setHighlightedPlaceId}
         language={language}

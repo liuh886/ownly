@@ -37,8 +37,15 @@ declare namespace chrome {
       url?: string | string[];
     }
     function query(queryInfo: QueryInfo): Promise<Tab[]>;
+    function get(tabId: number): Promise<Tab>;
     function sendMessage(tabId: number, message: unknown): Promise<unknown>;
     function update(tabId: number, updateProperties: { url?: string; active?: boolean }): Promise<Tab>;
+    const onUpdated: {
+      addListener(callback: (tabId: number, changeInfo: { status?: string; url?: string }, tab: Tab) => void): void;
+    };
+    const onActivated: {
+      addListener(callback: (activeInfo: { tabId: number; windowId: number }) => void): void;
+    };
   }
 
   namespace storage {
@@ -64,6 +71,7 @@ declare namespace chrome {
       openPanelOnActionClick?: boolean;
     }
     function setPanelBehavior(behavior: PanelBehavior): Promise<void>;
+    function open(options: { tabId?: number; windowId?: number }): Promise<void>;
   }
 
   namespace action {

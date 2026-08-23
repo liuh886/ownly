@@ -19,6 +19,9 @@
 - [x] 16. Implement exact Haversine distance, TSP route optimization (`optimizeStopsSequence`), and hotel proximity metrics in `src/domain/planner.ts` with comprehensive unit tests <!-- id: 16 -->
 - [x] 17. Create `HotelComparisonModal.tsx` multi-dimensional comparison matrix (Area, Price, Rating, Distance to today's POIs, Signals/Risks, 1-click stay assignment) <!-- id: 17 -->
 - [x] 18. Integrate 1-click `⚡ 顺路优化` and `🏨 酒店比选` into `PlannerHome.tsx` and verify test suite <!-- id: 18 -->
+- [x] 19. Add domain helpers for Multi-Day Stay span assignment, stay night calculation, and hotel transfer day detection in `src/domain/planner.ts` with unit tests <!-- id: 19 -->
+- [x] 20. Update `HotelComparisonModal.tsx` with Stay Range Selector (`[ 仅当天 ]` / `[ 连住至第 X 天 (共 N 晚) ]` / `[ 全程连住 ]`) and multi-day combined proximity index <!-- id: 20 -->
+- [x] 21. Integrate Stay Range binding & Transfer Day luggage alerts into `PlannerHome.tsx`, Day Skeleton, and `PlannerMap` <!-- id: 21 -->
 
 ## Review
 - **Unified List Capture Card**: Replaced redundant banners with `#smartListSection` featuring 1-click sync all (`btnSmartSyncAll`) and expandable item picker drawer (`btnToggleListPreview` + `batchListContainer`).
@@ -40,4 +43,8 @@
   - **TSP Optimization Engine (`optimizeStopsSequence`)**: Implemented exact Permutation search ($N \le 8$) and 2-opt heuristic ($N > 8$) using Haversine spherical distance matrix to eliminate zigzag detours in < 1ms, returning calculated saved mileage.
   - **Hotel Comparison Matrix (`HotelComparisonModal.tsx`)**: Created a dedicated multi-dimensional comparison view for candidate stays (`stay`), dynamically calculating proximity metrics to today's scheduled attractions centroid/closest stop, aligning price, rating, signals, risks, and notes, with 1-click day stay pinning (`[ ⭐ 选定为第 X 天住宿 ]`).
   - **1-Click Day Integration**: Added `🏨 酒店比选` entry in Research Pool and `⚡ 顺路优化` action in Day Skeleton toolbar with instant feedback toast notifications.
-- **Code Modularization & Verification**: 35/35 Vitest unit tests passed (`planner.test.ts`, `utils.test.ts`, `capture-state.test.ts`), `npm run validate:fast` passed with 0 errors and 0 warnings on new files.
+- **Multi-Day Stay Span & Hotel Transfer Logistics (Tasks 19-21)**:
+  - **Multi-Day Spatial Proximity (`calculateMultiDayHotelProximity`)**: Calculated weighted average commute distance across all consecutive dates in a multi-night stay span, with per-day breakdown pills.
+  - **Consecutive Stay Range Selector (`HotelComparisonModal.tsx`)**: Provided 1-click chips for `[ 仅当天 (1 晚) ]`, `[ 连住至第 X 天 (N 晚) ]`, and `[ 全程连住 ]`, assigning daily stay anchors with consecutive night notes.
+  - **Transfer Day Luggage Logistics & Night Counter**: Automatically detected hotel transition days (`isTransferDay`) to render morning checkout ➔ daytime sightseeing ➔ evening checkin luggage flowcards and consecutive night badges in Day Skeleton.
+- **Code Modularization & Verification**: 38/38 Vitest unit tests passed (`planner.test.ts`, `utils.test.ts`, `capture-state.test.ts`), `npm run validate:fast` passed with 0 errors and 0 warnings on new files.

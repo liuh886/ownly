@@ -18,6 +18,9 @@ import {
   normalizePlaceIdentity,
   optimizeStopsSequence,
   calculateHotelProximity,
+  calculateMultiDayHotelProximity,
+  generateStaySpanPlaces,
+  detectHotelTransferDays,
   STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
 } from './planner';
@@ -303,5 +306,89 @@ describe('Ownly Planner domain', () => {
     expect(metrics.minDistanceKm).toBeGreaterThan(0);
     expect(metrics.minDistanceKm).toBeLessThan(1.0); // very close (< 1km)
     expect(metrics.closestPlaceTitle).toBe('Temple');
+  });
+
+  it('calculates multi-day combined hotel proximity across consecutive days', () => {
+    const hotel = place('h1', {
+      title: 'Nimman Hotel',
+      kind: 'stay',
+      coordinates: { lat: 18.7960, lng: 98.9680 },
+    });
+    const day1Stop = place('d1', { title: 'Cafe 1', coordinates: { lat: 18.7970, lng: 98.9690 } });
+    const day2Stop = place('d2', { title: 'Doi Suthep', coordinates: { lat: 18.8050, lng: 98.9210 } });
+
+    const placesByDate = {
+      '2026-10-01': [day1Stop],
+      '2026-10-02': [day2Stop],
+    };
+
+    const multi = calculateMultiDayHotelProximity(hotel, placesByDate, ['2026-10-01', '2026-10-02']);
+    expect(multi.hasCoordinates).toBe(true);
+    expect(multi.combinedAvgKm).toBeGreaterThan(0);
+    expect(multi.dayDetails).toHaveLength(2);
+    expect(multi.dayDetails[0].avgKm).toBeLessThan(multi.dayDetails[1].avgKm);
+  });
+
+  it('generates multi-day stay span places with consecutive night notes', () => {
+    const hotel = place('h1', {
+      title: 'Old Town Resort',
+      kind: 'stay',
+      notes: 'Near East Gate',
+    });
+    const stayDates = ['2026-10-01', '2026-10-02', '2026-10-03'];
+    const places = generateStaySpanPlaces(hotel, stayDates);
+
+    expect(places).toHaveLength(3);
+    expect(places[0].id).toBe('h1');
+    expect(places[0].scheduled_date).toBe('2026-10-01');
+    expect(places[0].notes).toContain('连住第 1 晚 (共 3 晚)');
+    expect(places[1].id).toBe('h1__stay_2026-10-02');
+    expect(places[1].scheduled_date).toBe('2026-10-02');
+    expect(places[1].notes).toContain('连住第 2 晚 (共 3 晚)');
+    expect(places[2].scheduled_date).toBe('2026-10-03');
+    expect(places[2].notes).toContain('连住第 3 晚 (共 3 晚)');
+  });
+
+  it('detects hotel transfer days and consecutive night indexes', () => {
+    const hotelA = place('hA', {
+      title: 'Hotel A (Old Town)',
+      kind: 'stay',
+      state: 'scheduled',
+      scheduled_date: '2026-10-01',
+      is_anchor: true,
+      anchor_type: 'stay_checkin',
+    });
+    const hotelA_day2 = place('hA_2', {
+      title: 'Hotel A (Old Town)',
+      source_url: hotelA.source_url,
+      kind: 'stay',
+      state: 'scheduled',
+      scheduled_date: '2026-10-02',
+      is_anchor: true,
+      anchor_type: 'stay_checkin',
+    });
+    const hotelB_day3 = place('hB_3', {
+      title: 'Hotel B (Nimman)',
+      kind: 'stay',
+      state: 'scheduled',
+      scheduled_date: '2026-10-03',
+      is_anchor: true,
+      anchor_type: 'stay_checkin',
+    });
+
+    const dates = ['2026-10-01', '2026-10-02', '2026-10-03'];
+    const transfers = detectHotelTransferDays([hotelA, hotelA_day2, hotelB_day3], dates);
+
+    expect(transfers['2026-10-01'].isTransferDay).toBe(false);
+    expect(transfers['2026-10-01'].stayNightIndex).toBe(1);
+    expect(transfers['2026-10-01'].totalStayNights).toBe(2);
+
+    expect(transfers['2026-10-02'].isTransferDay).toBe(false);
+    expect(transfers['2026-10-02'].stayNightIndex).toBe(2);
+    expect(transfers['2026-10-02'].totalStayNights).toBe(2);
+
+    expect(transfers['2026-10-03'].isTransferDay).toBe(true);
+    expect(transfers['2026-10-03'].checkoutHotel?.title).toBe('Hotel A (Old Town)');
+    expect(transfers['2026-10-03'].checkinHotel?.title).toBe('Hotel B (Nimman)');
   });
 });
