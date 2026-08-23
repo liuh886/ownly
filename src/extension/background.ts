@@ -91,6 +91,10 @@ async function quickCaptureCurrentPlace() {
 
     if (capturedId) {
       void flashBadge(tabId, '✓', '#047857');
+      try {
+        await chrome.sidePanel.open({ tabId });
+        await chrome.runtime.sendMessage({ type: 'OWNLY_FOCUS_CAPTURE' }).catch(() => {});
+      } catch {}
     } else {
       void flashBadge(tabId, '!', '#b91c1c');
     }
@@ -106,9 +110,37 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
+const TRACKED_TAB_URL = /^https:\/\/(www\.google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|[^/]*tabelog\.com|[^/]*xiaohongshu\.com|[^/]*booking\.com)/i;
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.url && !changeInfo.status) return;
+  const url = changeInfo.url || tab.url || '';
+  if (!TRACKED_TAB_URL.test(url)) return;
+  void chrome.runtime.sendMessage({ type: 'OWNLY_TAB_CHANGED', tabId, url }).catch(() => {});
+});
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  void chrome.tabs.get(tabId).then((tab) => {
+    if (tab.url && TRACKED_TAB_URL.test(tab.url)) {
+      void chrome.runtime.sendMessage({ type: 'OWNLY_TAB_CHANGED', tabId, url: tab.url }).catch(() => {});
+    }
+  }).catch(() => {});
+});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const type = (message as { type?: string }).type;
+
+  if (type === 'OWNLY_SELECTOR_DRIFT') {
+    void (async () => {
+      try {
+        await chrome.action.setBadgeText({ text: '!' });
+        await chrome.action.setBadgeBackgroundColor({ color: '#b91c1c' });
+      } catch {}
+    })();
+    sendResponse({ ok: true });
+    return;
+  }
 
   if (type === 'CAPTURE_SAVE_STATE') {
     const state = (message as { state?: OwnlyCaptureState }).state;

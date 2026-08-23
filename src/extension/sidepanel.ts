@@ -1,4 +1,5 @@
 import { CAPTURE_STORAGE_KEY, normalizeCaptureState } from './capture-state';
+import { el } from './dom';
 import { loadState, store } from './sidepanel/store';
 import { readCurrentPlace } from './sidepanel/capture';
 import { initHandlers } from './sidepanel/handlers';
@@ -22,6 +23,26 @@ chrome.storage.onChanged.addListener((changes, area) => {
   renderCurrentPlace();
   renderSmartListCard();
   renderCandidatesList();
+});
+
+let lastTabRefresh = 0;
+chrome.runtime.onMessage.addListener((message) => {
+  if (!message || typeof message !== 'object') return;
+  if ((message as { type?: string }).type === 'OWNLY_TAB_CHANGED') {
+    const now = Date.now();
+    if (now - lastTabRefresh < 350) return;
+    lastTabRefresh = now;
+    void readCurrentPlace();
+    return;
+  }
+  if ((message as { type?: string }).type === 'OWNLY_FOCUS_CAPTURE') {
+    el.captureForm.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    window.setTimeout(() => {
+      el.why.focus({ preventScroll: true });
+      const end = el.why.value.length;
+      el.why.setSelectionRange(end, end);
+    }, 120);
+  }
 });
 
 // Auto-refresh when tab updates or gains focus
