@@ -1,16 +1,18 @@
 import { resolveGoogleMapsListByUrl } from '../api';
 import {
+  checkOpeningHoursCollision,
   findExistingTripPlace,
   inferPlaceKind,
   inferSourceProvider,
   normalizeDelimitedText,
   placeIdentityKey,
+  reorderPendingPlaces,
   type PlannerPlaceKind,
   type PlannerPlacePriority,
   type PlannerTrip,
   type PlannerTripPlace,
 } from '../../domain/planner';
-import { saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
+import { normalizeCaptureState, saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
@@ -61,6 +63,27 @@ function flashNewCandidate(placeId: string): void {
   });
 }
 
+let searchDebounce: number | undefined;
+
+function nextSortOrderFor(date: string): number {
+  return store.state.pendingPlaces
+    .filter((p) => p.trip_id === store.state.activeTripId && p.scheduled_date === date)
+    .reduce((max, p) => Math.max(max, p.sort_order ?? -1), -1) + 1;
+}
+
+function applyBulk(mutate: (place: PlannerTripPlace, value?: string) => PlannerTripPlace, value?: string): void {
+  const dict = t();
+  if (store.bulkSelected.size === 0) return;
+  const ids = new Set(store.bulkSelected);
+  store.state = {
+    ...store.state,
+    pendingPlaces: store.state.pendingPlaces.map((p) => (ids.has(p.id) ? mutate(p, value) : p)),
+  };
+  const count = ids.size;
+  store.bulkSelected.clear();
+  void saveState().then(() => setStatus(dict.bulkApplied(count), 'success'));
+}
+
 function initDragReorder(): void {
   const list = el.candidatesListContainer;
   let draggingId: string | null = null;
@@ -105,14 +128,7 @@ function initDragReorder(): void {
     const toIdx = orderedIds.indexOf(overId);
     orderedIds.splice(toIdx, 0, srcId);
 
-    const pending = [...store.state.pendingPlaces];
-    const slots: number[] = [];
-    pending.forEach((p, i) => { if (orderedIds.includes(p.id)) slots.push(i); });
-    const reordered = orderedIds
-      .map((id) => pending.find((p) => p.id === id))
-      .filter((p): p is PlannerTripPlace => Boolean(p));
-    slots.forEach((slotIdx, i) => { pending[slotIdx] = reordered[i]; });
-    store.state = { ...store.state, pendingPlaces: pending };
+    store.state = { ...store.state, pendingPlaces: reorderPendingPlaces(store.state.pendingPlaces, orderedIds) };
     void saveState();
   });
 
@@ -136,6 +152,15 @@ async function revealPlaceInMaps(sourceUrl: string): Promise<void> {
 function initCandidateDelegation() {
   el.candidatesListContainer.addEventListener('change', (e) => {
     const target = e.target as HTMLElement;
+    if (target.matches('.bulk-check')) {
+      const chk = target as HTMLInputElement;
+      const id = chk.dataset.placeId;
+      if (!id) return;
+      if (chk.checked) store.bulkSelected.add(id);
+      else store.bulkSelected.delete(id);
+      chk.closest<HTMLElement>('.candidate-card')?.classList.toggle('bulk-selected', chk.checked);
+      return;
+    }
     if (target.matches('.day-select')) {
       const placeId = target.dataset.placeId;
       const select = target as HTMLSelectElement;
@@ -153,6 +178,11 @@ function initCandidateDelegation() {
       });
       store.state = { ...store.state, pendingPlaces: updatedPlaces };
       void saveState();
+      if (selectedDate) {
+        const changed = store.state.pendingPlaces.find((p) => p.id === placeId);
+        const col = checkOpeningHoursCollision(changed?.open_hours, selectedDate);
+        if (col.isCollision) setStatus(t().dayConflictWarn(col.reason ?? ''), 'error');
+      }
     }
   });
 
@@ -287,8 +317,54 @@ export function initHandlers(): void {
   });
 
   el.candidatesSearch.addEventListener('input', () => {
-    store.searchQuery = el.candidatesSearch.value;
+    if (searchDebounce !== undefined) window.clearTimeout(searchDebounce);
+    searchDebounce = window.setTimeout(() => {
+      searchDebounce = undefined;
+      store.searchQuery = el.candidatesSearch.value;
+      renderCandidatesList();
+    }, 180);
+  });
+
+  el.btnBulkToggle.addEventListener('click', () => {
+    store.bulkMode = !store.bulkMode;
+    if (!store.bulkMode) store.bulkSelected.clear();
+    el.bulkActionBar.style.display = store.bulkMode ? 'flex' : 'none';
+    el.btnBulkToggle.textContent = store.bulkMode ? t().bulkExitBtn : '☑️';
     renderCandidatesList();
+  });
+
+  el.btnBulkExit.addEventListener('click', () => {
+    store.bulkMode = false;
+    store.bulkSelected.clear();
+    el.bulkActionBar.style.display = 'none';
+    el.btnBulkToggle.textContent = '☑️';
+    renderCandidatesList();
+  });
+
+  el.btnBulkDelete.addEventListener('click', () => {
+    const dict = t();
+    if (store.bulkSelected.size === 0) return;
+    const ids = new Set(store.bulkSelected);
+    store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => !ids.has(p.id)) };
+    store.bulkSelected.clear();
+    void saveState().then(() => setStatus(dict.candidateRemoved, 'success'));
+  });
+
+  el.bulkPrioritySelect.addEventListener('change', () => {
+    applyBulk((place, value) => ({ ...place, priority: value as PlannerPlacePriority }));
+    el.bulkPrioritySelect.value = '';
+  });
+
+  el.bulkDaySelect.addEventListener('change', () => {
+    const date = el.bulkDaySelect.value;
+    if (!date) return;
+    applyBulk((place) => ({
+      ...place,
+      scheduled_date: date,
+      state: 'scheduled' as const,
+      sort_order: nextSortOrderFor(date),
+    }));
+    el.bulkDaySelect.value = '';
   });
 
   // Click detected currency pill to apply to active trip & place form
@@ -309,6 +385,43 @@ export function initHandlers(): void {
         setStatus(dict.currencyApplied(store.pageDetectedCurrency!), 'success');
       });
     }
+  });
+
+  el.btnBackupState.addEventListener('click', () => {
+    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), captureState: store.state }, null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ownly-capture-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus(t().backupSaved, 'success');
+  });
+
+  el.btnRestoreState.addEventListener('click', () => el.fileRestoreState.click());
+
+  el.fileRestoreState.addEventListener('change', () => {
+    void (async () => {
+      const file = el.fileRestoreState.files?.[0];
+      if (!file) return;
+      try {
+        const parsed = JSON.parse(await file.text()) as { captureState?: unknown };
+        if (!window.confirm(t().confirmRestore)) return;
+        const next = normalizeCaptureState(parsed.captureState ?? parsed);
+        await writeCaptureState(next);
+        store.state = next;
+        renderState();
+        populateEditTripForm();
+        renderCurrentPlace();
+        renderSmartListCard();
+        renderCandidatesList();
+        setStatus(t().restoredCount(next.pendingPlaces.length), 'success');
+      } catch {
+        setStatus(store.lang === 'zh' ? '备份文件无效。' : 'Invalid backup file.', 'error');
+      }
+      el.fileRestoreState.value = '';
+    })();
   });
 
   el.btnCloseSmartList.addEventListener('click', () => {
@@ -362,6 +475,8 @@ export function initHandlers(): void {
       const mergedPending = new Map(store.state.pendingPlaces.map((p) => [p.id, p]));
       const listTag = store.detectedSavedList.listName;
       let importedCount = 0;
+      let droppedCount = 0;
+      const incomingIds = new Set<string>();
 
       for (const item of store.detectedSavedList.places) {
         const placeTitle = cleanExtractedText(item.title);
@@ -370,6 +485,7 @@ export function initHandlers(): void {
         const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, tripId, item.sourceUrl, item.sourcePlaceId);
         const stableId = found?.id ?? crypto.randomUUID();
         updatedKnown[placeIdentityKey(tripId, item.sourceUrl)] = stableId;
+        incomingIds.add(stableId);
 
         const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
         const placeArea = cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined;
@@ -414,6 +530,20 @@ export function initHandlers(): void {
         importedCount += 1;
       }
 
+      const missing = store.state.pendingPlaces.filter((p) =>
+        p.trip_id === tripId
+        && p.state === 'candidate'
+        && !p.scheduled_date
+        && p.tags.includes(listTag)
+        && !incomingIds.has(p.id));
+      if (missing.length > 0 && window.confirm(dict.removedDetected(missing.length, listTag))) {
+        const dropIds = new Set(missing.map((m) => m.id));
+        for (const [id, place] of mergedPending) {
+          if (dropIds.has(id)) mergedPending.set(id, { ...place, state: 'dropped' as const, updated_at: new Date().toISOString() });
+        }
+        droppedCount = missing.length;
+      }
+
       store.state = {
         ...store.state,
         knownPlaceIds: updatedKnown,
@@ -421,7 +551,7 @@ export function initHandlers(): void {
       };
 
       void saveState().then(() => {
-        setStatus(dict.savedListSynced(importedCount, listTag), 'success');
+        setStatus(dict.savedListSynced(importedCount, listTag) + (droppedCount > 0 ? ` · ${dict.markedDropped(droppedCount)}` : ''), 'success');
         store.smartListDismissed = true;
         renderSmartListCard();
       });

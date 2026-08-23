@@ -744,6 +744,36 @@ hr.divider {
   transform: scale(0.96);
 }
 
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--surface-3);
+}
+
+.bulk-select {
+  width: auto;
+  max-width: 42%;
+  height: 30px;
+  font-size: 10.5px;
+  padding: 4px 6px;
+}
+
+.candidate-card.bulk-selected {
+  border-color: var(--accent-border-strong);
+  background: var(--accent-softer);
+}
+
+.candidate-card .bulk-check {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
 .candidates-list {
   max-height: min(520px, 68vh);
   overflow-y: auto;

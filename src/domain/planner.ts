@@ -940,3 +940,250 @@ export function detectHotelTransferDays(
   return result;
 }
 
+export type TripExpenseCategory = 'stay' | 'food' | 'transit' | 'ticket' | 'shopping' | 'other';
+
+export interface TripExpenseItem {
+  id: string;
+  trip_id: string;
+  title: string;
+  category: TripExpenseCategory;
+  amount: number;
+  currency: string;
+  date?: string;
+  paid_by: string;
+  split_members: string[];
+  notes?: string;
+  created_at: string;
+}
+
+export interface MemberBalance {
+  member: string;
+  paidTotal: number;
+  shareTotal: number;
+  netBalance: number;
+}
+
+export interface CashFlowTransfer {
+  from: string;
+  to: string;
+  amount: number;
+}
+
+export interface TripSettlementResult {
+  totalExpense: number;
+  memberBalances: MemberBalance[];
+  transfers: CashFlowTransfer[];
+  summaryText: string;
+}
+
+export interface TripBudgetEstimation {
+  totalEstimated: number;
+  perPersonEstimated: number;
+  travelerCount: number;
+  categoryBreakdown: {
+    stay: number;
+    food: number;
+    ticket: number;
+    other: number;
+  };
+  detectedCurrency: string;
+}
+
+export function parseNumericPrice(raw?: string | null): number {
+  if (!raw) return 0;
+  // Handle ranges like "฿200-400" or "¥1,000–2,000" -> average
+  const rangeMatch = /(\d[\d,]*)\s*[-–—〜~至]\s*(\d[\d,]*)/.exec(raw);
+  if (rangeMatch) {
+    const min = parseFloat(rangeMatch[1].replace(/,/g, ''));
+    const max = parseFloat(rangeMatch[2].replace(/,/g, ''));
+    if (Number.isFinite(min) && Number.isFinite(max)) {
+      return Math.round((min + max) / 2);
+    }
+  }
+  // Single number
+  const singleMatch = /(\d[\d,]*)/.exec(raw);
+  if (singleMatch) {
+    const num = parseFloat(singleMatch[1].replace(/,/g, ''));
+    if (Number.isFinite(num)) return num;
+  }
+  return 0;
+}
+
+export function estimateTripBudget(
+  scheduledPlaces: PlannerTripPlace[],
+  travelerCount = 1,
+  defaultCurrency = 'CNY',
+): TripBudgetEstimation {
+  let stayTotal = 0;
+  let foodTotal = 0;
+  let ticketTotal = 0;
+  let otherTotal = 0;
+  let currency = defaultCurrency;
+
+  const validTravelers = Math.max(1, travelerCount);
+
+  scheduledPlaces.forEach((place) => {
+    const price = parseNumericPrice(place.observed_price);
+    if (!currency && place.observed_price) {
+      const curMatch = /(?:[¥฿$€£₩]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY)/i.exec(place.observed_price);
+      if (curMatch) currency = curMatch[0].toUpperCase();
+    }
+
+    if (place.kind === 'stay') {
+      stayTotal += price > 0 ? price : 0;
+    } else if (place.kind === 'food' || place.kind === 'cafe') {
+      foodTotal += (price > 0 ? price : 0) * validTravelers;
+    } else if (place.kind === 'attraction' || place.kind === 'experience') {
+      ticketTotal += (price > 0 ? price : 0) * validTravelers;
+    } else {
+      otherTotal += (price > 0 ? price : 0) * validTravelers;
+    }
+  });
+
+  const totalEstimated = stayTotal + foodTotal + ticketTotal + otherTotal;
+  const perPersonEstimated = Math.round(totalEstimated / validTravelers);
+
+  return {
+    totalEstimated,
+    perPersonEstimated,
+    travelerCount: validTravelers,
+    categoryBreakdown: {
+      stay: stayTotal,
+      food: foodTotal,
+      ticket: ticketTotal,
+      other: otherTotal,
+    },
+    detectedCurrency: currency || defaultCurrency,
+  };
+}
+
+export function calculateTripSettlement(
+  expenses: TripExpenseItem[],
+  allMembers: string[] = [],
+): TripSettlementResult {
+  const memberSet = new Set<string>(allMembers);
+  expenses.forEach((exp) => {
+    if (exp.paid_by) memberSet.add(exp.paid_by);
+    exp.split_members.forEach((m) => memberSet.add(m));
+  });
+
+  const members = Array.from(memberSet).filter(Boolean);
+  if (members.length === 0 || expenses.length === 0) {
+    return {
+      totalExpense: 0,
+      memberBalances: [],
+      transfers: [],
+      summaryText: '暂无账目流水记录。',
+    };
+  }
+
+  const paidMap: Record<string, number> = {};
+  const shareMap: Record<string, number> = {};
+  members.forEach((m) => {
+    paidMap[m] = 0;
+    shareMap[m] = 0;
+  });
+
+  let totalExpense = 0;
+
+  expenses.forEach((exp) => {
+    const amt = exp.amount;
+    totalExpense += amt;
+    if (paidMap[exp.paid_by] !== undefined) {
+      paidMap[exp.paid_by] += amt;
+    } else {
+      paidMap[exp.paid_by] = amt;
+    }
+
+    const splits = exp.split_members.length > 0 ? exp.split_members : members;
+    const perShare = amt / splits.length;
+    splits.forEach((sm) => {
+      if (shareMap[sm] !== undefined) {
+        shareMap[sm] += perShare;
+      } else {
+        shareMap[sm] = perShare;
+      }
+    });
+  });
+
+  const memberBalances: MemberBalance[] = members.map((m) => {
+    const paid = Math.round((paidMap[m] || 0) * 100) / 100;
+    const share = Math.round((shareMap[m] || 0) * 100) / 100;
+    const net = Math.round((paid - share) * 100) / 100;
+    return {
+      member: m,
+      paidTotal: paid,
+      shareTotal: share,
+      netBalance: net,
+    };
+  });
+
+  // Greedy Balance Matching (Minimum Cash Flow)
+  const balances: Record<string, number> = {};
+  memberBalances.forEach((mb) => {
+    balances[mb.member] = mb.netBalance;
+  });
+
+  const transfers: CashFlowTransfer[] = [];
+
+  while (true) {
+    let maxCreditor: string | null = null;
+    let maxCredit = 0.01;
+    let maxDebtor: string | null = null;
+    let maxDebt = -0.01;
+
+    for (const [member, balance] of Object.entries(balances)) {
+      if (balance > maxCredit) {
+        maxCredit = balance;
+        maxCreditor = member;
+      }
+      if (balance < maxDebt) {
+        maxDebt = balance;
+        maxDebtor = member;
+      }
+    }
+
+    if (!maxCreditor || !maxDebtor) break;
+
+    const transferAmount = Math.round(Math.min(maxCredit, -maxDebt) * 100) / 100;
+    if (transferAmount <= 0.01) break;
+
+    transfers.push({
+      from: maxDebtor,
+      to: maxCreditor,
+      amount: transferAmount,
+    });
+
+    balances[maxCreditor] = Math.round((balances[maxCreditor] - transferAmount) * 100) / 100;
+    balances[maxDebtor] = Math.round((balances[maxDebtor] + transferAmount) * 100) / 100;
+  }
+
+  // Build WeChat-friendly summary text
+  const currencySymbol = expenses[0]?.currency || '¥';
+  const lines: string[] = [
+    `✈️ 旅行费用 AA 清算账单`,
+    `💰 总支出: ${currencySymbol}${totalExpense} (共 ${members.length} 人)`,
+    `------------------------------`,
+  ];
+
+  if (transfers.length === 0) {
+    lines.push('🎉 全员账目已完全持平，无需任何转账！');
+  } else {
+    transfers.forEach((t, i) => {
+      lines.push(`${i + 1}. ${t.from} 👉 微信转账给 ${t.to}: ${currencySymbol}${t.amount}`);
+    });
+    const evenMembers = memberBalances.filter((mb) => Math.abs(mb.netBalance) <= 0.01).map((mb) => mb.member);
+    if (evenMembers.length > 0) {
+      lines.push(`------------------------------`);
+      lines.push(`• ${evenMembers.join('、')} 账目持平，无需转账。`);
+    }
+  }
+
+  return {
+    totalExpense: Math.round(totalExpense * 100) / 100,
+    memberBalances,
+    transfers,
+    summaryText: lines.join('\n'),
+  };
+}
+

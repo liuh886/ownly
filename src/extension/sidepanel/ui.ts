@@ -374,6 +374,7 @@ export function renderSmartListCard() {
   }
 
   const places = store.detectedSavedList.places;
+  const truncNote = store.detectedSavedList.truncated ? ` ⚠️ ${dict.truncatedWarn(places.length)}` : '';
   el.smartListSection.style.display = 'block';
   el.btnSmartSyncAll.style.display = 'block';
   el.btnToggleListPreview.style.display = 'block';
@@ -397,13 +398,13 @@ export function renderSmartListCard() {
     el.smartListSection.className = isMatched ? 'panel stack match-banner' : 'panel stack match-banner neutral';
     el.smartListBadge.textContent = isMatched ? dict.matchedBadge : dict.sensedBadge;
     el.smartListDesc.textContent = isMatched
-      ? dict.matchedDesc(store.detectedSavedList.listName, activeTrip.title)
-      : dict.unmatchedDesc(places.length, activeTrip.title);
+      ? dict.matchedDesc(store.detectedSavedList.listName, activeTrip.title) + truncNote
+      : dict.unmatchedDesc(places.length, activeTrip.title) + truncNote;
     el.btnSmartSyncAll.textContent = dict.syncAllBtn(places.length);
   } else {
     el.smartListSection.className = 'panel stack match-banner neutral';
     el.smartListBadge.textContent = dict.sensedBadge;
-    el.smartListDesc.textContent = dict.sensedNoTripDesc(store.detectedSavedList.listName, places.length);
+    el.smartListDesc.textContent = dict.sensedNoTripDesc(store.detectedSavedList.listName, places.length) + truncNote;
     el.btnSmartSyncAll.textContent = dict.importAllBtn(places.length);
   }
 
@@ -580,8 +581,22 @@ export function renderCurrentPlace() {
   setStatus(dict.readyToCapture);
 }
 
+const cardCache = new Map<string, { sig: string; node: HTMLDivElement }>();
+
+function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace, dictKey: string, tripDayCount: number): string {
+  return [
+    place.updated_at || '',
+    store.editingCandidateId === place.id ? 'edit' : 'view',
+    store.bulkMode ? 'bulk' : 'single',
+    store.bulkSelected.has(place.id) ? 'sel' : 'unsel',
+    String(tripDayCount),
+    dictKey,
+  ].join('|');
+}
+
 export function renderCandidatesList() {
   const dict = t();
+  const dictKey = store.lang;
   const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
   const tripDays = activeTrip ? listTripDates(activeTrip.start_date, activeTrip.end_date) : [];
 
@@ -609,6 +624,7 @@ export function renderCandidatesList() {
 
   el.candidatesListContainer.innerHTML = '';
   if (candidates.length === 0) {
+    cardCache.clear();
     const empty = document.createElement('div');
     empty.style.color = '#78716c';
     empty.style.fontSize = '11px';
@@ -618,10 +634,33 @@ export function renderCandidatesList() {
     return;
   }
 
+  const seen = new Set<string>();
   for (const place of candidates) {
-    const card = document.createElement('div');
-    card.className = 'candidate-card';
-    card.dataset.placeId = place.id;
+    seen.add(place.id);
+    const sig = candidateCardSig(place, dictKey, tripDays.length);
+    let node = place.scheduled_date ? undefined : cardCache.get(place.id)?.node;
+    const cached = place.scheduled_date ? undefined : cardCache.get(place.id);
+    if (cached && cached.sig === sig) {
+      el.candidatesListContainer.append(cached.node);
+      continue;
+    }
+    node = buildCandidateCard(place, dict, tripDays);
+    cardCache.set(place.id, { sig, node });
+    el.candidatesListContainer.append(node);
+  }
+  for (const id of [...cardCache.keys()]) {
+    if (!seen.has(id)) cardCache.delete(id);
+  }
+}
+
+function buildCandidateCard(
+  place: PlannerTripPlace,
+  dict: ReturnType<typeof t>,
+  tripDays: string[],
+): HTMLDivElement {
+  const card = document.createElement('div');
+  card.className = 'candidate-card' + (store.bulkMode && store.bulkSelected.has(place.id) ? ' bulk-selected' : '');
+  card.dataset.placeId = place.id;
 
     const header = document.createElement('div');
     header.className = 'candidate-header';
@@ -647,8 +686,7 @@ export function renderCandidatesList() {
     } else {
       card.append(header, buildCandidateDetails(place, dict, tripDays));
     }
-    el.candidatesListContainer.append(card);
-  }
+  return card;
 }
 
 function buildInlineEditor(
@@ -804,7 +842,19 @@ function buildCandidateDetails(
 
   const details = document.createElement('div');
   details.className = 'candidate-details';
+  if (store.bulkMode) {
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.className = 'bulk-check';
+    chk.checked = store.bulkSelected.has(place.id);
+    chk.dataset.action = 'bulk-check';
+    chk.dataset.placeId = place.id;
+    wrapper.append(chk);
+  }
   if (place.area) details.innerHTML += `<span>📍 ${escapeHtml(place.area)}</span>`;
+  if (place.source_place_id) {
+    details.innerHTML += `<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`;
+  }
   if (place.observed_rating) details.innerHTML += `<span>★ ${place.observed_rating}</span>`;
   if (place.observed_price) details.innerHTML += `<span>💰 ${escapeHtml(place.observed_price)}</span>`;
   if (place.duration_minutes) details.innerHTML += `<span>⏱️ ${place.duration_minutes}m</span>`;
