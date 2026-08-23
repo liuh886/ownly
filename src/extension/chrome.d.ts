@@ -38,6 +38,7 @@ declare namespace chrome {
     }
     function query(queryInfo: QueryInfo): Promise<Tab[]>;
     function sendMessage(tabId: number, message: unknown): Promise<unknown>;
+    function update(tabId: number, updateProperties: { url?: string; active?: boolean }): Promise<Tab>;
   }
 
   namespace storage {

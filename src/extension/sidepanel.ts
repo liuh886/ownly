@@ -1,5 +1,4 @@
 import { CAPTURE_STORAGE_KEY, normalizeCaptureState } from './capture-state';
-import { el } from './dom';
 import { loadState, store } from './sidepanel/store';
 import { readCurrentPlace } from './sidepanel/capture';
 import { initHandlers } from './sidepanel/handlers';

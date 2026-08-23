@@ -28,6 +28,8 @@ export const store = {
   searchQuery: '',
   pageDetectedCurrency: undefined as string | undefined,
   userDismissedPlaceUrl: null as string | null,
+  smartListDismissed: false,
+  smartListKey: '' as string,
   editingCandidateId: null as string | null,
   isListPreviewOpen: false,
 };

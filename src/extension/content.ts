@@ -1,5 +1,6 @@
 import { inferSourceProvider, extractPlaceCoordinates, type PlannerPlaceSourceProvider } from '../domain/planner';
-import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import { SELECTORS } from './selectors';
 
 export interface CurrentResearchPlace {
   title: string;
@@ -18,6 +19,7 @@ export interface CurrentResearchPlace {
   website?: string;
   coordinates?: { lat: number; lng: number };
   sourcePlaceId?: string;
+  tierNote?: string;
 }
 
 function titleFromUrl(url: string): string {
@@ -32,12 +34,12 @@ function titleFromUrl(url: string): string {
 }
 
 function extractRating(): number | undefined {
-  const ratingEl = document.querySelector<HTMLElement>('div.F7nice span[aria-hidden="true"]');
+  const ratingEl = document.querySelector<HTMLElement>(SELECTORS.rating);
   if (ratingEl?.textContent) {
     const val = parseFloat(ratingEl.textContent.replace(',', '.').trim());
     if (Number.isFinite(val) && val >= 1 && val <= 5) return val;
   }
-  const ariaEl = document.querySelector<HTMLElement>('span.ceNzKf, span[aria-label*="star"], span[aria-label*="星"]');
+  const ariaEl = document.querySelector<HTMLElement>(SELECTORS.ratingAria);
   if (ariaEl) {
     const aria = ariaEl.getAttribute('aria-label') || '';
     const match = /(\d+(\.\d+)?)/.exec(aria);
@@ -50,7 +52,7 @@ function extractRating(): number | undefined {
 }
 
 function extractReviewCount(): number | undefined {
-  const countEl = document.querySelector<HTMLElement>('div.F7nice span:last-child, span[aria-label*="reviews"], span[aria-label*="评价"]');
+  const countEl = document.querySelector<HTMLElement>(SELECTORS.reviewCount);
   if (countEl) {
     const text = countEl.textContent || countEl.getAttribute('aria-label') || '';
     const cleaned = text.replace(/[^0-9]/g, '');
@@ -63,9 +65,7 @@ function extractReviewCount(): number | undefined {
 }
 
 function extractCategory(): string | undefined {
-  const catBtn = document.querySelector<HTMLElement>(
-    'button.DkEaL, button[jsaction*="category"], div.fontBodyMedium button[jsaction*="pane"], button[jsaction*="pane.rating.category"], div.skqShb, div.LBgpqf button, span.mgr77e span.fontBodyMedium, span[class*="category"]'
-  );
+  const catBtn = document.querySelector<HTMLElement>(SELECTORS.category);
   if (catBtn?.textContent) {
     const cat = cleanExtractedText(catBtn.textContent);
     if (cat && cat.length < 50 && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(cat)) return cat;
@@ -75,30 +75,47 @@ function extractCategory(): string | undefined {
 
 function extractPrice(): string | undefined {
   // 1. Direct price attributes or dedicated badges
-  const priceEl = document.querySelector<HTMLElement>(
-    'span[aria-label*="价格"], span[aria-label*="Price"], span.fontBodyMedium span[aria-label*="£"], span.fontBodyMedium span[aria-label*="$"], span.fontBodyMedium span[aria-label*="¥"], span[aria-label*="฿"], span.mgr77e span, div.mgr77e, span[class*="price"], div[aria-label*="per night"], div[aria-label*="每晚"], div[class*="price"]'
-  );
+  const priceEl = document.querySelector<HTMLElement>(SELECTORS.priceBadge);
   if (priceEl) {
     const text = cleanExtractedText(priceEl.getAttribute('aria-label') || priceEl.textContent || '');
-    if (text && text.length < 50 && !/^(路线|directions|save|保存)$/i.test(text)) return text;
+    if (text && text.length < 50 && !/^(路线|directions|save|保存)$/i.test(text) && isPlausiblePriceText(text)) return text;
   }
 
   // 2. Scan per-person budget in header info (e.g. "人均 ฿200–400", "¥1,000–2,000 per person", "￥2,000〜￥3,000")
-  const infoSpans = document.querySelectorAll<HTMLElement>('div.fontBodyMedium span, div.W4Efsd span, div.mgr77e');
+  const infoSpans = document.querySelectorAll<HTMLElement>(SELECTORS.priceInfoSpans);
   for (const span of Array.from(infoSpans).slice(0, 10)) {
     const text = cleanExtractedText(span.textContent || '');
-    if (/(人均|per person|每人|每晚|per night|[¥฿$€£₩]\s*\d+)/i.test(text) && text.length < 60) {
+    if (/(人均|per person|每人|每晚|per night|[¥฿$€£₩]\s*\d+)/i.test(text) && text.length < 60 && isPlausiblePriceText(text)) {
       return text;
     }
   }
 
   // 3. Check for standalone price level ($$, $$$, ¥¥) in header pills
-  const levelSpans = document.querySelectorAll<HTMLElement>('span[aria-label*="Moderate"], span[aria-label*="Inexpensive"], span[aria-label*="Expensive"], span[aria-label*="适中"], span[aria-label*="实惠"]');
+  const levelSpans = document.querySelectorAll<HTMLElement>(SELECTORS.priceLevels);
   for (const span of Array.from(levelSpans)) {
     const label = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
-    if (label) return label;
+    if (label && isPlausiblePriceText(label)) return label;
   }
 
+  return undefined;
+}
+
+function extractHotelTier(): string | undefined {
+  const tierEl = document.querySelector<HTMLElement>(
+    'span[class*="price"], div.mgr77e, span.mgr77e span, div.fontBodyMedium span'
+  );
+  const candidates: string[] = [];
+  if (tierEl) candidates.push(tierEl.textContent || tierEl.getAttribute('aria-label') || '');
+  for (const span of Array.from(document.querySelectorAll<HTMLElement>('div.fontBodyMedium span, div.W4Efsd span')).slice(0, 10)) {
+    candidates.push(span.textContent || '');
+  }
+  for (const raw of candidates) {
+    const text = cleanExtractedText(raw);
+    if (!text || text.length > 40) continue;
+    if (/\b\d\s*[-–—]?\s*(?:star|stars?)\b|星级/i.test(text) && !isJunkNavigationText(text) && !isPlausiblePriceText(text)) {
+      return text;
+    }
+  }
   return undefined;
 }
 
@@ -456,6 +473,7 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     openHours,
     website: extractWebsite(),
     coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
+    tierNote: extractHotelTier(),
   };
 }
 
@@ -619,7 +637,8 @@ function extractTabelogPlace(): CurrentResearchPlace | null {
   const category = catEl?.textContent?.trim();
 
   const priceEl = document.querySelector<HTMLElement>('p.c-rating-v3__time span, span.c-rating-v3__val');
-  const priceLevel = priceEl?.textContent?.trim();
+  const rawPrice = priceEl?.textContent?.trim();
+  const priceLevel = rawPrice && isPlausiblePriceText(rawPrice) ? rawPrice : undefined;
 
   const addrEl = document.querySelector<HTMLElement>('p.rstinfo-table__address, p.rdhead-subinfo__address');
   const address = addrEl?.textContent?.trim();

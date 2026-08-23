@@ -100,7 +100,10 @@
     <section id="smartListSection" class="panel stack match-banner" style="display: none;">
       <div class="row">
         <span id="smartListBadge" class="match-badge">🌟 自动匹配收藏夹</span>
-        <span id="smartListCountBadge" class="badge highlight">0 个地点</span>
+        <span class="row" style="gap: 4px;">
+          <span id="smartListCountBadge" class="badge highlight">0 个地点</span>
+          <button id="btnCloseSmartList" class="link" type="button" title="收起 / Dismiss" style="color: var(--text-4); padding: 0 4px;">✕</button>
+        </span>
       </div>
       <div id="smartListTitle" class="match-title">列表名称</div>
       <p id="smartListDesc" class="match-desc">检测到当前 Google 收藏夹与行程匹配</p>

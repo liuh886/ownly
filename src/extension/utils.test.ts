@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, parseEntityListCoordinates, safeDecodeUri } from './utils';
 
 describe('cleanExtractedText & safeDecodeUri', () => {
   it('decodes HTML entities properly', () => {
@@ -58,6 +58,28 @@ describe('isJunkNavigationText', () => {
     expect(isJunkNavigationText('Great sunset view on the rooftop, reservation required')).toBe(false);
     expect(isJunkNavigationText('曼谷必吃泰北咖喱面')).toBe(false);
     expect(isJunkNavigationText('อร่อยมาก แนะนำสั่งต้มยำกุ้ง')).toBe(false);
+  });
+});
+
+describe('isPlausiblePriceText', () => {
+  it('accepts real prices and price levels', () => {
+    expect(isPlausiblePriceText('$$$')).toBe(true);
+    expect(isPlausiblePriceText('¥¥')).toBe(true);
+    expect(isPlausiblePriceText('¥1,000–2,000')).toBe(true);
+    expect(isPlausiblePriceText('$89 / night')).toBe(true);
+    expect(isPlausiblePriceText('人均 ฿200–400')).toBe(true);
+    expect(isPlausiblePriceText('每晚 per night 120')).toBe(true);
+    expect(isPlausiblePriceText('TWD1,200')).toBe(true);
+  });
+
+  it('rejects hotel tiers and non-price text', () => {
+    expect(isPlausiblePriceText('5-star hotel')).toBe(false);
+    expect(isPlausiblePriceText('4 stars')).toBe(false);
+    expect(isPlausiblePriceText('五星级饭店')).toBe(false);
+    expect(isPlausiblePriceText('Luxury Hotel & Resort')).toBe(false);
+    expect(isPlausiblePriceText('TWD')).toBe(false);
+    expect(isPlausiblePriceText('')).toBe(false);
+    expect(isPlausiblePriceText(null)).toBe(false);
   });
 });
 

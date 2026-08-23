@@ -10,7 +10,7 @@ import {
 } from '../../domain/planner';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
-import { escapeHtml } from '../utils';
+import { escapeHtml, isPlausiblePriceText } from '../utils';
 import { getExistingPlaceForUrl, store, t } from './store';
 
 const KIND_ICONS: Record<PlannerPlaceKind, string> = {
@@ -322,6 +322,10 @@ export function renderCurrencyPill() {
 
 export function renderSmartListCard() {
   const dict = t();
+  if (store.smartListDismissed) {
+    el.smartListSection.style.display = 'none';
+    return;
+  }
   const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
 
   // 1. Overview page with multiple lists found
@@ -447,18 +451,20 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
     el.duration.value = existing.duration_minutes ? String(existing.duration_minutes) : '';
     el.window.value = existing.preferred_window || '';
     el.rating.value = existing.observed_rating ? String(existing.observed_rating) : (place.rating ? String(place.rating) : '');
-    el.price.value = existing.observed_price || place.priceLevel || '';
+    const storedPrice = isPlausiblePriceText(existing.observed_price) ? existing.observed_price : undefined;
+    el.price.value = storedPrice || (isPlausiblePriceText(place.priceLevel) ? place.priceLevel! : '');
     el.why.value = existing.why || place.summary || '';
     el.signals.value = existing.signals?.join(', ') || '';
     el.risks.value = existing.risks?.join(', ') || '';
     el.notes.value = existing.notes || '';
+    applyTierNote(place);
     return;
   }
 
   if (place.rating) {
     el.rating.value = String(place.rating);
   }
-  if (place.priceLevel) {
+  if (place.priceLevel && isPlausiblePriceText(place.priceLevel)) {
     el.price.value = place.priceLevel;
   } else if (place.detectedCurrency) {
     el.price.placeholder = `${place.detectedCurrency} 价格预算`;
@@ -473,6 +479,7 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   if ((place.userNote || place.summary) && !el.why.value) {
     el.why.value = place.userNote || place.summary || '';
   }
+  applyTierNote(place);
   if (place.userNote && !el.notes.value) {
     el.notes.value = place.userNote;
   }
@@ -480,6 +487,13 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   if (activeTrip?.tags?.length && !el.tags.value) {
     el.tags.value = activeTrip.tags.join(', ');
   }
+}
+
+function applyTierNote(place: CurrentResearchPlace): void {
+  const tier = place.tierNote?.trim();
+  if (!tier) return;
+  if (el.why.value.includes(tier)) return;
+  el.why.value = el.why.value ? `${el.why.value}\n🏨 ${tier}` : `🏨 ${tier}`;
 }
 
 export function renderCurrentPlace() {

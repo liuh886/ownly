@@ -124,6 +124,15 @@ function initDragReorder(): void {
   });
 }
 
+async function revealPlaceInMaps(sourceUrl: string): Promise<void> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url) return;
+    if (!/^https:\/\/(www\.google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl)/i.test(tab.url)) return;
+    await chrome.tabs.update(tab.id, { url: sourceUrl });
+  } catch {}
+}
+
 function initCandidateDelegation() {
   el.candidatesListContainer.addEventListener('change', (e) => {
     const target = e.target as HTMLElement;
@@ -165,7 +174,11 @@ function initCandidateDelegation() {
     if (action === 'edit') {
       store.editingCandidateId = store.editingCandidateId === placeId ? null : placeId;
       renderCandidatesList();
-      if (store.editingCandidateId === placeId) scrollCardIntoView(placeId, true);
+      if (store.editingCandidateId === placeId) {
+        scrollCardIntoView(placeId, true);
+        const editing = store.state.pendingPlaces.find((p) => p.id === placeId);
+        if (editing?.source_url) void revealPlaceInMaps(editing.source_url);
+      }
     } else if (action === 'delete') {
       store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => p.id !== placeId) };
       if (store.editingCandidateId === placeId) store.editingCandidateId = null;
@@ -298,6 +311,11 @@ export function initHandlers(): void {
     }
   });
 
+  el.btnCloseSmartList.addEventListener('click', () => {
+    store.smartListDismissed = true;
+    renderSmartListCard();
+  });
+
   // ⚡ 1-Click Sync Matched Saved List
   el.btnSmartSyncAll.addEventListener('click', () => {
     const dict = t();
@@ -404,6 +422,8 @@ export function initHandlers(): void {
 
       void saveState().then(() => {
         setStatus(dict.savedListSynced(importedCount, listTag), 'success');
+        store.smartListDismissed = true;
+        renderSmartListCard();
       });
     } finally {
       el.btnSmartSyncAll.classList.remove('btn-loading');

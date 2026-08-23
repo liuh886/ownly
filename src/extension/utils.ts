@@ -121,6 +121,26 @@ export function findEntityListPlaceId(item?: unknown): string | undefined {
   return undefined;
 }
 
+const CURRENCY_CODE = /(?<![A-Za-z])(SGD|HKD|TWD|NTD|JPY|CNY|RMB|THB|KRW|MYR|VND|INR|EUR|GBP|USD|AUD|CAD|CHF|NZD)(?![A-Za-z])/i;
+const PRICE_LEVEL_ONLY = /^[¥฿$€£₩]{1,4}$/;
+
+function hasCurrencyMarker(text: string): boolean {
+  return /[¥฿$€£₩₫₹]/.test(text) || /R\$/.test(text) || CURRENCY_CODE.test(text);
+}
+
+/**
+ * Validates that an extracted string is actually a price/budget observation,
+ * not a hotel class ("5-star hotel"), rating, or other nearby badge text.
+ */
+export function isPlausiblePriceText(raw?: string | null): boolean {
+  const text = cleanExtractedText(raw);
+  if (!text) return false;
+  if (PRICE_LEVEL_ONLY.test(text)) return true;
+  if (/\b\d\s*[-–—]?\s*(?:star|stars?)\b|星级/i.test(text) && !hasCurrencyMarker(text)) return false;
+  if (hasCurrencyMarker(text)) return /\d/.test(text);
+  return /(人均|per person|每人|每晚|per night)/i.test(text) && /\d/.test(text);
+}
+
 /**
  * Determines if an extracted note/text is Google Maps sidebar navigation junk
  * (e.g. "SavedRecentsTH26Lampang4Chiang Mai17Bangkok2Hong KongView moreGet app")
