@@ -186,7 +186,9 @@ export function PlannerMap({
   const lastPinchEndRef = useRef(0);
 
   const viewRef = useRef({ center, zoom });
-  viewRef.current = { center, zoom };
+  useEffect(() => {
+    viewRef.current = { center, zoom };
+  }, [center, zoom]);
 
   // Dimensions
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 400, height: 350 });

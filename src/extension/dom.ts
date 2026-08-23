@@ -4,6 +4,9 @@ export type ElementMap = {
   lblActiveTrip: HTMLElement;
   btnDetectedCurrencyPill: HTMLButtonElement;
   tripSelect: HTMLSelectElement;
+  tripActiveRow: HTMLElement;
+  tripManageSection: HTMLDetailsElement;
+  sumTripManage: HTMLElement;
   editTripSection: HTMLElement;
   sumEditTrip: HTMLElement;
   editTripForm: HTMLFormElement;
@@ -65,6 +68,8 @@ export type ElementMap = {
   txtCapturedBanner: HTMLElement;
   placeMetaBadges: HTMLElement;
   refreshPlace: HTMLButtonElement;
+  placePanel: HTMLElement;
+  placeProvider: HTMLElement;
   captureForm: HTMLFormElement;
   lblKind: HTMLElement;
   kind: HTMLSelectElement;
@@ -96,7 +101,7 @@ export type ElementMap = {
   notes: HTMLTextAreaElement;
   btnCaptureSubmit: HTMLButtonElement;
   btnRemoveCandidate: HTMLButtonElement;
-  candidatesDrawer: HTMLElement;
+  candidatesDrawer: HTMLDetailsElement;
   sumCandidatesDrawer: HTMLElement;
   candidatesCountBadge: HTMLElement;
   candidatesSearch: HTMLInputElement;
@@ -118,6 +123,9 @@ export const el: ElementMap = {
   lblActiveTrip: required('lblActiveTrip'),
   btnDetectedCurrencyPill: required('btnDetectedCurrencyPill'),
   tripSelect: required('tripSelect'),
+  tripActiveRow: required('tripActiveRow'),
+  tripManageSection: required<HTMLDetailsElement>('tripManageSection'),
+  sumTripManage: required('sumTripManage'),
   editTripSection: required('editTripSection'),
   sumEditTrip: required('sumEditTrip'),
   editTripForm: required('editTripForm'),
@@ -179,6 +187,8 @@ export const el: ElementMap = {
   txtCapturedBanner: required('txtCapturedBanner'),
   placeMetaBadges: required('placeMetaBadges'),
   refreshPlace: required('refreshPlace'),
+  placePanel: required('placePanel'),
+  placeProvider: required('placeProvider'),
   captureForm: required('captureForm'),
   lblKind: required('lblKind'),
   kind: required('kind'),
@@ -210,7 +220,7 @@ export const el: ElementMap = {
   notes: required('notes'),
   btnCaptureSubmit: required('btnCaptureSubmit'),
   btnRemoveCandidate: required('btnRemoveCandidate'),
-  candidatesDrawer: required('candidatesDrawer'),
+  candidatesDrawer: required<HTMLDetailsElement>('candidatesDrawer'),
   sumCandidatesDrawer: required('sumCandidatesDrawer'),
   candidatesCountBadge: required('candidatesCountBadge'),
   candidatesSearch: required('candidatesSearch'),
