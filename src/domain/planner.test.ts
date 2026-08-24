@@ -472,3 +472,50 @@ describe('Ownly Planner domain', () => {
     expect(settlement.summaryText).toContain('Charlie 👉 微信转账给 Alice');
   });
 });
+
+describe('Route optimization pinning & budget currency', () => {
+  const coord = (lat: number, lng: number) => `https://www.google.com/maps/place/X/@${lat},${lng},15z`;
+  function stop(id: string, lat: number | null, overrides: Partial<PlannerTripPlace> = {}): PlannerTripPlace {
+    return place(id, {
+      source_url: lat === null ? `https://www.google.com/maps/search/?api=1&query=${id}` : coord(lat, (Number(id.charCodeAt(0)) % 10) + 100),
+      ...overrides,
+    });
+  }
+
+  it('keeps locked and coordinate-less stops pinned at their slots', () => {
+    const seq = [
+      stop('a', 35.700),
+      stop('locked-mid', 35.720, { locked: true }),
+      stop('c', 35.740),
+      stop('no-coord', null),
+      stop('e', 35.680),
+    ];
+    const result = optimizeStopsSequence(seq, { respectLocked: true });
+    expect(result.places[1].id).toBe('locked-mid');
+    expect(result.places[3].id).toBe('no-coord');
+    expect(result.places.filter((p) => p.id === 'no-coord')).toHaveLength(1);
+  });
+
+  it('never moves a locked stop even when it sits mid-route with big detours available', () => {
+    const seq = [
+      stop('start', 35.670, { locked: true }),
+      stop('far-a', 35.950),
+      stop('anchor', 35.675, { locked: true }),
+      stop('far-b', 35.960),
+      stop('tail', 35.690),
+    ];
+    const result = optimizeStopsSequence(seq, { respectLocked: true });
+    expect(result.places[0].id).toBe('start');
+    expect(result.places[2].id).toBe('anchor');
+  });
+
+  it('detects currency from observed prices instead of defaulting silently', () => {
+    const est = estimateTripBudget([
+      place('food1', { kind: 'food', observed_price: '฿200-400' }),
+      place('stay1', { kind: 'stay', observed_price: '฿2,000' }),
+    ], 2, 'CNY');
+    expect(est.detectedCurrency).toBe('THB');
+    expect(est.categoryBreakdown.stay).toBe(2000);
+    expect(est.categoryBreakdown.food).toBe(600);
+  });
+});

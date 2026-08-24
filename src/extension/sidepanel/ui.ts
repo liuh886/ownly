@@ -842,7 +842,7 @@ function buildCandidateDetails(
 
   const details = document.createElement('div');
   details.className = 'candidate-details';
-  if (store.bulkMode) {
+  if (store.bulkMode && !place.is_anchor) {
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.className = 'bulk-check';
@@ -852,6 +852,9 @@ function buildCandidateDetails(
     wrapper.append(chk);
   }
   if (place.area) details.innerHTML += `<span>📍 ${escapeHtml(place.area)}</span>`;
+  if (place.is_anchor) {
+    details.innerHTML += `<span class="badge highlight" title="${store.lang === 'zh' ? '行程锚点（住宿占位），受保护不可批量删除' : 'Trip anchor (stay placeholder), protected from bulk delete'}">🏨</span>`;
+  }
   if (place.source_place_id) {
     details.innerHTML += `<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`;
   }

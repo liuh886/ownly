@@ -344,6 +344,12 @@ export function initHandlers(): void {
   el.btnBulkDelete.addEventListener('click', () => {
     const dict = t();
     if (store.bulkSelected.size === 0) return;
+    const anchors = store.state.pendingPlaces.filter((p) => store.bulkSelected.has(p.id) && p.is_anchor);
+    if (anchors.length > 0) {
+      setStatus(dict.anchorProtected, 'error');
+      for (const a of anchors) store.bulkSelected.delete(a.id);
+      if (store.bulkSelected.size === 0) return;
+    }
     const ids = new Set(store.bulkSelected);
     store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => !ids.has(p.id)) };
     store.bulkSelected.clear();

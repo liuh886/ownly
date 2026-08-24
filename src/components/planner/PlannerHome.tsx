@@ -57,6 +57,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [capturePending, setCapturePending] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [optimizeUndo, setOptimizeUndo] = useState<PlannerTripPlace[] | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
   const [highlightedPlaceId, setHighlightedPlaceId] = useState<string | null>(null);
@@ -227,22 +228,40 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     if (scheduled.length < 3 || disabled) return;
     setBusy(true);
     try {
-      const result = optimizeStopsSequence(scheduled, { fixStart: true });
+      const result = optimizeStopsSequence(scheduled, { respectLocked: true });
       if (!result.improved) {
         setNotice(zh ? '当前路线已经是最佳顺路顺序！' : 'Current sequence is already optimal!');
         setTimeout(() => setNotice(''), 3000);
         return;
       }
+      const snapshot = scheduled.map((p) => ({ ...p }));
       for (const place of result.places) {
         await plannerRepository.upsertPlace(place);
       }
       await load();
+      setOptimizeUndo(snapshot);
       setNotice(zh ? `✓ 顺路优化完成！节省约 ${result.savedKm} km 绕路路程` : `✓ Optimized! Saved ~${result.savedKm} km`);
       setTimeout(() => setNotice(''), 4000);
     } finally {
       setBusy(false);
     }
   }, [scheduled, disabled, zh, load]);
+
+  const undoRouteOptimization = useCallback(async () => {
+    if (!optimizeUndo || disabled) return;
+    setBusy(true);
+    try {
+      for (const place of optimizeUndo) {
+        await plannerRepository.upsertPlace(place);
+      }
+      setOptimizeUndo(null);
+      await load();
+      setNotice(zh ? '已撤销本次顺路优化。' : 'Route optimization reverted.');
+      setTimeout(() => setNotice(''), 3000);
+    } finally {
+      setBusy(false);
+    }
+  }, [optimizeUndo, disabled, zh, load]);
 
   const placesByDate = useMemo(() => {
     const map: Record<string, PlannerTripPlace[]> = {};
@@ -266,6 +285,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       setBusy(true);
       try {
         const stayPlaces = generateStaySpanPlaces(hotel, stayDates);
+        const dateSet = new Set(stayDates);
+        const newIds = new Set(stayPlaces.map((sp) => sp.id));
+
+        // Retire previous stay anchors on the same dates so switching hotels never duplicates stays.
+        const staleStays = tripPlaces.filter(
+          (p) =>
+            p.state === 'scheduled'
+            && p.scheduled_date
+            && dateSet.has(p.scheduled_date)
+            && !newIds.has(p.id)
+            && (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin')),
+        );
+        for (const stale of staleStays) {
+          await plannerRepository.upsertPlace({ ...stale, state: 'dropped', updated_at: new Date().toISOString() });
+        }
+
         for (const sp of stayPlaces) {
           await plannerRepository.upsertPlace(sp);
         }
@@ -280,7 +315,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         setBusy(false);
       }
     },
-    [disabled, zh, load],
+    [disabled, zh, load, tripPlaces],
   );
 
   const handleDropHotel = useCallback(async (hotelId: string) => {
@@ -628,10 +663,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   onClick={() => void runRouteOptimization()}
                   disabled={busy || scheduled.length < 3}
                   className="rounded-md border border-emerald-300 bg-emerald-50/80 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 shadow-2xs transition"
-                  title={zh ? '基于真实经纬度一键顺路重排游览顺序 (消除折返跑)' : 'Optimize route sequence by shortest distance'}
+                  title={zh ? '基于真实经纬度一键顺路重排游览顺序 (消除折返跑)；锁定与无坐标点保持原位' : 'Optimize route sequence; locked and unlocated stops stay pinned'}
                 >
                   ⚡ {zh ? '顺路优化' : 'Optimize'}
                 </button>
+                {optimizeUndo ? (
+                  <button
+                    type="button"
+                    onClick={() => void undoRouteOptimization()}
+                    disabled={busy}
+                    className="rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40 transition"
+                    title={zh ? '恢复优化前的游览顺序' : 'Revert to the pre-optimization order'}
+                  >
+                    ↩️ {zh ? '撤销优化' : 'Undo'}
+                  </button>
+                ) : null}
                 <a
                   href={buildGoogleMapsRouteUrl(scheduled, selectedTrip.transport_mode ?? 'transit')}
                   target="_blank"

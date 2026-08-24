@@ -585,14 +585,29 @@ export interface RouteOptimizationResult {
   improved: boolean;
 }
 
+export interface RouteOptimizationOptions {
+  fixStart?: boolean;
+  fixEnd?: boolean;
+  /** Treat locked:true and coordinate-less stops as immovable pins at their slots. */
+  respectLocked?: boolean;
+}
+
+function buildPinnedOrder(base: PlannerTripPlace[], movableSlots: number[], movableItems: PlannerTripPlace[]): PlannerTripPlace[] {
+  const next = [...base];
+  movableSlots.forEach((slot, k) => {
+    next[slot] = movableItems[k];
+  });
+  return next;
+}
+
 export function optimizeStopsSequence(
   places: PlannerTripPlace[],
-  options: { fixStart?: boolean; fixEnd?: boolean } = { fixStart: true, fixEnd: false },
+  options: RouteOptimizationOptions = { fixStart: true, fixEnd: false },
 ): RouteOptimizationResult {
   const currentList = [...places];
   if (currentList.length <= 2) {
     const d = calculateTotalRouteDistanceKm(currentList);
-    return { places: currentList, originalKm: d, optimizedKm: d, savedKm: 0, improved: false };
+    return { places: currentList.map((p, i) => ({ ...p, sort_order: i })), originalKm: d, optimizedKm: d, savedKm: 0, improved: false };
   }
 
   const originalKm = calculateTotalRouteDistanceKm(currentList);
@@ -601,62 +616,68 @@ export function optimizeStopsSequence(
     return { places: currentList, originalKm, optimizedKm: originalKm, savedKm: 0, improved: false };
   }
 
-  const n = currentList.length;
-  let bestOrder = [...currentList];
-  let minDistance = originalKm;
+  // Determine pinned vs movable positions. Pins keep their exact slot.
+  const pinnedSlots = new Set<number>();
+  currentList.forEach((p, i) => {
+    if (!extractPlaceCoordinates(p)) pinnedSlots.add(i);
+    else if (options.respectLocked && p.locked) pinnedSlots.add(i);
+  });
+  if (options.fixStart && !options.respectLocked) pinnedSlots.add(0);
+  if (options.fixEnd && !options.respectLocked) pinnedSlots.add(currentList.length - 1);
 
-  // Exact Permutation for N <= 8
-  if (n <= 8) {
-    const startIdx = options.fixStart ? 1 : 0;
-    const endIdx = options.fixEnd ? n - 1 : n;
-    const toPermute = currentList.slice(startIdx, endIdx);
-
-    function permute(arr: PlannerTripPlace[], l: number, r: number) {
-      if (l === r) {
-        const candidate = [
-          ...(options.fixStart ? [currentList[0]] : []),
-          ...arr,
-          ...(options.fixEnd ? [currentList[n - 1]] : []),
-        ];
-        const dist = calculateTotalRouteDistanceKm(candidate);
-        if (dist < minDistance - 0.01) {
-          minDistance = dist;
-          bestOrder = candidate;
-        }
-        return;
-      }
-      for (let i = l; i <= r; i++) {
-        [arr[l], arr[i]] = [arr[i], arr[l]];
-        permute(arr, l + 1, r);
-        [arr[l], arr[i]] = [arr[i], arr[l]];
-      }
+  const movableSlots: number[] = [];
+  const movableItems: PlannerTripPlace[] = [];
+  currentList.forEach((p, i) => {
+    if (!pinnedSlots.has(i)) {
+      movableSlots.push(i);
+      movableItems.push(p);
     }
+  });
 
-    permute(toPermute, 0, toPermute.length - 1);
-  } else {
-    // 2-opt Local Search Heuristic for N > 8
-    let current = [...currentList];
-    let improved = true;
-    let iterations = 0;
-    const startIdx = options.fixStart ? 1 : 0;
-    const endBound = options.fixEnd ? n - 2 : n - 1;
+  let bestMovable = [...movableItems];
+  let minDistance = calculateTotalRouteDistanceKm(buildPinnedOrder(currentList, movableSlots, bestMovable));
+  const originalBest = minDistance;
 
-    while (improved && iterations < 50) {
-      improved = false;
-      iterations++;
-      for (let i = startIdx; i < endBound; i++) {
-        for (let k = i + 1; k <= (options.fixEnd ? n - 2 : n - 1); k++) {
-          const candidate = [
-            ...current.slice(0, i),
-            ...current.slice(i, k + 1).reverse(),
-            ...current.slice(k + 1),
-          ];
-          const dist = calculateTotalRouteDistanceKm(candidate);
+  const m = movableItems.length;
+  if (m >= 2) {
+    if (m <= 8) {
+      const permute = (arr: PlannerTripPlace[], l: number, r: number) => {
+        if (l === r) {
+          const dist = calculateTotalRouteDistanceKm(buildPinnedOrder(currentList, movableSlots, arr));
           if (dist < minDistance - 0.01) {
             minDistance = dist;
-            bestOrder = candidate;
-            current = candidate;
-            improved = true;
+            bestMovable = [...arr];
+          }
+          return;
+        }
+        for (let i = l; i <= r; i++) {
+          [arr[l], arr[i]] = [arr[i], arr[l]];
+          permute(arr, l + 1, r);
+          [arr[l], arr[i]] = [arr[i], arr[l]];
+        }
+      };
+      permute([...bestMovable], 0, m - 1);
+    } else {
+      let current = [...bestMovable];
+      let improved = true;
+      let iterations = 0;
+      while (improved && iterations < 60) {
+        improved = false;
+        iterations++;
+        for (let i = 0; i < m - 1; i++) {
+          for (let k = i + 1; k < m; k++) {
+            const candidate = [
+              ...current.slice(0, i),
+              ...current.slice(i, k + 1).reverse(),
+              ...current.slice(k + 1),
+            ];
+            const dist = calculateTotalRouteDistanceKm(buildPinnedOrder(currentList, movableSlots, candidate));
+            if (dist < minDistance - 0.01) {
+              minDistance = dist;
+              bestMovable = candidate;
+              current = candidate;
+              improved = true;
+            }
           }
         }
       }
@@ -664,10 +685,10 @@ export function optimizeStopsSequence(
   }
 
   const optimizedKm = Math.round(minDistance * 100) / 100;
-  const savedKm = Math.max(0, Math.round((originalKm - optimizedKm) * 100) / 100);
+  const savedKm = Math.max(0, Math.round((originalBest - optimizedKm) * 100) / 100);
 
-  // Re-assign sort_order
-  const resultPlaces = bestOrder.map((place, index) => ({
+  const finalOrder = buildPinnedOrder(currentList, movableSlots, bestMovable);
+  const resultPlaces = finalOrder.map((place, index) => ({
     ...place,
     sort_order: index,
   }));
@@ -1018,15 +1039,21 @@ export function estimateTripBudget(
   let foodTotal = 0;
   let ticketTotal = 0;
   let otherTotal = 0;
-  let currency = defaultCurrency;
+  let currency = '';
 
   const validTravelers = Math.max(1, travelerCount);
+  const SYMBOL_TO_CODE: Record<string, string> = {
+    '¥': 'CNY', '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '₩': 'KRW',
+  };
 
   scheduledPlaces.forEach((place) => {
     const price = parseNumericPrice(place.observed_price);
     if (!currency && place.observed_price) {
       const curMatch = /(?:[¥฿$€£₩]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY)/i.exec(place.observed_price);
-      if (curMatch) currency = curMatch[0].toUpperCase();
+      if (curMatch) {
+        const raw = curMatch[0].toUpperCase();
+        currency = SYMBOL_TO_CODE[raw] ?? (raw.length === 1 ? defaultCurrency : raw);
+      }
     }
 
     if (place.kind === 'stay') {
