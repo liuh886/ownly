@@ -669,7 +669,6 @@ export function renderCandidatesList() {
   for (const id of [...cardCache.keys()]) {
     if (!seen.has(id)) cardCache.delete(id);
   }
-  renderQuickPriceList();
 }
 
 function buildCandidateCard(
@@ -708,45 +707,7 @@ function buildCandidateCard(
   return card;
 }
 
-export function renderQuickPriceList(): void {
-  const dict = t();
-  const list = el.quickPriceList;
-  list.innerHTML = '';
-  const needsPrice = store.state.pendingPlaces.filter(
-    (p) => p.trip_id === store.state.activeTripId
-      && p.state !== 'dropped'
-      && !p.observed_price,
-  );
-  el.quickPriceSection.style.display = needsPrice.length > 0 ? 'block' : 'none';
-  el.btnSaveQuickPrices.style.display = needsPrice.length > 0 ? 'block' : 'none';
-  if (needsPrice.length === 0) return;
 
-  const header = document.createElement('p');
-  header.className = 'text-[10px] text-stone-400';
-  header.textContent = dict.quickPriceHint(needsPrice.length);
-  list.append(header);
-
-  for (const place of needsPrice) {
-    const row = document.createElement('div');
-    row.className = 'flex items-center gap-1.5';
-    row.dataset.placeId = place.id;
-
-    const label = document.createElement('span');
-    label.className = 'flex-1 min-w-0 truncate text-[11px] text-stone-700';
-    label.textContent = `${PLANNER_KIND_ICONS[place.kind] ?? '📍'} ${place.title}`;
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.inputMode = 'decimal';
-    input.placeholder = dict.pricePlaceholder;
-    input.className = 'w-24 rounded border border-stone-300 px-1.5 py-0.5 text-right font-mono text-[11px]';
-    input.dataset.priceFor = place.id;
-    if (place.observed_price) input.value = place.observed_price;
-
-    row.append(label, input);
-    list.append(row);
-  }
-}
 function buildInlineEditor(
   place: PlannerTripPlace,
   dict: ReturnType<typeof t>,

@@ -110,9 +110,6 @@ export type ElementMap = {
   risks: HTMLInputElement;
   lblNotes: HTMLElement;
   notes: HTMLTextAreaElement;
-  quickPriceSection: HTMLDetailsElement;
-  quickPriceList: HTMLElement;
-  btnSaveQuickPrices: HTMLButtonElement;
   btnCaptureSubmit: HTMLButtonElement;
   btnRemoveCandidate: HTMLButtonElement;
   candidatesDrawer: HTMLDetailsElement;
@@ -243,9 +240,6 @@ export const el: ElementMap = {
   risks: required('risks'),
   lblNotes: required('lblNotes'),
   notes: required('notes'),
-  quickPriceSection: required<HTMLDetailsElement>('quickPriceSection'),
-  quickPriceList: required('quickPriceList'),
-  btnSaveQuickPrices: required('btnSaveQuickPrices'),
   btnCaptureSubmit: required('btnCaptureSubmit'),
   btnRemoveCandidate: required('btnRemoveCandidate'),
   candidatesDrawer: required<HTMLDetailsElement>('candidatesDrawer'),
