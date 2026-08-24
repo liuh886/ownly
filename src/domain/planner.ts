@@ -26,6 +26,8 @@ export interface PlannerTrip {
   currency?: string;
   transport_mode?: 'driving' | 'walking' | 'bicycling' | 'transit';
   travel_preferences?: string[];
+  /** AA ledger participants, persisted so the ledger survives browsers/devices. */
+  members?: string[];
   created_at: string;
   updated_at?: string;
 }
