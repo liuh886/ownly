@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import {
   listPlannerBookings,
   listPlannerExpenses,

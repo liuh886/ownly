@@ -44,7 +44,6 @@ import {
   writeEntry,
 } from '../cli/storage';
 import {
-  estimateTripBudget,
   generateStaySpanPlaces,
   optimizeStopsSequence,
   type FxSettings,
