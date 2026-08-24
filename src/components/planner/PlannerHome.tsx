@@ -901,6 +901,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             </div>
           ) : rightTab === 'budget' ? (
             <PlannerBudgetLedger
+              key={selectedTrip.id}
               trip={selectedTrip}
               scheduledPlaces={scheduled}
               expenses={currentExpenses}
