@@ -128,6 +128,26 @@ function hasCurrencyMarker(text: string): boolean {
   return /[¥฿$€£₩₫₹]/.test(text) || /R\$/.test(text) || CURRENCY_CODE.test(text);
 }
 
+/** Compacts a phone string without inventing country codes. */
+export function normalizePhoneDisplay(raw: string | null | undefined): string | undefined {
+  const text = cleanExtractedText(raw);
+  if (!text) return undefined;
+  const compact = text.replace(/[^\d+]/g, '');
+  // Never fabricate a leading '+' — keep the source form, just compacted.
+  if (compact.replace(/\D/g, '').length < 7) return undefined;
+  return compact || undefined;
+}
+
+/**
+ * Extracts Google's canonical feature id ("0x…:0x…") from a maps URL.
+ * This is the stable identifier shared by search/details/reviews endpoints.
+ */
+export function extractFeatureIdFromUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  const match = /!1s(0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{8,})/.exec(url);
+  return match?.[1];
+}
+
 /**
  * Validates that an extracted string is actually a price/budget observation,
  * not a hotel class ("5-star hotel"), rating, or other nearby badge text.

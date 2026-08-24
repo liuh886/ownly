@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
 
 describe('cleanExtractedText & safeDecodeUri', () => {
   it('decodes HTML entities properly', () => {
@@ -111,5 +111,23 @@ describe('findEntityListPlaceId', () => {
     expect(findEntityListPlaceId(undefined)).toBeUndefined();
     expect(findEntityListPlaceId(['plain', ['nested', 'values']])).toBeUndefined();
     expect(findEntityListPlaceId(['0x123'])).toBeUndefined();
+  });
+});
+
+describe('extractFeatureIdFromUrl & normalizePhoneDisplay', () => {
+  it('extracts the canonical feature id from place URLs', () => {
+    expect(extractFeatureIdFromUrl('https://www.google.com/maps/place/X/!1s0x47e66e2964e34e2d:0xb9756db3a9643894!8m2')).toBe(
+      '0x47e66e2964e34e2d:0xb9756db3a9643894',
+    );
+    expect(extractFeatureIdFromUrl('https://maps.google.com/?q=hotel')).toBeUndefined();
+    expect(extractFeatureIdFromUrl(null)).toBeUndefined();
+  });
+
+  it('normalizes phone numbers to a displayable intl form', () => {
+    expect(normalizePhoneDisplay('+66 2-123-4567')).toBe('+6621234567');
+    expect(normalizePhoneDisplay('02-123-4567')).toBe('021234567');
+    expect(normalizePhoneDisplay('tel:+66812345678')).toBe('+66812345678');
+    expect(normalizePhoneDisplay('abc')).toBeUndefined();
+    expect(normalizePhoneDisplay(null)).toBeUndefined();
   });
 });

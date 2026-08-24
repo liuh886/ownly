@@ -123,6 +123,12 @@ export async function readCurrentPlace(): Promise<void> {
   }
 
   el.placePanel.classList.remove('is-loading');
+  if (store.currentPlace && store.currentPlace.sourceProvider === 'google_maps') {
+    try {
+      const { enrichPlaceFromHtml } = await import('../content');
+      store.currentPlace = await enrichPlaceFromHtml(store.currentPlace);
+    } catch {}
+  }
   renderCurrentPlace();
   renderSmartListCard();
   renderCurrencyPill();

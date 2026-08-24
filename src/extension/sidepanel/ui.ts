@@ -1,6 +1,7 @@
 import {
   checkOpeningHoursCollision,
   classifyResearchChip,
+  inferKindFromTypes,
   inferPlaceKind,
   listTripDates,
   normalizeDelimitedText,
@@ -464,6 +465,9 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   }
   if (place.category) {
     el.kind.value = inferPlaceKind(place.category);
+  } else {
+    const byTypes = inferKindFromTypes(place.types);
+    if (byTypes) el.kind.value = byTypes;
   }
   if (place.address && !el.area.value) {
     const parts = place.address.split(/[,，·]/).map((p) => p.trim()).filter(Boolean);
@@ -844,11 +848,18 @@ function buildCandidateDetails(
     wrapper.append(chk);
   }
   if (place.area) details.innerHTML += `<span>📍 ${escapeHtml(place.area)}</span>`;
+  if (place.phone) details.innerHTML += `<a href="tel:${escapeHtml(place.phone)}" class="badge">☎️ ${escapeHtml(place.phone)}</a>`;
+  if (place.plus_code) details.innerHTML += `<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`;
   if (place.is_anchor) {
     details.innerHTML += `<span class="badge highlight" title="${store.lang === 'zh' ? '行程锚点（住宿占位），受保护不可批量删除' : 'Trip anchor (stay placeholder), protected from bulk delete'}">🏨</span>`;
   }
   if (place.source_place_id) {
     details.innerHTML += `<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`;
+  }
+  if (place.menu_url) details.innerHTML += `<a href="${escapeHtml(place.menu_url)}" target="_blank" rel="noreferrer" class="badge">🍽️ 菜单</a>`;
+  if (place.reservation_url) details.innerHTML += `<a href="${escapeHtml(place.reservation_url)}" target="_blank" rel="noreferrer" class="badge highlight">🎟️ 预订</a>`;
+  if (place.review_topics && place.review_topics.length > 0) {
+    details.innerHTML += `<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`;
   }
   if (place.observed_rating) details.innerHTML += `<span>★ ${place.observed_rating}</span>`;
   if (place.observed_price) details.innerHTML += `<span>💰 ${escapeHtml(place.observed_price)}</span>`;
