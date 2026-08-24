@@ -20,9 +20,12 @@ Ownly/
   Trips/
   Trip Places/
   Trip Bookings/
+  Trip Expenses/
 ```
 
 The extension's `chrome.storage.local` state is only a pending handoff queue. After Planner writes pending places to Markdown it acknowledges those IDs and removes them from the queue. All writers (side panel, background quick capture, website bridge) share one serialized state module with an in-context write queue, and the side panel live-reloads when another context writes.
+
+Budget ledger expenses live in `Trip Expenses/` as one frontmatter file per entry (`expense--<id>.md`), and AA ledger members are stored on the trip's own frontmatter (`members`). Legacy localStorage ledgers are migrated into the vault on first Planner load and then removed.
 
 ### Trip
 

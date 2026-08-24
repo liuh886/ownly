@@ -67,26 +67,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const currentExpenses = useMemo(() => {
     if (!selectedTripId) return [];
-    if (expensesByTrip[selectedTripId]) return expensesByTrip[selectedTripId];
-    if (typeof window === 'undefined') return [];
-    try {
-      const raw = localStorage.getItem(`ownly_trip_expenses_${selectedTripId}`);
-      return raw ? (JSON.parse(raw) as TripExpenseItem[]) : [];
-    } catch {
-      return [];
-    }
+    return expensesByTrip[selectedTripId] ?? [];
   }, [selectedTripId, expensesByTrip]);
 
   const currentMembers = useMemo(() => {
     if (!selectedTripId) return [zh ? '我' : 'Me'];
-    if (membersByTrip[selectedTripId]) return membersByTrip[selectedTripId];
-    if (typeof window === 'undefined') return [zh ? '我' : 'Me'];
-    try {
-      const raw = localStorage.getItem(`ownly_trip_members_${selectedTripId}`);
-      return raw ? (JSON.parse(raw) as string[]) : [zh ? '我' : 'Me'];
-    } catch {
-      return [zh ? '我' : 'Me'];
-    }
+    return membersByTrip[selectedTripId] ?? (zh ? ['我'] : ['Me']);
   }, [selectedTripId, membersByTrip, zh]);
 
   const handleAddExpense = useCallback(
@@ -99,11 +85,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       };
       const next = [newExp, ...currentExpenses];
       setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: next }));
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(`ownly_trip_expenses_${selectedTripId}`, JSON.stringify(next));
-        } catch {}
-      }
+      void plannerRepository.upsertExpense(newExp).catch((error) => {
+        console.warn('[Planner] Failed to persist expense', error);
+      });
     },
     [selectedTripId, currentExpenses],
   );
@@ -113,11 +97,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       if (!selectedTripId) return;
       const next = currentExpenses.filter((e) => e.id !== id);
       setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: next }));
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(`ownly_trip_expenses_${selectedTripId}`, JSON.stringify(next));
-        } catch {}
-      }
+      void plannerRepository.deleteExpense(id).catch((error) => {
+        console.warn('[Planner] Failed to delete expense', error);
+      });
     },
     [selectedTripId, currentExpenses],
   );
@@ -126,16 +108,65 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     (nextMembers: string[]) => {
       if (!selectedTripId) return;
       setMembersByTrip((prev) => ({ ...prev, [selectedTripId]: nextMembers }));
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(`ownly_trip_members_${selectedTripId}`, JSON.stringify(nextMembers));
-        } catch {}
-      }
+      const trip = trips.find((item) => item.id === selectedTripId);
+      if (!trip) return;
+      void plannerRepository
+        .upsertTrip({ ...trip, members: nextMembers, updated_at: new Date().toISOString() })
+        .catch((error) => {
+          console.warn('[Planner] Failed to persist trip members', error);
+        });
     },
-    [selectedTripId],
+    [selectedTripId, trips],
   );
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
+
+  const hydrateLedgerFromVault = useCallback(async (trips: PlannerTrip[]) => {
+    const stored = await plannerRepository.listExpenses();
+
+    // One-time migration: pull legacy localStorage ledgers/members into the vault.
+    for (const trip of trips) {
+      try {
+        const expKey = `ownly_trip_expenses_${trip.id}`;
+        const rawExpenses = typeof window !== 'undefined' ? localStorage.getItem(expKey) : null;
+        if (rawExpenses !== null) {
+          localStorage.removeItem(expKey);
+          const legacy = JSON.parse(rawExpenses) as TripExpenseItem[];
+          if (Array.isArray(legacy) && legacy.length > 0 && !stored.some((e) => e.trip_id === trip.id)) {
+            await Promise.all(legacy.map((e) => plannerRepository.upsertExpense(e)));
+            stored.push(...legacy);
+          }
+        }
+      } catch (error) {
+        console.warn('[Planner] expense migration skipped', error);
+      }
+
+      try {
+        const memberKey = `ownly_trip_members_${trip.id}`;
+        const rawMembers = typeof window !== 'undefined' ? localStorage.getItem(memberKey) : null;
+        let members = trip.members;
+        if (rawMembers !== null) {
+          localStorage.removeItem(memberKey);
+          const parsed = JSON.parse(rawMembers) as string[];
+          if (Array.isArray(parsed) && parsed.length > 0 && JSON.stringify(trip.members ?? []) !== JSON.stringify(parsed)) {
+            members = parsed;
+            await plannerRepository.upsertTrip({ ...trip, members, updated_at: new Date().toISOString() });
+          }
+        }
+        if (members && members.length > 0) {
+          setMembersByTrip((prev) => ({ ...prev, [trip.id]: members as string[] }));
+        }
+      } catch (error) {
+        console.warn('[Planner] member migration skipped', error);
+      }
+    }
+
+    const grouped: Record<string, TripExpenseItem[]> = {};
+    for (const expense of stored) {
+      (grouped[expense.trip_id] ??= []).push(expense);
+    }
+    setExpensesByTrip(grouped);
+  }, []);
 
   const load = useCallback(async () => {
     if (disabled) return;
@@ -148,7 +179,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     setTrips(nextTrips);
     setPlaces(nextPlaces);
     setSelectedTripId((current) => current || nextTrips[0]?.id || '');
-  }, [disabled]);
+    try {
+      await hydrateLedgerFromVault(nextTrips);
+    } catch (error) {
+      console.warn('[Planner] ledger hydration failed', error);
+    }
+  }, [disabled, hydrateLedgerFromVault]);
 
   useEffect(() => {
     let active = true;
