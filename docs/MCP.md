@@ -87,6 +87,9 @@ claude mcp list
 | `ownly_recurring_by_account` | Group by payment account without mixing currencies |
 | `ownly_review_needed` | List records needing lifecycle review |
 | `ownly_doctor` | Run read-only integrity checks |
+| `ownly_planner_summary` | Trips overview with place-state and expense counts |
+| `ownly_planner_get_trip` | Full trip context: budget (FX-aware), day conflicts, places, bookings, expenses |
+| `ownly_planner_budget_estimate` | Scheduled-day budget converted into the trip base currency |
 
 ## Opt-in write mode
 
@@ -124,6 +127,14 @@ Write tools:
 | `ownly_prepare_create_snapshot` | Preview a net-worth snapshot |
 | `ownly_prepare_archive_object` | Preview recoverable archive |
 | `ownly_prepare_restore_object` | Preview archive restoration |
+| `ownly_planner_prepare_schedule_place` | Preview scheduling a place on a date (locks it) |
+| `ownly_planner_prepare_return_to_pool` | Preview returning a place to the research pool |
+| `ownly_planner_prepare_reorder_day` | Preview moving one scheduled place ±1 within its day |
+| `ownly_planner_prepare_optimize_route` | Preview TSP day-route optimization (locked/unlocated stops pinned) |
+| `ownly_planner_prepare_set_stay_span` | Preview hotel stay-span anchors (retires stale stays on those dates) |
+| `ownly_planner_prepare_drop_place` | Preview marking a place dropped |
+| `ownly_planner_prepare_add_expense` | Preview appending an AA-ledger expense |
+| `ownly_planner_prepare_set_fx_rates` | Preview persisting trip FX-rate overrides |
 | `ownly_commit_operation` | Back up and persist a confirmed preview |
 | `ownly_discard_operation` | Remove a preview without touching files |
 
