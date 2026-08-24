@@ -159,6 +159,19 @@ export class PlannerRepository {
     await this.upsert(booking);
   }
 
+  /** Explicit lifecycle transition that bypasses capture-merge semantics. */
+  async dropPlace(placeId: string): Promise<boolean> {
+    await this.initialize();
+    const existing = (await this.listPlaces()).find((place) => place.id === placeId);
+    if (!existing) return false;
+    await this.store.writeMarkdownFile(
+      this.directory(PLANNER_DIRECTORIES.places),
+      entityFileName(existing),
+      serializeMarkdownEntity({ ...existing, state: 'dropped', updated_at: new Date().toISOString() }, ''),
+    );
+    return true;
+  }
+
   async upsertExpense(expense: TripExpenseItem): Promise<void> {
     await this.initialize();
     await this.store.writeMarkdownFile(

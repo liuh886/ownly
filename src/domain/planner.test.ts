@@ -108,6 +108,13 @@ describe('Ownly Planner domain', () => {
     expect(merged.reservation_status).toBe('booked');
   });
 
+  it('honors an explicit dropped state as a lifecycle command during recapture', () => {
+    const existing = place('live', { state: 'scheduled', scheduled_date: '2026-10-07' });
+    const merged = mergeCapturedPlaceResearch(existing, place('live', { state: 'dropped' }));
+    expect(merged.state).toBe('dropped');
+    expect(merged.scheduled_date).toBe('2026-10-07');
+  });
+
   it('infers place kind from Chinese and English categories', () => {
     expect(inferPlaceKind('日本料理店')).toBe('food');
     expect(inferPlaceKind('Coffee Shop')).toBe('cafe');

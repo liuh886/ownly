@@ -185,8 +185,12 @@ export function mergeCapturedPlaceResearch(
   existing: PlannerTripPlace,
   captured: PlannerTripPlace,
 ): PlannerTripPlace {
+  // 'dropped' is a terminal lifecycle command that never originates from a
+  // normal capture, so it is honored explicitly instead of being swallowed.
+  const lifecycleOverride = captured.state === 'dropped' ? { state: 'dropped' as const } : {};
   return {
     ...existing,
+    ...lifecycleOverride,
     title: captured.title,
     source_provider: captured.source_provider,
     source_url: captured.source_url,
