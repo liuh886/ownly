@@ -28,6 +28,8 @@ export interface PlannerTrip {
   travel_preferences?: string[];
   /** AA ledger participants, persisted so the ledger survives browsers/devices. */
   members?: string[];
+  /** User-verified conversion overrides: fx_rates[FROM] = how many trip-currency per 1 FROM. */
+  fx_rates?: Record<string, number>;
   created_at: string;
   updated_at?: string;
 }
@@ -1003,6 +1005,49 @@ const SYMBOL_TO_CODE: Record<string, string> = {
   '¥': 'CNY', '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '₩': 'KRW',
 };
 
+/**
+ * Approximate reference rates used when a trip defines no explicit override:
+ * value = how many USD one unit of the currency is worth. Editable defaults,
+ * never a live market feed (local-first: no network, no API keys).
+ */
+export const DEFAULT_USD_PIVOT: Record<string, number> = {
+  USD: 1, CNY: 0.14, JPY: 0.0067, THB: 0.027, HKD: 0.128, TWD: 0.031,
+  KRW: 0.00073, SGD: 0.74, MYR: 0.21, EUR: 1.08, GBP: 1.27, AUD: 0.66,
+  CAD: 0.73, CHF: 1.12, INR: 0.012, VND: 0.00004,
+};
+
+export interface FxSettings {
+  /** Trip base currency (ISO code). */
+  base: string;
+  /** Explicit user overrides: overrides[from] = how many BASE per 1 FROM. */
+  overrides?: Record<string, number>;
+}
+
+/** Effective multiplier converting 1 FROM into BASE, or null when unknown. */
+export function effectiveFxRate(
+  from: string | null | undefined,
+  fx: FxSettings,
+): number | null {
+  const code = from?.trim().toUpperCase() || null;
+  if (!code) return null;
+  if (code === fx.base.toUpperCase()) return 1;
+  const overridden = fx.overrides?.[code];
+  if (typeof overridden === 'number' && Number.isFinite(overridden) && overridden > 0) return overridden;
+  const fromUsd = DEFAULT_USD_PIVOT[code];
+  const baseUsd = DEFAULT_USD_PIVOT[fx.base.toUpperCase()];
+  if (fromUsd && baseUsd) return Math.round((fromUsd / baseUsd) * 10000) / 10000;
+  return null;
+}
+
+/** Extracts a normalized ISO-ish currency marker from a free-text price string. */
+export function extractPriceCurrency(raw?: string | null): string | null {
+  if (!raw) return null;
+  const match = /(?:[¥฿$€£₩]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|NT\$|S\$|HK\$|US\$)/i.exec(raw);
+  if (!match) return null;
+  const rawMarker = match[0].toUpperCase();
+  return SYMBOL_TO_CODE[rawMarker] ?? rawMarker.replace(/\\$/, '');
+}
+
 export interface TripBudgetEstimation {
   totalEstimated: number;
   perPersonEstimated: number;
@@ -1064,36 +1109,43 @@ export function parseNumericPrice(raw?: string | null): number {  if (!raw) retu
 export function estimateTripBudget(
   scheduledPlaces: PlannerTripPlace[],
   travelerCount = 1,
-  defaultCurrency = 'CNY',
+  fx?: FxSettings,
 ): TripBudgetEstimation {
+  const base = fx?.base?.trim().toUpperCase() || 'CNY';
   let stayTotal = 0;
   let foodTotal = 0;
   let ticketTotal = 0;
   let otherTotal = 0;
   let currency = '';
+  const foundCurrencies = new Set<string>();
 
   const validTravelers = Math.max(1, travelerCount);
-  const foundCurrencies = new Set<string>();
 
   scheduledPlaces.forEach((place) => {
     const price = parseNumericPrice(place.observed_price);
+    let marker: string | null = null;
     if (place.observed_price) {
-      const curMatch = /(?:[¥฿$€£₩]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY)/i.exec(place.observed_price);
-      if (curMatch) {
-        const raw = curMatch[0].toUpperCase();
-        foundCurrencies.add(SYMBOL_TO_CODE[raw] ?? raw);
-        if (!currency) currency = SYMBOL_TO_CODE[raw] ?? (raw.length === 1 ? defaultCurrency : raw);
+      marker = extractPriceCurrency(place.observed_price);
+      if (marker) {
+        foundCurrencies.add(marker);
+        if (!currency) currency = marker;
       }
     }
 
+    // Convert the amount into the trip base currency when a rate is known.
+    // Bare numbers (no marker) are assumed to already be in base currency.
+    const from = marker ?? base;
+    const rate = effectiveFxRate(from, { base, overrides: fx?.overrides });
+    const converted = rate !== null ? Math.round(price * rate * 100) / 100 : price;
+
     if (place.kind === 'stay') {
-      stayTotal += price > 0 ? price : 0;
+      stayTotal += converted > 0 ? converted : 0;
     } else if (place.kind === 'food' || place.kind === 'cafe') {
-      foodTotal += (price > 0 ? price : 0) * validTravelers;
+      foodTotal += (converted > 0 ? converted : 0) * validTravelers;
     } else if (place.kind === 'attraction' || place.kind === 'experience') {
-      ticketTotal += (price > 0 ? price : 0) * validTravelers;
+      ticketTotal += (converted > 0 ? converted : 0) * validTravelers;
     } else {
-      otherTotal += (price > 0 ? price : 0) * validTravelers;
+      otherTotal += (converted > 0 ? converted : 0) * validTravelers;
     }
   });
 
@@ -1110,7 +1162,7 @@ export function estimateTripBudget(
       ticket: ticketTotal,
       other: otherTotal,
     },
-    detectedCurrency: currency || defaultCurrency,
+    detectedCurrency: currency || base,
     currencies: [...foundCurrencies],
   };
 }
@@ -1118,7 +1170,14 @@ export function estimateTripBudget(
 export function calculateTripSettlement(
   expenses: TripExpenseItem[],
   allMembers: string[] = [],
+  fx?: FxSettings,
 ): TripSettlementResult {
+  const toBase = (amount: number, from?: string): number => {
+    if (!fx) return amount;
+    const rate = effectiveFxRate(from, fx);
+    return rate === null ? amount : Math.round(amount * rate * 100) / 100;
+  };
+
   const memberSet = new Set<string>(allMembers);
   expenses.forEach((exp) => {
     if (exp.paid_by) memberSet.add(exp.paid_by);
@@ -1145,7 +1204,7 @@ export function calculateTripSettlement(
   let totalExpense = 0;
 
   expenses.forEach((exp) => {
-    const amt = exp.amount;
+    const amt = toBase(exp.amount, exp.currency);
     totalExpense += amt;
     if (paidMap[exp.paid_by] !== undefined) {
       paidMap[exp.paid_by] += amt;
@@ -1217,7 +1276,8 @@ export function calculateTripSettlement(
   }
 
   // Build WeChat-friendly summary text
-  const currencySymbol = currencySymbolFor(expenses[0]?.currency);
+  const baseCurrency = fx?.base?.trim().toUpperCase();
+  const currencySymbol = currencySymbolFor(baseCurrency ?? expenses[0]?.currency);
   const lines: string[] = [
     `✈️ 旅行费用 AA 清算账单`,
     `💰 总支出: ${currencySymbol}${totalExpense} (共 ${members.length} 人)`,

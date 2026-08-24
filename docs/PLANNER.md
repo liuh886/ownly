@@ -27,6 +27,8 @@ The extension's `chrome.storage.local` state is only a pending handoff queue. Af
 
 Budget ledger expenses live in `Trip Expenses/` as one frontmatter file per entry (`expense--<id>.md`), and AA ledger members are stored on the trip's own frontmatter (`members`). Legacy localStorage ledgers are migrated into the vault on first Planner load and then removed.
 
+Mixed-currency prices are converted for display only via built-in USD-pivot reference rates; trips may override any rate through `fx_rates` on the trip frontmatter. Raw captured price text is never rewritten.
+
 ### Trip
 
 Trip identity, date range, destinations, currency and default transport mode.
@@ -50,6 +52,8 @@ npm run build:extension
 Load `dist/extension` as an unpacked extension in Chromium. The action button opens the native Side Panel.
 
 The Google Maps adapter auto-fills observation hints for the current place or saved list: title, URL, coordinates (when present in the URL or list payload), rating, price, address, opening hours and the user's own Maps notes. Research judgment — priority, area, signals, risks, why — remains explicit user input. Ownly does not scrape or archive raw Google reviews.
+
+Currency detection runs in tiers: explicit symbols/codes on the page, then the place's map coordinates, then the trip's declared currency as a prior (beats VPN/TLD page-localization noise), then generic locale context. Hotel rate modules load lazily, so a missed price is retried once after ~2 seconds.
 
 Places are de-duplicated per trip with a stable identity: the Google place id when available, otherwise a normalized title/URL key (`knownPlaceIds`). Re-importing a saved list via one-click sync refreshes captured observations while preserving the user's edits and any scheduling state; bulk text/link paste only adds missing places and never overwrites existing ones.
 

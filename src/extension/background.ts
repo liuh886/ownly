@@ -34,7 +34,11 @@ async function quickCaptureCurrentPlace() {
   const tabId = tab.id;
 
   try {
-    const response = await chrome.tabs.sendMessage(tabId, { type: 'OWNLY_GET_CURRENT_PLACE' }) as { place?: CurrentResearchPlace | null };
+    const preState = await chrome.storage.local.get(CAPTURE_STORAGE_KEY);
+    const preActive = (preState[CAPTURE_STORAGE_KEY] as OwnlyCaptureState | undefined)?.activeTripId;
+    const preTrip = (preState[CAPTURE_STORAGE_KEY] as OwnlyCaptureState | undefined)?.trips?.find((t) => t.id === preActive);
+
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'OWNLY_GET_CURRENT_PLACE', targetCurrency: preTrip?.currency }) as { place?: CurrentResearchPlace | null };
     const place = response?.place;
     if (!place?.title || !place.sourceUrl) {
       void flashBadge(tabId, '!', '#b91c1c');

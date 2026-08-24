@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import type { PlannerTrip, PlannerTripPlace, TripExpenseCategory, TripExpenseItem } from '@/domain/planner';
-import { calculateTripSettlement, estimateTripBudget } from '@/domain/planner';
+import {
+  calculateTripSettlement,
+  effectiveFxRate,
+  estimateTripBudget,
+  type FxSettings,
+} from '@/domain/planner';
 
 interface PlannerBudgetLedgerProps {
   trip: PlannerTrip;
@@ -12,6 +17,7 @@ interface PlannerBudgetLedgerProps {
   onDeleteExpense: (expenseId: string) => void;
   members: string[];
   onUpdateMembers: (members: string[]) => void;
+  onUpdateFxRates?: (rates: Record<string, number>) => void;
   language?: 'zh' | 'en';
 }
 
@@ -34,9 +40,11 @@ export function PlannerBudgetLedger({
   onDeleteExpense,
   members,
   onUpdateMembers,
+  onUpdateFxRates,
   language = 'zh',
 }: PlannerBudgetLedgerProps) {
   const zh = language === 'zh';
+  const baseCurrency = (trip.currency || 'CNY').trim().toUpperCase();
 
   // New expense form state
   const [isAddingExpense, setIsAddingExpense] = useState(false);
@@ -47,21 +55,36 @@ export function PlannerBudgetLedger({
   const [paidBy, setPaidBy] = useState(members[0] || (zh ? '我' : 'Me'));
   const [selectedSplits, setSelectedSplits] = useState<string[]>(members);
   const [notes, setNotes] = useState('');
+  const [showFxEditor, setShowFxEditor] = useState(false);
+  const [fxDraft, setFxDraft] = useState<Record<string, string>>({});
 
   // Member management state
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
 
+  // FX settings derived from the trip; stable identity keeps downstream memos intact
+  const fx = useMemo<FxSettings>(
+    () => ({ base: (trip.currency || 'CNY').trim().toUpperCase(), overrides: trip.fx_rates }),
+    [trip.currency, trip.fx_rates],
+  );
+
   // Auto Budget Estimation
   const budgetEstimation = useMemo(() => {
-    return estimateTripBudget(scheduledPlaces, members.length || 1, currency);
-  }, [scheduledPlaces, members.length, currency]);
+    return estimateTripBudget(scheduledPlaces, members.length || 1, fx);
+  }, [scheduledPlaces, members.length, fx]);
+
+  const fxRowCodes = useMemo(() => {
+    const codes = new Set<string>();
+    budgetEstimation.currencies.forEach((c) => { if (c !== baseCurrency) codes.add(c); });
+    Object.keys(trip.fx_rates ?? {}).forEach((c) => { if (c !== baseCurrency) codes.add(c); });
+    return [...codes].sort();
+  }, [budgetEstimation.currencies, trip.fx_rates, baseCurrency]);
 
   // AA Settlement calculation
   const settlement = useMemo(() => {
-    return calculateTripSettlement(expenses, members);
-  }, [expenses, members]);
+    return calculateTripSettlement(expenses, members, fx);
+  }, [expenses, members, fx]);
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,11 +215,29 @@ export function PlannerBudgetLedger({
               : `Per person ${currency} ${budgetEstimation.perPersonEstimated.toLocaleString()}`}
           </p>
           {budgetEstimation.currencies.length > 1 ? (
-            <p className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-amber-200">
-              ⚠️ {zh
-                ? `混合币种（${budgetEstimation.currencies.join(' / ')}），估算未做汇率换算`
-                : `Mixed currencies (${budgetEstimation.currencies.join(' / ')}); no FX conversion applied`}
-            </p>
+            (() => {
+              const missing = budgetEstimation.currencies.filter((c) => c !== baseCurrency && effectiveFxRate(c, fx) === null);
+              const converted = budgetEstimation.currencies.filter((c) => c !== baseCurrency && effectiveFxRate(c, fx) !== null);
+              if (missing.length > 0) {
+                return (
+                  <p className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-amber-200">
+                    ⚠️ {zh
+                      ? `缺少 ${missing.join(' / ')} 汇率，相关金额按面值计入（请在下方汇率设置中补充）`
+                      : `Missing FX rate for ${missing.join(' / ')} — amounts counted at face value (set rates below)`}
+                  </p>
+                );
+              }
+              if (converted.length > 0) {
+                return (
+                  <p className="mt-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-sky-200">
+                    💱 {zh
+                      ? `已按行程币种 ${baseCurrency} 折算：${converted.join(' / ')}`
+                      : `Converted to ${baseCurrency}: ${converted.join(' / ')}`}
+                  </p>
+                );
+              }
+              return null;
+            })()
           ) : null}
         </div>
 
@@ -214,6 +255,84 @@ export function PlannerBudgetLedger({
           </p>
         </div>
       </div>
+
+      {/* 2b. FX Rates Editor */}
+      {fxRowCodes.length > 0 ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-sky-900">
+              💱 {zh ? `汇率设置（1 外币 = ? ${baseCurrency}）` : `FX rates (1 unit = ? ${baseCurrency})`}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setShowFxEditor((v) => !v);
+                setFxDraft({});
+              }}
+              className="rounded-md border border-sky-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-100"
+            >
+              {showFxEditor ? (zh ? '收起' : 'Close') : (zh ? '调整' : 'Adjust')}
+            </button>
+          </div>
+
+          {!showFxEditor ? (
+            <p className="mt-1 text-[10px] text-sky-800/80">
+              {fxRowCodes.map((code) => `${code}: ×${effectiveFxRate(code, fx) ?? '?'}`).join(' · ')}
+              {' '}
+              {zh ? '(内置近似汇率，可调整)' : '(built-in reference rates, editable)'}
+            </p>
+          ) : (
+            <div className="mt-2 space-y-1.5">
+              {fxRowCodes.map((code) => (
+                <div key={code} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-12 font-bold text-sky-900">{code}</span>
+                  <span className="text-stone-400">=</span>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    inputMode="decimal"
+                    value={fxDraft[code] ?? String(effectiveFxRate(code, fx) ?? '')}
+                    onChange={(e) => setFxDraft((prev) => ({ ...prev, [code]: e.target.value }))}
+                    className="w-24 rounded border border-stone-300 px-1.5 py-0.5 text-right font-mono text-[11px]"
+                  />
+                  <span className="text-stone-500">{baseCurrency}</span>
+                </div>
+              ))}
+              <div className="flex justify-end gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setFxDraft({}); setShowFxEditor(false); }}
+                  className="rounded-md border border-stone-200 px-2 py-1 text-[10px] font-semibold text-stone-600 hover:bg-white"
+                >
+                  {zh ? '取消' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next: Record<string, number> = { ...(trip.fx_rates ?? {}) };
+                    for (const [code, raw] of Object.entries(fxDraft)) {
+                      const num = parseFloat(raw);
+                      if (Number.isFinite(num) && num > 0) next[code] = num;
+                    }
+                    onUpdateFxRates?.(next);
+                    setShowFxEditor(false);
+                    setFxDraft({});
+                  }}
+                  className="rounded-md bg-sky-700 px-3 py-1 text-[10px] font-bold text-white hover:bg-sky-800"
+                >
+                  ✓ {zh ? '保存汇率' : 'Save rates'}
+                </button>
+              </div>
+              <p className="text-[9.5px] leading-4 text-stone-400">
+                {zh
+                  ? '默认为内置近似参考值，仅供本地折算展示；修改后仅保存在行程文件中，不影响原始价格记录。'
+                  : 'Defaults are built-in reference values for local display only; overrides persist on the trip file and never alter captured prices.'}
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* 3. Fast Expense Entry Drawer / Button */}
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-2xs">

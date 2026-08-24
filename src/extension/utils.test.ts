@@ -70,6 +70,9 @@ describe('isPlausiblePriceText', () => {
     expect(isPlausiblePriceText('人均 ฿200–400')).toBe(true);
     expect(isPlausiblePriceText('每晚 per night 120')).toBe(true);
     expect(isPlausiblePriceText('TWD1,200')).toBe(true);
+    expect(isPlausiblePriceText('S$1,024 night')).toBe(true);
+    expect(isPlausiblePriceText('SGD 1,024')).toBe(true);
+    expect(isPlausiblePriceText('THB 2,350')).toBe(true);
   });
 
   it('rejects hotel tiers and non-price text', () => {

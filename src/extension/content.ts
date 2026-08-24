@@ -97,6 +97,21 @@ function extractPrice(): string | undefined {
     if (label && isPlausiblePriceText(label)) return label;
   }
 
+  // 4. Localized hotel-rate modules (e.g. "S$1,024 night", "THB 2,350", "From ¥18,000")
+  const rateSpans = document.querySelectorAll<HTMLElement>(
+    'div.fontBodyMedium span, div.fontHeadlineSmall span, div.W4Efsd span, div.mgr77e *, div[jsaction*="hotel"] span'
+  );
+  const RATE_TEXT = /(?:from\s+|约\s*)?(S\$|HK\$|US\$|NT\$|[¥฿$€£₩₫]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR)\s?)\s?\d[\d.,]*(?:\s*[-–—〜~]\s*\d[\d.,]*)?(?:\s*[/·]?\s*(?:night|晚|person|人))?/i;
+  for (const el of Array.from(rateSpans).slice(0, 60)) {
+    const text = cleanExtractedText(el.textContent || '');
+    if (!text || text.length > 50) continue;
+    const match = RATE_TEXT.exec(text);
+    if (match) {
+      const candidate = cleanExtractedText(match[0]);
+      if (isPlausiblePriceText(candidate)) return candidate;
+    }
+  }
+
   return undefined;
 }
 
@@ -182,8 +197,13 @@ function extractWebsite(): string | undefined {
   return undefined;
 }
 
-export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): string | undefined {
+export function detectCurrencyFromPage(
+  sourceUrl: string,
+  priceText?: string,
+  hintCurrency?: string,
+): string | undefined {
   const currentUrl = sourceUrl || window.location.href;
+  const hint = hintCurrency?.trim().toUpperCase() || undefined;
   const pageContentToScan: string[] = [];
   if (priceText) pageContentToScan.push(priceText);
 
@@ -219,7 +239,7 @@ export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): s
   if (/cn¥|\brmb\b|\bcny\b|人民币/i.test(combinedPrices)) return 'CNY';
   if (/jp¥|\bjpy\b|円/i.test(combinedPrices)) return 'JPY';
 
-  // 2. Geographic & Domain Context (TLD, URL keywords, Coordinates, Address context)
+  // 2. Place-location coordinates are the strongest passive signal (immune to VPN/locale)
   const fullContext = (currentUrl + ' ' + document.title + ' ' + (document.body?.innerText?.slice(0, 1500) || '')).toLowerCase();
 
   // Coordinates extraction e.g. @1.3521,103.8198
@@ -235,7 +255,12 @@ export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): s
     if (lat >= 0.80 && lat <= 7.50 && lng >= 99.50 && lng <= 119.50) return 'MYR'; // Malaysia
   }
 
-  // Keywords & TLDs
+  // 3. Trip-currency prior beats page-localization context (VPN region, TLD):
+  //    if we reach this point no explicit price symbol matched, so the user's
+  //    declared travel currency is more meaningful than where Google served us.
+  if (hint) return hint;
+
+  // 4. Keywords & TLDs (page locale only — weakest signal)
   if (/\.com\.sg|\.sg\b|singapore|新加坡|changi|sentosa|marina bay/i.test(fullContext)) return 'SGD';
   if (/\.com\.hk|\.hk\b|hong kong|hongkong|香港|kowloon|九龙/i.test(fullContext)) return 'HKD';
   if (/\.com\.tw|\.tw\b|taiwan|taipei|台湾|台北|高雄/i.test(fullContext)) return 'TWD';
@@ -247,7 +272,7 @@ export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): s
   if (/\.co\.uk|\.uk\b|london|united kingdom|英国|伦敦/i.test(fullContext)) return 'GBP';
   if (/\.fr|\.de|\.it|\.es|\.nl|france|germany|italy|spain|paris|rome|berlin|欧洲|法国|德国|意大利/i.test(fullContext)) return 'EUR';
 
-  // 3. Ambiguous symbols fallback
+  // 5. Ambiguous symbols fallback
   if (combinedPrices.includes('¥')) {
     if (/円|japan|tokyo|osaka/i.test(fullContext) || document.documentElement.lang.startsWith('ja')) return 'JPY';
     return 'CNY';
@@ -257,6 +282,8 @@ export function detectCurrencyFromPage(sourceUrl: string, priceText?: string): s
     if (/hong kong|香港/i.test(fullContext)) return 'HKD';
     if (/australia|sydney|melbourne/i.test(fullContext)) return 'AUD';
     if (/canada|toronto|vancouver/i.test(fullContext)) return 'CAD';
+    // Ambiguous bare "$": prefer the trip's declared currency before falling back to USD.
+    if (hint) return hint;
     return 'USD';
   }
 
@@ -784,6 +811,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
         const allLists = scanAllSavedListsOnPage();
         const targetTags = ((message as { targetTags?: string[] }).targetTags || []).map((t) => t.trim().toLowerCase());
+        const targetCurrency = (message as { targetCurrency?: string }).targetCurrency;
 
         // If page has multiple lists and no single list is currently open, auto-fetch the list matching the target trip tag
         if ((!savedList || savedList.places.length === 0) && targetTags.length > 0 && allLists.length > 0) {
@@ -797,7 +825,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         const place = currentPlace();
-        sendResponse({ place, savedList, allLists });
+        sendResponse({ place, savedList, allLists, detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, targetCurrency) });
       } catch (e) {
         console.warn('OWNLY_GET_CURRENT_PLACE failed:', e);
         sendResponse({ place: null, savedList: null, allLists: [] });

@@ -408,7 +408,7 @@ describe('Ownly Planner domain', () => {
     const restaurant = place('r1', { kind: 'food', observed_price: '人均 ฿300' });
     const museum = place('m1', { kind: 'attraction', observed_price: '฿200' });
 
-    const estimate = estimateTripBudget([hotel, restaurant, museum], 4, 'THB');
+    const estimate = estimateTripBudget([hotel, restaurant, museum], 4, { base: 'THB' });
     // stay = 1800
     // food = 300 * 4 = 1200
     // ticket = 200 * 4 = 800
@@ -512,7 +512,7 @@ describe('Route optimization pinning & budget currency', () => {
     const est = estimateTripBudget([
       place('food1', { kind: 'food', observed_price: '฿200-400' }),
       place('stay1', { kind: 'stay', observed_price: '฿2,000' }),
-    ], 2, 'CNY');
+    ], 2, { base: 'THB' });
     expect(est.detectedCurrency).toBe('THB');
     expect(est.categoryBreakdown.stay).toBe(2000);
     expect(est.categoryBreakdown.food).toBe(600);
@@ -523,7 +523,7 @@ describe('Route optimization pinning & budget currency', () => {
     const est = estimateTripBudget([
       place('a', { kind: 'food', observed_price: '฿100' }),
       place('b', { kind: 'food', observed_price: '¥50' }),
-    ], 1, 'CNY');
+    ], 1, { base: 'CNY' });
     expect(est.detectedCurrency).toBe('THB');
     expect([...est.currencies].sort()).toEqual(['CNY', 'THB']);
   });
