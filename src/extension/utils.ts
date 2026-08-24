@@ -162,6 +162,34 @@ export function isPlausiblePriceText(raw?: string | null): boolean {
 }
 
 /**
+ * Detects Google Maps UI action labels that are NOT real place names.
+ * These appear near listings as buttons/chips but get picked up by text scanning.
+ */
+const FAKE_PLACE_PATTERNS: RegExp[] = [
+  /compare\s*price/i, /show\s*place\s*list/i, /^saved\s+in\b/i,
+  /^nearby$/i, /^near\s+me$/i, /^directions$/i, /^route$/i,
+  /^open\s+now$/i, /^highly\s+rated$/i, /^hotels?\s+near/i,
+  /^restaurants?\s+near/i, /^things?\s+to\s+do/i, /^attractions?$/i,
+  /^filters?$/i, /^sort\s+by/i, /^clear\s+(all|filters)/i,
+  /^(get|view)\s+(more|all|results)/i, /^show\s+(all|more)/i,
+  /^see\s+(all|more|outside)/i, /^results?$/i, /^list(s)?$/i,
+  /^photos?$/i, /^videos?$/i, /^about$/i, /^overview$/i,
+  /^menu$/i, /^order\s+online$/i, /^book\s+a\s+(table|room)$/i,
+  /^hours$/i, /^website$/i, /^call$/i, /^street\s*view/i,
+  /^360°?\s*view/i, /^ad$|^ads$|^sponsored$/i,
+  /^price(s)?$/i, /^deals?$/i, /^offers?$/i, /^amenities$/i,
+  /^reviews?$/i, /^questions?$/i, /^hotel\s+details$/i,
+  /^check\s*[-–]?in$/i, /^check\s*[-–]?out$/i,
+  /^\d+\s*(stars?|★)$/i, /^\$\{?[\d,]+\}?$/,
+];
+
+export function isFakePlaceLabel(text?: string | null): boolean {
+  const clean = (text ?? '').trim();
+  if (!clean || clean.length < 2) return true;
+  return FAKE_PLACE_PATTERNS.some((p) => p.test(clean));
+}
+
+/**
  * Determines if an extracted note/text is Google Maps sidebar navigation junk
  * (e.g. "SavedRecentsTH26Lampang4Chiang Mai17Bangkok2Hong KongView moreGet app")
  */

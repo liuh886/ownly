@@ -2,7 +2,7 @@ export type ElementMap = {
   langToggle: HTMLButtonElement;
   topbarSubtitle: HTMLElement;
   lblActiveTrip: HTMLElement;
-  btnDetectedCurrencyPill: HTMLButtonElement;
+  currencySelector: HTMLSelectElement;
   tripSelect: HTMLSelectElement;
   tripActiveRow: HTMLElement;
   tripManageSection: HTMLDetailsElement;
@@ -56,6 +56,7 @@ export type ElementMap = {
   bulkActionBar: HTMLElement;
   bulkDaySelect: HTMLSelectElement;
   bulkPrioritySelect: HTMLSelectElement;
+  btnSelectAllCandidates: HTMLButtonElement;
   btnBulkDelete: HTMLButtonElement;
   btnBulkExit: HTMLButtonElement;
   smartListSection: HTMLElement;
@@ -109,6 +110,9 @@ export type ElementMap = {
   risks: HTMLInputElement;
   lblNotes: HTMLElement;
   notes: HTMLTextAreaElement;
+  quickPriceSection: HTMLDetailsElement;
+  quickPriceList: HTMLElement;
+  btnSaveQuickPrices: HTMLButtonElement;
   btnCaptureSubmit: HTMLButtonElement;
   btnRemoveCandidate: HTMLButtonElement;
   candidatesDrawer: HTMLDetailsElement;
@@ -131,7 +135,7 @@ export const el: ElementMap = {
   langToggle: required('langToggle'),
   topbarSubtitle: required('topbarSubtitle'),
   lblActiveTrip: required('lblActiveTrip'),
-  btnDetectedCurrencyPill: required('btnDetectedCurrencyPill'),
+  currencySelector: required<HTMLSelectElement>('currencySelector'),
   tripSelect: required('tripSelect'),
   tripActiveRow: required('tripActiveRow'),
   tripManageSection: required<HTMLDetailsElement>('tripManageSection'),
@@ -185,6 +189,7 @@ export const el: ElementMap = {
   bulkActionBar: required('bulkActionBar'),
   bulkDaySelect: required('bulkDaySelect'),
   bulkPrioritySelect: required('bulkPrioritySelect'),
+  btnSelectAllCandidates: required('btnSelectAllCandidates'),
   btnBulkDelete: required('btnBulkDelete'),
   btnBulkExit: required('btnBulkExit'),
   smartListSection: required('smartListSection'),
@@ -238,6 +243,9 @@ export const el: ElementMap = {
   risks: required('risks'),
   lblNotes: required('lblNotes'),
   notes: required('notes'),
+  quickPriceSection: required<HTMLDetailsElement>('quickPriceSection'),
+  quickPriceList: required('quickPriceList'),
+  btnSaveQuickPrices: required('btnSaveQuickPrices'),
   btnCaptureSubmit: required('btnCaptureSubmit'),
   btnRemoveCandidate: required('btnRemoveCandidate'),
   candidatesDrawer: required<HTMLDetailsElement>('candidatesDrawer'),
