@@ -22,7 +22,7 @@
     <section class="panel stack">
       <div class="row" id="tripActiveRow">
         <label id="lblActiveTrip" class="label" for="tripSelect">当前行程</label>
-        <button id="btnDetectedCurrencyPill" class="chip accent-chip" type="button" style="display: none;">🗺️ 地图货币: THB</button>
+        <select id="currencySelector" class="chip accent-chip" style="display: none; padding: 1px 4px; font-size: 10px; width: auto; min-width: 70px;" aria-label="Currency"></select>🗺️ 地图货币: THB</button>
       </div>
       <select id="tripSelect"></select>
       <details id="tripManageSection" class="new-trip">
@@ -228,10 +228,15 @@
           <option value="want">想去 (Want)</option>
           <option value="optional">可选 (Optional)</option>
         </select>
-        <button id="btnBulkDelete" class="card-btn del" type="button">🗑️ 删除</button>
+        <button id="btnSelectAllCandidates" class="card-btn" type="button">☑️ 全选</button>`n        <button id="btnBulkDelete" class="card-btn del" type="button">🗑️ 删除</button>
         <button id="btnBulkExit" class="link" type="button">退出</button>
       </div>
       <div id="candidatesListContainer" class="candidates-list"></div>
+      <details id="quickPriceSection" class="new-trip" style="margin-top: 4px;">
+        <summary style="color: var(--accent); font-weight: 700;">💰 快速录价</summary>
+        <div id="quickPriceList" class="stack" style="margin-top: 6px;"></div>
+        <button id="btnSaveQuickPrices" class="primary" type="button" style="margin-top: 6px; display: none;">✓ 保存全部价格</button>
+      </details>
     </details>
 
     <p id="status" class="status visible" aria-live="polite">就绪。</p>

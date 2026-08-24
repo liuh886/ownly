@@ -1,5 +1,5 @@
 import { inferSourceProvider, extractPlaceCoordinates, type PlannerPlaceSourceProvider } from '../domain/planner';
-import { cleanExtractedText, extractFeatureIdFromUrl, normalizePhoneDisplay, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListPlaceId, isFakePlaceLabel, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
 import { SELECTORS, driftCheck } from './selectors';
 
 export interface CurrentResearchPlace {

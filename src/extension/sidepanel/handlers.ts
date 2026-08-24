@@ -23,6 +23,7 @@ import {
   populateEditTripForm,
   renderCandidatesList,
   renderCurrentPlace,
+  renderQuickPriceList,
   renderSmartListCard,
   renderState,
   setStatus,
@@ -444,24 +445,35 @@ export function initHandlers(): void {
     el.bulkDaySelect.value = '';
   });
 
-  // Click detected currency pill to apply to active trip & place form
-  el.btnDetectedCurrencyPill.addEventListener('click', () => {
+  // Currency selector: user picks a currency, applies to trip + form
+  el.currencySelector.addEventListener('change', () => {
     const dict = t();
-    if (!store.pageDetectedCurrency) return;
-    el.tripCurrency.value = store.pageDetectedCurrency;
-    el.editTripCurrency.value = store.pageDetectedCurrency;
+    const selected = el.currencySelector.value;
+    if (!selected) return;
+    store.pageDetectedCurrency = selected;
+    el.tripCurrency.value = selected;
+    el.editTripCurrency.value = selected;
 
     if (store.state.activeTripId) {
       store.state = {
         ...store.state,
         trips: store.state.trips.map((trip) =>
-          trip.id === store.state.activeTripId ? { ...trip, currency: store.pageDetectedCurrency, updated_at: new Date().toISOString() } : trip
+          trip.id === store.state.activeTripId ? { ...trip, currency: selected, updated_at: new Date().toISOString() } : trip
         ),
       };
       void saveState().then(() => {
-        setStatus(dict.currencyApplied(store.pageDetectedCurrency!), 'success');
+        setStatus(dict.currencyApplied(selected), 'success');
       });
     }
+  });
+
+  // Select all / deselect all in bulk mode
+  el.btnSelectAllCandidates.addEventListener('click', () => {
+    const checkboxes = el.candidatesListContainer.querySelectorAll<HTMLInputElement>('.bulk-check');
+    const allChecked = [...checkboxes].every((c) => c.checked);
+    checkboxes.forEach((c) => { c.checked = !allChecked; });
+    if (allChecked) store.bulkSelected.clear();
+    else checkboxes.forEach((c) => { if (c.dataset.placeId) store.bulkSelected.add(c.dataset.placeId); });
   });
 
   el.btnBackupState.addEventListener('click', () => {
@@ -1031,4 +1043,30 @@ export function initHandlers(): void {
 
   initDragReorder();
   initCandidateDelegation();
+  initQuickPriceEntry();
+}
+
+function initQuickPriceEntry(): void {
+  el.btnSaveQuickPrices.addEventListener('click', () => {
+    const dict = t();
+    const inputs = el.quickPriceList.querySelectorAll<HTMLInputElement>('input[data-price-for]');
+    const updated = new Map<string, PlannerTripPlace>();
+    for (const input of Array.from(inputs)) {
+      const placeId = input.dataset.priceFor;
+      const raw = input.value.trim();
+      if (!placeId || !raw) continue;
+      const existing = store.state.pendingPlaces.find((p) => p.id === placeId);
+      if (!existing) continue;
+      updated.set(placeId, { ...existing, observed_price: raw, updated_at: new Date().toISOString() });
+    }
+    if (updated.size === 0) return;
+    store.state = {
+      ...store.state,
+      pendingPlaces: store.state.pendingPlaces.map((p) => updated.get(p.id) ?? p),
+    };
+    void saveState().then(() => {
+      setStatus(dict.quickPriceSaved(updated.size), 'success');
+      renderQuickPriceList();
+    });
+  });
 }

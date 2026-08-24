@@ -1,4 +1,5 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
+import { normalizePlaceIdentity } from '../../domain/planner';
 import { el } from '../dom';
 import { store, t } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
@@ -132,6 +133,31 @@ export async function readCurrentPlace(): Promise<void> {
   renderCurrentPlace();
   renderSmartListCard();
   renderCurrencyPill();
+
+  // Auto-capture price for existing pool candidates when browsing their Maps page
+  if (store.currentPlace && store.currentPlace.priceLevel && store.state.activeTripId) {
+    const identity = normalizePlaceIdentity(store.currentPlace.sourceUrl);
+    const match = store.state.pendingPlaces.find(
+      (p) => p.trip_id === store.state.activeTripId
+        && !p.observed_price
+        && normalizePlaceIdentity(p.source_url) === identity,
+    );
+    if (match) {
+      match.observed_price = store.currentPlace.priceLevel;
+      match.updated_at = new Date().toISOString();
+      // Persist via background single-writer
+      void import('../capture-state').then(({ saveCaptureStateViaWorker }) =>
+        saveCaptureStateViaWorker(store.state).then((r) => {
+          if (!r?.ok) void import('../capture-state').then(({ writeCaptureState }) => writeCaptureState(store.state));
+        }),
+      );
+      setStatus(
+        (store.lang === 'zh' ? '💰 已自动抓取价格: ' : '💰 Price captured: ') + (match.title ?? '') + ' → ' + store.currentPlace.priceLevel,
+        'success',
+      );
+    }
+  }
+
   if (store.currentPlace) {
     autoFillPlaceForm(store.currentPlace);
   }

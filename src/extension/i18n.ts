@@ -136,6 +136,8 @@ export const I18N = {
     bulkDayLabel: '批量排日',
     bulkApplied: (count: number) => `已更新 ${count} 个候选。`,
     anchorProtected: '住宿锚点受保护，已跳过删除；其余所选已处理。',
+    quickPriceHint: (count: number) => `${count} 个地点尚未录入价格`,
+    quickPriceSaved: (count: number) => `已保存 ${count} 个价格。`,
     kinds: {
       attraction: '观光景点 (Attraction)',
       food: '餐厅美食 (Food)',
@@ -293,6 +295,8 @@ export const I18N = {
     bulkDayLabel: 'Bulk schedule',
     bulkApplied: (count: number) => `Updated ${count} candidates.`,
     anchorProtected: 'Stay anchors are protected and were skipped from deletion.',
+    quickPriceHint: (count: number) => `${count} places without prices`,
+    quickPriceSaved: (count: number) => `Saved ${count} prices.`,
     kinds: {
       attraction: 'Attraction',
       food: 'Food / Dining',
