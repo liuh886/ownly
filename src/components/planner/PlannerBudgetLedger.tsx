@@ -57,6 +57,7 @@ export function PlannerBudgetLedger({
   const [notes, setNotes] = useState('');
   const [showFxEditor, setShowFxEditor] = useState(false);
   const [fxDraft, setFxDraft] = useState<Record<string, string>>({});
+  const [memberNotice, setMemberNotice] = useState('');
 
   // Member management state
   const [isAddingMember, setIsAddingMember] = useState(false);
@@ -89,11 +90,17 @@ export function PlannerBudgetLedger({
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newMemberName.trim();
-    if (!trimmed || members.includes(trimmed)) return;
+    if (!trimmed) return;
+    if (members.includes(trimmed)) {
+      setMemberNotice(zh ? `'${trimmed}' 已存在` : `'${trimmed}' already exists`);
+      setTimeout(() => setMemberNotice(''), 2500);
+      return;
+    }
     const next = [...members, trimmed];
     onUpdateMembers(next);
     setSelectedSplits(next);
     setNewMemberName('');
+    setMemberNotice('');
     setIsAddingMember(false);
   };
 
@@ -106,7 +113,7 @@ export function PlannerBudgetLedger({
 
   const handleSubmitExpense = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedAmount = parseFloat(amountStr);
+    const parsedAmount = parseFloat(amountStr.replace(/,/g, ''));
     if (!title.trim() || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
 
     onAddExpense({
@@ -161,7 +168,9 @@ export function PlannerBudgetLedger({
         </div>
 
         {isAddingMember ? (
-          <form onSubmit={handleAddMember} className="mt-2 flex gap-1.5">
+          <form onSubmit={handleAddMember} className="mt-2 flex flex-col gap-1">
+            {memberNotice ? <p className="text-[10px] text-amber-600">{memberNotice}</p> : null}
+            <div className="flex gap-1.5">
             <input
               type="text"
               value={newMemberName}
@@ -176,6 +185,7 @@ export function PlannerBudgetLedger({
             >
               {zh ? '确定' : 'Add'}
             </button>
+            </div>
           </form>
         ) : null}
 
