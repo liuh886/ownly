@@ -73,6 +73,7 @@ export class PlannerRepository {
     directory: string,
     type: PlannerEntityType,
   ): Promise<T[]> {
+    await this.initialize();
     const files = await this.store.readMarkdownFiles(this.directory(directory));
     const result: T[] = [];
     for (const file of files) {
@@ -170,6 +171,71 @@ export class PlannerRepository {
       serializeMarkdownEntity({ ...existing, state: 'dropped', updated_at: new Date().toISOString() }, ''),
     );
     return true;
+  }
+
+  /**
+   * Scheduling lifecycle transitions — like dropPlace, these bypass
+   * capture-merge so the schedule state is never silently reverted.
+   */
+
+  async schedulePlace(placeId: string, date: string, sortOrder?: number): Promise<PlannerTripPlace | null> {
+    await this.initialize();
+    const places = await this.listPlaces();
+    const existing = places.find((place) => place.id === placeId);
+    if (!existing) return null;
+    const order = sortOrder ?? places
+      .filter((p) => p.trip_id === existing.trip_id && p.scheduled_date === date)
+      .reduce((max, p) => Math.max(max, p.sort_order ?? -1), -1) + 1;
+    const next: PlannerTripPlace = {
+      ...existing,
+      state: 'scheduled',
+      scheduled_date: date,
+      sort_order: order,
+      locked: true,
+      updated_at: new Date().toISOString(),
+    };
+    await this.upsert(next);
+    return next;
+  }
+
+  async unschedulePlace(placeId: string): Promise<PlannerTripPlace | null> {
+    await this.initialize();
+    const places = await this.listPlaces();
+    const existing = places.find((place) => place.id === placeId);
+    if (!existing) return null;
+    const next: PlannerTripPlace = {
+      ...existing,
+      state: 'candidate',
+      scheduled_date: undefined,
+      sort_order: undefined,
+      locked: true,
+      updated_at: new Date().toISOString(),
+    };
+    await this.upsert(next);
+    return next;
+  }
+
+  /** Rewrites sort_order 0..n-1 for an explicitly ordered subset of one day. */
+  async reorderScheduled(date: string, orderedIds: string[]): Promise<number> {
+    await this.initialize();
+    const places = await this.listPlaces();
+    const byId = new Map(places.map((p) => [p.id, p] as const));
+    const ordered = orderedIds
+      .map((id) => byId.get(id))
+      .filter((p): p is PlannerTripPlace => Boolean(p) && p!.scheduled_date === date);
+    let written = 0;
+    for (let i = 0; i < ordered.length; i++) {
+      const place = ordered[i];
+      if (place.sort_order === i) continue;
+      const next: PlannerTripPlace = { ...place, sort_order: i, updated_at: new Date().toISOString() };
+      await this.store.writeMarkdownFile(
+        this.directory(PLANNER_DIRECTORIES.places),
+        entityFileName(next),
+        serializeMarkdownEntity(next, ''),
+      );
+      written += 1;
+    }
+    return written;
   }
 
   async upsertExpense(expense: TripExpenseItem): Promise<void> {

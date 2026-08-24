@@ -415,51 +415,26 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     setNotice(zh ? '已复制当天路线清单至剪贴板！' : 'Copied day itinerary to clipboard!');
   }, [selectedTrip, scheduled, activeDate, zh]);
 
-  const persistPlace = useCallback(async (place: PlannerTripPlace) => {
-    await plannerRepository.upsertPlace(place);
-    setPlaces((current) => current.map((item) => item.id === place.id ? place : item));
-  }, []);
-
   const schedulePlace = useCallback(async (placeId: string, date = activeDate) => {
     if (!date) return;
-    const place = places.find((item) => item.id === placeId);
-    if (!place) return;
-    const existing = places.filter((item) => item.trip_id === place.trip_id && item.scheduled_date === date);
-    const nextOrder = existing.reduce((max, item) => Math.max(max, item.sort_order ?? -1), -1) + 1;
-    await persistPlace({
-      ...place,
-      state: 'scheduled',
-      scheduled_date: date,
-      sort_order: nextOrder,
-      locked: true,
-      updated_at: new Date().toISOString(),
-    });
-  }, [activeDate, persistPlace, places]);
+    await plannerRepository.schedulePlace(placeId, date);
+    await load();
+  }, [activeDate, load]);
 
   const returnToPool = useCallback(async (place: PlannerTripPlace) => {
-    await persistPlace({
-      ...place,
-      state: 'candidate',
-      scheduled_date: undefined,
-      sort_order: undefined,
-      locked: true,
-      updated_at: new Date().toISOString(),
-    });
-  }, [persistPlace]);
+    await plannerRepository.unschedulePlace(place.id);
+    await load();
+  }, [load]);
 
   const moveScheduled = useCallback(async (index: number, direction: -1 | 1) => {
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= scheduled.length) return;
-    const current = scheduled[index];
-    const target = scheduled[targetIndex];
-    const currentOrder = current.sort_order ?? index;
-    const targetOrder = target.sort_order ?? targetIndex;
-    await Promise.all([
-      plannerRepository.upsertPlace({ ...current, sort_order: targetOrder, locked: true, updated_at: new Date().toISOString() }),
-      plannerRepository.upsertPlace({ ...target, sort_order: currentOrder, locked: true, updated_at: new Date().toISOString() }),
-    ]);
+    const orderedIds = scheduled.map((p) => p.id);
+    const [moved] = orderedIds.splice(index, 1);
+    orderedIds.splice(targetIndex, 0, moved);
+    await plannerRepository.reorderScheduled(activeDate, orderedIds);
     await load();
-  }, [load, scheduled]);
+  }, [activeDate, load, scheduled]);
 
   const syncCapture = useCallback(async () => {
     setBusy(true);

@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseMarkdownEntity } from '../../src/data/frontmatter';
-import type { PlannerTripPlace, TripExpenseItem } from '../../src/domain/planner';
+import {
+  calculateTotalRouteDistanceKm,
+  type PlannerTripPlace,
+  type TripExpenseItem,
+} from '../../src/domain/planner';
 
 export const PLANNER_DIRECTORIES = {
   trips: 'Trips',
@@ -117,4 +121,9 @@ export function reorderDayPlace(
   const [moved] = next.splice(index, 1);
   next.splice(target, 0, moved);
   return next.map((p, i) => ({ ...p, sort_order: i }));
+}
+
+/** Total haversine km across an ordered day route (coordinate gaps skipped). */
+export function calculateDayRouteKm(stops: PlannerTripPlace[]): number {
+  return calculateTotalRouteDistanceKm(stops);
 }
