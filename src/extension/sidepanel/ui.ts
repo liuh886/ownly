@@ -4,6 +4,7 @@ import {
   inferPlaceKind,
   listTripDates,
   normalizeDelimitedText,
+  PLANNER_KIND_ICONS,
   type PlannerPlaceKind,
   type PlannerPlacePriority,
   type PlannerTripPlace,
@@ -13,16 +14,7 @@ import { el } from '../dom';
 import { escapeHtml, isPlausiblePriceText } from '../utils';
 import { getExistingPlaceForUrl, store, t } from './store';
 
-const KIND_ICONS: Record<PlannerPlaceKind, string> = {
-  attraction: '🏰',
-  food: '🍜',
-  cafe: '☕',
-  stay: '🏨',
-  shopping: '🛍️',
-  transit: '🚇',
-  experience: '🧗',
-  other: '📍',
-};
+const KIND_ICONS = PLANNER_KIND_ICONS;
 
 const PROVIDER_META: Record<string, { emoji: string; label: string }> = {
   google_maps: { emoji: '🗺️', label: 'Maps' },

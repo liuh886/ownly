@@ -333,24 +333,16 @@ describe('Ownly Planner domain', () => {
     expect(multi.dayDetails[0].avgKm).toBeLessThan(multi.dayDetails[1].avgKm);
   });
 
-  it('generates multi-day stay span places with consecutive night notes', () => {
-    const hotel = place('h1', {
-      title: 'Old Town Resort',
-      kind: 'stay',
-      notes: 'Near East Gate',
-    });
-    const stayDates = ['2026-10-01', '2026-10-02', '2026-10-03'];
-    const places = generateStaySpanPlaces(hotel, stayDates);
-
-    expect(places).toHaveLength(3);
-    expect(places[0].id).toBe('h1');
-    expect(places[0].scheduled_date).toBe('2026-10-01');
-    expect(places[0].notes).toContain('连住第 1 晚 (共 3 晚)');
-    expect(places[1].id).toBe('h1__stay_2026-10-02');
-    expect(places[1].scheduled_date).toBe('2026-10-02');
-    expect(places[1].notes).toContain('连住第 2 晚 (共 3 晚)');
-    expect(places[2].scheduled_date).toBe('2026-10-03');
-    expect(places[2].notes).toContain('连住第 3 晚 (共 3 晚)');
+  it('generates multi-day stay span anchors without leaking locale text into data', () => {
+    const hotel = place('hotel-1', { kind: 'stay', notes: 'Near East Gate' });
+    const spans = generateStaySpanPlaces(hotel, ['2026-10-06', '2026-10-07', '2026-10-08']);
+    expect(spans).toHaveLength(3);
+    expect(spans.every((s) => s.is_anchor && s.anchor_type === 'stay_checkin')).toBe(true);
+    expect(spans.every((s) => s.state === 'scheduled')).toBe(true);
+    expect(new Set(spans.map((s) => s.scheduled_date)).size).toBe(3);
+    expect(spans[0].id).toBe('hotel-1');
+    expect(spans[1].id).toBe('hotel-1__stay_2026-10-07');
+    spans.forEach((s) => expect(s.notes).toBe('Near East Gate'));
   });
 
   it('detects hotel transfer days and consecutive night indexes', () => {

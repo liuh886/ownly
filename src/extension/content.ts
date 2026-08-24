@@ -314,8 +314,46 @@ function isGenericNavigationTitle(text: string): boolean {
   return /^(google|google maps|google 地图|directions|路线|保存|已保存|saved|share|分享|搜索|search|返回|back|菜单|menu|overview|概览|reviews|评价|photos|照片|about|关于)$/i.test(norm);
 }
 
+function readCardFields(card: HTMLElement | null) {
+  const ratingText = card?.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim();
+  const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
+  const infoText = card?.querySelector<HTMLElement>(SELECTORS.cardInfo)?.textContent?.trim();
+  const category = infoText ? cleanExtractedText(infoText.split(/·|•/)[0]?.trim()) : undefined;
+  const rawAddr = card?.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
+  const address = rawAddr ? cleanExtractedText(rawAddr) : undefined;
+  const rawNote = card?.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
+  const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
+  return { rating, category, address, userNote };
+}
+
+function rememberScavengedPlace(rawTitle: string, sourceUrl: string, card: HTMLElement | null): void {
+  const cleanTitle = cleanExtractedText(rawTitle);
+  if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle)) return;
+
+  const titleKey = cleanTitle.toLowerCase();
+  if (scavengedListPlaces.has(titleKey)) return;
+
+  const { rating, category, address, userNote } = readCardFields(card);
+  const url = sourceUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`;
+  scavengedListPlaces.set(titleKey, {
+    title: cleanTitle,
+    sourceUrl: url,
+    sourceProvider: 'google_maps',
+    rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
+    category,
+    address,
+    detectedCurrency: detectCurrencyFromPage(url, undefined),
+    summary: userNote,
+    userNote,
+    coordinates: extractPlaceCoordinates(url) ?? undefined,
+  });
+}
+
+const PLACE_LINK = 'a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]';
+
 function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
   pruneScavengedCache(window.location.href);
+
   // Strategy 1: Scan all place link anchors directly
   const linkAnchors = document.querySelectorAll<HTMLAnchorElement>(SELECTORS.feedAnchors);
   for (const anchor of Array.from(linkAnchors)) {
@@ -327,34 +365,7 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
     if (!title || title.length < 2 || isGenericNavigationTitle(title)) continue;
 
     const card = anchor.closest<HTMLElement>(SELECTORS.cardContainers) || anchor.parentElement;
-
-    const ratingText = card?.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim();
-    const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
-
-    const infoText = card?.querySelector<HTMLElement>(SELECTORS.cardInfo)?.textContent?.trim();
-    const category = infoText ? cleanExtractedText(infoText.split(/·|•/)[0]?.trim()) : undefined;
-    const rawAddr = card?.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
-    const address = rawAddr ? cleanExtractedText(rawAddr) : undefined;
-    const rawNote = card?.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
-    const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
-
-    const cleanTitle = cleanExtractedText(title);
-    if (!cleanTitle || cleanTitle.length < 2 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle)) continue;
-    const titleKey = cleanTitle.toLowerCase();
-    if (!scavengedListPlaces.has(titleKey)) {
-      scavengedListPlaces.set(titleKey, {
-        title: cleanTitle,
-        sourceUrl: href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`,
-        sourceProvider: 'google_maps',
-        rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
-        category,
-        address,
-        detectedCurrency: detectCurrencyFromPage(href, undefined),
-        summary: userNote,
-        userNote,
-        coordinates: extractPlaceCoordinates(href || '') ?? undefined,
-      });
-    }
+    rememberScavengedPlace(title, href, card ?? null);
   }
 
   // Strategy 2: Scan all distinct item card containers inside lists
@@ -364,37 +375,8 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
   for (const card of Array.from(cardElements)) {
     const headEl = card.querySelector<HTMLElement>(SELECTORS.cardTitle);
     const title = headEl?.textContent?.trim() || card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[aria-label]')?.getAttribute('aria-label') || '';
-    const cleanTitle = cleanExtractedText(title);
-    if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle)) continue;
-
-    const linkEl = card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]');
-    const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`;
-
-    const ratingText = card.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim();
-    const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
-
-    const infoText = card.querySelector<HTMLElement>(SELECTORS.cardInfo)?.textContent?.trim();
-    const category = infoText ? cleanExtractedText(infoText.split(/·|•/)[0]?.trim()) : undefined;
-    const rawAddr = card.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
-    const address = rawAddr ? cleanExtractedText(rawAddr) : undefined;
-    const rawNote = card.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
-    const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
-
-    const titleKey = cleanTitle.toLowerCase();
-    if (!scavengedListPlaces.has(titleKey)) {
-      scavengedListPlaces.set(titleKey, {
-        title: cleanTitle,
-        sourceUrl,
-        sourceProvider: 'google_maps',
-        rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
-        category,
-        address,
-        detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined),
-        summary: userNote,
-        userNote,
-        coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
-      });
-    }
+    const linkEl = card.querySelector<HTMLAnchorElement>(PLACE_LINK);
+    rememberScavengedPlace(title, linkEl?.href || '', card);
   }
 
   // Strategy 3: Scan all list item cards and rows inside feed/pane
@@ -406,37 +388,8 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
       'h1, h2, h3, .fontHeadlineSmall, .qBF1Pd, .OSrXXb, [role="heading"], div[class*="headline"], span[class*="headline"]'
     );
     const title = titleEl?.textContent?.trim() || card.querySelector('[aria-label]')?.getAttribute('aria-label') || '';
-    const cleanTitle = cleanExtractedText(title);
-    if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle)) continue;
-
-    const linkEl = card.querySelector<HTMLAnchorElement>('a[href*="/maps/place/"], a[href*="/place/"], a.hfpxzc, a');
-    const sourceUrl = linkEl?.href || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`;
-
-    const ratingText = card.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim();
-    const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
-
-    const infoText = card.querySelector<HTMLElement>(SELECTORS.cardInfo)?.textContent?.trim();
-    const category = infoText ? cleanExtractedText(infoText.split(/·|•/)[0]?.trim()) : undefined;
-    const rawAddr = card.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
-    const address = rawAddr ? cleanExtractedText(rawAddr) : undefined;
-    const rawNote = card.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
-    const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
-
-    const titleKey = cleanTitle.toLowerCase();
-    if (!scavengedListPlaces.has(titleKey)) {
-      scavengedListPlaces.set(titleKey, {
-        title: cleanTitle,
-        sourceUrl,
-        sourceProvider: 'google_maps',
-        rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
-        category,
-        address,
-        detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined),
-        summary: userNote,
-        userNote,
-        coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
-      });
-    }
+    const linkEl = card.querySelector<HTMLAnchorElement>(PLACE_LINK);
+    rememberScavengedPlace(title, linkEl?.href || '', card);
   }
 
   return Array.from(scavengedListPlaces.values());

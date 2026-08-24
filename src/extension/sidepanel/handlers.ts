@@ -937,6 +937,12 @@ export function initHandlers(): void {
     }
   });
 
+  el.kind.addEventListener('change', () => {
+    el.price.placeholder = el.kind.value === 'stay'
+      ? t().pricePlaceholderStay
+      : t().pricePlaceholder;
+  });
+
   initDragReorder();
   initCandidateDelegation();
 }

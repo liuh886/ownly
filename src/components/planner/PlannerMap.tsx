@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerTripPlace } from '@/domain/planner';
-import { extractPlaceCoordinates } from '@/domain/planner';
+import { extractPlaceCoordinates, PLANNER_KIND_ICONS } from '@/domain/planner';
 import { searchCities } from '@/domain/travel';
 
 interface PlannerMapProps {
@@ -26,16 +26,7 @@ interface Point {
   order?: number;
 }
 
-const KIND_EMOJI: Record<string, string> = {
-  attraction: '🏰',
-  food: '🍜',
-  cafe: '☕',
-  stay: '🏨',
-  shopping: '🛍️',
-  transit: '🚇',
-  experience: '🧗',
-  other: '📍',
-};
+const KIND_EMOJI = PLANNER_KIND_ICONS;
 
 // Web Mercator projection
 function projectLngToX(lng: number, zoom: number): number {
