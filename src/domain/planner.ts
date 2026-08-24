@@ -999,6 +999,10 @@ export interface TripSettlementResult {
   summaryText: string;
 }
 
+const SYMBOL_TO_CODE: Record<string, string> = {
+  '¥': 'CNY', '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '₩': 'KRW',
+};
+
 export interface TripBudgetEstimation {
   totalEstimated: number;
   perPersonEstimated: number;
@@ -1010,6 +1014,8 @@ export interface TripBudgetEstimation {
     other: number;
   };
   detectedCurrency: string;
+  /** Distinct currency markers found across observed prices; >1 means mixed and unconverted. */
+  currencies: string[];
 }
 
 const CODE_TO_SYMBOL: Record<string, string> = {
@@ -1067,17 +1073,16 @@ export function estimateTripBudget(
   let currency = '';
 
   const validTravelers = Math.max(1, travelerCount);
-  const SYMBOL_TO_CODE: Record<string, string> = {
-    '¥': 'CNY', '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '₩': 'KRW',
-  };
+  const foundCurrencies = new Set<string>();
 
   scheduledPlaces.forEach((place) => {
     const price = parseNumericPrice(place.observed_price);
-    if (!currency && place.observed_price) {
+    if (place.observed_price) {
       const curMatch = /(?:[¥฿$€£₩]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY)/i.exec(place.observed_price);
       if (curMatch) {
         const raw = curMatch[0].toUpperCase();
-        currency = SYMBOL_TO_CODE[raw] ?? (raw.length === 1 ? defaultCurrency : raw);
+        foundCurrencies.add(SYMBOL_TO_CODE[raw] ?? raw);
+        if (!currency) currency = SYMBOL_TO_CODE[raw] ?? (raw.length === 1 ? defaultCurrency : raw);
       }
     }
 
@@ -1106,6 +1111,7 @@ export function estimateTripBudget(
       other: otherTotal,
     },
     detectedCurrency: currency || defaultCurrency,
+    currencies: [...foundCurrencies],
   };
 }
 

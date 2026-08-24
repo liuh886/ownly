@@ -39,7 +39,9 @@ export function HotelComparisonModal({
   const zh = language === 'zh';
   const totalDays = tripDates.length || 1;
 
-  // Stay Range Selection: end index (inclusive)
+  // Stay Range Selection: end index (inclusive).
+  // PlannerHome remounts this modal via `key` on open/day change, so these
+  // initializers always reflect the current context without reset effects.
   const [stayEndIndex, setStayEndIndex] = useState<number>(activeDayIndex);
   const [isFullTripStay, setIsFullTripStay] = useState<boolean>(false);
 

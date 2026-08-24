@@ -994,6 +994,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       ) : null}
 
       <HotelComparisonModal
+        key={`hotel-cmp-${activeDate}-${isHotelModalOpen}`}
         open={isHotelModalOpen}
         onClose={() => setIsHotelModalOpen(false)}
         candidateHotels={candidateHotels}
