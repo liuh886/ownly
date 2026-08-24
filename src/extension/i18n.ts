@@ -134,6 +134,7 @@ export const I18N = {
     bulkPriorityLabel: '设为优先级',
     bulkDayLabel: '批量排日',
     bulkApplied: (count: number) => `已更新 ${count} 个候选。`,
+    anchorProtected: '住宿锚点受保护，已跳过删除；其余所选已处理。',
     kinds: {
       attraction: '观光景点 (Attraction)',
       food: '餐厅美食 (Food)',
@@ -289,6 +290,7 @@ export const I18N = {
     bulkPriorityLabel: 'Set priority',
     bulkDayLabel: 'Bulk schedule',
     bulkApplied: (count: number) => `Updated ${count} candidates.`,
+    anchorProtected: 'Stay anchors are protected and were skipped from deletion.',
     kinds: {
       attraction: 'Attraction',
       food: 'Food / Dining',
