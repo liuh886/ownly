@@ -465,6 +465,18 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
     return;
   }
 
+  // No existing — start fresh: clear all optional fields before auto-filling
+  el.rating.value = '';
+  el.price.value = '';
+  el.area.value = '';
+  el.tags.value = '';
+  el.duration.value = '';
+  el.window.value = '';
+  el.why.value = '';
+  el.signals.value = '';
+  el.risks.value = '';
+  el.notes.value = '';
+
   if (place.rating) {
     el.rating.value = String(place.rating);
   }

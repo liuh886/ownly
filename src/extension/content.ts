@@ -357,6 +357,29 @@ async function enrichFromPlaceHtml(place: CurrentResearchPlace): Promise<Current
       }
       if (found.size > 0) place.types = [...found];
     }
+    if (!place.priceLevel) {
+      // Google Hotels embeds price strings near known keys in the state blob
+      const pricePatterns = [
+        /"(?:displayPrice|priceString|ratePerNight|startingPrice)":\s*"([^"]{2,30})"/,
+        /"(?:priceText|nightlyPrice)":\s*"([^"]{2,30})"/,
+      ];
+      for (const pattern of pricePatterns) {
+        const match = pattern.exec(html)?.[1];
+        if (match) {
+          const candidate = cleanExtractedText(match);
+          if (isPlausiblePriceText(candidate)) { place.priceLevel = candidate; break; }
+        }
+      }
+      // Fallback: scan for currency+amount near "hotel" or "rate" context
+      if (!place.priceLevel) {
+        const ctxIdx = html.search(/(?:"hotelRates"|"ratePlan"|"pricingForStay")/i);
+        if (ctxIdx >= 0) {
+          const window = html.slice(Math.max(0, ctxIdx - 100), ctxIdx + 500);
+          const priceMatch = /((?:S\$|HK\$|US\$|NT\$|[¥฿$€£₩₫])\s?\d[\d,.]*(?:\s*[-–—〜~]\s*\d[\d.,]*)?)/.exec(window);
+          if (priceMatch && isPlausiblePriceText(priceMatch[1])) place.priceLevel = cleanExtractedText(priceMatch[1]);
+        }
+      }
+    }
   } catch {
     // enrichment is best-effort; DOM extraction already provided the basics
   }
@@ -521,7 +544,7 @@ function readCardFields(card: HTMLElement | null) {
 
 function rememberScavengedPlace(rawTitle: string, sourceUrl: string, card: HTMLElement | null): void {
   const cleanTitle = cleanExtractedText(rawTitle);
-  if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle)) return;
+  if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle) || isFakePlaceLabel(cleanTitle)) return;
 
   const titleKey = cleanTitle.toLowerCase();
   if (scavengedListPlaces.has(titleKey)) return;

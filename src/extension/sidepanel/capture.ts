@@ -1,15 +1,17 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
+import { normalizePlaceIdentity } from '../../domain/planner';
 import { el } from '../dom';
 import { store, t } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
 
-const PRICE_RETRY_DELAY_MS = 2000;
-let lastPriceRetryKey = '';
+const PRICE_RETRY_DELAYS = [1500, 3000, 5000];
+let priceRetryCount = 0;
+let lastPriceRetryUrl = '';
 
 function needsPriceRetry(): boolean {
   const place = store.currentPlace;
   if (!place) return false;
-  if (place.sourceUrl === lastPriceRetryKey) return false;
+  if (place.sourceUrl !== lastPriceRetryUrl) { priceRetryCount = 0; } else if (priceRetryCount >= PRICE_RETRY_DELAYS.length) { return false; }
   // Hotel/restaurant rate modules load lazily after the panel renders —
   // schedule one targeted re-read when the first pass missed the price.
   if (place.priceLevel) return false;
@@ -132,17 +134,47 @@ export async function readCurrentPlace(): Promise<void> {
   renderCurrentPlace();
   renderSmartListCard();
   renderCurrencyPill();
+
+  // Auto-capture price for existing pool candidates when browsing their Maps page
+  if (store.currentPlace && store.currentPlace.priceLevel && store.state.activeTripId) {
+    const identity = normalizePlaceIdentity(store.currentPlace.sourceUrl);
+    const match = store.state.pendingPlaces.find(
+      (p) => p.trip_id === store.state.activeTripId
+        && !p.observed_price
+        && normalizePlaceIdentity(p.source_url) === identity,
+    );
+    if (match) {
+      match.observed_price = store.currentPlace.priceLevel;
+      match.updated_at = new Date().toISOString();
+      // Persist via background single-writer
+      void import('../capture-state').then(({ saveCaptureStateViaWorker }) =>
+        saveCaptureStateViaWorker(store.state).then((r) => {
+          if (!r?.ok) void import('../capture-state').then(({ writeCaptureState }) => writeCaptureState(store.state));
+        }),
+      );
+      setStatus(
+        (store.lang === 'zh' ? '💰 已自动抓取价格: ' : '💰 Price captured: ') + (match.title ?? '') + ' → ' + store.currentPlace.priceLevel,
+        'success',
+      );
+    }
+  }
+
   if (store.currentPlace) {
     autoFillPlaceForm(store.currentPlace);
   }
 
-  // One-shot retry for lazily loaded price modules (hotels, restaurants).
+  // Multi-round retry for lazily loaded price modules (hotels, restaurants).
   if (needsPriceRetry()) {
-    lastPriceRetryKey = store.currentPlace!.sourceUrl;
+    const delay = PRICE_RETRY_DELAYS[Math.min(priceRetryCount, PRICE_RETRY_DELAYS.length - 1)];
+    priceRetryCount += 1;
+    lastPriceRetryUrl = store.currentPlace!.sourceUrl;
+    const retryUrl = lastPriceRetryUrl;
     window.setTimeout(() => {
-      if (store.currentPlace?.sourceUrl === lastPriceRetryKey) {
+      if (store.currentPlace?.sourceUrl === retryUrl) {
         void readCurrentPlace();
       }
-    }, PRICE_RETRY_DELAY_MS);
+    }, delay);
+  } else {
+    priceRetryCount = 0;
   }
 }
