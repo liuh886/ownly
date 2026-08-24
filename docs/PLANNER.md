@@ -19,7 +19,6 @@ The selected Ownly data directory is authoritative:
 Ownly/
   Trips/
   Trip Places/
-  Trip Bookings/
   Trip Expenses/
 ```
 

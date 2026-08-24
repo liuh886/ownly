@@ -85,24 +85,6 @@ export interface PlannerTripPlace {
   updated_at?: string;
 }
 
-export interface PlannerTripBooking {
-  schema_version: '0.1';
-  type: 'trip_booking';
-  id: string;
-  trip_id: string;
-  title: string;
-  kind: 'stay' | 'flight' | 'rail' | 'ticket' | 'restaurant' | 'other';
-  starts_at: string;
-  ends_at?: string;
-  place_id?: string;
-  confirmation?: string;
-  amount?: number;
-  currency?: string;
-  notes?: string;
-  created_at: string;
-  updated_at?: string;
-}
-
 export interface OwnlyCaptureState {
   version: 1;
   trips: PlannerTrip[];
@@ -994,6 +976,7 @@ export interface TripExpenseItem {
   paid_by: string;
   split_members: string[];
   notes?: string;
+  confirmation?: string;
   created_at: string;
 }
 

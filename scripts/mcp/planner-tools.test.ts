@@ -15,7 +15,7 @@ afterEach(() => {
 function createFixture(): { root: string; trip: PlannerTrip; place: PlannerTripPlace; second: PlannerTripPlace } {
   const root = mkdtempSync(join(tmpdir(), 'ownly-planner-mcp-'));
   temporaryRoots.push(root);
-  for (const dir of ['Trips', 'Trip Places', 'Trip Bookings', 'Trip Expenses']) {
+  for (const dir of ['Trips', 'Trip Places', 'Trip Expenses']) {
     mkdirSync(join(root, dir), { recursive: true });
   }
 
@@ -141,7 +141,6 @@ describe('Planner ledger via vault (smoke through repository contract)', () => {
     }));
     const detail = getPlannerTripDetail(root, 'trip-1') as { expenses: Array<{ id: string }> };
     void expense;
-    // Detail reads only Trips/Trip Places/Trip Bookings/Trip Expenses — expenses included
     expect(Array.isArray(detail.expenses)).toBe(true);
   });
 });

@@ -2,7 +2,6 @@ import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter
 import {
   mergeCapturedPlaceResearch,
   type PlannerTrip,
-  type PlannerTripBooking,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '@/domain/planner';
@@ -18,11 +17,10 @@ export interface PlannerFileStore {
 const PLANNER_DIRECTORIES = {
   trips: 'Trips',
   places: 'Trip Places',
-  bookings: 'Trip Bookings',
   expenses: 'Trip Expenses',
 } as const;
 
-type PlannerEntity = PlannerTrip | PlannerTripPlace | PlannerTripBooking;
+type PlannerEntity = PlannerTrip | PlannerTripPlace
 type PlannerEntityType = PlannerEntity['type'];
 
 interface RepoExpense extends TripExpenseItem {
@@ -96,10 +94,6 @@ export class PlannerRepository {
     return this.list<PlannerTripPlace>(PLANNER_DIRECTORIES.places, 'trip_place');
   }
 
-  async listBookings(): Promise<PlannerTripBooking[]> {
-    return this.list<PlannerTripBooking>(PLANNER_DIRECTORIES.bookings, 'trip_booking');
-  }
-
   async listExpenses(): Promise<TripExpenseItem[]> {
     const files = await this.store.readMarkdownFiles(this.directory(PLANNER_DIRECTORIES.expenses));
     const result: TripExpenseItem[] = [];
@@ -120,7 +114,7 @@ export class PlannerRepository {
       ? PLANNER_DIRECTORIES.trips
       : entity.type === 'trip_place'
         ? PLANNER_DIRECTORIES.places
-        : PLANNER_DIRECTORIES.bookings;
+        : PLANNER_DIRECTORIES.expenses;
 
     await this.store.writeMarkdownFile(
       this.directory(directory),
@@ -156,9 +150,6 @@ export class PlannerRepository {
     }
   }
 
-  async upsertBooking(booking: PlannerTripBooking): Promise<void> {
-    await this.upsert(booking);
-  }
 
   /** Explicit lifecycle transition that bypasses capture-merge semantics. */
   async dropPlace(placeId: string): Promise<boolean> {
