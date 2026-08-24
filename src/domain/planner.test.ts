@@ -28,6 +28,15 @@ import {
   STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
 } from './planner';
+import {
+  computeUrgencies,
+  daysUntil as daysUntilDeparture,
+  isWeatherRelevant,
+  summarizeWeather,
+  type OpenMeteoResponse,
+} from './departure';
+
+const NOW = new Date('2026-10-20T12:00:00Z');
 
 function place(id: string, overrides: Partial<PlannerTripPlace> = {}): PlannerTripPlace {
   return {
@@ -529,5 +538,60 @@ describe('Route optimization pinning & budget currency', () => {
     ], 1, { base: 'CNY' });
     expect(est.detectedCurrency).toBe('THB');
     expect([...est.currencies].sort()).toEqual(['CNY', 'THB']);
+  });
+});
+describe('daysUntil', () => {
+  it('computes positive days for future dates', () => {
+    expect(daysUntilDeparture('2026-10-27', NOW)).toBe(7);
+  });
+  it('returns 0 for today', () => {
+    expect(daysUntilDeparture('2026-10-20', NOW)).toBe(0);
+  });
+});
+
+describe('isWeatherRelevant', () => {
+  it('is true within 16-day window', () => {
+    expect(isWeatherRelevant('2026-10-25', NOW)).toBe(true);
+  });
+  it('is false outside window', () => {
+    expect(isWeatherRelevant('2026-12-15', NOW)).toBe(false);
+  });
+});
+
+describe('summarizeWeather', () => {
+  const mock: OpenMeteoResponse = {
+    daily: {
+      time: ['2026-10-25', '2026-10-26'],
+      temperature_2m_max: [32, 28],
+      temperature_2m_min: [24, 22],
+      precipitation_sum: [0, 12.5],
+      weather_code: [1, 65],
+    },
+  };
+  it('summarizes with rain detection and labels', () => {
+    const r = summarizeWeather(mock);
+    expect(r[0].label).toBe('🌤️');
+    expect(r[1].is_rainy).toBe(true);
+  });
+});
+
+describe('computeUrgencies', () => {
+  const NOW = new Date('2026-10-20T12:00:00Z');
+  function dp(id: string, o: Partial<PlannerTripPlace> = {}): PlannerTripPlace {
+    return {
+      schema_version: '0.1', type: 'trip_place', id,
+      trip_id: 't1', title: id, source_provider: 'google_maps',
+      source_url: `https://maps.google.com/?q=${id}`, kind: 'attraction',
+      priority: 'want', tags: [], signals: [], risks: [],
+      reservation_status: 'none', state: 'candidate',
+      created_at: '2026-08-01', ...o,
+    };
+  }
+  it('flags lead-time risk as urgent when past deadline', () => {
+    const u = computeUrgencies([dp('r', { risks: ['需提前2周预约'], reservation_status: 'needed' })], '2026-10-30', NOW);
+    expect(u.some((x) => x.severity === 'urgent')).toBe(true);
+  });
+  it('does not flag when plenty of time remains', () => {
+    expect(computeUrgencies([dp('r', { risks: ['需提前2周预约'] })], '2026-12-19', NOW)).toHaveLength(0);
   });
 });

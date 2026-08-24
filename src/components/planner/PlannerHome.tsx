@@ -4,10 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import type { PlannerTrip, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
 import {
+  computeUrgencies,
+  fetchWeather,
+  isWeatherRelevant,
+  daysUntil,
+  type WeatherSummary,
+} from '@/domain/departure';
+import {
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
   exportPlacesToCSV,
   exportPlacesToKML,
+  extractPlaceCoordinates,
   getTripAreaCounts,
   detectHotelTransferDays,
   generateStaySpanPlaces,
@@ -379,6 +387,35 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const mustScheduled = tripPlaces.filter((place) => place.priority === 'must' && place.scheduled_date).length;
   const scheduledMinutes = scheduled.reduce((sum, place) => sum + (place.duration_minutes ?? 0), 0);
 
+  // ── Departure intelligence ────────────────────────────────────────────────
+
+  const tripStart = selectedTrip?.start_date ?? '';
+  const daysOut = useMemo(() => (tripStart ? daysUntil(tripStart) : -1), [tripStart]);
+  const weatherRelevant = selectedTrip ? isWeatherRelevant(tripStart) : false;
+
+  const [weather, setWeather] = useState<WeatherSummary['forecasts']>([]);
+  useEffect(() => {
+    if (!weatherRelevant || !selectedTrip || places.length === 0) return;
+    const withCoords = places.find((p) => extractPlaceCoordinates(p));
+    if (!withCoords) return;
+    const coords = extractPlaceCoordinates(withCoords)!;
+    let stale = false;
+    void fetchWeather(coords.lat, coords.lng, tripStart, selectedTrip.end_date)
+      .then((data) => { if (!stale) setWeather(data); })
+      .catch(() => {});
+    return () => { stale = true; };
+  }, [weatherRelevant, selectedTrip, tripStart, places]);
+
+  const urgencies = useMemo(() => {
+    if (!selectedTrip) return [];
+    return computeUrgencies(places, tripStart);
+  }, [places, tripStart]);
+
+  const activeDayWeather = useMemo(
+    () => weather.find((w) => w.date === activeDate) ?? null,
+    [weather, activeDate],
+  );
+
   const downloadKML = useCallback(() => {
     if (!selectedTrip || scheduled.length === 0) return;
     const kmlContent = exportPlacesToKML(selectedTrip.title, activeDate, scheduled);
@@ -560,6 +597,49 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         ))}
       </div>
 
+      {/* Departure Intelligence Bar */}
+      {(urgencies.length > 0 || (weatherRelevant && weather.length > 0)) && selectedTrip ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 shadow-2xs">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
+              ⏰ {zh ? '出发情报' : 'Departure Intel'}
+              <span className="ml-1 rounded-full bg-amber-200/70 px-1.5 py-0 text-[9px] font-bold text-amber-800">
+                {daysOut >= 0 ? `D-${daysOut}` : ''}
+              </span>
+            </span>
+            {weatherRelevant ? (
+              <div className="flex gap-1">
+                {weather.slice(0, 7).map((w) => (
+                  <span
+                    key={w.date}
+                    className={`inline-flex flex-col items-center rounded-md px-1.5 py-0.5 text-[9px] leading-tight ${
+                      w.date === activeDate
+                        ? 'bg-white ring-1 ring-amber-400 font-bold'
+                        : 'bg-white/60 text-stone-500'
+                    }`}
+                    title={w.date}
+                  >
+                    <span>{w.label}</span>
+                    <span>{w.temp_min}°~{w.temp_max}°</span>
+                    {w.is_rainy ? <span className="text-sky-600">🌧️</span> : null}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {urgencies.length > 0 ? (
+            <ul className="space-y-0.5 mt-1">
+              {urgencies.slice(0, 5).map((u, i) => (
+                <li key={i} className="flex items-center gap-1.5 text-[11px] leading-4">
+                  <span className={u.severity === 'urgent' ? 'text-red-600 font-bold' : 'text-amber-600'}>{u.severity === 'urgent' ? '🔴' : '🟡'}</span>
+                  <span className="text-stone-700">{u.message}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)_minmax(220px,0.75fr)]">
         <section className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
@@ -675,6 +755,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <h2 className="text-sm font-semibold text-stone-900">Day Skeleton</h2>
               <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
             </div>
+            {activeDayWeather ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  activeDayWeather.is_rainy
+                    ? 'bg-sky-100 text-sky-700 ring-1 ring-sky-300'
+                    : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                }`}
+                title={zh
+                  ? `${activeDayWeather.temp_min}°C ~ ${activeDayWeather.temp_max}°C · 降水 ${activeDayWeather.precipitation_mm}mm`
+                  : `${activeDayWeather.temp_min}°C ~ ${activeDayWeather.temp_max}°C · ${activeDayWeather.precipitation_mm}mm precip`}
+              >
+                {activeDayWeather.label} {activeDayWeather.temp_min}°~{activeDayWeather.temp_max}°
+                {activeDayWeather.is_rainy ? (zh ? ' 🌧️ 有雨' : ' 🌧️ Rain') : ''}
+              </span>
+            ) : null}
             {scheduled.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
