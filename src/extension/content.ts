@@ -834,14 +834,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (msgType === 'OWNLY_FETCH_LIST_BY_ID') {
-    const listId = (message as { listId?: string }).listId;
-    if (listId) {
-      void (async () => {
-        const listData = await fetchGoogleMapsEntityList(listId);
-        sendResponse({ savedList: listData });
-      })();
-      return true;
-    }
+    void (async () => {
+      let listId = (message as { listId?: string }).listId;
+      const listUrl = (message as { listUrl?: string }).listUrl;
+      if (!listId && listUrl) {
+        const m = /!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(listUrl);
+        listId = m?.[1] || m?.[2];
+      }
+      if (!listId) {
+        sendResponse({ savedList: null });
+        return;
+      }
+      const listData = await fetchGoogleMapsEntityList(listId);
+      sendResponse({ savedList: listData });
+    })();
+    return true;
   }
   if (msgType === 'OWNLY_GET_VISIBLE_LIST_PLACES') {
     void (async () => {
