@@ -3,6 +3,23 @@ import { el } from '../dom';
 import { store, t } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
 
+const PRICE_RETRY_DELAY_MS = 2000;
+let lastPriceRetryKey = '';
+
+function needsPriceRetry(): boolean {
+  const place = store.currentPlace;
+  if (!place) return false;
+  if (place.sourceUrl === lastPriceRetryKey) return false;
+  // Hotel/restaurant rate modules load lazily after the panel renders —
+  // schedule one targeted re-read when the first pass missed the price.
+  if (place.priceLevel) return false;
+  const cat = (place.category || '').toLowerCase();
+  const likelyPriced =
+    !cat ||
+    /hotel|hostel|ryokan|resort|guesthouse|restaurant|ramen|sushi|izakaya|cafe|coffee|tea house|bar\b|bistro|buffet|美食|酒店|旅馆|民宿|饭店|度假村|餐厅|咖啡|居酒屋|烤肉|拉面/.test(cat);
+  return likelyPriced;
+}
+
 export async function readCurrentPlace(): Promise<void> {
   setStatus(t().readingStatus);
   el.placePanel.classList.add('is-loading');
@@ -23,6 +40,7 @@ export async function readCurrentPlace(): Promise<void> {
     place?: CurrentResearchPlace | null;
     savedList?: DetectedSavedList | null;
     allLists?: Array<{ listId?: string; listName: string; count?: number; url?: string }>;
+    detectedCurrency?: string;
   };
   type ListMessageResponse = {
     listPlaces?: CurrentResearchPlace[];
@@ -35,7 +53,7 @@ export async function readCurrentPlace(): Promise<void> {
   const targetTags = (activeTrip?.tags || []).filter(Boolean);
 
   try {
-    placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags })) as PlaceMessageResponse;
+    placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags, targetCurrency: store.state.trips.find((trip) => trip.id === store.state.activeTripId)?.currency })) as PlaceMessageResponse;
     listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' })) as ListMessageResponse;
   } catch {
     // If message failed (e.g. content script was disconnected after extension reload), dynamically inject it
@@ -47,7 +65,7 @@ export async function readCurrentPlace(): Promise<void> {
           files: ['content.js'],
         });
         await new Promise((r) => setTimeout(r, 150));
-        placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags })) as PlaceMessageResponse;
+        placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags, targetCurrency: store.state.trips.find((trip) => trip.id === store.state.activeTripId)?.currency })) as PlaceMessageResponse;
         listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' })) as ListMessageResponse;
       }
     } catch (err) {
@@ -57,6 +75,9 @@ export async function readCurrentPlace(): Promise<void> {
 
   if (placeResp?.place && placeResp.place.sourceUrl !== store.userDismissedPlaceUrl) {
     store.currentPlace = placeResp.place;
+    if (!store.currentPlace.detectedCurrency && placeResp.detectedCurrency) {
+      store.currentPlace = { ...store.currentPlace, detectedCurrency: placeResp.detectedCurrency };
+    }
   } else {
     store.currentPlace = null;
   }
@@ -107,5 +128,15 @@ export async function readCurrentPlace(): Promise<void> {
   renderCurrencyPill();
   if (store.currentPlace) {
     autoFillPlaceForm(store.currentPlace);
+  }
+
+  // One-shot retry for lazily loaded price modules (hotels, restaurants).
+  if (needsPriceRetry()) {
+    lastPriceRetryKey = store.currentPlace!.sourceUrl;
+    window.setTimeout(() => {
+      if (store.currentPlace?.sourceUrl === lastPriceRetryKey) {
+        void readCurrentPlace();
+      }
+    }, PRICE_RETRY_DELAY_MS);
   }
 }

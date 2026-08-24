@@ -354,6 +354,19 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [disabled, zh, load, tripPlaces],
   );
 
+  const handleUpdateFxRates = useCallback(
+    (rates: Record<string, number>) => {
+      if (!selectedTripId) return;
+      setTrips((prev) => prev.map((t) => (t.id === selectedTripId ? { ...t, fx_rates: rates } : t)));
+      const trip = trips.find((item) => item.id === selectedTripId);
+      if (!trip) return;
+      void plannerRepository
+        .upsertTrip({ ...trip, fx_rates: rates, updated_at: new Date().toISOString() })
+        .catch((error) => console.warn('[Planner] Failed to persist fx_rates', error));
+    },
+    [selectedTripId, trips],
+  );
+
   const handleDropHotel = useCallback(async (hotelId: string) => {
     if (!hotelId || disabled) return;
     await plannerRepository.dropPlace(hotelId);
@@ -918,8 +931,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               expenses={currentExpenses}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
-              members={currentMembers}
-              onUpdateMembers={handleUpdateMembers}
+        members={currentMembers}
+        onUpdateMembers={handleUpdateMembers}
+        onUpdateFxRates={handleUpdateFxRates}
               language={language}
             />
           ) : (
