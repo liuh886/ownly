@@ -334,7 +334,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             && (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin')),
         );
         for (const stale of staleStays) {
-          await plannerRepository.upsertPlace({ ...stale, state: 'dropped', updated_at: new Date().toISOString() });
+          await plannerRepository.dropPlace(stale.id);
         }
 
         for (const sp of stayPlaces) {
@@ -355,15 +355,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   );
 
   const handleDropHotel = useCallback(async (hotelId: string) => {
-    const hotel = tripPlaces.find((p) => p.id === hotelId);
-    if (!hotel || disabled) return;
-    const updated: PlannerTripPlace = {
-      ...hotel,
-      state: 'dropped',
-    };
-    await plannerRepository.upsertPlace(updated);
+    if (!hotelId || disabled) return;
+    await plannerRepository.dropPlace(hotelId);
     await load();
-  }, [tripPlaces, disabled, load]);
+  }, [disabled, load]);
 
   const areaCounts = useMemo(() => getTripAreaCounts(tripPlaces), [tripPlaces]);
   const maxAreaCount = Math.max(1, ...areaCounts.map((item) => item.count));
