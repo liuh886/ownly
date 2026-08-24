@@ -1,4 +1,4 @@
-import { resolveGoogleMapsListByUrl } from '../api';
+import { expandAndExtractListId, resolveGoogleMapsListByUrl } from '../api';
 import {
   checkOpeningHoursCollision,
   findExistingTripPlace,
@@ -13,6 +13,7 @@ import {
   type PlannerTripPlace,
 } from '../../domain/planner';
 import { normalizeCaptureState, saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
+import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
@@ -82,6 +83,76 @@ function applyBulk(mutate: (place: PlannerTripPlace, value?: string) => PlannerT
   const count = ids.size;
   store.bulkSelected.clear();
   void saveState().then(() => setStatus(dict.bulkApplied(count), 'success'));
+}
+
+function buildPlaceFromDetected(
+  item: CurrentResearchPlace,
+  tripId: string,
+  tripTags: string[],
+  now: string,
+): PlannerTripPlace {
+  const cleanTitle = cleanExtractedText(item.title);
+  const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
+  return {
+    schema_version: '0.1',
+    type: 'trip_place',
+    id: crypto.randomUUID(),
+    trip_id: tripId,
+    title: cleanTitle,
+    source_provider: item.sourceProvider || 'google_maps',
+    source_url: item.sourceUrl,
+    kind: inferPlaceKind(cleanTitle + ' ' + (item.category || '') + ' ' + (cleanAddress || '')),
+    area: cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined,
+    priority: 'want',
+    tags: Array.from(new Set([...tripTags, item.category ? cleanExtractedText(item.category) : ''].filter(Boolean))),
+    why: item.userNote || item.summary || undefined,
+    signals: item.category ? [cleanExtractedText(item.category)] : [],
+    risks: [],
+    notes: item.userNote || undefined,
+    open_hours: item.openHours ? cleanExtractedText(item.openHours) : undefined,
+    address: cleanAddress,
+    observed_rating: item.rating,
+    observed_price: item.priceLevel,
+    observed_at: today(),
+    coordinates: item.coordinates,
+    source_place_id: item.sourcePlaceId,
+    reservation_status: 'none',
+    state: 'candidate',
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+/**
+ * Bulk-paste list resolution that prefers the active Maps tab's content script
+ * (correct authuser/cookie context for multi-account users), falling back to
+ * the legacy side-panel fetch when no tab is available.
+ */
+async function resolveListPlacesSmart(
+  line: string,
+  activeTrip?: PlannerTrip,
+): Promise<PlannerTripPlace[] | null> {
+  const ref = await expandAndExtractListId(line);
+  if (!ref) return null;
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id && /^https:\/\/(www\.google\.[a-z.]+|maps\.google\.[a-z.]+)/i.test(tab.url ?? '')) {
+      const resp = await chrome.tabs.sendMessage(tab.id, {
+        type: 'OWNLY_FETCH_LIST_BY_ID',
+        listUrl: ref.finalUrl,
+        listId: ref.listId,
+      }) as { savedList?: DetectedSavedList | null } | undefined;
+      if (resp && 'savedList' in resp) {
+        const places = resp.savedList?.places ?? [];
+        const now = new Date().toISOString();
+        const tripTags = activeTrip?.tags ?? [];
+        return places.map((p) => buildPlaceFromDetected(p, activeTrip?.id || '', tripTags, now));
+      }
+    }
+  } catch {}
+
+  return resolveGoogleMapsListByUrl(line, activeTrip);
 }
 
 function initDragReorder(): void {
@@ -606,8 +677,8 @@ export function initHandlers(): void {
           const isUrl = /^https?:\/\//i.test(line);
           if (isUrl && (line.includes('maps.app.goo.gl') || line.includes('!2s') || line.includes('placelists/list') || line.includes('goo.gl/maps'))) {
             try {
-              const listItems = await resolveGoogleMapsListByUrl(line, activeTrip);
-              if (listItems.length > 0) {
+              const listItems = await resolveListPlacesSmart(line, activeTrip);
+              if (listItems && listItems.length > 0) {
                 for (const item of listItems) {
                   const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, item.source_url, item.source_place_id);
                   if (found) continue;
