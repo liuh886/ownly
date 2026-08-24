@@ -16,6 +16,7 @@ import {
   toOwnlyMcpErrorPayload,
 } from '../../../scripts/mcp/ownly-tools.ts';
 import { OwnlyWriteService } from '../../../scripts/shared/ownly-write-service.ts';
+import { getPlannerSummary, getPlannerTripDetail } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
 const SERVER_VERSION = '0.2.0';
@@ -124,7 +125,7 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       instructions:
-        'Ownly is a local-first evidence source. Use Doctor before high-stakes analysis when data quality matters. Treat tool results as recorded facts and keep recommendations or interpretations clearly separate from those facts. Persistent mutations use two phases: call an ownly_prepare_* tool, show the preview to the user, then call ownly_commit_operation only after confirmation. Writes must also be enabled when the server starts. Do not claim that all Ownly data stays outside the model context: only the source-of-truth remains local; returned tool results are shared with this MCP client.',
+        'Ownly is a local-first evidence source. Use Doctor before high-stakes analysis when data quality matters. Treat tool results as recorded facts and keep recommendations or interpretations clearly separate from those facts. Persistent mutations use two phases: call an ownly_prepare_* tool, show the preview to the user, then call ownly_commit_operation only after confirmation. Writes must also be enabled when the server starts. Planner tools follow the same discipline: propose schedules/routes/budgets with read tools and planner_prepare_*, never silently overwrite locked stops (optimization pins them), and convert foreign prices only for display using trip fx_rates. Do not claim that all Ownly data stays outside the model context: only the source-of-truth remains local; returned tool results are shared with this MCP client.',
     },
   );
 
@@ -243,6 +244,160 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     },
     safeHandler(() => getOwnlyDoctor(dataLocation)),
   );
+
+  // ── Planner: travel research & scheduling ─────────────────────────────
+
+  server.registerTool(
+    'ownly_planner_summary',
+    {
+      title: 'Planner Summary',
+      description: 'Overview of all trips with place counts (scheduled/candidates/dropped) and expense counts.',
+      inputSchema: z.object({}),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(() => getPlannerSummary(dataLocation)),
+  );
+
+  server.registerTool(
+    'ownly_planner_get_trip',
+    {
+      title: 'Planner Trip Detail',
+      description: 'Full trip context: trip, budget estimate in base currency with FX, day conflicts (opening hours), places, bookings and expenses.',
+      inputSchema: z.object({ trip_id: z.string().min(1) }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id }) => getPlannerTripDetail(dataLocation, trip_id)),
+  );
+
+  server.registerTool(
+    'ownly_planner_budget_estimate',
+    {
+      title: 'Planner Budget Estimate',
+      description: 'Estimate the scheduled-trip budget converted into the trip base currency. Uses built-in USD-pivot rates unless the trip defines fx_rates overrides.',
+      inputSchema: z.object({ trip_id: z.string().min(1) }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id }) => {
+      const detail = getPlannerTripDetail(dataLocation, trip_id);
+      return { budget: detail.budget, conflicts: detail.conflicts };
+    }),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_schedule_place',
+    {
+      title: 'Preview Scheduling a Place',
+      description: 'Preview scheduling a planner place on a date (locks it as a hard constraint for later optimization).',
+      inputSchema: z.object({
+        place_id: z.string().min(1),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        sort_order: z.number().int().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ place_id, date, sort_order }) => writeService.prepareSchedulePlace(place_id, date, sort_order)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_return_to_pool',
+    {
+      title: 'Preview Returning a Place to Pool',
+      description: 'Preview moving a scheduled place back to the candidate pool.',
+      inputSchema: z.object({ place_id: z.string().min(1) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ place_id }) => writeService.prepareReturnPlaceToPool(place_id)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_reorder_day',
+    {
+      title: 'Preview Reordering a Day',
+      description: 'Preview moving a scheduled place one position up (-1) or down (+1) within its day.',
+      inputSchema: z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        place_id: z.string().min(1),
+        delta: z.union([z.literal(-1), z.literal(1)]),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ date, place_id, delta }) => writeService.prepareReorderDay(date, place_id, delta)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_optimize_route',
+    {
+      title: 'Preview Day Route Optimization',
+      description: 'Preview TSP re-ordering of one scheduled day (locked and coordinate-less stops stay pinned). Preview includes km saved.',
+      inputSchema: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ date }) => writeService.prepareOptimizeDayRoute(date)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_set_stay_span',
+    {
+      title: 'Preview Setting Stay Span',
+      description: 'Preview anchoring a hotel across consecutive dates; stale stay anchors on those dates are retired automatically.',
+      inputSchema: z.object({
+        hotel_place_id: z.string().min(1),
+        dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).min(1),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ hotel_place_id, dates }) => writeService.prepareSetStaySpan(hotel_place_id, dates)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_drop_place',
+    {
+      title: 'Preview Dropping a Place',
+      description: 'Preview marking a place as dropped (terminal lifecycle state, recoverable by editing Markdown).',
+      inputSchema: z.object({ place_id: z.string().min(1) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ place_id }) => writeService.prepareDropPlannerPlace(place_id)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_add_expense',
+    {
+      title: 'Preview Adding an Expense',
+      description: 'Preview appending an AA-ledger expense entry to Trip Expenses/.',
+      inputSchema: z.object({
+        id: z.string().min(3),
+        trip_id: z.string().min(1),
+        title: z.string().min(1),
+        category: z.enum(['stay', 'food', 'transit', 'ticket', 'shopping', 'other']),
+        amount: z.number().positive(),
+        currency: z.string().min(2).max(6),
+        paid_by: z.string().min(1),
+        split_members: z.array(z.string()).default([]),
+        notes: z.string().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler((input) => writeService.prepareAddExpense({
+      ...input,
+      created_at: new Date().toISOString(),
+    })),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_set_fx_rates',
+    {
+      title: 'Preview Setting FX Rates',
+      description: 'Preview persisting user-verified conversion overrides on the trip frontmatter (rates[FROM] = base per 1 FROM).',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        rates: z.record(z.string(), z.number().positive()),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id, rates }) => writeService.prepareSetFxRates(trip_id, rates)),
+  );
+
 
   server.registerTool(
     'ownly_prepare_create_object',

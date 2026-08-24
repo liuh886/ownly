@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { createOwnlyBackup, serializeOwnlyBackup } from '../../src/core/data-portability';
 import { validateEntity } from '../../src/domain/schema';
 import type {
@@ -23,8 +23,17 @@ import {
   slugify,
   todayISO,
 } from '../cli/domain';
+import { serializeMarkdownEntity } from '../../src/data/frontmatter';
 import { NodeOwnlyTextFileAdapter } from '../cli/node-portability-adapter';
 import {
+  PLANNER_DIRECTORIES,
+  findPlannerEntry,
+  listPlannerPlaces,
+  listPlannerTrips,
+  reorderDayPlace,
+  returnPlaceToPool,
+  schedulePlaceOnDate,
+} from '../cli/planner-storage';import {
   archiveEntry,
   availableFileName,
   ensureEntityDirectory,
@@ -34,6 +43,14 @@ import {
   writeAgentLog,
   writeEntry,
 } from '../cli/storage';
+import {
+  estimateTripBudget,
+  generateStaySpanPlaces,
+  optimizeStopsSequence,
+  type FxSettings,
+  type PlannerTripPlace,
+  type TripExpenseItem,
+} from '../../src/domain/planner';
 
 export type OwnlyMutationErrorCode =
   | 'WRITE_DISABLED'
@@ -543,6 +560,196 @@ export class OwnlyWriteService {
       const archiveFile = archiveEntry(this.dataLocation, 'object', entry, this.now());
       writeAgentLog(this.dataLocation, 'object_delete', id, entry.frontmatter, null);
       return { id, archived: true, archive_file: archiveFile };
+    });
+  }
+
+  // ── Planner operations ────────────────────────────────────────────────
+
+  private plannerPlaceEntry(placeId: string) {
+    const entry = findPlannerEntry(listPlannerPlaces(this.dataLocation), placeId);
+    if (!entry) {
+      throw new OwnlyMutationError(`Planner place was not found: ${placeId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
+    }
+    return entry;
+  }
+
+  private tripBaseFx(): FxSettings {
+    return { base: 'CNY', overrides: undefined };
+  }
+
+  prepareSchedulePlace(placeId: string, date: string, sortOrder?: number): PreparedOwnlyOperation {
+    const entry = this.plannerPlaceEntry(placeId);
+    const before = entry.frontmatter;
+    const order = sortOrder ?? before.sort_order ?? 0;
+    const next = schedulePlaceOnDate(before, date, order);
+    const expected = fingerprint(entry.filePath);
+    return this.prepare('planner_schedule_place', { before, after: next }, () => {
+      assertUnchanged(entry.filePath, expected);
+      writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
+      writeAgentLog(this.dataLocation, 'planner_schedule_place', placeId, before, next);
+      return { id: placeId, state: next.state, scheduled_date: next.scheduled_date };
+    });
+  }
+
+  prepareReturnPlaceToPool(placeId: string): PreparedOwnlyOperation {
+    const entry = this.plannerPlaceEntry(placeId);
+    const before = entry.frontmatter;
+    const next = returnPlaceToPool(before);
+    const expected = fingerprint(entry.filePath);
+    return this.prepare('planner_return_to_pool', { before, after: next }, () => {
+      assertUnchanged(entry.filePath, expected);
+      writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
+      writeAgentLog(this.dataLocation, 'planner_return_to_pool', placeId, before, next);
+      return { id: placeId, state: next.state };
+    });
+  }
+
+  prepareReorderDay(date: string, placeId: string, delta: -1 | 1): PreparedOwnlyOperation {
+    const places = listPlannerPlaces(this.dataLocation)
+      .map((e) => e.frontmatter)
+      .filter((p) => p.state === 'scheduled' && p.scheduled_date === date)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const reordered = reorderDayPlace(places, placeId, delta);
+    if (!reordered) {
+      throw new OwnlyMutationError('Reorder target is out of bounds for this day.', 'INVALID_INPUT');
+    }
+    const touched = reordered.filter((p, i) => p !== places[i] || p.sort_order !== places[i].sort_order);
+    const expectedMap = new Map(
+      listPlannerPlaces(this.dataLocation).map((e) => [e.filePath, fingerprint(e.filePath)]),
+    );
+    const previews = touched.map((p) => ({ id: p.id, sort_order: p.sort_order }));
+    return this.prepare('planner_reorder_day', { date, changes: previews }, () => {
+      for (const place of touched) {
+        const entry = listPlannerPlaces(this.dataLocation).find((e) => e.frontmatter.id === place.id);
+        if (!entry) continue;
+        assertUnchanged(entry.filePath, expectedMap.get(entry.filePath)!);
+        writeEntry(dirname(entry.filePath), entry.fileName, place, entry.body);
+      }
+      return { date, updated: previews.length };
+    });
+  }
+
+  prepareOptimizeDayRoute(date: string): PreparedOwnlyOperation {
+    const entries = listPlannerPlaces(this.dataLocation).filter((e) =>
+      e.frontmatter.state === 'scheduled' && e.frontmatter.scheduled_date === date,
+    );
+    const ordered = entries
+      .map((e) => e.frontmatter)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const result = optimizeStopsSequence(ordered, { respectLocked: true });
+    if (!result.improved) {
+      throw new OwnlyMutationError('Route is already optimal; nothing to commit.', 'INVALID_INPUT');
+    }
+    const expectedMap = new Map(entries.map((e) => [e.filePath, fingerprint(e.filePath)] as const));
+    const byId = new Map(result.places.map((p) => [p.id, p] as const));
+    const updates = entries
+      .filter((e) => {
+        const optimized = byId.get(e.frontmatter.id);
+        return optimized && optimized.sort_order !== e.frontmatter.sort_order;
+      })
+      .map((e) => ({ entry: e, next: byId.get(e.frontmatter.id)! }));
+    return this.prepare(
+      'planner_optimize_day_route',
+      {
+        date,
+        original_km: result.originalKm,
+        optimized_km: result.optimizedKm,
+        saved_km: result.savedKm,
+        order: result.places.map((p) => ({ id: p.id, title: p.title })),
+      },
+      () => {
+        for (const { entry, next } of updates) {
+          assertUnchanged(entry.filePath, expectedMap.get(entry.filePath)!);
+          writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
+        }
+        return { date, saved_km: result.savedKm, updated: updates.length };
+      },
+    );
+  }
+
+  prepareSetStaySpan(hotelPlaceId: string, dates: string[]): PreparedOwnlyOperation {
+    const hotelEntry = findPlannerEntry(listPlannerPlaces(this.dataLocation), hotelPlaceId);
+    if (!hotelEntry) {
+      throw new OwnlyMutationError(`Hotel place was not found: ${hotelPlaceId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
+    }
+    const hotel = hotelEntry.frontmatter;
+    const spans = generateStaySpanPlaces(hotel, dates);
+    const spanIds = new Set(spans.map((s) => s.id));
+    const dateSet = new Set(dates);
+    const staleIds = listPlannerPlaces(this.dataLocation)
+      .filter((e) => {
+        const p: PlannerTripPlace = e.frontmatter;
+        return (
+          p.state === 'scheduled'
+          && p.scheduled_date !== undefined
+          && dateSet.has(p.scheduled_date)
+          && !spanIds.has(p.id)
+          && (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin'))
+        );
+      })
+      .map((e) => e.frontmatter.id);
+
+    const allEntries = listPlannerPlaces(this.dataLocation);
+    const expectedMap = new Map(allEntries.map((e) => [e.filePath, fingerprint(e.filePath)] as const));
+    return this.prepare(
+      'planner_set_stay_span',
+      { hotel: hotel.title, dates, new_anchors: spans.map((s) => ({ id: s.id, date: s.scheduled_date })), retires_stale_ids: staleIds },
+      () => {
+        for (const staleId of staleIds) {
+          const staleEntry = allEntries.find((e) => e.frontmatter.id === staleId);
+          if (!staleEntry) continue;
+          assertUnchanged(staleEntry.filePath, expectedMap.get(staleEntry.filePath)!);
+          const dropped = { ...staleEntry.frontmatter, state: 'dropped' as const, updated_at: todayISO(this.now()) };
+          writeEntry(dirname(staleEntry.filePath), staleEntry.fileName, dropped, staleEntry.body);
+        }
+        const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.places);
+        mkdirSync(directory, { recursive: true });
+        for (const span of spans) {
+          const fileName = `place--${span.id}.md`;
+          writeFileSync(join(directory, fileName), serializeMarkdownEntity(span, ''), 'utf8');
+        }
+        return { hotel_id: hotelPlaceId, nights: dates.length, retired: staleIds.length };
+      },
+    );
+  }
+
+  prepareDropPlannerPlace(placeId: string): PreparedOwnlyOperation {
+    const entry = this.plannerPlaceEntry(placeId);
+    const before = entry.frontmatter;
+    const next = { ...before, state: 'dropped' as const };
+    const expected = fingerprint(entry.filePath);
+    return this.prepare('planner_drop_place', { before, after: next }, () => {
+      assertUnchanged(entry.filePath, expected);
+      writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
+      writeAgentLog(this.dataLocation, 'planner_drop_place', placeId, before, next);
+      return { id: placeId, state: next.state };
+    });
+  }
+
+  prepareAddExpense(input: TripExpenseItem): PreparedOwnlyOperation {
+    const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.expenses);
+    const fileName = `expense--${input.id}.md`;
+    return this.prepare('planner_add_expense', { expense: input }, () => {
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, fileName), serializeMarkdownEntity({ schema_version: '0.1', type: 'trip_expense', ...input }, ''), 'utf8');
+      writeAgentLog(this.dataLocation, 'planner_add_expense', input.id, null, input);
+      return { id: input.id, amount: input.amount, currency: input.currency };
+    });
+  }
+
+  prepareSetFxRates(tripId: string, rates: Record<string, number>): PreparedOwnlyOperation {
+    const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), tripId);
+    if (!tripEntry) {
+      throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
+    }
+    const before = tripEntry.frontmatter;
+    const next = { ...before, fx_rates: rates, updated_at: todayISO(this.now()) };
+    const expected = fingerprint(tripEntry.filePath);
+    return this.prepare('planner_set_fx_rates', { before_rates: before.fx_rates ?? {}, rates }, () => {
+      assertUnchanged(tripEntry.filePath, expected);
+      writeEntry(dirname(tripEntry.filePath), tripEntry.fileName, next, tripEntry.body);
+      writeAgentLog(this.dataLocation, 'planner_set_fx_rates', tripId, before.fx_rates ?? {}, rates);
+      return { trip_id: tripId, fx_rates: rates };
     });
   }
 
