@@ -51,7 +51,7 @@ npm run build:extension
 
 Load `dist/extension` as an unpacked extension in Chromium. The action button opens the native Side Panel.
 
-The Google Maps adapter auto-fills observation hints for the current place or saved list: title, URL, coordinates (when present in the URL or list payload), rating, price, address, opening hours and the user's own Maps notes. Research judgment — priority, area, signals, risks, why — remains explicit user input. Ownly does not scrape or archive raw Google reviews.
+The Google Maps adapter auto-fills observation hints for the current place or saved list: title, URL, coordinates (when present in the URL or list payload), rating, price, address, opening hours and the user's own Maps notes. Structured extras include phone, plus code, menu link, reservation link, review-topic chips and the Google taxonomy `types` — sourced from stable DOM anchors plus a same-origin enrichment pass over the page's embedded state blob (feature id `0x…:0x…` / ChIJ id included). Research judgment — priority, area, signals, risks, why — remains explicit user input. Ownly does not scrape or archive raw Google reviews.
 
 Currency detection runs in tiers: explicit symbols/codes on the page, then the place's map coordinates, then the trip's declared currency as a prior (beats VPN/TLD page-localization noise), then generic locale context. Hotel rate modules load lazily, so a missed price is retried once after ~2 seconds.
 

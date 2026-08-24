@@ -161,13 +161,16 @@ describe('Ownly Planner domain', () => {
       place('1', { title: '浅草寺', kind: 'attraction', observed_rating: 4.6, address: 'Tokyo, Asakusa' }),
       place('2', { title: 'Blue Bottle', kind: 'cafe', observed_price: '¥800', address: 'Tokyo, Shibuya' }),
     ];
-    const kml = exportPlacesToKML('Tokyo Trip', 'Day 1', stops);
+    stops[0].phone = '+81312345678';
+    const kmlAll = exportPlacesToKML('Tokyo Trip', 'Day 1', stops);
+    expect(kmlAll).toContain('电话:');
+    const kml = kmlAll;
     expect(kml).toContain('<kml xmlns="http://www.opengis.net/kml/2.2">');
     expect(kml).toContain('<name>1. 浅草寺</name>');
     expect(kml).toContain('<name>2. Blue Bottle</name>');
 
     const csv = exportPlacesToCSV(stops);
-    expect(csv).toContain('Order,Title,Kind,Rating,Price,Address,Why,Notes,Tags,Google_Maps_URL');
+    expect(csv).toContain('Google_Maps_URL,Phone,Plus_Code,Menu_URL,Reservation_URL');
     expect(csv).toContain('1,"浅草寺","attraction",4.6');
   });
 

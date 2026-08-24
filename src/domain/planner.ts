@@ -433,6 +433,10 @@ export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: 
         ${place.why ? `<p><b>理由:</b> ${escapeXml(place.why)}</p>` : ''}
         ${place.notes ? `<p><b>备注:</b> ${escapeXml(place.notes)}</p>` : ''}
         ${place.address ? `<p><b>地址:</b> ${escapeXml(place.address)}</p>` : ''}
+        ${place.phone ? `<p><b>电话:</b> ${escapeXml(place.phone)}</p>` : ''}
+        ${place.plus_code ? `<p><b>Plus Code:</b> ${escapeXml(place.plus_code)}</p>` : ''}
+        ${place.menu_url ? `<p><b>菜单:</b> ${escapeXml(place.menu_url)}</p>` : ''}
+        ${place.reservation_url ? `<p><b>预订:</b> ${escapeXml(place.reservation_url)}</p>` : ''}
         ${place.source_url ? `<p><a href="${escapeXml(place.source_url)}">Google Maps 链接</a></p>` : ''}
       `);
     return `
@@ -454,7 +458,7 @@ export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: 
 }
 
 export function exportPlacesToCSV(places: PlannerTripPlace[]): string {
-  const headers = ['Order', 'Title', 'Kind', 'Rating', 'Price', 'Address', 'Why', 'Notes', 'Tags', 'Google_Maps_URL'];
+  const headers = ['Order', 'Title', 'Kind', 'Rating', 'Price', 'Address', 'Why', 'Notes', 'Tags', 'Google_Maps_URL', 'Phone', 'Plus_Code', 'Menu_URL', 'Reservation_URL'];
   const cell = (value: string) => `"${csvSafeCell(value.replace(/"/g, '""'))}"`;
   const rows = places.map((p, i) => [
     i + 1,
@@ -467,6 +471,10 @@ export function exportPlacesToCSV(places: PlannerTripPlace[]): string {
     cell(p.notes || ''),
     cell((p.tags || []).join(';')),
     cell(p.source_url || ''),
+    cell(p.phone || ''),
+    cell(p.plus_code || ''),
+    cell(p.menu_url || ''),
+    cell(p.reservation_url || ''),
   ].join(','));
   return [headers.join(','), ...rows].join('\n');
 }
