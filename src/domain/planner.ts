@@ -73,6 +73,14 @@ export interface PlannerTripPlace {
   scheduled_date?: string;
   sort_order?: number;
   locked?: boolean;
+  /** Contact & structured extras captured from Google Maps. */
+  phone?: string;
+  plus_code?: string;
+  menu_url?: string;
+  reservation_url?: string;
+  review_topics?: string[];
+  /** Google taxonomy types, e.g. ["lodging","restaurant","tourist_attraction"]. */
+  types?: string[];
   created_at: string;
   updated_at?: string;
 }
@@ -1086,6 +1094,25 @@ export const PLANNER_KIND_ICONS: Record<PlannerPlaceKind, string> = {
   experience: '🧗',
   other: '📍',
 };
+
+/** Maps Google taxonomy types onto our place kinds; more specific wins. */
+const TYPE_KIND_RULES: Array<[RegExp, PlannerPlaceKind]> = [
+  [/lodging|hotel|motel|hostel|guest_house|bed_and_breakfast|ryokan/i, 'stay'],
+  [/cafe|coffee_shop|tea_house|dessert|bakery|ice_cream/i, 'cafe'],
+  [/restaurant|bar\b|pub|food|meal_takeaway|meal_delivery|ramen|sushi|izakaya/i, 'food'],
+  [/transit_station|subway_station|bus_station|airport|train_station|ferry_terminal/i, 'transit'],
+  [/shopping_mall|department_store|store|market|bazaar|outlet/i, 'shopping'],
+  [/museum|art_gallery|tourist_attraction|place_of_worship|historical|castle|park\b|zoo|aquarium|viewpoint|beach/i, 'attraction'],
+  [/spa|gym|fitness|bowling|amusement|water_park|night_club|experience/i, 'experience'],
+];
+
+export function inferKindFromTypes(types?: string[]): PlannerPlaceKind | null {
+  if (!types || types.length === 0) return null;
+  for (const [pattern, kind] of TYPE_KIND_RULES) {
+    if (types.some((t) => pattern.test(t))) return kind;
+  }
+  return null;
+}
 
 export function parseNumericPrice(raw?: string | null): number {  if (!raw) return 0;
   // Handle ranges like "฿200-400" or "¥1,000–2,000" -> average

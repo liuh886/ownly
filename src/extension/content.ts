@@ -1,5 +1,5 @@
 import { inferSourceProvider, extractPlaceCoordinates, type PlannerPlaceSourceProvider } from '../domain/planner';
-import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import { cleanExtractedText, extractFeatureIdFromUrl, normalizePhoneDisplay, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, parseEntityListCoordinates, safeDecodeUri } from './utils';
 import { SELECTORS, driftCheck } from './selectors';
 
 export interface CurrentResearchPlace {
@@ -20,6 +20,12 @@ export interface CurrentResearchPlace {
   coordinates?: { lat: number; lng: number };
   sourcePlaceId?: string;
   tierNote?: string;
+  phone?: string;
+  plusCode?: string;
+  menuUrl?: string;
+  reservationUrl?: string;
+  reviewTopics?: string[];
+  types?: string[];
 }
 
 function titleFromUrl(url: string): string {
@@ -195,6 +201,166 @@ function extractWebsite(): string | undefined {
   const webEl = document.querySelector<HTMLAnchorElement>(SELECTORS.website);
   if (webEl?.href) return webEl.href;
   return undefined;
+}
+
+function extractPhone(): string | undefined {
+  const el = document.querySelector<HTMLElement>(SELECTORS.phone);
+  const aria = el?.getAttribute('aria-label') || '';
+  const fromAria = aria.match(/[\+]?[\d][\d\s\-()·]{6,}/);
+  if (fromAria) return normalizePhoneDisplay(fromAria[0]);
+  const href = (el as HTMLAnchorElement)?.href || document.querySelector<HTMLAnchorElement>('a[href^="tel:"]')?.href;
+  if (href?.startsWith('tel:')) return normalizePhoneDisplay(decodeURIComponent(href.slice(4)));
+  return normalizePhoneDisplay(el?.textContent || undefined);
+}
+
+function extractPlusCode(): string | undefined {
+  const el = document.querySelector<HTMLElement>(SELECTORS.plusCode);
+  const text = cleanExtractedText(el?.textContent || el?.getAttribute('aria-label') || '');
+  // Plus codes look like "2VH5+XX Bangkok" or "7M3C+GP Phuket"
+  const match = /\b[A-Z0-9]{4}\+[A-Z0-9]{2,5}(?:\s+[^\n]{0,40})?/.exec(text.toUpperCase());
+  return match ? cleanExtractedText(match[0]) : undefined;
+}
+
+function extractMenuLink(): string | undefined {
+  const anchor = document.querySelector<HTMLAnchorElement>(SELECTORS.menuLink);
+  return anchor?.href || undefined;
+}
+
+const RESERVE_URL_HINT = /(reserve|booking|tablecheck|sevenrooms|opentable|quandoo|eatigo|tabelog.*reserve)/i;
+
+function extractReservation(): { url?: string; available: boolean } {
+  const nodes = document.querySelectorAll<HTMLElement>(SELECTORS.reserveAction);
+  for (const node of Array.from(nodes).slice(0, 10)) {
+    const anchor = node instanceof HTMLAnchorElement ? node : node.querySelector<HTMLAnchorElement>('a[href]');
+    if (anchor?.href && RESERVE_URL_HINT.test(anchor.href)) {
+      return { url: anchor.href, available: true };
+    }
+  }
+  const visibleReserve = [...document.querySelectorAll<HTMLElement>('[aria-label]')]
+    .filter((el) => /reserve|book a table|预订|订座/i.test(el.getAttribute('aria-label') || ''))
+    .slice(0, 5);
+  if (visibleReserve.length > 0) return { available: true };
+  return { available: false };
+}
+
+function extractReviewTopics(): string[] {
+  const topics: string[] = [];
+  const seen = new Set<string>();
+  for (const chip of Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.reviewTopicChips)).slice(0, 60)) {
+    const label = cleanExtractedText(chip.getAttribute('aria-label') || chip.textContent || '');
+    const m = /^(.{1,24}?)\s*[-–]\s*(\d{1,5})$|^(.{1,24}?)\s+(\d{1,5})\s*(?:条评论|reviews?)$/i.exec(label);
+    const topic = m ? (m[1] || m[3]) : '';
+    if (!topic || topic.length < 2) continue;
+    const key = topic.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      topics.push(topic);
+    }
+    if (topics.length >= 5) break;
+  }
+  return topics;
+}
+
+interface AppStateSignals {
+  placeId?: string;
+  intlPhone?: string;
+  plusCode?: string;
+  types?: string[];
+}
+
+let appStateSignals: AppStateSignals | null = null;
+let stateBridgeInjected = false;
+
+/** Reads Google's APP_INITIALIZATION_STATE in the page world via a one-shot bridge. */
+function injectAppStateBridge(): void {
+  if (stateBridgeInjected) return;
+  stateBridgeInjected = true;
+  try {
+    const script = document.createElement('script');
+    script.textContent = `(() => {
+      const out = {};
+      try {
+        let nodes = [window.APP_INITIALIZATION_STATE];
+        let scanned = 0;
+        while (nodes.length && scanned < 6000) {
+          const cur = nodes.shift(); scanned++;
+          if (typeof cur === 'string') {
+            if (/^ChIJ[A-Za-z0-9_-]{8,}$/.test(cur) && !out.placeId) out.placeId = cur;
+            else if (/^\\+[0-9][0-9 ()-]{7,}$/.test(cur) && !out.intlPhone) out.intlPhone = cur;
+            else if (/^[A-Z0-9]{4}\\+[A-Z0-9]{2,5}/.test(cur) && !out.plusCode) out.plusCode = cur.split(/[,; ]/)[0];
+            continue;
+          }
+          if (Array.isArray(cur)) {
+            for (const child of cur) { if (nodes.length < 4000) nodes.push(child); }
+          }
+        }
+        const typesBlob = JSON.stringify(window.APP_INITIALIZATION_STATE || '').match(/"(restaurant|lodging|cafe|bar|tourist_attraction|museum|park|spa|shopping_mall|transit_station|store|bakery|coffee_shop|gym|night_club)"/g);
+        if (typesBlob) out.types = [...new Set(typesBlob.map(t => t.replace(/"/g, '')))].slice(0, 12);
+      } catch {}
+      window.dispatchEvent(new CustomEvent('ownly-app-state', { detail: out }));
+    })();`;
+    document.documentElement.appendChild(script);
+    script.remove();
+  } catch {}
+}
+
+window.addEventListener('ownly-app-state' as keyof WindowEventMap, ((event: CustomEvent<AppStateSignals>) => {
+  if (event.detail && typeof event.detail === 'object') {
+    appStateSignals = event.detail;
+  }
+}) as EventListener);
+
+/** Public wrapper so the side panel can enrich the place it already holds. */
+export async function enrichPlaceFromHtml(place: CurrentResearchPlace): Promise<CurrentResearchPlace> {
+  return enrichFromPlaceHtml(place);
+}
+
+function collectAppStateSignals(): AppStateSignals | null {
+  injectAppStateBridge();
+  return appStateSignals;
+}
+
+const TAXONOMY_TYPES = /(restaurant|lodging|cafe|bar|tourist_attraction|museum|park|spa|shopping_mall|transit_station|store|bakery|coffee_shop|gym|night_club|meal_takeaway)/g;
+
+/**
+ * Same-origin fetch of the place page HTML: the server-rendered blob embeds a
+ * complete APP_INITIALIZATION_STATE (ChIJ id, phone, plus code, taxonomy) that
+ * is far more robust than CSS classes. Fills only missing fields.
+ */
+async function enrichFromPlaceHtml(place: CurrentResearchPlace): Promise<CurrentResearchPlace> {
+  try {
+    const res = await fetch(window.location.href, { credentials: 'include' });
+    if (!res.ok) return place;
+    const html = (await res.text()).slice(0, 3_000_000);
+
+    if (!place.sourcePlaceId) {
+      const chij = /"(ChIJ[A-Za-z0-9_-]{8,})"/.exec(html)?.[1];
+      if (chij) place.sourcePlaceId = chij;
+    }
+    if (!place.sourcePlaceId) {
+      const fid = extractFeatureIdFromUrl(window.location.href);
+      if (fid) place.sourcePlaceId = fid;
+    }
+    if (!place.phone) {
+      const phoneMatch = /"(\+\d[\d ()-]{8,})"/.exec(html)?.[1];
+      if (phoneMatch) place.phone = normalizePhoneDisplay(phoneMatch);
+    }
+    if (!place.plusCode) {
+      const plusMatch = /"([A-Z0-9]{4}\+[A-Z0-9]{2,5})[^"]{0,40}"/.exec(html)?.[1];
+      if (plusMatch) place.plusCode = plusMatch;
+    }
+    if (!place.types || place.types.length === 0) {
+      const found = new Set<string>();
+      for (const m of html.matchAll(TAXONOMY_TYPES)) {
+        found.add(m[1]);
+        if (found.size >= 12) break;
+      }
+      if (found.size > 0) place.types = [...found];
+    }
+  } catch {
+    // enrichment is best-effort; DOM extraction already provided the basics
+  }
+  return place;
 }
 
 export function detectCurrencyFromPage(
@@ -453,6 +619,8 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const summary = extractSummary();
   const openHours = extractOpenHours();
   const openStatus = extractOpenStatus();
+  const stateSignals = collectAppStateSignals();
+  const reservation = extractReservation();
 
   return {
     title,
@@ -471,6 +639,12 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     website: extractWebsite(),
     coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
     tierNote: extractHotelTier(),
+    phone: extractPhone() ?? stateSignals?.intlPhone,
+    plusCode: extractPlusCode() ?? stateSignals?.plusCode,
+    menuUrl: extractMenuLink(),
+    reservationUrl: reservation.url,
+    reviewTopics: extractReviewTopics().length > 0 ? extractReviewTopics() : undefined,
+    types: stateSignals?.types,
   };
 }
 
