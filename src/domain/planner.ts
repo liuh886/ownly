@@ -862,10 +862,6 @@ export function generateStaySpanPlaces(
     is_anchor: true,
     anchor_type: 'stay_checkin' as const,
     sort_order: 0,
-    notes:
-      stayDates.length > 1
-        ? `${hotel.notes ? `${hotel.notes} · ` : ''}连住第 ${index + 1} 晚 (共 ${stayDates.length} 晚)`
-        : hotel.notes,
   }));
 }
 
@@ -1012,8 +1008,31 @@ export interface TripBudgetEstimation {
   detectedCurrency: string;
 }
 
-export function parseNumericPrice(raw?: string | null): number {
-  if (!raw) return 0;
+const CODE_TO_SYMBOL: Record<string, string> = {
+  CNY: '¥', JPY: '¥', USD: '$', EUR: '€', GBP: '£', THB: '฿', KRW: '₩',
+  SGD: 'S$', HKD: 'HK$', TWD: 'NT$', AUD: 'A$', CAD: 'C$', CHF: 'CHF ', INR: '₹', MYR: 'RM', VND: '₫',
+};
+
+/** Renders an ISO code (or raw symbol) as a display symbol for ledger summaries. */
+export function currencySymbolFor(code?: string | null): string {
+  if (!code) return '¥';
+  const trimmed = code.trim();
+  if (CODE_TO_SYMBOL[trimmed.toUpperCase()]) return CODE_TO_SYMBOL[trimmed.toUpperCase()];
+  return trimmed;
+}
+
+export const PLANNER_KIND_ICONS: Record<PlannerPlaceKind, string> = {
+  attraction: '🏰',
+  food: '🍜',
+  cafe: '☕',
+  stay: '🏨',
+  shopping: '🛍️',
+  transit: '🚇',
+  experience: '🧗',
+  other: '📍',
+};
+
+export function parseNumericPrice(raw?: string | null): number {  if (!raw) return 0;
   // Handle ranges like "฿200-400" or "¥1,000–2,000" -> average
   const rangeMatch = /(\d[\d,]*)\s*[-–—〜~至]\s*(\d[\d,]*)/.exec(raw);
   if (rangeMatch) {
@@ -1188,7 +1207,7 @@ export function calculateTripSettlement(
   }
 
   // Build WeChat-friendly summary text
-  const currencySymbol = expenses[0]?.currency || '¥';
+  const currencySymbol = currencySymbolFor(expenses[0]?.currency);
   const lines: string[] = [
     `✈️ 旅行费用 AA 清算账单`,
     `💰 总支出: ${currencySymbol}${totalExpense} (共 ${members.length} 人)`,
