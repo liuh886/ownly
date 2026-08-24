@@ -11,7 +11,6 @@ import {
 export const PLANNER_DIRECTORIES = {
   trips: 'Trips',
   places: 'Trip Places',
-  bookings: 'Trip Bookings',
   expenses: 'Trip Expenses',
 } as const;
 
@@ -52,7 +51,7 @@ export function listPlannerPlaces(dataLocation: string) {
   return readPlannerDir<PlannerTripPlace>(dataLocation, PLANNER_DIRECTORIES.places, 'trip_place');
 }
 export function listPlannerBookings(dataLocation: string) {
-  return readPlannerDir(dataLocation, PLANNER_DIRECTORIES.bookings, 'trip_booking');
+  return readPlannerDir(dataLocation, PLANNER_DIRECTORIES.expenses, 'trip_expense');
 }
 export function listPlannerExpenses(dataLocation: string) {
   return readPlannerDir<TripExpenseItem>(dataLocation, PLANNER_DIRECTORIES.expenses, 'trip_expense');

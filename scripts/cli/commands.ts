@@ -2,7 +2,6 @@ import { join } from 'node:path';
 import { validateEntity, VALID_OBJECT_LOG_EVENT_TYPES } from '../../src/domain/schema';
 import type {
   AccountSnapshot,
-  BillingCycle,
   ObjectLogEntry,
   OneTimeExperienceObject,
   OneTimeExperienceStatus,
@@ -29,7 +28,6 @@ import {
   calculateNextBillingDate,
   daysBetween,
   formatAgentRow,
-  isBillingCycle,
   isObjectLogEventType,
   normalizePhysicalStatus,
   nowId,
@@ -60,7 +58,6 @@ import {
   type CliOptions,
   type DoctorResult,
   type ObjectEntry,
-  type ReviewEntryFile,
   type StoredEntry,
   type SupportedCliEntity,
 } from './types';
