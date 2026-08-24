@@ -516,5 +516,15 @@ describe('Route optimization pinning & budget currency', () => {
     expect(est.detectedCurrency).toBe('THB');
     expect(est.categoryBreakdown.stay).toBe(2000);
     expect(est.categoryBreakdown.food).toBe(600);
+    expect(est.currencies).toEqual(['THB']);
+  });
+
+  it('flags mixed currencies instead of silently summing them', () => {
+    const est = estimateTripBudget([
+      place('a', { kind: 'food', observed_price: '฿100' }),
+      place('b', { kind: 'food', observed_price: '¥50' }),
+    ], 1, 'CNY');
+    expect(est.detectedCurrency).toBe('THB');
+    expect([...est.currencies].sort()).toEqual(['CNY', 'THB']);
   });
 });

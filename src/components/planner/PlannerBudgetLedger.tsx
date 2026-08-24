@@ -191,6 +191,13 @@ export function PlannerBudgetLedger({
               ? `基于已排日程 (人均 ${currency} ${budgetEstimation.perPersonEstimated.toLocaleString()})`
               : `Per person ${currency} ${budgetEstimation.perPersonEstimated.toLocaleString()}`}
           </p>
+          {budgetEstimation.currencies.length > 1 ? (
+            <p className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-amber-200">
+              ⚠️ {zh
+                ? `混合币种（${budgetEstimation.currencies.join(' / ')}），估算未做汇率换算`
+                : `Mixed currencies (${budgetEstimation.currencies.join(' / ')}); no FX conversion applied`}
+            </p>
+          ) : null}
         </div>
 
         <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-2xs">
