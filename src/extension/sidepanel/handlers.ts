@@ -23,7 +23,6 @@ import {
   populateEditTripForm,
   renderCandidatesList,
   renderCurrentPlace,
-  renderQuickPriceList,
   renderSmartListCard,
   renderState,
   setStatus,
@@ -156,61 +155,7 @@ async function resolveListPlacesSmart(
   return resolveGoogleMapsListByUrl(line, activeTrip);
 }
 
-function initDragReorder(): void {
-  const list = el.candidatesListContainer;
-  let draggingId: string | null = null;
 
-  list.addEventListener('dragstart', (e) => {
-    const card = (e.target as HTMLElement).closest<HTMLElement>('.candidate-card');
-    if (!card) return;
-    draggingId = card.dataset.placeId || null;
-    card.classList.add('dragging');
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', draggingId || ''); } catch {}
-    }
-  });
-
-  list.addEventListener('dragover', (e) => {
-    if (!draggingId) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    for (const el2 of Array.from(list.querySelectorAll('.drop-above'))) el2.classList.remove('drop-above');
-    const over = (e.target as HTMLElement).closest<HTMLElement>('.candidate-card');
-    if (over && over.dataset.placeId !== draggingId) over.classList.add('drop-above');
-  });
-
-  list.addEventListener('drop', (e) => {
-    if (!draggingId) return;
-    e.preventDefault();
-    const over = (e.target as HTMLElement).closest<HTMLElement>('.candidate-card');
-    const srcId = draggingId;
-    draggingId = null;
-    for (const el2 of Array.from(list.querySelectorAll('.drop-above'))) el2.classList.remove('drop-above');
-    if (!over) return;
-    const overId = over.dataset.placeId;
-    if (!overId || overId === srcId) return;
-
-    const orderedIds = [...list.querySelectorAll<HTMLElement>('.candidate-card')]
-      .map((c) => c.dataset.placeId)
-      .filter((id): id is string => Boolean(id));
-    const fromIdx = orderedIds.indexOf(srcId);
-    if (fromIdx === -1) return;
-    orderedIds.splice(fromIdx, 1);
-    const toIdx = orderedIds.indexOf(overId);
-    orderedIds.splice(toIdx, 0, srcId);
-
-    store.state = { ...store.state, pendingPlaces: reorderPendingPlaces(store.state.pendingPlaces, orderedIds) };
-    void saveState();
-  });
-
-  list.addEventListener('dragend', () => {
-    draggingId = null;
-    for (const el2 of Array.from(list.querySelectorAll('.candidate-card'))) {
-      el2.classList.remove('dragging', 'drop-above');
-    }
-  });
-}
 
 async function revealPlaceInMaps(sourceUrl: string): Promise<void> {
   try {
@@ -1041,32 +986,7 @@ export function initHandlers(): void {
       : t().pricePlaceholder;
   });
 
-  initDragReorder();
   initCandidateDelegation();
-  initQuickPriceEntry();
 }
 
-function initQuickPriceEntry(): void {
-  el.btnSaveQuickPrices.addEventListener('click', () => {
-    const dict = t();
-    const inputs = el.quickPriceList.querySelectorAll<HTMLInputElement>('input[data-price-for]');
-    const updated = new Map<string, PlannerTripPlace>();
-    for (const input of Array.from(inputs)) {
-      const placeId = input.dataset.priceFor;
-      const raw = input.value.trim();
-      if (!placeId || !raw) continue;
-      const existing = store.state.pendingPlaces.find((p) => p.id === placeId);
-      if (!existing) continue;
-      updated.set(placeId, { ...existing, observed_price: raw, updated_at: new Date().toISOString() });
-    }
-    if (updated.size === 0) return;
-    store.state = {
-      ...store.state,
-      pendingPlaces: store.state.pendingPlaces.map((p) => updated.get(p.id) ?? p),
-    };
-    void saveState().then(() => {
-      setStatus(dict.quickPriceSaved(updated.size), 'success');
-      renderQuickPriceList();
-    });
-  });
-}
+

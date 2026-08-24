@@ -5,7 +5,6 @@ import {
   daysUntil,
   isWeatherRelevant,
   summarizeWeather,
-  weatherLabel,
   type OpenMeteoResponse,
 } from './departure';
 
