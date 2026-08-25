@@ -46,7 +46,6 @@ export function setStatus(message: string, tone: 'muted' | 'success' | 'error' =
 export function applyI18n() {
   const dict = t();
   el.langToggle.textContent = store.lang === 'zh' ? 'EN' : '中文';
-  el.topbarSubtitle.textContent = dict.subtitle;
   el.lblActiveTrip.textContent = dict.activeTrip;
   el.sumTripManage.textContent = dict.tripManage;
   el.sumCreateTrip.textContent = dict.createTripSummary;
@@ -134,6 +133,7 @@ export function applyI18n() {
   el.sumCandidatesDrawer.textContent = dict.drawerTitle;
   el.candidatesSearch.placeholder = dict.searchPlaceholder;
 
+  renderCurrencyPill();
   renderChips();
   renderFilters();
   renderState();
