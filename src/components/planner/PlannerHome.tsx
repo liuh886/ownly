@@ -34,12 +34,6 @@ interface PlannerHomeProps {
   disabled: boolean;
 }
 
-const priorityRank: Record<PlannerTripPlace['priority'], number> = {
-  must: 0,
-  want: 1,
-  optional: 2,
-};
-
 function formatDay(date: string, language: 'en' | 'zh'): string {
   const [, month, day] = date.split('-');
   return language === 'zh' ? `${Number(month)}月${Number(day)}日` : `${month}/${day}`;
@@ -249,7 +243,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const candidates = useMemo(
     () => [...tripPlaces]
       .filter((place) => !place.scheduled_date && place.state === 'candidate')
-      .sort((left, right) => priorityRank[left.priority] - priorityRank[right.priority] || left.title.localeCompare(right.title)),
+      .sort((left, right) => {
+    const lMust = left.tags.some(t => t.includes('必去') || t.includes('must'));
+    const rMust = right.tags.some(t => t.includes('必去') || t.includes('must'));
+    if (lMust !== rMust) return lMust ? -1 : 1;
+    return left.title.localeCompare(right.title);
+  }),
     [tripPlaces],
   );
 

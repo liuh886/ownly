@@ -163,16 +163,6 @@
             <option value="other">其它 (Other)</option>
           </select>
         </label>
-        <label id="lblPriority">优先级
-          <select id="priority">
-            <option value="must">必去 (Must)</option>
-            <option value="want" selected>想去 (Want)</option>
-            <option value="optional">可选 (Optional)</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="two">
         <label id="lblRating">评分<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label>
         <label id="lblPrice">人均价格 / 预算<input id="price" placeholder="例如：¥2,000 / 人" /></label>
       </div>
@@ -228,7 +218,8 @@
           <option value="want">想去 (Want)</option>
           <option value="optional">可选 (Optional)</option>
         </select>
-        <button id="btnSelectAllCandidates" class="card-btn" type="button">☑️ 全选</button>`n        <button id="btnBulkDelete" class="card-btn del" type="button">🗑️ 删除</button>
+        <button id="btnSelectAllCandidates" class="card-btn" type="button">☑️ 全选</button>
+        <button id="btnBulkDelete" class="card-btn del" type="button">🗑️ 删除</button>
         <button id="btnBulkExit" class="link" type="button">退出</button>
       </div>
       <div id="candidatesListContainer" class="candidates-list"></div>

@@ -52,7 +52,7 @@ export interface PlannerTripPlace {
   source_place_id?: string;
   kind: PlannerPlaceKind;
   area?: string;
-  priority: PlannerPlacePriority;
+  priority?: PlannerPlacePriority;
   tags: string[];
   why?: string;
   signals: string[];
