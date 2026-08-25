@@ -118,6 +118,16 @@ function extractPrice(): string | undefined {
     }
   }
 
+  // 5. Last resort: any short text with both a currency marker and a digit
+  const allSpans = document.querySelectorAll<HTMLElement>('span, div.fontBodyMedium, div.fontHeadlineSmall');
+  for (const el of Array.from(allSpans).slice(0, 100)) {
+    const text = cleanExtractedText(el.textContent || '');
+    if (!text || text.length > 40) continue;
+    if (/[\$¥฿€£₩]/.test(text) && /\d/.test(text) && !/[a-zA-Z]{4,}/.test(text.replace(/night|person|per|晚|人|酒店|price/i, ''))) {
+      if (isPlausiblePriceText(text)) return text;
+    }
+  }
+
   return undefined;
 }
 
@@ -779,12 +789,8 @@ async function resolveGoogleMapsList(): Promise<DetectedSavedList | null> {
     }
   }
 
-  // Fallback to DOM scan
-  const domList = detectGoogleMapsSavedList();
-  if (domList) {
-    cachedEntityList = domList;
-    return domList;
-  }
+  // DOM-scan list detection removed: entitylist API is the only reliable source.
+  // DOM scanning picks up UI chrome ("Compare prices", "Nearby", etc.) as fake places.
   return null;
 }
 

@@ -891,7 +891,6 @@ export function initHandlers(): void {
     void saveState().then(() => {
       el.captureForm.reset();
       el.kind.value = 'attraction';
-      el.priority.value = 'want';
       syncQuickChipStates();
       setStatus(dict.candidateRemoved, 'success');
     });
@@ -930,7 +929,6 @@ export function initHandlers(): void {
       source_url: store.currentPlace.sourceUrl,
       kind: el.kind.value as PlannerPlaceKind,
       area: cleanExtractedText(el.area.value.trim()) || undefined,
-      priority: el.priority.value as PlannerPlacePriority,
       tags: combinedTags,
       why: cleanExtractedText(el.why.value.trim()) || undefined,
       signals: normalizeDelimitedText(el.signals.value).map(cleanExtractedText).filter(Boolean),

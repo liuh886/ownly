@@ -95,11 +95,6 @@ export function applyI18n() {
     if (dict.kinds[val]) opt.textContent = dict.kinds[val];
   }
 
-  el.lblPriority.childNodes[0].nodeValue = dict.priorityLabel;
-  for (const opt of Array.from(el.priority.options)) {
-    const val = opt.value as PlannerPlacePriority;
-    if (dict.priorities[val]) opt.textContent = dict.priorities[val];
-  }
 
   for (const opt of Array.from(el.tripTransport.options)) {
     const val = opt.value as keyof typeof dict.transport;
@@ -449,7 +444,6 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   const existing = getExistingPlaceForUrl(place.sourceUrl, place.sourcePlaceId);
   if (existing) {
     el.kind.value = existing.kind;
-    el.priority.value = existing.priority;
     el.area.value = existing.area || '';
     el.tags.value = existing.tags?.join(', ') || '';
     el.duration.value = existing.duration_minutes ? String(existing.duration_minutes) : '';
@@ -589,10 +583,11 @@ export function renderCurrentPlace() {
     b.textContent = `⏰ ${store.currentPlace.openStatus}`;
     el.placeMetaBadges.append(b);
   }
-  if (store.currentPlace.address) {
+  if (store.currentPlace.address || store.currentPlace.coordinates) {
     const b = document.createElement('span');
     b.className = 'badge';
-    b.textContent = `📍 ${store.currentPlace.address.slice(0, 30)}`;
+    b.textContent = '📍';
+    b.title = store.currentPlace.address || `${store.currentPlace.coordinates?.lat}, ${store.currentPlace.coordinates?.lng}`;
     el.placeMetaBadges.append(b);
   }
 
@@ -693,11 +688,7 @@ function buildCandidateCard(
     titleEl.className = 'candidate-title';
     titleEl.textContent = `${KIND_ICONS[place.kind] || '📍'} ${place.title}`;
 
-    const priorityBadge = document.createElement('span');
-    priorityBadge.className = `badge ${place.priority}`;
-    priorityBadge.textContent = dict.priorities[place.priority] || place.priority;
-
-    header.append(grip, titleEl, priorityBadge);
+    header.append(grip, titleEl);
 
     if (store.editingCandidateId === place.id) {
       card.append(header, buildInlineEditor(place, dict));
@@ -870,7 +861,7 @@ function buildCandidateDetails(
     chk.dataset.placeId = place.id;
     wrapper.append(chk);
   }
-  if (place.area) details.innerHTML += `<span>📍 ${escapeHtml(place.area)}</span>`;
+  if (place.area || place.address) details.innerHTML += '<span title="' + escapeHtml(place.address ?? place.area ?? '') + '">📍</span>';
   if (place.phone) details.innerHTML += `<a href="tel:${escapeHtml(place.phone)}" class="badge">☎️ ${escapeHtml(place.phone)}</a>`;
   if (place.plus_code) details.innerHTML += `<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`;
   if (place.is_anchor) {

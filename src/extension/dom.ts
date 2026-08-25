@@ -84,8 +84,6 @@ export type ElementMap = {
   captureForm: HTMLFormElement;
   lblKind: HTMLElement;
   kind: HTMLSelectElement;
-  lblPriority: HTMLElement;
-  priority: HTMLSelectElement;
   lblArea: HTMLElement;
   area: HTMLInputElement;
   lblTags: HTMLElement;
@@ -214,8 +212,6 @@ export const el: ElementMap = {
   captureForm: required('captureForm'),
   lblKind: required('lblKind'),
   kind: required('kind'),
-  lblPriority: required('lblPriority'),
-  priority: required('priority'),
   lblArea: required('lblArea'),
   area: required('area'),
   lblTags: required('lblTags'),

@@ -22,16 +22,20 @@ function needsPriceRetry(): boolean {
   return likelyPriced;
 }
 
-export async function readCurrentPlace(): Promise<void> {
-  setStatus(t().readingStatus);
-  el.placePanel.classList.add('is-loading');
+export async function readCurrentPlace(options?: { soft?: boolean }): Promise<void> {
+  if (!options?.soft) {
+    setStatus(t().readingStatus);
+    el.placePanel.classList.add('is-loading');
+  }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     store.currentPlace = null;
     store.detectedSavedList = null;
     store.detectedListPlaces = [];
     store.pageDetectedCurrency = undefined;
-    el.placePanel.classList.remove('is-loading');
+    if (!options?.soft) {
+      el.placePanel.classList.remove('is-loading');
+    }
     renderCurrentPlace();
     renderSmartListCard();
     renderCurrencyPill();
@@ -171,7 +175,7 @@ export async function readCurrentPlace(): Promise<void> {
     const retryUrl = lastPriceRetryUrl;
     window.setTimeout(() => {
       if (store.currentPlace?.sourceUrl === retryUrl) {
-        void readCurrentPlace();
+        void readCurrentPlace({ soft: true });
       }
     }, delay);
   } else {
