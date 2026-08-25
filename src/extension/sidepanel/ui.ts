@@ -589,10 +589,11 @@ export function renderCurrentPlace() {
     b.textContent = `⏰ ${store.currentPlace.openStatus}`;
     el.placeMetaBadges.append(b);
   }
-  if (store.currentPlace.address) {
+  if (store.currentPlace.address || store.currentPlace.coordinates) {
     const b = document.createElement('span');
     b.className = 'badge';
-    b.textContent = `📍 ${store.currentPlace.address.slice(0, 30)}`;
+    b.textContent = '📍';
+    b.title = store.currentPlace.address || `${store.currentPlace.coordinates?.lat}, ${store.currentPlace.coordinates?.lng}`;
     el.placeMetaBadges.append(b);
   }
 
@@ -870,7 +871,7 @@ function buildCandidateDetails(
     chk.dataset.placeId = place.id;
     wrapper.append(chk);
   }
-  if (place.area) details.innerHTML += `<span>📍 ${escapeHtml(place.area)}</span>`;
+  if (place.area || place.address) details.innerHTML += '<span title="' + escapeHtml(place.address ?? place.area ?? '') + '">📍</span>';
   if (place.phone) details.innerHTML += `<a href="tel:${escapeHtml(place.phone)}" class="badge">☎️ ${escapeHtml(place.phone)}</a>`;
   if (place.plus_code) details.innerHTML += `<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`;
   if (place.is_anchor) {

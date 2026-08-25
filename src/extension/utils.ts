@@ -168,6 +168,7 @@ export function isPlausiblePriceText(raw?: string | null): boolean {
 const FAKE_PLACE_PATTERNS: RegExp[] = [
   /compare\s*price/i, /show\s*place\s*list/i, /^saved\s+in\b/i,
   /^nearby$/i, /^near\s+me$/i, /^directions$/i, /^route$/i,
+  /^see\s+photos?$/i, /^overview\s+of\b/i, /^\$\d+/i,
   /^open\s+now$/i, /^highly\s+rated$/i, /^hotels?\s+near/i,
   /^restaurants?\s+near/i, /^things?\s+to\s+do/i, /^attractions?$/i,
   /^filters?$/i, /^sort\s+by/i, /^clear\s+(all|filters)/i,
