@@ -184,10 +184,12 @@
             <label id="lblDuration">预计停留 (分钟)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label>
             <label id="lblWindow">偏好时段<input id="window" placeholder="上午 / 傍晚日落 / 晚上" /></label>
           </div>
-          <!-- Hidden: quick chips write to these -->
-          <input id="tags" type="hidden" />
-          <input id="signals" type="hidden" />
-          <input id="risks" type="hidden" />
+          <!-- Hidden: quick chips write to these; area auto-derived from address -->
+          <span id="lblArea" hidden></span><input id="area" type="hidden" />
+          <span id="lblTags" hidden></span><input id="tags" type="hidden" />
+          <span id="lblSignals" hidden></span><input id="signals" type="hidden" />
+          <span id="lblRisks" hidden></span><input id="risks" type="hidden" />
+          <span id="lblNotes" hidden></span><textarea id="notes" hidden></textarea>
         </div>
       </details>
 
