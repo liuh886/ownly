@@ -52,7 +52,15 @@
   - Implemented sleek floating drawer with search, category & custom filter chips with counts, hotel compare banner, and draggable candidate cards.
   - Maintained drag-and-drop from floating pool directly to Day Skeleton dropzone.
   - Added keyboard shortcut (`Esc` to close) and backdrop dismiss on mobile.
-- [x] 21. (Verification & Polish) Test responsive layouts, drag-and-drop, filter switching, full validation suite (`validate:fast`, `validate:extension`), and commit/sync.
+## Planner Layout Evolution: Full-Width Horizontal Candidate Pool Below List & Map
+- [x] 22. (Bottom Full-Width Pool Section) Position Candidate Pool below the 1:3 Day Skeleton & Map Workspace:
+  - Full-width container (`w-full mt-4 rounded-xl border border-stone-200 bg-white shadow-sm overflow-hidden`).
+  - Sleek header with Title, counts, inline search, hotel compare button, and collapse/expand toggle.
+  - Horizontal filter chips bar with category and custom tags counts.
+  - Responsive multi-column grid layout (`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-4`) for candidate place cards.
+  - Retain drag-and-drop upward into Day Skeleton, hover highlight sync with Map above, and one-click `+ 当天` (`+ Day`) scheduling.
+- [x] 23. (Verification & Sync) Run full test suite (`validate:fast`, `validate:extension`), verify responsive design, commit and push to `origin main`.
+- [ ] 24. (Basemap Research) Analyze and discuss free basemap solutions for the spatial map.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:
@@ -61,5 +69,5 @@
   - Aligned category & tag taxonomy with automatic default kind tagging (`ensurePlaceKindTag`) across Extension Capture and Planner Home.
   - Guaranteed tag filter purity by filtering out place names and addresses.
   - Streamlined candidate inline editor and cleaned up sidepanel top bar header.
-  - Redesigned Planner Home to a spacious 1:3 layout ratio (Day Skeleton vs Map/Budget Workspace) with an accessible, interactive Floating Research Pool Drawer.
+  - Redesigned Planner Home with 1:3 ratio for Day Skeleton / Map Workspace and full-width horizontal candidate pool below.
   - All test suites green across entire project (`validate:fast`, `validate:extension`, `tsc --noEmit`).
