@@ -107,6 +107,38 @@ export function acknowledgeCapturedPlaces(state: OwnlyCaptureState, placeIds: st
 }
 
 /**
+ * Merges a freshly-read storage state with the side panel's local state for a
+ * safe read-modify-write. Rules:
+ * - trips / activeTripId: the side panel owns them (only it edits trips).
+ * - pendingPlaces: local wins per id; places that exist only in storage are
+ *   kept UNLESS the side panel deleted them locally (tombstone set) — this
+ *   preserves quick-captures made by the background worker in between, without
+ *   resurrecting places the user removed.
+ * - knownPlaceIds: union (append-only identity map).
+ */
+export function mergeCaptureState(
+  fresh: OwnlyCaptureState,
+  local: OwnlyCaptureState,
+  locallyDeletedIds?: ReadonlySet<string>,
+): OwnlyCaptureState {
+  const tombstones = locallyDeletedIds;
+  const localPlaces = tombstones
+    ? local.pendingPlaces.filter((place) => !tombstones.has(place.id))
+    : local.pendingPlaces;
+  const localPlaceIds = new Set(localPlaces.map((place) => place.id));
+  const backgroundOnly = fresh.pendingPlaces.filter(
+    (place) => !localPlaceIds.has(place.id) && !(tombstones && tombstones.has(place.id)),
+  );
+  return {
+    version: 1,
+    trips: local.trips,
+    activeTripId: local.activeTripId,
+    pendingPlaces: [...localPlaces, ...backgroundOnly],
+    knownPlaceIds: { ...fresh.knownPlaceIds, ...local.knownPlaceIds },
+  };
+}
+
+/**
  * Reorders a visible subset of places (e.g. the filtered candidate pool) while
  * keeping every hidden entry pinned to its original slot.
  */
@@ -180,6 +212,7 @@ export function mergeCapturedPlaceResearch(
   // 'dropped' is a terminal lifecycle command that never originates from a
   // normal capture, so it is honored explicitly instead of being swallowed.
   const lifecycleOverride = captured.state === 'dropped' ? { state: 'dropped' as const } : {};
+  const mergedTypes = new Set<string>([...(captured.types ?? []), ...(existing.types ?? [])]);
   return {
     ...existing,
     ...lifecycleOverride,
@@ -190,7 +223,7 @@ export function mergeCapturedPlaceResearch(
     kind: captured.kind,
     area: captured.area,
     priority: captured.priority,
-    tags: captured.tags,
+    tags: ensurePlaceKindTag(captured.tags, captured.kind),
     why: captured.why,
     signals: captured.signals,
     risks: captured.risks,
@@ -200,6 +233,18 @@ export function mergeCapturedPlaceResearch(
     observed_at: captured.observed_at,
     preferred_window: captured.preferred_window,
     duration_minutes: captured.duration_minutes,
+    // Structured facts are usually missing on the first (bulk/name-only)
+    // capture and only appear on a later full place-page capture — never drop
+    // them just because the newer capture omits them.
+    address: captured.address ?? existing.address,
+    coordinates: captured.coordinates ?? existing.coordinates,
+    open_hours: captured.open_hours ?? existing.open_hours,
+    phone: captured.phone ?? existing.phone,
+    plus_code: captured.plus_code ?? existing.plus_code,
+    menu_url: captured.menu_url ?? existing.menu_url,
+    reservation_url: captured.reservation_url ?? existing.reservation_url,
+    review_topics: captured.review_topics ?? existing.review_topics,
+    types: mergedTypes.size > 0 ? [...mergedTypes] : undefined,
     updated_at: captured.updated_at,
   };
 }
@@ -318,25 +363,60 @@ export function normalizeDelimitedText(value: string): string[] {
 }
 
 export function inferPlaceKind(category?: string): PlannerPlaceKind {
-  if (!category) return 'attraction';
+  if (!category || !category.trim()) return 'attraction';
   const lower = category.toLowerCase();
-  if (/restaurant|food|diner|ramen|sushi|izakaya|bar|pub|bistro|steak|grill|noodle|bakery|dessert|cafe|coffee|tea|餐厅|饭店|美食|料理|小吃|拉面|火锅|烤肉|甜品|面包|咖啡|酒吧|居酒屋/.test(lower)) {
-    if (/cafe|coffee|tea|dessert|bakery|咖啡|甜品|面包|茶/.test(lower)) return 'cafe';
-    return 'food';
-  }
-  if (/hotel|resort|hostel|inn|ryokan|stay|motel|guesthouse|酒店|旅馆|民宿|饭店|度假村/.test(lower)) {
+
+  // 1. Lodging & Stays (Hotels, Resorts, Villas, Hostels, Ryokans, Brands like IHG/Marriott/UHG, etc.)
+  if (
+    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|citadines|somerset|ascott)\b|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|mandarin\s*oriental|m[oö]venpick|le\s*m[eé]ridien|ji\s*hotel|酒店|旅馆|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|星级酒店|精品酒店|宾馆|别馆|营地|庄园/.test(lower)
+  ) {
     return 'stay';
   }
-  if (/store|mall|market|shopping|bazaar|outlet|plaza|商场|超市|购物|市场|商店|奥特莱斯/.test(lower)) {
+
+  // 2. Cafes, Bakeries, Coffee, Dessert, Tea
+  if (
+    /\b(?:cafe|coffee|roastery|espresso|boba|matcha|patisserie|chocolatier|gelato|waffle|pancake|crepe)\b|tea\s*house|tea\s*room|dessert|bakery|ice\s*cream|pastry|咖啡|甜品|奶茶|面包|烘焙|茶室|茶馆|茶饮|冰淇淋|冰品|蛋糕|点心局|下午茶/.test(lower)
+  ) {
+    return 'cafe';
+  }
+
+  // 3. Food, Dining, Restaurants, Bars, Street Food
+  if (
+    /\b(?:restaurant|food|diner|ramen|sushi|izakaya|bar|pub|bistro|steak|grill|bbq|noodle|buffet|eatery|tavern|pizzeria|pizza|burger|tacos|seafood|hotpot|brunch|curry|tabelog|gastropub|brewery|yakitori|tempura|tonkatsu|shabu|udon|soba)\b|wine\s*bar|cocktail|dim\s*sum|cantonese|sichuan|thai\s*food|street\s*food|night\s*market\s*food|餐厅|料理|美食|小吃|拉面|火锅|烧烤|烤肉|酒吧|居酒屋|酒场|快餐|大排档|早茶|熟食|排档|海鲜|日料|寿司|串烧|居食屋|食堂|私房菜|茶餐厅|酒馆|饭店/.test(lower)
+  ) {
+    return 'food';
+  }
+
+  // 4. Shopping, Malls, Supermarkets, Markets, Boutiques
+  if (
+    /\b(?:store|mall|market|shopping|bazaar|outlet|plaza|supermarket|boutique|grocer|vintage|thrift)\b|department\s*store|gift\s*shop|souvenir|bookstore|pharmacy|convenience\s*store|duty\s*free|flea\s*market|商场|超市|购物|市场|百货|商店|奥特莱斯|免税店|便利店|书店|药妆|夜市|集市|市集|杂货|商业街|专卖店/.test(lower)
+  ) {
     return 'shopping';
   }
-  if (/station|subway|bus|airport|terminal|ferry|transit|车站|地铁|机场|码头|交通/.test(lower)) {
+
+  // 5. Transit & Transportation
+  if (
+    /\b(?:station|subway|metro|train|railway|bus|airport|terminal|ferry|transit|pier|port|tram|heliport|harbor|dock)\b|cable\s*car|ropeway|车站|地铁|机场|码头|火车站|公交|客运|缆车|中转|口岸|轮渡|航站楼|站台/.test(lower)
+  ) {
     return 'transit';
   }
-  if (/museum|temple|shrine|park|attraction|landmark|castle|garden|tower|tourist|historic|gallery|beach|viewpoint|景点|寺|神社|博物馆|公园|观光|古迹|城堡|塔|美术馆|沙滩|观景台/.test(lower)) {
+
+  // 6. Experience, Wellness, Sports, Activities
+  if (
+    /\b(?:spa|massage|onsen|sauna|wellness|diving|snorkeling|ski|skiing|snowboard|surfing|climbing|hiking|rafting|karting|safari|workshop|class|tour|cruise|kayak|paragliding|zipline|skydive|bungee|bowling|golf|gym|fitness|yoga|camp|experience|activity)\b|hot\s*spring|amusement\s*park|water\s*park|theme\s*park|escape\s*room|cooking\s*class|体验|活动|按摩|水疗|温泉|足浴|泰式按摩|潜水|冲浪|滑雪|徒步|漂流|游乐园|主题公园|水上乐园|工坊|课程|卡丁车|密室|剧本杀|游船|跳伞|滑翔伞|热气球|射击|骑马|越野/.test(lower)
+  ) {
+    return 'experience';
+  }
+
+  // 7. Attractions, Sightseeing, Heritage, Culture, Nature
+  if (
+    /\b(?:museum|temple|shrine|church|cathedral|mosque|park|attraction|monument|landmark|castle|palace|garden|tower|tourist|historic|heritage|ruins|gallery|beach|viewpoint|lookout|observatory|waterfall|island|lake|mountain|canyon|cave|plaza|square|scenic|statue|bridge|zoo|aquarium|botanical)\b|景点|寺|庙|神社|教堂|博物馆|纪念馆|公园|观光|古迹|遗址|城堡|皇宫|宫殿|塔|美术馆|沙滩|海滩|观景台|展望台|瀑布|岛|湖|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地/.test(lower)
+  ) {
     return 'attraction';
   }
-  return 'experience';
+
+  // Default to attraction for unclassified POIs
+  return 'attraction';
 }
 
 export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
@@ -566,7 +646,8 @@ export function haversineDistanceKm(
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const clampedA = Math.min(1, Math.max(0, a));
+  const c = 2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(Math.max(0, 1 - clampedA)));
   return Math.round(R * c * 100) / 100;
 }
 
@@ -608,8 +689,9 @@ function buildPinnedOrder(base: PlannerTripPlace[], movableSlots: number[], mova
 
 export function optimizeStopsSequence(
   places: PlannerTripPlace[],
-  options: RouteOptimizationOptions = { fixStart: true, fixEnd: false },
+  options: RouteOptimizationOptions = {},
 ): RouteOptimizationResult {
+  const { fixStart = true, fixEnd = false, respectLocked = false } = options;
   const currentList = [...places];
   if (currentList.length <= 2) {
     const d = calculateTotalRouteDistanceKm(currentList);
@@ -623,13 +705,18 @@ export function optimizeStopsSequence(
   }
 
   // Determine pinned vs movable positions. Pins keep their exact slot.
+  // Stay anchors are schedule fixtures (check-in placeholders) — they must
+  // never participate in reordering, regardless of options.
   const pinnedSlots = new Set<number>();
   currentList.forEach((p, i) => {
     if (!extractPlaceCoordinates(p)) pinnedSlots.add(i);
-    else if (options.respectLocked && p.locked) pinnedSlots.add(i);
+    else if (p.is_anchor) pinnedSlots.add(i);
+    else if (respectLocked && p.locked) pinnedSlots.add(i);
   });
-  if (options.fixStart && !options.respectLocked) pinnedSlots.add(0);
-  if (options.fixEnd && !options.respectLocked) pinnedSlots.add(currentList.length - 1);
+  // fixStart/fixEnd are independent of respectLocked: locking user-pinned
+  // stops should not silently unlock the route endpoints.
+  if (fixStart) pinnedSlots.add(0);
+  if (fixEnd) pinnedSlots.add(currentList.length - 1);
 
   const movableSlots: number[] = [];
   const movableItems: PlannerTripPlace[] = [];
@@ -727,7 +814,7 @@ export function calculateHotelProximity(
 
   const validStops = scheduledPlaces
     .map((p) => ({ place: p, coords: extractPlaceCoordinates(p) }))
-    .filter((item): item is { place: PlannerTripPlace; coords: { lat: number; lng: number } } => item.coords !== null);
+    .filter((item): item is { place: PlannerTripPlace; coords: { lat: number; lng: number } } => item.coords !== null && item.place.kind !== 'stay');
 
   if (validStops.length === 0) {
     return { hasCoordinates: true, avgDistanceKm: 0, minDistanceKm: 0, centerDistanceKm: 0 };
@@ -756,10 +843,10 @@ export function calculateHotelProximity(
 
   return {
     hasCoordinates: true,
-    avgDistanceKm: Math.round((totalDist / validStops.length) * 10) / 10,
-    minDistanceKm: Math.round(minDist * 10) / 10,
-    centerDistanceKm: Math.round(centerDist * 10) / 10,
+    avgDistanceKm: Math.round((totalDist / validStops.length) * 100) / 100,
+    minDistanceKm: Math.round(minDist * 100) / 100,
     closestPlaceTitle: closestTitle,
+    centerDistanceKm: centerDist,
   };
 }
 
@@ -865,7 +952,9 @@ export function generateStaySpanPlaces(
     scheduled_date: date,
     is_anchor: true,
     anchor_type: 'stay_checkin' as const,
+    locked: true,
     sort_order: 0,
+    updated_at: new Date().toISOString(),
   }));
 }
 
@@ -885,6 +974,7 @@ export function detectHotelTransferDays(
   tripDates: string[],
 ): Record<string, DayHotelTransferInfo> {
   const result: Record<string, DayHotelTransferInfo> = {};
+  if (tripDates.length === 0) return result;
 
   const stayByDate: Record<string, PlannerTripPlace | undefined> = {};
   tripDates.forEach((date) => {
@@ -908,6 +998,19 @@ export function detectHotelTransferDays(
       normalizePlaceIdentity(prevStay.source_url || prevStay.title) !==
         normalizePlaceIdentity(todayStay.source_url || todayStay.title)
     ) {
+      const baseId = normalizePlaceIdentity(todayStay.source_url || todayStay.title);
+      let end = index;
+      while (
+        end < tripDates.length - 1 &&
+        stayByDate[tripDates[end + 1]] &&
+        normalizePlaceIdentity(
+          stayByDate[tripDates[end + 1]]!.source_url || stayByDate[tripDates[end + 1]]!.title,
+        ) === baseId
+      ) {
+        end++;
+      }
+      const totalNights = end - index + 1;
+
       result[date] = {
         date,
         dayIndex: index,
@@ -916,7 +1019,7 @@ export function detectHotelTransferDays(
         checkinHotel: todayStay,
         stayHotel: todayStay,
         stayNightIndex: 1,
-        totalStayNights: 1,
+        totalStayNights: totalNights,
       };
     } else {
       let nightIndex = 1;
@@ -1002,6 +1105,7 @@ export interface TripSettlementResult {
 
 const SYMBOL_TO_CODE: Record<string, string> = {
   '¥': 'CNY', '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '₩': 'KRW',
+  'S$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD',
 };
 
 /**
@@ -1044,7 +1148,9 @@ export function extractPriceCurrency(raw?: string | null): string | null {
   const match = /(?:[¥฿$€£₩]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|NT\$|S\$|HK\$|US\$)/i.exec(raw);
   if (!match) return null;
   const rawMarker = match[0].toUpperCase();
-  return SYMBOL_TO_CODE[rawMarker] ?? rawMarker.replace(/\\$/, '');
+  // NOTE: /\$$/ — a literal dollar sign at the end (the old /\\$/ matched a
+  // backslash, which silently broke S$/HK$/NT$/US$ normalization).
+  return SYMBOL_TO_CODE[rawMarker] ?? rawMarker.replace(/\$$/, '');
 }
 
 export interface TripBudgetEstimation {
@@ -1086,15 +1192,91 @@ export const PLANNER_KIND_ICONS: Record<PlannerPlaceKind, string> = {
   other: '📍',
 };
 
+export const PLANNER_KIND_LABELS: Record<PlannerPlaceKind, { zh: string; en: string }> = {
+  stay: { zh: '住宿', en: 'Stay' },
+  food: { zh: '美食', en: 'Food' },
+  cafe: { zh: '咖啡', en: 'Cafe' },
+  attraction: { zh: '景点', en: 'Attraction' },
+  experience: { zh: '体验', en: 'Experience' },
+  shopping: { zh: '购物', en: 'Shopping' },
+  transit: { zh: '交通', en: 'Transit' },
+  other: { zh: '其它', en: 'Other' },
+};
+
+export function getPlannerKindLabel(kind: PlannerPlaceKind, lang: 'zh' | 'en' = 'zh'): string {
+  return PLANNER_KIND_LABELS[kind]?.[lang] || (lang === 'zh' ? '其它' : 'Other');
+}
+
+export function ensurePlaceKindTag(
+  tags: string[] = [],
+  kind: PlannerPlaceKind = 'other',
+  language: 'zh' | 'en' = 'zh',
+): string[] {
+  const kindZh = PLANNER_KIND_LABELS[kind]?.zh || '其它';
+  const kindEn = PLANNER_KIND_LABELS[kind]?.en || 'Other';
+  const targetTag = language === 'en' ? kindEn : kindZh;
+
+  const rawTags = (tags || []).map((t) => (t || '').trim()).filter(Boolean);
+
+  const isMatchThisKind = (t: string) => {
+    const lower = t.toLowerCase();
+    if (lower === kindZh.toLowerCase() || lower === kindEn.toLowerCase()) return true;
+    if (kind === 'stay' && (lower === '酒店' || lower === '酒店住宿' || lower === 'hotel' || lower === 'stay')) return true;
+    if (kind === 'food' && (lower === '餐厅' || lower === '餐厅美食' || lower === '美食' || lower === 'food' || lower === 'dining')) return true;
+    if (kind === 'cafe' && (lower === '咖啡馆' || lower === '咖啡甜品' || lower === '咖啡' || lower === 'cafe' || lower === 'coffee')) return true;
+    if (kind === 'attraction' && (lower === '观光景点' || lower === '景点' || lower === 'attraction' || lower === 'sightseeing')) return true;
+    if (kind === 'shopping' && (lower === '购物商场' || lower === '购物' || lower === 'shopping' || lower === 'mall')) return true;
+    if (kind === 'transit' && (lower === '交通中转' || lower === '交通' || lower === 'transit' || lower === 'station')) return true;
+    if (kind === 'experience' && (lower === '体验活动' || lower === '体验' || lower === 'experience' || lower === 'activity')) return true;
+    if (kind === 'other' && (lower === '其他' || lower === '其它' || lower === 'other')) return true;
+    return false;
+  };
+
+  const hasKindTag = rawTags.some(isMatchThisKind);
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  if (!hasKindTag) {
+    seen.add(targetTag.toLowerCase());
+    result.push(targetTag);
+  }
+
+  for (const tag of rawTags) {
+    const lower = tag.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      result.push(tag);
+    }
+  }
+
+  return result;
+}
+
+export function isPlausibleCustomTag(
+  tag: string,
+  excludedNames: Set<string> = new Set(),
+): boolean {
+  const trimmed = (tag || '').trim();
+  if (!trimmed || trimmed.length < 1 || trimmed.length > 25) return false;
+  const lower = trimmed.toLowerCase();
+  if (excludedNames.has(lower)) return false;
+  if (/^https?:\/\//i.test(trimmed)) return false;
+  if (/^\d+([-\s]\d+)*$/.test(trimmed)) return false;
+  if (/[0-9]+[街路巷弄号]/.test(trimmed)) return false;
+  if (/^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9.-]+$/.test(trimmed)) return false;
+  return true;
+}
+
 /** Maps Google taxonomy types onto our place kinds; more specific wins. */
 const TYPE_KIND_RULES: Array<[RegExp, PlannerPlaceKind]> = [
-  [/lodging|hotel|motel|hostel|guest_house|bed_and_breakfast|ryokan/i, 'stay'],
+  [/lodging|hotel|motel|hostel|guest_house|bed_and_breakfast|ryokan|resort|accommodation|serviced_apartment|villa|extended_stay/i, 'stay'],
   [/cafe|coffee_shop|tea_house|dessert|bakery|ice_cream/i, 'cafe'],
-  [/restaurant|bar\b|pub|food|meal_takeaway|meal_delivery|ramen|sushi|izakaya/i, 'food'],
-  [/transit_station|subway_station|bus_station|airport|train_station|ferry_terminal/i, 'transit'],
-  [/shopping_mall|department_store|store|market|bazaar|outlet/i, 'shopping'],
-  [/museum|art_gallery|tourist_attraction|place_of_worship|historical|castle|park\b|zoo|aquarium|viewpoint|beach/i, 'attraction'],
-  [/spa|gym|fitness|bowling|amusement|water_park|night_club|experience/i, 'experience'],
+  [/restaurant|bar\b|pub|food|meal_takeaway|meal_delivery|ramen|sushi|izakaya|bistro|steak_house/i, 'food'],
+  [/transit_station|subway_station|bus_station|airport|train_station|ferry_terminal|light_rail_station/i, 'transit'],
+  [/shopping_mall|department_store|store|market|bazaar|outlet|supermarket|clothing_store/i, 'shopping'],
+  [/spa|gym|fitness|bowling|amusement_park|water_park|night_club|experience|diving|ski_resort|hot_spring/i, 'experience'],
+  [/museum|art_gallery|tourist_attraction|place_of_worship|historical|castle|park\b|zoo|aquarium|viewpoint|beach|point_of_interest|landmark/i, 'attraction'],
 ];
 
 export function inferKindFromTypes(types?: string[]): PlannerPlaceKind | null {
@@ -1198,8 +1380,10 @@ export function calculateTripSettlement(
 
   const memberSet = new Set<string>(allMembers);
   expenses.forEach((exp) => {
-    if (exp.paid_by) memberSet.add(exp.paid_by);
-    exp.split_members.forEach((m) => memberSet.add(m));
+    if (exp.paid_by?.trim()) memberSet.add(exp.paid_by.trim());
+    (exp.split_members || []).forEach((m) => {
+      if (m?.trim()) memberSet.add(m.trim());
+    });
   });
 
   const members = Array.from(memberSet).filter(Boolean);
@@ -1224,13 +1408,15 @@ export function calculateTripSettlement(
   expenses.forEach((exp) => {
     const amt = toBase(exp.amount, exp.currency);
     totalExpense += amt;
-    if (paidMap[exp.paid_by] !== undefined) {
-      paidMap[exp.paid_by] += amt;
+    const payer = exp.paid_by?.trim() || members[0];
+    if (paidMap[payer] !== undefined) {
+      paidMap[payer] += amt;
     } else {
-      paidMap[exp.paid_by] = amt;
+      paidMap[payer] = amt;
     }
 
-    const splits = exp.split_members.length > 0 ? exp.split_members : members;
+    const rawSplits = (exp.split_members || []).map((m) => m?.trim()).filter(Boolean) as string[];
+    const splits = rawSplits.length > 0 ? rawSplits : members;
     const perShare = amt / splits.length;
     splits.forEach((sm) => {
       if (shareMap[sm] !== undefined) {

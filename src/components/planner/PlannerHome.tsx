@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
-import type { PlannerTrip, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
+import type { PlannerPlaceKind, PlannerTrip, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
 import {
   computeUrgencies,
   fetchWeather,
@@ -13,15 +13,20 @@ import {
 import {
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
+  ensurePlaceKindTag,
   exportPlacesToCSV,
   exportPlacesToKML,
   extractPlaceCoordinates,
+  getPlannerKindLabel,
   getTripAreaCounts,
   detectHotelTransferDays,
   generateStaySpanPlaces,
+  isPlausibleCustomTag,
   listTripDates,
   optimizeStopsSequence,
   sortPlannerPlaces,
+  PLANNER_KIND_ICONS,
+  PLANNER_KIND_LABELS,
 } from '@/domain/planner';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
@@ -39,12 +44,26 @@ function formatDay(date: string, language: 'en' | 'zh'): string {
   return language === 'zh' ? `${Number(month)}月${Number(day)}日` : `${month}/${day}`;
 }
 
-function placeMeta(place: PlannerTripPlace): string {
+function placeMeta(place: PlannerTripPlace, language: 'en' | 'zh' = 'zh'): string {
+  const kindLabel = `${PLANNER_KIND_ICONS[place.kind] || '📍'} ${getPlannerKindLabel(place.kind, language)}`;
+  const durationLabel = place.duration_minutes
+    ? (language === 'zh' ? `${place.duration_minutes} 分钟` : `${place.duration_minutes} min`)
+    : null;
+  const windowMap: Record<string, { zh: string; en: string }> = {
+    morning: { zh: '上午', en: 'Morning' },
+    afternoon: { zh: '下午', en: 'Afternoon' },
+    evening: { zh: '傍晚', en: 'Evening' },
+    night: { zh: '夜间', en: 'Night' },
+  };
+  const windowLabel = place.preferred_window
+    ? (windowMap[place.preferred_window.toLowerCase()]?.[language] || place.preferred_window)
+    : null;
+
   return [
     place.area,
-    place.kind,
-    place.duration_minutes ? `${place.duration_minutes} min` : null,
-    place.preferred_window,
+    kindLabel,
+    durationLabel,
+    windowLabel,
   ].filter(Boolean).join(' · ');
 }
 
@@ -55,11 +74,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [places, setPlaces] = useState<PlannerTripPlace[]>([]);
   const [selectedTripId, setSelectedTripId] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
-  const [activeTag, setActiveTag] = useState<string>('all');
+  const [activeFilter, setActiveFilter] = useState<string>('all');
   const [capturePending, setCapturePending] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const [optimizeUndo, setOptimizeUndo] = useState<PlannerTripPlace[] | null>(null);
+  const [optimizeUndo, setOptimizeUndo] = useState<{ key: string; places: PlannerTripPlace[] } | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
   const [highlightedPlaceId, setHighlightedPlaceId] = useState<string | null>(null);
@@ -82,7 +101,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       if (!selectedTripId) return;
       const newExp: TripExpenseItem = {
         ...item,
-        id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: crypto.randomUUID(),
         created_at: new Date().toISOString(),
       };
       const next = [newExp, ...currentExpenses];
@@ -110,6 +129,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     (nextMembers: string[]) => {
       if (!selectedTripId) return;
       setMembersByTrip((prev) => ({ ...prev, [selectedTripId]: nextMembers }));
+      setTrips((prev) => prev.map((t) => (t.id === selectedTripId ? { ...t, members: nextMembers } : t)));
       const trip = trips.find((item) => item.id === selectedTripId);
       if (!trip) return;
       void plannerRepository
@@ -204,12 +224,17 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       setPlaces(nextPlaces);
       setSelectedTripId((current) => current || nextTrips[0]?.id || '');
       setCapturePending(state ? state.pendingPlaces.length : null);
+      try {
+        await hydrateLedgerFromVault(nextTrips);
+      } catch (error) {
+        console.warn('[Planner] ledger hydration failed', error);
+      }
     }
     void init();
     return () => {
       active = false;
     };
-  }, [disabled]);
+  }, [disabled, hydrateLedgerFromVault]);
 
   const selectedTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
@@ -235,27 +260,164 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [places, selectedTripId],
   );
 
-  const tripTags = useMemo(
-    () => Array.from(new Set([...(selectedTrip?.tags || []), ...tripPlaces.flatMap((p) => p.tags)])).filter(Boolean),
-    [selectedTrip, tripPlaces],
-  );
+  const tripTags = useMemo(() => {
+    // Collect all place titles and addresses to strictly exclude them from tag filter chips
+    const excludedNames = new Set<string>();
+    for (const p of tripPlaces) {
+      if (p.title) excludedNames.add(p.title.trim().toLowerCase());
+      if (p.address) {
+        excludedNames.add(p.address.trim().toLowerCase());
+        p.address.split(/[,，·]/).forEach((part) => {
+          const t = part.trim().toLowerCase();
+          if (t.length > 2) excludedNames.add(t);
+        });
+      }
+      if (p.area) excludedNames.add(p.area.trim().toLowerCase());
+    }
+
+    const rawTags = [
+      ...(selectedTrip?.tags || []),
+      ...tripPlaces.flatMap((p) => [...(p.tags || []), ...(p.signals || []), ...(p.risks || [])]),
+    ];
+    const knownKindTags = new Set(
+      Object.values(PLANNER_KIND_LABELS).flatMap((l) => [
+        l.zh.toLowerCase(),
+        l.en.toLowerCase(),
+        '观光景点',
+        '餐厅美食',
+        '咖啡甜品',
+        '酒店住宿',
+        '购物商场',
+        '交通中转',
+        '体验活动',
+        '景点',
+        '美食',
+        '咖啡',
+        '住宿',
+        '购物',
+        '交通',
+        '体验',
+        '其它',
+        '其他',
+      ]),
+    );
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const raw of rawTags) {
+      const trimmed = (raw || '').trim();
+      if (!trimmed) continue;
+      const lower = trimmed.toLowerCase();
+      if (
+        !seen.has(lower) &&
+        !knownKindTags.has(lower) &&
+        !excludedNames.has(lower) &&
+        isPlausibleCustomTag(trimmed, excludedNames)
+      ) {
+        seen.add(lower);
+        unique.push(trimmed);
+      }
+    }
+    return unique;
+  }, [selectedTrip, tripPlaces]);
 
   const candidates = useMemo(
     () => [...tripPlaces]
       .filter((place) => !place.scheduled_date && place.state === 'candidate')
+      .map((place) => ({
+        ...place,
+        tags: ensurePlaceKindTag(place.tags, place.kind, language),
+      }))
       .sort((left, right) => {
-    const lMust = left.tags.some(t => t.includes('必去') || t.includes('must'));
-    const rMust = right.tags.some(t => t.includes('必去') || t.includes('must'));
-    if (lMust !== rMust) return lMust ? -1 : 1;
-    return left.title.localeCompare(right.title);
-  }),
-    [tripPlaces],
+        const lMust = left.priority === 'must' || left.tags.some((t) => t.includes('必去') || t.includes('must'));
+        const rMust = right.priority === 'must' || right.tags.some((t) => t.includes('必去') || t.includes('must'));
+        if (lMust !== rMust) return lMust ? -1 : 1;
+        return left.title.localeCompare(right.title);
+      }),
+    [tripPlaces, language],
   );
 
+  const filterChips = useMemo(() => {
+    const chips: Array<{ id: string; label: string; count: number; type: 'all' | 'priority' | 'kind' | 'tag' }> = [
+      { id: 'all', label: zh ? '全部' : 'All', count: candidates.length, type: 'all' },
+    ];
+
+    const mustCount = candidates.filter((p) => p.priority === 'must').length;
+    if (mustCount > 0) chips.push({ id: 'must', label: zh ? '必去' : 'Must', count: mustCount, type: 'priority' });
+
+    const wantCount = candidates.filter((p) => p.priority === 'want').length;
+    if (wantCount > 0) chips.push({ id: 'want', label: zh ? '想去' : 'Want', count: wantCount, type: 'priority' });
+
+    const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'other'];
+    for (const kind of allKinds) {
+      const kindTagZh = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
+      const kindTagEn = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
+      const count = candidates.filter(
+        (p) =>
+          p.kind === kind ||
+          p.tags.some((t) => {
+            const lower = t.trim().toLowerCase();
+            return lower === kindTagZh || lower === kindTagEn;
+          }),
+      ).length;
+      if (count > 0) {
+        chips.push({
+          id: `kind:${kind}`,
+          label: `${PLANNER_KIND_ICONS[kind]} ${getPlannerKindLabel(kind, language)}`,
+          count,
+          type: 'kind',
+        });
+      }
+    }
+
+    for (const tag of tripTags) {
+      const tagLower = tag.trim().toLowerCase();
+      const count = candidates.filter(
+        (p) =>
+          p.tags.some((t) => t.trim().toLowerCase() === tagLower) ||
+          p.signals?.some((s) => s.trim().toLowerCase() === tagLower) ||
+          p.risks?.some((r) => r.trim().toLowerCase() === tagLower),
+      ).length;
+      if (count > 0) {
+        chips.push({
+          id: `tag:${tag}`,
+          label: `🏷️ ${tag}`,
+          count,
+          type: 'tag',
+        });
+      }
+    }
+
+    return chips;
+  }, [candidates, zh, language, tripTags]);
+
   const filteredCandidates = useMemo(() => {
-    if (activeTag === 'all') return candidates;
-    return candidates.filter((p) => p.tags.some((t) => t.trim().toLowerCase() === activeTag.trim().toLowerCase()));
-  }, [candidates, activeTag]);
+    if (activeFilter === 'all') return candidates;
+    if (activeFilter === 'must') return candidates.filter((p) => p.priority === 'must');
+    if (activeFilter === 'want') return candidates.filter((p) => p.priority === 'want');
+    if (activeFilter.startsWith('kind:')) {
+      const targetKind = activeFilter.slice(5) as PlannerPlaceKind;
+      const zhLabel = PLANNER_KIND_LABELS[targetKind]?.zh.toLowerCase() || '';
+      const enLabel = PLANNER_KIND_LABELS[targetKind]?.en.toLowerCase() || '';
+      return candidates.filter(
+        (p) =>
+          p.kind === targetKind ||
+          p.tags.some((t) => {
+            const lower = t.trim().toLowerCase();
+            return lower === zhLabel || lower === enLabel;
+          }),
+      );
+    }
+    if (activeFilter.startsWith('tag:')) {
+      const targetTag = activeFilter.slice(4).trim().toLowerCase();
+      return candidates.filter(
+        (p) =>
+          p.tags.some((t) => t.trim().toLowerCase() === targetTag) ||
+          p.signals?.some((s) => s.trim().toLowerCase() === targetTag) ||
+          p.risks?.some((r) => r.trim().toLowerCase() === targetTag),
+      );
+    }
+    return candidates;
+  }, [candidates, activeFilter]);
 
   const scheduled = useMemo(
     () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === activeDate && place.state === 'scheduled')),
@@ -282,19 +444,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         await plannerRepository.upsertPlace(place);
       }
       await load();
-      setOptimizeUndo(snapshot);
+      setOptimizeUndo({ key: `${selectedTripId}_${activeDate}`, places: snapshot });
       setNotice(zh ? `✓ 顺路优化完成！节省约 ${result.savedKm} km 绕路路程` : `✓ Optimized! Saved ~${result.savedKm} km`);
       setTimeout(() => setNotice(''), 4000);
     } finally {
       setBusy(false);
     }
-  }, [scheduled, disabled, zh, load]);
+  }, [scheduled, disabled, zh, load, selectedTripId, activeDate]);
+
+  const activeOptimizeUndo = optimizeUndo && optimizeUndo.key === `${selectedTripId}_${activeDate}` ? optimizeUndo.places : null;
 
   const undoRouteOptimization = useCallback(async () => {
-    if (!optimizeUndo || disabled) return;
+    if (!activeOptimizeUndo || disabled) return;
     setBusy(true);
     try {
-      for (const place of optimizeUndo) {
+      for (const place of activeOptimizeUndo) {
         await plannerRepository.upsertPlace(place);
       }
       setOptimizeUndo(null);
@@ -304,7 +468,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     } finally {
       setBusy(false);
     }
-  }, [optimizeUndo, disabled, zh, load]);
+  }, [activeOptimizeUndo, disabled, zh, load]);
 
   const placesByDate = useMemo(() => {
     const map: Record<string, PlannerTripPlace[]> = {};
@@ -331,17 +495,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         const dateSet = new Set(stayDates);
         const newIds = new Set(stayPlaces.map((sp) => sp.id));
 
-        // Retire previous stay anchors on the same dates so switching hotels never duplicates stays.
+        // Retire previous stay anchors on the same dates or previous virtual spans of this hotel
         const staleStays = tripPlaces.filter(
           (p) =>
             p.state === 'scheduled'
-            && p.scheduled_date
-            && dateSet.has(p.scheduled_date)
             && !newIds.has(p.id)
-            && (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin')),
+            && (
+              (p.scheduled_date && dateSet.has(p.scheduled_date) && (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin')))
+              || (p.id.startsWith(`${hotel.id}__stay_`))
+            ),
         );
         for (const stale of staleStays) {
-          await plannerRepository.dropPlace(stale.id);
+          if (stale.id.includes('__stay_')) {
+            await plannerRepository.dropPlace(stale.id);
+          } else {
+            await plannerRepository.unschedulePlace(stale.id);
+          }
         }
 
         for (const sp of stayPlaces) {
@@ -392,23 +561,27 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const daysOut = useMemo(() => (tripStart ? daysUntil(tripStart) : -1), [tripStart]);
   const weatherRelevant = selectedTrip ? isWeatherRelevant(tripStart) : false;
 
-  const [weather, setWeather] = useState<WeatherSummary['forecasts']>([]);
+  const primaryCoords = useMemo(() => {
+    const withCoords = places.find((p) => p.trip_id === selectedTripId && extractPlaceCoordinates(p));
+    return withCoords ? extractPlaceCoordinates(withCoords) : null;
+  }, [places, selectedTripId]);
+
+  const [rawWeather, setRawWeather] = useState<WeatherSummary['forecasts']>([]);
   useEffect(() => {
-    if (!weatherRelevant || !selectedTrip || places.length === 0) return;
-    const withCoords = places.find((p) => extractPlaceCoordinates(p));
-    if (!withCoords) return;
-    const coords = extractPlaceCoordinates(withCoords)!;
+    if (!weatherRelevant || !selectedTrip || !primaryCoords) return;
     let stale = false;
-    void fetchWeather(coords.lat, coords.lng, tripStart, selectedTrip.end_date)
-      .then((data) => { if (!stale) setWeather(data); })
+    void fetchWeather(primaryCoords.lat, primaryCoords.lng, tripStart, selectedTrip.end_date)
+      .then((data) => { if (!stale) setRawWeather(data); })
       .catch(() => {});
     return () => { stale = true; };
-  }, [weatherRelevant, selectedTrip, tripStart, places]);
+  }, [weatherRelevant, selectedTrip, primaryCoords, tripStart]);
+
+  const weather = weatherRelevant && selectedTrip && primaryCoords ? rawWeather : [];
 
   const urgencies = useMemo(() => {
     if (!selectedTrip) return [];
-    return computeUrgencies(places, tripStart);
-  }, [places, tripStart]);
+    return computeUrgencies(places, selectedTrip.start_date);
+  }, [places, selectedTrip]);
 
   const activeDayWeather = useMemo(
     () => weather.find((w) => w.date === activeDate) ?? null,
@@ -543,7 +716,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={selectedTripId}
-              onChange={(event) => setSelectedTripId(event.target.value)}
+              onChange={(event) => {
+                setSelectedTripId(event.target.value);
+                setActiveFilter('all');
+              }}
               className="max-w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-900 outline-none focus:border-stone-400"
               aria-label={zh ? '选择行程' : 'Select trip'}
             >
@@ -665,26 +841,26 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             </div>
           ) : null}
 
-          {tripTags.length > 0 ? (
+          {candidates.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 border-b border-stone-100 bg-stone-50/70 px-3 py-2">
-              <button
-                type="button"
-                onClick={() => setActiveTag('all')}
-                className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold transition ${activeTag === 'all' ? 'bg-stone-900 text-white' : 'border border-stone-200 bg-white text-stone-600 hover:bg-stone-100'}`}
-              >
-                {zh ? '全部' : 'All'} ({candidates.length})
-              </button>
-              {tripTags.map((tag) => {
-                const count = candidates.filter((p) => p.tags.some((t) => t.trim().toLowerCase() === tag.trim().toLowerCase())).length;
-                const isSelected = activeTag.trim().toLowerCase() === tag.trim().toLowerCase();
+              {filterChips.map((f) => {
+                const isSelected = activeFilter === f.id;
                 return (
                   <button
-                    key={tag}
+                    key={f.id}
                     type="button"
-                    onClick={() => setActiveTag(isSelected ? 'all' : tag)}
-                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold transition ${isSelected ? 'bg-emerald-700 text-white' : 'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}
+                    onClick={() => setActiveFilter(isSelected && f.id !== 'all' ? 'all' : f.id)}
+                    className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition ${
+                      isSelected
+                        ? 'bg-stone-900 text-white shadow-2xs'
+                        : f.type === 'kind'
+                        ? 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-100'
+                        : f.type === 'tag'
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                        : 'border border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
+                    }`}
                   >
-                    🏷️ {tag} ({count})
+                    {f.label} ({f.count})
                   </button>
                 );
               })}
@@ -700,7 +876,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <article
                 key={place.id}
                 draggable
-                onDragStart={() => setDraggingPlaceId(place.id)}
+                onDragStart={(event) => {
+                  event.dataTransfer.setData('text/plain', place.id);
+                  event.dataTransfer.dropEffect = 'move';
+                  setDraggingPlaceId(place.id);
+                }}
                 onDragEnd={() => setDraggingPlaceId(null)}
                 onMouseEnter={() => setHighlightedPlaceId(place.id)}
                 onMouseLeave={() => setHighlightedPlaceId(null)}
@@ -713,7 +893,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
-                    <p className="mt-1 text-[11px] text-stone-400">{placeMeta(place)}</p>
+                    <p className="mt-1 text-[11px] text-stone-400">{placeMeta(place, language)}</p>
                   </div>
                   <button
                     type="button"
@@ -732,7 +912,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       🏷️ {tag}
                     </span>
                   ))}
-                  {place.signals.slice(0, 2).map((signal) => <span key={signal} className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">{signal}</span>)}
+                  {place.signals?.map((signal) => (
+                    <span key={signal} className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-800">
+                      ✅ {signal}
+                    </span>
+                  ))}
+                  {place.risks?.map((risk) => (
+                    <span key={risk} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                      ⚠️ {risk}
+                    </span>
+                  ))}
                 </div>
                 {place.why ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-600">{place.why}</p> : null}
               </article>
@@ -742,10 +931,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
         <section
           className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"
-          onDragOver={(event) => event.preventDefault()}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+          }}
           onDrop={(event) => {
             event.preventDefault();
-            if (draggingPlaceId) void schedulePlace(draggingPlaceId);
+            const id = event.dataTransfer.getData('text/plain') || draggingPlaceId;
+            if (id) void schedulePlace(id);
             setDraggingPlaceId(null);
           }}
         >
@@ -780,7 +973,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 >
                   ⚡ {zh ? '顺路优化' : 'Optimize'}
                 </button>
-                {optimizeUndo ? (
+                {activeOptimizeUndo ? (
                   <button
                     type="button"
                     onClick={() => void undoRouteOptimization()}
@@ -891,16 +1084,36 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 {scheduled.map((place, index) => {
                   const col = checkOpeningHoursCollision(place.open_hours, activeDate);
                   return (
-                    <li key={place.id} className="space-y-1.5">
+                    <li
+                      key={place.id}
+                      className="space-y-1.5"
+                      onMouseEnter={() => setHighlightedPlaceId(place.id)}
+                      onMouseLeave={() => setHighlightedPlaceId(null)}
+                    >
                       <div className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-stone-200 bg-white p-3 shadow-xs">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white shrink-0">{index + 1}</div>
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
-                            {place.locked ? <span className="text-[10px] text-stone-400">locked</span> : null}
+                            {place.locked ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">📌 {zh ? '固定顺位' : 'pinned'}</span> : null}
                             {place.observed_price ? <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[10px] text-stone-500">{place.observed_price}</span> : null}
+                            {place.tags.map((tag) => (
+                              <span key={tag} className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9.5px] font-medium text-emerald-800">
+                                🏷️ {tag}
+                              </span>
+                            ))}
+                            {place.signals?.map((signal) => (
+                              <span key={signal} className="rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[9.5px] font-medium text-teal-800">
+                                ✅ {signal}
+                              </span>
+                            ))}
+                            {place.risks?.map((risk) => (
+                              <span key={risk} className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-medium text-amber-800">
+                                ⚠️ {risk}
+                              </span>
+                            ))}
                           </div>
-                          <p className="mt-0.5 text-[11px] text-stone-400">{placeMeta(place)}</p>
+                          <p className="mt-0.5 text-[11px] text-stone-400">{placeMeta(place, language)}</p>
                           {col.isCollision ? (
                             <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">
                               ⚠️ {col.reason}
@@ -910,6 +1123,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           {place.notes ? <p className="mt-0.5 line-clamp-1 text-xs text-stone-500 italic">📝 {place.notes}</p> : null}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            aria-label={place.locked ? (zh ? '已固定顺位（点击取消固定）' : 'Pinned (click to unpin)') : (zh ? '固定在当前顺位（点击固定）' : 'Pin stop at slot')}
+                            onClick={async () => {
+                              await plannerRepository.toggleLockPlace(place.id);
+                              await load();
+                            }}
+                            className={`h-8 w-8 rounded-md border text-xs transition ${
+                              place.locked
+                                ? 'border-amber-300 bg-amber-50 text-amber-700 font-bold'
+                                : 'border-stone-200 text-stone-400 hover:bg-stone-50 hover:text-stone-700'
+                            }`}
+                            title={place.locked ? (zh ? '已固定顺位（顺路优化不会挪动此站）' : 'Pinned (TSP optimizer will not move this stop)') : (zh ? '点击固定此站顺位' : 'Click to pin stop')}
+                          >
+                            {place.locked ? '📌' : '📍'}
+                          </button>
                           <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↑</button>
                           <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↓</button>
                           <button type="button" aria-label={zh ? '放回候选池' : 'Return to pool'} onClick={() => void returnToPool(place)} className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-500 hover:bg-stone-50">{zh ? '移出' : 'Pool'}</button>

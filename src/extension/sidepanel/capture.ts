@@ -59,8 +59,8 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   const targetTags = (activeTrip?.tags || []).filter(Boolean);
 
   try {
-    placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags, targetCurrency: store.state.trips.find((trip) => trip.id === store.state.activeTripId)?.currency })) as PlaceMessageResponse;
-    listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' })) as ListMessageResponse;
+    placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags, targetCurrency: store.state.trips.find((trip) => trip.id === store.state.activeTripId)?.currency, overrideCurrency: store.mapCurrencyOverride })) as PlaceMessageResponse;
+    listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES', overrideCurrency: store.mapCurrencyOverride })) as ListMessageResponse;
   } catch {
     // If message failed (e.g. content script was disconnected after extension reload), dynamically inject it
     try {
@@ -71,8 +71,8 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
           files: ['content.js'],
         });
         await new Promise((r) => setTimeout(r, 150));
-        placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags, targetCurrency: store.state.trips.find((trip) => trip.id === store.state.activeTripId)?.currency })) as PlaceMessageResponse;
-        listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES' })) as ListMessageResponse;
+        placeResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_CURRENT_PLACE', targetTags, targetCurrency: store.state.trips.find((trip) => trip.id === store.state.activeTripId)?.currency, overrideCurrency: store.mapCurrencyOverride })) as PlaceMessageResponse;
+        listResp = (await chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_GET_VISIBLE_LIST_PLACES', overrideCurrency: store.mapCurrencyOverride })) as ListMessageResponse;
       }
     } catch (err) {
       console.warn('Could not inject content script:', err);
@@ -106,6 +106,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
         const fetched = (await chrome.tabs.sendMessage(tab.id, {
           type: 'OWNLY_FETCH_LIST_BY_ID',
           listId: targetList.listId,
+          overrideCurrency: store.mapCurrencyOverride,
         })) as { savedList?: DetectedSavedList | null };
         if (fetched?.savedList && fetched.savedList.places.length > 0) {
           store.detectedSavedList = fetched.savedList;
@@ -118,7 +119,10 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   store.detectedListPlaces = (store.detectedSavedList?.places && store.detectedSavedList.places.length > 0)
     ? store.detectedSavedList.places
     : directListPlaces;
-  store.pageDetectedCurrency = store.currentPlace?.detectedCurrency || store.detectedSavedList?.detectedCurrency;
+  // Manual override always wins over page auto-detection; otherwise keep the detected value.
+  store.pageDetectedCurrency = store.mapCurrencyOverride
+    || store.currentPlace?.detectedCurrency
+    || store.detectedSavedList?.detectedCurrency;
 
   const listKey = store.detectedSavedList
     ? `${store.detectedSavedList.listName}|${store.detectedSavedList.listUrl}`
@@ -129,12 +133,6 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   }
 
   el.placePanel.classList.remove('is-loading');
-  if (store.currentPlace && store.currentPlace.sourceProvider === 'google_maps') {
-    try {
-      const { enrichPlaceFromHtml } = await import('../content');
-      store.currentPlace = await enrichPlaceFromHtml(store.currentPlace);
-    } catch {}
-  }
   renderCurrentPlace();
   renderSmartListCard();
   renderCurrencyPill();
@@ -147,17 +145,23 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
         && !p.observed_price
         && normalizePlaceIdentity(p.source_url) === identity,
     );
-    if (match) {
-      match.observed_price = store.currentPlace.priceLevel;
-      match.updated_at = new Date().toISOString();
-      // Persist via background single-writer
+    if (match && store.currentPlace.priceLevel) {
+      const price = store.currentPlace.priceLevel;
+      const nowIso = new Date().toISOString();
+      // Immutable update — the single-writer merge path persists it below.
+      store.state = {
+        ...store.state,
+        pendingPlaces: store.state.pendingPlaces.map((p) =>
+          p.id === match.id ? { ...p, observed_price: price, updated_at: nowIso } : p,
+        ),
+      };
       void import('../capture-state').then(({ saveCaptureStateViaWorker }) =>
-        saveCaptureStateViaWorker(store.state).then((r) => {
+        saveCaptureStateViaWorker(store.state, store.locallyDeletedIds).then((r) => {
           if (!r?.ok) void import('../capture-state').then(({ writeCaptureState }) => writeCaptureState(store.state));
         }),
       );
       setStatus(
-        (store.lang === 'zh' ? '💰 已自动抓取价格: ' : '💰 Price captured: ') + (match.title ?? '') + ' → ' + store.currentPlace.priceLevel,
+        (store.lang === 'zh' ? '💰 已自动抓取价格: ' : '💰 Price captured: ') + (match.title ?? '') + ' → ' + price,
         'success',
       );
     }

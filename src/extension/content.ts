@@ -1,17 +1,26 @@
-import { inferSourceProvider, extractPlaceCoordinates, type PlannerPlaceSourceProvider } from '../domain/planner';
-import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListPlaceId, isFakePlaceLabel, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import {
+  inferPlaceKind,
+  inferSourceProvider,
+  extractPlaceCoordinates,
+  type PlannerPlaceKind,
+  type PlannerPlaceSourceProvider,
+} from '../domain/planner';
+import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListCategory, findEntityListPlaceId, isFakePlaceLabel, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
 import { SELECTORS, driftCheck } from './selectors';
+import { PLACE_PARSER } from './place-parser';
 
 export interface CurrentResearchPlace {
   title: string;
   sourceUrl: string;
   sourceProvider: PlannerPlaceSourceProvider;
+  kind?: PlannerPlaceKind;
   rating?: number;
   reviewCount?: number;
   category?: string;
   priceLevel?: string;
   detectedCurrency?: string;
   address?: string;
+  area?: string;
   summary?: string;
   userNote?: string;
   openStatus?: string;
@@ -41,41 +50,55 @@ function titleFromUrl(url: string): string {
 
 function extractRating(): number | undefined {
   const ratingEl = document.querySelector<HTMLElement>(SELECTORS.rating);
-  if (ratingEl?.textContent) {
-    const val = parseFloat(ratingEl.textContent.replace(',', '.').trim());
-    if (Number.isFinite(val) && val >= 1 && val <= 5) return val;
-  }
   const ariaEl = document.querySelector<HTMLElement>(SELECTORS.ratingAria);
-  if (ariaEl) {
-    const aria = ariaEl.getAttribute('aria-label') || '';
-    const match = /(\d+(\.\d+)?)/.exec(aria);
-    if (match?.[1]) {
-      const val = parseFloat(match[1]);
-      if (Number.isFinite(val) && val >= 1 && val <= 5) return val;
-    }
-  }
-  return undefined;
+  return PLACE_PARSER.parseRating(ratingEl?.textContent || ariaEl?.getAttribute('aria-label'));
 }
 
 function extractReviewCount(): number | undefined {
   const countEl = document.querySelector<HTMLElement>(SELECTORS.reviewCount);
-  if (countEl) {
-    const text = countEl.textContent || countEl.getAttribute('aria-label') || '';
-    const cleaned = text.replace(/[^0-9]/g, '');
-    if (cleaned) {
-      const count = parseInt(cleaned, 10);
-      if (Number.isFinite(count) && count > 0) return count;
-    }
-  }
-  return undefined;
+  return PLACE_PARSER.parseReviewCount(countEl?.getAttribute('aria-label') || countEl?.textContent);
 }
 
 function extractCategory(): string | undefined {
+  // 1. Primary Google Maps category button
   const catBtn = document.querySelector<HTMLElement>(SELECTORS.category);
   if (catBtn?.textContent) {
     const cat = cleanExtractedText(catBtn.textContent);
     if (cat && cat.length < 50 && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(cat)) return cat;
   }
+
+  // 2. Hotel classification / Star rating badge (e.g. "4-star hotel", "5 星级酒店", "Resort hotel")
+  const hotelClassEl = document.querySelector<HTMLElement>(
+    'span[aria-label*="star hotel" i], span[aria-label*="星级酒店"], button[aria-label*="hotel" i], span.mgr77e, div.mgr77e'
+  );
+  if (hotelClassEl) {
+    const text = cleanExtractedText(hotelClassEl.getAttribute('aria-label') || hotelClassEl.textContent || '');
+    if (text && text.length < 50 && /(hotel|resort|inn|hostel|lodging|stay|酒店|旅馆|民宿|度假村|星级)/i.test(text)) return text;
+  }
+
+  // 3. Schema.org JSON-LD structured metadata
+  try {
+    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const s of Array.from(scripts)) {
+      if (!s.textContent) continue;
+      const data = JSON.parse(s.textContent);
+      const item = Array.isArray(data) ? data[0] : (data?.['@graph'] ? data['@graph'][0] : data);
+      const type = item?.['@type'] || item?.type;
+      if (type && typeof type === 'string' && type !== 'Place' && type !== 'LocalBusiness') {
+        return cleanExtractedText(type);
+      }
+    }
+  } catch {}
+
+  // 4. Header subtitle row span scanning
+  const subSpans = document.querySelectorAll<HTMLElement>('div.fontBodyMedium button, div.fontBodyMedium span.mgr77e, div.LBgpqf span');
+  for (const span of Array.from(subSpans).slice(0, 5)) {
+    const text = cleanExtractedText(span.textContent || '');
+    if (text && text.length < 40 && !/^(directions|save|share|nearby|路线|保存|分享|附近|\d+)/i.test(text)) {
+      return text;
+    }
+  }
+
   return undefined;
 }
 
@@ -279,12 +302,15 @@ interface AppStateSignals {
 }
 
 let appStateSignals: AppStateSignals | null = null;
-let stateBridgeInjected = false;
+let lastBridgeUrl = '';
 
-/** Reads Google's APP_INITIALIZATION_STATE in the page world via a one-shot bridge. */
+/** Reads Google's APP_INITIALIZATION_STATE in the page world via a bridge. */
 function injectAppStateBridge(): void {
-  if (stateBridgeInjected) return;
-  stateBridgeInjected = true;
+  const currentUrl = window.location.href;
+  if (currentUrl !== lastBridgeUrl) {
+    appStateSignals = null;
+    lastBridgeUrl = currentUrl;
+  }
   try {
     const script = document.createElement('script');
     script.textContent = `(() => {
@@ -304,7 +330,7 @@ function injectAppStateBridge(): void {
             for (const child of cur) { if (nodes.length < 4000) nodes.push(child); }
           }
         }
-        const typesBlob = JSON.stringify(window.APP_INITIALIZATION_STATE || '').match(/"(restaurant|lodging|cafe|bar|tourist_attraction|museum|park|spa|shopping_mall|transit_station|store|bakery|coffee_shop|gym|night_club)"/g);
+        const typesBlob = JSON.stringify(window.APP_INITIALIZATION_STATE || '').match(/"(restaurant|lodging|cafe|bar|tourist_attraction|museum|park|spa|shopping_mall|transit_station|store|bakery|coffee_shop|gym|night_club|meal_takeaway)"/g);
         if (typesBlob) out.types = [...new Set(typesBlob.map(t => t.replace(/"/g, '')))].slice(0, 12);
       } catch {}
       window.dispatchEvent(new CustomEvent('ownly-app-state', { detail: out }));
@@ -321,8 +347,27 @@ window.addEventListener('ownly-app-state' as keyof WindowEventMap, ((event: Cust
 }) as EventListener);
 
 /** Public wrapper so the side panel can enrich the place it already holds. */
-export async function enrichPlaceFromHtml(place: CurrentResearchPlace): Promise<CurrentResearchPlace> {
-  return enrichFromPlaceHtml(place);
+export async function enrichPlaceFromHtml(
+  place: CurrentResearchPlace,
+  options?: { soft?: boolean },
+): Promise<CurrentResearchPlace> {
+  return enrichFromPlaceHtml(place, options);
+}
+
+const ENRICH_CACHE_TTL_MS = 5 * 60 * 1000;
+const ENRICH_CACHE_MAX = 20;
+const enrichCache = new Map<string, { at: number; place: CurrentResearchPlace }>();
+
+/** Fills only the fields a cache hit can provide without re-fetching the page. */
+function applyEnriched(target: CurrentResearchPlace, enriched: CurrentResearchPlace): CurrentResearchPlace {
+  return {
+    ...target,
+    sourcePlaceId: target.sourcePlaceId ?? enriched.sourcePlaceId,
+    phone: target.phone ?? enriched.phone,
+    plusCode: target.plusCode ?? enriched.plusCode,
+    types: target.types && target.types.length > 0 ? target.types : enriched.types,
+    priceLevel: target.priceLevel ?? enriched.priceLevel,
+  };
 }
 
 function collectAppStateSignals(): AppStateSignals | null {
@@ -337,7 +382,18 @@ const TAXONOMY_TYPES = /(restaurant|lodging|cafe|bar|tourist_attraction|museum|p
  * complete APP_INITIALIZATION_STATE (ChIJ id, phone, plus code, taxonomy) that
  * is far more robust than CSS classes. Fills only missing fields.
  */
-async function enrichFromPlaceHtml(place: CurrentResearchPlace): Promise<CurrentResearchPlace> {
+async function enrichFromPlaceHtml(
+  place: CurrentResearchPlace,
+  options?: { soft?: boolean },
+): Promise<CurrentResearchPlace> {
+  const cached = enrichCache.get(place.sourceUrl);
+  if (cached && Date.now() - cached.at < ENRICH_CACHE_TTL_MS) {
+    return applyEnriched(place, cached.place);
+  }
+  // Soft refreshes (price retries, tab refocus) skip the multi-MB re-fetch
+  // unless a critical identity field is still missing.
+  const missingCritical = !place.sourcePlaceId || !place.phone;
+  if (options?.soft && !missingCritical) return place;
   try {
     const res = await fetch(window.location.href, { credentials: 'include' });
     if (!res.ok) return place;
@@ -392,6 +448,12 @@ async function enrichFromPlaceHtml(place: CurrentResearchPlace): Promise<Current
     }
   } catch {
     // enrichment is best-effort; DOM extraction already provided the basics
+    return place;
+  }
+  enrichCache.set(place.sourceUrl, { at: Date.now(), place });
+  if (enrichCache.size > ENRICH_CACHE_MAX) {
+    const oldest = enrichCache.keys().next().value;
+    if (oldest !== undefined) enrichCache.delete(oldest);
   }
   return place;
 }
@@ -400,7 +462,13 @@ export function detectCurrencyFromPage(
   sourceUrl: string,
   priceText?: string,
   hintCurrency?: string,
+  overrideCurrency?: string,
 ): string | undefined {
+  // 0. Explicit user override from the side-panel selector always wins:
+  //    the selector IS the map currency used to read prices on this page.
+  const forced = overrideCurrency?.trim().toUpperCase();
+  if (forced && forced !== 'AUTO') return forced;
+
   const currentUrl = sourceUrl || window.location.href;
   const hint = hintCurrency?.trim().toUpperCase() || undefined;
   const pageContentToScan: string[] = [];
@@ -420,13 +488,13 @@ export function detectCurrencyFromPage(
   const combinedPrices = pageContentToScan.join(' ');
 
   // 1. High-precision explicit currency symbol matching from screen
-  if (/s\$|\bsgd\b/i.test(combinedPrices)) return 'SGD';
-  if (/hk\$|\bhkd\b/i.test(combinedPrices)) return 'HKD';
-  if (/nt\$|\btwd\b|\bntd\b|新台币/i.test(combinedPrices)) return 'TWD';
-  if (/au\$|a\$|\baud\b/i.test(combinedPrices)) return 'AUD';
-  if (/ca\$|c\$|\bcad\b/i.test(combinedPrices)) return 'CAD';
-  if (/nz\$|\bnzd\b/i.test(combinedPrices)) return 'NZD';
-  if (/us\$|\busd\b/i.test(combinedPrices)) return 'USD';
+  if (/(?<![a-zA-Z])(?:s\$|\bsgd\b)/i.test(combinedPrices)) return 'SGD';
+  if (/(?<![a-zA-Z])(?:hk\$|\bhkd\b)/i.test(combinedPrices)) return 'HKD';
+  if (/(?<![a-zA-Z])(?:nt\$|\btwd\b|\bntd\b|新台币)/i.test(combinedPrices)) return 'TWD';
+  if (/(?<![a-zA-Z])(?:au\$|a\$|\baud\b)/i.test(combinedPrices)) return 'AUD';
+  if (/(?<![a-zA-Z])(?:ca\$|c\$|\bcad\b)/i.test(combinedPrices)) return 'CAD';
+  if (/(?<![a-zA-Z])(?:nz\$|\bnzd\b)/i.test(combinedPrices)) return 'NZD';
+  if (/(?<![a-zA-Z])(?:us\$|\busd\b)/i.test(combinedPrices)) return 'USD';
   if (/฿|\bthb\b|บาท/i.test(combinedPrices)) return 'THB';
   if (/₩|\bkrw\b|원/i.test(combinedPrices)) return 'KRW';
   if (/\brm\b|\bmyr\b/i.test(combinedPrices)) return 'MYR';
@@ -439,7 +507,7 @@ export function detectCurrencyFromPage(
   if (/jp¥|\bjpy\b|円/i.test(combinedPrices)) return 'JPY';
 
   // 2. Place-location coordinates are the strongest passive signal (immune to VPN/locale)
-  const fullContext = (currentUrl + ' ' + document.title + ' ' + (document.body?.innerText?.slice(0, 1500) || '')).toLowerCase();
+  const fullContext = (currentUrl + ' ' + document.title + ' ' + (document.body?.textContent?.slice(0, 1500) || '')).toLowerCase();
 
   // Coordinates extraction e.g. @1.3521,103.8198
   const coordMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(currentUrl);
@@ -522,10 +590,21 @@ const MAX_SCAVENGED_PLACES = 600;
 const scavengedListPlaces = new Map<string, CurrentResearchPlace>();
 let lastScannedPageUrl = '';
 
+function getCanonicalPageKey(url: string): string {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/@[-0-9.,]+z\/?/, '');
+    return `${u.origin}${path}${u.search}`;
+  } catch {
+    return url;
+  }
+}
+
 function pruneScavengedCache(pageUrl: string): void {
-  if (pageUrl !== lastScannedPageUrl) {
+  const canonical = getCanonicalPageKey(pageUrl);
+  if (canonical !== lastScannedPageUrl) {
     scavengedListPlaces.clear();
-    lastScannedPageUrl = pageUrl;
+    lastScannedPageUrl = canonical;
     return;
   }
   if (scavengedListPlaces.size <= MAX_SCAVENGED_PLACES) return;
@@ -541,15 +620,27 @@ function isGenericNavigationTitle(text: string): boolean {
 }
 
 function readCardFields(card: HTMLElement | null) {
-  const ratingText = card?.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim();
-  const rating = ratingText ? parseFloat(ratingText.replace(',', '.')) : undefined;
+  const ratingText = card?.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim() ||
+    card?.querySelector<HTMLElement>(SELECTORS.ratingAria)?.getAttribute('aria-label');
+  const rating = PLACE_PARSER.parseRating(ratingText);
+
   const infoText = card?.querySelector<HTMLElement>(SELECTORS.cardInfo)?.textContent?.trim();
-  const category = infoText ? cleanExtractedText(infoText.split(/·|•/)[0]?.trim()) : undefined;
+  const subInfo = PLACE_PARSER.parseSubtitleInfo(infoText);
+
   const rawAddr = card?.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
-  const address = rawAddr ? cleanExtractedText(rawAddr) : undefined;
+  const address = rawAddr ? cleanExtractedText(rawAddr) : (subInfo.area || undefined);
   const rawNote = card?.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
   const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
-  return { rating, category, address, userNote };
+
+  return {
+    rating: rating ?? subInfo.rating,
+    reviewCount: subInfo.reviewCount,
+    category: subInfo.category,
+    priceLevel: subInfo.priceLevel,
+    openStatus: subInfo.openStatus,
+    address,
+    userNote,
+  };
 }
 
 function rememberScavengedPlace(rawTitle: string, sourceUrl: string, card: HTMLElement | null): void {
@@ -559,18 +650,24 @@ function rememberScavengedPlace(rawTitle: string, sourceUrl: string, card: HTMLE
   const titleKey = cleanTitle.toLowerCase();
   if (scavengedListPlaces.has(titleKey)) return;
 
-  const { rating, category, address, userNote } = readCardFields(card);
+  const fields = readCardFields(card);
   const url = sourceUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`;
+  const kind = inferPlaceKind((fields.category || '') + ' ' + cleanTitle + ' ' + (fields.address || ''));
+
   scavengedListPlaces.set(titleKey, {
     title: cleanTitle,
     sourceUrl: url,
     sourceProvider: 'google_maps',
-    rating: Number.isFinite(rating) && rating && rating >= 1 && rating <= 5 ? rating : undefined,
-    category,
-    address,
-    detectedCurrency: detectCurrencyFromPage(url, undefined),
-    summary: userNote,
-    userNote,
+    kind,
+    rating: fields.rating,
+    reviewCount: fields.reviewCount,
+    category: fields.category,
+    priceLevel: fields.priceLevel,
+    openStatus: fields.openStatus,
+    address: fields.address,
+    detectedCurrency: detectCurrencyFromPage(url, fields.priceLevel),
+    summary: fields.userNote,
+    userNote: fields.userNote,
     coordinates: extractPlaceCoordinates(url) ?? undefined,
   });
 }
@@ -636,17 +733,18 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     return null;
   }
 
+  const jsonLd = PLACE_PARSER.extractJsonLd(document);
   const heading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
     ?? document.querySelector<HTMLElement>('main h1')
     ?? document.querySelector<HTMLElement>('h1');
-  const title = heading?.textContent?.trim() || titleFromUrl(sourceUrl);
+  const title = heading?.textContent?.trim() || jsonLd.title || titleFromUrl(sourceUrl);
   if (!title && isDedicatedPlacePage) {
     driftCheck('placeHeading', null);
   }
   if (!title || (!/\/maps\/(place|search|dir|saved|@)\//.test(window.location.pathname) && !window.location.pathname.includes('/maps/'))) return null;
 
-  const priceLevel = extractPrice();
-  const address = extractAddress();
+  const priceLevel = extractPrice() || jsonLd.priceLevel;
+  const address = extractAddress() || jsonLd.address;
   const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel);
   const userNote = extractUserNote();
   const summary = extractSummary();
@@ -654,14 +752,19 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const openStatus = extractOpenStatus();
   const stateSignals = collectAppStateSignals();
   const reservation = extractReservation();
+  const rating = extractRating() || jsonLd.rating;
+  const reviewCount = extractReviewCount() || jsonLd.reviewCount;
+  const category = extractCategory() || jsonLd.category;
+  const kind = inferPlaceKind((category || '') + ' ' + title + ' ' + (address || '') + ' ' + ((stateSignals?.types || []).join(' ')));
 
   return {
     title,
     sourceUrl,
     sourceProvider: 'google_maps',
-    rating: extractRating(),
-    reviewCount: extractReviewCount(),
-    category: extractCategory(),
+    kind,
+    rating,
+    reviewCount,
+    category,
     priceLevel,
     detectedCurrency,
     address,
@@ -669,14 +772,17 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     userNote,
     openStatus,
     openHours,
-    website: extractWebsite(),
+    website: extractWebsite() || jsonLd.website,
     coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
     tierNote: extractHotelTier(),
-    phone: extractPhone() ?? stateSignals?.intlPhone,
+    phone: extractPhone() ?? jsonLd.phone ?? stateSignals?.intlPhone,
     plusCode: extractPlusCode() ?? stateSignals?.plusCode,
     menuUrl: extractMenuLink(),
     reservationUrl: reservation.url,
-    reviewTopics: extractReviewTopics().length > 0 ? extractReviewTopics() : undefined,
+    reviewTopics: (() => {
+      const topics = extractReviewTopics();
+      return topics.length > 0 ? topics : undefined;
+    })(),
     types: stateSignals?.types,
   };
 }
@@ -714,7 +820,7 @@ function extractGoogleMapsListId(): string | null {
 let cachedEntityList: DetectedSavedList | null = null;
 let lastScannedListId: string | null = null;
 
-async function fetchGoogleMapsEntityList(listId: string): Promise<DetectedSavedList | null> {
+async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: string): Promise<DetectedSavedList | null> {
   try {
     const authuserMatch = window.location.href.match(/authuser=(\d+)/);
     const authuser = authuserMatch ? authuserMatch[1] : '0';
@@ -743,6 +849,8 @@ async function fetchGoogleMapsEntityList(listId: string): Promise<DetectedSavedL
           const coordinates = parseEntityListCoordinates(placeInfo);
           const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
 
+          const category = findEntityListCategory(item) || ((address && address.includes(',')) ? address.split(',').slice(-2, -1)[0]?.trim() : undefined);
+
           places.push({
             title,
             sourceUrl,
@@ -750,8 +858,8 @@ async function fetchGoogleMapsEntityList(listId: string): Promise<DetectedSavedL
             address,
             userNote,
             summary: userNote,
-            category: (address && address.includes(',')) ? address.split(',').slice(-2, -1)[0]?.trim() : 'Google Maps 收藏地点',
-            detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
+            category,
+            detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, undefined, overrideCurrency),
             coordinates,
             sourcePlaceId: findEntityListPlaceId(item),
           });
@@ -761,7 +869,7 @@ async function fetchGoogleMapsEntityList(listId: string): Promise<DetectedSavedL
           return {
             listName,
             listUrl: window.location.href,
-            detectedCurrency: detectCurrencyFromPage(window.location.href, undefined),
+            detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, undefined, overrideCurrency),
             places,
             truncated: rawItems.length >= 500,
           };
@@ -774,14 +882,14 @@ async function fetchGoogleMapsEntityList(listId: string): Promise<DetectedSavedL
   return null;
 }
 
-async function resolveGoogleMapsList(): Promise<DetectedSavedList | null> {
+async function resolveGoogleMapsList(overrideCurrency?: string): Promise<DetectedSavedList | null> {
   const listId = extractGoogleMapsListId();
   if (listId && listId === lastScannedListId && cachedEntityList) {
     return cachedEntityList;
   }
 
   if (listId) {
-    const entityList = await fetchGoogleMapsEntityList(listId);
+    const entityList = await fetchGoogleMapsEntityList(listId, overrideCurrency);
     if (entityList) {
       cachedEntityList = entityList;
       lastScannedListId = listId;
@@ -792,33 +900,6 @@ async function resolveGoogleMapsList(): Promise<DetectedSavedList | null> {
   // DOM-scan list detection removed: entitylist API is the only reliable source.
   // DOM scanning picks up UI chrome ("Compare prices", "Nearby", etc.) as fake places.
   return null;
-}
-
-function detectGoogleMapsSavedList(): DetectedSavedList | null {
-  // Extract list name from Google Maps Saved / Lists page
-  let listName = '';
-  const heading = document.querySelector<HTMLElement>(SELECTORS.savedListHeading);
-  if (heading?.textContent?.trim()) {
-    listName = heading.textContent.trim();
-  } else {
-    const docTitle = document.title || '';
-    const match = /^(.*?)\s*[-–—·]\s*Google/i.exec(docTitle);
-    if (match?.[1]) {
-      listName = match[1].trim();
-    }
-  }
-
-  const places = scanAllGoogleMapsPlaces();
-  if (!listName && places.length === 0) return null;
-
-  const listCurrency = detectCurrencyFromPage(window.location.href, undefined);
-
-  return {
-    listName: listName || 'Google Maps 收藏列表',
-    listUrl: window.location.href,
-    detectedCurrency: listCurrency,
-    places,
-  };
 }
 
 function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {
@@ -918,46 +999,45 @@ export interface SavedListCardSummary {
 function scanAllSavedListsOnPage(): SavedListCardSummary[] {
   const listsMap = new Map<string, SavedListCardSummary>();
 
-  // Look for any elements that represent a saved list
-  const listElements = document.querySelectorAll<HTMLElement>(
-    'a[href*="/placelists/list/"], a[href*="!2s"], div[data-list-id], div.THL29e, div.jANrlb, div.Nv2PK, div[role="listitem"], div.m6QErb > div, div[role="article"], div[jsaction*="list"]'
-  );
-
-  for (const el of Array.from(listElements)) {
-    const anchor = el instanceof HTMLAnchorElement ? el : el.querySelector<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!2s"], a');
-    const href = anchor?.href || '';
-    const listIdMatch = href.match(/!2s([A-Za-z0-9_-]{15,})|\/placelists\/list\/([A-Za-z0-9_-]{15,})/);
-    let listId = listIdMatch?.[1] || listIdMatch?.[2];
-
-    if (!listId) {
-      const dataId = el.getAttribute('data-list-id') || el.dataset?.id || el.getAttribute('data-id');
-      if (dataId && dataId.length > 15) listId = dataId;
-    }
-
-    if (!listId) {
-      const jsaction = el.getAttribute('jsaction') || '';
-      const jsMatch = /list[:;]([A-Za-z0-9_-]{15,})/.exec(jsaction);
-      if (jsMatch) listId = jsMatch[1];
-    }
-
-    const titleEl = el.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, .OSrXXb, [role="heading"], h2, h3, div.fontBodyLarge, div.fontHeadlineMedium, div[class*="title"], span[class*="title"]');
-    const title = titleEl?.textContent?.trim() || anchor?.getAttribute('aria-label')?.trim() || el.getAttribute('aria-label')?.trim() || '';
-    if (!title || title.length < 2 || isGenericNavigationTitle(title)) continue;
-
-    // Check count (e.g. "19 places" or "19 个地点")
-    const countText = el.textContent || '';
-    const countMatch = /(\d+)\s*(places|个地点|项|items)/i.exec(countText);
-    const count = countMatch ? parseInt(countMatch[1], 10) : undefined;
-
+  const pushList = (listId: string | undefined, rawTitle: string, count: number | undefined, url: string) => {
+    const title = cleanExtractedText(rawTitle);
+    if (!title || title.length < 2 || title.length > 80) return;
+    if (isGenericNavigationTitle(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) return;
     const key = (listId || title).toLowerCase();
     if (!listsMap.has(key)) {
-      listsMap.set(key, {
-        listId,
-        listName: title,
-        count,
-        url: href || window.location.href,
-      });
+      listsMap.set(key, { listId, listName: title, count, url });
     }
+  };
+
+  const countOf = (scope: HTMLElement | null): number | undefined => {
+    const m = /(\d+)\s*(places|个地点|项|items)/i.exec(scope?.textContent || '');
+    return m ? parseInt(m[1], 10) : undefined;
+  };
+
+  // Only real saved-list carriers qualify: an anchor that links to a placelist
+  // (its href carries the list id needed for the entitylist fetch), or a card
+  // that explicitly exposes data-list-id. Generic feed containers, role=listitem
+  // blocks and bare anchors are Google UI chrome ("Compare prices", "Guests",
+  // "All reviews", …) — matching them produced dozens of phantom "lists".
+  const listAnchors = document.querySelectorAll<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!2s"]');
+  for (const anchor of Array.from(listAnchors)) {
+    const href = anchor.href || '';
+    const listIdMatch = href.match(/!2s([A-Za-z0-9_-]{15,})|\/placelists\/list\/([A-Za-z0-9_-]{15,})/);
+    const listId = listIdMatch?.[1] || listIdMatch?.[2];
+    if (!listId) continue;
+
+    const card = anchor.closest<HTMLElement>('div[role="listitem"], div.m6QErb, div.Nv2PK, li') ?? anchor;
+    const titleEl = card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, [role="heading"], h2, h3');
+    const title = titleEl?.textContent?.trim() || anchor.getAttribute('aria-label')?.trim() || '';
+    pushList(listId, title, countOf(card), href || window.location.href);
+  }
+
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-list-id]'))) {
+    const dataId = el.getAttribute('data-list-id') || '';
+    if (dataId.length < 15) continue;
+    const titleEl = el.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, [role="heading"], h2, h3');
+    const title = titleEl?.textContent?.trim() || el.getAttribute('aria-label')?.trim() || '';
+    pushList(dataId, title, countOf(el), window.location.href);
   }
 
   return Array.from(listsMap.values());
@@ -1007,10 +1087,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       try {
         const provider = inferSourceProvider(window.location.href);
+        const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
         let savedList = provider === 'xiaohongshu' ? detectXiaohongshuNoteList() : null;
         if (!savedList || savedList.places.length === 0) {
-          await autoScrollFeed();
-          savedList = await resolveGoogleMapsList();
+          savedList = await resolveGoogleMapsList(overrideCurrency);
         }
         const allLists = scanAllSavedListsOnPage();
         const targetTags = ((message as { targetTags?: string[] }).targetTags || []).map((t) => t.trim().toLowerCase());
@@ -1023,12 +1103,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             return targetTags.some((t) => t && (name === t || name.includes(t) || t.includes(name)));
           });
           if (matched?.listId) {
-            savedList = await fetchGoogleMapsEntityList(matched.listId);
+            savedList = await fetchGoogleMapsEntityList(matched.listId, overrideCurrency);
           }
         }
 
         const place = currentPlace();
-        sendResponse({ place, savedList, allLists, detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, targetCurrency) });
+        sendResponse({ place, savedList, allLists, detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, targetCurrency, overrideCurrency) });
       } catch (e) {
         console.warn('OWNLY_GET_CURRENT_PLACE failed:', e);
         sendResponse({ place: null, savedList: null, allLists: [] });
@@ -1040,6 +1120,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       let listId = (message as { listId?: string }).listId;
       const listUrl = (message as { listUrl?: string }).listUrl;
+      const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       if (!listId && listUrl) {
         const m = /!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(listUrl);
         listId = m?.[1] || m?.[2];
@@ -1048,15 +1129,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ savedList: null });
         return;
       }
-      const listData = await fetchGoogleMapsEntityList(listId);
+      const listData = await fetchGoogleMapsEntityList(listId, overrideCurrency);
       sendResponse({ savedList: listData });
     })();
     return true;
   }
   if (msgType === 'OWNLY_GET_VISIBLE_LIST_PLACES') {
     void (async () => {
+      const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       await autoScrollFeed();
-      const savedList = await resolveGoogleMapsList();
+      const savedList = await resolveGoogleMapsList(overrideCurrency);
       const listPlaces = savedList?.places ?? detectGoogleMapsListPlaces();
       sendResponse({ listPlaces, truncated: savedList?.truncated ?? false });
     })();
@@ -1064,7 +1146,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (msgType === 'OWNLY_GET_SAVED_LIST') {
     void (async () => {
-      const savedList = await resolveGoogleMapsList();
+      const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
+      const savedList = await resolveGoogleMapsList(overrideCurrency);
       sendResponse({ savedList });
     })();
     return true;

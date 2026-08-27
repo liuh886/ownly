@@ -21,7 +21,7 @@
     <section class="panel stack">
       <div class="row" id="tripActiveRow">
         <label id="lblActiveTrip" class="label" for="tripSelect">当前行程</label>
-        <select id="currencySelector" class="chip accent-chip" style="display: none; padding: 1px 4px; font-size: 10px; width: auto; min-width: 70px;" aria-label="Currency"></select>🗺️ 地图货币: THB</button>
+        <select id="currencySelector" class="chip accent-chip" style="display: none; padding: 1px 4px; font-size: 10px; width: auto; min-width: 70px;" aria-label="地图货币 / Map currency"></select>
       </div>
       <select id="tripSelect"></select>
       <details id="tripManageSection" class="new-trip">
@@ -181,7 +181,6 @@
         <summary id="captureAdvancedSummary">⚙️ 更多设置</summary>
         <div class="stack" style="margin-top: 8px;">
           <div class="two">
-            <label id="lblDuration">预计停留 (分钟)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label>
             <label id="lblWindow">偏好时段<input id="window" placeholder="上午 / 傍晚日落 / 晚上" /></label>
           </div>
           <!-- Hidden: quick chips write to these; area auto-derived from address -->

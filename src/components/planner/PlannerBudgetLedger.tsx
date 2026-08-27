@@ -45,15 +45,31 @@ export function PlannerBudgetLedger({
 }: PlannerBudgetLedgerProps) {
   const zh = language === 'zh';
   const baseCurrency = (trip.currency || 'CNY').trim().toUpperCase();
+  const availableCurrencies = useMemo(() => {
+    return Array.from(new Set([baseCurrency, ...COMMON_CURRENCIES]));
+  }, [baseCurrency]);
 
   // New expense form state
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [title, setTitle] = useState('');
   const [amountStr, setAmountStr] = useState('');
-  const [currency, setCurrency] = useState(trip.currency || 'CNY');
+  const [currencyOverride, setCurrencyOverride] = useState<string | null>(null);
+  const currency = currencyOverride ?? baseCurrency;
   const [category, setCategory] = useState<TripExpenseCategory>('food');
-  const [paidBy, setPaidBy] = useState(members[0] || (zh ? '我' : 'Me'));
-  const [selectedSplits, setSelectedSplits] = useState<string[]>(members);
+  // Payer / split selections are user overrides layered on top of the
+  // asynchronously-hydrated member list. No effect needed: when members change,
+  // a stale override simply stops matching and falls back to derived defaults (C1).
+  const [paidByOverride, setPaidByOverride] = useState<string | null>(null);
+  const [splitOverride, setSplitOverride] = useState<string[] | null>(null);
+  const paidBy = paidByOverride && members.includes(paidByOverride)
+    ? paidByOverride
+    : members[0] || (zh ? '我' : 'Me');
+  const selectedSplits = splitOverride && splitOverride.length > 0 && splitOverride.every((m) => members.includes(m))
+    ? splitOverride
+    : [...members];
+  const setSelectedSplits = (
+    next: string[] | ((prev: string[]) => string[]),
+  ): void => setSplitOverride(typeof next === 'function' ? next(selectedSplits) : next);
   const [notes, setNotes] = useState('');
   const [showFxEditor, setShowFxEditor] = useState(false);
   const [fxDraft, setFxDraft] = useState<Record<string, string>>({});
@@ -130,12 +146,38 @@ export function PlannerBudgetLedger({
     setTitle('');
     setAmountStr('');
     setNotes('');
+    setPaidByOverride(null);
+    setSplitOverride(null);
     setIsAddingExpense(false);
   };
 
   const copySettlementText = async () => {
-    await navigator.clipboard.writeText(settlement.summaryText);
-    setCopyNotice(zh ? '✓ 已复制 AA 结账清单，可直接发微信群！' : '✓ Copied settlement text to clipboard!');
+    let copied = false;
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(settlement.summaryText);
+        copied = true;
+      } catch {}
+    }
+    if (!copied && typeof document !== 'undefined') {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = settlement.summaryText;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch {}
+    }
+    setCopyNotice(
+      copied
+        ? (zh ? '✓ 已复制 AA 结账清单，可直接发微信群！' : '✓ Copied settlement text to clipboard!')
+        : (zh ? '⚠️ 复制失败，请手动长按复制' : '⚠️ Copy failed, please copy manually'),
+    );
     setTimeout(() => setCopyNotice(''), 3500);
   };
 
@@ -217,12 +259,12 @@ export function PlannerBudgetLedger({
             {zh ? '💰 全程预估预算' : 'Estimated Budget'}
           </span>
           <div className="mt-1 text-base font-extrabold text-emerald-950">
-            {currency} {budgetEstimation.totalEstimated.toLocaleString()}
+            {baseCurrency} {budgetEstimation.totalEstimated.toLocaleString()}
           </div>
           <p className="mt-0.5 text-[10px] text-emerald-700">
             {zh
-              ? `基于已排日程 (人均 ${currency} ${budgetEstimation.perPersonEstimated.toLocaleString()})`
-              : `Per person ${currency} ${budgetEstimation.perPersonEstimated.toLocaleString()}`}
+              ? `基于已排日程 (人均 ${baseCurrency} ${budgetEstimation.perPersonEstimated.toLocaleString()})`
+              : `Per person ${baseCurrency} ${budgetEstimation.perPersonEstimated.toLocaleString()}`}
           </p>
           {budgetEstimation.currencies.length > 1 ? (
             (() => {
@@ -256,12 +298,12 @@ export function PlannerBudgetLedger({
             {zh ? '💸 已记录支出' : 'Total Spent'}
           </span>
           <div className="mt-1 text-base font-extrabold text-stone-900">
-            {currency} {settlement.totalExpense.toLocaleString()}
+            {baseCurrency} {settlement.totalExpense.toLocaleString()}
           </div>
           <p className="mt-0.5 text-[10px] text-stone-500">
             {zh
-              ? `人均已支出 ${currency} ${members.length > 0 ? Math.round(settlement.totalExpense / members.length).toLocaleString() : 0}`
-              : `Per person ${members.length > 0 ? Math.round(settlement.totalExpense / members.length).toLocaleString() : 0}`}
+              ? `人均已支出 ${baseCurrency} ${members.length > 0 ? Math.round(settlement.totalExpense / members.length).toLocaleString() : 0}`
+              : `Per person ${baseCurrency} ${members.length > 0 ? Math.round(settlement.totalExpense / members.length).toLocaleString() : 0}`}
           </p>
         </div>
       </div>
@@ -411,10 +453,10 @@ export function PlannerBudgetLedger({
                 <div className="mt-1 flex gap-1">
                   <select
                     value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
+                    onChange={(e) => setCurrencyOverride(e.target.value)}
                     className="w-16 rounded-lg border border-stone-300 bg-stone-50 px-1 text-xs"
                   >
-                    {COMMON_CURRENCIES.map((c) => (
+                    {availableCurrencies.map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
@@ -440,7 +482,7 @@ export function PlannerBudgetLedger({
                 </label>
                 <select
                   value={paidBy}
-                  onChange={(e) => setPaidBy(e.target.value)}
+                  onChange={(e) => setPaidByOverride(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-stone-300 p-1.5 text-xs font-medium"
                 >
                   {members.map((m) => (
@@ -569,7 +611,7 @@ export function PlannerBudgetLedger({
               >
                 <div className="font-semibold text-stone-900 truncate">{mb.member}</div>
                 <div className="mt-0.5 text-[10.5px] text-stone-500">
-                  {zh ? '付' : 'Paid'}: {currency}{mb.paidTotal} | {zh ? '摊' : 'Share'}: {currency}{mb.shareTotal}
+                  {zh ? '付' : 'Paid'}: {baseCurrency}{mb.paidTotal} | {zh ? '摊' : 'Share'}: {baseCurrency}{mb.shareTotal}
                 </div>
                 <div
                   className={`mt-1 font-bold text-xs ${
@@ -580,7 +622,7 @@ export function PlannerBudgetLedger({
                       : 'text-stone-500'
                   }`}
                 >
-                  {isCreditor ? `+ ${currency}${mb.netBalance} (待收款)` : isDebtor ? `- ${currency}${Math.abs(mb.netBalance)} (待支付)` : (zh ? '已结清' : 'Settled')}
+                  {isCreditor ? `+ ${baseCurrency}${mb.netBalance} (待收款)` : isDebtor ? `- ${baseCurrency}${Math.abs(mb.netBalance)} (待支付)` : (zh ? '已结清' : 'Settled')}
                 </div>
               </div>
             );
@@ -605,16 +647,16 @@ export function PlannerBudgetLedger({
                   className="flex items-center justify-between rounded-md bg-white px-2.5 py-1.5 font-medium text-stone-800 shadow-2xs border border-stone-200/60"
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="rounded-full bg-rose-100 text-rose-800 px-1.5 py-0.2 text-[10px] font-bold">
+                    <span className="rounded-full bg-rose-100 text-rose-800 px-1.5 py-0.5 text-[10px] font-bold">
                       {t.from}
                     </span>
-                    <span className="text-stone-400">👉 转账给</span>
-                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 py-0.2 text-[10px] font-bold">
+                    <span className="text-stone-400">{zh ? '👉 转账给' : '👉 Transfer to'}</span>
+                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[10px] font-bold">
                       {t.to}
                     </span>
                   </div>
                   <strong className="text-emerald-800 font-bold">
-                    {currency} {t.amount.toLocaleString()}
+                    {baseCurrency} {t.amount.toLocaleString()}
                   </strong>
                 </div>
               ))}

@@ -4,8 +4,14 @@ import { ackPlacesViaWorker, readCaptureState, updateCaptureState } from './capt
 const REQUEST_SOURCE = 'ownly-planner-web';
 const RESPONSE_SOURCE = 'ownly-capture-extension';
 
+function getTargetOrigin(): string {
+  if (typeof window === 'undefined') return '*';
+  return (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
+}
+
 window.addEventListener('message', (event) => {
-  if (event.source !== window || event.origin !== window.location.origin) return;
+  const isSameOrigin = !event.origin || event.origin === 'null' || event.origin === window.location.origin;
+  if (event.source !== window || !isSameOrigin) return;
   const message = event.data as { source?: string; requestId?: string; type?: string; payload?: unknown };
   if (!message || message.source !== REQUEST_SOURCE || !message.requestId || !message.type) return;
 
@@ -13,7 +19,7 @@ window.addEventListener('message', (event) => {
     try {
       if (message.type === 'PULL_CAPTURE_STATE') {
         const state = await readCaptureState();
-        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'CAPTURE_STATE', payload: state }, window.location.origin);
+        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'CAPTURE_STATE', payload: state }, getTargetOrigin());
         return;
       }
 
@@ -27,7 +33,7 @@ window.addEventListener('message', (event) => {
             result: { ok: true },
           }));
         }
-        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'ACK_CAPTURED_PLACES_RESULT', payload: { ok: true } }, window.location.origin);
+        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'ACK_CAPTURED_PLACES_RESULT', payload: { ok: true } }, getTargetOrigin());
       }
     } catch (error) {
       window.postMessage({
@@ -35,7 +41,7 @@ window.addEventListener('message', (event) => {
         requestId: message.requestId,
         type: 'ERROR',
         error: error instanceof Error ? error.message : 'Ownly Capture bridge failed',
-      }, window.location.origin);
+      }, getTargetOrigin());
     }
   })();
 });

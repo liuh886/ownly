@@ -3,7 +3,8 @@ import type { PlannerTripPlace } from './planner';
 // ── Time helpers ────────────────────────────────────────────────────────────
 
 export function daysUntil(dateISO: string, now = new Date()): number {
-  const target = new Date(dateISO + 'T00:00:00Z');
+  const cleanDate = dateISO.includes('T') ? dateISO.split('T')[0] : dateISO;
+  const target = new Date(cleanDate + 'T00:00:00Z');
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
@@ -70,12 +71,16 @@ export interface OpenMeteoResponse {
 }
 
 export async function fetchWeather(lat: number, lng: number, startDate: string, endDate: string): Promise<WeatherSummary['forecasts']> {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
-    + `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code`
-    + `&timezone=auto&start_date=${startDate}&end_date=${endDate}`;
-  const res = await fetch(url);
-  if (!res.ok) return [];
-  return summarizeWeather(await res.json());
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
+      + `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code`
+      + `&timezone=auto&start_date=${startDate}&end_date=${endDate}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    return summarizeWeather(await res.json());
+  } catch {
+    return [];
+  }
 }
 
 // ── Urgency detection ───────────────────────────────────────────────────────
@@ -88,15 +93,15 @@ export interface UrgencyItem {
   severity: 'urgent' | 'warning';
 }
 
-const LEAD_TIME_PATTERNS: Array<[RegExp, number]> = [
-  [/提前\s*(\d+)\s*天/, 0],
-  [/advance\s*(\d+)\s*days?/i, 0],
-  [/提前\s*(\d+)\s*周/, 0],
-  [/(\d+)\s*weeks?\s+advance/i, 0],
+const LEAD_TIME_PATTERNS: RegExp[] = [
+  /提前\s*(\d+)\s*天/,
+  /advance\s*(\d+)\s*days?/i,
+  /提前\s*(\d+)\s*周/,
+  /(\d+)\s*weeks?\s+advance/i,
 ];
 
 function extractLeadTimeDays(riskText: string): number | null {
-  for (const [pattern] of LEAD_TIME_PATTERNS) {
+  for (const pattern of LEAD_TIME_PATTERNS) {
     const m = pattern.exec(riskText);
     if (m) {
       const num = parseInt(m[1], 10);

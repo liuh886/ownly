@@ -1,13 +1,15 @@
 import {
   checkOpeningHoursCollision,
   classifyResearchChip,
-  inferKindFromTypes,
+  ensurePlaceKindTag,
+  getPlannerKindLabel,
   inferPlaceKind,
+  isPlausibleCustomTag,
   listTripDates,
   normalizeDelimitedText,
   PLANNER_KIND_ICONS,
+  PLANNER_KIND_LABELS,
   type PlannerPlaceKind,
-  type PlannerPlacePriority,
   type PlannerTripPlace,
 } from '../../domain/planner';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
@@ -26,6 +28,18 @@ const PROVIDER_META: Record<string, { emoji: string; label: string }> = {
 };
 
 let statusTimer: number | undefined;
+
+/**
+ * Rewrites only the leading text node of a label, leaving nested inputs and
+ * other elements untouched. Safe no-op when the label has no text child
+ * (e.g. the hidden chip-target spans), so i18n can never crash the panel.
+ */
+function setLeadingLabel(node: HTMLElement, text: string): void {
+  const first = node.childNodes[0];
+  if (first && first.nodeType === Node.TEXT_NODE) {
+    (first as Text).nodeValue = text;
+  }
+}
 
 export function setStatus(message: string, tone: 'muted' | 'success' | 'error' = 'muted') {
   if (statusTimer !== undefined) {
@@ -51,33 +65,33 @@ export function applyI18n() {
   el.sumCreateTrip.textContent = dict.createTripSummary;
   el.sumEditTrip.textContent = dict.editTripSummary;
 
-  el.lblTripTitle.childNodes[0].nodeValue = dict.tripTitleLabel;
+  setLeadingLabel(el.lblTripTitle, dict.tripTitleLabel);
   el.tripTitle.placeholder = dict.tripTitlePlaceholder;
-  el.lblTripStart.childNodes[0].nodeValue = dict.tripStartLabel;
-  el.lblTripEnd.childNodes[0].nodeValue = dict.tripEndLabel;
-  el.lblTripDestinations.childNodes[0].nodeValue = dict.tripDestinationsLabel;
+  setLeadingLabel(el.lblTripStart, dict.tripStartLabel);
+  setLeadingLabel(el.lblTripEnd, dict.tripEndLabel);
+  setLeadingLabel(el.lblTripDestinations, dict.tripDestinationsLabel);
   el.tripDestinations.placeholder = dict.tripDestinationsPlaceholder;
-  el.lblTripTags.childNodes[0].nodeValue = dict.tripTagsLabel;
+  setLeadingLabel(el.lblTripTags, dict.tripTagsLabel);
   el.tripTags.placeholder = dict.tripTagsPlaceholder;
-  el.lblTripCurrency.childNodes[0].nodeValue = dict.tripCurrencyLabel;
-  el.lblTripTransport.childNodes[0].nodeValue = dict.tripTransportLabel;
+  setLeadingLabel(el.lblTripCurrency, dict.tripCurrencyLabel);
+  setLeadingLabel(el.lblTripTransport, dict.tripTransportLabel);
   el.btnCreateTrip.textContent = dict.btnCreateTrip;
 
-  el.lblEditTripTitle.childNodes[0].nodeValue = dict.tripTitleLabel;
+  setLeadingLabel(el.lblEditTripTitle, dict.tripTitleLabel);
   el.editTripTitle.placeholder = dict.tripTitlePlaceholder;
-  el.lblEditTripStart.childNodes[0].nodeValue = dict.tripStartLabel;
-  el.lblEditTripEnd.childNodes[0].nodeValue = dict.tripEndLabel;
-  el.lblEditTripDestinations.childNodes[0].nodeValue = dict.tripDestinationsLabel;
+  setLeadingLabel(el.lblEditTripStart, dict.tripStartLabel);
+  setLeadingLabel(el.lblEditTripEnd, dict.tripEndLabel);
+  setLeadingLabel(el.lblEditTripDestinations, dict.tripDestinationsLabel);
   el.editTripDestinations.placeholder = dict.tripDestinationsPlaceholder;
-  el.lblEditTripTags.childNodes[0].nodeValue = dict.tripTagsLabel;
+  setLeadingLabel(el.lblEditTripTags, dict.tripTagsLabel);
   el.editTripTags.placeholder = dict.tripTagsPlaceholder;
-  el.lblEditTripCurrency.childNodes[0].nodeValue = dict.tripCurrencyLabel;
-  el.lblEditTripTransport.childNodes[0].nodeValue = dict.tripTransportLabel;
+  setLeadingLabel(el.lblEditTripCurrency, dict.tripCurrencyLabel);
+  setLeadingLabel(el.lblEditTripTransport, dict.tripTransportLabel);
   el.btnSaveTripEdit.textContent = dict.btnSaveTripEdit;
   el.btnDeleteTrip.textContent = dict.btnDeleteTrip;
 
   el.sumBulkImport.textContent = dict.sumBulkImport;
-  el.lblBulkText.childNodes[0].nodeValue = dict.lblBulkText;
+  setLeadingLabel(el.lblBulkText, dict.lblBulkText);
   el.bulkInputText.placeholder = dict.bulkPlaceholder;
   el.btnParseBulkImport.textContent = dict.btnParseBulkImport;
 
@@ -88,7 +102,7 @@ export function applyI18n() {
   el.refreshPlace.textContent = dict.refreshBtn;
   el.txtCapturedBanner.textContent = dict.capturedBanner;
 
-  el.lblKind.childNodes[0].nodeValue = dict.kindLabel;
+  setLeadingLabel(el.lblKind, dict.kindLabel);
   for (const opt of Array.from(el.kind.options)) {
     const val = opt.value as PlannerPlaceKind;
     if (dict.kinds[val]) opt.textContent = dict.kinds[val];
@@ -105,28 +119,28 @@ export function applyI18n() {
     if (dict.transport[val]) opt.textContent = dict.transport[val];
   }
 
-  el.lblArea.childNodes[0].nodeValue = dict.areaLabel;
+  setLeadingLabel(el.lblArea, dict.areaLabel);
   el.area.placeholder = dict.areaPlaceholder;
-  el.lblTags.childNodes[0].nodeValue = dict.tagsLabel;
+  setLeadingLabel(el.lblTags, dict.tagsLabel);
   el.tags.placeholder = dict.tagsPlaceholder;
-  el.lblDuration.childNodes[0].nodeValue = dict.durationLabel;
+  setLeadingLabel(el.lblDuration, dict.durationLabel);
   el.duration.placeholder = dict.durationPlaceholder;
-  el.lblWindow.childNodes[0].nodeValue = dict.windowLabel;
+  setLeadingLabel(el.lblWindow, dict.windowLabel);
   el.window.placeholder = dict.windowPlaceholder;
-  el.lblRating.childNodes[0].nodeValue = dict.ratingLabel;
+  setLeadingLabel(el.lblRating, dict.ratingLabel);
   el.rating.placeholder = dict.ratingPlaceholder;
-  el.lblPrice.childNodes[0].nodeValue = dict.priceLabel;
+  setLeadingLabel(el.lblPrice, dict.priceLabel);
   el.price.placeholder = dict.pricePlaceholder;
   el.lblQuickChips.textContent = dict.quickChipsLabel;
 
-  el.lblWhy.childNodes[0].nodeValue = dict.whyLabel;
+  setLeadingLabel(el.lblWhy, dict.whyLabel);
   el.why.placeholder = dict.whyPlaceholder;
   el.captureAdvancedSummary.textContent = dict.advancedSettings;
-  el.lblSignals.childNodes[0].nodeValue = dict.signalsLabel;
+  setLeadingLabel(el.lblSignals, dict.signalsLabel);
   el.signals.placeholder = dict.signalsPlaceholder;
-  el.lblRisks.childNodes[0].nodeValue = dict.risksLabel;
+  setLeadingLabel(el.lblRisks, dict.risksLabel);
   el.risks.placeholder = dict.risksPlaceholder;
-  el.lblNotes.childNodes[0].nodeValue = dict.notesLabel;
+  setLeadingLabel(el.lblNotes, dict.notesLabel);
   el.notes.placeholder = dict.notesPlaceholder;
   el.btnRemoveCandidate.textContent = dict.btnRemoveCandidate;
 
@@ -216,21 +230,99 @@ export function syncQuickChipStates(): void {
 function renderFilters() {
   const dict = t();
   const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-  const tripPlaces = store.state.pendingPlaces.filter((p) => p.trip_id === store.state.activeTripId);
+  const tripPlaces = store.state.pendingPlaces.filter(
+    (p) => p.trip_id === store.state.activeTripId && (p.state as string) !== 'dropped' && (p.state as string) !== 'tombstone',
+  );
 
-  const filters: { id: string; label: string }[] = [
-    { id: 'all', label: dict.allFilter },
-    { id: 'must', label: dict.mustFilter },
-    { id: 'want', label: dict.wantFilter },
-    { id: 'food', label: dict.foodFilter },
-    { id: 'attraction', label: dict.attractionFilter },
-    { id: 'stay', label: dict.stayFilter },
+  const filters: { id: string; label: string; count: number }[] = [
+    { id: 'all', label: dict.allFilter, count: tripPlaces.length },
   ];
 
-  // Dynamically add trip tags and place tags as filter chips (e.g. 曼谷, 清迈, 普吉)
-  const allTags = Array.from(new Set([...(activeTrip?.tags || []), ...tripPlaces.flatMap((p) => p.tags)])).filter(Boolean);
+  const mustCount = tripPlaces.filter((p) => p.priority === 'must').length;
+  if (mustCount > 0) filters.push({ id: 'must', label: dict.mustFilter, count: mustCount });
+
+  const wantCount = tripPlaces.filter((p) => p.priority === 'want').length;
+  if (wantCount > 0) filters.push({ id: 'want', label: dict.wantFilter, count: wantCount });
+
+  const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'other'];
+  for (const kind of allKinds) {
+    const kindTagZh = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
+    const kindTagEn = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
+    const count = tripPlaces.filter(
+      (p) =>
+        p.kind === kind ||
+        p.tags.some((t) => {
+          const lower = t.trim().toLowerCase();
+          return lower === kindTagZh || lower === kindTagEn;
+        }),
+    ).length;
+    if (count > 0) {
+      const cleanName = getPlannerKindLabel(kind, store.lang);
+      const label = `${KIND_ICONS[kind] || ''} ${cleanName}`;
+      filters.push({ id: kind, label, count });
+    }
+  }
+
+  // Dynamically add non-kind tags as filter chips (e.g. 曼谷, 清迈, 普吉)
+  const excludedNames = new Set<string>();
+  for (const p of tripPlaces) {
+    if (p.title) excludedNames.add(p.title.trim().toLowerCase());
+    if (p.address) {
+      excludedNames.add(p.address.trim().toLowerCase());
+      p.address.split(/[,，·]/).forEach((part) => {
+        const t = part.trim().toLowerCase();
+        if (t.length > 2) excludedNames.add(t);
+      });
+    }
+    if (p.area) excludedNames.add(p.area.trim().toLowerCase());
+  }
+
+  const knownKindTags = new Set(
+    Object.values(PLANNER_KIND_LABELS).flatMap((l) => [
+      l.zh.toLowerCase(),
+      l.en.toLowerCase(),
+      '观光景点',
+      '餐厅美食',
+      '咖啡甜品',
+      '酒店住宿',
+      '购物商场',
+      '交通中转',
+      '体验活动',
+      '景点',
+      '美食',
+      '咖啡',
+      '住宿',
+      '购物',
+      '交通',
+      '体验',
+      '其它',
+      '其他',
+    ]),
+  );
+
+  const allTags = Array.from(
+    new Set([
+      ...(activeTrip?.tags || []),
+      ...tripPlaces.flatMap((p) => [...(p.tags || []), ...(p.signals || []), ...(p.risks || [])]),
+    ]),
+  )
+    .filter(Boolean)
+    .filter((tag) => {
+      const lower = tag.trim().toLowerCase();
+      return !knownKindTags.has(lower) && !excludedNames.has(lower) && isPlausibleCustomTag(tag, excludedNames);
+    });
+
   for (const tag of allTags) {
-    filters.push({ id: `tag:${tag}`, label: `🏷️ ${tag}` });
+    const tagLower = tag.trim().toLowerCase();
+    const count = tripPlaces.filter(
+      (p) =>
+        p.tags.some((t) => t.trim().toLowerCase() === tagLower) ||
+        p.signals?.some((s) => s.trim().toLowerCase() === tagLower) ||
+        p.risks?.some((r) => r.trim().toLowerCase() === tagLower),
+    ).length;
+    if (count > 0) {
+      filters.push({ id: `tag:${tag}`, label: `🏷️ ${tag}`, count });
+    }
   }
 
   el.candidatesFilterBar.innerHTML = '';
@@ -238,9 +330,9 @@ function renderFilters() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `filter-btn ${store.activeFilter === item.id ? 'active' : ''}`;
-    btn.textContent = item.label;
+    btn.textContent = `${item.label} (${item.count})`;
     btn.addEventListener('click', () => {
-      store.activeFilter = item.id;
+      store.activeFilter = store.activeFilter === item.id && item.id !== 'all' ? 'all' : item.id;
       renderFilters();
       renderCandidatesList();
     });
@@ -264,6 +356,24 @@ export function populateEditTripForm() {
   el.editTripTransport.value = activeTrip.transport_mode || 'transit';
 }
 
+/** Fills the bulk "schedule to day" select with the active trip's dates. */
+function populateBulkDaySelect(): void {
+  const dict = t();
+  const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
+  const days = activeTrip ? listTripDates(activeTrip.start_date, activeTrip.end_date) : [];
+  el.bulkDaySelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = dict.bulkDayPlaceholder;
+  el.bulkDaySelect.append(placeholder);
+  days.forEach((date, index) => {
+    const opt = document.createElement('option');
+    opt.value = date;
+    opt.textContent = dict.dayOption(index + 1, date.slice(5));
+    el.bulkDaySelect.append(opt);
+  });
+}
+
 export function renderState() {
   const dict = t();
   el.pending.textContent = `${store.state.pendingPlaces.length} ${dict.pendingSuffix}`;
@@ -283,11 +393,13 @@ export function renderState() {
   el.tripActiveRow.style.display = 'flex';
   el.tripSelect.style.display = 'block';
   el.tripManageSection.classList.remove('first-run');
+  populateBulkDaySelect();
   for (const trip of store.state.trips) {
     const option = document.createElement('option');
     option.value = trip.id;
+    const title = trip.title?.trim() || (store.lang === 'zh' ? '未命名行程' : 'Untitled trip');
     const currencyBadge = trip.currency ? ` [${trip.currency}]` : '';
-    option.textContent = trip.tags?.length ? `${trip.title} (${trip.tags.join(', ')})${currencyBadge}` : `${trip.title}${currencyBadge}`;
+    option.textContent = trip.tags?.length ? `${title} (${trip.tags.join(', ')})${currencyBadge}` : `${title}${currencyBadge}`;
     el.tripSelect.append(option);
   }
   const active = store.state.trips.some((trip) => trip.id === store.state.activeTripId)
@@ -302,20 +414,20 @@ const CURRENCY_OPTIONS = ['CNY', 'THB', 'JPY', 'USD', 'EUR', 'GBP', 'SGD', 'HKD'
 
 export function renderCurrencyPill() {
   const sel = el.currencySelector;
-  const current = store.pageDetectedCurrency
-    || store.state.trips.find((t) => t.id === store.state.activeTripId)?.currency
-    || '';
+  // The selector IS the map currency: manual override first, else page detection.
+  // Trip currency is intentionally NOT a fallback — it is the stats base, a separate concept.
+  const current = store.mapCurrencyOverride || store.pageDetectedCurrency || '';
   if (!current) { sel.style.display = 'none'; return; }
   sel.style.display = 'inline-block';
   sel.innerHTML = '';
-  const codes = [...new Set([current, ...CURRENCY_OPTIONS])];
+  const codes = ['AUTO', ...new Set([current, ...CURRENCY_OPTIONS])];
   for (const code of codes) {
     const opt = document.createElement('option');
     opt.value = code;
-    opt.textContent = code;
+    opt.textContent = code === 'AUTO' ? (store.lang === 'zh' ? '自动' : 'AUTO') : code;
     sel.append(opt);
   }
-  sel.value = current;
+  sel.value = store.mapCurrencyOverride || current;
 }
 
 export function renderSmartListCard() {
@@ -479,12 +591,14 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   } else if (place.detectedCurrency) {
     el.price.placeholder = `${place.detectedCurrency} 价格预算`;
   }
-  if (place.category) {
-    el.kind.value = inferPlaceKind(place.category);
-  } else {
-    const byTypes = inferKindFromTypes(place.types);
-    if (byTypes) el.kind.value = byTypes;
-  }
+  const compositeKindText = [
+    place.category,
+    place.title,
+    place.address,
+    ...(place.types || []),
+  ].filter(Boolean).join(' ');
+  const detectedKind = inferPlaceKind(compositeKindText);
+  el.kind.value = detectedKind;
   if (place.address && !el.area.value) {
     const parts = place.address.split(/[,，·]/).map((p) => p.trim()).filter(Boolean);
     el.area.value = parts[0] || place.address;
@@ -497,9 +611,8 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
     el.notes.value = place.userNote;
   }
   const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-  if (activeTrip?.tags?.length && !el.tags.value) {
-    el.tags.value = activeTrip.tags.join(', ');
-  }
+  const baseTags = (activeTrip?.tags || []).filter(Boolean);
+  el.tags.value = ensurePlaceKindTag(baseTags, detectedKind, store.lang).join(', ');
 }
 
 function applyTierNote(place: CurrentResearchPlace): void {
@@ -594,15 +707,22 @@ export function renderCurrentPlace() {
   setStatus(dict.readyToCapture);
 }
 
+function sanitizeSafeHref(url: string | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return null;
+}
+
 const cardCache = new Map<string, { sig: string; node: HTMLDivElement }>();
 
-function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace, dictKey: string, tripDayCount: number): string {
+function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace, dictKey: string, tripDays: string[]): string {
   return [
     place.updated_at || '',
     store.editingCandidateId === place.id ? 'edit' : 'view',
     store.bulkMode ? 'bulk' : 'single',
     store.bulkSelected.has(place.id) ? 'sel' : 'unsel',
-    String(tripDayCount),
+    tripDays.join(','),
     dictKey,
   ].join('|');
 }
@@ -613,14 +733,33 @@ export function renderCandidatesList() {
   const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
   const tripDays = activeTrip ? listTripDates(activeTrip.start_date, activeTrip.end_date) : [];
 
-  let candidates = store.state.pendingPlaces.filter((p) => p.trip_id === store.state.activeTripId);
+  let candidates = store.state.pendingPlaces.filter(
+    (p) => p.trip_id === store.state.activeTripId && (p.state as string) !== 'dropped' && (p.state as string) !== 'tombstone',
+  );
   el.candidatesCountBadge.textContent = String(candidates.length);
+
+  const kindMatches = (p: PlannerTripPlace, kind: PlannerPlaceKind): boolean => {
+    const zhLabel = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
+    const enLabel = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
+    return (
+      p.kind === kind ||
+      p.tags.some((t) => {
+        const lower = t.trim().toLowerCase();
+        return lower === zhLabel || lower === enLabel;
+      })
+    );
+  };
 
   if (store.activeFilter === 'must') candidates = candidates.filter((p) => p.priority === 'must');
   if (store.activeFilter === 'want') candidates = candidates.filter((p) => p.priority === 'want');
-  if (store.activeFilter === 'food') candidates = candidates.filter((p) => p.kind === 'food' || p.kind === 'cafe');
-  if (store.activeFilter === 'attraction') candidates = candidates.filter((p) => p.kind === 'attraction');
-  if (store.activeFilter === 'stay') candidates = candidates.filter((p) => p.kind === 'stay');
+  if (store.activeFilter === 'stay') candidates = candidates.filter((p) => kindMatches(p, 'stay'));
+  if (store.activeFilter === 'food') candidates = candidates.filter((p) => kindMatches(p, 'food'));
+  if (store.activeFilter === 'cafe') candidates = candidates.filter((p) => kindMatches(p, 'cafe'));
+  if (store.activeFilter === 'attraction') candidates = candidates.filter((p) => kindMatches(p, 'attraction'));
+  if (store.activeFilter === 'experience') candidates = candidates.filter((p) => kindMatches(p, 'experience'));
+  if (store.activeFilter === 'shopping') candidates = candidates.filter((p) => kindMatches(p, 'shopping'));
+  if (store.activeFilter === 'transit') candidates = candidates.filter((p) => kindMatches(p, 'transit'));
+  if (store.activeFilter === 'other') candidates = candidates.filter((p) => kindMatches(p, 'other'));
   if (store.activeFilter.startsWith('tag:')) {
     const filterTag = store.activeFilter.slice(4).trim().toLowerCase();
     candidates = candidates.filter((p) => p.tags.some((tag) => tag.trim().toLowerCase() === filterTag));
@@ -650,7 +789,7 @@ export function renderCandidatesList() {
   const seen = new Set<string>();
   for (const place of candidates) {
     seen.add(place.id);
-    const sig = candidateCardSig(place, dictKey, tripDays.length);
+    const sig = candidateCardSig(place, dictKey, tripDays);
     let node = place.scheduled_date ? undefined : cardCache.get(place.id)?.node;
     const cached = place.scheduled_date ? undefined : cardCache.get(place.id);
     if (cached && cached.sig === sig) {
@@ -739,18 +878,9 @@ function buildInlineEditor(
 
   row1.append(kindLabel, priorityLabel);
 
-  // Row 2: Area & Price
+  // Row 2: Price & Rating
   const row2 = document.createElement('div');
   row2.className = 'inline-row';
-
-  const areaLabel = document.createElement('label');
-  areaLabel.textContent = dict.areaLabel;
-  const areaInput = document.createElement('input');
-  areaInput.name = 'area';
-  areaInput.type = 'text';
-  areaInput.value = place.area || '';
-  areaInput.placeholder = dict.areaPlaceholder;
-  areaLabel.append(areaInput);
 
   const priceLabel = document.createElement('label');
   priceLabel.textContent = dict.priceLabel;
@@ -760,12 +890,6 @@ function buildInlineEditor(
   priceInput.value = place.observed_price || '';
   priceInput.placeholder = dict.pricePlaceholder;
   priceLabel.append(priceInput);
-
-  row2.append(areaLabel, priceLabel);
-
-  // Row 3: Rating & Duration
-  const row3 = document.createElement('div');
-  row3.className = 'inline-row';
 
   const ratingLabel = document.createElement('label');
   ratingLabel.textContent = dict.ratingLabel;
@@ -779,6 +903,12 @@ function buildInlineEditor(
   ratingInput.placeholder = dict.ratingPlaceholder;
   ratingLabel.append(ratingInput);
 
+  row2.append(priceLabel, ratingLabel);
+
+  // Row 3: Duration & Tags
+  const row3 = document.createElement('div');
+  row3.className = 'inline-row';
+
   const durationLabel = document.createElement('label');
   durationLabel.textContent = dict.durationLabel;
   const durationInput = document.createElement('input');
@@ -791,7 +921,7 @@ function buildInlineEditor(
   durationInput.placeholder = dict.durationPlaceholder;
   durationLabel.append(durationInput);
 
-  row3.append(ratingLabel, durationLabel);
+  row3.append(durationLabel);
 
   // Row 4: Tags
   const row4 = document.createElement('div');
@@ -861,34 +991,44 @@ function buildCandidateDetails(
     chk.dataset.placeId = place.id;
     wrapper.append(chk);
   }
-  if (place.area || place.address) details.innerHTML += '<span title="' + escapeHtml(place.address ?? place.area ?? '') + '">📍</span>';
-  if (place.phone) details.innerHTML += `<a href="tel:${escapeHtml(place.phone)}" class="badge">☎️ ${escapeHtml(place.phone)}</a>`;
-  if (place.plus_code) details.innerHTML += `<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`;
+  const parts: string[] = [];
+  if (place.area || place.address) parts.push('<span title="' + escapeHtml(place.address ?? place.area ?? '') + '">📍</span>');
+  if (place.phone) parts.push(`<a href="tel:${escapeHtml(place.phone)}" class="badge">☎️ ${escapeHtml(place.phone)}</a>`);
+  if (place.plus_code) parts.push(`<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`);
   if (place.is_anchor) {
-    details.innerHTML += `<span class="badge highlight" title="${store.lang === 'zh' ? '行程锚点（住宿占位），受保护不可批量删除' : 'Trip anchor (stay placeholder), protected from bulk delete'}">🏨</span>`;
+    parts.push(`<span class="badge highlight" title="${store.lang === 'zh' ? '行程锚点（住宿占位），受保护不可批量删除' : 'Trip anchor (stay placeholder), protected from bulk delete'}">🏨</span>`);
   }
   if (place.source_place_id) {
-    details.innerHTML += `<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`;
+    parts.push(`<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`);
   }
-  if (place.menu_url) details.innerHTML += `<a href="${escapeHtml(place.menu_url)}" target="_blank" rel="noreferrer" class="badge">🍽️ 菜单</a>`;
-  if (place.reservation_url) details.innerHTML += `<a href="${escapeHtml(place.reservation_url)}" target="_blank" rel="noreferrer" class="badge highlight">🎟️ 预订</a>`;
+  const safeMenuUrl = sanitizeSafeHref(place.menu_url);
+  if (safeMenuUrl) parts.push(`<a href="${escapeHtml(safeMenuUrl)}" target="_blank" rel="noreferrer" class="badge">🍽️ 菜单</a>`);
+  const safeResUrl = sanitizeSafeHref(place.reservation_url);
+  if (safeResUrl) parts.push(`<a href="${escapeHtml(safeResUrl)}" target="_blank" rel="noreferrer" class="badge highlight">🎟️ 预订</a>`);
   if (place.review_topics && place.review_topics.length > 0) {
-    details.innerHTML += `<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`;
+    parts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
   }
-  if (place.observed_rating) details.innerHTML += `<span>★ ${place.observed_rating}</span>`;
-  if (place.observed_price) details.innerHTML += `<span>💰 ${escapeHtml(place.observed_price)}</span>`;
-  if (place.duration_minutes) details.innerHTML += `<span>⏱️ ${place.duration_minutes}m</span>`;
-  if (place.tags.length) details.innerHTML += `<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`;
+  if (place.observed_rating) parts.push(`<span>★ ${place.observed_rating}</span>`);
+  if (place.observed_price) parts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
+  if (place.duration_minutes) parts.push(`<span>⏱️ ${place.duration_minutes}m</span>`);
+  if (place.tags.length) parts.push(`<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`);
+  if (place.signals && place.signals.length > 0) {
+    parts.push(...place.signals.map((s) => `<span class="badge">✅ ${escapeHtml(s)}</span>`));
+  }
+  if (place.risks && place.risks.length > 0) {
+    parts.push(...place.risks.map((r) => `<span class="risk-flag">⚠️ ${escapeHtml(r)}</span>`));
+  }
   const noteText = place.notes || place.why;
   if (noteText) {
-    details.innerHTML += `<div class="note-line">📝 ${escapeHtml(noteText)}</div>`;
+    parts.push(`<div class="note-line">📝 ${escapeHtml(noteText)}</div>`);
   }
   if (place.scheduled_date && place.open_hours) {
     const col = checkOpeningHoursCollision(place.open_hours, place.scheduled_date);
     if (col.isCollision) {
-      details.innerHTML += `<span class="risk-flag">⚠️ ${escapeHtml(col.reason ?? '')}</span>`;
+      parts.push(`<span class="risk-flag">⚠️ ${escapeHtml(col.reason ?? '')}</span>`);
     }
   }
+  details.innerHTML = parts.join('');
 
   const actions = document.createElement('div');
   actions.className = 'candidate-actions';

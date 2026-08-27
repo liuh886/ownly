@@ -766,6 +766,25 @@ hr.divider {
   background: var(--accent-softer);
 }
 
+.candidate-card.dragging {
+  opacity: 0.45;
+}
+
+.candidate-card.drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+.candidate-card .grip {
+  cursor: grab;
+  color: var(--text-3);
+  user-select: none;
+}
+
+.candidate-card .grip:active {
+  cursor: grabbing;
+}
+
 .candidate-card .bulk-check {
   width: auto;
   margin: 0;

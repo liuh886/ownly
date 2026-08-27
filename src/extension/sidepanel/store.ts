@@ -27,6 +27,10 @@ export const store = {
   activeFilter: 'all',
   searchQuery: '',
   pageDetectedCurrency: undefined as string | undefined,
+  /** Manual map-currency override picked in the selector; undefined = auto-detect. */
+  mapCurrencyOverride: undefined as string | undefined,
+  /** Place ids deleted locally since last successful persist; guards merge-write resurrection. */
+  locallyDeletedIds: new Set<string>(),
   userDismissedPlaceUrl: null as string | null,
   smartListDismissed: false,
   smartListKey: '' as string,

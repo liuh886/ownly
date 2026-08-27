@@ -1,12 +1,14 @@
 import {
   acknowledgeCapturedPlaces,
+  ensurePlaceKindTag,
   findExistingTripPlace,
   inferPlaceKind,
+  mergeCaptureState,
   placeIdentityKey,
   type OwnlyCaptureState,
   type PlannerTripPlace,
 } from '../domain/planner';
-import { CAPTURE_STORAGE_KEY, enqueueWrite, updateCaptureState } from './capture-state';
+import { CAPTURE_STORAGE_KEY, updateCaptureState } from './capture-state';
 import type { CurrentResearchPlace } from './content';
 
 async function configureSidePanel() {
@@ -49,7 +51,9 @@ async function quickCaptureCurrentPlace() {
       if (!state.activeTripId) return { state, result: null };
       const tripId = state.activeTripId;
       const existing = findExistingTripPlace(state.knownPlaceIds, state.pendingPlaces, tripId, place.sourceUrl, place.sourcePlaceId);
-      const stableId = existing?.id ?? crypto.randomUUID();
+      const idKey = placeIdentityKey(tripId, place.sourceUrl);
+      // Reuse the acked place's identity so re-capture updates instead of duplicating.
+      const stableId = existing?.id ?? state.knownPlaceIds[idKey] ?? crypto.randomUUID();
       const now = new Date().toISOString();
       const activeTrip = state.trips.find((trip) => trip.id === tripId);
 
@@ -61,10 +65,13 @@ async function quickCaptureCurrentPlace() {
         title: place.title,
         source_provider: place.sourceProvider || 'google_maps',
         source_url: place.sourceUrl,
-        kind: inferPlaceKind(place.category),
+        kind: existing?.kind ?? inferPlaceKind([place.title, place.category, place.address].filter(Boolean).join(' ')),
         area: place.address?.split(/[,，·]/)[0]?.trim() || undefined,
         priority: existing?.priority ?? 'want',
-        tags: Array.from(new Set([...(activeTrip?.tags ?? []), ...(existing?.tags ?? [])])),
+        tags: ensurePlaceKindTag(
+          Array.from(new Set([...(activeTrip?.tags ?? []), ...(existing?.tags ?? [])])),
+          existing?.kind ?? inferPlaceKind([place.title, place.category, place.address].filter(Boolean).join(' ')),
+        ),
         why: existing?.why ?? place.summary,
         signals: existing?.signals ?? [],
         risks: existing?.risks ?? [],
@@ -86,7 +93,7 @@ async function quickCaptureCurrentPlace() {
       return {
         state: {
           ...state,
-          knownPlaceIds: { ...state.knownPlaceIds, [placeIdentityKey(tripId, place.sourceUrl)]: stableId },
+          knownPlaceIds: { ...state.knownPlaceIds, [idKey]: stableId },
           pendingPlaces: [...state.pendingPlaces.filter((item) => item.id !== stableId), tripPlace],
         },
         result: stableId,
@@ -147,13 +154,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === 'CAPTURE_SAVE_STATE') {
-    const state = (message as { state?: OwnlyCaptureState }).state;
-    if (!state || typeof state !== 'object') {
+    const incoming = (message as { state?: OwnlyCaptureState }).state;
+    if (!incoming || typeof incoming !== 'object') {
       sendResponse({ ok: false, error: 'invalid state' });
       return true;
     }
-    void enqueueWrite(() => chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: state }))
-      .then(() => sendResponse({ ok: true }))
+    const rawDeleted = (message as { locallyDeletedIds?: unknown }).locallyDeletedIds;
+    const deletedIds = Array.isArray(rawDeleted)
+      ? new Set(rawDeleted.filter((id): id is string => typeof id === 'string'))
+      : undefined;
+    // Merge inside the single-writer queue: trips/activeTripId come from the
+    // panel, background-added quick captures survive, deleted ids never return.
+    void updateCaptureState((current) => {
+      const merged = mergeCaptureState(current, incoming, deletedIds);
+      return { state: merged, result: { ok: true, state: merged } };
+    })
+      .then((result) => sendResponse(result))
       .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
     return true;
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListCategory, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
 
 describe('cleanExtractedText & safeDecodeUri', () => {
   it('decodes HTML entities properly', () => {
@@ -101,7 +101,7 @@ describe('parseEntityListCoordinates', () => {
   });
 });
 
-describe('findEntityListPlaceId', () => {
+describe('findEntityListPlaceId & findEntityListCategory', () => {
   it('extracts a Google internal feature id from item payload', () => {
     const item = ['meta', [null, '0x3ba58a39c41ff829:0x715f5a08d2ca8f6f'], 'Sensoji', 'note'];
     expect(findEntityListPlaceId(item)).toBe('0x3ba58a39c41ff829:0x715f5a08d2ca8f6f');
@@ -111,6 +111,17 @@ describe('findEntityListPlaceId', () => {
     expect(findEntityListPlaceId(undefined)).toBeUndefined();
     expect(findEntityListPlaceId(['plain', ['nested', 'values']])).toBeUndefined();
     expect(findEntityListPlaceId(['0x123'])).toBeUndefined();
+  });
+
+  it('extracts hotel/dining/attraction category from entitylist payload', () => {
+    const hotelItem = ['meta', [null, '0x1:0x2', null, null, 'Address', null, null, null, null, null, null, null, null, 'Hotel & Resort']];
+    expect(findEntityListCategory(hotelItem)).toBe('Hotel & Resort');
+
+    const thaiHotelItem = ['meta', [null, '0x1:0x2', null, null, 'Bangkok', null, null, null, null, null, null, null, null, '4 星级酒店']];
+    expect(findEntityListCategory(thaiHotelItem)).toBe('4 星级酒店');
+
+    const restaurantItem = ['meta', [null, '0x1:0x2', null, null, 'Tokyo', null, null, null, null, null, null, null, null, '日本料理店']];
+    expect(findEntityListCategory(restaurantItem)).toBe('日本料理店');
   });
 });
 

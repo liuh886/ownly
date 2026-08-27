@@ -101,6 +101,7 @@ export function parseEntityListCoordinates(placeInfo?: unknown): { lat: number; 
 }
 
 const GOOGLE_FEATURE_ID_PATTERN = /0x[0-9a-f]{8,}:0x[0-9a-f]{6,}/i;
+const ENTITY_CATEGORY_HINTS = /(hotel|resort|hostel|inn\b|lodging|accommodation|stay|quarter|restaurant|food|diner|cafe|coffee|bakery|dessert|bar\b|pub\b|bistro|ramen|sushi|izakaya|spa\b|massage|onsen|attraction|museum|park\b|temple|shrine|castle|landmark|shopping|mall|market|supermarket|outlet|store|station|subway|bus|airport|terminal|ferry|transit|酒店|旅馆|民宿|度假村|客栈|餐厅|美食|料理|咖啡|甜品|景点|公园|寺|神社|博物馆|商场|超市|车站|地铁|机场|码头|按摩|水疗|体验)/i;
 
 export function findEntityListPlaceId(item?: unknown): string | undefined {
   if (!Array.isArray(item)) return undefined;
@@ -121,11 +122,43 @@ export function findEntityListPlaceId(item?: unknown): string | undefined {
   return undefined;
 }
 
+export function findEntityListCategory(item?: unknown, knownTitle?: string): string | undefined {
+  if (!Array.isArray(item)) return undefined;
+  const cleanTitle = knownTitle ? cleanExtractedText(knownTitle).toLowerCase() : '';
+  let scanned = 0;
+  const queue: unknown[] = [item];
+  while (queue.length > 0 && scanned < 300) {
+    const current = queue.shift();
+    scanned += 1;
+    if (typeof current === 'string') {
+      const text = cleanExtractedText(current);
+      if (
+        text &&
+        text.length >= 2 &&
+        text.length <= 40 &&
+        (!cleanTitle || text.toLowerCase() !== cleanTitle) &&
+        !GOOGLE_FEATURE_ID_PATTERN.test(text) &&
+        !/^https?:\/\//i.test(text) &&
+        !/^\+?\d[\d\s-]{6,}$/.test(text)
+      ) {
+        if (ENTITY_CATEGORY_HINTS.test(text) && !isJunkNavigationText(text) && !isFakePlaceLabel(text)) {
+          return text;
+        }
+      }
+      continue;
+    }
+    if (Array.isArray(current)) {
+      for (const child of current.slice(0, 40)) queue.push(child);
+    }
+  }
+  return undefined;
+}
+
 const CURRENCY_CODE = /(?<![A-Za-z])(SGD|HKD|TWD|NTD|JPY|CNY|RMB|THB|KRW|MYR|VND|INR|EUR|GBP|USD|AUD|CAD|CHF|NZD)(?![A-Za-z])/i;
 const PRICE_LEVEL_ONLY = /^[¥฿$€£₩]{1,4}$/;
 
 function hasCurrencyMarker(text: string): boolean {
-  return /[¥฿$€£₩₫₹]/.test(text) || /R\$/.test(text) || CURRENCY_CODE.test(text);
+  return /[¥￥฿$€£₩₫₹]/.test(text) || /R\$/.test(text) || CURRENCY_CODE.test(text);
 }
 
 /** Compacts a phone string without inventing country codes. */

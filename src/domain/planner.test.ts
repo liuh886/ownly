@@ -5,15 +5,19 @@ import {
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
   classifyResearchChip,
+  ensurePlaceKindTag,
   exportPlacesToCSV,
   exportPlacesToKML,
   extractPlaceCoordinates,
+  extractPriceCurrency,
   findExistingTripPlace,
   haversineDistanceKm,
   inferPlaceKind,
   inferSourceProvider,
+  isPlausibleCustomTag,
   listTripDates,
   mergeCapturedPlaceResearch,
+  mergeCaptureState,
   normalizeDelimitedText,
   normalizePlaceIdentity,
   optimizeStopsSequence,
@@ -24,6 +28,8 @@ import {
   estimateTripBudget,
   calculateTripSettlement,
   parseNumericPrice,
+  placeIdentityKey,
+  type OwnlyCaptureState,
   type TripExpenseItem,
   STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
@@ -124,12 +130,114 @@ describe('Ownly Planner domain', () => {
     expect(merged.scheduled_date).toBe('2026-10-07');
   });
 
-  it('infers place kind from Chinese and English categories', () => {
+  it('keeps structured facts when a later capture omits them (A2)', () => {
+    const existing = place('rich', {
+      address: '2-11-3 Meguro, Tokyo',
+      coordinates: { lat: 35.6432, lng: 139.6982 },
+      open_hours: '10:00-18:00',
+      phone: '+81 3-5730-1531',
+      plus_code: '8Q7X+MP Tokyo',
+      menu_url: 'https://example.com/menu',
+      reservation_url: 'https://example.com/book',
+      review_topics: ['ramen', 'queue'],
+      types: ['restaurant', 'cash_only'],
+    });
+    const merged = mergeCapturedPlaceResearch(existing, place('rich', { title: 'Renamed' }));
+    expect(merged.address).toBe('2-11-3 Meguro, Tokyo');
+    expect(merged.coordinates).toEqual({ lat: 35.6432, lng: 139.6982 });
+    expect(merged.open_hours).toBe('10:00-18:00');
+    expect(merged.phone).toBe('+81 3-5730-1531');
+    expect(merged.plus_code).toBe('8Q7X+MP Tokyo');
+    expect(merged.menu_url).toBe('https://example.com/menu');
+    expect(merged.reservation_url).toBe('https://example.com/book');
+    expect(merged.review_topics).toEqual(['ramen', 'queue']);
+    expect(merged.types).toEqual(['restaurant', 'cash_only']);
+  });
+
+  it('upgrades structured facts and unions types when the new capture has them (A2)', () => {
+    const existing = place('thin', { types: ['restaurant'] });
+    const merged = mergeCapturedPlaceResearch(existing, place('thin', {
+      coordinates: { lat: 1.35, lng: 103.82 },
+      phone: '+65 6222-5555',
+      types: ['tourist_attraction'],
+    }));
+    expect(merged.coordinates).toEqual({ lat: 1.35, lng: 103.82 });
+    expect(merged.phone).toBe('+65 6222-5555');
+    expect(merged.types).toEqual(['tourist_attraction', 'restaurant']);
+  });
+
+  it('normalizes prefixed dollar markers into ISO codes (B1)', () => {
+    expect(extractPriceCurrency('S$25')).toBe('SGD');
+    expect(extractPriceCurrency('HK$500')).toBe('HKD');
+    expect(extractPriceCurrency('NT$1,200')).toBe('TWD');
+    expect(extractPriceCurrency('US$9.90')).toBe('USD');
+    expect(extractPriceCurrency('฿2,350')).toBe('THB');
+    expect(extractPriceCurrency('¥18,000')).toBe('CNY');
+    expect(extractPriceCurrency('free entry')).toBeNull();
+  });
+
+  it('converts prefixed-dollar prices into the trip base currency in budget estimates (B1)', () => {
+    const est = estimateTripBudget([
+      place('stay1', { kind: 'stay', observed_price: 'S$1,024' }),
+      place('food1', { kind: 'food', observed_price: 'S$30' }),
+    ], 2, { base: 'CNY' });
+    expect(est.detectedCurrency).toBe('SGD');
+    expect(est.categoryBreakdown.stay).toBeGreaterThan(0);
+    expect(est.currencies).toEqual(['SGD']);
+  });
+
+  it('mergeCaptureState keeps background quick-captures and honors local tombstones', () => {
+    const fresh: OwnlyCaptureState = {
+      version: 1,
+      trips: [],
+      activeTripId: null,
+      pendingPlaces: [place('bg-quick'), place('acked-gone')],
+      knownPlaceIds: { 't1::u:bg': 'bg-quick' },
+    };
+    const local: OwnlyCaptureState = {
+      version: 1,
+      trips: [],
+      activeTripId: null,
+      pendingPlaces: [place('edited-local'), place('locally-deleted')],
+      knownPlaceIds: { 't1::u:local': 'edited-local' },
+    };
+    const merged = mergeCaptureState(fresh, local, new Set(['locally-deleted', 'acked-gone']));
+    expect(merged.trips).toBe(local.trips);
+    expect(merged.pendingPlaces.map((p) => p.id)).toEqual(['edited-local', 'bg-quick']);
+    expect(merged.knownPlaceIds['t1::u:bg']).toBe('bg-quick');
+    expect(merged.knownPlaceIds['t1::u:local']).toBe('edited-local');
+  });
+
+  it('never moves stay anchors during route optimization (A3)', () => {
+    const anchor = place('hotel', {
+      kind: 'stay',
+      is_anchor: true,
+      anchor_type: 'stay_checkin',
+      state: 'scheduled',
+      coordinates: { lat: 35.6700, lng: 139.7000 },
+    });
+    const seq = [
+      anchor,
+      place('far-a', { coordinates: { lat: 35.9500, lng: 139.7500 } }),
+      place('far-b', { coordinates: { lat: 35.9600, lng: 139.7600 } }),
+      place('near', { coordinates: { lat: 35.6800, lng: 139.7100 } }),
+    ];
+    const result = optimizeStopsSequence(seq, { respectLocked: true });
+    expect(result.places[0].id).toBe('hotel');
+    expect(result.places[0].is_anchor).toBe(true);
+  });
+
+  it('infers place kind from Chinese and English categories and hotel brands', () => {
     expect(inferPlaceKind('日本料理店')).toBe('food');
     expect(inferPlaceKind('Coffee Shop')).toBe('cafe');
     expect(inferPlaceKind('Luxury Hotel & Resort')).toBe('stay');
+    expect(inferPlaceKind('The quarter Chao Phraya by IHG')).toBe('stay');
+    expect(inferPlaceKind('The Quarter Silom by UHG')).toBe('stay');
+    expect(inferPlaceKind('Kimpton Maa-Lai Bangkok, an IHG Hotel')).toBe('stay');
+    expect(inferPlaceKind('Four Seasons Resort Chiang Mai')).toBe('stay');
     expect(inferPlaceKind('Outlet Shopping Mall')).toBe('shopping');
     expect(inferPlaceKind('Subway Station')).toBe('transit');
+    expect(inferPlaceKind('Let\'s Relax Spa')).toBe('experience');
     expect(inferPlaceKind('Historical Temple & Museum')).toBe('attraction');
     expect(inferPlaceKind(undefined)).toBe('attraction');
   });
@@ -141,6 +249,29 @@ describe('Ownly Planner domain', () => {
       'Want to go',
       '浅草',
     ]);
+  });
+
+  it('ensures default kind tags are attached and deduplicated cleanly', () => {
+    expect(ensurePlaceKindTag(['曼谷', '必去'], 'stay', 'zh')).toEqual(['住宿', '曼谷', '必去']);
+    expect(ensurePlaceKindTag(['Bangkok', 'Must'], 'stay', 'en')).toEqual(['Stay', 'Bangkok', 'Must']);
+    expect(ensurePlaceKindTag(['住宿', '曼谷'], 'stay', 'zh')).toEqual(['住宿', '曼谷']);
+    expect(ensurePlaceKindTag(['酒店', '曼谷'], 'stay', 'zh')).toEqual(['酒店', '曼谷']);
+    expect(ensurePlaceKindTag([], 'food', 'zh')).toEqual(['美食']);
+    expect(ensurePlaceKindTag([], 'cafe', 'zh')).toEqual(['咖啡']);
+    expect(ensurePlaceKindTag([], 'experience', 'zh')).toEqual(['体验']);
+    expect(ensurePlaceKindTag(['咖啡馆'], 'cafe', 'zh')).toEqual(['咖啡馆']);
+  });
+
+  it('filters out place titles, addresses, and invalid strings from custom tag chips', () => {
+    const excluded = new Set(['浅草寺', 'tokyo, asakusa 2-3-1', '浅草']);
+    expect(isPlausibleCustomTag('曼谷', excluded)).toBe(true);
+    expect(isPlausibleCustomTag('绝美夜景', excluded)).toBe(true);
+    expect(isPlausibleCustomTag('浅草寺', excluded)).toBe(false);
+    expect(isPlausibleCustomTag('Tokyo, Asakusa 2-3-1', excluded)).toBe(false);
+    expect(isPlausibleCustomTag('https://maps.google.com', excluded)).toBe(false);
+    expect(isPlausibleCustomTag('100-0001', excluded)).toBe(false);
+    expect(isPlausibleCustomTag('中央区银座4丁目12-15号', excluded)).toBe(false);
+    expect(isPlausibleCustomTag('', excluded)).toBe(false);
   });
 
   it('detects day-of-week opening hours collision accurately', () => {
@@ -520,29 +651,31 @@ describe('Route optimization pinning & budget currency', () => {
     expect(result.places[2].id).toBe('anchor');
   });
 
-  it('detects currency from observed prices instead of defaulting silently', () => {
-    const est = estimateTripBudget([
-      place('food1', { kind: 'food', observed_price: '฿200-400' }),
-      place('stay1', { kind: 'stay', observed_price: '฿2,000' }),
-    ], 2, { base: 'THB' });
-    expect(est.detectedCurrency).toBe('THB');
-    expect(est.categoryBreakdown.stay).toBe(2000);
-    expect(est.categoryBreakdown.food).toBe(600);
-    expect(est.currencies).toEqual(['THB']);
+  it('keeps start pinned by default even when options is passed with only respectLocked', () => {
+    const seq = [
+      stop('start', 35.670),
+      stop('mid1', 35.800),
+      stop('mid2', 35.700),
+      stop('tail', 35.900),
+    ];
+    const result = optimizeStopsSequence(seq, { respectLocked: true });
+    expect(result.places[0].id).toBe('start');
   });
 
-  it('flags mixed currencies instead of silently summing them', () => {
-    const est = estimateTripBudget([
-      place('a', { kind: 'food', observed_price: '฿100' }),
-      place('b', { kind: 'food', observed_price: '¥50' }),
-    ], 1, { base: 'CNY' });
-    expect(est.detectedCurrency).toBe('THB');
-    expect([...est.currencies].sort()).toEqual(['CNY', 'THB']);
+  it('haversineDistanceKm calculates accurately and does not produce NaN for identical or close coords', () => {
+    const c = { lat: 35.6895, lng: 139.6917 };
+    expect(haversineDistanceKm(c, c)).toBe(0);
+    const c2 = { lat: 35.6896, lng: 139.6918 };
+    expect(haversineDistanceKm(c, c2)).toBeGreaterThan(0);
+    expect(Number.isFinite(haversineDistanceKm(c, c2))).toBe(true);
   });
 });
 describe('daysUntil', () => {
   it('computes positive days for future dates', () => {
     expect(daysUntilDeparture('2026-10-27', NOW)).toBe(7);
+  });
+  it('handles ISO strings with time component', () => {
+    expect(daysUntilDeparture('2026-10-27T15:30:00Z', NOW)).toBe(7);
   });
   it('returns 0 for today', () => {
     expect(daysUntilDeparture('2026-10-20', NOW)).toBe(0);

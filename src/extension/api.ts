@@ -1,4 +1,4 @@
-import { inferPlaceKind, type PlannerTrip, type PlannerTripPlace } from '../domain/planner';
+import { ensurePlaceKindTag, inferPlaceKind, type PlannerTrip, type PlannerTripPlace } from '../domain/planner';
 import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, parseEntityListCoordinates, today } from './utils';
 
 export interface ResolvedListRef {
@@ -73,6 +73,7 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: Pl
           ? address.split(/[,，]/).map((p: string) => p.trim()).filter(Boolean)[0]
           : undefined;
 
+        const inferredKind = inferPlaceKind(placeTitle + ' ' + (address || ''));
         places.push({
           schema_version: '0.1',
           type: 'trip_place',
@@ -81,10 +82,10 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: Pl
           title: placeTitle,
           source_provider: 'google_maps',
           source_url: sourceUrl,
-          kind: inferPlaceKind(placeTitle + ' ' + (address || '')),
+          kind: inferredKind,
           area: placeArea,
           priority: 'want',
-          tags: combinedTags,
+          tags: ensurePlaceKindTag(combinedTags, inferredKind),
           why: userNote,
           signals: [],
           risks: [],

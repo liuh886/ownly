@@ -72,13 +72,13 @@ describe('PlannerRepository scheduling lifecycle', () => {
     expect(next?.state).toBe('scheduled');
     expect(next?.scheduled_date).toBe('2026-11-01');
     expect(next?.sort_order).toBe(5);
-    expect(next?.locked).toBe(true);
+    expect(next?.locked).toBe(false);
 
     const all = await plannerRepository.listPlaces();
     writeFileSync(join(tmpdir(), 'ownly-sched-after.json'), JSON.stringify(all));
     const stored = all.find((p) => p.id === 'pool');
     expect(stored?.state).toBe('scheduled');
-    expect(stored?.locked).toBe(true);
+    expect(stored?.locked).toBe(false);
   });
 
   it('auto-assigns the next sort_order per date when omitted', async () => {
@@ -86,11 +86,18 @@ describe('PlannerRepository scheduling lifecycle', () => {
     expect(next?.sort_order).toBe(2);
   });
 
-  it('unschedulePlace returns a place to the pool while keeping the lock', async () => {
+  it('unschedulePlace returns a place to the pool as unlocked candidate', async () => {
     const back = await plannerRepository.unschedulePlace('a');
     expect(back?.state).toBe('candidate');
     expect(back?.scheduled_date).toBeUndefined();
-    expect(back?.locked).toBe(true);
+    expect(back?.locked).toBe(false);
+  });
+
+  it('toggleLockPlace flips the lock state', async () => {
+    const locked = await plannerRepository.toggleLockPlace('a');
+    expect(locked?.locked).toBe(true);
+    const unlocked = await plannerRepository.toggleLockPlace('a');
+    expect(unlocked?.locked).toBe(false);
   });
 
   it('reorderScheduled rewrites sort_order sequentially for the day', async () => {
@@ -105,5 +112,6 @@ describe('PlannerRepository scheduling lifecycle', () => {
   it('returns false when the place id does not exist', async () => {
     expect(await plannerRepository.schedulePlace('ghost', '2026-11-01')).toBeNull();
     expect(await plannerRepository.unschedulePlace('ghost')).toBeNull();
+    expect(await plannerRepository.toggleLockPlace('ghost')).toBeNull();
   });
 });

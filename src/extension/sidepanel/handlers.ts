@@ -1,6 +1,7 @@
 import { expandAndExtractListId, resolveGoogleMapsListByUrl } from '../api';
 import {
   checkOpeningHoursCollision,
+  ensurePlaceKindTag,
   findExistingTripPlace,
   inferPlaceKind,
   inferSourceProvider,
@@ -12,7 +13,7 @@ import {
   type PlannerTrip,
   type PlannerTripPlace,
 } from '../../domain/planner';
-import { normalizeCaptureState, saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
+import { mergeWriteCaptureState, normalizeCaptureState, saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
@@ -22,6 +23,7 @@ import {
   applyI18n,
   populateEditTripForm,
   renderCandidatesList,
+  renderCurrencyPill,
   renderCurrentPlace,
   renderSmartListCard,
   renderState,
@@ -32,9 +34,24 @@ import {
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 
 export async function saveState(): Promise<void> {
-  const viaWorker = await saveCaptureStateViaWorker(store.state);
-  if (!viaWorker?.ok) {
-    await writeCaptureState(store.state);
+  try {
+    // Merge-write inside the single-writer queue: quick captures added by the
+    // background worker in between survive; locally deleted ids never return.
+    const viaWorker = await saveCaptureStateViaWorker(store.state, store.locallyDeletedIds);
+    if (viaWorker?.ok && viaWorker.state) {
+      store.state = viaWorker.state;
+    } else {
+      store.state = await mergeWriteCaptureState(store.state, store.locallyDeletedIds);
+    }
+    store.locallyDeletedIds.clear();
+  } catch (error) {
+    console.warn('[Ownly Capture] Failed to persist capture state', error);
+    setStatus(
+      store.lang === 'zh'
+        ? '⚠️ 状态保存失败：请重试或重新打开侧栏（扩展可能刚被重载）。'
+        : '⚠️ Failed to save state. Retry or reopen the panel (the extension may have been reloaded).',
+      'error',
+    );
   }
   renderState();
   renderCurrentPlace();
@@ -93,21 +110,26 @@ function buildPlaceFromDetected(
 ): PlannerTripPlace {
   const cleanTitle = cleanExtractedText(item.title);
   const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
-  return {
-    schema_version: '0.1',
-    type: 'trip_place',
-    id: crypto.randomUUID(),
-    trip_id: tripId,
-    title: cleanTitle,
-    source_provider: item.sourceProvider || 'google_maps',
-    source_url: item.sourceUrl,
-    kind: inferPlaceKind(cleanTitle + ' ' + (item.category || '') + ' ' + (cleanAddress || '')),
-    area: cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined,
-    priority: 'want',
-    tags: Array.from(new Set([...tripTags, item.category ? cleanExtractedText(item.category) : ''].filter(Boolean))),
-    why: item.userNote || item.summary || undefined,
-    signals: item.category ? [cleanExtractedText(item.category)] : [],
-    risks: [],
+    const inferredKind = inferPlaceKind(cleanTitle + ' ' + (item.category || '') + ' ' + (cleanAddress || ''));
+    return {
+      schema_version: '0.1',
+      type: 'trip_place',
+      id: crypto.randomUUID(),
+      trip_id: tripId,
+      title: cleanTitle,
+      source_provider: item.sourceProvider || 'google_maps',
+      source_url: item.sourceUrl,
+      kind: inferredKind,
+      area: cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined,
+      priority: 'want',
+      tags: ensurePlaceKindTag(
+        tripTags,
+        inferredKind,
+        store.lang,
+      ),
+      why: item.userNote || item.summary || undefined,
+      signals: [],
+      risks: [],
     notes: item.userNote || undefined,
     open_hours: item.openHours ? cleanExtractedText(item.openHours) : undefined,
     address: cleanAddress,
@@ -164,6 +186,71 @@ async function revealPlaceInMaps(sourceUrl: string): Promise<void> {
     if (!/^https:\/\/(www\.google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl)/i.test(tab.url)) return;
     await chrome.tabs.update(tab.id, { url: sourceUrl });
   } catch {}
+}
+
+/**
+ * Candidate pool drag-to-reorder: the ⠿ grip starts the drag, cards highlight
+ * as drop targets, and dropping reorders the visible subset via the domain
+ * helper (hidden/filtered places keep their absolute slots) then persists.
+ */
+function initCandidateDragReorder(): void {
+  let draggedPlaceId: string | null = null;
+
+  const clearDropMarkers = (): void => {
+    el.candidatesListContainer.querySelectorAll<HTMLElement>('.candidate-card.drop-target')
+      .forEach((card) => card.classList.remove('drop-target'));
+  };
+
+  el.candidatesListContainer.addEventListener('dragstart', (e) => {
+    const grip = (e.target as HTMLElement).closest<HTMLElement>('.grip');
+    const card = grip?.closest<HTMLElement>('.candidate-card');
+    if (!grip || !card) return;
+    draggedPlaceId = card.dataset.placeId || null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedPlaceId || '');
+    }
+    card.classList.add('dragging');
+  });
+
+  el.candidatesListContainer.addEventListener('dragend', () => {
+    draggedPlaceId = null;
+    clearDropMarkers();
+    el.candidatesListContainer.querySelectorAll<HTMLElement>('.candidate-card.dragging')
+      .forEach((card) => card.classList.remove('dragging'));
+  });
+
+  el.candidatesListContainer.addEventListener('dragover', (e) => {
+    if (!draggedPlaceId) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    clearDropMarkers();
+    const card = (e.target as HTMLElement).closest<HTMLElement>('.candidate-card');
+    if (card && card.dataset.placeId !== draggedPlaceId) card.classList.add('drop-target');
+  });
+
+  el.candidatesListContainer.addEventListener('drop', (e) => {
+    if (!draggedPlaceId) return;
+    e.preventDefault();
+    const targetCard = (e.target as HTMLElement).closest<HTMLElement>('.candidate-card');
+    const sourceId = draggedPlaceId;
+    draggedPlaceId = null;
+    clearDropMarkers();
+    if (!targetCard) return;
+    const targetId = targetCard.dataset.placeId;
+    if (!targetId || targetId === sourceId) return;
+
+    const visibleIds = Array.from(el.candidatesListContainer.querySelectorAll<HTMLElement>('.candidate-card'))
+      .map((card) => card.dataset.placeId)
+      .filter((id): id is string => Boolean(id));
+    const fromIdx = visibleIds.indexOf(sourceId);
+    const toIdx = visibleIds.indexOf(targetId);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    visibleIds.splice(toIdx, 0, visibleIds.splice(fromIdx, 1)[0]);
+    store.state = { ...store.state, pendingPlaces: reorderPendingPlaces(store.state.pendingPlaces, visibleIds) };
+    void saveState();
+  });
 }
 
 function initCandidateDelegation() {
@@ -227,6 +314,7 @@ function initCandidateDelegation() {
         if (editing?.source_url) void revealPlaceInMaps(editing.source_url);
       }
     } else if (action === 'delete') {
+      store.locallyDeletedIds.add(placeId);
       store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => p.id !== placeId) };
       if (store.editingCandidateId === placeId) store.editingCandidateId = null;
       void saveState().then(() => {
@@ -243,7 +331,6 @@ function initCandidateDelegation() {
 
       const kindSelect = form.querySelector<HTMLSelectElement>('select[name="kind"]');
       const prioritySelect = form.querySelector<HTMLSelectElement>('select[name="priority"]');
-      const areaInput = form.querySelector<HTMLInputElement>('input[name="area"]');
       const priceInput = form.querySelector<HTMLInputElement>('input[name="price"]');
       const ratingInput = form.querySelector<HTMLInputElement>('input[name="rating"]');
       const durationInput = form.querySelector<HTMLInputElement>('input[name="duration"]');
@@ -252,11 +339,11 @@ function initCandidateDelegation() {
 
       const newKind = (kindSelect?.value || 'attraction') as PlannerPlaceKind;
       const newPriority = (prioritySelect?.value || 'want') as PlannerPlacePriority;
-      const newArea = areaInput ? cleanExtractedText(areaInput.value) || undefined : undefined;
       const newPrice = priceInput ? cleanExtractedText(priceInput.value) || undefined : undefined;
       const numRating = ratingInput ? parseFloat(ratingInput.value) : NaN;
       const numDuration = durationInput ? parseInt(durationInput.value, 10) : NaN;
-      const newTags = tagsInput ? normalizeDelimitedText(tagsInput.value).map(cleanExtractedText).filter(Boolean) : [];
+      const rawTags = tagsInput ? normalizeDelimitedText(tagsInput.value).map(cleanExtractedText).filter(Boolean) : [];
+      const newTags = ensurePlaceKindTag(rawTags, newKind, store.lang);
       const newNotes = notesTextarea ? cleanExtractedText(notesTextarea.value) || undefined : undefined;
 
       store.state = {
@@ -267,7 +354,6 @@ function initCandidateDelegation() {
             ...p,
             kind: newKind,
             priority: newPriority,
-            area: newArea,
             observed_price: newPrice,
             observed_rating: Number.isFinite(numRating) && numRating >= 1 && numRating <= 5 ? numRating : undefined,
             duration_minutes: Number.isFinite(numDuration) && numDuration > 0 ? Math.min(1440, numDuration) : undefined,
@@ -368,6 +454,7 @@ export function initHandlers(): void {
       if (store.bulkSelected.size === 0) return;
     }
     const ids = new Set(store.bulkSelected);
+    for (const id of ids) store.locallyDeletedIds.add(id);
     store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => !ids.has(p.id)) };
     store.bulkSelected.clear();
     void saveState().then(() => setStatus(dict.candidateRemoved, 'success'));
@@ -390,26 +477,25 @@ export function initHandlers(): void {
     el.bulkDaySelect.value = '';
   });
 
-  // Currency selector: user picks a currency, applies to trip + form
+  // Currency selector: user picks the MAP currency used to read prices on this
+  // page. AUTO restores auto-detection. Trip currency (stats base) is untouched.
   el.currencySelector.addEventListener('change', () => {
     const dict = t();
     const selected = el.currencySelector.value;
     if (!selected) return;
-    store.pageDetectedCurrency = selected;
-    el.tripCurrency.value = selected;
-    el.editTripCurrency.value = selected;
-
-    if (store.state.activeTripId) {
-      store.state = {
-        ...store.state,
-        trips: store.state.trips.map((trip) =>
-          trip.id === store.state.activeTripId ? { ...trip, currency: selected, updated_at: new Date().toISOString() } : trip
-        ),
-      };
-      void saveState().then(() => {
-        setStatus(dict.currencyApplied(selected), 'success');
-      });
+    store.mapCurrencyOverride = selected === 'AUTO' ? undefined : selected;
+    if (store.mapCurrencyOverride) {
+      store.pageDetectedCurrency = store.mapCurrencyOverride;
+      if (store.currentPlace) {
+        store.currentPlace = { ...store.currentPlace, detectedCurrency: store.mapCurrencyOverride };
+      }
+      if (store.detectedSavedList) {
+        store.detectedSavedList = { ...store.detectedSavedList, detectedCurrency: store.mapCurrencyOverride };
+      }
     }
+    renderCurrencyPill();
+    renderCurrentPlace();
+    setStatus(dict.currencyApplied(selected), 'success');
   });
 
   // Select all / deselect all in bulk mode
@@ -517,15 +603,21 @@ export function initHandlers(): void {
         if (!placeTitle || isJunkNavigationText(placeTitle)) continue;
 
         const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, tripId, item.sourceUrl, item.sourcePlaceId);
-        const stableId = found?.id ?? crypto.randomUUID();
-        updatedKnown[placeIdentityKey(tripId, item.sourceUrl)] = stableId;
+        const idKey = placeIdentityKey(tripId, item.sourceUrl);
+        const stableId = found?.id ?? store.state.knownPlaceIds[idKey] ?? crypto.randomUUID();
+        updatedKnown[idKey] = stableId;
         incomingIds.add(stableId);
 
         const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
         const placeArea = cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined;
         const cleanNote = (!item.userNote || isJunkNavigationText(item.userNote)) ? undefined : cleanExtractedText(item.userNote);
         const cleanWhy = cleanNote || ((!item.summary || isJunkNavigationText(item.summary)) ? undefined : cleanExtractedText(item.summary));
-        const combinedTags = Array.from(new Set([...(found?.tags ?? []), ...(activeTrip.tags ?? []), listTag]));
+        const inferredKind = inferPlaceKind(placeTitle + ' ' + (item.category || '') + ' ' + (cleanAddress || ''));
+        const combinedTags = ensurePlaceKindTag(
+          Array.from(new Set([...(found?.tags ?? []), ...(activeTrip.tags ?? []), listTag])),
+          inferredKind,
+          store.lang,
+        );
 
         const captured: PlannerTripPlace = {
           schema_version: '0.1',
@@ -535,12 +627,12 @@ export function initHandlers(): void {
           title: placeTitle,
           source_provider: item.sourceProvider || 'google_maps',
           source_url: item.sourceUrl,
-          kind: inferPlaceKind(placeTitle + ' ' + (item.category || '') + ' ' + (cleanAddress || '')),
+          kind: inferredKind,
           area: found?.area ?? placeArea,
           priority: found?.priority ?? 'want',
           tags: combinedTags,
           why: found?.why ?? cleanWhy,
-          signals: found?.signals ?? (item.category ? [cleanExtractedText(item.category)] : []),
+          signals: found?.signals ?? [],
           risks: found?.risks ?? [],
           notes: found?.notes ?? cleanNote,
           open_hours: item.openHours ? cleanExtractedText(item.openHours) : (found?.open_hours ?? undefined),
@@ -646,8 +738,9 @@ export function initHandlers(): void {
                   const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, item.source_url, item.source_place_id);
                   if (found) continue;
                   item.trip_id = store.state.activeTripId;
-                  item.id = crypto.randomUUID();
-                  updatedKnown[placeIdentityKey(store.state.activeTripId, item.source_url)] = item.id;
+                  const idKey = placeIdentityKey(store.state.activeTripId, item.source_url);
+                  item.id = store.state.knownPlaceIds[idKey] ?? crypto.randomUUID();
+                  updatedKnown[idKey] = item.id;
                   mergedPending.set(item.id, item);
                   importedCount += 1;
                 }
@@ -666,9 +759,11 @@ export function initHandlers(): void {
           const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, sourceUrl);
           if (found) continue;
 
-          const stableId = crypto.randomUUID();
-          updatedKnown[placeIdentityKey(store.state.activeTripId, sourceUrl)] = stableId;
+          const idKey = placeIdentityKey(store.state.activeTripId, sourceUrl);
+          const stableId = store.state.knownPlaceIds[idKey] ?? crypto.randomUUID();
+          updatedKnown[idKey] = stableId;
 
+          const inferredKind = inferPlaceKind(safeDecodeUri(title));
           const place: PlannerTripPlace = {
             schema_version: '0.1',
             type: 'trip_place',
@@ -677,9 +772,9 @@ export function initHandlers(): void {
             title: safeDecodeUri(title),
             source_provider: inferSourceProvider(sourceUrl),
             source_url: sourceUrl,
-            kind: inferPlaceKind(safeDecodeUri(title)),
+            kind: inferredKind,
             priority: 'want',
-            tags: activeTrip?.tags ?? [],
+            tags: ensurePlaceKindTag(activeTrip?.tags ?? [], inferredKind, store.lang),
             signals: [],
             risks: [],
             observed_at: today(),
@@ -742,9 +837,11 @@ export function initHandlers(): void {
     for (const item of toAdd) {
       const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, tripId, item.sourceUrl, item.sourcePlaceId);
       if (found) continue;
-      const stableId = crypto.randomUUID();
-      updatedKnown[placeIdentityKey(tripId, item.sourceUrl)] = stableId;
+      const idKey = placeIdentityKey(tripId, item.sourceUrl);
+      const stableId = store.state.knownPlaceIds[idKey] ?? crypto.randomUUID();
+      updatedKnown[idKey] = stableId;
 
+      const inferredKind = inferPlaceKind((item.title || '') + ' ' + (item.category || '') + ' ' + (item.address || ''));
       const place: PlannerTripPlace = {
         schema_version: '0.1',
         type: 'trip_place',
@@ -753,11 +850,11 @@ export function initHandlers(): void {
         title: item.title,
         source_provider: item.sourceProvider || 'google_maps',
         source_url: item.sourceUrl,
-        kind: inferPlaceKind(item.category),
+        kind: inferredKind,
         priority: 'want',
-        tags: activeTrip?.tags ?? [],
+        tags: ensurePlaceKindTag(activeTrip?.tags ?? [], inferredKind, store.lang),
         why: item.userNote || item.summary,
-        signals: item.category ? [item.category] : [],
+        signals: [],
         risks: [],
         notes: item.userNote,
         open_hours: item.openHours,
@@ -840,6 +937,8 @@ export function initHandlers(): void {
     const deletedTripId = store.state.activeTripId;
     const remainingTrips = store.state.trips.filter((item) => item.id !== deletedTripId);
     const nextActiveId = remainingTrips[0]?.id || null;
+    const removedPlaces = store.state.pendingPlaces.filter((p) => p.trip_id === deletedTripId);
+    for (const place of removedPlaces) store.locallyDeletedIds.add(place.id);
 
     store.state = {
       ...store.state,
@@ -887,6 +986,7 @@ export function initHandlers(): void {
     const existing = getExistingPlaceForUrl(store.currentPlace.sourceUrl, store.currentPlace.sourcePlaceId);
     if (!existing) return;
 
+    store.locallyDeletedIds.add(existing.id);
     store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => p.id !== existing.id) };
     void saveState().then(() => {
       el.captureForm.reset();
@@ -912,12 +1012,19 @@ export function initHandlers(): void {
     const rating = Number(el.rating.value);
     const now = new Date().toISOString();
     const existing = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, store.currentPlace.sourceUrl, store.currentPlace.sourcePlaceId);
-    const stableId = existing?.id ?? crypto.randomUUID();
+    // Reuse the identity of an already-synced (acked) place so a re-capture
+    // updates the Vault entry instead of creating a duplicate.
     const placeKey = placeIdentityKey(store.state.activeTripId, store.currentPlace.sourceUrl);
+    const stableId = existing?.id ?? store.state.knownPlaceIds[placeKey] ?? crypto.randomUUID();
 
+    const selectedKind = (el.kind.value as PlannerPlaceKind) || 'other';
     const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
     const placeTags = normalizeDelimitedText(el.tags.value);
-    const combinedTags = Array.from(new Set([...(activeTrip?.tags ?? []), ...placeTags]));
+    const combinedTags = ensurePlaceKindTag(
+      Array.from(new Set([...(activeTrip?.tags ?? []), ...placeTags])),
+      selectedKind,
+      store.lang,
+    );
 
     const place: PlannerTripPlace = {
       schema_version: '0.1',
@@ -927,7 +1034,7 @@ export function initHandlers(): void {
       title: cleanExtractedText(store.currentPlace.title),
       source_provider: store.currentPlace.sourceProvider || 'google_maps',
       source_url: store.currentPlace.sourceUrl,
-      kind: el.kind.value as PlannerPlaceKind,
+      kind: selectedKind,
       area: cleanExtractedText(el.area.value.trim()) || undefined,
       tags: combinedTags,
       why: cleanExtractedText(el.why.value.trim()) || undefined,
@@ -979,12 +1086,16 @@ export function initHandlers(): void {
   });
 
   el.kind.addEventListener('change', () => {
-    el.price.placeholder = el.kind.value === 'stay'
+    const newKind = (el.kind.value as PlannerPlaceKind) || 'other';
+    el.price.placeholder = newKind === 'stay'
       ? t().pricePlaceholderStay
       : t().pricePlaceholder;
+    const currentTags = normalizeDelimitedText(el.tags.value);
+    el.tags.value = ensurePlaceKindTag(currentTags, newKind, store.lang).join(', ');
   });
 
   initCandidateDelegation();
+  initCandidateDragReorder();
 }
 
 

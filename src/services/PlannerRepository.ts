@@ -1,5 +1,6 @@
 import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
 import {
+  ensurePlaceKindTag,
   mergeCapturedPlaceResearch,
   type PlannerTrip,
   type PlannerTripPlace,
@@ -40,13 +41,23 @@ function fromRepoExpense(raw: Record<string, unknown>): TripExpenseItem {
 }
 
 function safeEntityId(id: string): string {
-  const safe = id.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
-  if (!safe) throw new Error('Planner entity id is empty');
+  const trimmed = id.trim();
+  const safe = trimmed.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  const hasNonAscii = /[^\x00-\x7F]/.test(trimmed);
+  if (!safe || hasNonAscii) {
+    let hash = 0;
+    for (let i = 0; i < trimmed.length; i++) {
+      hash = ((hash << 5) - hash) + trimmed.charCodeAt(i);
+      hash |= 0;
+    }
+    const hashStr = Math.abs(hash).toString(36);
+    return safe ? `${safe.slice(0, 30)}-${hashStr}` : `entity-${hashStr}`;
+  }
   return safe;
 }
 
 function entityFileName(entity: PlannerEntity): string {
-  const prefix = entity.type === 'trip' ? 'trip' : entity.type === 'trip_place' ? 'place' : 'booking';
+  const prefix = entity.type === 'trip' ? 'trip' : 'place';
   return `${prefix}--${safeEntityId(entity.id)}.md`;
 }
 
@@ -91,7 +102,11 @@ export class PlannerRepository {
   }
 
   async listPlaces(): Promise<PlannerTripPlace[]> {
-    return this.list<PlannerTripPlace>(PLANNER_DIRECTORIES.places, 'trip_place');
+    const places = await this.list<PlannerTripPlace>(PLANNER_DIRECTORIES.places, 'trip_place');
+    return places.map((p) => ({
+      ...p,
+      tags: ensurePlaceKindTag(p.tags, p.kind),
+    }));
   }
 
   async listExpenses(): Promise<TripExpenseItem[]> {
@@ -110,11 +125,8 @@ export class PlannerRepository {
   }
 
   private async upsert(entity: PlannerEntity): Promise<void> {
-    const directory = entity.type === 'trip'
-      ? PLANNER_DIRECTORIES.trips
-      : entity.type === 'trip_place'
-        ? PLANNER_DIRECTORIES.places
-        : PLANNER_DIRECTORIES.expenses;
+    await this.initialize();
+    const directory = entity.type === 'trip' ? PLANNER_DIRECTORIES.trips : PLANNER_DIRECTORIES.places;
 
     await this.store.writeMarkdownFile(
       this.directory(directory),
@@ -139,14 +151,18 @@ export class PlannerRepository {
       for (const existing of await this.listPlaces()) existingMap.set(existing.id, existing);
     }
     for (const place of places) {
-      if (place.locked === undefined) {
-        const existing = existingMap.get(place.id);
+      const normalizedPlace: PlannerTripPlace = {
+        ...place,
+        tags: ensurePlaceKindTag(place.tags, place.kind),
+      };
+      if (normalizedPlace.locked === undefined) {
+        const existing = existingMap.get(normalizedPlace.id);
         if (existing) {
-          await this.upsert(mergeCapturedPlaceResearch(existing, place));
+          await this.upsert(mergeCapturedPlaceResearch(existing, normalizedPlace));
           continue;
         }
       }
-      await this.upsert(place);
+      await this.upsert(normalizedPlace);
     }
   }
 
@@ -169,20 +185,24 @@ export class PlannerRepository {
    * capture-merge so the schedule state is never silently reverted.
    */
 
-  async schedulePlace(placeId: string, date: string, sortOrder?: number): Promise<PlannerTripPlace | null> {
+  async schedulePlace(placeId: string, date: string, sortOrder?: number, locked?: boolean): Promise<PlannerTripPlace | null> {
     await this.initialize();
     const places = await this.listPlaces();
     const existing = places.find((place) => place.id === placeId);
     if (!existing) return null;
-    const order = sortOrder ?? places
-      .filter((p) => p.trip_id === existing.trip_id && p.scheduled_date === date)
-      .reduce((max, p) => Math.max(max, p.sort_order ?? -1), -1) + 1;
+    const order = sortOrder ?? (
+      existing.scheduled_date === date && existing.sort_order !== undefined
+        ? existing.sort_order
+        : places
+            .filter((p) => p.id !== placeId && p.trip_id === existing.trip_id && p.scheduled_date === date)
+            .reduce((max, p) => Math.max(max, p.sort_order ?? -1), -1) + 1
+    );
     const next: PlannerTripPlace = {
       ...existing,
       state: 'scheduled',
       scheduled_date: date,
       sort_order: order,
-      locked: true,
+      locked: locked !== undefined ? locked : (existing.locked ?? false),
       updated_at: new Date().toISOString(),
     };
     await this.upsert(next);
@@ -199,7 +219,21 @@ export class PlannerRepository {
       state: 'candidate',
       scheduled_date: undefined,
       sort_order: undefined,
-      locked: true,
+      locked: false,
+      updated_at: new Date().toISOString(),
+    };
+    await this.upsert(next);
+    return next;
+  }
+
+  async toggleLockPlace(placeId: string): Promise<PlannerTripPlace | null> {
+    await this.initialize();
+    const places = await this.listPlaces();
+    const existing = places.find((place) => place.id === placeId);
+    if (!existing) return null;
+    const next: PlannerTripPlace = {
+      ...existing,
+      locked: !existing.locked,
       updated_at: new Date().toISOString(),
     };
     await this.upsert(next);

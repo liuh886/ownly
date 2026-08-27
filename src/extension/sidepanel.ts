@@ -12,7 +12,8 @@ import {
   renderState,
 } from './sidepanel/ui';
 
-// Live-reload when the background service worker (quick capture) writes state externally
+// Live-reload when the background service worker (quick capture / web ack)
+// writes state externally.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[CAPTURE_STORAGE_KEY]) return;
   const incoming = normalizeCaptureState(changes[CAPTURE_STORAGE_KEY].newValue);
