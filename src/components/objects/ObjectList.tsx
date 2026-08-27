@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type { WYQDStoredEntity } from '@/core/repository';
-import type { ReviewEntry, WYQDObject } from '@/domain/types';
+import type { ObjectLogEntry, ReviewEntry, WYQDObject } from '@/domain/types';
 import { useI18n } from '@/core/i18n-context';
 
 import { useObjectListStats } from './useObjectListStats';
@@ -46,6 +46,7 @@ export interface ObjectListFocus {
 interface ObjectListProps {
   objects: WYQDStoredEntity<WYQDObject>[];
   reviews?: WYQDStoredEntity<ReviewEntry>[];
+  logs?: WYQDStoredEntity<ObjectLogEntry>[];
   focus?: ObjectListFocus | null;
   disabled?: boolean;
   onUpdate: (fileName: string, object: WYQDObject, body: string) => Promise<void>;
@@ -66,6 +67,7 @@ interface ObjectListProps {
 export function ObjectList({
   objects,
   reviews = [],
+  logs = [],
   focus,
   disabled,
   onUpdate,
@@ -85,7 +87,7 @@ export function ObjectList({
   const [showAllPhysical, setShowAllPhysical] = useState(false);
   const [showAllSupporting, setShowAllSupporting] = useState(false);
   const [openActionMenuFileName, setOpenActionMenuFileName] = useState<string | null>(null);
-  const { confirm, prompt } = useConfirmDialog();
+  const { confirm, prompt, dialog } = useConfirmDialog();
 
   const {
     query,
@@ -218,110 +220,114 @@ export function ObjectList({
   }
 
   return (
-    <section className="space-y-5">
-      <ObjectConsole
-        objectsCount={objects.length}
-        allPhysicalObjectsCount={allPhysicalObjects.length}
-        totalCost={totalCost}
-        ownedPhysicalObjectsCount={ownedPhysicalObjectsCount}
-        totalResidualValue={totalResidualValue}
-        averageDailyCost={averageDailyCost}
-        observingObjectsCount={observingObjectsCount}
-        observingAmount={observingAmount}
-        controlCounts={controlCounts}
-        controlBucketFilter={controlBucketFilter}
-        applyControlBucket={applyControlBucket}
-        query={query}
-        setQuery={setQuery}
-        sortBy={sortBy}
-        setSortBy={setSortBy}
-        typeFilter={typeFilter}
-        setTypeFilter={setTypeFilter}
-        statusGroupFilter={statusGroupFilter}
-        setStatusGroupFilter={setStatusGroupFilter}
-        filter={filter}
-        setFilter={setFilter}
-        closeInlinePanels={closeInlinePanels}
-
-        getSortLabels={getSortLabels}
-        objectTypeFilterLabels={getObjectTypeFilterLabels(t)}
-        getObjectTypeFilterCount={getObjectTypeFilterCount}
-        objectStatusGroupLabels={getObjectStatusGroupLabels(t)}
-        getObjectStatusGroupCount={getObjectStatusGroupCount}
-        filterLabels={getFilterLabels(t)}
-        visiblePhysicalFilterCounts={visiblePhysicalFilterCounts}
-        objectControlLabels={getObjectControlLabels(t)}
-        hasPhysicalObjects={physicalObjects.length > 0}
-      />
-
-      <div className="space-y-4">
-        {visibleFilteredObjects.map((stored) => (
-          <ObjectCardPhysical
-            key={stored.fileName}
-            stored={stored}
-            isEditing={editingFileName === stored.fileName}
-            isDetailing={selectedFileName === stored.fileName}
-            disabled={disabled}
-            openActionMenuFileName={openActionMenuFileName}
-            exitingFileName={exitingFileName}
-            deletingFileName={deletingFileName}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-            setEditingFileName={setEditingFileName}
-            setSelectedFileName={setSelectedFileName}
-            setOpenActionMenuFileName={setOpenActionMenuFileName}
-            setExitingFileName={setExitingFileName}
-            setDeletingFileName={setDeletingFileName}
-            confirm={confirm}
-            menuItemClass={menuItemClass}
-          />
-        ))}
-        <ObjectPagination 
-          hiddenCount={hiddenPhysicalCount} 
-          onShowAll={() => setShowAllPhysical(true)} 
-          label="" 
+    <>
+      <section className="space-y-5">
+        <ObjectConsole
+          objectsCount={objects.length}
+          allPhysicalObjectsCount={allPhysicalObjects.length}
+          totalCost={totalCost}
+          ownedPhysicalObjectsCount={ownedPhysicalObjectsCount}
+          totalResidualValue={totalResidualValue}
+          averageDailyCost={averageDailyCost}
+          observingObjectsCount={observingObjectsCount}
+          observingAmount={observingAmount}
+          controlCounts={controlCounts}
+          controlBucketFilter={controlBucketFilter}
+          applyControlBucket={applyControlBucket}
+          query={query}
+          setQuery={setQuery}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+          typeFilter={typeFilter}
+          setTypeFilter={setTypeFilter}
+          statusGroupFilter={statusGroupFilter}
+          setStatusGroupFilter={setStatusGroupFilter}
+          filter={filter}
+          setFilter={setFilter}
+          closeInlinePanels={closeInlinePanels}
+          getSortLabels={getSortLabels}
+          objectTypeFilterLabels={getObjectTypeFilterLabels(t)}
+          getObjectTypeFilterCount={getObjectTypeFilterCount}
+          objectStatusGroupLabels={getObjectStatusGroupLabels(t)}
+          getObjectStatusGroupCount={getObjectStatusGroupCount}
+          filterLabels={getFilterLabels(t)}
+          visiblePhysicalFilterCounts={visiblePhysicalFilterCounts}
+          objectControlLabels={getObjectControlLabels(t)}
+          hasPhysicalObjects={physicalObjects.length > 0}
         />
-        {visibleSupportingObjects.map((stored) => (
-          <ObjectCardSupporting
-            key={stored.fileName}
-            stored={stored}
-            reviews={reviews}
-            isEditing={editingFileName === stored.fileName}
-            isDetailing={selectedFileName === stored.fileName}
-            isReviewing={reviewingFileName === stored.fileName}
-            disabled={disabled}
-            openActionMenuFileName={openActionMenuFileName}
-            exitingFileName={exitingFileName}
-            deletingFileName={deletingFileName}
-            reviewSummary={reviewSummary}
-            reviewFoodScore={reviewFoodScore}
-            reviewSceneryScore={reviewSceneryScore}
-            reviewExperienceScore={reviewExperienceScore}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-            onCreateObjectReview={onCreateObjectReview}
-            setEditingFileName={setEditingFileName}
-            setSelectedFileName={setSelectedFileName}
-            setReviewingFileName={setReviewingFileName}
-            setOpenActionMenuFileName={setOpenActionMenuFileName}
-            setExitingFileName={setExitingFileName}
-            setDeletingFileName={setDeletingFileName}
-            setReviewSummary={setReviewSummary}
-            setReviewFoodScore={setReviewFoodScore}
-            setReviewSceneryScore={setReviewSceneryScore}
-            setReviewExperienceScore={setReviewExperienceScore}
-            cancelObjectReview={cancelObjectReview}
-            confirm={confirm}
-            prompt={prompt}
-            menuItemClass={menuItemClass}
+
+        <div className="space-y-4">
+          {visibleFilteredObjects.map((stored) => (
+            <ObjectCardPhysical
+              key={stored.fileName}
+              stored={stored}
+              logs={logs}
+              isEditing={editingFileName === stored.fileName}
+              isDetailing={selectedFileName === stored.fileName}
+              disabled={disabled}
+              openActionMenuFileName={openActionMenuFileName}
+              exitingFileName={exitingFileName}
+              deletingFileName={deletingFileName}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              setEditingFileName={setEditingFileName}
+              setSelectedFileName={setSelectedFileName}
+              setOpenActionMenuFileName={setOpenActionMenuFileName}
+              setExitingFileName={setExitingFileName}
+              setDeletingFileName={setDeletingFileName}
+              confirm={confirm}
+              menuItemClass={menuItemClass}
+            />
+          ))}
+          <ObjectPagination 
+            hiddenCount={hiddenPhysicalCount} 
+            onShowAll={() => setShowAllPhysical(true)} 
+            label="" 
           />
-        ))}
-        <ObjectPagination 
-          hiddenCount={hiddenSupportingCount} 
-          onShowAll={() => setShowAllSupporting(true)} 
-          label="" 
-        />
-      </div>
-    </section>
+          {visibleSupportingObjects.map((stored) => (
+            <ObjectCardSupporting
+              key={stored.fileName}
+              stored={stored}
+              reviews={reviews}
+              logs={logs}
+              isEditing={editingFileName === stored.fileName}
+              isDetailing={selectedFileName === stored.fileName}
+              isReviewing={reviewingFileName === stored.fileName}
+              disabled={disabled}
+              openActionMenuFileName={openActionMenuFileName}
+              exitingFileName={exitingFileName}
+              deletingFileName={deletingFileName}
+              reviewSummary={reviewSummary}
+              reviewFoodScore={reviewFoodScore}
+              reviewSceneryScore={reviewSceneryScore}
+              reviewExperienceScore={reviewExperienceScore}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              onCreateObjectReview={onCreateObjectReview}
+              setEditingFileName={setEditingFileName}
+              setSelectedFileName={setSelectedFileName}
+              setReviewingFileName={setReviewingFileName}
+              setOpenActionMenuFileName={setOpenActionMenuFileName}
+              setExitingFileName={setExitingFileName}
+              setDeletingFileName={setDeletingFileName}
+              setReviewSummary={setReviewSummary}
+              setReviewFoodScore={setReviewFoodScore}
+              setReviewSceneryScore={setReviewSceneryScore}
+              setReviewExperienceScore={setReviewExperienceScore}
+              cancelObjectReview={cancelObjectReview}
+              confirm={confirm}
+              prompt={prompt}
+              menuItemClass={menuItemClass}
+            />
+          ))}
+          <ObjectPagination 
+            hiddenCount={hiddenSupportingCount} 
+            onShowAll={() => setShowAllSupporting(true)} 
+            label="" 
+          />
+        </div>
+      </section>
+      {dialog}
+    </>
   );
 }

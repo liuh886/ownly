@@ -1,6 +1,8 @@
 # Ownly User Guide
 
-Ownly is a local-first ownership memory and decision ledger. It records possessions, recurring costs, experiences, snapshots, reviews, and object experience logs as Markdown in an **Ownly data folder**.
+Ownly is a local-first ownership memory and decision ledger. It records possessions, recurring costs, experiences, snapshots, reviews, and object experience logs as Markdown in an **Ownly data folder** that you control.
+
+Ownly does not host your personal ledger. You choose where the filesystem folder lives.
 
 ## 1. Choose an interface
 
@@ -9,28 +11,50 @@ Ownly is a local-first ownership memory and decision ledger. It records possessi
 | Hosted Web app | No | Open Ownly directly from GitHub Pages |
 | Installed PWA | No | Use the same Web runtime in a standalone app window |
 | Obsidian plugin | Yes | Work with the shared Ownly data inside Obsidian |
+| Agent CLI | No | Deterministic scripting and validated local mutations |
+| Local MCP | No | Read-only Ownly evidence for compatible local agents |
 
 Web and PWA have identical data behavior. The PWA adds installation and offline application-shell startup; it does not create a separate database.
 
-## 2. Create or open local data
+## 2. Choose where your Ownly data lives
 
-On first Web/PWA launch, Ownly offers two actions.
+On first Web/PWA launch, Ownly asks for a storage location and then lets you create new data or open an existing Ownly data folder.
 
-### Create new local data
+### On this device
+
+Choose a normal local filesystem folder. Ownly reads and writes that folder directly. Nothing is synchronized unless you configure synchronization outside Ownly.
+
+### In your personal cloud folder
+
+You may choose a local folder already synchronized by a provider you control, such as Dropbox, Google Drive, OneDrive, iCloud Drive, or another filesystem-sync service.
+
+This does not create a cloud backend inside Ownly:
+
+- Ownly still reads and writes normal local Markdown files;
+- Ownly does not use provider APIs or OAuth;
+- Ownly does not store provider credentials;
+- the provider handles uploading, downloading, synchronization, retention, and provider-level conflicts under its own policies;
+- when the provider supports online-only placeholders, keep the Ownly folder available offline;
+- use **one sync provider per Ownly data folder** to reduce conflicting copies.
+
+Both storage choices use the same Ownly repository, schema, and directory picker.
+
+### Create new data
 
 Choose a save location. Ownly initializes the required directory structure automatically.
 
 - Selecting `Documents` creates `Documents/Ownly/...`.
 - Selecting an empty folder already named `Ownly` uses it directly.
 - Selecting an Obsidian Vault root creates or opens `<Vault>/Ownly/...`.
+- Selecting a Dropbox / Google Drive / OneDrive / iCloud Drive local folder works the same way from Ownly's point of view.
 
-Obsidian is not required. It is recommended because the Markdown remains directly readable, searchable, and editable.
+Obsidian is not required. It is useful when you want the Markdown directly readable, searchable, and editable inside Obsidian.
 
 ### Open existing data
 
-Choose an existing Ownly data root or an Obsidian Vault containing Ownly data. The browser requests explicit local read/write permission.
+Choose an existing Ownly data root or an Obsidian Vault containing Ownly data. The browser requests explicit read/write permission for the selected filesystem folder.
 
-The hosted site does not upload personal Markdown. The PWA service worker caches application resources, not the user's data files.
+The hosted site does not receive the personal Markdown merely because you selected it. The PWA service worker caches application resources, not the user's data files. If the selected folder is synchronized by a third-party provider, that provider may transfer those files under its own privacy and security policy.
 
 ## 3. Create your first real object
 
@@ -51,15 +75,15 @@ Important behavior:
 - When the dataset remains empty, a small banner allows the chooser to be reopened later.
 - Existing datasets are not interrupted by the first-object prompt.
 
-Demo mode remains available before local data is connected, but demo records are not silently copied into real data.
+Demo mode remains available before a real data folder is connected, but demo records are not silently copied into real data.
 
 ## 4. Home dashboard
 
 The Home dashboard summarizes:
 
 - **Net worth** from account snapshots;
-- **Monthly fixed cost** from active recurring costs;
-- **Daily and annualized cost** for relevant records;
+- **Monthly subscription cost** from active recurring costs;
+- **Daily usage and annualized cost** for relevant records;
 - **Pending decisions and reviews**;
 - **Quick entry** for creating a new object;
 - **Data scale and health**.
@@ -140,8 +164,6 @@ Example:
 Tokyo trip / travel / 18000 / 16500 / 2026-05-04 / Travel / completed / JP / Tokyo / 35.6762 / 139.6503
 ```
 
-Aliases such as `fixed` for `recurring_cost`, `travel` for travel experiences, and Chinese type/status terms remain supported where documented.
-
 ## 7. Snapshots
 
 Snapshots record point-in-time account and net-worth facts.
@@ -194,24 +216,24 @@ Doctor performs deterministic checks such as:
 - invalid costs or date order;
 - missing review or object references;
 - stale snapshots;
-- missing data directories.
+- missing data directories;
+- filesystem accessibility needed to read the selected Ownly data folder.
 
-Doctor does not use AI. It validates local facts and relationships.
+Doctor does not use AI and does not inspect Dropbox, Google Drive, OneDrive, iCloud, or other provider accounts. Provider sync health remains the provider's responsibility.
 
-## 12. Agent CLI
+## 12. Agent CLI and MCP
 
-Scripts and external AI agents should use the documented CLI instead of editing YAML through unvalidated file manipulation.
+Scripts and external AI agents should use documented Ownly interfaces instead of editing YAML through unvalidated file manipulation.
 
-```bash
-npm run wyqd -- --vault <path> object list --json
-```
+The Agent CLI exposes deterministic facts, validated mutations, JSON output, and documented error codes. The local MCP server exposes a read-only tool surface over the same Ownly data folder.
 
-The CLI exposes deterministic facts, validated mutations, JSON output, and documented error codes. Ownly does not include AI chat, embeddings, or model-generated recommendations.
+The selected data folder remains the source of truth whether it is stored in a normal local location or a personal cloud folder. Facts explicitly returned through MCP can enter the connected agent/provider context.
 
 See:
 
 - [Agent CLI Contract](AGENT_CLI_CONTRACT.md)
 - [Agent CLI Guide](AGENT_CLI_GUIDE.md)
+- [Agent / MCP Guide](MCP.md)
 - [Data Model](DATA_MODEL.md)
 - [Terminology Contract](TERMINOLOGY.md)
 
@@ -219,8 +241,14 @@ See:
 
 Use these terms consistently:
 
-- **Ownly data folder** — cross-runtime storage term;
-- **local data** — Web/PWA user-facing term;
+- **Ownly data folder** — canonical cross-runtime storage term;
+- **user-controlled storage** — the principle that the user chooses where the folder lives;
+- **local folder** — normal filesystem folder on the current device;
+- **personal cloud folder** — local filesystem folder synchronized by the user's own provider;
 - **Obsidian Vault** — only for an actual Vault or the Obsidian runtime;
 - **Archive** — recoverable removal;
 - **Permanently delete** — irreversible removal.
+
+The product principle is:
+
+> **Ownly doesn't host your data. You choose where your files live.**

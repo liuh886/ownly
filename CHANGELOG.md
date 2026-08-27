@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added opt-in Ownly MCP writes for objects, lifecycle actions, logs, reviews, snapshots, and recoverable archive/restore.
+- Added short-lived before/after previews, explicit commit/discard tools, safety backups, idempotent retries, and stale-write conflict detection.
+
+### Improved
+
+- Unified CLI and MCP data-root resolution: `Ownly/` remains the default folder, while a custom root containing `Objects/` can be passed directly.
+- Fixed local-date formatting so positive-offset time zones do not report recurring billing dates one day early.
+
 ## 1.1.0 (2026-06-23)
 
 ### Added

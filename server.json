@@ -2,25 +2,32 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.liuh886/ownly",
   "title": "Ownly",
-  "description": "Read-only local access to validated Ownly ownership, subscription, review, history, and data-health evidence.",
+  "description": "Local-first access to validated Ownly evidence with opt-in, preview-before-commit writes and safety backups.",
   "repository": {
     "url": "https://github.com/liuh886/ownly",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@ownly/mcp",
-      "version": "0.1.0",
+      "identifier": "@ownly-app/mcp",
+      "version": "0.2.0",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "OWNLY_DATA_DIR",
-          "description": "Absolute path to the directory containing the canonical Ownly/ data folder.",
+          "description": "Absolute path to a parent containing Ownly/ or directly to a custom Ownly data root containing Objects/.",
           "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "OWNLY_MCP_ALLOW_WRITE",
+          "description": "Set to 1 to enable two-phase persistent write commits. Omit for read-only mode.",
+          "isRequired": false,
           "isSecret": false,
           "format": "string"
         }

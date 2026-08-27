@@ -34,16 +34,19 @@ if (!rootLayout.includes('membership-config.js')) {
 }
 for (const reference of [
   'https://liuh886.github.io/admin/shared',
-  'account-shell.js?v=6',
-  'account-upgrade.js?v=5',
+  'account-shell.js?v=7',
+  'product-referral.js?v=5',
   "import './account-shell.css'",
 ]) {
   if (!appLayout.includes(reference)) throw new Error(`Ownly app layout is missing ${reference}`);
 }
-if (!routeAccountStyles.includes('account-shell.css?v=5')) {
-  throw new Error('Ownly app route must load Account Shell v5 styles.');
+if (appLayout.includes('product-referral.js?v=4')) {
+  throw new Error('Ownly must not pin the retired referral JS v4 after the user-facing copy release.');
 }
-for (const forbiddenRootAsset of ['account-shell.css?v=5', 'account-shell.js?v=6', 'account-upgrade.js?v=5']) {
+if (!routeAccountStyles.includes('account-shell.css?v=6')) {
+  throw new Error('Ownly app route must load canonical Account Shell v6 styles.');
+}
+for (const forbiddenRootAsset of ['account-shell.css?v=6', 'account-shell.js?v=7']) {
   if (rootLayout.includes(forbiddenRootAsset)) {
     throw new Error(`Ownly marketing root must not load app-only account asset ${forbiddenRootAsset}`);
   }
@@ -58,9 +61,20 @@ for (const contract of [
   'billingEnabled: true',
   'feedbackEnabled: false',
   'sb_publishable_',
-  'Markdown、附件、归档和本地目录不会上传',
+  'Markdown、附件、归档和本地目录不会自动上传',
+  'Ownly Pro 当前不锁定或减少任何现有本地核心功能',
 ]) {
   if (!config.includes(contract)) throw new Error(`Ownly account config is missing ${contract}`);
+}
+for (const forbiddenCopy of [
+  '共享账户',
+  '支持产品持续开发',
+  '未来正式上线',
+  'support continued development',
+  'Future released advanced templates',
+  'shared account',
+]) {
+  if (config.includes(forbiddenCopy)) throw new Error(`Ownly account UI contains internal or roadmap copy: ${forbiddenCopy}`);
 }
 for (const contract of ['data-account-slot', 'ownly-account-slot', "import './account-integration.css'"]) {
   if (!header.includes(contract)) throw new Error(`Ownly app header is missing ${contract}`);
@@ -79,8 +93,11 @@ for (const forbidden of [/sk_(live|test)_/, /whsec_/, /sb_secret_/, /service_rol
 if (combined.includes('membership-widget.js') || combined.includes('membership-widget.css')) {
   throw new Error('Ownly must not load the retired local membership widget');
 }
+if (combined.includes('account-upgrade.js') || combined.includes('account-upgrade.css')) {
+  throw new Error('Ownly must not load the retired secondary account-upgrade runtime');
+}
 for (const forbidden of ['Objects/', 'Accounts/', 'Snapshots/', 'Reviews/', 'Logs/']) {
   if (config.includes(forbidden)) throw new Error(`Ownly account config must not inspect local data paths: ${forbidden}`);
 }
 
-console.log('Ownly scopes Account Shell v6 and Account Upgrade v5 to /app, keeps the native header slot, and preserves local-data isolation.');
+console.log('Ownly scopes canonical Account Shell v7/v6 and referral v5 to /app, keeps the native header slot, preserves local-data isolation, and rejects owner-facing roadmap copy.');

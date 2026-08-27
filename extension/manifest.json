@@ -1,0 +1,85 @@
+{
+  "manifest_version": 3,
+  "name": "Ownly Capture",
+  "version": "0.4.0",
+  "description": "Capture personal travel research from Google Maps into Ownly Planner.",
+  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
+  "host_permissions": [
+    "https://www.google.com/maps*",
+    "https://maps.google.com/*",
+    "https://www.google.co.th/maps*",
+    "https://www.google.co.jp/maps*",
+    "https://www.google.com.sg/maps*",
+    "https://www.google.com.tw/maps*",
+    "https://www.google.com.hk/maps*",
+    "https://www.google.co.uk/maps*",
+    "https://www.google.com.au/maps*",
+    "https://www.google.ca/maps*",
+    "https://www.google.fr/maps*",
+    "https://www.google.de/maps*",
+    "https://www.google.it/maps*",
+    "https://www.google.es/maps*",
+    "https://maps.app.goo.gl/*",
+    "https://goo.gl/*",
+    "https://*.tabelog.com/*",
+    "https://*.xiaohongshu.com/*",
+    "https://*.booking.com/*",
+    "https://liuh886.github.io/ownly/*",
+    "https://zhihaol.eu.org/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Ownly Capture"
+  },
+  "commands": {
+    "quick-capture-place": {
+      "suggested_key": {
+        "default": "Alt+Shift+C",
+        "mac": "Alt+Shift+C"
+      },
+      "description": "Quickly capture current place to active trip"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.google.com/maps*",
+        "https://maps.google.com/*",
+        "https://www.google.co.th/maps*",
+        "https://www.google.co.jp/maps*",
+        "https://www.google.com.sg/maps*",
+        "https://www.google.com.tw/maps*",
+        "https://www.google.com.hk/maps*",
+        "https://www.google.co.uk/maps*",
+        "https://www.google.com.au/maps*",
+        "https://www.google.ca/maps*",
+        "https://www.google.fr/maps*",
+        "https://www.google.de/maps*",
+        "https://www.google.it/maps*",
+        "https://www.google.es/maps*",
+        "https://*.tabelog.com/*",
+        "https://*.xiaohongshu.com/*",
+        "https://*.booking.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://liuh886.github.io/ownly/*",
+        "https://zhihaol.eu.org/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["ownly-bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

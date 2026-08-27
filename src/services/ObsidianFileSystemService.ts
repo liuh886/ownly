@@ -6,6 +6,26 @@ import {
   shouldUseSelectedDirectoryAsDataRoot,
 } from './ownly-data-layout';
 
+interface FileSystemPermissionDescriptor {
+  mode?: 'read' | 'readwrite';
+}
+
+declare global {
+  interface FileSystemHandle {
+    queryPermission?(descriptor?: { mode?: 'read' | 'readwrite' }): Promise<PermissionState>;
+    requestPermission?(descriptor?: { mode?: 'read' | 'readwrite' }): Promise<PermissionState>;
+  }
+  interface FileSystemFileHandle extends FileSystemHandle {
+    getFile(): Promise<File>;
+  }
+  interface FileSystemDirectoryHandle {
+    values(): AsyncIterableIterator<FileSystemFileHandle | FileSystemDirectoryHandle>;
+  }
+  interface Window {
+    showDirectoryPicker?(options?: { mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>;
+  }
+}
+
 export interface WishlistItem {
   name: string;
   price_estimated: number;

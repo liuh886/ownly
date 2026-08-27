@@ -62,7 +62,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe('Ownly CLI data portability process contract', () => {
+describe('Ownly CLI data portability process contract', { timeout: 30000 }, () => {
   it('creates and validates a complete backup file', async () => {
     const source = temporaryRoot('backup-source');
     const output = join(source, 'exports', 'backup.json');

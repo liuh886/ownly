@@ -6,7 +6,7 @@ import { ObjectDetailPanel } from './ObjectDetailPanel';
 import { getDailyCost, getPhysicalAccentClasses, getStatusLabel, formatDateRange, type TranslateFn } from './ObjectListUtils';
 import { getPhysicalBucket } from './useObjectFilterSort';
 import type { WYQDStoredEntity } from '@/core/repository';
-import type { PhysicalObject, WYQDObject } from '@/domain/types';
+import type { ObjectLogEntry, PhysicalObject, WYQDObject } from '@/domain/types';
 import { todayISO } from '@/lib/format';
 
 function MoreActionsButton({
@@ -38,6 +38,7 @@ function MoreActionsButton({
 
 export function ObjectCardPhysical({
   stored,
+  logs,
   isEditing,
   isDetailing,
   disabled,
@@ -55,6 +56,7 @@ export function ObjectCardPhysical({
   menuItemClass,
 }: {
   stored: WYQDStoredEntity<WYQDObject>;
+  logs?: WYQDStoredEntity<ObjectLogEntry>[];
   isEditing: boolean;
   isDetailing: boolean;
   disabled?: boolean;
@@ -78,6 +80,7 @@ export function ObjectCardPhysical({
   const dailyCost = getDailyCost(object);
   const bucket = getPhysicalBucket(object.status);
   const accent = getPhysicalAccentClasses(bucket);
+  const canRetire = bucket === 'active';
 
   return (
     <article className="overflow-visible rounded-xl border border-stone-200 bg-white shadow-sm transition hover:border-stone-300">
@@ -98,10 +101,28 @@ export function ObjectCardPhysical({
         <div className="p-1">
           <ObjectDetailPanel
             stored={stored as WYQDStoredEntity<WYQDObject>}
+            logs={logs}
             onClose={() => setSelectedFileName(null)}
             onSave={async (updatedObject, body) => {
               await onUpdate(stored.fileName, updatedObject, body);
             }}
+            onDelete={async () => {
+              const confirmed = await confirm({
+                title: t('delete'),
+                message: t('deleteConfirm').replace('{title}', object.title),
+                destructive: true,
+              });
+              if (!confirmed) return;
+
+              setDeletingFileName(stored.fileName);
+              try {
+                await onDelete(stored.fileName);
+                setSelectedFileName(null);
+              } finally {
+                setDeletingFileName(null);
+              }
+            }}
+            deleting={deletingFileName === stored.fileName}
             disabled={disabled}
           />
         </div>
@@ -149,77 +170,53 @@ export function ObjectCardPhysical({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div
-                className="relative z-10"
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-              >
-                <MoreActionsButton
-                  objectTitle={object.title}
-                  menuId={`object-actions-${stored.fileName}`}
-                  open={openActionMenuFileName === stored.fileName}
-                  onToggle={() =>
-                    setOpenActionMenuFileName((current: string | null) =>
-                      current === stored.fileName ? null : stored.fileName,
-                    )
-                  }
-                  t={t}
-                />
-                {openActionMenuFileName === stored.fileName ? (
-                  <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
-                    <button
-                      type="button" role="menuitem"
-                      onClick={() => void (async () => {
-                        const next: PhysicalObject = {
-                          ...object,
-                          status: 'idle',
-                          ended_at: object.ended_at || todayISO(),
-                          updated_at: todayISO(),
-                        };
-                        setOpenActionMenuFileName(null);
-                        setExitingFileName(stored.fileName);
-                        try {
-                          await onUpdate(stored.fileName, next, stored.body);
-                        } finally {
-                          setExitingFileName(null);
-                        }
-                      })()}
-                      className={menuItemClass}
-                      disabled={
-                        disabled || exitingFileName === stored.fileName || bucket !== 'active'
-                      }
-                    >
-                      <span>{t('retire')}</span>
-                      <span aria-hidden="true">📦</span>
-                    </button>
-                    <button
-                      type="button" role="menuitem"
-                      onClick={() => void (async () => {
-                        const confirmed = await confirm({
-                          title: t('delete'),
-                          message: t('deleteConfirm').replace('{title}', object.title),
-                          destructive: true,
-                        });
-                        if (!confirmed) return;
-                        setOpenActionMenuFileName(null);
-                        setDeletingFileName(stored.fileName);
-                        try {
-                          await onDelete(stored.fileName);
-                        } finally {
-                          setDeletingFileName(null);
-                        }
-                      })()}
-                      className={`${menuItemClass} text-red-600 hover:bg-red-50`}
-                      disabled={disabled || deletingFileName === stored.fileName}
-                    >
-                      <span>{t('delete')}</span>
-                      <span aria-hidden="true">
-                        {deletingFileName === stored.fileName ? '…' : '🗑️'}
-                      </span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              {canRetire ? (
+                <div
+                  className="relative z-10"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <MoreActionsButton
+                    objectTitle={object.title}
+                    menuId={`object-actions-${stored.fileName}`}
+                    open={openActionMenuFileName === stored.fileName}
+                    onToggle={() =>
+                      setOpenActionMenuFileName((current: string | null) =>
+                        current === stored.fileName ? null : stored.fileName,
+                      )
+                    }
+                    t={t}
+                  />
+                  {openActionMenuFileName === stored.fileName ? (
+                    <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => void (async () => {
+                          const next: PhysicalObject = {
+                            ...object,
+                            status: 'idle',
+                            ended_at: object.ended_at || todayISO(),
+                            updated_at: todayISO(),
+                          };
+                          setOpenActionMenuFileName(null);
+                          setExitingFileName(stored.fileName);
+                          try {
+                            await onUpdate(stored.fileName, next, stored.body);
+                          } finally {
+                            setExitingFileName(null);
+                          }
+                        })()}
+                        className={menuItemClass}
+                        disabled={disabled || exitingFileName === stored.fileName}
+                      >
+                        <span>{t('retire')}</span>
+                        <span aria-hidden="true">📦</span>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="text-stone-300">
                 <span aria-hidden="true">→</span>
               </div>

@@ -5,13 +5,14 @@ import { ObjectComposer } from '@/components/objects/ObjectComposer';
 import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
+import { PlannerHome } from '@/components/planner/PlannerHome';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import type { FirstObjectChoice } from '@/core/first-object-copy';
 import { firstObjectTemplateType } from '@/core/first-object-onboarding';
 import { getQuickLineTemplates } from '@/components/objects/composerQuickLine';
 import type { AppTab } from './BottomNav';
-import type { WYQDObject, AccountSnapshot, ReviewEntry } from '@/domain/types';
+import type { WYQDObject, AccountSnapshot, ReviewEntry, ObjectLogEntry } from '@/domain/types';
 import type { WYQDStoredEntity, WYQDArchivedStoredEntity } from '@/core/repository';
 
 import type { HomeMetrics } from '@/domain/types';
@@ -31,6 +32,7 @@ interface TabRendererProps {
   storedObjects: WYQDStoredEntity<WYQDObject>[];
   storedReviews: WYQDStoredEntity<ReviewEntry>[];
   storedSnapshots: WYQDStoredEntity<AccountSnapshot>[];
+  storedLogs?: WYQDStoredEntity<ObjectLogEntry>[];
   archivedEntities: WYQDArchivedStoredEntity[];
   objectListFocus: ObjectListFocus | null;
   autoFocusComposer: boolean;
@@ -50,6 +52,7 @@ export function TabRenderer({
   storedObjects,
   storedReviews,
   storedSnapshots,
+  storedLogs,
   archivedEntities,
   objectListFocus,
   autoFocusComposer,
@@ -138,6 +141,7 @@ export function TabRenderer({
           disabled={!isConnected}
           objects={storedObjects}
           reviews={storedReviews}
+          logs={storedLogs}
           focus={objectListFocus}
           onUpdate={actions.updateObject}
           onDelete={actions.archiveObject}
@@ -174,6 +178,10 @@ export function TabRenderer({
         />
       </div>
     );
+  }
+
+  if (activeTab === 'planner') {
+    return <PlannerHome disabled={!isConnected} />;
   }
 
   if (activeTab === 'reviews') {

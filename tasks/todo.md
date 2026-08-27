@@ -1,0 +1,52 @@
+# Todo: P0 & P1 Code Review Fixes
+
+## Tasks
+- [x] 1. (P0) Fix TSP 1-click optimization pipeline: `schedulePlace` default `locked: false`, `optimizeStopsSequence` default options destructuring, and `haversineDistanceKm` numerical clamping <!-- id: 1 -->
+- [x] 2. (P0) Fix cold-load ledger hydration: invoke `hydrateLedgerFromVault` in `PlannerHome.tsx` mount `useEffect` <!-- id: 2 -->
+- [x] 3. (P0) Fix trip state synchronization: update `setTrips` in `handleUpdateMembers` to prevent `handleUpdateFxRates` from wiping members <!-- id: 3 -->
+- [x] 4. (P0) Fix multi-day stay replacement: `unschedulePlace` on base candidate hotel entities instead of `dropPlace` <!-- id: 4 -->
+- [x] 5. (P0) Fix sidepanel tombstone race: remove heuristic tombstone insertion in `sidepanel.ts` `storage.onChanged` <!-- id: 5 -->
+- [x] 6. (P0) Decouple `content.ts` from sidepanel: remove dynamic import of `content.ts` in `src/extension/sidepanel/capture.ts` <!-- id: 6 -->
+- [x] 7. (P1) Fix Budget Ledger currency binding & selection: bind aggregate metrics to `{baseCurrency}`, include `baseCurrency` in options, reset form overrides on submit <!-- id: 7 -->
+- [x] 8. (P1) Fix `safeEntityId` CJK/Unicode crash & `PlannerRepository.upsert` initialization <!-- id: 8 -->
+- [x] 9. (P1) Harden capture bridge & sidepanel XSS safety: handle `"null"` origin in `capture-bridge.ts`, sanitize safe URL schemes in `ui.ts` <!-- id: 9 -->
+- [x] 10. (P1) Fix UI interactions & hook dependencies: reset `optimizeUndo` on date/trip change, fix `urgencies` `useMemo` dependency, refactor `fetchWeather` dependencies <!-- id: 10 -->
+- [x] 11. (P1) Fix content scraping edge cases: review count regex extraction, European comma rating parsing, and currency regex word boundaries <!-- id: 11 -->
+- [x] 12. Run full validation suite (`validate:extension`, `validate:fast`, vitest unit tests) and verify all fixes <!-- id: 12 -->
+- [x] 13. (P1) Upgrade unified PlaceParser: unified multi-layer extraction pipeline (JSON-LD, subtitle decomposition, standardized rating/category/review count) <!-- id: 13 -->
+
+- [x] 14. (Architecture Evolution) End-to-end architecture audit & clean refinement across Domain, Data Persistence, Chrome Extension, and React UI:
+  - Preserved canonical domain interfaces (`MultiDayHotelProximityResult`, `DayHotelTransferInfo`).
+  - Added non-ASCII hash disambiguation for `safeEntityId` preventing entity ID collisions.
+  - Hardened AA cash flow settlement (`calculateTripSettlement`) against empty members and payer edge cases.
+  - Seamless clipboard copy fallback in `PlannerBudgetLedger.tsx`.
+  - Upgraded HTML5 drag-and-drop compliance across Firefox/Safari.
+  - Eliminated setState in effects and refreshed SPA bridge signals on URL change.
+
+- [x] 15. (Category & Tag System Alignment) Automatic default kind tags & candidate pool count indicators:
+  - Aligned category taxonomy: `住宿` (Stay), `美食` (Food), `咖啡` (Cafe), `体验` (Experience), `景点` (Attraction), `购物` (Shopping), `交通` (Transit), `其它` (Other).
+  - Implemented `ensurePlaceKindTag`: automatically defaults and preserves the category tag for any captured/imported place (e.g. `stay` automatically gets `住宿` tag).
+  - Filter chips and candidate drawer now display counts in parentheses, e.g. `全部 (12)`, `🏨 住宿 (5)`, `🍜 美食 (3)`, `☕ 咖啡 (2)`, `🏷️ 曼谷 (4)`.
+  - Filter chip deduplication: cleanly isolates standard category tags from custom trip tags.
+
+- [x] 16. (Tag Purity & Address/Title Exclusion):
+  - Strictly excluded place titles (`p.title`), full addresses (`p.address`), and address fragments from being rendered as tag filter chips.
+  - Implemented `isPlausibleCustomTag` in domain planner to reject postal codes, long addresses, emails, and URLs.
+  - Cleaned extension sidepanel handlers (`buildPlaceFromDetected`, `btnSmartSyncAll`, `btnBatchAdd`) so raw subtitle categories/addresses are no longer mistakenly pushed into `signals`.
+
+- [x] 17. (Candidate Inline Editor Streamlining):
+  - Removed unnecessary "区域 / 街区 (Area)" input field from candidate inline edit form in the sidepanel.
+  - Streamlined row layout: Row 1 (Kind + Priority), Row 2 (Price + Rating), Row 3 (Duration), Row 4 (Tags), Row 5 (Notes).
+  - Preserved existing `place.area` and ensured kind tags are automatically preserved on inline save.
+
+- [x] 18. (Top Bar UI Cleanup):
+  - Removed unnecessary `🗺️` map currency icon span (`lblMapCurrency`) from the top of the sidepanel header (`tripActiveRow`).
+
+## Review
+- **Architecture Evolution & Quality Hardening**:
+  - Maintained complete backward compatibility with existing interfaces across `stay.ts` and `HotelComparisonModal.tsx`.
+  - Unified Google Maps place parser (`src/extension/place-parser.ts`) with multi-layer JSON-LD + Subtitle decomposition.
+  - Aligned category & tag taxonomy with automatic default kind tagging (`ensurePlaceKindTag`) across Extension Capture and Planner Home.
+  - Guaranteed tag filter purity by filtering out place names and addresses.
+  - Streamlined candidate inline editor and cleaned up sidepanel top bar header.
+  - All test suites green across entire project (`validate:fast`, `validate:extension`, `tsc --noEmit`).

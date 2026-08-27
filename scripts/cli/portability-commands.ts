@@ -13,6 +13,7 @@ import {
   type RestoreCollisionPolicy,
 } from '../../src/core/data-portability';
 import { hasFlag, optionalString, requiredString } from './args';
+import { resolveOwnlyDataRoot } from '../shared/data-root';
 import type { CommandContext } from './commands';
 import { NodeOwnlyTextFileAdapter } from './node-portability-adapter';
 import { CliError } from './types';
@@ -81,7 +82,7 @@ export async function backupCommand(
       context.now,
     );
     const output = optionalString(context.options, 'output')
-      ?? join(context.dataLocation, `ownly-backup-${timestampToken(context.now)}.json`);
+      ?? join(dirname(context.dataLocation), `ownly-backup-${timestampToken(context.now)}.json`);
     const absoluteOutput = writeBundle(output, bundle);
     printJson(context, {
       created: true,
@@ -161,7 +162,7 @@ export async function backupCommand(
       );
       safetyOutput = writeBundle(
         optionalString(context.options, 'safety_output')
-          ?? join(targetPath, `ownly-safety-backup-${timestampToken(context.now)}.json`),
+          ?? join(dirname(resolveOwnlyDataRoot(targetPath, { allowCreateDefault: true })), `ownly-safety-backup-${timestampToken(context.now)}.json`),
         safetyBackup,
       );
     }
@@ -223,7 +224,7 @@ export async function migrateCommand(context: CommandContext): Promise<void> {
 
   const backupOutput = writeBundle(
     optionalString(context.options, 'backup_output')
-      ?? join(context.dataLocation, `ownly-pre-migration-${timestampToken(context.now)}.json`),
+      ?? join(dirname(context.dataLocation), `ownly-pre-migration-${timestampToken(context.now)}.json`),
     original,
   );
   const restore = await restoreOwnlyBackup(migration.migrated_bundle, adapter, {

@@ -23,13 +23,14 @@ import {
 const temporaryRoots: string[] = [];
 
 function createDataLocation(): string {
-  const root = mkdtempSync(join(tmpdir(), 'ownly-mcp-'));
-  temporaryRoots.push(root);
+  const container = mkdtempSync(join(tmpdir(), 'ownly-mcp-'));
+  temporaryRoots.push(container);
+  const root = join(container, 'Ownly');
   for (const relative of [
-    'Ownly/Objects',
-    'Ownly/Snapshots',
-    'Ownly/Reviews',
-    'Ownly/Logs/Object Experiences',
+    'Objects',
+    'Snapshots',
+    'Reviews',
+    'Logs/Object Experiences',
   ]) {
     mkdirSync(join(root, relative), { recursive: true });
   }
@@ -78,16 +79,22 @@ describe('Ownly MCP local evidence adapter', () => {
 
     const root = mkdtempSync(join(tmpdir(), 'ownly-mcp-invalid-'));
     temporaryRoots.push(root);
-    expect(() => resolveOwnlyDataLocation(root)).toThrow(/does not contain an Ownly data folder/);
+    expect(() => resolveOwnlyDataLocation(root)).toThrow(/not an Ownly data root/);
 
     const valid = createDataLocation();
     expect(resolveOwnlyDataLocation(valid)).toBe(valid);
+    expect(resolveOwnlyDataLocation(join(valid, '..'))).toBe(valid);
+
+    const customRoot = mkdtempSync(join(tmpdir(), 'ownly-mcp-custom-'));
+    temporaryRoots.push(customRoot);
+    mkdirSync(join(customRoot, 'Objects'));
+    expect(resolveOwnlyDataLocation(customRoot)).toBe(customRoot);
   });
 
   it('returns bounded summary, search and upcoming recurring-cost facts', () => {
     const root = createDataLocation();
-    writeEntity(root, 'Ownly/Objects/chatgpt.md', recurring('sub_chatgpt', 'ChatGPT Plus'));
-    writeEntity(root, 'Ownly/Objects/storage.md', recurring('sub_storage', 'Cloud Storage', {
+    writeEntity(root, 'Objects/chatgpt.md', recurring('sub_chatgpt', 'ChatGPT Plus'));
+    writeEntity(root, 'Objects/storage.md', recurring('sub_storage', 'Cloud Storage', {
       billing_amount: 12,
       annualized_cost: 144,
       billing_day: 28,
@@ -156,9 +163,9 @@ describe('Ownly MCP local evidence adapter', () => {
       source: 'user',
       created_at: '2026-07-20',
     };
-    writeEntity(root, 'Ownly/Objects/adobe.md', object);
-    writeEntity(root, 'Ownly/Reviews/adobe-review.md', review);
-    writeEntity(root, 'Ownly/Logs/Object Experiences/adobe-log.md', log);
+    writeEntity(root, 'Objects/adobe.md', object);
+    writeEntity(root, 'Reviews/adobe-review.md', review);
+    writeEntity(root, 'Logs/Object Experiences/adobe-log.md', log);
 
     const history = getOwnlyObjectHistory(root, 'sub_adobe');
     expect(history).toMatchObject({
@@ -181,8 +188,8 @@ describe('Ownly MCP local evidence adapter', () => {
 
   it('never silently combines recurring-cost totals across currencies', () => {
     const root = createDataLocation();
-    writeEntity(root, 'Ownly/Objects/usd.md', recurring('sub_usd', 'US Service'));
-    writeEntity(root, 'Ownly/Objects/cny.md', recurring('sub_cny', 'CN Service', {
+    writeEntity(root, 'Objects/usd.md', recurring('sub_usd', 'US Service'));
+    writeEntity(root, 'Objects/cny.md', recurring('sub_cny', 'CN Service', {
       currency: 'CNY',
       billing_currency: 'CNY',
       billing_amount: 100,
@@ -204,14 +211,14 @@ describe('Ownly MCP local evidence adapter', () => {
   it('Doctor is read-only and reports missing directories instead of creating them', () => {
     const root = mkdtempSync(join(tmpdir(), 'ownly-mcp-readonly-'));
     temporaryRoots.push(root);
-    mkdirSync(join(root, 'Ownly/Objects'), { recursive: true });
-    writeEntity(root, 'Ownly/Objects/chatgpt.md', recurring('sub_chatgpt', 'ChatGPT Plus'));
+    mkdirSync(join(root, 'Objects'), { recursive: true });
+    writeEntity(root, 'Objects/chatgpt.md', recurring('sub_chatgpt', 'ChatGPT Plus'));
 
     const result = getOwnlyDoctor(root);
     expect(result.valid).toBe(false);
-    expect(result.errors.map((error) => error.message).join('\n')).toContain('Ownly/Snapshots');
-    expect(existsSync(join(root, 'Ownly/Snapshots'))).toBe(false);
-    expect(existsSync(join(root, 'Ownly/Reviews'))).toBe(false);
-    expect(existsSync(join(root, 'Ownly/Logs/Object Experiences'))).toBe(false);
+    expect(result.errors.map((error) => error.message).join('\n')).toContain('Snapshots');
+    expect(existsSync(join(root, 'Snapshots'))).toBe(false);
+    expect(existsSync(join(root, 'Reviews'))).toBe(false);
+    expect(existsSync(join(root, 'Logs/Object Experiences'))).toBe(false);
   });
 });

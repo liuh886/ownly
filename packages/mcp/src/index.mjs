@@ -15,12 +15,26 @@ import {
   searchOwnly,
   toOwnlyMcpErrorPayload,
 } from '../../../scripts/mcp/ownly-tools.ts';
+import { OwnlyWriteService } from '../../../scripts/shared/ownly-write-service.ts';
+import { getPlannerSummary, getPlannerTripDetail } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = '0.2.0';
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+const PREPARE_WRITE_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+const COMMIT_WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: true,
   idempotentHint: true,
   openWorldHint: false,
 };
@@ -43,12 +57,17 @@ const OBJECT_STATUS = z.enum([
 
 function parseServerArgs(argv, env) {
   let dataDir = env.OWNLY_DATA_DIR;
+  let allowWrite = ['1', 'true', 'yes'].includes(String(env.OWNLY_MCP_ALLOW_WRITE ?? '').toLowerCase());
   let help = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--help' || token === '-h') {
       help = true;
+      continue;
+    }
+    if (token === '--allow-write') {
+      allowWrite = true;
       continue;
     }
     if (token.startsWith('--data-dir=')) {
@@ -67,11 +86,11 @@ function parseServerArgs(argv, env) {
     throw new Error(`Unknown option: ${token}`);
   }
 
-  return { dataDir, help };
+  return { dataDir, allowWrite, help };
 }
 
 function printHelp() {
-  process.stdout.write(`Ownly MCP\n\nUsage:\n  ownly-mcp --data-dir <path-containing-Ownly>\n\nEnvironment:\n  OWNLY_DATA_DIR=<path-containing-Ownly>\n\nOwnly MCP is read-only. The configured path must contain an Ownly/ data folder.\n`);
+  process.stdout.write(`Ownly MCP\n\nUsage:\n  ownly-mcp --data-dir <vault-or-data-root> [--allow-write]\n\nEnvironment:\n  OWNLY_DATA_DIR=<vault-or-data-root>\n  OWNLY_MCP_ALLOW_WRITE=1\n\nThe data folder defaults to Ownly/ under the configured path. Pass a custom Ownly data root directly when its Objects/ directory is at the root. Writes are disabled unless explicitly enabled and always require prepare + commit.\n`);
 }
 
 function toolResult(value) {
@@ -100,12 +119,13 @@ function safeHandler(handler) {
   };
 }
 
-export function createOwnlyMcpServer(dataLocation) {
+export function createOwnlyMcpServer(dataLocation, options = {}) {
+  const writeService = new OwnlyWriteService(dataLocation, { allowWrite: options.allowWrite });
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       instructions:
-        'Ownly is a read-only local evidence source. Use Doctor before high-stakes analysis when data quality matters. Treat tool results as recorded facts and keep recommendations or interpretations clearly separate from those facts. Do not claim that all Ownly data stays outside the model context: only the source-of-truth remains local; returned tool results are shared with this MCP client.',
+        'Ownly is a local-first evidence source. Use Doctor before high-stakes analysis when data quality matters. Treat tool results as recorded facts and keep recommendations or interpretations clearly separate from those facts. Persistent mutations use two phases: call an ownly_prepare_* tool, show the preview to the user, then call ownly_commit_operation only after confirmation. Writes must also be enabled when the server starts. Planner tools follow the same discipline: propose schedules/routes/budgets with read tools and planner_prepare_*, never silently overwrite locked stops (optimization pins them), and convert foreign prices only for display using trip fx_rates. Do not claim that all Ownly data stays outside the model context: only the source-of-truth remains local; returned tool results are shared with this MCP client.',
     },
   );
 
@@ -225,6 +245,354 @@ export function createOwnlyMcpServer(dataLocation) {
     safeHandler(() => getOwnlyDoctor(dataLocation)),
   );
 
+  // ── Planner: travel research & scheduling ─────────────────────────────
+
+  server.registerTool(
+    'ownly_planner_summary',
+    {
+      title: 'Planner Summary',
+      description: 'Overview of all trips with place counts (scheduled/candidates/dropped) and expense counts.',
+      inputSchema: z.object({}),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(() => getPlannerSummary(dataLocation)),
+  );
+
+  server.registerTool(
+    'ownly_planner_get_trip',
+    {
+      title: 'Planner Trip Detail',
+      description: 'Full trip context: trip, budget estimate in base currency with FX, day conflicts (opening hours), places, bookings and expenses.',
+      inputSchema: z.object({ trip_id: z.string().min(1) }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id }) => getPlannerTripDetail(dataLocation, trip_id)),
+  );
+
+  server.registerTool(
+    'ownly_planner_budget_estimate',
+    {
+      title: 'Planner Budget Estimate',
+      description: 'Estimate the scheduled-trip budget converted into the trip base currency. Uses built-in USD-pivot rates unless the trip defines fx_rates overrides.',
+      inputSchema: z.object({ trip_id: z.string().min(1) }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id }) => {
+      const detail = getPlannerTripDetail(dataLocation, trip_id);
+      return { budget: detail.budget, conflicts: detail.conflicts };
+    }),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_schedule_place',
+    {
+      title: 'Preview Scheduling a Place',
+      description: 'Preview scheduling a planner place on a date (locks it as a hard constraint for later optimization).',
+      inputSchema: z.object({
+        place_id: z.string().min(1),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        sort_order: z.number().int().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ place_id, date, sort_order }) => writeService.prepareSchedulePlace(place_id, date, sort_order)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_return_to_pool',
+    {
+      title: 'Preview Returning a Place to Pool',
+      description: 'Preview moving a scheduled place back to the candidate pool.',
+      inputSchema: z.object({ place_id: z.string().min(1) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ place_id }) => writeService.prepareReturnPlaceToPool(place_id)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_reorder_day',
+    {
+      title: 'Preview Reordering a Day',
+      description: 'Preview moving a scheduled place one position up (-1) or down (+1) within its day.',
+      inputSchema: z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        place_id: z.string().min(1),
+        delta: z.union([z.literal(-1), z.literal(1)]),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ date, place_id, delta }) => writeService.prepareReorderDay(date, place_id, delta)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_optimize_route',
+    {
+      title: 'Preview Day Route Optimization',
+      description: 'Preview TSP re-ordering of one scheduled day (locked and coordinate-less stops stay pinned). Preview includes km saved.',
+      inputSchema: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ date }) => writeService.prepareOptimizeDayRoute(date)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_set_stay_span',
+    {
+      title: 'Preview Setting Stay Span',
+      description: 'Preview anchoring a hotel across consecutive dates; stale stay anchors on those dates are retired automatically.',
+      inputSchema: z.object({
+        hotel_place_id: z.string().min(1),
+        dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).min(1),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ hotel_place_id, dates }) => writeService.prepareSetStaySpan(hotel_place_id, dates)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_drop_place',
+    {
+      title: 'Preview Dropping a Place',
+      description: 'Preview marking a place as dropped (terminal lifecycle state, recoverable by editing Markdown).',
+      inputSchema: z.object({ place_id: z.string().min(1) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ place_id }) => writeService.prepareDropPlannerPlace(place_id)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_add_expense',
+    {
+      title: 'Preview Adding an Expense',
+      description: 'Preview appending an AA-ledger expense entry to Trip Expenses/.',
+      inputSchema: z.object({
+        id: z.string().min(3),
+        trip_id: z.string().min(1),
+        title: z.string().min(1),
+        category: z.enum(['stay', 'food', 'transit', 'ticket', 'shopping', 'other']),
+        amount: z.number().positive(),
+        currency: z.string().min(2).max(6),
+        paid_by: z.string().min(1),
+        split_members: z.array(z.string()).default([]),
+        notes: z.string().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler((input) => writeService.prepareAddExpense({
+      ...input,
+      created_at: new Date().toISOString(),
+    })),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_set_fx_rates',
+    {
+      title: 'Preview Setting FX Rates',
+      description: 'Preview persisting user-verified conversion overrides on the trip frontmatter (rates[FROM] = base per 1 FROM).',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        rates: z.record(z.string(), z.number().positive()),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id, rates }) => writeService.prepareSetFxRates(trip_id, rates)),
+  );
+
+
+  server.registerTool(
+    'ownly_prepare_create_object',
+    {
+      title: 'Preview Ownly Object Creation',
+      description: 'Validate and preview a new physical object, recurring cost, or one-time experience. This does not write files; commit the returned operation_id separately.',
+      inputSchema: z.object({
+        object_type: z.enum(['physical', 'recurring_cost', 'one_time_experience']),
+        title: z.string().min(1),
+        amount: z.number().nonnegative(),
+        currency: z.string().min(1).optional(),
+        category: z.string().min(1).optional(),
+        status: OBJECT_STATUS.optional(),
+        body: z.string().optional(),
+        purchased_at: z.string().optional(),
+        ended_at: z.string().optional(),
+        billing_cycle: z.enum(['weekly', 'monthly', 'quarterly', 'annual', 'custom']).optional(),
+        billing_day: z.number().int().min(1).max(31).optional(),
+        started_at: z.string().optional(),
+        payment_account: z.string().min(1).optional(),
+        annualized_cost: z.number().nonnegative().optional(),
+        actual_total: z.number().nonnegative().optional(),
+        experience_subtype: z.string().min(1).optional(),
+        location: z.object({
+          country: z.string().optional(),
+          region: z.string().optional(),
+          city: z.string().optional(),
+          country_code: z.string().optional(),
+          latitude: z.number().optional(),
+          longitude: z.number().optional(),
+        }).optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler((args) => writeService.prepareCreateObject(args)),
+  );
+
+  server.registerTool(
+    'ownly_prepare_update_object',
+    {
+      title: 'Preview Ownly Object Update',
+      description: 'Preview validated changes to an existing Ownly object. The stable ID and object type cannot be changed.',
+      inputSchema: z.object({
+        id: z.string().min(1),
+        title: z.string().min(1).optional(),
+        status: OBJECT_STATUS.optional(),
+        category: z.string().min(1).optional(),
+        amount: z.number().nonnegative().optional(),
+        purchased_at: z.string().optional(),
+        ended_at: z.string().nullable().optional(),
+        billing_cycle: z.enum(['weekly', 'monthly', 'quarterly', 'annual', 'custom']).optional(),
+        billing_day: z.number().int().min(1).max(31).optional(),
+        started_at: z.string().optional(),
+        payment_account: z.string().nullable().optional(),
+        annualized_cost: z.number().nonnegative().optional(),
+        actual_total: z.number().nonnegative().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler((args) => writeService.prepareUpdateObject(args)),
+  );
+
+  server.registerTool(
+    'ownly_prepare_retire_object',
+    {
+      title: 'Preview Retiring an Ownly Object',
+      description: 'Preview moving a physical object to the idle lifecycle state with an end date.',
+      inputSchema: z.object({ id: z.string().min(1), ended_at: z.string().optional() }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ id, ended_at }) => writeService.prepareRetireObject(id, ended_at)),
+  );
+
+  server.registerTool(
+    'ownly_prepare_cancel_recurring_cost',
+    {
+      title: 'Preview Cancelling a Recurring Cost',
+      description: 'Preview cancelling an Ownly recurring cost while preserving its history.',
+      inputSchema: z.object({
+        id: z.string().min(1),
+        reason: z.string().min(1).optional(),
+        cancelled_at: z.string().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ id, reason, cancelled_at }) =>
+      writeService.prepareCancelRecurring(id, reason, cancelled_at)),
+  );
+
+  server.registerTool(
+    'ownly_prepare_add_object_log',
+    {
+      title: 'Preview Adding an Ownly Object Log',
+      description: 'Preview an append-only usage, issue, maintenance, regret, lesson, comparison, or exit note for an object.',
+      inputSchema: z.object({
+        id: z.string().min(1),
+        event_type: z.enum(['usage', 'issue', 'maintenance', 'regret', 'lesson', 'comparison', 'exit_note']),
+        summary: z.string().min(1),
+        occurred_at: z.string().optional(),
+        lesson: z.string().optional(),
+        source: z.string().optional(),
+        body: z.string().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler((args) => writeService.prepareAddObjectLog(args)),
+  );
+
+  server.registerTool(
+    'ownly_prepare_create_review',
+    {
+      title: 'Preview Creating an Ownly Review',
+      description: 'Preview a review record. Object and exit reviews require a target object ID.',
+      inputSchema: z.object({
+        review_type: z.enum(['object_review', 'exit_record', 'monthly', 'annual']),
+        summary: z.string().min(1),
+        title: z.string().min(1).optional(),
+        target_id: z.string().min(1).optional(),
+        reviewed_at: z.string().optional(),
+        regret_score: z.number().nullable().optional(),
+        food_score: z.number().nullable().optional(),
+        scenery_score: z.number().nullable().optional(),
+        experience_score: z.number().nullable().optional(),
+        body: z.string().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler((args) => writeService.prepareCreateReview(args)),
+  );
+
+  server.registerTool(
+    'ownly_prepare_create_snapshot',
+    {
+      title: 'Preview Creating an Ownly Snapshot',
+      description: 'Preview a net-worth snapshot from total assets and liabilities.',
+      inputSchema: z.object({
+        assets: z.number(),
+        liabilities: z.number().optional(),
+        date: z.string().optional(),
+        currency: z.string().min(1).optional(),
+        is_month_end: z.boolean().optional(),
+        body: z.string().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler((args) => writeService.prepareCreateSnapshot(args)),
+  );
+
+  server.registerTool(
+    'ownly_prepare_archive_object',
+    {
+      title: 'Preview Archiving an Ownly Object',
+      description: 'Preview moving an active object file into Ownly Archive. The archive remains restorable.',
+      inputSchema: z.object({ id: z.string().min(1) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ id }) => writeService.prepareArchiveObject(id)),
+  );
+
+  server.registerTool(
+    'ownly_prepare_restore_object',
+    {
+      title: 'Preview Restoring an Ownly Object',
+      description: 'Preview restoring an archived Ownly object to the active Objects directory.',
+      inputSchema: z.object({ id: z.string().min(1) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ id }) => writeService.prepareRestoreObject(id)),
+  );
+
+  server.registerTool(
+    'ownly_commit_operation',
+    {
+      title: 'Commit Prepared Ownly Operation',
+      description: 'Persist one previously prepared operation after user confirmation. Creates a safety backup first and is idempotent for the operation ID.',
+      inputSchema: z.object({ operation_id: z.string().uuid() }),
+      annotations: COMMIT_WRITE_ANNOTATIONS,
+    },
+    safeHandler(async ({ operation_id }) => ({
+      ...await writeService.commit(operation_id),
+      health: getOwnlyDoctor(dataLocation),
+    })),
+  );
+
+  server.registerTool(
+    'ownly_discard_operation',
+    {
+      title: 'Discard Prepared Ownly Operation',
+      description: 'Discard a prepared operation without changing the Ownly data files.',
+      inputSchema: z.object({ operation_id: z.string().uuid() }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ operation_id }) => writeService.discard(operation_id)),
+  );
+
   return server;
 }
 
@@ -254,8 +622,8 @@ async function main() {
     return;
   }
 
-  console.error('Ownly MCP running locally over stdio (read-only).');
-  await serveStdio(() => createOwnlyMcpServer(dataLocation));
+  console.error(`Ownly MCP running locally over stdio (${parsed.allowWrite ? 'two-phase writes enabled' : 'read-only'}).`);
+  await serveStdio(() => createOwnlyMcpServer(dataLocation, { allowWrite: parsed.allowWrite }));
 }
 
 const entrypoint = process.argv[1] ? pathToFileURL(process.argv[1]).href : undefined;

@@ -61,7 +61,7 @@ jobs:
           npm pack --dry-run
           npm publish --dry-run --access public --provenance=false 2>&1 | tee /tmp/ownly-mcp-publish-dry-run.log
           ! grep -F 'script name' /tmp/ownly-mcp-publish-dry-run.log
-          grep -F 'name: @ownly/mcp' /tmp/ownly-mcp-publish-dry-run.log
+          grep -F 'name: @ownly-app/mcp' /tmp/ownly-mcp-publish-dry-run.log
 
       - name: Check npm release state
         id: npm_state
