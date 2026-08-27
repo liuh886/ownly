@@ -142,6 +142,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   );
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
+  const [isPoolOpen, setIsPoolOpen] = useState(false);
+  const [poolSearch, setPoolSearch] = useState('');
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsPoolOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const hydrateLedgerFromVault = useCallback(async (trips: PlannerTrip[]) => {
     const stored = await plannerRepository.listExpenses();
@@ -418,6 +430,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     }
     return candidates;
   }, [candidates, activeFilter]);
+
+  const searchFilteredCandidates = useMemo(() => {
+    const query = poolSearch.trim().toLowerCase();
+    if (!query) return filteredCandidates;
+    return filteredCandidates.filter(
+      (p) =>
+        p.title.toLowerCase().includes(query) ||
+        (p.area && p.area.toLowerCase().includes(query)) ||
+        (p.address && p.address.toLowerCase().includes(query)) ||
+        p.tags.some((t) => t.toLowerCase().includes(query)) ||
+        (p.signals && p.signals.some((s) => s.toLowerCase().includes(query))) ||
+        (p.risks && p.risks.some((r) => r.toLowerCase().includes(query))) ||
+        (p.why && p.why.toLowerCase().includes(query)) ||
+        (p.notes && p.notes.toLowerCase().includes(query)),
+    );
+  }, [filteredCandidates, poolSearch]);
 
   const scheduled = useMemo(
     () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === activeDate && place.state === 'scheduled')),
@@ -754,6 +782,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           >
             {busy ? '…' : (zh ? '同步 Capture' : 'Sync Capture')}
           </button>
+          <button
+            type="button"
+            onClick={() => setIsPoolOpen((prev) => !prev)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold shadow-2xs transition active:scale-98 ${
+              isPoolOpen
+                ? 'border-stone-900 bg-stone-900 text-white'
+                : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 hover:border-stone-300'
+            }`}
+            title={zh ? '切换行程候选池' : 'Toggle Research Pool'}
+          >
+            <span>🗂️</span>
+            <span>{zh ? '候选池' : 'Pool'}</span>
+            <span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${isPoolOpen ? 'bg-stone-800 text-stone-200' : 'bg-stone-100 text-stone-600'}`}>
+              {candidates.length}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -815,122 +859,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         </div>
       ) : null}
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)_minmax(220px,0.75fr)]">
-        <section className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-semibold text-stone-900">Research Pool</h2>
-              <p className="text-[11px] text-stone-400">{zh ? 'Google Maps 研究完成的候选' : 'Researched in Google Maps'}</p>
-            </div>
-            <span className="text-xs font-medium text-stone-400">{filteredCandidates.length}/{candidates.length}</span>
-          </div>
-
-          {candidateHotels.length > 0 ? (
-            <div className="flex items-center justify-between border-b border-stone-100 bg-amber-50/70 px-3 py-2 text-xs">
-              <div className="flex items-center gap-1.5 font-semibold text-amber-900">
-                <span>🏨</span>
-                <span>{zh ? `有 ${candidateHotels.length} 家备选住宿` : `${candidateHotels.length} candidate stays`}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsHotelModalOpen(true)}
-                className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 shadow-2xs hover:bg-amber-100/60"
-              >
-                {zh ? '多维比选' : 'Compare'}
-              </button>
-            </div>
-          ) : null}
-
-          {candidates.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 border-b border-stone-100 bg-stone-50/70 px-3 py-2">
-              {filterChips.map((f) => {
-                const isSelected = activeFilter === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setActiveFilter(isSelected && f.id !== 'all' ? 'all' : f.id)}
-                    className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition ${
-                      isSelected
-                        ? 'bg-stone-900 text-white shadow-2xs'
-                        : f.type === 'kind'
-                        ? 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-100'
-                        : f.type === 'tag'
-                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                        : 'border border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
-                    }`}
-                  >
-                    {f.label} ({f.count})
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          <div className="space-y-2 p-3">
-            {filteredCandidates.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-stone-200 px-3 py-8 text-center text-xs text-stone-400">
-                {zh ? '当前筛选下暂无候选地点。' : 'No unscheduled candidates matching filter.'}
-              </div>
-            ) : filteredCandidates.map((place) => (
-              <article
-                key={place.id}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData('text/plain', place.id);
-                  event.dataTransfer.dropEffect = 'move';
-                  setDraggingPlaceId(place.id);
-                }}
-                onDragEnd={() => setDraggingPlaceId(null)}
-                onMouseEnter={() => setHighlightedPlaceId(place.id)}
-                onMouseLeave={() => setHighlightedPlaceId(null)}
-                className={`rounded-lg border bg-stone-50/70 p-3 transition-all duration-150 ${
-                  highlightedPlaceId === place.id
-                    ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/30'
-                    : 'border-stone-200 hover:border-stone-300'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
-                    <p className="mt-1 text-[11px] text-stone-400">{placeMeta(place, language)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void schedulePlace(place.id)}
-                    className="shrink-0 rounded-md bg-stone-950 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-stone-800"
-                  >
-                    + {zh ? '当天' : 'Day'}
-                  </button>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${place.priority === 'must' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>{place.priority}</span>
-                  {place.observed_rating ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">★ {place.observed_rating}</span> : null}
-                  {place.observed_price ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">{place.observed_price}</span> : null}
-                  {place.tags.map((tag) => (
-                    <span key={tag} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
-                      🏷️ {tag}
-                    </span>
-                  ))}
-                  {place.signals?.map((signal) => (
-                    <span key={signal} className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-800">
-                      ✅ {signal}
-                    </span>
-                  ))}
-                  {place.risks?.map((risk) => (
-                    <span key={risk} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                      ⚠️ {risk}
-                    </span>
-                  ))}
-                </div>
-                {place.why ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-600">{place.why}</p> : null}
-              </article>
-            ))}
-          </div>
-        </section>
-
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-[minmax(340px,1fr)_minmax(0,3fr)]">
         <section
-          className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"
+          className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm flex flex-col"
           onDragOver={(event) => {
             event.preventDefault();
             event.dataTransfer.dropEffect = 'move';
@@ -943,9 +874,20 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           }}
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-semibold text-stone-900">Day Skeleton</h2>
-              <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
+            <div className="flex items-center gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-stone-900">Day Skeleton</h2>
+                <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPoolOpen(true)}
+                className="ml-1 inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 transition shadow-2xs"
+                title={zh ? '打开候选池挑选地点' : 'Open Candidate Pool'}
+              >
+                <span>🗂️ {zh ? '候选池' : 'Pool'}</span>
+                <span className="rounded-full bg-stone-200 px-1.5 py-0 text-[9.5px] font-bold text-stone-700">{candidates.length}</span>
+              </button>
             </div>
             {activeDayWeather ? (
               <span
@@ -1304,6 +1246,185 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {/* Floating Pool Trigger Pill when closed */}
+      {!isPoolOpen && candidates.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => setIsPoolOpen(true)}
+          className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full border border-stone-200/80 bg-stone-900 px-4 py-2.5 text-xs font-semibold text-white shadow-xl hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all duration-200"
+          title={zh ? '展开候选地点池' : 'Open Candidate Research Pool'}
+        >
+          <span className="text-sm">🗂️</span>
+          <span>{zh ? '候选池' : 'Research Pool'}</span>
+          <span className="rounded-full bg-stone-700 px-2 py-0.5 text-[10px] font-bold text-stone-200">
+            {candidates.length}
+          </span>
+        </button>
+      ) : null}
+
+      {/* Floating Candidate Pool Drawer / Window */}
+      {isPoolOpen ? (
+        <>
+          {/* Backdrop on mobile */}
+          <div
+            className="fixed inset-0 z-40 bg-stone-900/20 backdrop-blur-2xs lg:hidden"
+            onClick={() => setIsPoolOpen(false)}
+          />
+          <div className="fixed inset-y-0 left-0 z-50 flex w-full sm:w-[440px] flex-col border-r border-stone-200 bg-white shadow-2xl animate-in slide-in-from-left duration-200">
+            {/* Floating Pool Header */}
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/90 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🗂️</span>
+                <div>
+                  <h2 className="text-sm font-semibold text-stone-900">{zh ? '行程候选池' : 'Research Pool'}</h2>
+                  <p className="text-[11px] text-stone-400">
+                    {searchFilteredCandidates.length}/{candidates.length} {zh ? '个候选地点' : 'places'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPoolOpen(false)}
+                className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-200/60 hover:text-stone-700 transition text-sm"
+                title={zh ? '收起候选池 (Esc)' : 'Close Pool (Esc)'}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Search & Hotel Banner */}
+            <div className="border-b border-stone-100 bg-white p-3 space-y-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={poolSearch}
+                  onChange={(e) => setPoolSearch(e.target.value)}
+                  placeholder={zh ? '🔍 搜索候选地点、区域或标签...' : '🔍 Search candidates, areas, tags...'}
+                  className="w-full rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-1.5 text-xs text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:bg-white focus:outline-hidden"
+                />
+                {poolSearch ? (
+                  <button
+                    type="button"
+                    onClick={() => setPoolSearch('')}
+                    className="absolute right-2.5 top-1.5 text-xs text-stone-400 hover:text-stone-700"
+                  >
+                    ✕
+                  </button>
+                ) : null}
+              </div>
+
+              {candidateHotels.length > 0 ? (
+                <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-1.5 font-semibold text-amber-900 truncate">
+                    <span>🏨</span>
+                    <span className="truncate">{zh ? `有 ${candidateHotels.length} 家备选住宿` : `${candidateHotels.length} candidate stays`}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsHotelModalOpen(true)}
+                    className="shrink-0 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 shadow-2xs hover:bg-amber-100/60"
+                  >
+                    {zh ? '多维比选' : 'Compare'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Filter Chips Bar */}
+            {candidates.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 border-b border-stone-100 bg-stone-50/60 px-3 py-2 max-h-28 overflow-y-auto">
+                {filterChips.map((f) => {
+                  const isSelected = activeFilter === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setActiveFilter(isSelected && f.id !== 'all' ? 'all' : f.id)}
+                      className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition ${
+                        isSelected
+                          ? 'bg-stone-900 text-white shadow-2xs'
+                          : f.type === 'kind'
+                          ? 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-100'
+                          : f.type === 'tag'
+                          ? 'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                          : 'border border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
+                      }`}
+                    >
+                      {f.label} ({f.count})
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {/* Candidate Cards List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {searchFilteredCandidates.length === 0 ? (
+                <div className="py-16 text-center text-xs text-stone-400">
+                  <p className="text-2xl mb-2">📭</p>
+                  <p>{candidates.length === 0 ? (zh ? '当前行程暂无候选地点' : 'No candidates yet') : (zh ? '没有匹配的候选地点' : 'No matching candidates')}</p>
+                </div>
+              ) : (
+                searchFilteredCandidates.map((place) => (
+                  <article
+                    key={place.id}
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('text/plain', place.id);
+                      event.dataTransfer.dropEffect = 'move';
+                      setDraggingPlaceId(place.id);
+                    }}
+                    onDragEnd={() => setDraggingPlaceId(null)}
+                    onMouseEnter={() => setHighlightedPlaceId(place.id)}
+                    onMouseLeave={() => setHighlightedPlaceId(null)}
+                    className={`rounded-lg border bg-stone-50/70 p-3 transition-all duration-150 ${
+                      highlightedPlaceId === place.id
+                        ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/30'
+                        : 'border-stone-200 hover:border-stone-300 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
+                        <p className="mt-1 text-[11px] text-stone-400">{placeMeta(place, language)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void schedulePlace(place.id)}
+                        className="shrink-0 rounded-md bg-stone-950 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-stone-800 transition"
+                      >
+                        + {zh ? '当天' : 'Day'}
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${place.priority === 'must' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>{place.priority}</span>
+                      {place.observed_rating ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">★ {place.observed_rating}</span> : null}
+                      {place.observed_price ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">{place.observed_price}</span> : null}
+                      {place.tags.map((tag) => (
+                        <span key={tag} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                          🏷️ {tag}
+                        </span>
+                      ))}
+                      {place.signals?.map((signal) => (
+                        <span key={signal} className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-800">
+                          ✅ {signal}
+                        </span>
+                      ))}
+                      {place.risks?.map((risk) => (
+                        <span key={risk} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                          ⚠️ {risk}
+                        </span>
+                      ))}
+                    </div>
+                    {place.why ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-600">{place.why}</p> : null}
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </>
       ) : null}
 
       <HotelComparisonModal

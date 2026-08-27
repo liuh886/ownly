@@ -42,6 +42,18 @@
 - [x] 18. (Top Bar UI Cleanup):
   - Removed unnecessary `🗺️` map currency icon span (`lblMapCurrency`) from the top of the sidepanel header (`tripActiveRow`).
 
+## Planner Layout Redesign: 1:3 Day Skeleton/Workspace & Floating Pool Window
+- [x] 19. (Layout Restructure) Update `PlannerHome.tsx` main grid to 1:3 ratio:
+  - Day Skeleton occupies 1 part (`minmax(340px, 1fr)`).
+  - Planner Workspace (Spatial Map / Budget / Context) occupies 3 parts (`minmax(0, 3fr)`).
+- [x] 20. (Floating Candidate Pool Window) Implement toggleable floating pool drawer/window:
+  - Added `isPoolOpen` state and floating trigger button (`🗂️ 候选池 (${candidates.length})`).
+  - Added top bar quick button and Day Skeleton header trigger button.
+  - Implemented sleek floating drawer with search, category & custom filter chips with counts, hotel compare banner, and draggable candidate cards.
+  - Maintained drag-and-drop from floating pool directly to Day Skeleton dropzone.
+  - Added keyboard shortcut (`Esc` to close) and backdrop dismiss on mobile.
+- [x] 21. (Verification & Polish) Test responsive layouts, drag-and-drop, filter switching, full validation suite (`validate:fast`, `validate:extension`), and commit/sync.
+
 ## Review
 - **Architecture Evolution & Quality Hardening**:
   - Maintained complete backward compatibility with existing interfaces across `stay.ts` and `HotelComparisonModal.tsx`.
@@ -49,4 +61,5 @@
   - Aligned category & tag taxonomy with automatic default kind tagging (`ensurePlaceKindTag`) across Extension Capture and Planner Home.
   - Guaranteed tag filter purity by filtering out place names and addresses.
   - Streamlined candidate inline editor and cleaned up sidepanel top bar header.
+  - Redesigned Planner Home to a spacious 1:3 layout ratio (Day Skeleton vs Map/Budget Workspace) with an accessible, interactive Floating Research Pool Drawer.
   - All test suites green across entire project (`validate:fast`, `validate:extension`, `tsc --noEmit`).
