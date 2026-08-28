@@ -28,6 +28,60 @@ interface Point {
 
 const KIND_EMOJI = PLANNER_KIND_ICONS;
 
+export type BasemapStyle = 'carto_voyager' | 'carto_positron' | 'carto_dark' | 'osm_standard' | 'esri_satellite';
+
+export interface BasemapOption {
+  id: BasemapStyle;
+  label: { zh: string; en: string };
+  icon: string;
+  getUrl: (z: number, x: number, y: number) => string;
+  fallbackUrl?: (z: number, x: number, y: number) => string;
+  bgColor: string;
+}
+
+export const BASEMAP_OPTIONS: BasemapOption[] = [
+  {
+    id: 'carto_voyager',
+    label: { zh: '淡彩旅行', en: 'Voyager' },
+    icon: '🧭',
+    getUrl: (z, x, y) => `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+    bgColor: '#e5e7eb',
+  },
+  {
+    id: 'carto_positron',
+    label: { zh: '极简浅灰', en: 'Positron' },
+    icon: '⚪',
+    getUrl: (z, x, y) => `https://basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`,
+    fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+    bgColor: '#f3f4f6',
+  },
+  {
+    id: 'carto_dark',
+    label: { zh: '深邃夜景', en: 'Dark' },
+    icon: '🌑',
+    getUrl: (z, x, y) => `https://basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`,
+    fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+    bgColor: '#18181b',
+  },
+  {
+    id: 'osm_standard',
+    label: { zh: '开源标准', en: 'OSM' },
+    icon: '🗺️',
+    getUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+    fallbackUrl: (z, x, y) => `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    bgColor: '#e5e7eb',
+  },
+  {
+    id: 'esri_satellite',
+    label: { zh: '卫星实景', en: 'Satellite' },
+    icon: '🛰️',
+    getUrl: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+    fallbackUrl: (z, x, y) => `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    bgColor: '#1c1917',
+  },
+];
+
 // Web Mercator projection
 function projectLngToX(lng: number, zoom: number): number {
   return ((lng + 180) / 360) * Math.pow(2, zoom) * 256;
@@ -99,6 +153,29 @@ export function PlannerMap({
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [filterMode, setFilterMode] = useState<'all' | 'candidates' | 'scheduled'>('all');
+  const [basemapStyle, setBasemapStyle] = useState<BasemapStyle>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('ownly_planner_basemap_style') as BasemapStyle | null;
+        if (saved && BASEMAP_OPTIONS.some((opt) => opt.id === saved)) {
+          return saved;
+        }
+      } catch {}
+    }
+    return 'carto_voyager';
+  });
+
+  const handleBasemapChange = useCallback((newStyle: BasemapStyle) => {
+    setBasemapStyle(newStyle);
+    try {
+      localStorage.setItem('ownly_planner_basemap_style', newStyle);
+    } catch {}
+  }, []);
+
+  const activeBasemap = useMemo(
+    () => BASEMAP_OPTIONS.find((opt) => opt.id === basemapStyle) ?? BASEMAP_OPTIONS[0],
+    [basemapStyle],
+  );
 
   // Extract valid geo points
   const points = useMemo<Point[]>(() => {
@@ -409,7 +486,23 @@ export function PlannerMap({
           </span>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Basemap Style Selector */}
+          <div className="relative inline-flex items-center">
+            <select
+              value={basemapStyle}
+              onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
+              className="rounded-full border border-stone-200 bg-white py-0.5 pl-2 pr-6 text-[10px] font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 focus:border-stone-400 focus:outline-hidden cursor-pointer"
+              title={zh ? '切换免费底图样式' : 'Switch Basemap Style'}
+            >
+              {BASEMAP_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.icon} {opt.label[language]}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={() => setFilterMode('all')}
@@ -442,15 +535,15 @@ export function PlannerMap({
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         className="relative flex-1 cursor-grab overflow-hidden select-none active:cursor-grabbing"
-        style={{ minHeight: '300px', background: '#e5e7eb', touchAction: 'none' }}
+        style={{ minHeight: '300px', background: activeBasemap.bgColor, touchAction: 'none' }}
       >
-        {/* OpenStreetMap Carto Positron Tiles */}
+        {/* Dynamic Basemap Tiles */}
         <div className="absolute inset-0 pointer-events-none">
           {tiles.map((t) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              key={t.key}
-              src={`https://basemaps.cartocdn.com/rastertiles/voyager/${t.key}.png`}
+              key={`${basemapStyle}/${t.key}`}
+              src={activeBasemap.getUrl(intZoom, t.x, t.y)}
               alt=""
               className="absolute"
               style={{
@@ -462,9 +555,9 @@ export function PlannerMap({
               loading="lazy"
               onError={(e) => {
                 const img = e.target as HTMLImageElement;
-                if (img.dataset.fallback) return;
+                if (img.dataset.fallback || !activeBasemap.fallbackUrl) return;
                 img.dataset.fallback = '1';
-                img.src = `https://tile.openstreetmap.org/${t.key}.png`;
+                img.src = activeBasemap.fallbackUrl(intZoom, t.x, t.y);
               }}
             />
           ))}

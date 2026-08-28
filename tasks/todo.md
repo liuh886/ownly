@@ -60,7 +60,12 @@
   - Responsive multi-column grid layout (`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-4`) for candidate place cards.
   - Retain drag-and-drop upward into Day Skeleton, hover highlight sync with Map above, and one-click `+ 当天` (`+ Day`) scheduling.
 - [x] 23. (Verification & Sync) Run full test suite (`validate:fast`, `validate:extension`), verify responsive design, commit and push to `origin main`.
-- [ ] 24. (Basemap Research) Analyze and discuss free basemap solutions for the spatial map.
+- [x] 24. (Basemap Research) Analyze and discuss free basemap solutions for the spatial map.
+- [x] 25. (Free Basemap Switcher) Implement multi-style basemap switcher in `PlannerMap.tsx`:
+  - Support free, zero-config basemaps: CARTO Voyager (淡彩旅行), CARTO Positron (极简浅灰), CARTO Dark Matter (深邃夜景), OpenStreetMap Standard (标准开源), and Esri World Imagery (卫星实景).
+  - Add basemap selector in the map header toolbar with localized labels and icons.
+  - Persist chosen style in `localStorage` (`ownly_planner_basemap_style`).
+  - Graceful fallback on image load error to ensure tiles always display reliably.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:
