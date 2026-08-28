@@ -1299,6 +1299,118 @@ export function inferKindFromTypes(types?: string[]): PlannerPlaceKind | null {
   return null;
 }
 
+export interface ParsedPriceDetail {
+  raw: string;
+  currency: string | null;
+  minAmount: number;
+  maxAmount: number;
+  isRange: boolean;
+}
+
+export interface ConvertedPriceResult {
+  sourceRaw: string;
+  sourceCurrency: string | null;
+  targetCurrency: string;
+  rate: number;
+  convertedMin: number;
+  convertedMax: number;
+  isRange: boolean;
+  formattedTarget: string;
+  rateDescription: string;
+}
+
+export function parseDetailedPrice(raw?: string | null): ParsedPriceDetail | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const currency = extractPriceCurrency(raw);
+  
+  // Range check: e.g. "฿400–1,000", "¥1000 - 2000", "400 ~ 1000", "400 to 1000"
+  const rangeMatch = /(\d[\d,]*(?:\.\d+)?)\s*[-–—〜~至到|/]\s*(\d[\d,]*(?:\.\d+)?)/.exec(raw);
+  if (rangeMatch) {
+    const min = parseFloat(rangeMatch[1].replace(/,/g, ''));
+    const max = parseFloat(rangeMatch[2].replace(/,/g, ''));
+    if (Number.isFinite(min) && Number.isFinite(max) && (min > 0 || max > 0)) {
+      return {
+        raw,
+        currency,
+        minAmount: min,
+        maxAmount: max,
+        isRange: min !== max,
+      };
+    }
+  }
+
+  // Single number check: e.g. "฿500", "JPY 2500", "$120.50"
+  const singleMatch = /(\d[\d,]*(?:\.\d+)?)/.exec(raw);
+  if (singleMatch) {
+    const val = parseFloat(singleMatch[1].replace(/,/g, ''));
+    if (Number.isFinite(val) && val > 0) {
+      return {
+        raw,
+        currency,
+        minAmount: val,
+        maxAmount: val,
+        isRange: false,
+      };
+    }
+  }
+
+  return null;
+}
+
+export function convertPriceRange(
+  raw: string,
+  targetCurrency = 'CNY',
+  fxOverrides?: Record<string, number>,
+  fallbackSourceCurrency?: string,
+): ConvertedPriceResult | null {
+  const parsed = parseDetailedPrice(raw);
+  if (!parsed) return null;
+
+  // Disambiguate multi-country symbols (¥ for JPY/CNY, $ for USD/SGD/HKD/AUD/CAD)
+  const isAmbiguousSymbol = raw.includes('¥') || (raw.includes('$') && !/S\$|HK\$|NT\$|US\$|A\$|C\$/i.test(raw));
+  const fromCurr = (isAmbiguousSymbol && fallbackSourceCurrency)
+    ? fallbackSourceCurrency
+    : (parsed.currency || fallbackSourceCurrency || null);
+  if (!fromCurr) return null;
+
+  const target = targetCurrency.trim().toUpperCase();
+  const from = fromCurr.trim().toUpperCase();
+
+  const fx: FxSettings = {
+    base: target,
+    overrides: fxOverrides,
+  };
+
+  const rate = effectiveFxRate(from, fx);
+  if (!rate || rate <= 0) return null;
+
+  const convertedMin = Math.round(parsed.minAmount * rate * 100) / 100;
+  const convertedMax = Math.round(parsed.maxAmount * rate * 100) / 100;
+  const targetSymbol = currencySymbolFor(target);
+
+  const formatAmount = (num: number) => {
+    return num % 1 === 0 ? num.toLocaleString() : num.toFixed(2);
+  };
+
+  const formattedTarget = parsed.isRange
+    ? `${targetSymbol}${formatAmount(convertedMin)} – ${formatAmount(convertedMax)}`
+    : `${targetSymbol}${formatAmount(convertedMin)}`;
+
+  const rateDescription = `1 ${from} ≈ ${rate < 0.01 ? rate.toFixed(5) : (rate < 1 ? rate.toFixed(4) : rate.toFixed(2))} ${target}`;
+
+  return {
+    sourceRaw: raw,
+    sourceCurrency: from,
+    targetCurrency: target,
+    rate,
+    convertedMin,
+    convertedMax,
+    isRange: parsed.isRange,
+    formattedTarget,
+    rateDescription,
+  };
+}
+
 export function parseNumericPrice(raw?: string | null): number {  if (!raw) return 0;
   // Handle ranges like "฿200-400" or "¥1,000–2,000" -> average
   const rangeMatch = /(\d[\d,]*)\s*[-–—〜~至]\s*(\d[\d,]*)/.exec(raw);

@@ -1,5 +1,6 @@
 import {
   acknowledgeCapturedPlaces,
+  DEFAULT_USD_PIVOT,
   ensurePlaceKindTag,
   findExistingTripPlace,
   inferPlaceKind,
@@ -190,8 +191,93 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
     return true;
   }
+
+  if (type === 'OWNLY_GET_FX_CONFIG') {
+    void (async () => {
+      try {
+        const rates = await getCachedFxRates();
+        const stored = await chrome.storage.local.get([CAPTURE_STORAGE_KEY, FX_TOOLTIP_ENABLED_KEY]);
+        const state = stored[CAPTURE_STORAGE_KEY] as OwnlyCaptureState | undefined;
+        const activeTrip = state?.trips?.find((t) => t.id === state.activeTripId);
+        const targetCurrency = activeTrip?.currency || 'CNY';
+        const enabled = stored[FX_TOOLTIP_ENABLED_KEY] !== false;
+        sendResponse({ ok: true, targetCurrency, rates, enabled });
+      } catch {
+        sendResponse({ ok: false, targetCurrency: 'CNY', rates: DEFAULT_USD_PIVOT, enabled: true });
+      }
+    })();
+    return true;
+  }
+
+  if (type === 'OWNLY_SET_FX_TOOLTIP_ENABLED') {
+    const enabled = (message as { enabled?: boolean }).enabled !== false;
+    void (async () => {
+      await chrome.storage.local.set({ [FX_TOOLTIP_ENABLED_KEY]: enabled });
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.id) {
+          void chrome.tabs.sendMessage(tab.id, { type: 'OWNLY_FX_TOOLTIP_STATUS_CHANGED', enabled }).catch(() => {});
+        }
+      }
+    })();
+    sendResponse({ ok: true });
+    return true;
+  }
 });
 
-chrome.runtime.onInstalled.addListener(() => { void configureSidePanel(); });
-chrome.runtime.onStartup.addListener(() => { void configureSidePanel(); });
+const FX_RATES_CACHE_KEY = 'ownly_fx_rates';
+const FX_RATES_TIME_KEY = 'ownly_fx_rates_updated_at';
+const FX_TOOLTIP_ENABLED_KEY = 'ownly_fx_tooltip_enabled';
+const FX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+async function getCachedFxRates(): Promise<Record<string, number>> {
+  try {
+    const data = await chrome.storage.local.get([FX_RATES_CACHE_KEY, FX_RATES_TIME_KEY]);
+    const cachedRates = data[FX_RATES_CACHE_KEY] as Record<string, number> | undefined;
+    const lastUpdated = (data[FX_RATES_TIME_KEY] as number) || 0;
+    const now = Date.now();
+
+    if (cachedRates && now - lastUpdated < FX_CACHE_MAX_AGE_MS) {
+      return cachedRates;
+    }
+
+    void refreshFxRates();
+    return cachedRates || DEFAULT_USD_PIVOT;
+  } catch {
+    return DEFAULT_USD_PIVOT;
+  }
+}
+
+async function refreshFxRates(): Promise<Record<string, number>> {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    if (!res.ok) return DEFAULT_USD_PIVOT;
+    const data = (await res.json()) as { result?: string; rates?: Record<string, number> };
+    if (data?.result === 'success' && data?.rates && typeof data.rates === 'object') {
+      const pivotMap: Record<string, number> = { USD: 1 };
+      for (const [code, rate] of Object.entries(data.rates)) {
+        if (typeof rate === 'number' && rate > 0) {
+          pivotMap[code.toUpperCase()] = Math.round((1 / rate) * 100000) / 100000;
+        }
+      }
+      await chrome.storage.local.set({
+        [FX_RATES_CACHE_KEY]: pivotMap,
+        [FX_RATES_TIME_KEY]: Date.now(),
+      });
+      return pivotMap;
+    }
+  } catch (e) {
+    console.warn('[Ownly Capture] Failed to fetch live FX rates, using pivot fallback:', e);
+  }
+  return DEFAULT_USD_PIVOT;
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  void configureSidePanel();
+  void refreshFxRates();
+});
+chrome.runtime.onStartup.addListener(() => {
+  void configureSidePanel();
+  void refreshFxRates();
+});
 void configureSidePanel();

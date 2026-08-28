@@ -76,6 +76,12 @@
   - Expand `inferPlaceKind` taxonomy with `cuisine`, `dining`, `kitchen`, `eatery`, `steakhouse`, `dumpling`, `barbecue`, `tapas`, `canteen`, `fondue` and multilingual Thai keywords (`ร้านอาหาร`, `อาหาร`, `ก๋วยเตี๋ยว`, `ข้าวมันไก่`, `ส้มตำ`, `บาร์`).
   - Add Japanese keywords (`ラーメン`, `焼肉`, `寿司`, `うどん`, `そば`, `天ぷら`, `割烹`, `居酒屋`, `食堂`, `定食`).
   - Accurately categorize `Ekachan The Wisdom of Ethnic Thai Cuisine` and related global culinary establishments as `food`.
+- [x] 28. (Extension Currency Conversion Hover Tooltip & Switch):
+  - [x] 28.1 (Domain FX Converter): Implement `convertPriceRange` & currency extraction supporting single/range prices and target trip currency. Add unit tests.
+  - [x] 28.2 (Background Rates Engine): Daily silent sync of open exchange rates with 24h `chrome.storage.local` cache and `DEFAULT_USD_PIVOT` fallback.
+  - [x] 28.3 (Content Script Floating Tooltip): Safe, zero-DOM-mutation hovering tooltip with glassmorphism styling, showing converted amount, rate formula, and auto-dismissal.
+  - [x] 28.4 (Sidepanel Toggle & State Sync): Add a clean `💱 汇率浮窗` toggle in sidepanel header with persistence (`ownly_fx_tooltip_enabled`) and runtime tab broadcast.
+  - [x] 28.5 (Verification & Build): Run `validate:fast` and `validate:extension`, verify zero performance overhead, commit and push.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:

@@ -1119,6 +1119,15 @@ export function initHandlers(): void {
     el.tags.value = ensurePlaceKindTag(currentTags, newKind, store.lang).join(', ');
   });
 
+  void chrome.storage.local.get('ownly_fx_tooltip_enabled').then((data) => {
+    el.toggleFxTooltip.checked = data.ownly_fx_tooltip_enabled !== false;
+  }).catch(() => {});
+
+  el.toggleFxTooltip.addEventListener('change', () => {
+    const isEnabled = el.toggleFxTooltip.checked;
+    void chrome.runtime.sendMessage({ type: 'OWNLY_SET_FX_TOOLTIP_ENABLED', enabled: isEnabled });
+  });
+
   initCandidateDelegation();
   initCandidateDragReorder();
 }

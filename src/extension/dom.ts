@@ -1,5 +1,8 @@
 export type ElementMap = {
   langToggle: HTMLButtonElement;
+  toggleFxTooltip: HTMLInputElement;
+  lblFxTooltipToggle: HTMLElement;
+  txtFxTooltipToggle: HTMLElement;
   lblActiveTrip: HTMLElement;
   currencySelector: HTMLSelectElement;
   tripSelect: HTMLSelectElement;
@@ -127,6 +130,9 @@ export function required<T extends HTMLElement>(id: string): T {
 
 export const el: ElementMap = {
   langToggle: required('langToggle'),
+  toggleFxTooltip: required<HTMLInputElement>('toggleFxTooltip'),
+  lblFxTooltipToggle: required('lblFxTooltipToggle'),
+  txtFxTooltipToggle: required('txtFxTooltipToggle'),
   lblActiveTrip: required('lblActiveTrip'),
   currencySelector: required<HTMLSelectElement>('currencySelector'),
   tripSelect: required('tripSelect'),

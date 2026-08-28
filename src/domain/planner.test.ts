@@ -28,6 +28,8 @@ import {
   estimateTripBudget,
   calculateTripSettlement,
   parseNumericPrice,
+  parseDetailedPrice,
+  convertPriceRange,
   placeIdentityKey,
   type OwnlyCaptureState,
   type TripExpenseItem,
@@ -619,6 +621,41 @@ describe('Ownly Planner domain', () => {
     expect(parseNumericPrice('$25 per person')).toBe(25);
     expect(parseNumericPrice('')).toBe(0);
     expect(parseNumericPrice(null)).toBe(0);
+  });
+
+  it('parses detailed price ranges and currencies', () => {
+    const range = parseDetailedPrice('฿400–1,000');
+    expect(range).toEqual({
+      raw: '฿400–1,000',
+      currency: 'THB',
+      minAmount: 400,
+      maxAmount: 1000,
+      isRange: true,
+    });
+
+    const single = parseDetailedPrice('$120.50 per night');
+    expect(single).toEqual({
+      raw: '$120.50 per night',
+      currency: 'USD',
+      minAmount: 120.5,
+      maxAmount: 120.5,
+      isRange: false,
+    });
+  });
+
+  it('converts single and range prices into target trip currency', () => {
+    const converted = convertPriceRange('฿400–1,000', 'CNY', { THB: 0.205 });
+    expect(converted).not.toBeNull();
+    expect(converted?.sourceCurrency).toBe('THB');
+    expect(converted?.targetCurrency).toBe('CNY');
+    expect(converted?.convertedMin).toBe(82);
+    expect(converted?.convertedMax).toBe(205);
+    expect(converted?.formattedTarget).toBe('¥82 – 205');
+    expect(converted?.isRange).toBe(true);
+
+    const convertedSingle = convertPriceRange('¥3,500', 'CNY', { JPY: 0.048 }, 'JPY');
+    expect(convertedSingle?.convertedMin).toBe(168);
+    expect(convertedSingle?.formattedTarget).toBe('¥168');
   });
 
   it('estimates categorized trip budget based on scheduled places and traveler count', () => {

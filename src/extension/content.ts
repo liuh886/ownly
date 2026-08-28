@@ -1,4 +1,6 @@
 import {
+  convertPriceRange,
+  DEFAULT_USD_PIVOT,
   inferPlaceKind,
   inferSourceProvider,
   extractPlaceCoordinates,
@@ -1152,7 +1154,266 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     })();
     return true;
   }
+  if (msgType === 'OWNLY_FX_TOOLTIP_STATUS_CHANGED') {
+    const enabled = (message as { enabled?: boolean }).enabled !== false;
+    fxTooltipEnabled = enabled;
+    if (!enabled && tooltipHideFn) tooltipHideFn();
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (msgType === 'OWNLY_FX_CONFIG_UPDATED') {
+    const target = (message as { targetCurrency?: string }).targetCurrency;
+    const rates = (message as { rates?: Record<string, number> }).rates;
+    const enabled = (message as { enabled?: boolean }).enabled;
+    if (target) fxTargetCurrency = target;
+    if (rates) fxPivotRates = rates;
+    if (typeof enabled === 'boolean') fxTooltipEnabled = enabled;
+    sendResponse({ ok: true });
+    return true;
+  }
 });
+
+// ==========================================
+// Currency Hover Conversion Tooltip Engine
+// ==========================================
+
+let fxTargetCurrency = 'CNY';
+let fxPivotRates: Record<string, number> = DEFAULT_USD_PIVOT;
+let fxTooltipEnabled = true;
+let tooltipHideFn: (() => void) | null = null;
+
+function initFxTooltipEngine() {
+  if (typeof document === 'undefined') return;
+
+  try {
+    void chrome.runtime.sendMessage({ type: 'OWNLY_GET_FX_CONFIG' })
+      .then((val: unknown) => {
+        const res = val as { ok?: boolean; targetCurrency?: string; rates?: Record<string, number>; enabled?: boolean } | undefined;
+        if (res?.ok) {
+          if (res.targetCurrency) fxTargetCurrency = res.targetCurrency;
+          if (res.rates) fxPivotRates = res.rates;
+          if (typeof res.enabled === 'boolean') fxTooltipEnabled = res.enabled;
+        }
+      })
+      .catch(() => {});
+  } catch {}
+
+  const style = document.createElement('style');
+  style.id = 'ownly-fx-styles';
+  style.textContent = `
+    #ownly-fx-tooltip {
+      position: fixed;
+      z-index: 2147483647;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(4px) scale(0.98);
+      transition: opacity 0.14s ease, transform 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      max-width: 320px;
+      user-select: none;
+    }
+    #ownly-fx-tooltip.ownly-fx-visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+    .ownly-fx-card {
+      background: rgba(24, 24, 27, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      padding: 8px 12px;
+      box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+      color: #f4f4f5;
+    }
+    .ownly-fx-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 2px;
+      font-size: 10.5px;
+      color: #a1a1aa;
+      font-weight: 500;
+    }
+    .ownly-fx-title {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #a1a1aa;
+    }
+    .ownly-fx-converted-val {
+      font-size: 16px;
+      font-weight: 700;
+      color: #34d399;
+      letter-spacing: -0.01em;
+      line-height: 1.25;
+      margin-bottom: 3px;
+    }
+    .ownly-fx-sub-info {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 10px;
+      color: #71717a;
+    }
+    .ownly-fx-rate {
+      color: #a1a1aa;
+      font-variant-numeric: tabular-nums;
+    }
+    .ownly-fx-badge {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 1px 4px;
+      border-radius: 4px;
+      color: #d4d4d8;
+      font-size: 9px;
+    }
+    .ownly-fx-close {
+      background: transparent;
+      border: none;
+      color: #71717a;
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .ownly-fx-close:hover {
+      color: #f4f4f5;
+      background: rgba(255, 255, 255, 0.12);
+    }
+  `;
+  if (!document.getElementById('ownly-fx-styles')) {
+    document.head.appendChild(style);
+  }
+
+  let tooltipNode = document.getElementById('ownly-fx-tooltip') as HTMLDivElement | null;
+  if (!tooltipNode) {
+    tooltipNode = document.createElement('div');
+    tooltipNode.id = 'ownly-fx-tooltip';
+    tooltipNode.innerHTML = `
+      <div class="ownly-fx-card">
+        <div class="ownly-fx-header">
+          <span class="ownly-fx-title"><span>💱</span> <span>汇率换算</span></span>
+          <button class="ownly-fx-close" type="button" title="关闭浮窗">✕</button>
+        </div>
+        <div class="ownly-fx-converted-val" id="ownly-fx-converted-val">--</div>
+        <div class="ownly-fx-sub-info">
+          <span class="ownly-fx-rate" id="ownly-fx-rate">--</span>
+          <span class="ownly-fx-badge" id="ownly-fx-badge">行程货币</span>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(tooltipNode);
+
+    const closeBtn = tooltipNode.querySelector('.ownly-fx-close');
+    closeBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideTooltip();
+    });
+  }
+
+  const convertedValEl = document.getElementById('ownly-fx-converted-val');
+  const rateEl = document.getElementById('ownly-fx-rate');
+  const badgeEl = document.getElementById('ownly-fx-badge');
+
+  let hideTimeout: number | undefined;
+  let activeElement: HTMLElement | null = null;
+
+  function showTooltip(el: HTMLElement, result: import('../domain/planner').ConvertedPriceResult) {
+    if (!tooltipNode || !convertedValEl || !rateEl || !badgeEl) return;
+    if (hideTimeout) {
+      window.clearTimeout(hideTimeout);
+      hideTimeout = undefined;
+    }
+    activeElement = el;
+
+    convertedValEl.textContent = `≈ ${result.formattedTarget}`;
+    rateEl.textContent = result.rateDescription;
+    badgeEl.textContent = `${result.targetCurrency}`;
+
+    const rect = el.getBoundingClientRect();
+    const tooltipWidth = 230;
+    const tooltipHeight = 65;
+
+    let top = rect.top - tooltipHeight - 6;
+    if (top < 10) {
+      top = rect.bottom + 6;
+    }
+    let left = rect.left + (rect.width - tooltipWidth) / 2;
+    left = Math.max(10, Math.min(window.innerWidth - tooltipWidth - 10, left));
+
+    tooltipNode.style.top = `${Math.round(top)}px`;
+    tooltipNode.style.left = `${Math.round(left)}px`;
+    tooltipNode.classList.add('ownly-fx-visible');
+  }
+
+  function hideTooltip() {
+    if (!tooltipNode) return;
+    tooltipNode.classList.remove('ownly-fx-visible');
+    activeElement = null;
+  }
+  tooltipHideFn = hideTooltip;
+
+  function scheduleHide() {
+    if (hideTimeout) window.clearTimeout(hideTimeout);
+    hideTimeout = window.setTimeout(() => {
+      hideTooltip();
+    }, 120);
+  }
+
+  tooltipNode.addEventListener('mouseenter', () => {
+    if (hideTimeout) {
+      window.clearTimeout(hideTimeout);
+      hideTimeout = undefined;
+    }
+  });
+  tooltipNode.addEventListener('mouseleave', () => {
+    scheduleHide();
+  });
+
+  const PRICE_SCAN_REGEX = /(?:人均|per person|每人|每晚|per night|[¥฿$€£₩]|THB|JPY|USD|EUR|GBP|KRW|SGD|HKD|TWD|NT\$|S\$|HK\$|US\$)/i;
+
+  let lastCheckedTime = 0;
+  document.addEventListener('mouseover', (event) => {
+    if (!fxTooltipEnabled) return;
+    const now = Date.now();
+    if (now - lastCheckedTime < 40) return; // throttle
+    lastCheckedTime = now;
+
+    const target = event.target as HTMLElement | null;
+    if (!target || tooltipNode?.contains(target)) return;
+
+    const text = (target.textContent || '').trim();
+    if (!text || text.length > 80 || !PRICE_SCAN_REGEX.test(text)) {
+      return;
+    }
+
+    if (!isPlausiblePriceText(text)) {
+      const snippetMatch = /(?:人均|per person|每人|每晚|per night)?\s*([¥฿$€£₩]|THB|JPY|USD|EUR|GBP|KRW|SGD|HKD|TWD|NT\$|S\$|HK\$|US\$)\s*[\d,]+(?:\.\d+)?(?:\s*[-–—〜~至到]\s*[\d,]+(?:\.\d+)?)?/i.exec(text);
+      if (!snippetMatch || !isPlausiblePriceText(snippetMatch[0])) return;
+    }
+
+    const pageCurrency = detectCurrencyFromPage(window.location.href);
+    const converted = convertPriceRange(text, fxTargetCurrency, fxPivotRates, pageCurrency);
+    if (converted && converted.sourceCurrency !== converted.targetCurrency) {
+      showTooltip(target, converted);
+    }
+  }, { passive: true });
+
+  document.addEventListener('mouseout', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (activeElement && (target === activeElement || activeElement.contains(target))) {
+      scheduleHide();
+    }
+  }, { passive: true });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideTooltip();
+  });
+}
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const SCAN_DEBOUNCE_MS = 400;
@@ -1171,4 +1432,5 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       observer.observe(document.body, { childList: true, subtree: true });
     }
   } catch {}
+  initFxTooltipEngine();
 }

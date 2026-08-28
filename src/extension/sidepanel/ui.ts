@@ -1,6 +1,7 @@
 import {
   checkOpeningHoursCollision,
   classifyResearchChip,
+  convertPriceRange,
   ensurePlaceKindTag,
   getPlannerKindLabel,
   inferPlaceKind,
@@ -60,6 +61,8 @@ export function setStatus(message: string, tone: 'muted' | 'success' | 'error' =
 export function applyI18n() {
   const dict = t();
   el.langToggle.textContent = store.lang === 'zh' ? 'EN' : '中文';
+  el.lblFxTooltipToggle.title = dict.toggleFxTooltipDesc;
+  el.txtFxTooltipToggle.textContent = dict.toggleFxTooltipLabel;
   el.lblActiveTrip.textContent = dict.activeTrip;
   el.sumTripManage.textContent = dict.tripManage;
   el.sumCreateTrip.textContent = dict.createTripSummary;
@@ -1015,7 +1018,17 @@ function buildCandidateDetails(
     parts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
   }
   if (place.observed_rating) parts.push(`<span>★ ${place.observed_rating}</span>`);
-  if (place.observed_price) parts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
+  if (place.observed_price) {
+    const activeTrip = store.state.trips?.find((t) => t.id === store.state.activeTripId);
+    const converted = activeTrip?.currency
+      ? convertPriceRange(place.observed_price, activeTrip.currency)
+      : null;
+    if (converted && converted.sourceCurrency !== converted.targetCurrency) {
+      parts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);
+    } else {
+      parts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
+    }
+  }
   if (place.duration_minutes) parts.push(`<span>⏱️ ${place.duration_minutes}m</span>`);
   if (place.tags.length) parts.push(`<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`);
   if (place.signals && place.signals.length > 0) {
