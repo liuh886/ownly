@@ -1116,8 +1116,9 @@ export interface TripSettlementResult {
 }
 
 const SYMBOL_TO_CODE: Record<string, string> = {
-  '¥': 'CNY', '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '₩': 'KRW',
-  'S$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD',
+  '¥': 'CNY', '￥': 'CNY', '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '₩': 'KRW',
+  'S$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD', 'A$': 'AUD', 'C$': 'CAD',
+  '₫': 'VND', '₹': 'INR', 'RM': 'MYR',
 };
 
 /**
@@ -1157,7 +1158,7 @@ export function effectiveFxRate(
 /** Extracts a normalized ISO-ish currency marker from a free-text price string. */
 export function extractPriceCurrency(raw?: string | null): string | null {
   if (!raw) return null;
-  const match = /(?:[¥฿$€£₩]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|NT\$|S\$|HK\$|US\$)/i.exec(raw);
+  const match = /(?:[¥￥฿$€£₩₫₹]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|KRW|MYR|VND|CHF|INR|NT\$|S\$|HK\$|US\$|A\$|C\$)/i.exec(raw);
   if (!match) return null;
   const rawMarker = match[0].toUpperCase();
   // NOTE: /\$$/ — a literal dollar sign at the end (the old /\\$/ matched a
