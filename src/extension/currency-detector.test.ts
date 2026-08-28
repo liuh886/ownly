@@ -32,6 +32,62 @@ describe('Unified Currency Detector & Cross-Validation Engine', () => {
   });
 
   describe('detectPageCurrency cross-validation', () => {
+    it('detects currency from SEO Schema.org JSON-LD structured data', () => {
+      const mockDoc = {
+        querySelectorAll: (sel: string) => {
+          if (sel.includes('application/ld+json')) {
+            return [{
+              textContent: JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Hotel',
+                'name': 'Marina Bay Sands',
+                'offers': {
+                  '@type': 'Offer',
+                  'priceCurrency': 'SGD',
+                  'price': '850.00'
+                }
+              })
+            }];
+          }
+          return [];
+        },
+        querySelector: () => null,
+        documentElement: { getAttribute: () => null },
+        body: { textContent: '' },
+      } as unknown as Document;
+
+      const result = detectPageCurrency({
+        priceText: '$850.00',
+        doc: mockDoc,
+      });
+      expect(result.currency).toBe('SGD');
+      expect(result.signals.some(s => s.source === 'json_ld')).toBe(true);
+    });
+
+    it('detects currency from site-level active currency picker / HTML data-currency', () => {
+      const mockDoc = {
+        querySelectorAll: () => [],
+        querySelector: (sel: string) => {
+          if (sel.includes('currency')) {
+            return {
+              getAttribute: (attr: string) => attr === 'data-currency' ? 'SGD' : null,
+              textContent: 'SGD',
+            };
+          }
+          return null;
+        },
+        documentElement: { getAttribute: (attr: string) => attr === 'data-currency' ? 'SGD' : null },
+        body: { textContent: '' },
+      } as unknown as Document;
+
+      const result = detectPageCurrency({
+        priceText: '$150.00',
+        doc: mockDoc,
+      });
+      expect(result.currency).toBe('SGD');
+      expect(result.signals.some(s => s.source === 'site_switcher')).toBe(true);
+    });
+
     it('disambiguates bare "$" to SGD in Singapore via phone code +65', () => {
       const result = detectPageCurrency({
         priceText: '$45.00',

@@ -8,9 +8,10 @@ export interface CurrencySignal {
   currency: string;
   source:
     | 'override'
-    | 'explicit_token'
+    | 'site_switcher'
     | 'json_ld'
     | 'meta_tag'
+    | 'explicit_token'
     | 'phone_code'
     | 'geo_coord'
     | 'tax_clue'
@@ -119,22 +120,36 @@ export interface DetectionContext {
 export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResult {
   const signals: CurrencySignal[] = [];
 
+  // Priority 0: User Manual Override (From Extension Sidepanel)
   const override = ctx.overrideCurrency?.trim().toUpperCase();
   if (override && override !== 'AUTO') {
     signals.push({ currency: override, source: 'override', confidence: 100, detail: 'User manual override' });
     return { currency: override, confidence: 100, signals, isAmbiguousResolved: false };
   }
 
-  const explicit = extractExplicitToken(ctx.priceText);
-  if (explicit) {
-    signals.push({ currency: explicit, source: 'explicit_token', confidence: 100, detail: `Found token in "${ctx.priceText}"` });
-  }
-
-  const rawUrl = ctx.url || (typeof window !== 'undefined' ? window.location.href : '');
   const doc = ctx.doc || (typeof document !== 'undefined' ? document : undefined);
+  const rawUrl = ctx.url || (typeof window !== 'undefined' ? window.location.href : '');
 
+  // Priority 1: SEO & Structured Data (JSON-LD & Meta Tags)
   if (doc) {
     try {
+      // A. Schema.org JSON-LD (Rich Snippets / Merchant / Products)
+      const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+      for (const script of Array.from(scripts)) {
+        const text = script.textContent || '';
+        if (text.includes('priceCurrency') || text.includes('"currency"')) {
+          const match = /"(?:priceCurrency|currency)"\s*:\s*"([A-Z]{3})"/i.exec(text);
+          if (match && match[1]) {
+            const curr = match[1].toUpperCase();
+            if (UNAMBIGUOUS_SYMBOLS[curr]) {
+              signals.push({ currency: curr, source: 'json_ld', confidence: 95, detail: 'Schema.org JSON-LD' });
+              break;
+            }
+          }
+        }
+      }
+
+      // B. HTML Meta tags (OpenGraph, Product, standard meta)
       const metaEls = doc.querySelectorAll<HTMLMetaElement>(
         'meta[property*="currency" i], meta[name*="currency" i], meta[itemprop*="currency" i]'
       );
@@ -145,22 +160,58 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
           break;
         }
       }
+    } catch {}
+  }
 
-      const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
-      for (const script of Array.from(scripts)) {
-        const text = script.textContent || '';
-        if (text.includes('priceCurrency') || text.includes('"currency"')) {
-          const match = /"(?:priceCurrency|currency)"\s*:\s*"([A-Z]{3})"/i.exec(text);
-          if (match && match[1]) {
-            const curr = match[1].toUpperCase();
-            signals.push({ currency: curr, source: 'json_ld', confidence: 95, detail: 'Schema.org JSON-LD' });
-            break;
-          }
+  // Priority 2: Website Built-in Currency Switcher & Active DOM/Storage State
+  if (doc) {
+    try {
+      // A. Root HTML/Body data attributes (e.g. <html data-currency="SGD">)
+      const rootCurrency = doc.documentElement.getAttribute('data-currency') ||
+        doc.documentElement.getAttribute('data-site-currency') ||
+        doc.body?.getAttribute('data-currency');
+      if (rootCurrency) {
+        const code = rootCurrency.trim().toUpperCase();
+        if (UNAMBIGUOUS_SYMBOLS[code]) {
+          signals.push({ currency: code, source: 'site_switcher', confidence: 95, detail: 'HTML data-currency attribute' });
+        }
+      }
+
+      // B. Header/Navigation Currency Picker (Booking, Agoda, Klook, TripAdvisor)
+      const pickerEl = doc.querySelector<HTMLElement>(
+        '[data-testid*="currency" i], [data-selected-currency], select[name*="currency" i] option:checked, [class*="currency-picker" i] [class*="active" i], [class*="currency-selector" i]'
+      );
+      if (pickerEl) {
+        const pickerText = (pickerEl.getAttribute('data-selected-currency') || pickerEl.getAttribute('data-currency') || pickerEl.textContent || '').trim().toUpperCase();
+        const extracted = extractExplicitToken(pickerText) || (pickerText.length === 3 && UNAMBIGUOUS_SYMBOLS[pickerText] ? pickerText : null);
+        if (extracted) {
+          signals.push({ currency: extracted, source: 'site_switcher', confidence: 92, detail: 'Site Currency Switcher / Picker' });
         }
       }
     } catch {}
   }
 
+  // C. Storage active currency
+  if (typeof window !== 'undefined') {
+    try {
+      const storageKeys = ['currency', 'user_currency', 'selected_currency', 'booking_currency', 'klook_currency'];
+      for (const key of storageKeys) {
+        const val = (window.localStorage?.getItem(key) || window.sessionStorage?.getItem(key) || '').trim().toUpperCase();
+        if (val && val.length === 3 && UNAMBIGUOUS_SYMBOLS[val]) {
+          signals.push({ currency: val, source: 'site_switcher', confidence: 90, detail: `Storage: ${key}` });
+          break;
+        }
+      }
+    } catch {}
+  }
+
+  // Priority 3: Explicit Currency Symbol in Target Price / Selected Text
+  const explicit = extractExplicitToken(ctx.priceText);
+  if (explicit) {
+    signals.push({ currency: explicit, source: 'explicit_token', confidence: 100, detail: `Found explicit token in "${ctx.priceText}"` });
+  }
+
+  // Priority 4: Physical Evidence & Local Context (Phone, GPS, Tax, TLD)
   const phoneSource = ctx.phoneText || (doc ? (doc.querySelector('button[data-tooltip*="phone" i], a[href^="tel:"], div[aria-label*="phone" i]')?.textContent || '') : '');
   if (phoneSource) {
     if (/(?:\+65|\b65\s*\d{4})/i.test(phoneSource)) signals.push({ currency: 'SGD', source: 'phone_code', confidence: 90, detail: '+65 Singapore' });
@@ -193,7 +244,7 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
       signals.push({ currency: 'MYR', source: 'geo_coord', confidence: 95, detail: 'Coordinates in Malaysia' });
     } else if (lat >= 33.00 && lat <= 38.60 && lng >= 124.50 && lng <= 131.00) {
       signals.push({ currency: 'KRW', source: 'geo_coord', confidence: 95, detail: 'Coordinates in South Korea' });
-    } else if (lat >= 8.50 && lat <= 23.40 && lng >= 102.10 && lng <= 109.50) {
+    } else if (lat >= 8.50 && lat <= 23.40 && lng >= 102.10 && lng >= 109.50) {
       signals.push({ currency: 'VND', source: 'geo_coord', confidence: 95, detail: 'Coordinates in Vietnam' });
     } else if (lat >= -44.00 && lat <= -10.00 && lng >= 113.00 && lng <= 154.00) {
       signals.push({ currency: 'AUD', source: 'geo_coord', confidence: 95, detail: 'Coordinates in Australia' });
@@ -238,10 +289,12 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     else if (/\.my$/i.test(host)) signals.push({ currency: 'MYR', source: 'domain_tld', confidence: 75, detail: '.my Malaysia' });
   } catch {}
 
+  // Low confidence fallback: Trip currency
   if (ctx.hintCurrency) {
     signals.push({ currency: ctx.hintCurrency.trim().toUpperCase(), source: 'hint', confidence: 30, detail: 'Active trip hint fallback' });
   }
 
+  // Decision Matrix
   const priceRaw = ctx.priceText || '';
   const isBareDollar = priceRaw.includes('$') && !/S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$/i.test(priceRaw);
   const isYenOrYuan = priceRaw.includes('¥') || priceRaw.includes('￥');
@@ -251,6 +304,7 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     scores[s.currency] = (scores[s.currency] || 0) + s.confidence;
   }
 
+  // 1. Bare "$" disambiguation
   if (isBareDollar) {
     let bestCurr = 'USD';
     let maxScore = -1;
@@ -269,6 +323,7 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     };
   }
 
+  // 2. "¥" disambiguation
   if (isYenOrYuan) {
     const jpyScore = scores['JPY'] || 0;
     const cnyScore = scores['CNY'] || 0;
@@ -281,6 +336,7 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     };
   }
 
+  // 3. Explicit Token
   if (explicit) {
     return {
       currency: explicit,
@@ -290,6 +346,7 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     };
   }
 
+  // 4. Highest Score General
   let winningCurrency = 'USD';
   let highestScore = 0;
   for (const [curr, score] of Object.entries(scores)) {
