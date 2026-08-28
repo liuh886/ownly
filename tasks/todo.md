@@ -66,6 +66,12 @@
   - Add basemap selector in the map header toolbar with localized labels and icons.
   - Persist chosen style in `localStorage` (`ownly_planner_basemap_style`).
   - Graceful fallback on image load error to ensure tiles always display reliably.
+- [x] 26. (Extension Capture & Candidate Editor Unification):
+  - Improve capture banner to friendly editing status indicator (`🟢 已在候选池 · 可在此完善快捷标签与心得`).
+  - Update submit button text to clear `💾 保存地点与标签修改` (Save Place & Tags).
+  - Respect exact tag selections during capture edit without re-injecting deleted tags.
+  - Sync candidate card "✏️ 编辑" with top capture form and quick chips seamlessly.
+  - Clear user feedback upon saving updates (`✓ 已保存地点修改与快捷标签`).
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:

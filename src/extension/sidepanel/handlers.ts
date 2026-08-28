@@ -21,6 +21,7 @@ import { readCurrentPlace } from './capture';
 import { getExistingPlaceForUrl, store, t } from './store';
 import {
   applyI18n,
+  autoFillPlaceForm,
   populateEditTripForm,
   renderCandidatesList,
   renderCurrencyPill,
@@ -311,7 +312,32 @@ function initCandidateDelegation() {
       if (store.editingCandidateId === placeId) {
         scrollCardIntoView(placeId, true);
         const editing = store.state.pendingPlaces.find((p) => p.id === placeId);
-        if (editing?.source_url) void revealPlaceInMaps(editing.source_url);
+        if (editing) {
+          store.currentPlace = {
+            title: editing.title,
+            sourceUrl: editing.source_url,
+            sourceProvider: editing.source_provider,
+            sourcePlaceId: editing.source_place_id,
+            category: editing.kind,
+            address: editing.address,
+            coordinates: editing.coordinates,
+            rating: editing.observed_rating,
+            priceLevel: editing.observed_price,
+            summary: editing.why,
+            userNote: editing.notes,
+            openHours: editing.open_hours,
+            phone: editing.phone,
+            plusCode: editing.plus_code,
+            menuUrl: editing.menu_url,
+            reservationUrl: editing.reservation_url,
+            reviewTopics: editing.review_topics,
+            types: editing.types,
+          };
+          renderCurrentPlace();
+          autoFillPlaceForm(store.currentPlace);
+          syncQuickChipStates();
+          if (editing.source_url) void revealPlaceInMaps(editing.source_url);
+        }
       }
     } else if (action === 'delete') {
       store.locallyDeletedIds.add(placeId);
@@ -1018,10 +1044,9 @@ export function initHandlers(): void {
     const stableId = existing?.id ?? store.state.knownPlaceIds[placeKey] ?? crypto.randomUUID();
 
     const selectedKind = (el.kind.value as PlannerPlaceKind) || 'other';
-    const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
     const placeTags = normalizeDelimitedText(el.tags.value);
     const combinedTags = ensurePlaceKindTag(
-      Array.from(new Set([...(activeTrip?.tags ?? []), ...placeTags])),
+      placeTags,
       selectedKind,
       store.lang,
     );
@@ -1074,7 +1099,7 @@ export function initHandlers(): void {
     void saveState().then(() => {
       syncQuickChipStates();
       setStatus(existing ? dict.candidateUpdated : dict.candidateAdded, 'success');
-      if (!existing) flashNewCandidate(place.id);
+      flashNewCandidate(place.id);
     });
   });
 
