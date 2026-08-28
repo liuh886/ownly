@@ -1138,6 +1138,8 @@ export interface FxSettings {
   base: string;
   /** Explicit user overrides: overrides[from] = how many BASE per 1 FROM. */
   overrides?: Record<string, number>;
+  /** Pivot exchange rates against USD: pivot[code] = USD value of 1 unit of currency. */
+  usdPivots?: Record<string, number>;
 }
 
 /** Effective multiplier converting 1 FROM into BASE, or null when unknown. */
@@ -1147,12 +1149,24 @@ export function effectiveFxRate(
 ): number | null {
   const code = from?.trim().toUpperCase() || null;
   if (!code) return null;
-  if (code === fx.base.toUpperCase()) return 1;
-  const overridden = fx.overrides?.[code];
-  if (typeof overridden === 'number' && Number.isFinite(overridden) && overridden > 0) return overridden;
-  const fromUsd = DEFAULT_USD_PIVOT[code];
-  const baseUsd = DEFAULT_USD_PIVOT[fx.base.toUpperCase()];
-  if (fromUsd && baseUsd) return Math.round((fromUsd / baseUsd) * 10000) / 10000;
+  const base = fx.base.toUpperCase();
+  if (code === base) return 1;
+
+  // Direct override: how many BASE per 1 FROM
+  const directOverride = fx.overrides?.[code];
+  // Guard: if overrides contains 'USD: 1', it is a USD-pivot table rather than direct BASE multiplier
+  const isUsdPivotTable = fx.overrides?.USD === 1 && base !== 'USD';
+  if (!isUsdPivotTable && typeof directOverride === 'number' && Number.isFinite(directOverride) && directOverride > 0) {
+    return directOverride;
+  }
+
+  const pivots = isUsdPivotTable ? fx.overrides : (fx.usdPivots || DEFAULT_USD_PIVOT);
+  const fromUsd = pivots?.[code] ?? DEFAULT_USD_PIVOT[code];
+  const baseUsd = pivots?.[base] ?? DEFAULT_USD_PIVOT[base];
+
+  if (fromUsd && baseUsd && baseUsd > 0) {
+    return Math.round((fromUsd / baseUsd) * 10000) / 10000;
+  }
   return null;
 }
 
@@ -1369,7 +1383,7 @@ export function parseDetailedPrice(raw?: string | null): ParsedPriceDetail | nul
 export function convertPriceRange(
   raw: string,
   targetCurrency = 'CNY',
-  fxOverrides?: Record<string, number>,
+  fxOverridesOrPivots?: Record<string, number> | { overrides?: Record<string, number>; usdPivots?: Record<string, number> },
   fallbackSourceCurrency?: string,
 ): ConvertedPriceResult | null {
   const parsed = parseDetailedPrice(raw);
@@ -1401,10 +1415,28 @@ export function convertPriceRange(
   const target = targetCurrency.trim().toUpperCase();
   const from = fromCurr.trim().toUpperCase();
 
-  const fx: FxSettings = {
-    base: target,
-    overrides: fxOverrides,
-  };
+  let fx: FxSettings;
+  if (fxOverridesOrPivots && typeof fxOverridesOrPivots === 'object' && ('overrides' in fxOverridesOrPivots || 'usdPivots' in fxOverridesOrPivots)) {
+    const config = fxOverridesOrPivots as { overrides?: Record<string, number>; usdPivots?: Record<string, number> };
+    fx = {
+      base: target,
+      overrides: config.overrides,
+      usdPivots: config.usdPivots,
+    };
+  } else {
+    const map = fxOverridesOrPivots as Record<string, number> | undefined;
+    if (map && map.USD === 1 && target !== 'USD') {
+      fx = {
+        base: target,
+        usdPivots: map,
+      };
+    } else {
+      fx = {
+        base: target,
+        overrides: map,
+      };
+    }
+  }
 
   const rate = effectiveFxRate(from, fx);
   if (!rate || rate <= 0) return null;

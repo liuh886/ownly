@@ -706,6 +706,14 @@ describe('Ownly Planner domain', () => {
     const convertedMyr = convertPriceRange('RM 50', 'CNY', { MYR: 1.62 });
     expect(convertedMyr?.sourceCurrency).toBe('MYR');
     expect(convertedMyr?.convertedMin).toBe(81);
+
+    // Test with USD pivot table (Live market rates from background)
+    const pivotTable = { USD: 1, CNY: 0.14, GBP: 1.36, EUR: 1.09, JPY: 0.0067 };
+    const convertedGbpWithPivot = convertPriceRange('£20', 'CNY', pivotTable);
+    expect(convertedGbpWithPivot?.sourceCurrency).toBe('GBP');
+    expect(convertedGbpWithPivot?.rate).toBeCloseTo(9.7143, 2);
+    expect(convertedGbpWithPivot?.convertedMin).toBe(194.29);
+    expect(convertedGbpWithPivot?.rateDescription).toBe('1 GBP ≈ 9.71 CNY');
   });
 
   it('estimates categorized trip budget based on scheduled places and traveler count', () => {
