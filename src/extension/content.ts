@@ -1399,21 +1399,24 @@ function initFxTooltipEngine() {
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  const SCAN_DEBOUNCE_MS = 400;
-  let scanTimer: number | undefined;
-  const scheduleScan = () => {
-    if (scanTimer !== undefined) window.clearTimeout(scanTimer);
-    scanTimer = window.setTimeout(() => {
-      scanTimer = undefined;
-      scanAllGoogleMapsPlaces();
-    }, SCAN_DEBOUNCE_MS);
-  };
-  window.addEventListener('scroll', scheduleScan, { passive: true });
-  try {
-    const observer = new MutationObserver(scheduleScan);
-    if (document.body) {
-      observer.observe(document.body, { childList: true, subtree: true });
-    }
-  } catch {}
+  const isGoogleMaps = /google\.[a-z.]+\/maps|maps\.google\.[a-z.]+/i.test(window.location.href);
+  if (isGoogleMaps) {
+    const SCAN_DEBOUNCE_MS = 400;
+    let scanTimer: number | undefined;
+    const scheduleScan = () => {
+      if (scanTimer !== undefined) window.clearTimeout(scanTimer);
+      scanTimer = window.setTimeout(() => {
+        scanTimer = undefined;
+        scanAllGoogleMapsPlaces();
+      }, SCAN_DEBOUNCE_MS);
+    };
+    window.addEventListener('scroll', scheduleScan, { passive: true });
+    try {
+      const observer = new MutationObserver(scheduleScan);
+      if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    } catch {}
+  }
   initFxTooltipEngine();
 }

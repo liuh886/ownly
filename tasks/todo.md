@@ -87,6 +87,10 @@
   - [x] 29.2 (Selection Cleared & Outside Click): Clean dismissal when clicking outside or clearing selection.
   - [x] 29.3 (i18n & UI Updates): Update sidepanel toggle labels to `💱 划词汇率` (Selection FX).
   - [x] 29.4 (Verification & Sync): Run `validate:fast` and `validate:extension`, commit and push.
+- [x] 30. (Universal Web Support for Selection FX & Capture):
+  - [x] 30.1 (Manifest Permissions & Matches): Update `host_permissions` and `content_scripts[0].matches` to `["http://*/*", "https://*/*"]` for full-web coverage.
+  - [x] 30.2 (Performance Guarding): Guard Google Maps-specific DOM observers & list auto-scroll so they strictly execute only on Google Maps.
+  - [x] 30.3 (Universal Verification): Run `validate:fast` and `validate:extension`, test build, commit and push.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:

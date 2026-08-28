@@ -127,7 +127,7 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
-const TRACKED_TAB_URL = /^https:\/\/(www\.google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|[^/]*tabelog\.com|[^/]*xiaohongshu\.com|[^/]*booking\.com)/i;
+const TRACKED_TAB_URL = /^https?:\/\//i;
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!changeInfo.url && !changeInfo.status) return;

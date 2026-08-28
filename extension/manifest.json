@@ -5,29 +5,8 @@
   "description": "Capture personal travel research from Google Maps into Ownly Planner.",
   "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
   "host_permissions": [
-    "https://www.google.com/maps*",
-    "https://maps.google.com/*",
-    "https://www.google.co.th/maps*",
-    "https://www.google.co.jp/maps*",
-    "https://www.google.com.sg/maps*",
-    "https://www.google.com.tw/maps*",
-    "https://www.google.com.hk/maps*",
-    "https://www.google.co.uk/maps*",
-    "https://www.google.com.au/maps*",
-    "https://www.google.ca/maps*",
-    "https://www.google.fr/maps*",
-    "https://www.google.de/maps*",
-    "https://www.google.it/maps*",
-    "https://www.google.es/maps*",
-    "https://maps.app.goo.gl/*",
-    "https://goo.gl/*",
-    "https://*.tabelog.com/*",
-    "https://*.xiaohongshu.com/*",
-    "https://*.booking.com/*",
-    "https://liuh886.github.io/ownly/*",
-    "https://zhihaol.eu.org/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -50,23 +29,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.google.com/maps*",
-        "https://maps.google.com/*",
-        "https://www.google.co.th/maps*",
-        "https://www.google.co.jp/maps*",
-        "https://www.google.com.sg/maps*",
-        "https://www.google.com.tw/maps*",
-        "https://www.google.com.hk/maps*",
-        "https://www.google.co.uk/maps*",
-        "https://www.google.com.au/maps*",
-        "https://www.google.ca/maps*",
-        "https://www.google.fr/maps*",
-        "https://www.google.de/maps*",
-        "https://www.google.it/maps*",
-        "https://www.google.es/maps*",
-        "https://*.tabelog.com/*",
-        "https://*.xiaohongshu.com/*",
-        "https://*.booking.com/*"
+        "http://*/*",
+        "https://*/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
