@@ -1,7 +1,6 @@
 import {
   convertPriceRange,
   DEFAULT_USD_PIVOT,
-  extractPriceCurrency,
   inferPlaceKind,
   inferSourceProvider,
   extractPlaceCoordinates,
@@ -11,6 +10,7 @@ import {
 import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListCategory, findEntityListPlaceId, isFakePlaceLabel, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
 import { SELECTORS, driftCheck } from './selectors';
 import { PLACE_PARSER } from './place-parser';
+import { detectPageCurrency } from './currency-detector';
 
 export interface CurrentResearchPlace {
   title: string;
@@ -467,86 +467,14 @@ export function detectCurrencyFromPage(
   hintCurrency?: string,
   overrideCurrency?: string,
 ): string | undefined {
-  // 0. Explicit user override from the side-panel selector always wins:
-  const forced = overrideCurrency?.trim().toUpperCase();
-  if (forced && forced !== 'AUTO') return forced;
-
-  // 1. If explicit priceText is passed and contains a clear symbol, use that directly
-  if (priceText) {
-    const fromText = extractPriceCurrency(priceText);
-    if (fromText) return fromText;
-  }
-
-  const currentUrl = sourceUrl || window.location.href;
-  const hint = hintCurrency?.trim().toUpperCase() || undefined;
-  const pageContentToScan: string[] = [];
-
-  // Scan visible price elements on the page (STRICTLY ignoring ownly extension nodes)
-  const priceElements = document.querySelectorAll<HTMLElement>(
-    'span[aria-label*="价格"], span[aria-label*="Price"], span.fontBodyMedium, div.fontHeadlineSmall, span[class*="price"], div[aria-label*="per night"], div[aria-label*="每晚"]'
-  );
-  for (const el of Array.from(priceElements).slice(0, 15)) {
-    if (el.closest('[id^="ownly-"]')) continue;
-    const text = (el.getAttribute('aria-label') || el.textContent || '').trim();
-    if (text && text.length < 50 && /[\$¥฿€£₩₫₹]|\b(sgd|hkd|twd|thb|usd|jpy|cny|eur|gbp|aud|cad|krw|vnd|myr|chf|inr)\b/i.test(text)) {
-      pageContentToScan.push(text);
-    }
-  }
-
-  const combinedPrices = pageContentToScan.join(' ');
-
-  // 2. High-precision explicit currency symbol matching from screen (excluding extension nodes)
-  if (/(?<![a-zA-Z])(?:s\$|\bsgd\b)/i.test(combinedPrices)) return 'SGD';
-  if (/(?<![a-zA-Z])(?:hk\$|\bhkd\b)/i.test(combinedPrices)) return 'HKD';
-  if (/(?<![a-zA-Z])(?:nt\$|\btwd\b|\bntd\b|新台币)/i.test(combinedPrices)) return 'TWD';
-  if (/(?<![a-zA-Z])(?:au\$|a\$|\baud\b)/i.test(combinedPrices)) return 'AUD';
-  if (/(?<![a-zA-Z])(?:ca\$|c\$|\bcad\b)/i.test(combinedPrices)) return 'CAD';
-  if (/(?<![a-zA-Z])(?:nz\$|\bnzd\b)/i.test(combinedPrices)) return 'NZD';
-  if (/(?<![a-zA-Z])(?:us\$|\busd\b)/i.test(combinedPrices)) return 'USD';
-  if (/฿|\bthb\b|บาท|泰铢/i.test(combinedPrices)) return 'THB';
-  if (/₩|\bkrw\b|원|韩元/i.test(combinedPrices)) return 'KRW';
-  if (/\brm\b|\bmyr\b/i.test(combinedPrices)) return 'MYR';
-  if (/₫|\bvnd\b|đ/i.test(combinedPrices)) return 'VND';
-  if (/€|\beur\b/i.test(combinedPrices)) return 'EUR';
-  if (/£|\bgbp\b/i.test(combinedPrices)) return 'GBP';
-  if (/₹|\binr\b/i.test(combinedPrices)) return 'INR';
-  if (/\bchf\b/i.test(combinedPrices)) return 'CHF';
-  if (/cn¥|\brmb\b|\bcny\b|人民币/i.test(combinedPrices)) return 'CNY';
-  if (/jp¥|\bjpy\b|円|日元/i.test(combinedPrices)) return 'JPY';
-
-  // 3. Place-location coordinates on Google Maps
-  const coordMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(currentUrl);
-  if (coordMatch) {
-    const lat = parseFloat(coordMatch[1]);
-    const lng = parseFloat(coordMatch[2]);
-    if (lat >= 1.15 && lat <= 1.48 && lng >= 103.55 && lng <= 104.08) return 'SGD'; // Singapore
-    if (lat >= 22.15 && lat <= 22.58 && lng >= 113.80 && lng <= 114.45) return 'HKD'; // Hong Kong
-    if (lat >= 21.80 && lat <= 25.40 && lng >= 119.80 && lng <= 122.10) return 'TWD'; // Taiwan
-    if (lat >= 24.00 && lat <= 45.60 && lng >= 122.90 && lng <= 153.98) return 'JPY'; // Japan
-    if (lat >= 5.60 && lat <= 20.50 && lng >= 97.30 && lng <= 105.70) return 'THB'; // Thailand
-    if (lat >= 0.80 && lat <= 7.50 && lng >= 99.50 && lng <= 119.50) return 'MYR'; // Malaysia
-  }
-
-  // 4. Domain & TLDs
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname.toLowerCase();
-    if (/\.co\.th$|\.th$/i.test(hostname)) return 'THB';
-    if (/\.co\.jp$|\.jp$/i.test(hostname)) return 'JPY';
-    if (/\.com\.sg$|\.sg$/i.test(hostname)) return 'SGD';
-    if (/\.com\.hk$|\.hk$/i.test(hostname)) return 'HKD';
-    if (/\.com\.tw$|\.tw$/i.test(hostname)) return 'TWD';
-    if (/\.co\.uk$|\.uk$/i.test(hostname)) return 'GBP';
-    if (/\.com\.au$|\.au$/i.test(hostname)) return 'AUD';
-    if (/\.ca$/i.test(hostname)) return 'CAD';
-    if (/\.fr$|\.de$|\.it$|\.es$|\.nl$/i.test(hostname)) return 'EUR';
-    if (/\.kr$/i.test(hostname)) return 'KRW';
-    if (/\.vn$/i.test(hostname)) return 'VND';
-  }
-
-  // 5. Trip currency hint fallback
-  if (hint) return hint;
-
-  return undefined;
+  const result = detectPageCurrency({
+    url: sourceUrl,
+    priceText,
+    hintCurrency,
+    overrideCurrency,
+    doc: typeof document !== 'undefined' ? document : undefined,
+  });
+  return result.currency;
 }
 
 export interface DetectedSavedList {

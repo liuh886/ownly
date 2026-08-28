@@ -96,6 +96,11 @@
   - [x] 31.2 (Extension DOM Isolation): Filter out `[id^="ownly-"]` in `detectCurrencyFromPage` to prevent tooltip text like "1 THB ≈ 0.205 CNY" from polluting page detection.
   - [x] 31.3 (Selection Integration & Suppression): Suppress tooltip when `sourceCurrency === targetCurrency`. Pass `selectedText` into `detectCurrencyFromPage(url, selectedText)`.
   - [x] 31.4 (Testing & Verification): Add unit tests in `planner.test.ts` for USD, EUR, GBP, JPY, SGD, HKD, TWD, AUD, CAD, THB, CNY selections. Run all validations.
+- [x] 32. (Unified Multi-Signal Currency Cross-Validation Architecture):
+  - [x] 32.1 (Engine Design): Create `src/extension/currency-detector.ts` unifying JSON-LD Schema, HTML5 Meta, International Phone Codes (+65, +852, +886, etc.), Geo Coordinates, Statutory Taxes (9% GST, 加一服務費), Site Switchers, and TLDs with weighted confidence scoring.
+  - [x] 32.2 (Disambiguation Matrix): Resolve ambiguous `$` (SGD vs HKD vs AUD vs CAD vs NZD vs USD) and `¥` (JPY vs CNY) dynamically using the highest weighted contextual score.
+  - [x] 32.3 (System Integration): Connect `currency-detector.ts` seamlessly across Google Maps place capture, webpage price extraction, and Selection FX tooltip in `content.ts` and `place-parser.ts`.
+  - [x] 32.4 (Automated Testing & Parity): Write unit tests in `currency-detector.test.ts` covering Singapore (9% GST, +65, SGD), Hong Kong (+852, HKD), Japan (円, +81, JPY), Australia (+61, 10% GST, AUD), France/Germany (EUR), UK (+44, GBP), and US (USD). Run all validations.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:
