@@ -57,6 +57,11 @@ async function quickCaptureCurrentPlace() {
       const now = new Date().toISOString();
       const activeTrip = state.trips.find((trip) => trip.id === tripId);
 
+      const freshKind = inferPlaceKind([place.title, place.category, place.address, ...(place.types || [])].filter(Boolean).join(' '));
+      const isGeneric = existing?.kind === 'attraction' || existing?.kind === 'other';
+      const hasSpecific = freshKind !== 'attraction' && freshKind !== 'other';
+      const effectiveKind = (existing && !isGeneric) ? existing.kind : (hasSpecific ? freshKind : (existing?.kind ?? freshKind));
+
       const tripPlace: PlannerTripPlace = {
         schema_version: '0.1',
         type: 'trip_place',
@@ -65,12 +70,12 @@ async function quickCaptureCurrentPlace() {
         title: place.title,
         source_provider: place.sourceProvider || 'google_maps',
         source_url: place.sourceUrl,
-        kind: existing?.kind ?? inferPlaceKind([place.title, place.category, place.address].filter(Boolean).join(' ')),
+        kind: effectiveKind,
         area: place.address?.split(/[,，·]/)[0]?.trim() || undefined,
         priority: existing?.priority ?? 'want',
         tags: ensurePlaceKindTag(
           Array.from(new Set([...(activeTrip?.tags ?? []), ...(existing?.tags ?? [])])),
-          existing?.kind ?? inferPlaceKind([place.title, place.category, place.address].filter(Boolean).join(' ')),
+          effectiveKind,
         ),
         why: existing?.why ?? place.summary,
         signals: existing?.signals ?? [],

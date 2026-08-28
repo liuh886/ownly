@@ -553,11 +553,24 @@ export function renderSmartListCard() {
 }
 
 export function autoFillPlaceForm(place: CurrentResearchPlace) {
+  const compositeKindText = [
+    place.category,
+    place.title,
+    place.address,
+    ...(place.types || []),
+  ].filter(Boolean).join(' ');
+  const freshDetectedKind = inferPlaceKind(compositeKindText);
+
   const existing = getExistingPlaceForUrl(place.sourceUrl, place.sourcePlaceId);
   if (existing) {
-    el.kind.value = existing.kind;
-    el.area.value = existing.area || '';
-    el.tags.value = existing.tags?.join(', ') || '';
+    const isGeneric = existing.kind === 'attraction' || existing.kind === 'other';
+    const hasSpecificDetection = freshDetectedKind !== 'attraction' && freshDetectedKind !== 'other';
+    const effectiveKind = (isGeneric && hasSpecificDetection) ? freshDetectedKind : existing.kind;
+
+    el.kind.value = effectiveKind;
+    el.area.value = existing.area || (place.address?.split(/[,，·]/)[0]?.trim() || '');
+    const rawTags = existing.tags || [];
+    el.tags.value = ensurePlaceKindTag(rawTags, effectiveKind, store.lang).join(', ');
     el.duration.value = existing.duration_minutes ? String(existing.duration_minutes) : '';
     el.window.value = existing.preferred_window || '';
     el.rating.value = existing.observed_rating ? String(existing.observed_rating) : (place.rating ? String(place.rating) : '');
@@ -591,14 +604,7 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   } else if (place.detectedCurrency) {
     el.price.placeholder = `${place.detectedCurrency} 价格预算`;
   }
-  const compositeKindText = [
-    place.category,
-    place.title,
-    place.address,
-    ...(place.types || []),
-  ].filter(Boolean).join(' ');
-  const detectedKind = inferPlaceKind(compositeKindText);
-  el.kind.value = detectedKind;
+  el.kind.value = freshDetectedKind;
   if (place.address && !el.area.value) {
     const parts = place.address.split(/[,，·]/).map((p) => p.trim()).filter(Boolean);
     el.area.value = parts[0] || place.address;
@@ -612,7 +618,7 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   }
   const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
   const baseTags = (activeTrip?.tags || []).filter(Boolean);
-  el.tags.value = ensurePlaceKindTag(baseTags, detectedKind, store.lang).join(', ');
+  el.tags.value = ensurePlaceKindTag(baseTags, freshDetectedKind, store.lang).join(', ');
 }
 
 function applyTierNote(place: CurrentResearchPlace): void {
