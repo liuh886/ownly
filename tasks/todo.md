@@ -72,6 +72,10 @@
   - Respect exact tag selections during capture edit without re-injecting deleted tags.
   - Sync candidate card "✏️ 编辑" with top capture form and quick chips seamlessly.
   - Clear user feedback upon saving updates (`✓ 已保存地点修改与快捷标签`).
+- [x] 27. (Place Category Taxonomy Hardening):
+  - Expand `inferPlaceKind` taxonomy with `cuisine`, `dining`, `kitchen`, `eatery`, `steakhouse`, `dumpling`, `barbecue`, `tapas`, `canteen`, `fondue` and multilingual Thai keywords (`ร้านอาหาร`, `อาหาร`, `ก๋วยเตี๋ยว`, `ข้าวมันไก่`, `ส้มตำ`, `บาร์`).
+  - Add Japanese keywords (`ラーメン`, `焼肉`, `寿司`, `うどん`, `そば`, `天ぷら`, `割烹`, `居酒屋`, `食堂`, `定食`).
+  - Accurately categorize `Ekachan The Wisdom of Ethnic Thai Cuisine` and related global culinary establishments as `food`.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:

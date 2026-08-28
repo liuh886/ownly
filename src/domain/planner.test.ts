@@ -229,12 +229,17 @@ describe('Ownly Planner domain', () => {
 
   it('infers place kind from Chinese and English categories and hotel brands', () => {
     expect(inferPlaceKind('日本料理店')).toBe('food');
+    expect(inferPlaceKind('Ekachan The Wisdom of Ethnic Thai Cuisine')).toBe('food');
+    expect(inferPlaceKind('Thai restaurant')).toBe('food');
+    expect(inferPlaceKind('ร้านอาหารไทย')).toBe('food');
+    expect(inferPlaceKind('Fine Dining & Kitchen')).toBe('food');
     expect(inferPlaceKind('Coffee Shop')).toBe('cafe');
     expect(inferPlaceKind('Luxury Hotel & Resort')).toBe('stay');
     expect(inferPlaceKind('The quarter Chao Phraya by IHG')).toBe('stay');
     expect(inferPlaceKind('The Quarter Silom by UHG')).toBe('stay');
     expect(inferPlaceKind('Kimpton Maa-Lai Bangkok, an IHG Hotel')).toBe('stay');
     expect(inferPlaceKind('Four Seasons Resort Chiang Mai')).toBe('stay');
+    expect(inferPlaceKind('โรงแรมกรุงเทพ')).toBe('stay');
     expect(inferPlaceKind('Outlet Shopping Mall')).toBe('shopping');
     expect(inferPlaceKind('Subway Station')).toBe('transit');
     expect(inferPlaceKind('Let\'s Relax Spa')).toBe('experience');

@@ -368,28 +368,28 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
 
   // 1. Lodging & Stays (Hotels, Resorts, Villas, Hostels, Ryokans, Brands like IHG/Marriott/UHG, etc.)
   if (
-    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|citadines|somerset|ascott)\b|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|mandarin\s*oriental|m[oö]venpick|le\s*m[eé]ridien|ji\s*hotel|酒店|旅馆|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|星级酒店|精品酒店|宾馆|别馆|营地|庄园/.test(lower)
+    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|citadines|somerset|ascott)\b|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|mandarin\s*oriental|m[oö]venpick|le\s*m[eé]ridien|ji\s*hotel|โรงแรม|ที่พัก|รีสอร์ท|ホテル|旅館|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|星级酒店|精品酒店|宾馆|别馆|营地|庄园|酒店/.test(lower)
   ) {
     return 'stay';
   }
 
   // 2. Cafes, Bakeries, Coffee, Dessert, Tea
   if (
-    /\b(?:cafe|coffee|roastery|espresso|boba|matcha|patisserie|chocolatier|gelato|waffle|pancake|crepe)\b|tea\s*house|tea\s*room|dessert|bakery|ice\s*cream|pastry|咖啡|甜品|奶茶|面包|烘焙|茶室|茶馆|茶饮|冰淇淋|冰品|蛋糕|点心局|下午茶/.test(lower)
+    /\b(?:cafe|coffee|roastery|espresso|boba|matcha|patisserie|chocolatier|gelato|waffle|pancake|crepe)\b|tea\s*house|tea\s*room|dessert|bakery|boulangerie|ice\s*cream|pastry|คาเฟ่|กาแฟ|ชา|カフェ|喫茶|咖啡|甜品|奶茶|面包|烘焙|茶室|茶馆|茶饮|冰淇淋|冰品|蛋糕|点心局|下午茶/.test(lower)
   ) {
     return 'cafe';
   }
 
-  // 3. Food, Dining, Restaurants, Bars, Street Food
+  // 3. Food, Dining, Restaurants, Bars, Street Food, Cuisines
   if (
-    /\b(?:restaurant|food|diner|ramen|sushi|izakaya|bar|pub|bistro|steak|grill|bbq|noodle|buffet|eatery|tavern|pizzeria|pizza|burger|tacos|seafood|hotpot|brunch|curry|tabelog|gastropub|brewery|yakitori|tempura|tonkatsu|shabu|udon|soba)\b|wine\s*bar|cocktail|dim\s*sum|cantonese|sichuan|thai\s*food|street\s*food|night\s*market\s*food|餐厅|料理|美食|小吃|拉面|火锅|烧烤|烤肉|酒吧|居酒屋|酒场|快餐|大排档|早茶|熟食|排档|海鲜|日料|寿司|串烧|居食屋|食堂|私房菜|茶餐厅|酒馆|饭店/.test(lower)
+    /\b(?:restaurant|cuisine|dining|food|kitchen|eatery|diner|ramen|sushi|izakaya|bar|pub|bistro|steak|steakhouse|grill|bbq|barbecue|noodle|noodles|buffet|tavern|pizzeria|pizza|burger|tacos|taqueria|taquería|trattoria|osteria|brasserie|cucina|seafood|hotpot|hot\s*pot|brunch|curry|tabelog|gastropub|brewery|yakitori|tempura|tonkatsu|shabu|udon|soba|dim\s*sum|dumpling|dumplings|tapas|bento|skewer|skewers|poke|ceviche|rotisserie|warung|kopitiam|hawker|canteen|chophouse|fondue|cantina|churrascaria)\b|wine\s*bar|cocktail|cantonese|sichuan|thai\s*food|street\s*food|night\s*market\s*food|fine\s*dining|casual\s*dining|ethnic\s*cuisine|local\s*cuisine|regional\s*cuisine|ร้านอาหาร|อาหาร|ก๋วยเตี๋ยว|ข้าวมันไก่|ส้มตำ|บาร์|ラーメン|焼肉|寿司|うどん|そば|天ぷら|割烹|食堂|定食|居酒屋|餐厅|餐馆|料理|美食|小吃|拉面|米线|面馆|火锅|烧烤|烤肉|酒吧|居酒屋|酒场|快餐|大排档|早茶|熟食|排档|海鲜|日料|韩料|泰餐|西餐|粤菜|川菜|湘菜|家常菜|烤鸭|刺身|烧鸟|铁板烧|串烧|居食屋|私房菜|茶餐厅|酒馆|饭店/.test(lower)
   ) {
     return 'food';
   }
 
   // 4. Shopping, Malls, Supermarkets, Markets, Boutiques
   if (
-    /\b(?:store|mall|market|shopping|bazaar|outlet|plaza|supermarket|boutique|grocer|vintage|thrift)\b|department\s*store|gift\s*shop|souvenir|bookstore|pharmacy|convenience\s*store|duty\s*free|flea\s*market|商场|超市|购物|市场|百货|商店|奥特莱斯|免税店|便利店|书店|药妆|夜市|集市|市集|杂货|商业街|专卖店/.test(lower)
+    /\b(?:store|mall|market|shopping|bazaar|outlet|plaza|supermarket|boutique|grocer|vintage|thrift)\b|department\s*store|gift\s*shop|souvenir|bookstore|pharmacy|convenience\s*store|duty\s*free|flea\s*market|ตลาด|商场|超市|购物|市场|百货|商店|奥特莱斯|免税店|便利店|书店|药妆|夜市|集市|市集|杂货|商业街|专卖店/.test(lower)
   ) {
     return 'shopping';
   }
@@ -403,14 +403,14 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
 
   // 6. Experience, Wellness, Sports, Activities
   if (
-    /\b(?:spa|massage|onsen|sauna|wellness|diving|snorkeling|ski|skiing|snowboard|surfing|climbing|hiking|rafting|karting|safari|workshop|class|tour|cruise|kayak|paragliding|zipline|skydive|bungee|bowling|golf|gym|fitness|yoga|camp|experience|activity)\b|hot\s*spring|amusement\s*park|water\s*park|theme\s*park|escape\s*room|cooking\s*class|体验|活动|按摩|水疗|温泉|足浴|泰式按摩|潜水|冲浪|滑雪|徒步|漂流|游乐园|主题公园|水上乐园|工坊|课程|卡丁车|密室|剧本杀|游船|跳伞|滑翔伞|热气球|射击|骑马|越野/.test(lower)
+    /\b(?:spa|massage|onsen|sauna|wellness|diving|snorkeling|ski|skiing|snowboard|surfing|climbing|hiking|rafting|karting|safari|workshop|class|tour|cruise|kayak|paragliding|zipline|skydive|bungee|bowling|golf|gym|fitness|yoga|camp|experience|activity)\b|hot\s*spring|amusement\s*park|water\s*park|theme\s*park|escape\s*room|cooking\s*class|สปา|นวด|体验|活动|按摩|水疗|温泉|足浴|泰式按摩|潜水|冲浪|滑雪|徒步|漂流|游乐园|主题公园|水上乐园|工坊|课程|卡丁车|密室|剧本杀|游船|跳伞|滑翔伞|热气球|射击|骑马|越野/.test(lower)
   ) {
     return 'experience';
   }
 
   // 7. Attractions, Sightseeing, Heritage, Culture, Nature
   if (
-    /\b(?:museum|temple|shrine|church|cathedral|mosque|park|attraction|monument|landmark|castle|palace|garden|tower|tourist|historic|heritage|ruins|gallery|beach|viewpoint|lookout|observatory|waterfall|island|lake|mountain|canyon|cave|plaza|square|scenic|statue|bridge|zoo|aquarium|botanical)\b|景点|寺|庙|神社|教堂|博物馆|纪念馆|公园|观光|古迹|遗址|城堡|皇宫|宫殿|塔|美术馆|沙滩|海滩|观景台|展望台|瀑布|岛|湖|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地/.test(lower)
+    /\b(?:museum|temple|shrine|church|cathedral|mosque|park|attraction|monument|landmark|castle|palace|garden|tower|tourist|historic|heritage|ruins|gallery|beach|viewpoint|lookout|observatory|waterfall|island|lake|mountain|canyon|cave|plaza|square|scenic|statue|bridge|zoo|aquarium|botanical)\b|วัด|พิพิธภัณฑ์|พระราชวัง|สวน|景点|寺|庙|神社|教堂|博物馆|纪念馆|公园|观光|古迹|遗址|城堡|皇宫|宫殿|塔|美术馆|沙滩|海滩|观景台|展望台|瀑布|岛|湖|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地/.test(lower)
   ) {
     return 'attraction';
   }
