@@ -82,6 +82,11 @@
   - [x] 28.3 (Content Script Floating Tooltip): Safe, zero-DOM-mutation hovering tooltip with glassmorphism styling, showing converted amount, rate formula, and auto-dismissal.
   - [x] 28.4 (Sidepanel Toggle & State Sync): Add a clean `💱 汇率浮窗` toggle in sidepanel header with persistence (`ownly_fx_tooltip_enabled`) and runtime tab broadcast.
   - [x] 28.5 (Verification & Build): Run `validate:fast` and `validate:extension`, verify zero performance overhead, commit and push.
+- [x] 29. (Simplify Activation to Text Selection / 划词激活):
+  - [x] 29.1 (Content Script Refactor): Replace passive `mouseover` with active text selection (`mouseup`/`selectionchange`), measuring selection bounding range and popping tooltip above selection.
+  - [x] 29.2 (Selection Cleared & Outside Click): Clean dismissal when clicking outside or clearing selection.
+  - [x] 29.3 (i18n & UI Updates): Update sidepanel toggle labels to `💱 划词汇率` (Selection FX).
+  - [x] 29.4 (Verification & Sync): Run `validate:fast` and `validate:extension`, commit and push.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:

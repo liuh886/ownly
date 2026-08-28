@@ -1319,28 +1319,19 @@ function initFxTooltipEngine() {
   const rateEl = document.getElementById('ownly-fx-rate');
   const badgeEl = document.getElementById('ownly-fx-badge');
 
-  let hideTimeout: number | undefined;
-  let activeElement: HTMLElement | null = null;
-
-  function showTooltip(el: HTMLElement, result: import('../domain/planner').ConvertedPriceResult) {
+  function showTooltip(rect: DOMRect, result: import('../domain/planner').ConvertedPriceResult) {
     if (!tooltipNode || !convertedValEl || !rateEl || !badgeEl) return;
-    if (hideTimeout) {
-      window.clearTimeout(hideTimeout);
-      hideTimeout = undefined;
-    }
-    activeElement = el;
 
     convertedValEl.textContent = `≈ ${result.formattedTarget}`;
     rateEl.textContent = result.rateDescription;
     badgeEl.textContent = `${result.targetCurrency}`;
 
-    const rect = el.getBoundingClientRect();
     const tooltipWidth = 230;
     const tooltipHeight = 65;
 
-    let top = rect.top - tooltipHeight - 6;
+    let top = rect.top - tooltipHeight - 8;
     if (top < 10) {
-      top = rect.bottom + 6;
+      top = rect.bottom + 8;
     }
     let left = rect.left + (rect.width - tooltipWidth) / 2;
     left = Math.max(10, Math.min(window.innerWidth - tooltipWidth - 10, left));
@@ -1353,62 +1344,54 @@ function initFxTooltipEngine() {
   function hideTooltip() {
     if (!tooltipNode) return;
     tooltipNode.classList.remove('ownly-fx-visible');
-    activeElement = null;
   }
   tooltipHideFn = hideTooltip;
 
-  function scheduleHide() {
-    if (hideTimeout) window.clearTimeout(hideTimeout);
-    hideTimeout = window.setTimeout(() => {
-      hideTooltip();
-    }, 120);
-  }
-
-  tooltipNode.addEventListener('mouseenter', () => {
-    if (hideTimeout) {
-      window.clearTimeout(hideTimeout);
-      hideTimeout = undefined;
-    }
-  });
-  tooltipNode.addEventListener('mouseleave', () => {
-    scheduleHide();
-  });
-
-  const PRICE_SCAN_REGEX = /(?:人均|per person|每人|每晚|per night|[¥฿$€£₩]|THB|JPY|USD|EUR|GBP|KRW|SGD|HKD|TWD|NT\$|S\$|HK\$|US\$)/i;
-
-  let lastCheckedTime = 0;
-  document.addEventListener('mouseover', (event) => {
+  function handleTextSelection() {
     if (!fxTooltipEnabled) return;
-    const now = Date.now();
-    if (now - lastCheckedTime < 40) return; // throttle
-    lastCheckedTime = now;
-
-    const target = event.target as HTMLElement | null;
-    if (!target || tooltipNode?.contains(target)) return;
-
-    const text = (target.textContent || '').trim();
-    if (!text || text.length > 80 || !PRICE_SCAN_REGEX.test(text)) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      hideTooltip();
       return;
     }
 
-    if (!isPlausiblePriceText(text)) {
-      const snippetMatch = /(?:人均|per person|每人|每晚|per night)?\s*([¥฿$€£₩]|THB|JPY|USD|EUR|GBP|KRW|SGD|HKD|TWD|NT\$|S\$|HK\$|US\$)\s*[\d,]+(?:\.\d+)?(?:\s*[-–—〜~至到]\s*[\d,]+(?:\.\d+)?)?/i.exec(text);
-      if (!snippetMatch || !isPlausiblePriceText(snippetMatch[0])) return;
+    const selectedText = selection.toString().trim();
+    if (!selectedText || selectedText.length > 80) {
+      hideTooltip();
+      return;
     }
 
     const pageCurrency = detectCurrencyFromPage(window.location.href);
-    const converted = convertPriceRange(text, fxTargetCurrency, fxPivotRates, pageCurrency);
-    if (converted && converted.sourceCurrency !== converted.targetCurrency) {
-      showTooltip(target, converted);
+    const converted = convertPriceRange(selectedText, fxTargetCurrency, fxPivotRates, pageCurrency);
+    if (converted) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width > 0 || rect.height > 0) {
+        showTooltip(rect, converted);
+      }
+    } else {
+      hideTooltip();
     }
-  }, { passive: true });
+  }
 
-  document.addEventListener('mouseout', (event) => {
+  document.addEventListener('mouseup', (event) => {
     const target = event.target as HTMLElement | null;
-    if (activeElement && (target === activeElement || activeElement.contains(target))) {
-      scheduleHide();
+    if (tooltipNode?.contains(target)) return;
+    setTimeout(handleTextSelection, 15);
+  });
+
+  document.addEventListener('keyup', (event) => {
+    if (event.key === 'Shift' || event.key.startsWith('Arrow')) {
+      setTimeout(handleTextSelection, 15);
     }
-  }, { passive: true });
+  });
+
+  document.addEventListener('mousedown', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (tooltipNode && !tooltipNode.contains(target)) {
+      hideTooltip();
+    }
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') hideTooltip();
