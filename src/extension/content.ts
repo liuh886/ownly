@@ -330,7 +330,7 @@ function injectAppStateBridge(): void {
             for (const child of cur) { if (nodes.length < 4000) nodes.push(child); }
           }
         }
-        const typesBlob = JSON.stringify(window.APP_INITIALIZATION_STATE || '').match(/"(restaurant|lodging|cafe|bar|tourist_attraction|museum|park|spa|shopping_mall|transit_station|store|bakery|coffee_shop|gym|night_club|meal_takeaway)"/g);
+        const typesBlob = JSON.stringify(window.APP_INITIALIZATION_STATE || '').match(/"(restaurant|lodging|hotel|hostel|bed_and_breakfast|guest_house|motel|campground|cafe|coffee_shop|bakery|bar|pub|meal_takeaway|meal_delivery|food_court|tourist_attraction|museum|art_gallery|park|national_park|historical_landmark|historical_place|scenic_viewpoint|spa|massage|gym|fitness_center|amusement_park|water_park|aquarium|zoo|shopping_mall|department_store|supermarket|grocery_or_supermarket|convenience_store|transit_station|subway_station|train_station|bus_station|airport|ferry_terminal|store|night_club)"/g);
         if (typesBlob) out.types = [...new Set(typesBlob.map(t => t.replace(/"/g, '')))].slice(0, 12);
       } catch {}
       window.dispatchEvent(new CustomEvent('ownly-app-state', { detail: out }));
@@ -375,7 +375,7 @@ function collectAppStateSignals(): AppStateSignals | null {
   return appStateSignals;
 }
 
-const TAXONOMY_TYPES = /(restaurant|lodging|cafe|bar|tourist_attraction|museum|park|spa|shopping_mall|transit_station|store|bakery|coffee_shop|gym|night_club|meal_takeaway)/g;
+const TAXONOMY_TYPES = /(restaurant|lodging|hotel|hostel|bed_and_breakfast|guest_house|motel|campground|cafe|coffee_shop|bakery|bar|pub|meal_takeaway|meal_delivery|food_court|tourist_attraction|museum|art_gallery|park|national_park|historical_landmark|historical_place|scenic_viewpoint|spa|massage|gym|fitness_center|amusement_park|water_park|aquarium|zoo|shopping_mall|department_store|supermarket|grocery_or_supermarket|convenience_store|transit_station|subway_station|train_station|bus_station|airport|ferry_terminal|store|night_club)/g;
 
 /**
  * Same-origin fetch of the place page HTML: the server-rendered blob embeds a

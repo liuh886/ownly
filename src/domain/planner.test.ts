@@ -227,23 +227,61 @@ describe('Ownly Planner domain', () => {
     expect(result.places[0].is_anchor).toBe(true);
   });
 
-  it('infers place kind from Chinese and English categories and hotel brands', () => {
+  it('infers place kind from Chinese, English, Japanese, and Thai across all categories', () => {
+    // 1. Food & Dining
     expect(inferPlaceKind('日本料理店')).toBe('food');
     expect(inferPlaceKind('Ekachan The Wisdom of Ethnic Thai Cuisine')).toBe('food');
     expect(inferPlaceKind('Thai restaurant')).toBe('food');
     expect(inferPlaceKind('ร้านอาหารไทย')).toBe('food');
     expect(inferPlaceKind('Fine Dining & Kitchen')).toBe('food');
-    expect(inferPlaceKind('Coffee Shop')).toBe('cafe');
+    expect(inferPlaceKind('Hotel Restaurant & Bar')).toBe('food');
+    expect(inferPlaceKind('Food Court Terminal 21')).toBe('food');
+    expect(inferPlaceKind('Jay Fai Street Food')).toBe('food');
+    expect(inferPlaceKind('居酒屋 鳥貴族')).toBe('food');
+
+    // 2. Cafes & Desserts
+    expect(inferPlaceKind('Coffee Shop & Roastery')).toBe('cafe');
+    expect(inferPlaceKind('Factory Coffee Bangkok')).toBe('cafe');
+    expect(inferPlaceKind('After You Dessert Cafe')).toBe('cafe');
+    expect(inferPlaceKind('甘味処 和菓子')).toBe('cafe');
+    expect(inferPlaceKind('คาเฟ่เชียงใหม่')).toBe('cafe');
+    expect(inferPlaceKind('Hotel Cafe & Afternoon Tea')).toBe('cafe');
+
+    // 3. Stays & Lodgings
     expect(inferPlaceKind('Luxury Hotel & Resort')).toBe('stay');
     expect(inferPlaceKind('The quarter Chao Phraya by IHG')).toBe('stay');
     expect(inferPlaceKind('The Quarter Silom by UHG')).toBe('stay');
     expect(inferPlaceKind('Kimpton Maa-Lai Bangkok, an IHG Hotel')).toBe('stay');
     expect(inferPlaceKind('Four Seasons Resort Chiang Mai')).toBe('stay');
     expect(inferPlaceKind('โรงแรมกรุงเทพ')).toBe('stay');
+    expect(inferPlaceKind('Kyoto Ryokan & Guesthouse')).toBe('stay');
+    expect(inferPlaceKind('Capsule Hotel Shinjuku')).toBe('stay');
+
+    // 4. Shopping
     expect(inferPlaceKind('Outlet Shopping Mall')).toBe('shopping');
+    expect(inferPlaceKind('Chatuchak Weekend Market')).toBe('shopping');
+    expect(inferPlaceKind('Don Quijote Shinjuku')).toBe('shopping');
+    expect(inferPlaceKind('松本清 药妆店')).toBe('shopping');
+    expect(inferPlaceKind('ตลาดนัดรถไฟ')).toBe('shopping');
+
+    // 5. Transit & Transportation
     expect(inferPlaceKind('Subway Station')).toBe('transit');
-    expect(inferPlaceKind('Let\'s Relax Spa')).toBe('experience');
+    expect(inferPlaceKind('Suvarnabhumi Airport (BKK)')).toBe('transit');
+    expect(inferPlaceKind('Asakusa Pier / Ferry Terminal')).toBe('transit');
+    expect(inferPlaceKind('ท่าเรือสาทร')).toBe('transit');
+
+    // 6. Experience & Wellness
+    expect(inferPlaceKind('Let\'s Relax Onsen and Spa')).toBe('experience');
+    expect(inferPlaceKind('Thai Massage & Wellness')).toBe('experience');
+    expect(inferPlaceKind('Universal Studios Theme Park')).toBe('experience');
+    expect(inferPlaceKind('Niseko Ski Resort')).toBe('experience');
+    expect(inferPlaceKind('นวดแผนไทย')).toBe('experience');
+
+    // 7. Attractions & Sightseeing
     expect(inferPlaceKind('Historical Temple & Museum')).toBe('attraction');
+    expect(inferPlaceKind('Wat Arun Ratchawararam')).toBe('attraction');
+    expect(inferPlaceKind('Shinjuku Gyoen National Garden')).toBe('attraction');
+    expect(inferPlaceKind('พระบรมมหาราชวัง')).toBe('attraction');
     expect(inferPlaceKind(undefined)).toBe('attraction');
   });
 
