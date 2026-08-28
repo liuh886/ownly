@@ -654,8 +654,58 @@ describe('Ownly Planner domain', () => {
     expect(converted?.isRange).toBe(true);
 
     const convertedSingle = convertPriceRange('¥3,500', 'CNY', { JPY: 0.048 }, 'JPY');
+    expect(convertedSingle?.sourceCurrency).toBe('JPY');
     expect(convertedSingle?.convertedMin).toBe(168);
     expect(convertedSingle?.formattedTarget).toBe('¥168');
+
+    // USD should never be overwritten by THB fallback
+    const convertedUsd = convertPriceRange('$100', 'CNY', { USD: 7.14 }, 'THB');
+    expect(convertedUsd?.sourceCurrency).toBe('USD');
+    expect(convertedUsd?.convertedMin).toBe(714);
+
+    // EUR should be EUR
+    const convertedEur = convertPriceRange('€50', 'CNY', { EUR: 7.80 }, 'THB');
+    expect(convertedEur?.sourceCurrency).toBe('EUR');
+    expect(convertedEur?.convertedMin).toBe(390);
+
+    // GBP should be GBP
+    const convertedGbp = convertPriceRange('£20', 'CNY', { GBP: 9.10 });
+    expect(convertedGbp?.sourceCurrency).toBe('GBP');
+    expect(convertedGbp?.convertedMin).toBe(182);
+
+    // JPY with 円 symbol
+    const convertedYen = convertPriceRange('10,000円', 'CNY', { JPY: 0.048 });
+    expect(convertedYen?.sourceCurrency).toBe('JPY');
+    expect(convertedYen?.convertedMin).toBe(480);
+
+    // SGD, HKD, TWD, AUD, CAD
+    const convertedSgd = convertPriceRange('S$25', 'CNY', { SGD: 5.40 });
+    expect(convertedSgd?.sourceCurrency).toBe('SGD');
+    expect(convertedSgd?.convertedMin).toBe(135);
+
+    const convertedHkd = convertPriceRange('HK$100', 'CNY', { HKD: 0.91 });
+    expect(convertedHkd?.sourceCurrency).toBe('HKD');
+    expect(convertedHkd?.convertedMin).toBe(91);
+
+    const convertedTwd = convertPriceRange('NT$500', 'CNY', { TWD: 0.22 });
+    expect(convertedTwd?.sourceCurrency).toBe('TWD');
+    expect(convertedTwd?.convertedMin).toBe(110);
+
+    const convertedAud = convertPriceRange('A$50', 'CNY', { AUD: 4.65 });
+    expect(convertedAud?.sourceCurrency).toBe('AUD');
+    expect(convertedAud?.convertedMin).toBe(232.5);
+
+    const convertedCad = convertPriceRange('C$50', 'CNY', { CAD: 5.20 });
+    expect(convertedCad?.sourceCurrency).toBe('CAD');
+    expect(convertedCad?.convertedMin).toBe(260);
+
+    const convertedVnd = convertPriceRange('100,000₫', 'CNY', { VND: 0.00029 });
+    expect(convertedVnd?.sourceCurrency).toBe('VND');
+    expect(convertedVnd?.convertedMin).toBe(29);
+
+    const convertedMyr = convertPriceRange('RM 50', 'CNY', { MYR: 1.62 });
+    expect(convertedMyr?.sourceCurrency).toBe('MYR');
+    expect(convertedMyr?.convertedMin).toBe(81);
   });
 
   it('estimates categorized trip budget based on scheduled places and traveler count', () => {

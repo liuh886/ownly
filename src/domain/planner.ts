@@ -1116,9 +1116,10 @@ export interface TripSettlementResult {
 }
 
 const SYMBOL_TO_CODE: Record<string, string> = {
-  '¥': 'CNY', '￥': 'CNY', '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '₩': 'KRW',
-  'S$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD', 'A$': 'AUD', 'C$': 'CAD',
-  '₫': 'VND', '₹': 'INR', 'RM': 'MYR',
+  '¥': 'CNY', '￥': 'CNY', '円': 'JPY', '日元': 'JPY', '元': 'CNY', '块': 'CNY', '人民币': 'CNY',
+  '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '铢': 'THB', '泰铢': 'THB', '₩': 'KRW', '원': 'KRW', '韩元': 'KRW',
+  'S$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD', 'A$': 'AUD', 'AU$': 'AUD', 'C$': 'CAD', 'CA$': 'CAD', 'NZ$': 'NZD',
+  '₫': 'VND', '₹': 'INR', 'RM': 'MYR', 'CHF': 'CHF',
 };
 
 /**
@@ -1129,7 +1130,7 @@ const SYMBOL_TO_CODE: Record<string, string> = {
 export const DEFAULT_USD_PIVOT: Record<string, number> = {
   USD: 1, CNY: 0.14, JPY: 0.0067, THB: 0.027, HKD: 0.128, TWD: 0.031,
   KRW: 0.00073, SGD: 0.74, MYR: 0.21, EUR: 1.08, GBP: 1.27, AUD: 0.66,
-  CAD: 0.73, CHF: 1.12, INR: 0.012, VND: 0.00004,
+  CAD: 0.73, CHF: 1.12, INR: 0.012, VND: 0.00004, NZD: 0.61,
 };
 
 export interface FxSettings {
@@ -1158,12 +1159,19 @@ export function effectiveFxRate(
 /** Extracts a normalized ISO-ish currency marker from a free-text price string. */
 export function extractPriceCurrency(raw?: string | null): string | null {
   if (!raw) return null;
-  const match = /(?:[¥￥฿$€£₩₫₹]|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|KRW|MYR|VND|CHF|INR|NT\$|S\$|HK\$|US\$|A\$|C\$)/i.exec(raw);
-  if (!match) return null;
-  const rawMarker = match[0].toUpperCase();
-  // NOTE: /\$$/ — a literal dollar sign at the end (the old /\\$/ matched a
-  // backslash, which silently broke S$/HK$/NT$/US$ normalization).
-  return SYMBOL_TO_CODE[rawMarker] ?? rawMarker.replace(/\$$/, '');
+  const specificMatch = /(?:S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|\bRM\b|新台币|人民币|日元|泰铢|韩元)/i.exec(raw);
+  if (specificMatch) {
+    const marker = specificMatch[0].toUpperCase();
+    return SYMBOL_TO_CODE[marker] ?? marker.replace(/\$$/, '');
+  }
+
+  const singleMatch = /(?:[¥￥฿$€£₩₫₹円铢元块원])/i.exec(raw);
+  if (singleMatch) {
+    const marker = singleMatch[0];
+    return SYMBOL_TO_CODE[marker] ?? null;
+  }
+
+  return null;
 }
 
 export interface TripBudgetEstimation {
@@ -1367,11 +1375,27 @@ export function convertPriceRange(
   const parsed = parseDetailedPrice(raw);
   if (!parsed) return null;
 
-  // Disambiguate multi-country symbols (¥ for JPY/CNY, $ for USD/SGD/HKD/AUD/CAD)
-  const isAmbiguousSymbol = raw.includes('¥') || (raw.includes('$') && !/S\$|HK\$|NT\$|US\$|A\$|C\$/i.test(raw));
-  const fromCurr = (isAmbiguousSymbol && fallbackSourceCurrency)
-    ? fallbackSourceCurrency
-    : (parsed.currency || fallbackSourceCurrency || null);
+  let fromCurr: string | null = parsed.currency;
+  const fallback = fallbackSourceCurrency?.trim().toUpperCase();
+
+  // Strict disambiguation:
+  if (raw.includes('¥') || raw.includes('￥')) {
+    if (raw.includes('円') || raw.includes('日元') || /JPY/i.test(raw) || fallback === 'JPY') {
+      fromCurr = 'JPY';
+    } else {
+      fromCurr = 'CNY';
+    }
+  } else if (raw.includes('$') && !/S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$/i.test(raw)) {
+    const validDollarCurrencies = ['SGD', 'HKD', 'AUD', 'CAD', 'NZD', 'USD', 'TWD'];
+    if (fallback && validDollarCurrencies.includes(fallback)) {
+      fromCurr = fallback;
+    } else {
+      fromCurr = 'USD';
+    }
+  } else if (!fromCurr) {
+    fromCurr = fallback || null;
+  }
+
   if (!fromCurr) return null;
 
   const target = targetCurrency.trim().toUpperCase();

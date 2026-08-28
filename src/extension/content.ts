@@ -1,6 +1,7 @@
 import {
   convertPriceRange,
   DEFAULT_USD_PIVOT,
+  extractPriceCurrency,
   inferPlaceKind,
   inferSourceProvider,
   extractPlaceCoordinates,
@@ -467,20 +468,25 @@ export function detectCurrencyFromPage(
   overrideCurrency?: string,
 ): string | undefined {
   // 0. Explicit user override from the side-panel selector always wins:
-  //    the selector IS the map currency used to read prices on this page.
   const forced = overrideCurrency?.trim().toUpperCase();
   if (forced && forced !== 'AUTO') return forced;
+
+  // 1. If explicit priceText is passed and contains a clear symbol, use that directly
+  if (priceText) {
+    const fromText = extractPriceCurrency(priceText);
+    if (fromText) return fromText;
+  }
 
   const currentUrl = sourceUrl || window.location.href;
   const hint = hintCurrency?.trim().toUpperCase() || undefined;
   const pageContentToScan: string[] = [];
-  if (priceText) pageContentToScan.push(priceText);
 
-  // Scan visible price elements on the page (place card, hotels, menu, reviews, footer)
+  // Scan visible price elements on the page (STRICTLY ignoring ownly extension nodes)
   const priceElements = document.querySelectorAll<HTMLElement>(
     'span[aria-label*="价格"], span[aria-label*="Price"], span.fontBodyMedium, div.fontHeadlineSmall, span[class*="price"], div[aria-label*="per night"], div[aria-label*="每晚"]'
   );
   for (const el of Array.from(priceElements).slice(0, 15)) {
+    if (el.closest('[id^="ownly-"]')) continue;
     const text = (el.getAttribute('aria-label') || el.textContent || '').trim();
     if (text && text.length < 50 && /[\$¥฿€£₩₫₹]|\b(sgd|hkd|twd|thb|usd|jpy|cny|eur|gbp|aud|cad|krw|vnd|myr|chf|inr)\b/i.test(text)) {
       pageContentToScan.push(text);
@@ -489,7 +495,7 @@ export function detectCurrencyFromPage(
 
   const combinedPrices = pageContentToScan.join(' ');
 
-  // 1. High-precision explicit currency symbol matching from screen
+  // 2. High-precision explicit currency symbol matching from screen (excluding extension nodes)
   if (/(?<![a-zA-Z])(?:s\$|\bsgd\b)/i.test(combinedPrices)) return 'SGD';
   if (/(?<![a-zA-Z])(?:hk\$|\bhkd\b)/i.test(combinedPrices)) return 'HKD';
   if (/(?<![a-zA-Z])(?:nt\$|\btwd\b|\bntd\b|新台币)/i.test(combinedPrices)) return 'TWD';
@@ -497,8 +503,8 @@ export function detectCurrencyFromPage(
   if (/(?<![a-zA-Z])(?:ca\$|c\$|\bcad\b)/i.test(combinedPrices)) return 'CAD';
   if (/(?<![a-zA-Z])(?:nz\$|\bnzd\b)/i.test(combinedPrices)) return 'NZD';
   if (/(?<![a-zA-Z])(?:us\$|\busd\b)/i.test(combinedPrices)) return 'USD';
-  if (/฿|\bthb\b|บาท/i.test(combinedPrices)) return 'THB';
-  if (/₩|\bkrw\b|원/i.test(combinedPrices)) return 'KRW';
+  if (/฿|\bthb\b|บาท|泰铢/i.test(combinedPrices)) return 'THB';
+  if (/₩|\bkrw\b|원|韩元/i.test(combinedPrices)) return 'KRW';
   if (/\brm\b|\bmyr\b/i.test(combinedPrices)) return 'MYR';
   if (/₫|\bvnd\b|đ/i.test(combinedPrices)) return 'VND';
   if (/€|\beur\b/i.test(combinedPrices)) return 'EUR';
@@ -506,12 +512,9 @@ export function detectCurrencyFromPage(
   if (/₹|\binr\b/i.test(combinedPrices)) return 'INR';
   if (/\bchf\b/i.test(combinedPrices)) return 'CHF';
   if (/cn¥|\brmb\b|\bcny\b|人民币/i.test(combinedPrices)) return 'CNY';
-  if (/jp¥|\bjpy\b|円/i.test(combinedPrices)) return 'JPY';
+  if (/jp¥|\bjpy\b|円|日元/i.test(combinedPrices)) return 'JPY';
 
-  // 2. Place-location coordinates are the strongest passive signal (immune to VPN/locale)
-  const fullContext = (currentUrl + ' ' + document.title + ' ' + (document.body?.textContent?.slice(0, 1500) || '')).toLowerCase();
-
-  // Coordinates extraction e.g. @1.3521,103.8198
+  // 3. Place-location coordinates on Google Maps
   const coordMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(currentUrl);
   if (coordMatch) {
     const lat = parseFloat(coordMatch[1]);
@@ -524,37 +527,24 @@ export function detectCurrencyFromPage(
     if (lat >= 0.80 && lat <= 7.50 && lng >= 99.50 && lng <= 119.50) return 'MYR'; // Malaysia
   }
 
-  // 3. Trip-currency prior beats page-localization context (VPN region, TLD):
-  //    if we reach this point no explicit price symbol matched, so the user's
-  //    declared travel currency is more meaningful than where Google served us.
+  // 4. Domain & TLDs
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname.toLowerCase();
+    if (/\.co\.th$|\.th$/i.test(hostname)) return 'THB';
+    if (/\.co\.jp$|\.jp$/i.test(hostname)) return 'JPY';
+    if (/\.com\.sg$|\.sg$/i.test(hostname)) return 'SGD';
+    if (/\.com\.hk$|\.hk$/i.test(hostname)) return 'HKD';
+    if (/\.com\.tw$|\.tw$/i.test(hostname)) return 'TWD';
+    if (/\.co\.uk$|\.uk$/i.test(hostname)) return 'GBP';
+    if (/\.com\.au$|\.au$/i.test(hostname)) return 'AUD';
+    if (/\.ca$/i.test(hostname)) return 'CAD';
+    if (/\.fr$|\.de$|\.it$|\.es$|\.nl$/i.test(hostname)) return 'EUR';
+    if (/\.kr$/i.test(hostname)) return 'KRW';
+    if (/\.vn$/i.test(hostname)) return 'VND';
+  }
+
+  // 5. Trip currency hint fallback
   if (hint) return hint;
-
-  // 4. Keywords & TLDs (page locale only — weakest signal)
-  if (/\.com\.sg|\.sg\b|singapore|新加坡|changi|sentosa|marina bay/i.test(fullContext)) return 'SGD';
-  if (/\.com\.hk|\.hk\b|hong kong|hongkong|香港|kowloon|九龙/i.test(fullContext)) return 'HKD';
-  if (/\.com\.tw|\.tw\b|taiwan|taipei|台湾|台北|高雄/i.test(fullContext)) return 'TWD';
-  if (/\.co\.th|\.th\b|thailand|bangkok|chiang mai|phuket|泰国|曼谷|清迈|普吉/i.test(fullContext)) return 'THB';
-  if (/\.co\.jp|\.jp\b|japan|tokyo|osaka|kyoto|hokkaido|日本|东京|大阪|京都|北海道/i.test(fullContext)) return 'JPY';
-  if (/\.com\.my|\.my\b|malaysia|kuala lumpur|penang|马来西亚|吉隆坡|槟城/i.test(fullContext)) return 'MYR';
-  if (/\.com\.au|\.au\b|australia|sydney|melbourne|brisbane|澳大利亚|悉尼|墨尔本/i.test(fullContext)) return 'AUD';
-  if (/\.ca\b|canada|toronto|vancouver|montreal|加拿大|多伦多|温哥华/i.test(fullContext)) return 'CAD';
-  if (/\.co\.uk|\.uk\b|london|united kingdom|英国|伦敦/i.test(fullContext)) return 'GBP';
-  if (/\.fr|\.de|\.it|\.es|\.nl|france|germany|italy|spain|paris|rome|berlin|欧洲|法国|德国|意大利/i.test(fullContext)) return 'EUR';
-
-  // 5. Ambiguous symbols fallback
-  if (combinedPrices.includes('¥')) {
-    if (/円|japan|tokyo|osaka/i.test(fullContext) || document.documentElement.lang.startsWith('ja')) return 'JPY';
-    return 'CNY';
-  }
-  if (combinedPrices.includes('$')) {
-    if (/singapore|新加坡/i.test(fullContext)) return 'SGD';
-    if (/hong kong|香港/i.test(fullContext)) return 'HKD';
-    if (/australia|sydney|melbourne/i.test(fullContext)) return 'AUD';
-    if (/canada|toronto|vancouver/i.test(fullContext)) return 'CAD';
-    // Ambiguous bare "$": prefer the trip's declared currency before falling back to USD.
-    if (hint) return hint;
-    return 'USD';
-  }
 
   return undefined;
 }
@@ -1361,9 +1351,9 @@ function initFxTooltipEngine() {
       return;
     }
 
-    const pageCurrency = detectCurrencyFromPage(window.location.href);
+    const pageCurrency = detectCurrencyFromPage(window.location.href, selectedText);
     const converted = convertPriceRange(selectedText, fxTargetCurrency, fxPivotRates, pageCurrency);
-    if (converted) {
+    if (converted && converted.sourceCurrency !== converted.targetCurrency) {
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       if (rect.width > 0 || rect.height > 0) {

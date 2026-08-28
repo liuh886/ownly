@@ -91,6 +91,11 @@
   - [x] 30.1 (Manifest Permissions & Matches): Update `host_permissions` and `content_scripts[0].matches` to `["http://*/*", "https://*/*"]` for full-web coverage.
   - [x] 30.2 (Performance Guarding): Guard Google Maps-specific DOM observers & list auto-scroll so they strictly execute only on Google Maps.
   - [x] 30.3 (Universal Verification): Run `validate:fast` and `validate:extension`, test build, commit and push.
+- [x] 31. (Fix Currency Disambiguation & Self-Pollution Elimination):
+  - [x] 31.1 (Domain Currency Matching): Refactor `convertPriceRange` so explicit symbols (`$`, `¥`, `€`, `£`, `₩`, `S$`, `HK$`, `NT$`, `A$`, `C$`, `₫`, `RM`, `฿`, `円`, `元`, `块`) always take primary precedence over page fallback. Disambiguate `¥` (JPY/CNY) and `$` (USD/AUD/CAD/SGD) strictly within their valid sets.
+  - [x] 31.2 (Extension DOM Isolation): Filter out `[id^="ownly-"]` in `detectCurrencyFromPage` to prevent tooltip text like "1 THB ≈ 0.205 CNY" from polluting page detection.
+  - [x] 31.3 (Selection Integration & Suppression): Suppress tooltip when `sourceCurrency === targetCurrency`. Pass `selectedText` into `detectCurrencyFromPage(url, selectedText)`.
+  - [x] 31.4 (Testing & Verification): Add unit tests in `planner.test.ts` for USD, EUR, GBP, JPY, SGD, HKD, TWD, AUD, CAD, THB, CNY selections. Run all validations.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:
