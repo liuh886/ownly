@@ -49,7 +49,8 @@ jobs:
       - name: Prepare validated code commit
         run: |
           rm scripts/refactor_capture_boundary.py scripts/patch_refactor_driver.py scripts/post_refactor_fixes.py
-          git restore .github/workflows/pages.yml src/core/git-sha.ts
+          git restore .github/workflows/pages.yml
+          rm -f src/core/git-sha.ts
 
       - name: Commit validated refactor
         run: |
