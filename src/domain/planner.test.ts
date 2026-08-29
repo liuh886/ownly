@@ -1079,6 +1079,9 @@ describe('checkOpeningHoursCollision & checkDayScheduleCollisions', () => {
     expect(morningCol.isCollision).toBe(true);
     expect(morningCol.reason).toContain('上午不开放');
 
+    const overnightNight = checkOpeningHoursCollision('18:00 - 02:00', '2026-10-20', 'night');
+    expect(overnightNight.isCollision).toBe(false);
+
     const okCol = checkOpeningHoursCollision('09:00 - 22:00', '2026-10-20', 'afternoon');
     expect(okCol.isCollision).toBe(false);
   });
@@ -1121,6 +1124,23 @@ describe('parseImportPayload', () => {
     expect(places[0].coordinates?.lat).toBe(35.6586);
     expect(places[1].title).toBe('Tsukiji Outer Market');
     expect(places[1].kind).toBe('food');
+  });
+
+  it('preserves comparable research facts from external JSON', () => {
+    const json = JSON.stringify([{
+      title: 'Bangkok Bistro',
+      source_category: 'Thai restaurant',
+      observed_review_count: 1280,
+      observed_price: '฿400–600 per person',
+      price_currency: 'THB',
+    }]);
+    const [place] = parseImportPayload(json, 'trip-123');
+    expect(place.source_category).toBe('Thai restaurant');
+    expect(place.observed_review_count).toBe(1280);
+    expect(place.price_currency).toBe('THB');
+    expect(place.price_min).toBe(400);
+    expect(place.price_max).toBe(600);
+    expect(place.price_unit).toBe('person');
   });
 
   it('parses KML placemarks', () => {
@@ -1176,7 +1196,7 @@ describe('parsePlaceExpenseEstimate', () => {
     const est1 = parsePlaceExpenseEstimate(p1, 'JPY');
     expect(est1).not.toBeNull();
     expect(est1?.amount).toBe(25000);
-    expect(est1?.currency).toBe('CNY'); // ¥ mapped to CNY by extractPriceCurrency default, or JPY if prefix
+    expect(est1?.currency).toBe('JPY');
     expect(est1?.category).toBe('stay');
 
     const p2 = place('p2', {
@@ -1188,6 +1208,22 @@ describe('parsePlaceExpenseEstimate', () => {
     expect(est2?.amount).toBe(35.5);
     expect(est2?.currency).toBe('USD');
     expect(est2?.category).toBe('ticket');
+
+    const p3 = place('p3', {
+      title: 'Bangkok Dinner',
+      kind: 'food',
+      observed_price: '฿400–600 per person',
+      price_currency: 'THB',
+      price_min: 400,
+      price_max: 600,
+      price_unit: 'person',
+    });
+    const est3 = parsePlaceExpenseEstimate(p3, 'CNY');
+    expect(est3?.amount).toBe(500);
+    expect(est3?.minAmount).toBe(400);
+    expect(est3?.maxAmount).toBe(600);
+    expect(est3?.currency).toBe('THB');
+    expect(est3?.unit).toBe('person');
   });
 
   it('returns null if observed_price has no valid number', () => {
@@ -1212,6 +1248,7 @@ describe('exportTripToMarkdown', () => {
       destinations: ['Tokyo'],
       currency: 'JPY',
       members: ['Alice', 'Bob'],
+      fx_rates: { USD: 150 },
       created_at: '2026-08-01',
     };
     const places: PlannerTripPlace[] = [
@@ -1241,6 +1278,18 @@ describe('exportTripToMarkdown', () => {
       },
     ];
 
+    expenses.push({
+      id: 'e2',
+      trip_id: 'trip-1',
+      title: 'Museum',
+      category: 'ticket',
+      amount: 10,
+      currency: 'USD',
+      paid_by: 'Bob',
+      split_members: ['Alice', 'Bob'],
+      created_at: '2026-10-20',
+    });
+
     const md = exportTripToMarkdown(trip, places, expenses, 'zh');
     expect(md).toContain('# ✈️ Tokyo 2026');
     expect(md).toContain('Day 1 (2026-10-20)');
@@ -1249,5 +1298,7 @@ describe('exportTripToMarkdown', () => {
     expect(md).toContain('Akihabara');
     expect(md).toContain('费用账本汇总');
     expect(md).toContain('Train Pass');
+    expect(md).toContain('已折算总额');
+    expect(md).toContain('¥4500 JPY');
   });
 });

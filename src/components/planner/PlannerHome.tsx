@@ -673,57 +673,38 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   }, [tripPlaces, activeDate]);
 
   const dayEstimatedCost = useMemo(() => {
-    if (!selectedTrip) return 0;
+    if (!selectedTrip) return { total: 0, unconverted: 0 };
     let total = 0;
+    let unconverted = 0;
     const tripCurrency = selectedTrip.currency || 'USD';
     const fx = { base: tripCurrency, overrides: selectedTrip.fx_rates };
-    scheduled.forEach((p) => {
-      const est = parsePlaceExpenseEstimate(p, tripCurrency);
-      if (est) {
-        const rate = effectiveFxRate(est.currency, fx) ?? 1;
-        total += est.amount * rate;
+    scheduled.forEach((place) => {
+      const estimate = parsePlaceExpenseEstimate(place, tripCurrency);
+      if (!estimate) return;
+      const rate = effectiveFxRate(estimate.currency, fx);
+      if (rate === null) {
+        unconverted += 1;
+        return;
       }
+      const quantity = estimate.unit === 'person' ? Math.max(1, currentMembers.length) : 1;
+      total += estimate.amount * rate * quantity;
     });
-    return Math.round(total * 100) / 100;
-  }, [scheduled, selectedTrip]);
+    return { total: Math.round(total * 100) / 100, unconverted };
+  }, [scheduled, selectedTrip, currentMembers.length]);
 
   const dayActualCost = useMemo(() => {
-    if (!selectedTrip) return 0;
+    if (!selectedTrip) return { total: 0, unconverted: 0 };
     const tripCurrency = selectedTrip.currency || 'USD';
     const fx = { base: tripCurrency, overrides: selectedTrip.fx_rates };
     let total = 0;
-    currentExpenses.filter((e) => e.date === activeDate).forEach((e) => {
-      const rate = effectiveFxRate(e.currency, fx) ?? 1;
-      total += e.amount * rate;
+    let unconverted = 0;
+    currentExpenses.filter((expense) => expense.date === activeDate).forEach((expense) => {
+      const rate = effectiveFxRate(expense.currency, fx);
+      if (rate === null) unconverted += 1;
+      else total += expense.amount * rate;
     });
-    return Math.round(total * 100) / 100;
+    return { total: Math.round(total * 100) / 100, unconverted };
   }, [currentExpenses, activeDate, selectedTrip]);
-
-  const handleAddPlaceExpense = useCallback(
-    async (place: PlannerTripPlace) => {
-      if (!selectedTrip) return;
-      const est = parsePlaceExpenseEstimate(place, selectedTrip.currency || 'USD');
-      const amount = est?.amount || 0;
-      const currency = est?.currency || selectedTrip.currency || 'USD';
-      const category = est?.category || 'other';
-
-      await handleAddExpense({
-        trip_id: selectedTrip.id,
-        title: place.title,
-        amount,
-        currency,
-        category,
-        date: place.scheduled_date || activeDate,
-        paid_by: currentMembers[0],
-        split_members: currentMembers,
-        notes: place.why || place.notes,
-      });
-
-      setNotice(zh ? `已将「${place.title}」记入预算账本！` : `Added "${place.title}" to budget expenses!`);
-      setTimeout(() => setNotice(''), 3000);
-    },
-    [selectedTrip, activeDate, currentMembers, handleAddExpense, zh],
-  );
 
   const copyMarkdownItinerary = useCallback(async () => {
     if (!selectedTrip) return;
@@ -1003,9 +984,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               </button>
               <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-stone-50 border border-stone-200 px-2 py-1 text-[11px] font-medium text-stone-700">
                 <span>💸</span>
-                <span>{zh ? '预估' : 'Est'}: {currencySymbolFor(selectedTrip.currency)}{dayEstimatedCost}</span>
+                <span>{zh ? '预估' : 'Est'}: {currencySymbolFor(selectedTrip.currency)}{dayEstimatedCost.total}</span>
                 <span className="text-stone-300">|</span>
-                <span>{zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip.currency)}{dayActualCost}</span>
+                <span>{zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip.currency)}{dayActualCost.total}</span>
+                {dayEstimatedCost.unconverted + dayActualCost.unconverted > 0 ? (
+                  <span className="text-amber-700" title={zh ? '存在缺少可用汇率的金额，未计入总额' : 'Some amounts lack a usable FX rate and are excluded'}>
+                    ⚠ {dayEstimatedCost.unconverted + dayActualCost.unconverted}
+                  </span>
+                ) : null}
               </div>
             </div>
             {activeDayWeather ? (
@@ -1215,15 +1201,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             title={place.locked ? (zh ? '已固定顺位（顺路优化不会挪动此站）' : 'Pinned (TSP optimizer will not move this stop)') : (zh ? '点击固定此站顺位' : 'Click to pin stop')}
                           >
                             {place.locked ? '📌' : '📍'}
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={zh ? '记入账本' : 'Add to expense'}
-                            onClick={() => void handleAddPlaceExpense(place)}
-                            className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-600 hover:bg-stone-50 hover:border-stone-300 transition"
-                            title={zh ? '将此地点预估消费记入预算账本' : 'Record this place expense in budget ledger'}
-                          >
-                            + {zh ? '记账' : 'Exp'}
                           </button>
                           <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↑</button>
                           <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↓</button>
@@ -1536,16 +1513,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             {place.title}
                           </h3>
                           <div className="flex items-center gap-1 shrink-0">
-                            {place.observed_price ? (
-                              <button
-                                type="button"
-                                onClick={() => void handleAddPlaceExpense(place)}
-                                className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-stone-600 hover:bg-stone-100 transition"
-                                title={zh ? '将此地点预估消费记入预算账本' : 'Add to budget expenses'}
-                              >
-                                + {zh ? '记账' : 'Exp'}
-                              </button>
-                            ) : null}
                             <button
                               type="button"
                               onClick={() => void schedulePlace(place.id)}

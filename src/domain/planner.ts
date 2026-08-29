@@ -533,7 +533,8 @@ export function checkOpeningHoursCollision(
     // Check evening/night window collision when hours indicate closing early (<= 17:30)
     if (lowerWindow === 'night' || lowerWindow === 'evening' || /晚上|夜间|傍晚/.test(lowerWindow)) {
       const closingMatch = /(?:~|-|至|到)\s*(0?\d|1[0-7]):([0-5]\d)/.exec(lowerHours);
-      if (closingMatch && !/(?:2[0-4]|1[8-9]):[0-5]\d/.test(lowerHours) && !/24小时|24\s*hours/i.test(lowerHours)) {
+      const closingHour = closingMatch ? Number(closingMatch[1]) : null;
+      if (closingMatch && closingHour !== null && closingHour >= 6 && closingHour <= 17 && !/(?:2[0-4]|1[8-9]):[0-5]\d/.test(lowerHours) && !/24小时|24\s*hours/i.test(lowerHours)) {
         return {
           isCollision: true,
           reason: `地点约 ${closingMatch[1]}:${closingMatch[2]} 闭馆，傍晚/夜间不开放`,
@@ -580,7 +581,7 @@ export function checkDayScheduleCollisions(
       placeCollisions[p.id] = col;
       hasCollision = true;
     }
-    totalDurationMinutes += p.duration_minutes || 60;
+    if (p.duration_minutes && p.duration_minutes > 0) totalDurationMinutes += p.duration_minutes;
   });
 
   const isOverloaded = totalDurationMinutes > 600; // > 10 hours
@@ -1956,38 +1957,80 @@ export function parseImportPayload(rawText: string, tripId: string): PlannerTrip
   const now = new Date().toISOString();
 
   const makePlace = (partial: Partial<PlannerTripPlace> & { title: string; category?: string }): PlannerTripPlace => {
-    const kind = partial.kind
+    const allowedKinds: PlannerPlaceKind[] = ['attraction', 'food', 'cafe', 'stay', 'shopping', 'transit', 'experience', 'other'];
+    const explicitKind = allowedKinds.includes(partial.kind as PlannerPlaceKind) ? partial.kind : undefined;
+    const kind = explicitKind
       || (partial.category ? inferPlaceKind(partial.category) : undefined)
+      || (partial.source_category ? inferPlaceKind(partial.source_category) : undefined)
       || inferPlaceKind(partial.title);
+    const allowedProviders: PlannerPlaceSourceProvider[] = ['google_maps', 'tabelog', 'xiaohongshu', 'booking', 'other'];
+    const sourceProvider = allowedProviders.includes(partial.source_provider as PlannerPlaceSourceProvider)
+      ? partial.source_provider as PlannerPlaceSourceProvider
+      : (partial.source_url ? inferSourceProvider(partial.source_url) : 'other');
+    const priority: PlannerPlacePriority = ['must', 'want', 'optional'].includes(partial.priority as string)
+      ? partial.priority as PlannerPlacePriority
+      : 'want';
+    const normalizedPrice = normalizeObservedPrice(partial.observed_price, partial.price_currency);
+    const explicitPriceUnit = ['person', 'night', 'item', 'level', 'unknown'].includes(partial.price_unit as string)
+      ? partial.price_unit as PlannerPriceUnit
+      : undefined;
+    const tags = Array.isArray(partial.tags) ? partial.tags.filter((value): value is string => typeof value === 'string') : [];
+    const signals = Array.isArray(partial.signals) ? partial.signals.filter((value): value is string => typeof value === 'string') : [];
+    const risks = Array.isArray(partial.risks) ? partial.risks.filter((value): value is string => typeof value === 'string') : [];
+    const reviewTopics = Array.isArray(partial.review_topics) ? partial.review_topics.filter((value): value is string => typeof value === 'string') : undefined;
+    const types = Array.isArray(partial.types) ? partial.types.filter((value): value is string => typeof value === 'string') : undefined;
+    const coordinates = partial.coordinates
+      && Number.isFinite(partial.coordinates.lat)
+      && Number.isFinite(partial.coordinates.lng)
+      && partial.coordinates.lat >= -90
+      && partial.coordinates.lat <= 90
+      && partial.coordinates.lng >= -180
+      && partial.coordinates.lng <= 180
+      ? partial.coordinates
+      : undefined;
     return {
       schema_version: '0.1',
       type: 'trip_place',
       id: partial.id || crypto.randomUUID(),
       trip_id: tripId,
       title: partial.title.trim(),
-      source_provider: partial.source_provider || (partial.source_url ? inferSourceProvider(partial.source_url) : 'other'),
+      source_provider: sourceProvider,
       source_url: partial.source_url || '',
       source_place_id: partial.source_place_id,
       kind,
       area: partial.area?.trim() || undefined,
-      priority: partial.priority || 'want',
-      tags: ensurePlaceKindTag(partial.tags || [], kind),
+      priority,
+      tags: ensurePlaceKindTag(tags, kind),
       why: partial.why?.trim() || undefined,
-      signals: partial.signals || [],
-      risks: partial.risks || [],
+      signals,
+      risks,
       notes: partial.notes?.trim() || undefined,
-      observed_rating: typeof partial.observed_rating === 'number' ? partial.observed_rating : undefined,
+      source_category: partial.source_category?.trim() || partial.category?.trim() || undefined,
+      observed_rating: typeof partial.observed_rating === 'number' && Number.isFinite(partial.observed_rating) ? partial.observed_rating : undefined,
+      observed_review_count: typeof partial.observed_review_count === 'number' && Number.isFinite(partial.observed_review_count) && partial.observed_review_count >= 0
+        ? Math.round(partial.observed_review_count)
+        : undefined,
       observed_price: partial.observed_price?.trim() || undefined,
+      price_currency: partial.price_currency?.trim().toUpperCase() || normalizedPrice?.currency,
+      price_min: typeof partial.price_min === 'number' && Number.isFinite(partial.price_min) ? partial.price_min : normalizedPrice?.min,
+      price_max: typeof partial.price_max === 'number' && Number.isFinite(partial.price_max) ? partial.price_max : normalizedPrice?.max,
+      price_unit: explicitPriceUnit || normalizedPrice?.unit,
+      price_level: typeof partial.price_level === 'number' && Number.isFinite(partial.price_level) ? partial.price_level : normalizedPrice?.level,
+      observed_at: partial.observed_at,
       preferred_window: partial.preferred_window,
-      duration_minutes: typeof partial.duration_minutes === 'number' ? partial.duration_minutes : undefined,
+      duration_minutes: typeof partial.duration_minutes === 'number' && Number.isFinite(partial.duration_minutes) && partial.duration_minutes > 0
+        ? partial.duration_minutes
+        : undefined,
       open_hours: partial.open_hours?.trim() || undefined,
       address: partial.address?.trim() || undefined,
-      coordinates: partial.coordinates,
+      coordinates,
       phone: partial.phone?.trim() || undefined,
       plus_code: partial.plus_code?.trim() || undefined,
       menu_url: partial.menu_url?.trim() || undefined,
       reservation_url: partial.reservation_url?.trim() || undefined,
       reservation_status: partial.reservation_status || 'none',
+      review_topics: reviewTopics,
+      types,
       state: 'candidate',
       created_at: partial.created_at || now,
       updated_at: partial.updated_at || now,
@@ -2116,46 +2159,57 @@ export function parseImportPayload(rawText: string, tripId: string): PlannerTrip
   return results;
 }
 
+export interface PlaceExpenseEstimate {
+  title: string;
+  amount: number;
+  minAmount: number;
+  maxAmount: number;
+  currency: string;
+  unit: PlannerPriceUnit;
+  category: TripExpenseCategory;
+}
+
 export function parsePlaceExpenseEstimate(
   place: PlannerTripPlace,
   fallbackCurrency = 'USD',
-): { title: string; amount: number; currency: string; category: TripExpenseCategory } | null {
-  if (!place.observed_price && !place.title) return null;
+): PlaceExpenseEstimate | null {
+  const normalized = normalizeObservedPrice(
+    place.observed_price,
+    place.price_currency || fallbackCurrency,
+  );
+  const minAmount = typeof place.price_min === 'number' && Number.isFinite(place.price_min)
+    ? place.price_min
+    : normalized?.min;
+  const maxAmount = typeof place.price_max === 'number' && Number.isFinite(place.price_max)
+    ? place.price_max
+    : normalized?.max;
+  const unit = place.price_unit || normalized?.unit || 'unknown';
+  if (unit === 'level' || minAmount === undefined || maxAmount === undefined || minAmount < 0 || maxAmount < 0) return null;
 
-  const rawPrice = place.observed_price || '';
-  const numMatch = /(?:[¥￥$€£฿₩]|NT\$|HK\$|S\$|US\$|THB|USD|CNY|JPY|EUR|GBP)?\s*([\d,]+(?:\.\d+)?)/i.exec(rawPrice);
-  const amount = numMatch ? parseFloat(numMatch[1].replace(/,/g, '')) : 0;
-  if (!amount || isNaN(amount) || amount <= 0) return null;
-
-  const currency = extractPriceCurrency(rawPrice) || fallbackCurrency;
+  const currency = (place.price_currency || normalized?.currency || fallbackCurrency).trim().toUpperCase();
+  if (!currency) return null;
+  const amount = (minAmount + maxAmount) / 2;
+  if (!Number.isFinite(amount) || amount <= 0) return null;
 
   let category: TripExpenseCategory = 'other';
   switch (place.kind) {
-    case 'stay':
-      category = 'stay';
-      break;
+    case 'stay': category = 'stay'; break;
     case 'food':
-    case 'cafe':
-      category = 'food';
-      break;
+    case 'cafe': category = 'food'; break;
     case 'attraction':
-    case 'experience':
-      category = 'ticket';
-      break;
-    case 'shopping':
-      category = 'shopping';
-      break;
-    case 'transit':
-      category = 'transit';
-      break;
-    default:
-      category = 'other';
+    case 'experience': category = 'ticket'; break;
+    case 'shopping': category = 'shopping'; break;
+    case 'transit': category = 'transit'; break;
+    default: category = 'other';
   }
 
   return {
     title: place.title,
     amount,
+    minAmount,
+    maxAmount,
     currency,
+    unit,
     category,
   };
 }
@@ -2236,12 +2290,22 @@ export function exportTripToMarkdown(
   const tripExpenses = expenses.filter((e) => e.trip_id === trip.id);
   if (tripExpenses.length > 0) {
     lines.push(`---`, ``, `## 💰 ${zh ? '费用账本汇总' : 'Expense Summary'}`, ``);
+    const baseCurrency = (trip.currency || 'USD').toUpperCase();
+    const fx: FxSettings = { base: baseCurrency, overrides: trip.fx_rates };
     let total = 0;
+    let unconverted = 0;
     tripExpenses.forEach((e) => {
-      total += e.amount;
+      const rate = effectiveFxRate(e.currency, fx);
+      if (rate === null) unconverted += 1;
+      else total += e.amount * rate;
       lines.push(`- **${e.date || '-'}** | ${e.title} (${e.category}): ${e.currency} ${e.amount} (${zh ? '付款人' : 'Paid by'}: ${e.paid_by})`);
     });
-    lines.push(``, `**${zh ? '总支出笔数' : 'Total Entries'}:** ${tripExpenses.length} | **${zh ? '累计金额' : 'Total Amount'}:** ${total.toFixed(2)} ${trip.currency || ''}`, ``);
+    const totalText = `${currencySymbolFor(baseCurrency)}${total.toFixed(getCurrencyDecimals(baseCurrency))} ${baseCurrency}`;
+    lines.push(``, `**${zh ? '总支出笔数' : 'Total Entries'}:** ${tripExpenses.length} | **${zh ? '已折算总额' : 'Converted Total'}:** ${totalText}`);
+    if (unconverted > 0) {
+      lines.push(`> ⚠️ ${zh ? `${unconverted} 笔支出缺少可用汇率，未计入折算总额。` : `${unconverted} expense(s) had no usable FX rate and were excluded from the converted total.`}`);
+    }
+    lines.push(``);
   }
 
   return lines.join('\n');
