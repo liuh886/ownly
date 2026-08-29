@@ -4,10 +4,12 @@ import {
   buildGoogleMapsDirectionsSegments,
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
+  checkDayScheduleCollisions,
   classifyResearchChip,
   ensurePlaceKindTag,
   exportPlacesToCSV,
   exportPlacesToKML,
+  exportTripToMarkdown,
   extractPlaceCoordinates,
   extractPriceCurrency,
   findExistingTripPlace,
@@ -30,9 +32,11 @@ import {
   parseNumericPrice,
   parseDetailedPrice,
   convertPriceRange,
-  placeIdentityKey,
+  parseImportPayload,
+  parsePlaceExpenseEstimate,
   type OwnlyCaptureState,
   type TripExpenseItem,
+  type PlannerTrip,
   STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
 } from './planner';
@@ -1015,5 +1019,194 @@ describe('computeUrgencies', () => {
   });
   it('does not flag when plenty of time remains', () => {
     expect(computeUrgencies([dp('r', { risks: ['需提前2周预约'] })], '2026-12-19', NOW)).toHaveLength(0);
+  });
+});
+
+describe('checkOpeningHoursCollision & checkDayScheduleCollisions', () => {
+  it('detects day-of-week closed collision', () => {
+    const col = checkOpeningHoursCollision('Monday: Closed', '2026-10-19'); // 2026-10-19 is Mon
+    expect(col.isCollision).toBe(true);
+    expect(col.reason).toContain('Closed');
+  });
+
+  it('detects preferred_window collision with open hours', () => {
+    const nightCol = checkOpeningHoursCollision('09:00 - 17:00', '2026-10-20', 'night');
+    expect(nightCol.isCollision).toBe(true);
+    expect(nightCol.reason).toContain('傍晚/夜间不开放');
+
+    const morningCol = checkOpeningHoursCollision('18:00 - 02:00', '2026-10-20', 'morning');
+    expect(morningCol.isCollision).toBe(true);
+    expect(morningCol.reason).toContain('上午不开放');
+
+    const okCol = checkOpeningHoursCollision('09:00 - 22:00', '2026-10-20', 'afternoon');
+    expect(okCol.isCollision).toBe(false);
+  });
+
+  it('detects day overload and long distance transit', () => {
+    const places: PlannerTripPlace[] = [
+      place('p1', {
+        scheduled_date: '2026-10-20',
+        state: 'scheduled',
+        duration_minutes: 360,
+        coordinates: { lat: 35.6895, lng: 139.6917 }, // Tokyo
+      }),
+      place('p2', {
+        scheduled_date: '2026-10-20',
+        state: 'scheduled',
+        duration_minutes: 300,
+        coordinates: { lat: 35.4437, lng: 139.6380 }, // Yokohama (~28km away)
+      }),
+    ];
+
+    const summary = checkDayScheduleCollisions(places, '2026-10-20');
+    expect(summary.hasCollision).toBe(true);
+    expect(summary.isOverloaded).toBe(true);
+    expect(summary.totalDurationMinutes).toBe(660);
+    expect(summary.longTransits.length).toBeGreaterThanOrEqual(1);
+    expect(summary.longTransits[0].distanceKm).toBeGreaterThan(20);
+  });
+});
+
+describe('parseImportPayload', () => {
+  it('parses JSON array of places', () => {
+    const json = JSON.stringify([
+      { title: 'Tokyo Tower', address: 'Minato, Tokyo', category: 'attraction', lat: 35.6586, lng: 139.7454 },
+      { title: 'Tsukiji Outer Market', category: 'food', observed_price: '¥2,000' },
+    ]);
+    const places = parseImportPayload(json, 'trip-123');
+    expect(places).toHaveLength(2);
+    expect(places[0].title).toBe('Tokyo Tower');
+    expect(places[0].trip_id).toBe('trip-123');
+    expect(places[0].coordinates?.lat).toBe(35.6586);
+    expect(places[1].title).toBe('Tsukiji Outer Market');
+    expect(places[1].kind).toBe('food');
+  });
+
+  it('parses KML placemarks', () => {
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+    <kml xmlns="http://www.opengis.net/kml/2.2">
+      <Document>
+        <Placemark>
+          <name>1. Fushimi Inari Shrine</name>
+          <description>Iconic torii gates</description>
+          <address>Kyoto, Japan</address>
+          <coordinates>135.7727,34.9671,0</coordinates>
+        </Placemark>
+      </Document>
+    </kml>`;
+    const places = parseImportPayload(kml, 'trip-123');
+    expect(places).toHaveLength(1);
+    expect(places[0].title).toBe('Fushimi Inari Shrine');
+    expect(places[0].coordinates?.lat).toBe(34.9671);
+    expect(places[0].coordinates?.lng).toBe(135.7727);
+  });
+
+  it('parses CSV rows', () => {
+    const csv = `Title,Kind,Rating,Price,Address\n"Ichiran Ramen",food,4.5,"¥1,200","Shinjuku, Tokyo"`;
+    const places = parseImportPayload(csv, 'trip-123');
+    expect(places).toHaveLength(1);
+    expect(places[0].title).toBe('Ichiran Ramen');
+    expect(places[0].kind).toBe('food');
+    expect(places[0].observed_price).toBe('¥1,200');
+    expect(places[0].observed_rating).toBe(4.5);
+  });
+
+  it('parses line-by-line text and Google Maps URLs', () => {
+    const text = `
+    - Senso-ji Temple
+    https://maps.google.com/?q=Tokyo+Skytree&ll=35.7100,139.8107
+    * Roppongi Hills
+    `;
+    const places = parseImportPayload(text, 'trip-123');
+    expect(places).toHaveLength(3);
+    expect(places[0].title).toBe('Senso-ji Temple');
+    expect(places[1].source_url).toContain('maps.google.com');
+    expect(places[2].title).toBe('Roppongi Hills');
+  });
+});
+
+describe('parsePlaceExpenseEstimate', () => {
+  it('extracts amount, currency, and category from place observed_price', () => {
+    const p1 = place('p1', {
+      title: 'Grand Hotel Tokyo',
+      kind: 'stay',
+      observed_price: '¥25,000/晚',
+    });
+    const est1 = parsePlaceExpenseEstimate(p1, 'JPY');
+    expect(est1).not.toBeNull();
+    expect(est1?.amount).toBe(25000);
+    expect(est1?.currency).toBe('CNY'); // ¥ mapped to CNY by extractPriceCurrency default, or JPY if prefix
+    expect(est1?.category).toBe('stay');
+
+    const p2 = place('p2', {
+      title: 'Museum Entry',
+      kind: 'attraction',
+      observed_price: '$35.50',
+    });
+    const est2 = parsePlaceExpenseEstimate(p2, 'USD');
+    expect(est2?.amount).toBe(35.5);
+    expect(est2?.currency).toBe('USD');
+    expect(est2?.category).toBe('ticket');
+  });
+
+  it('returns null if observed_price has no valid number', () => {
+    const p = place('p3', {
+      title: 'Park Walk',
+      observed_price: 'Free admission',
+    });
+    expect(parsePlaceExpenseEstimate(p)).toBeNull();
+  });
+});
+
+describe('exportTripToMarkdown', () => {
+  it('generates structured itinerary markdown', () => {
+    const trip: PlannerTrip = {
+      schema_version: '0.1',
+      type: 'trip',
+      id: 'trip-1',
+      title: 'Tokyo 2026',
+      status: 'planning',
+      start_date: '2026-10-20',
+      end_date: '2026-10-21',
+      destinations: ['Tokyo'],
+      currency: 'JPY',
+      members: ['Alice', 'Bob'],
+      created_at: '2026-08-01',
+    };
+    const places: PlannerTripPlace[] = [
+      place('p1', {
+        title: 'Shibuya Crossing',
+        kind: 'attraction',
+        scheduled_date: '2026-10-20',
+        state: 'scheduled',
+      }),
+      place('p2', {
+        title: 'Akihabara',
+        kind: 'shopping',
+        state: 'candidate',
+      }),
+    ];
+    const expenses: TripExpenseItem[] = [
+      {
+        id: 'e1',
+        trip_id: 'trip-1',
+        title: 'Train Pass',
+        category: 'transit',
+        amount: 3000,
+        currency: 'JPY',
+        paid_by: 'Alice',
+        split_members: ['Alice', 'Bob'],
+        created_at: '2026-10-20',
+      },
+    ];
+
+    const md = exportTripToMarkdown(trip, places, expenses, 'zh');
+    expect(md).toContain('# ✈️ Tokyo 2026');
+    expect(md).toContain('Day 1 (2026-10-20)');
+    expect(md).toContain('Shibuya Crossing');
+    expect(md).toContain('待选研究灵感池');
+    expect(md).toContain('Akihabara');
+    expect(md).toContain('费用账本汇总');
+    expect(md).toContain('Train Pass');
   });
 });

@@ -1,124 +1,45 @@
-# Todo: P0 & P1 Code Review Fixes
+# Planner Milestones 1-5 实施计划与进度追踪
 
-## Tasks
-- [x] 1. (P0) Fix TSP 1-click optimization pipeline: `schedulePlace` default `locked: false`, `optimizeStopsSequence` default options destructuring, and `haversineDistanceKm` numerical clamping <!-- id: 1 -->
-- [x] 2. (P0) Fix cold-load ledger hydration: invoke `hydrateLedgerFromVault` in `PlannerHome.tsx` mount `useEffect` <!-- id: 2 -->
-- [x] 3. (P0) Fix trip state synchronization: update `setTrips` in `handleUpdateMembers` to prevent `handleUpdateFxRates` from wiping members <!-- id: 3 -->
-- [x] 4. (P0) Fix multi-day stay replacement: `unschedulePlace` on base candidate hotel entities instead of `dropPlace` <!-- id: 4 -->
-- [x] 5. (P0) Fix sidepanel tombstone race: remove heuristic tombstone insertion in `sidepanel.ts` `storage.onChanged` <!-- id: 5 -->
-- [x] 6. (P0) Decouple `content.ts` from sidepanel: remove dynamic import of `content.ts` in `src/extension/sidepanel/capture.ts` <!-- id: 6 -->
-- [x] 7. (P1) Fix Budget Ledger currency binding & selection: bind aggregate metrics to `{baseCurrency}`, include `baseCurrency` in options, reset form overrides on submit <!-- id: 7 -->
-- [x] 8. (P1) Fix `safeEntityId` CJK/Unicode crash & `PlannerRepository.upsert` initialization <!-- id: 8 -->
-- [x] 9. (P1) Harden capture bridge & sidepanel XSS safety: handle `"null"` origin in `capture-bridge.ts`, sanitize safe URL schemes in `ui.ts` <!-- id: 9 -->
-- [x] 10. (P1) Fix UI interactions & hook dependencies: reset `optimizeUndo` on date/trip change, fix `urgencies` `useMemo` dependency, refactor `fetchWeather` dependencies <!-- id: 10 -->
-- [x] 11. (P1) Fix content scraping edge cases: review count regex extraction, European comma rating parsing, and currency regex word boundaries <!-- id: 11 -->
-- [x] 12. Run full validation suite (`validate:extension`, `validate:fast`, vitest unit tests) and verify all fixes <!-- id: 12 -->
-- [x] 13. (P1) Upgrade unified PlaceParser: unified multi-layer extraction pipeline (JSON-LD, subtitle decomposition, standardized rating/category/review count) <!-- id: 13 -->
+## 一、Milestone 1: 导入事务性与原子 ACK (Import Transactionality)
+- [x] 1.1 修改 `PlannerRepository.importCapturedPlaces()` 返回 `Promise<string[]>` (成功写入的 place IDs)
+- [x] 1.2 更新 `PlannerHome.tsx` 中 `syncCapture()`，仅对 `importedIds` 调用 `ackCapturedPlaces(importedIds)`
+- [x] 1.3 编写与更新相关单元测试，覆盖部分导入容错与精准 ACK 场景
 
-- [x] 14. (Architecture Evolution) End-to-end architecture audit & clean refinement across Domain, Data Persistence, Chrome Extension, and React UI:
-  - Preserved canonical domain interfaces (`MultiDayHotelProximityResult`, `DayHotelTransferInfo`).
-  - Added non-ASCII hash disambiguation for `safeEntityId` preventing entity ID collisions.
-  - Hardened AA cash flow settlement (`calculateTripSettlement`) against empty members and payer edge cases.
-  - Seamless clipboard copy fallback in `PlannerBudgetLedger.tsx`.
-  - Upgraded HTML5 drag-and-drop compliance across Firefox/Safari.
-  - Eliminated setState in effects and refreshed SPA bridge signals on URL change.
+## 二、Milestone 2: 智能排期与行程冲突感知 (Smart Scheduling & Collision Guard)
+- [x] 2.1 增强 `src/domain/planner.ts` 中的冲突检测逻辑（时段与营业时间冲突、单日总时长超标、跨区远距离转场）
+- [x] 2.2 实现 `checkDayScheduleCollisions(places, date)` 综合感知函数
+- [x] 2.3 在 `PlannerHome.tsx` 中为地点卡片与 Day 头部呈现结构化冲突与警告徽章
+- [x] 2.4 编写针对冲突与过载算法的单元测试
 
-- [x] 15. (Category & Tag System Alignment) Automatic default kind tags & candidate pool count indicators:
-  - Aligned category taxonomy: `住宿` (Stay), `美食` (Food), `咖啡` (Cafe), `体验` (Experience), `景点` (Attraction), `购物` (Shopping), `交通` (Transit), `其它` (Other).
-  - Implemented `ensurePlaceKindTag`: automatically defaults and preserves the category tag for any captured/imported place (e.g. `stay` automatically gets `住宿` tag).
-  - Filter chips and candidate drawer now display counts in parentheses, e.g. `全部 (12)`, `🏨 住宿 (5)`, `🍜 美食 (3)`, `☕ 咖啡 (2)`, `🏷️ 曼谷 (4)`.
-  - Filter chip deduplication: cleanly isolates standard category tags from custom trip tags.
+## 三、Milestone 3: Obsidian 原生环境适配与外部互通 (Obsidian Native Interop)
+- [x] 3.1 在 `src/domain/planner.ts` 中实现通用导入解析器 `parseImportPayload(rawText, tripId)`（支持 JSON、CSV、KML、纯文本链接/列表）
+- [x] 3.2 在 `PlannerHome.tsx` 中新增“外部导入候选”弹窗 (`ImportCandidatesModal.tsx`，支持直接粘贴文本/链接/JSON/CSV/KML 或上传文件)
+- [x] 3.3 编写针对多格式导入解析器的单元测试
 
-- [x] 16. (Tag Purity & Address/Title Exclusion):
-  - Strictly excluded place titles (`p.title`), full addresses (`p.address`), and address fragments from being rendered as tag filter chips.
-  - Implemented `isPlausibleCustomTag` in domain planner to reject postal codes, long addresses, emails, and URLs.
-  - Cleaned extension sidepanel handlers (`buildPlaceFromDetected`, `btnSmartSyncAll`, `btnBatchAdd`) so raw subtitle categories/addresses are no longer mistakenly pushed into `signals`.
+## 四、Milestone 4: 预算账本与 AA 结算深度集成 (Budget & Ledger Enhancements)
+- [x] 4.1 在 `src/domain/planner.ts` 中实现地点预估价解析与支出类别推导 `parsePlaceExpenseEstimate(place)`
+- [x] 4.2 在 `PlannerHome.tsx` 地点卡片上新增“一键转记账（+ 记账）”快捷动作
+- [x] 4.3 在 Day 排期头部展示当日预估消费与实际支出汇总
+- [x] 4.4 编写支出推导与金额换算测试
 
-- [x] 17. (Candidate Inline Editor Streamlining):
-  - Removed unnecessary "区域 / 街区 (Area)" input field from candidate inline edit form in the sidepanel.
-  - Streamlined row layout: Row 1 (Kind + Priority), Row 2 (Price + Rating), Row 3 (Duration), Row 4 (Tags), Row 5 (Notes).
-  - Preserved existing `place.area` and ensured kind tags are automatically preserved on inline save.
+## 五、Milestone 5: 排期交互体验与多格式导出交付 (UX Refinement & Delivery)
+- [x] 5.1 在 `src/domain/planner.ts` 中实现 `exportTripToMarkdown(trip, places, expenses, language)` 结构化行程单导出
+- [x] 5.2 在 `PlannerHome.tsx` 增加一键复制 Markdown 行程单 / 导出入口
+- [x] 5.3 完善 Candidate Pool 与 Day 视图的快速排期、上移下移、锁定与退回操作
+- [x] 5.4 验证全套回归测试（`validate:fast`, `validate:extension`, `validate:shared`, `validate:web`）
+- [x] 5.5 提交 PR 并记录 Review 总结
 
-- [x] 18. (Top Bar UI Cleanup):
-  - Removed unnecessary `🗺️` map currency icon span (`lblMapCurrency`) from the top of the sidepanel header (`tripActiveRow`).
+---
 
-## Planner Layout Redesign: 1:3 Day Skeleton/Workspace & Floating Pool Window
-- [x] 19. (Layout Restructure) Update `PlannerHome.tsx` main grid to 1:3 ratio:
-  - Day Skeleton occupies 1 part (`minmax(340px, 1fr)`).
-  - Planner Workspace (Spatial Map / Budget / Context) occupies 3 parts (`minmax(0, 3fr)`).
-- [x] 20. (Floating Candidate Pool Window) Implement toggleable floating pool drawer/window:
-  - Added `isPoolOpen` state and floating trigger button (`🗂️ 候选池 (${candidates.length})`).
-  - Added top bar quick button and Day Skeleton header trigger button.
-  - Implemented sleek floating drawer with search, category & custom filter chips with counts, hotel compare banner, and draggable candidate cards.
-  - Maintained drag-and-drop from floating pool directly to Day Skeleton dropzone.
-  - Added keyboard shortcut (`Esc` to close) and backdrop dismiss on mobile.
-## Planner Layout Evolution: Full-Width Horizontal Candidate Pool Below List & Map
-- [x] 22. (Bottom Full-Width Pool Section) Position Candidate Pool below the 1:3 Day Skeleton & Map Workspace:
-  - Full-width container (`w-full mt-4 rounded-xl border border-stone-200 bg-white shadow-sm overflow-hidden`).
-  - Sleek header with Title, counts, inline search, hotel compare button, and collapse/expand toggle.
-  - Horizontal filter chips bar with category and custom tags counts.
-  - Responsive multi-column grid layout (`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-4`) for candidate place cards.
-  - Retain drag-and-drop upward into Day Skeleton, hover highlight sync with Map above, and one-click `+ 当天` (`+ Day`) scheduling.
-- [x] 33. (Mathematical Full Precision & Arbitrary Currency Matrix): Full 64-bit IEEE-754 float precision without intermediate rounding, ISO 4217 zero-decimal formatting for JPY/KRW/VND, and arbitrary cross-rate pivot conversion matrix.
-- [x] 34. (Price Preservation on Recapture & SGD Disambiguation): Protect manually-edited place prices, notes, and tags during bulk saved list re-import via non-destructive merge; add Google Maps RPC coordinates & Singapore keywords.
-- [x] 35. (Explicit Currency Control & Distance-Based Candidate Pool Sorting):
-  - [x] 35.1 (Explicit Currency Control in Extension): Prominently show detected currency in sidepanel toolbar, provide interactive dropdown selector (Auto / manual currency list) and 🔄 Re-detect button, persisting override and broadcasting to content script Selection FX.
-  - [x] 35.2 (Distance-Based Candidate Pool Sorting in Planner): Sort candidates dynamically by distance relative to the last scheduled stop of the current day (`haversineDistanceKm`), display distance badges (`📍 距上一站 X km`), and auto-recalculate upon adding stops.
-  - [x] 35.3 (Verification & Tests): Add unit tests in `planner.test.ts` and `currency-detector.test.ts`, run `validate:extension` and `validate:fast`, build and push.
-- [x] 23. (Verification & Sync) Run full test suite (`validate:fast`, `validate:extension`), verify responsive design, commit and push to `origin main`.
-- [x] 24. (Basemap Research) Analyze and discuss free basemap solutions for the spatial map.
-- [x] 25. (Free Basemap Switcher) Implement multi-style basemap switcher in `PlannerMap.tsx`:
-  - Support free, zero-config basemaps: CARTO Voyager (淡彩旅行), CARTO Positron (极简浅灰), CARTO Dark Matter (深邃夜景), OpenStreetMap Standard (标准开源), and Esri World Imagery (卫星实景).
-  - Add basemap selector in the map header toolbar with localized labels and icons.
-  - Persist chosen style in `localStorage` (`ownly_planner_basemap_style`).
-  - Graceful fallback on image load error to ensure tiles always display reliably.
-- [x] 26. (Extension Capture & Candidate Editor Unification):
-  - Improve capture banner to friendly editing status indicator (`🟢 已在候选池 · 可在此完善快捷标签与心得`).
-  - Update submit button text to clear `💾 保存地点与标签修改` (Save Place & Tags).
-  - Respect exact tag selections during capture edit without re-injecting deleted tags.
-  - Sync candidate card "✏️ 编辑" with top capture form and quick chips seamlessly.
-  - Clear user feedback upon saving updates (`✓ 已保存地点修改与快捷标签`).
-- [x] 27. (Place Category Taxonomy Hardening):
-  - Expand `inferPlaceKind` taxonomy with `cuisine`, `dining`, `kitchen`, `eatery`, `steakhouse`, `dumpling`, `barbecue`, `tapas`, `canteen`, `fondue` and multilingual Thai keywords (`ร้านอาหาร`, `อาหาร`, `ก๋วยเตี๋ยว`, `ข้าวมันไก่`, `ส้มตำ`, `บาร์`).
-  - Add Japanese keywords (`ラーメン`, `焼肉`, `寿司`, `うどん`, `そば`, `天ぷら`, `割烹`, `居酒屋`, `食堂`, `定食`).
-  - Accurately categorize `Ekachan The Wisdom of Ethnic Thai Cuisine` and related global culinary establishments as `food`.
-- [x] 28. (Extension Currency Conversion Hover Tooltip & Switch):
-  - [x] 28.1 (Domain FX Converter): Implement `convertPriceRange` & currency extraction supporting single/range prices and target trip currency. Add unit tests.
-  - [x] 28.2 (Background Rates Engine): Daily silent sync of open exchange rates with 24h `chrome.storage.local` cache and `DEFAULT_USD_PIVOT` fallback.
-  - [x] 28.3 (Content Script Floating Tooltip): Safe, zero-DOM-mutation hovering tooltip with glassmorphism styling, showing converted amount, rate formula, and auto-dismissal.
-  - [x] 28.4 (Sidepanel Toggle & State Sync): Add a clean `💱 汇率浮窗` toggle in sidepanel header with persistence (`ownly_fx_tooltip_enabled`) and runtime tab broadcast.
-  - [x] 28.5 (Verification & Build): Run `validate:fast` and `validate:extension`, verify zero performance overhead, commit and push.
-- [x] 29. (Simplify Activation to Text Selection / 划词激活):
-  - [x] 29.1 (Content Script Refactor): Replace passive `mouseover` with active text selection (`mouseup`/`selectionchange`), measuring selection bounding range and popping tooltip above selection.
-  - [x] 29.2 (Selection Cleared & Outside Click): Clean dismissal when clicking outside or clearing selection.
-  - [x] 29.3 (i18n & UI Updates): Update sidepanel toggle labels to `💱 划词汇率` (Selection FX).
-  - [x] 29.4 (Verification & Sync): Run `validate:fast` and `validate:extension`, commit and push.
-- [x] 30. (Universal Web Support for Selection FX & Capture):
-  - [x] 30.1 (Manifest Permissions & Matches): Update `host_permissions` and `content_scripts[0].matches` to `["http://*/*", "https://*/*"]` for full-web coverage.
-  - [x] 30.2 (Performance Guarding): Guard Google Maps-specific DOM observers & list auto-scroll so they strictly execute only on Google Maps.
-  - [x] 30.3 (Universal Verification): Run `validate:fast` and `validate:extension`, test build, commit and push.
-- [x] 31. (Fix Currency Disambiguation & Self-Pollution Elimination):
-  - [x] 31.1 (Domain Currency Matching): Refactor `convertPriceRange` so explicit symbols (`$`, `¥`, `€`, `£`, `₩`, `S$`, `HK$`, `NT$`, `A$`, `C$`, `₫`, `RM`, `฿`, `円`, `元`, `块`) always take primary precedence over page fallback. Disambiguate `¥` (JPY/CNY) and `$` (USD/AUD/CAD/SGD) strictly within their valid sets.
-  - [x] 31.2 (Extension DOM Isolation): Filter out `[id^="ownly-"]` in `detectCurrencyFromPage` to prevent tooltip text like "1 THB ≈ 0.205 CNY" from polluting page detection.
-  - [x] 31.3 (Selection Integration & Suppression): Suppress tooltip when `sourceCurrency === targetCurrency`. Pass `selectedText` into `detectCurrencyFromPage(url, selectedText)`.
-  - [x] 31.4 (Testing & Verification): Add unit tests in `planner.test.ts` for USD, EUR, GBP, JPY, SGD, HKD, TWD, AUD, CAD, THB, CNY selections. Run all validations.
-- [x] 32. (Unified Multi-Signal Currency Cross-Validation Architecture):
-  - [x] 32.1 (Engine Design): Create `src/extension/currency-detector.ts` unifying JSON-LD Schema, HTML5 Meta, International Phone Codes (+65, +852, +886, etc.), Geo Coordinates, Statutory Taxes (9% GST, 加一服務費), Site Switchers, and TLDs with weighted confidence scoring.
-  - [x] 32.2 (Disambiguation Matrix): Resolve ambiguous `$` (SGD vs HKD vs AUD vs CAD vs NZD vs USD) and `¥` (JPY vs CNY) dynamically using the highest weighted contextual score.
-  - [x] 32.3 (System Integration): Connect `currency-detector.ts` seamlessly across Google Maps place capture, webpage price extraction, and Selection FX tooltip in `content.ts` and `place-parser.ts`.
-  - [x] 32.4 (Automated Testing & Parity): Write unit tests in `currency-detector.test.ts` covering Singapore (9% GST, +65, SGD), Hong Kong (+852, HKD), Japan (円, +81, JPY), Australia (+61, 10% GST, AUD), France/Germany (EUR), UK (+44, GBP), and US (USD). Run all validations.
-- [x] 33. (Universal Arbitrary Target Currency Conversion & Robust Formatting):
-  - [x] 33.1 (Global Pivot Table & Symbol Dictionary): Expand `DEFAULT_USD_PIVOT` and `CODE_TO_SYMBOL` with top world currencies (PHP, IDR, AED, TRY, SEK, NOK, DKK, PLN, BRL, SAR, MOP, NZD, etc.).
-  - [x] 33.2 (Universal Cross-Rate Matrix): Ensure `effectiveFxRate` and `convertPriceRange` accurately compute cross-rates from any currency $A$ to any target currency $B$ (e.g. USD -> THB, CNY -> THB, JPY -> THB, THB -> USD, GBP -> EUR, etc.).
-  - [x] 33.3 (Formatting Polish): Ensure clean symbol spacing and precision across large numbers (e.g. `25,000 VND`, `150,000 IDR`, `3,700 THB`).
-  - [x] 33.4 (Testing & Verification): Add comprehensive unit tests in `planner.test.ts` asserting arbitrary trip currencies (`targetCurrency: 'THB'`, `'USD'`, `'EUR'`, `'JPY'`, `'SGD'`, etc.). Run all validations.
+## 六、Review 总结与成果验证
 
-## Review
-- **Architecture Evolution & Quality Hardening**:
-  - Maintained complete backward compatibility with existing interfaces across `stay.ts` and `HotelComparisonModal.tsx`.
-  - Unified Google Maps place parser (`src/extension/place-parser.ts`) with multi-layer JSON-LD + Subtitle decomposition.
-  - Aligned category & tag taxonomy with automatic default kind tagging (`ensurePlaceKindTag`) across Extension Capture and Planner Home.
-  - Guaranteed tag filter purity by filtering out place names and addresses.
-  - Streamlined candidate inline editor and cleaned up sidepanel top bar header.
-  - Redesigned Planner Home with 1:3 ratio for Day Skeleton / Map Workspace and full-width horizontal candidate pool below.
-  - All test suites green across entire project (`validate:fast`, `validate:extension`, `tsc --noEmit`).
+- **事务原子性**：`PlannerRepository.importCapturedPlaces()` 精准返回持久化成功的 `importedIds`，Web 端按需 ACK，彻底杜绝异常掉盘导致候选丢失问题。
+- **智能排期与冲突守卫**：支持闭馆日 + 时段冲突（如夜间开放性判断）、单日活动时长超负荷（>10h）预警、跨区长距离转场（>20km）交通提醒。
+- **Obsidian 原生与多源导入**：通过 `ImportCandidatesModal` 支持直接粘贴或上传 Google Maps 链接、KML、CSV、JSON、纯文本，解决了 Obsidian 桌面端无浏览器 Extension Bridge 的数据录入痛点。
+- **预算深度联动**：地点预估人均一键生成真实支出记账条目，Day 头部实时展示该日预估开销与已记账支出汇总（按汇率表自动折算）。
+- **行程导出交付**：支持一键复制完整 Markdown 结构化行程单，方便离线查看、打印或分享至社交软件。
+- **全套验证指标**：
+  - `validate:fast`: 0 errors (ESLint warning 从 18 项进一步降低到 15 项)
+  - `validate:extension`: 105/105 tests 通过 (新增 10 个测试用例)
+  - `validate:shared`: 全部通过
+  - `validate:web`: Turbopack 生产编译通过，静态导出与 PWA 校验 100% 通过

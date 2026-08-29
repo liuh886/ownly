@@ -13,9 +13,13 @@ import {
 import {
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
+  checkDayScheduleCollisions,
+  currencySymbolFor,
+  effectiveFxRate,
   ensurePlaceKindTag,
   exportPlacesToCSV,
   exportPlacesToKML,
+  exportTripToMarkdown,
   extractPlaceCoordinates,
   getPlannerKindLabel,
   getTripAreaCounts,
@@ -25,6 +29,7 @@ import {
   isPlausibleCustomTag,
   listTripDates,
   optimizeStopsSequence,
+  parsePlaceExpenseEstimate,
   sortPlannerPlaces,
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
@@ -35,6 +40,7 @@ import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './captur
 import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
 import { PlannerBudgetLedger } from './PlannerBudgetLedger';
+import { ImportCandidatesModal } from './ImportCandidatesModal';
 
 interface PlannerHomeProps {
   disabled: boolean;
@@ -153,6 +159,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   );
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
 
@@ -621,7 +628,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     return () => { stale = true; };
   }, [weatherRelevant, selectedTrip, primaryCoords, tripStart]);
 
-  const weather = weatherRelevant && selectedTrip && primaryCoords ? rawWeather : [];
+  const weather = useMemo(() => {
+    return weatherRelevant && selectedTrip && primaryCoords ? rawWeather : [];
+  }, [weatherRelevant, selectedTrip, primaryCoords, rawWeather]);
 
   const urgencies = useMemo(() => {
     if (!selectedTrip) return [];
@@ -658,6 +667,71 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     URL.revokeObjectURL(url);
     setNotice(zh ? '已导出 Google Maps (CSV) 路线文件！' : 'Exported Google Maps (CSV) file!');
   }, [selectedTrip, scheduled, activeDate, zh]);
+
+  const dayCollisions = useMemo(() => {
+    return checkDayScheduleCollisions(tripPlaces, activeDate);
+  }, [tripPlaces, activeDate]);
+
+  const dayEstimatedCost = useMemo(() => {
+    if (!selectedTrip) return 0;
+    let total = 0;
+    const tripCurrency = selectedTrip.currency || 'USD';
+    const fx = { base: tripCurrency, overrides: selectedTrip.fx_rates };
+    scheduled.forEach((p) => {
+      const est = parsePlaceExpenseEstimate(p, tripCurrency);
+      if (est) {
+        const rate = effectiveFxRate(est.currency, fx) ?? 1;
+        total += est.amount * rate;
+      }
+    });
+    return Math.round(total * 100) / 100;
+  }, [scheduled, selectedTrip]);
+
+  const dayActualCost = useMemo(() => {
+    if (!selectedTrip) return 0;
+    const tripCurrency = selectedTrip.currency || 'USD';
+    const fx = { base: tripCurrency, overrides: selectedTrip.fx_rates };
+    let total = 0;
+    currentExpenses.filter((e) => e.date === activeDate).forEach((e) => {
+      const rate = effectiveFxRate(e.currency, fx) ?? 1;
+      total += e.amount * rate;
+    });
+    return Math.round(total * 100) / 100;
+  }, [currentExpenses, activeDate, selectedTrip]);
+
+  const handleAddPlaceExpense = useCallback(
+    async (place: PlannerTripPlace) => {
+      if (!selectedTrip) return;
+      const est = parsePlaceExpenseEstimate(place, selectedTrip.currency || 'USD');
+      const amount = est?.amount || 0;
+      const currency = est?.currency || selectedTrip.currency || 'USD';
+      const category = est?.category || 'other';
+
+      await handleAddExpense({
+        trip_id: selectedTrip.id,
+        title: place.title,
+        amount,
+        currency,
+        category,
+        date: place.scheduled_date || activeDate,
+        paid_by: currentMembers[0],
+        split_members: currentMembers,
+        notes: place.why || place.notes,
+      });
+
+      setNotice(zh ? `已将「${place.title}」记入预算账本！` : `Added "${place.title}" to budget expenses!`);
+      setTimeout(() => setNotice(''), 3000);
+    },
+    [selectedTrip, activeDate, currentMembers, handleAddExpense, zh],
+  );
+
+  const copyMarkdownItinerary = useCallback(async () => {
+    if (!selectedTrip) return;
+    const md = exportTripToMarkdown(selectedTrip, places, currentExpenses, language);
+    await navigator.clipboard.writeText(md);
+    setNotice(zh ? '已复制 Markdown 完整行程单至剪贴板！' : 'Copied Markdown itinerary to clipboard!');
+    setTimeout(() => setNotice(''), 3000);
+  }, [selectedTrip, places, currentExpenses, language, zh]);
 
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;
@@ -703,23 +777,28 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
       await plannerRepository.initialize();
       if (state.pendingPlaces.length > 0) {
-        await plannerRepository.importCapturedPlaces(state.pendingPlaces);
-        const acknowledged = await ackCapturedPlaces(state.pendingPlaces.map((place) => place.id));
-        if (!acknowledged) throw new Error('Capture ACK failed');
+        const importedIds = await plannerRepository.importCapturedPlaces(state.pendingPlaces);
+        if (importedIds.length > 0) {
+          const acknowledged = await ackCapturedPlaces(importedIds);
+          if (!acknowledged) throw new Error('Capture ACK failed');
+        }
+        setCapturePending(state.pendingPlaces.length - importedIds.length);
+        setNotice(zh
+          ? `已同步 ${importedIds.length} 个研究候选。`
+          : `Synced ${importedIds.length} research candidates.`);
+      } else {
+        setCapturePending(0);
+        setNotice(zh ? '没有待同步的研究候选。' : 'No pending research candidates to sync.');
       }
-      setCapturePending(0);
       await load();
       setSelectedTripId((current) => current || state.activeContext?.tripId || '');
-      setNotice(zh
-        ? `已同步 ${state.pendingPlaces.length} 个研究候选。`
-        : `Synced ${state.pendingPlaces.length} research candidates.`);
     } catch {
       setCapturePending(null);
       setNotice(zh ? '同步失败：无法写入数据目录或扩展未响应。' : 'Sync failed: could not write data folder or extension unreachable.');
     } finally {
       setBusy(false);
     }
-  }, [load, trips, zh]);
+  }, [load, zh]);
 
   if (disabled) {
     return (
@@ -795,6 +874,24 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50 disabled:opacity-50"
           >
             {busy ? '…' : (zh ? '同步 Capture' : 'Sync Capture')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
+            title={zh ? '从剪贴板、Google Maps 链接、KML、CSV 或 JSON 批量导入候选' : 'Import candidates from clipboard, links, KML, CSV, or JSON'}
+          >
+            <span>📥</span>
+            <span>{zh ? '导入候选' : 'Import'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void copyMarkdownItinerary()}
+            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
+            title={zh ? '一键复制 Markdown 完整行程单至剪贴板' : 'Copy complete Markdown itinerary to clipboard'}
+          >
+            <span>📋</span>
+            <span>{zh ? '复制行程单' : 'Copy Markdown'}</span>
           </button>
           <button
             type="button"
@@ -904,6 +1001,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 <span>🗂️ {zh ? '候选池' : 'Pool'}</span>
                 <span className="rounded-full bg-stone-200 px-1.5 py-0 text-[9.5px] font-bold text-stone-700">{candidates.length}</span>
               </button>
+              <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-stone-50 border border-stone-200 px-2 py-1 text-[11px] font-medium text-stone-700">
+                <span>💸</span>
+                <span>{zh ? '预估' : 'Est'}: {currencySymbolFor(selectedTrip.currency)}{dayEstimatedCost}</span>
+                <span className="text-stone-300">|</span>
+                <span>{zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip.currency)}{dayActualCost}</span>
+              </div>
             </div>
             {activeDayWeather ? (
               <span
@@ -1032,6 +1135,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               </span>
             </div>
           ) : null}
+          {dayCollisions.isOverloaded || dayCollisions.longTransits.length > 0 ? (
+            <div className="mx-4 mt-2 space-y-1">
+              {dayCollisions.isOverloaded ? (
+                <div className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 shadow-2xs font-medium">
+                  <span>⚠️</span>
+                  <span>{dayCollisions.overloadReason}</span>
+                </div>
+              ) : null}
+              {dayCollisions.longTransits.map((lt, idx) => (
+                <div key={idx} className="flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] text-sky-900 shadow-2xs">
+                  <span>🚗</span>
+                  <span><b>{lt.fromTitle} ➔ {lt.toTitle}</b>: {lt.warning}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="p-3">
             {scheduled.length === 0 ? (
               <div className={`rounded-xl border-2 border-dashed px-4 py-16 text-center text-sm ${draggingPlaceId ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700' : 'border-stone-200 text-stone-400'}`}>
@@ -1040,7 +1159,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             ) : (
               <ol className="space-y-1.5">
                 {scheduled.map((place, index) => {
-                  const col = checkOpeningHoursCollision(place.open_hours, activeDate);
+                  const col = dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
                   return (
                     <li
                       key={place.id}
@@ -1096,6 +1215,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             title={place.locked ? (zh ? '已固定顺位（顺路优化不会挪动此站）' : 'Pinned (TSP optimizer will not move this stop)') : (zh ? '点击固定此站顺位' : 'Click to pin stop')}
                           >
                             {place.locked ? '📌' : '📍'}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={zh ? '记入账本' : 'Add to expense'}
+                            onClick={() => void handleAddPlaceExpense(place)}
+                            className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-600 hover:bg-stone-50 hover:border-stone-300 transition"
+                            title={zh ? '将此地点预估消费记入预算账本' : 'Record this place expense in budget ledger'}
+                          >
+                            + {zh ? '记账' : 'Exp'}
                           </button>
                           <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↑</button>
                           <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↓</button>
@@ -1407,14 +1535,26 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           <h3 className="truncate text-sm font-semibold text-stone-900" title={place.title}>
                             {place.title}
                           </h3>
-                          <button
-                            type="button"
-                            onClick={() => void schedulePlace(place.id)}
-                            className="shrink-0 rounded-md bg-stone-950 px-2 py-1 text-[10.5px] font-semibold text-white hover:bg-stone-800 transition"
-                            title={zh ? '直接排入当天日程' : 'Schedule to active day'}
-                          >
-                            + {zh ? '当天' : 'Day'}
-                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {place.observed_price ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleAddPlaceExpense(place)}
+                                className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-stone-600 hover:bg-stone-100 transition"
+                                title={zh ? '将此地点预估消费记入预算账本' : 'Add to budget expenses'}
+                              >
+                                + {zh ? '记账' : 'Exp'}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => void schedulePlace(place.id)}
+                              className="rounded-md bg-stone-950 px-2 py-1 text-[10.5px] font-semibold text-white hover:bg-stone-800 transition"
+                              title={zh ? '直接排入当天日程' : 'Schedule to active day'}
+                            >
+                              + {zh ? '当天' : 'Day'}
+                            </button>
+                          </div>
                         </div>
                         <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
 
@@ -1471,6 +1611,19 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           </>
         ) : null}
       </section>
+
+      <ImportCandidatesModal
+        key={`import-${selectedTrip.id}-${isImportModalOpen}`}
+        open={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        tripId={selectedTrip.id}
+        tripTitle={selectedTrip.title}
+        onImportSuccess={(count) => {
+          void load();
+          setNotice(zh ? `成功导入 ${count} 个候选地点！` : `Successfully imported ${count} places!`);
+        }}
+        language={language}
+      />
 
       <HotelComparisonModal
         key={`hotel-cmp-${activeDate}-${isHotelModalOpen}`}
