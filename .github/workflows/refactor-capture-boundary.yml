@@ -28,6 +28,7 @@ jobs:
         run: |
           python scripts/patch_refactor_driver.py
           python scripts/refactor_capture_boundary.py
+          python scripts/post_refactor_fixes.py
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
@@ -45,7 +46,7 @@ jobs:
         run: npm run validate:extension
 
       - name: Remove staging automation
-        run: rm scripts/refactor_capture_boundary.py scripts/patch_refactor_driver.py .github/workflows/refactor-capture-boundary.yml
+        run: rm scripts/refactor_capture_boundary.py scripts/patch_refactor_driver.py scripts/post_refactor_fixes.py .github/workflows/refactor-capture-boundary.yml
 
       - name: Commit validated refactor
         run: |
