@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.liuh886/ownly",
   "title": "Ownly",
-  "description": "Local-first access to validated Ownly evidence with opt-in, preview-before-commit writes and safety backups.",
+  "description": "Local-first Ownly evidence and Planner schedules with preview-before-commit writes.",
   "repository": {
     "url": "https://github.com/liuh886/ownly",
     "source": "github"
