@@ -23,7 +23,7 @@ import {
 } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
-const SERVER_VERSION = '0.2.0';
+const SERVER_VERSION = '0.3.0';
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
