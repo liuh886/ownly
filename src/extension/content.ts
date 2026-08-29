@@ -784,7 +784,9 @@ async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: stri
           const rawNote = item[3] || undefined;
           const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
           const coordinates = parseEntityListCoordinates(placeInfo);
-          const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+          const sourcePlaceId = findEntityListPlaceId(item);
+          const sourceUrl = googleMapsDetailUrlFromSourceId(sourcePlaceId, title, window.location.origin)
+            || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
 
           const research = PLACE_PARSER.extractEntityListResearch(item, title);
           const category = research.category || findEntityListCategory(item, title);
@@ -805,7 +807,7 @@ async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: stri
             detectedCurrency,
             types: research.types,
             coordinates,
-            sourcePlaceId: findEntityListPlaceId(item),
+            sourcePlaceId,
           });
         }
 
@@ -883,12 +885,14 @@ async function enrichSavedListDetails(
         reviewCount: place.reviewCount ?? facts.reviewCount,
         category: place.category ?? facts.category,
         priceLevel: nextPrice,
-        detectedCurrency: detectCurrencyFromPage(
-          place.sourceUrl,
-          nextPrice,
-          facts.priceCurrency ?? place.detectedCurrency ?? list.detectedCurrency,
-          overrideCurrency,
-        ),
+        detectedCurrency: overrideCurrency
+          || facts.priceCurrency
+          || detectCurrencyFromPage(
+            place.sourceUrl,
+            nextPrice,
+            place.detectedCurrency ?? list.detectedCurrency,
+            undefined,
+          ),
         address: place.address ?? facts.address,
         website: place.website ?? facts.website,
         phone: place.phone ?? facts.phone,
@@ -1127,7 +1131,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           }
         }
 
-        const place = currentPlace();
+        const detectedPlace = currentPlace();
+        const place = provider === 'google_maps' && detectedPlace
+          ? await enrichFromPlaceHtml(detectedPlace)
+          : detectedPlace;
         sendResponse({ place, savedList, allLists, detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, targetCurrency, overrideCurrency) });
       } catch (e) {
         console.warn('OWNLY_GET_CURRENT_PLACE failed:', e);
