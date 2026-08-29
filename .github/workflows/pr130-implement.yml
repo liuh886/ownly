@@ -27,7 +27,7 @@ jobs:
           cache: npm
 
       - name: Apply implementation
-        run: python .github/pr130-implement.py
+        run: python .github/pr130-run.py
 
       - name: Install locked dependencies
         run: npm ci
