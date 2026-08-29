@@ -7,6 +7,7 @@ import {
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '@/domain/planner';
+import { exportTripToICalProMarkdown } from '@/domain/ical-pro';
 import { obsidianService } from './ObsidianFileSystemService';
 
 export interface PlannerFileStore {
@@ -277,6 +278,7 @@ export class PlannerRepository {
       ...existing,
       state: 'candidate',
       scheduled_date: undefined,
+      scheduled_start: undefined,
       sort_order: undefined,
       locked: false,
       updated_at: new Date().toISOString(),
@@ -337,6 +339,22 @@ export class PlannerRepository {
       this.directory(PLANNER_DIRECTORIES.expenses),
       expenseFileName(expenseId),
     );
+  }
+
+  /**
+   * Generates and writes an obsidian-ical-plugin-pro compliant Markdown file to Trips/
+   * so Obsidian can immediately sync it to Google Calendar via the iCal Pro plugin.
+   */
+  async saveTripICalMarkdown(trip: PlannerTrip, places: PlannerTripPlace[]): Promise<string> {
+    await this.initialize();
+    const markdown = exportTripToICalProMarkdown(trip, places);
+    const fileName = `trip--${trip.id}.itinerary.md`;
+    await this.store.writeMarkdownFile(
+      this.directory(PLANNER_DIRECTORIES.trips),
+      fileName,
+      markdown,
+    );
+    return fileName;
   }
 }
 

@@ -4,7 +4,11 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { serializeMarkdownEntity } from '../../src/data/frontmatter';
 import type { PlannerTrip, PlannerTripPlace, TripExpenseItem } from '../../src/domain/planner';
-import { getPlannerSummary, getPlannerTripDetail } from './planner-tools';
+import {
+  getPlannerSummary,
+  getPlannerTripDetail,
+  getPlannerTripICalMarkdown,
+} from './planner-tools';
 
 const temporaryRoots: string[] = [];
 
@@ -56,6 +60,8 @@ function createFixture(): { root: string; trip: PlannerTrip; place: PlannerTripP
     scheduled_date: '2026-11-01',
     sort_order: 0,
     locked: true,
+    scheduled_start: '09:00',
+    duration_minutes: 90,
     observed_price: '฿500',
     open_hours: 'Sunday: Closed; Mon-Sat: 08:30-15:30',
   });
@@ -142,5 +148,16 @@ describe('Planner ledger via vault (smoke through repository contract)', () => {
     const detail = getPlannerTripDetail(root, 'trip-1') as { expenses: Array<{ id: string }> };
     void expense;
     expect(Array.isArray(detail.expenses)).toBe(true);
+  });
+});
+
+describe('Planner MCP calendar projection', () => {
+  it('exports only canonical Planner time facts to iCal Pro Markdown', () => {
+    const { root } = createFixture();
+    const result = getPlannerTripICalMarkdown(root, 'trip-1');
+    expect(result.tripId).toBe('trip-1');
+    expect(result.title).toBe('Bangkok 2026');
+    expect(result.markdown).toContain('2026-11-01 09:00-10:30');
+    expect(result.markdown).not.toContain('ownly-ai-planner');
   });
 });

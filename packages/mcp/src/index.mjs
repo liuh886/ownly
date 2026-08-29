@@ -16,7 +16,11 @@ import {
   toOwnlyMcpErrorPayload,
 } from '../../../scripts/mcp/ownly-tools.ts';
 import { OwnlyWriteService } from '../../../scripts/shared/ownly-write-service.ts';
-import { getPlannerSummary, getPlannerTripDetail } from '../../../scripts/mcp/planner-tools.ts';
+import {
+  getPlannerSummary,
+  getPlannerTripDetail,
+  getPlannerTripICalMarkdown,
+} from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
 const SERVER_VERSION = '0.2.0';
@@ -125,7 +129,7 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       instructions:
-        'Ownly is a local-first evidence source. Use Doctor before high-stakes analysis when data quality matters. Treat tool results as recorded facts and keep recommendations or interpretations clearly separate from those facts. Persistent mutations use two phases: call an ownly_prepare_* tool, show the preview to the user, then call ownly_commit_operation only after confirmation. Writes must also be enabled when the server starts. Planner tools follow the same discipline: propose schedules/routes/budgets with read tools and planner_prepare_*, never silently overwrite locked stops (optimization pins them), and convert foreign prices only for display using trip fx_rates. Do not claim that all Ownly data stays outside the model context: only the source-of-truth remains local; returned tool results are shared with this MCP client.',
+        'Ownly is a local-first evidence source. Use Doctor before high-stakes analysis when data quality matters. Treat tool results as recorded facts and keep recommendations or interpretations clearly separate from those facts. Persistent mutations use two phases: call an ownly_prepare_* tool, show the preview to the user, then call ownly_commit_operation only after confirmation. Writes must also be enabled when the server starts. Planner tools follow the same discipline: MCP clients/LLMs may propose schedules, but Ownly validates hard constraints and persists only confirmed decisions through planner_prepare_* + commit. Never invent missing start times, durations, prices, or transit facts; never silently overwrite locked/anchored stops; convert foreign prices only for display using trip fx_rates. Do not claim that all Ownly data stays outside the model context: only the source-of-truth remains local; returned tool results are shared with this MCP client.',
     },
   );
 
@@ -398,6 +402,50 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     safeHandler(({ trip_id, rates }) => writeService.prepareSetFxRates(trip_id, rates)),
   );
 
+  server.registerTool(
+    'ownly_planner_get_ical_markdown',
+    {
+      title: 'Planner iCal Pro Projection',
+      description: 'Project confirmed Planner/Vault schedule facts into obsidian-ical-plugin-pro Markdown. Missing start times or durations are never invented.',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        language: z.enum(['zh', 'en']).optional(),
+      }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id, language }) => getPlannerTripICalMarkdown(dataLocation, trip_id, { language })),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_apply_schedule_proposal',
+    {
+      title: 'Preview Schedule Proposal',
+      description: 'Validate and preview an MCP client/LLM schedule proposal. Locked or anchored stops cannot be changed; accepted AI decisions remain unlocked until the user explicitly pins them.',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        places: z.array(z.object({
+          id: z.string().min(1),
+          scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          scheduled_start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional(),
+          sort_order: z.number().int().nonnegative(),
+          duration_minutes: z.number().int().positive().max(1440).optional(),
+        })).min(1),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id, places }) => writeService.preparePlannerApplyScheduleProposal(trip_id, { places })),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_save_ical_markdown',
+    {
+      title: 'Preview Saving iCal Pro Projection',
+      description: 'Preview regenerating the derived iCal Pro Markdown file from current canonical Planner/Vault facts. Arbitrary custom Markdown is not accepted.',
+      inputSchema: z.object({ trip_id: z.string().min(1) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id }) => writeService.preparePlannerSaveICalMarkdown(trip_id)),
+  );
 
   server.registerTool(
     'ownly_prepare_create_object',
