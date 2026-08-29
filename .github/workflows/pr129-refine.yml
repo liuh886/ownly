@@ -55,3 +55,5 @@ jobs:
           git add docs/AI_PLANNER_MCP.md packages/mcp/package.json packages/mcp/src/index.mjs scripts/mcp/planner-tools.ts server.json src/components/planner/PlaceTimingModal.tsx src/components/planner/PlannerHome.tsx src/domain/planner-schedule.test.ts src/domain/planner-schedule.ts src/domain/planner.test.ts src/domain/planner.ts src/services/PlannerRepository.schedule.test.ts src/services/PlannerRepository.ts tasks/todo.md
           git commit -m 'refactor(planner): unify timing rules and projection boundary'
           git push origin HEAD:feat/planner-timing-ui-and-prompt-presets
+
+      # Trigger marker: 3
