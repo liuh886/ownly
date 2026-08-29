@@ -187,9 +187,10 @@ export function evaluatePlannerScheduleProposal(
       issues.push({ severity: 'error', code: 'INVALID_SORT_ORDER', place_id: item.id, message: 'sort_order must be a non-negative integer.' });
     }
 
+    const effectiveDuration = item.duration_minutes ?? existing.duration_minutes;
     issues.push(...validatePlannerTiming(
       item.scheduled_start,
-      item.duration_minutes,
+      effectiveDuration,
       { allowCrossMidnight: isHardConstraint(existing) },
     ).map((issue) => ({ ...issue, place_id: item.id })));
 
@@ -216,7 +217,7 @@ export function evaluatePlannerScheduleProposal(
       scheduled_date: item.scheduled_date,
       scheduled_start: item.scheduled_start,
       sort_order: item.sort_order,
-      duration_minutes: item.duration_minutes ?? existing.duration_minutes,
+      duration_minutes: effectiveDuration,
       // AI proposals never promote their own decisions to hard constraints.
       locked: existing.locked,
     });
