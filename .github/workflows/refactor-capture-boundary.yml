@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   refactor:
+    if: ${{ github.event.head_commit.message != 'refactor: make Planner the travel state authority' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
@@ -45,8 +46,10 @@ jobs:
       - name: Extension validation
         run: npm run validate:extension
 
-      - name: Remove staging automation
-        run: rm scripts/refactor_capture_boundary.py scripts/patch_refactor_driver.py scripts/post_refactor_fixes.py .github/workflows/refactor-capture-boundary.yml
+      - name: Prepare validated code commit
+        run: |
+          rm scripts/refactor_capture_boundary.py scripts/patch_refactor_driver.py scripts/post_refactor_fixes.py
+          git restore .github/workflows/pages.yml src/core/git-sha.ts
 
       - name: Commit validated refactor
         run: |
