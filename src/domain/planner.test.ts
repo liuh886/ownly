@@ -223,6 +223,13 @@ describe('Ownly Planner domain', () => {
     expect(est.currencies).toEqual(['SGD']);
   });
 
+  it('converts ambiguous $59 using fallback SGD when provided', () => {
+    const result = convertPriceRange('$59', 'CNY', { USD: 1, CNY: 0.14, SGD: 0.74 }, 'SGD');
+    expect(result).not.toBeNull();
+    expect(result!.sourceCurrency).toBe('SGD');
+    expect(result!.convertedMin).toBeCloseTo(311.86, 1);
+  });
+
   it('correctly calculates distance to last stop and sorts candidates closest first', () => {
     const lastStop = place('last_stop', {
       title: 'Marina Bay Sands',

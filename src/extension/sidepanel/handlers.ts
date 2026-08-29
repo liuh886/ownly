@@ -18,7 +18,7 @@ import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
-import { getExistingPlaceForUrl, MAP_CURRENCY_OVERRIDE_KEY, store, t } from './store';
+import { getExistingPlaceForUrl, MAP_CURRENCY_OVERRIDE_KEY, MAP_CURRENCY_OVERRIDE_ORIGIN_KEY, store, t } from './store';
 import {
   applyI18n,
   autoFillPlaceForm,
@@ -510,7 +510,30 @@ export function initHandlers(): void {
     const selected = el.currencySelector.value;
     if (!selected) return;
     store.mapCurrencyOverride = selected === 'AUTO' ? undefined : selected;
-    void chrome.storage.local.set({ [MAP_CURRENCY_OVERRIDE_KEY]: store.mapCurrencyOverride || '' });
+
+    void (async () => {
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const currentTab = tabs[0];
+        let origin: string | undefined = undefined;
+        if (currentTab?.url) {
+          try { origin = new URL(currentTab.url).origin; } catch {}
+        }
+        store.mapCurrencyOverrideOrigin = store.mapCurrencyOverride ? origin : undefined;
+
+        await chrome.storage.local.set({
+          [MAP_CURRENCY_OVERRIDE_KEY]: store.mapCurrencyOverride || '',
+          [MAP_CURRENCY_OVERRIDE_ORIGIN_KEY]: store.mapCurrencyOverrideOrigin || '',
+        });
+
+        if (currentTab?.id) {
+          await chrome.tabs.sendMessage(currentTab.id, {
+            type: 'OWNLY_CURRENCY_OVERRIDE_CHANGED',
+            overrideCurrency: store.mapCurrencyOverride,
+          });
+        }
+      } catch {}
+    })();
 
     if (store.mapCurrencyOverride) {
       store.pageDetectedCurrency = store.mapCurrencyOverride;
@@ -522,19 +545,6 @@ export function initHandlers(): void {
       }
     }
 
-    // Broadcast override change to active tab for real-time Selection FX conversion
-    void (async () => {
-      try {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tabs[0]?.id) {
-          await chrome.tabs.sendMessage(tabs[0].id, {
-            type: 'OWNLY_CURRENCY_OVERRIDE_CHANGED',
-            overrideCurrency: store.mapCurrencyOverride,
-          });
-        }
-      } catch {}
-    })();
-
     renderCurrencyPill();
     renderCurrentPlace();
     setStatus(dict.currencyApplied(selected), 'success');
@@ -543,7 +553,11 @@ export function initHandlers(): void {
   // Re-detect currency on demand
   el.btnRedetectCurrency.addEventListener('click', () => {
     store.mapCurrencyOverride = undefined;
-    void chrome.storage.local.set({ [MAP_CURRENCY_OVERRIDE_KEY]: '' });
+    store.mapCurrencyOverrideOrigin = undefined;
+    void chrome.storage.local.set({
+      [MAP_CURRENCY_OVERRIDE_KEY]: '',
+      [MAP_CURRENCY_OVERRIDE_ORIGIN_KEY]: '',
+    });
 
     const activeTrip = store.state.trips.find((t) => t.id === store.state.activeTripId);
     void (async () => {

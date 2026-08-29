@@ -196,12 +196,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       try {
         const rates = await getCachedFxRates();
-        const stored = await chrome.storage.local.get([CAPTURE_STORAGE_KEY, FX_TOOLTIP_ENABLED_KEY]);
+        const stored = await chrome.storage.local.get([
+          CAPTURE_STORAGE_KEY,
+          FX_TOOLTIP_ENABLED_KEY,
+          'ownlyMapCurrencyOverride',
+          'ownlyMapCurrencyOverrideOrigin',
+        ]);
         const state = stored[CAPTURE_STORAGE_KEY] as OwnlyCaptureState | undefined;
         const activeTrip = state?.trips?.find((t) => t.id === state.activeTripId);
         const targetCurrency = activeTrip?.currency || 'CNY';
         const enabled = stored[FX_TOOLTIP_ENABLED_KEY] !== false;
-        sendResponse({ ok: true, targetCurrency, rates, enabled });
+        const rawOverride = stored.ownlyMapCurrencyOverride as string | undefined;
+        const overrideOrigin = stored.ownlyMapCurrencyOverrideOrigin as string | undefined;
+        const overrideCurrency = rawOverride && rawOverride !== 'AUTO' ? rawOverride.trim().toUpperCase() : undefined;
+        sendResponse({ ok: true, targetCurrency, rates, enabled, overrideCurrency, overrideOrigin });
       } catch {
         sendResponse({ ok: false, targetCurrency: 'CNY', rates: DEFAULT_USD_PIVOT, enabled: true });
       }

@@ -1116,14 +1116,58 @@ let tooltipHideFn: (() => void) | null = null;
 function initFxTooltipEngine() {
   if (typeof document === 'undefined') return;
 
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  function applyOverrideIfMatchingOrigin(override?: string, origin?: string) {
+    if (!override || override === 'AUTO') {
+      fxOverrideCurrency = undefined;
+      return;
+    }
+    // If no origin was recorded, or origin matches the current page origin, apply override!
+    if (!origin || origin === currentOrigin) {
+      fxOverrideCurrency = override.trim().toUpperCase();
+    } else {
+      fxOverrideCurrency = undefined;
+    }
+  }
+
   try {
+    // 1. Check local storage directly on page load
+    void chrome.storage.local.get(['ownlyMapCurrencyOverride', 'ownlyMapCurrencyOverrideOrigin']).then((stored) => {
+      applyOverrideIfMatchingOrigin(
+        stored?.ownlyMapCurrencyOverride as string | undefined,
+        stored?.ownlyMapCurrencyOverrideOrigin as string | undefined,
+      );
+    }).catch(() => {});
+
+    // 2. React dynamically to storage changes
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && (changes.ownlyMapCurrencyOverride || changes.ownlyMapCurrencyOverrideOrigin)) {
+        void chrome.storage.local.get(['ownlyMapCurrencyOverride', 'ownlyMapCurrencyOverrideOrigin']).then((stored) => {
+          applyOverrideIfMatchingOrigin(
+            stored?.ownlyMapCurrencyOverride as string | undefined,
+            stored?.ownlyMapCurrencyOverrideOrigin as string | undefined,
+          );
+        }).catch(() => {});
+      }
+    });
+
+    // 3. Query background for FX rates & target currency
     void chrome.runtime.sendMessage({ type: 'OWNLY_GET_FX_CONFIG' })
       .then((val: unknown) => {
-        const res = val as { ok?: boolean; targetCurrency?: string; rates?: Record<string, number>; enabled?: boolean } | undefined;
+        const res = val as {
+          ok?: boolean;
+          targetCurrency?: string;
+          rates?: Record<string, number>;
+          enabled?: boolean;
+          overrideCurrency?: string;
+          overrideOrigin?: string;
+        } | undefined;
         if (res?.ok) {
           if (res.targetCurrency) fxTargetCurrency = res.targetCurrency;
           if (res.rates) fxPivotRates = res.rates;
           if (typeof res.enabled === 'boolean') fxTooltipEnabled = res.enabled;
+          if (res.overrideCurrency) applyOverrideIfMatchingOrigin(res.overrideCurrency, res.overrideOrigin);
         }
       })
       .catch(() => {});

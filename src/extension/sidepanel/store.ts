@@ -10,6 +10,7 @@ import { I18N, type Lang } from '../i18n';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 export const MAP_CURRENCY_OVERRIDE_KEY = 'ownlyMapCurrencyOverride';
+export const MAP_CURRENCY_OVERRIDE_ORIGIN_KEY = 'ownlyMapCurrencyOverrideOrigin';
 
 export interface SavedListSummary {
   listId?: string;
@@ -30,6 +31,8 @@ export const store = {
   pageDetectedCurrency: undefined as string | undefined,
   /** Manual map-currency override picked in the selector; undefined = auto-detect. */
   mapCurrencyOverride: undefined as string | undefined,
+  /** Origin/domain for which the manual override was selected. */
+  mapCurrencyOverrideOrigin: undefined as string | undefined,
   /** Place ids deleted locally since last successful persist; guards merge-write resurrection. */
   locallyDeletedIds: new Set<string>(),
   userDismissedPlaceUrl: null as string | null,
@@ -46,9 +49,10 @@ export function t() {
 }
 
 export async function loadState(): Promise<void> {
-  const [langRes, currRes, fresh] = await Promise.all([
+  const [langRes, currRes, originRes, fresh] = await Promise.all([
     chrome.storage.local.get(LANG_STORAGE_KEY),
     chrome.storage.local.get(MAP_CURRENCY_OVERRIDE_KEY),
+    chrome.storage.local.get(MAP_CURRENCY_OVERRIDE_ORIGIN_KEY),
     readCaptureState(),
   ]);
   const langVal = langRes[LANG_STORAGE_KEY];
@@ -58,6 +62,10 @@ export async function loadState(): Promise<void> {
   const currVal = currRes[MAP_CURRENCY_OVERRIDE_KEY];
   if (typeof currVal === 'string' && currVal.trim().length > 0 && currVal !== 'AUTO') {
     store.mapCurrencyOverride = currVal.trim().toUpperCase();
+  }
+  const originVal = originRes[MAP_CURRENCY_OVERRIDE_ORIGIN_KEY];
+  if (typeof originVal === 'string' && originVal.trim().length > 0) {
+    store.mapCurrencyOverrideOrigin = originVal.trim();
   }
   store.state = fresh;
 }

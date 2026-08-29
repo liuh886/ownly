@@ -1,13 +1,12 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { normalizePlaceIdentity } from '../../domain/planner';
 import { el } from '../dom';
-import { MAP_CURRENCY_OVERRIDE_KEY, store, t } from './store';
+import { MAP_CURRENCY_OVERRIDE_KEY, MAP_CURRENCY_OVERRIDE_ORIGIN_KEY, store, t } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
 
 const PRICE_RETRY_DELAYS = [1500, 3000, 5000];
 let priceRetryCount = 0;
 let lastPriceRetryUrl = '';
-let lastReadTabUrl = '';
 
 function needsPriceRetry(): boolean {
   const place = store.currentPlace;
@@ -31,21 +30,20 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const currentTabUrl = tab?.url || '';
 
-  // If the user navigated to a new page or different website domain, reset manual override so fresh auto-detection takes over
-  if (lastReadTabUrl && currentTabUrl && currentTabUrl !== lastReadTabUrl) {
+  // If the user navigated to a DIFFERENT website domain than where the manual override was set, reset it
+  if (store.mapCurrencyOverrideOrigin && currentTabUrl) {
     try {
-      const oldOrigin = new URL(lastReadTabUrl).origin;
-      const newOrigin = new URL(currentTabUrl).origin;
-      if (oldOrigin !== newOrigin) {
+      const currentOrigin = new URL(currentTabUrl).origin;
+      if (currentOrigin !== store.mapCurrencyOverrideOrigin) {
         store.mapCurrencyOverride = undefined;
-        void chrome.storage.local.set({ [MAP_CURRENCY_OVERRIDE_KEY]: '' });
+        store.mapCurrencyOverrideOrigin = undefined;
+        void chrome.storage.local.set({
+          [MAP_CURRENCY_OVERRIDE_KEY]: '',
+          [MAP_CURRENCY_OVERRIDE_ORIGIN_KEY]: '',
+        });
       }
-    } catch {
-      store.mapCurrencyOverride = undefined;
-      void chrome.storage.local.set({ [MAP_CURRENCY_OVERRIDE_KEY]: '' });
-    }
+    } catch {}
   }
-  lastReadTabUrl = currentTabUrl;
 
   if (!tab?.id) {
     store.currentPlace = null;
