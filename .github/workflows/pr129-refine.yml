@@ -27,7 +27,9 @@ jobs:
           cache: npm
 
       - name: Apply architecture refinement
-        run: python .github/pr129-refine.py
+        run: |
+          python .github/pr129-refine.py
+          python .github/pr129-fix-whitespace.py
 
       - name: Install locked dependencies
         run: npm ci
