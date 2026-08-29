@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { PlannerTrip, PlannerTripPlace } from './planner';
+import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTripPlace } from './planner';
 import {
+  evaluatePlannerDayFeasibility,
   evaluatePlannerScheduleProposal,
   findPlannerTimeOverlaps,
   getScheduledEndTime,
@@ -83,6 +84,39 @@ describe('Planner schedule proposal', () => {
     expect(validatePlannerTiming('23:30', 60).some((issue) => issue.code === 'CROSSES_MIDNIGHT')).toBe(true);
     expect(validatePlannerTiming('23:30', 60, { allowCrossMidnight: true })).toEqual([]);
     expect(validatePlannerTiming(undefined, 90)).toEqual([]);
+  });
+
+  it('evaluates adjacent travel legs without inventing missing travel time', () => {
+    const places = [
+      place('a', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '09:00', duration_minutes: 90, sort_order: 0 }),
+      place('b', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '11:00', duration_minutes: 60, sort_order: 1 }),
+      place('c', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '12:00', duration_minutes: 60, sort_order: 2 }),
+    ];
+    const leg: PlannerTripLeg = {
+      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, 'a', 'b'), trip_id: trip.id,
+      from_place_id: 'a', to_place_id: 'b', mode: 'walking', duration_minutes: 20,
+      source: 'manual', created_at: '2026-08-29T00:00:00Z',
+    };
+    const result = evaluatePlannerDayFeasibility(trip, places, [leg], '2026-10-05');
+    expect(result.status).toBe('unknown');
+    expect(result.transitions[0]).toMatchObject({ status: 'ok', earliest_arrival: '10:50', slack_minutes: 10 });
+    expect(result.transitions[1]).toMatchObject({ status: 'unknown', unknown_reason: 'travel_time_missing' });
+  });
+
+  it('flags a deterministic late arrival from persisted travel time', () => {
+    const places = [
+      place('a', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '09:00', duration_minutes: 90, sort_order: 0 }),
+      place('b', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '10:45', duration_minutes: 60, sort_order: 1 }),
+    ];
+    const leg: PlannerTripLeg = {
+      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, 'a', 'b'), trip_id: trip.id,
+      from_place_id: 'a', to_place_id: 'b', mode: 'driving', duration_minutes: 30,
+      source: 'manual', created_at: '2026-08-29T00:00:00Z',
+    };
+    const result = evaluatePlannerDayFeasibility(trip, places, [leg], '2026-10-05');
+    expect(result.status).toBe('conflict');
+    expect(result.valid).toBe(false);
+    expect(result.transitions[0]).toMatchObject({ status: 'conflict', earliest_arrival: '11:00', late_by_minutes: 15 });
   });
 
   it('derives end time instead of persisting a second authority', () => {

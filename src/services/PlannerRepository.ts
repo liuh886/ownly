@@ -3,7 +3,9 @@ import {
   ensurePlaceKindTag,
   mergeCapturedPlaceResearch,
   normalizePlaceIdentity,
+  plannerTripLegFileName,
   type PlannerTrip,
+  type PlannerTripLeg,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '@/domain/planner';
@@ -21,10 +23,11 @@ export interface PlannerFileStore {
 const PLANNER_DIRECTORIES = {
   trips: 'Trips',
   places: 'Trip Places',
+  legs: 'Trip Legs',
   expenses: 'Trip Expenses',
 } as const;
 
-type PlannerEntity = PlannerTrip | PlannerTripPlace
+type PlannerEntity = PlannerTrip | PlannerTripPlace | PlannerTripLeg;
 type PlannerEntityType = PlannerEntity['type'];
 
 interface RepoExpense extends TripExpenseItem {
@@ -60,6 +63,7 @@ function safeEntityId(id: string): string {
 }
 
 function entityFileName(entity: PlannerEntity): string {
+  if (entity.type === 'trip_leg') return plannerTripLegFileName(entity.id);
   const prefix = entity.type === 'trip' ? 'trip' : 'place';
   return `${prefix}--${safeEntityId(entity.id)}.md`;
 }
@@ -112,6 +116,10 @@ export class PlannerRepository {
     }));
   }
 
+  async listLegs(): Promise<PlannerTripLeg[]> {
+    return this.list<PlannerTripLeg>(PLANNER_DIRECTORIES.legs, 'trip_leg');
+  }
+
   async listExpenses(): Promise<TripExpenseItem[]> {
     await this.initialize();
     const files = await this.store.readMarkdownFiles(this.directory(PLANNER_DIRECTORIES.expenses));
@@ -130,7 +138,9 @@ export class PlannerRepository {
 
   private async upsert(entity: PlannerEntity): Promise<void> {
     await this.initialize();
-    const directory = entity.type === 'trip' ? PLANNER_DIRECTORIES.trips : PLANNER_DIRECTORIES.places;
+    const directory = entity.type === 'trip'
+      ? PLANNER_DIRECTORIES.trips
+      : entity.type === 'trip_leg' ? PLANNER_DIRECTORIES.legs : PLANNER_DIRECTORIES.places;
 
     await this.store.writeMarkdownFile(
       this.directory(directory),
@@ -148,6 +158,10 @@ export class PlannerRepository {
       ...place,
       tags: ensurePlaceKindTag(place.tags, place.kind),
     });
+  }
+
+  async upsertLeg(leg: PlannerTripLeg): Promise<void> {
+    await this.upsert(leg);
   }
 
   /** Canonical Planner writes: no Capture merge heuristics. */

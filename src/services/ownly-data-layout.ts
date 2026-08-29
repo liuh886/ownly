@@ -7,6 +7,7 @@ export const OWNLY_REQUIRED_DIRECTORIES = [
   'Reviews',
   'Trips',
   'Trip Places',
+  'Trip Legs',
     'Logs/Object Experiences',
   'Archive/Objects',
   'Archive/Accounts',

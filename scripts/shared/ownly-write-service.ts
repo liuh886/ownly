@@ -28,12 +28,14 @@ import { NodeOwnlyTextFileAdapter } from '../cli/node-portability-adapter';
 import {
   PLANNER_DIRECTORIES,
   findPlannerEntry,
+  listPlannerLegs,
   listPlannerPlaces,
   listPlannerTrips,
   reorderDayPlace,
   returnPlaceToPool,
   schedulePlaceOnDate,
-} from '../cli/planner-storage';import {
+} from '../cli/planner-storage';
+import {
   archiveEntry,
   availableFileName,
   ensureEntityDirectory,
@@ -46,8 +48,10 @@ import {
 import {
   generateStaySpanPlaces,
   optimizeStopsSequence,
+  plannerTripLegFileName,
   type FxSettings,
   type PlannerTrip,
+  type PlannerTripLeg,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
@@ -752,6 +756,61 @@ export class OwnlyWriteService {
       writeEntry(dirname(tripEntry.filePath), tripEntry.fileName, next, tripEntry.body);
       writeAgentLog(this.dataLocation, 'planner_set_fx_rates', tripId, before.fx_rates ?? {}, rates);
       return { trip_id: tripId, fx_rates: rates };
+    });
+  }
+
+  preparePlannerUpsertTravelLegs(
+    inputLegs: PlannerTripLeg[],
+    action = 'planner_set_travel_legs',
+  ): PreparedOwnlyOperation {
+    if (inputLegs.length === 0) throw new OwnlyMutationError('At least one travel leg is required.', 'INVALID_INPUT');
+    const tripId = inputLegs[0].trip_id;
+    if (inputLegs.some((leg) => leg.trip_id !== tripId)) {
+      throw new OwnlyMutationError('All travel legs in one operation must belong to the same trip.', 'INVALID_INPUT');
+    }
+    const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), tripId);
+    if (!tripEntry) throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'INVALID_INPUT');
+    const placeIds = new Set(
+      listPlannerPlaces(this.dataLocation)
+        .map((entry) => entry.frontmatter)
+        .filter((place) => place.trip_id === tripId)
+        .map((place) => place.id),
+    );
+    const existingById = new Map(
+      listPlannerLegs(this.dataLocation)
+        .map((entry) => [entry.frontmatter.id, entry.frontmatter] as const),
+    );
+    const now = this.now().toISOString();
+    const normalized = inputLegs.map((leg) => {
+      if (!placeIds.has(leg.from_place_id) || !placeIds.has(leg.to_place_id) || leg.from_place_id === leg.to_place_id) {
+        throw new OwnlyMutationError(`Invalid travel leg endpoints: ${leg.from_place_id} → ${leg.to_place_id}`, 'INVALID_INPUT');
+      }
+      if (!Number.isInteger(leg.duration_minutes) || leg.duration_minutes <= 0 || leg.duration_minutes > 1440) {
+        throw new OwnlyMutationError('Travel duration must be an integer between 1 and 1440 minutes.', 'INVALID_INPUT');
+      }
+      if (leg.distance_meters !== undefined && (!Number.isInteger(leg.distance_meters) || leg.distance_meters < 0)) {
+        throw new OwnlyMutationError('Travel distance must be a non-negative integer number of meters.', 'INVALID_INPUT');
+      }
+      const existing = existingById.get(leg.id);
+      return {
+        ...leg,
+        created_at: existing?.created_at ?? leg.created_at ?? now,
+        updated_at: now,
+      };
+    });
+    const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.legs);
+    const targets = normalized.map((leg) => {
+      const filePath = join(directory, plannerTripLegFileName(leg.id));
+      return { leg, filePath, expected: fingerprint(filePath) };
+    });
+    return this.prepare(action, { trip_id: tripId, legs: normalized }, () => {
+      mkdirSync(directory, { recursive: true });
+      for (const target of targets) {
+        assertUnchanged(target.filePath, target.expected);
+        writeFileSync(target.filePath, serializeMarkdownEntity(target.leg, ''), 'utf8');
+        writeAgentLog(this.dataLocation, action, target.leg.id, existingById.get(target.leg.id) ?? null, target.leg);
+      }
+      return { trip_id: tripId, written: normalized.length, legs: normalized };
     });
   }
 

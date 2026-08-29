@@ -16,6 +16,8 @@ import {
   toOwnlyMcpErrorPayload,
 } from '../../../scripts/mcp/ownly-tools.ts';
 import { OwnlyWriteService } from '../../../scripts/shared/ownly-write-service.ts';
+import { plannerTripLegId } from '../../../src/domain/planner.ts';
+import { buildOpenRouteServiceDayLegs } from '../../../scripts/mcp/openrouteservice.ts';
 import {
   getPlannerSummary,
   getPlannerTripDetail,
@@ -23,7 +25,7 @@ import {
 } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
-const SERVER_VERSION = '0.3.1';
+const SERVER_VERSION = '0.4.0';
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -35,6 +37,10 @@ const PREPARE_WRITE_ANNOTATIONS = {
   destructiveHint: false,
   idempotentHint: false,
   openWorldHint: false,
+};
+const PREPARE_OPEN_WORLD_ANNOTATIONS = {
+  ...PREPARE_WRITE_ANNOTATIONS,
+  openWorldHint: true,
 };
 const COMMIT_WRITE_ANNOTATIONS = {
   readOnlyHint: false,
@@ -94,7 +100,7 @@ function parseServerArgs(argv, env) {
 }
 
 function printHelp() {
-  process.stdout.write(`Ownly MCP\n\nUsage:\n  ownly-mcp --data-dir <vault-or-data-root> [--allow-write]\n\nEnvironment:\n  OWNLY_DATA_DIR=<vault-or-data-root>\n  OWNLY_MCP_ALLOW_WRITE=1\n\nThe data folder defaults to Ownly/ under the configured path. Pass a custom Ownly data root directly when its Objects/ directory is at the root. Writes are disabled unless explicitly enabled and always require prepare + commit.\n`);
+  process.stdout.write(`Ownly MCP\n\nUsage:\n  ownly-mcp --data-dir <vault-or-data-root> [--allow-write]\n\nEnvironment:\n  OWNLY_DATA_DIR=<vault-or-data-root>\n  OWNLY_MCP_ALLOW_WRITE=1\n  OPENROUTESERVICE_API_KEY=<optional key for walking/driving/bicycling leg refresh>\n\nThe data folder defaults to Ownly/ under the configured path. Pass a custom Ownly data root directly when its Objects/ directory is at the root. Writes are disabled unless explicitly enabled and always require prepare + commit.\n`);
 }
 
 function toolResult(value) {
@@ -284,6 +290,70 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     safeHandler(({ trip_id }) => {
       const detail = getPlannerTripDetail(dataLocation, trip_id);
       return { budget: detail.budget, conflicts: detail.conflicts };
+    }),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_set_travel_leg',
+    {
+      title: 'Preview Setting a Travel Leg',
+      description: 'Preview one explicit adjacent-place travel-time fact. Use this for public transit or any user-verified route duration.',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        from_place_id: z.string().min(1),
+        to_place_id: z.string().min(1),
+        mode: z.enum(['driving', 'walking', 'bicycling', 'transit']),
+        duration_minutes: z.number().int().positive().max(1440),
+        distance_meters: z.number().int().nonnegative().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler((input) => {
+      const now = new Date().toISOString();
+      return writeService.preparePlannerUpsertTravelLegs([{
+        schema_version: '0.1',
+        type: 'trip_leg',
+        id: plannerTripLegId(input.trip_id, input.from_place_id, input.to_place_id),
+        trip_id: input.trip_id,
+        from_place_id: input.from_place_id,
+        to_place_id: input.to_place_id,
+        mode: input.mode,
+        duration_minutes: input.duration_minutes,
+        distance_meters: input.distance_meters,
+        source: 'manual',
+        observed_at: now,
+        created_at: now,
+      }], 'planner_set_travel_leg');
+    }),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_refresh_day_travel',
+    {
+      title: 'Preview Refreshing Day Travel Legs',
+      description: 'Query OpenRouteService only for adjacent scheduled pairs on one day, preserving manual legs. Supports walking, driving and bicycling; transit remains manual.',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }),
+      annotations: PREPARE_OPEN_WORLD_ANNOTATIONS,
+    },
+    safeHandler(async ({ trip_id, date }) => {
+      const refresh = await buildOpenRouteServiceDayLegs(
+        dataLocation,
+        trip_id,
+        date,
+        String(process.env.OPENROUTESERVICE_API_KEY ?? ''),
+      );
+      const prepared = writeService.preparePlannerUpsertTravelLegs(refresh.legs, 'planner_refresh_day_travel');
+      return {
+        ...prepared,
+        refresh: {
+          date,
+          skipped_manual: refresh.skipped_manual,
+          missing_coordinates: refresh.missing_coordinates,
+        },
+      };
     }),
   );
 

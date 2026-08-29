@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
-import type { PlannerPlaceKind, PlannerTrip, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
+import type { PlannerPlaceKind, PlannerTrip, PlannerTripLeg, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
 import {
   computeUrgencies,
   fetchWeather,
@@ -35,7 +35,7 @@ import {
   PLANNER_KIND_LABELS,
 } from '@/domain/planner';
 import { exportTripToICalProMarkdown, ICAL_PRO_PRIORITY_MAP } from '@/domain/ical-pro';
-import { findPlannerTimeOverlaps, getScheduledEndTime } from '@/domain/planner-schedule';
+import { evaluatePlannerDayFeasibility, findPlannerTimeOverlaps, getScheduledEndTime } from '@/domain/planner-schedule';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';
@@ -90,6 +90,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const zh = language === 'zh';
   const [trips, setTrips] = useState<PlannerTrip[]>([]);
   const [places, setPlaces] = useState<PlannerTripPlace[]>([]);
+  const [legs, setLegs] = useState<PlannerTripLeg[]>([]);
   const [selectedTripId, setSelectedTripId] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('all');
@@ -182,13 +183,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const load = useCallback(async () => {
     if (disabled) return;
     await plannerRepository.initialize();
-    const [nextTrips, nextPlaces] = await Promise.all([
+    const [nextTrips, nextPlaces, nextLegs] = await Promise.all([
       plannerRepository.listTrips(),
       plannerRepository.listPlaces(),
+      plannerRepository.listLegs(),
     ]);
     nextTrips.sort((left, right) => right.start_date.localeCompare(left.start_date));
     setTrips(nextTrips);
     setPlaces(nextPlaces);
+    setLegs(nextLegs);
     setSelectedTripId((current) => current || nextTrips[0]?.id || '');
     try {
       await hydrateLedgerFromVault(nextTrips);
@@ -202,15 +205,17 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     async function init() {
       if (disabled) return;
       await plannerRepository.initialize();
-      const [nextTrips, nextPlaces, state] = await Promise.all([
+      const [nextTrips, nextPlaces, nextLegs, state] = await Promise.all([
         plannerRepository.listTrips(),
         plannerRepository.listPlaces(),
+        plannerRepository.listLegs(),
         pullCaptureState(),
       ]);
       if (!active) return;
       nextTrips.sort((left, right) => right.start_date.localeCompare(left.start_date));
       setTrips(nextTrips);
       setPlaces(nextPlaces);
+      setLegs(nextLegs);
       setSelectedTripId((current) => current || nextTrips[0]?.id || '');
       setCapturePending(state ? state.pendingPlaces.length : null);
       try {
@@ -436,6 +441,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const scheduled = useMemo(
     () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === activeDate && place.state === 'scheduled')),
     [activeDate, tripPlaces],
+  );
+
+  const tripLegs = useMemo(
+    () => legs.filter((leg) => leg.trip_id === selectedTripId),
+    [legs, selectedTripId],
+  );
+
+  const dayFeasibility = useMemo(
+    () => selectedTrip
+      ? evaluatePlannerDayFeasibility(selectedTrip, tripPlaces, tripLegs, activeDate)
+      : { date: activeDate, status: 'unknown' as const, valid: false, transitions: [] },
+    [activeDate, selectedTrip, tripLegs, tripPlaces],
   );
 
   const scheduledWithCoords = useMemo(
@@ -1248,6 +1265,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     ? { isCollision: true, reason: zh ? '与当天其它地点存在时间重叠' : 'Overlaps another timed stop on this day' }
                     : dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
                   const scheduledEnd = getScheduledEndTime(place.scheduled_start, place.duration_minutes);
+                  const transition = dayFeasibility.transitions[index];
                   return (
                     <li
                       key={place.id}
@@ -1327,17 +1345,38 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           <button type="button" aria-label={zh ? '放回候选池' : 'Return to pool'} onClick={() => void returnToPool(place)} className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-500 hover:bg-stone-50">{zh ? '移出' : 'Pool'}</button>
                         </div>
                       </div>
-                      {index < scheduled.length - 1 ? (
+{index < scheduled.length - 1 ? (
                         <div className="flex items-center justify-center py-0.5">
-                          <a
-                            href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(scheduled[index + 1].address || scheduled[index + 1].title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 rounded-full bg-stone-100 hover:bg-stone-200 px-2.5 py-0.5 text-[10px] font-medium text-stone-600 transition"
-                            title={zh ? '在 Google Maps 中查看两站之间的导航' : 'View directions between stops in Google Maps'}
-                          >
-                            ↓ {zh ? 'Google Maps 站间路线' : 'Directions to next stop'}
-                          </a>
+                          <div className={`flex min-h-7 flex-wrap items-center justify-center gap-2 rounded-full border px-3 py-1 text-[10px] font-semibold ${
+                            transition?.status === 'conflict'
+                              ? 'border-red-200 bg-red-50 text-red-700'
+                              : transition?.status === 'ok'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-stone-200 bg-stone-50 text-stone-500'
+                          }`}>
+                            <span>
+                              {transition?.leg
+                                ? `${transition.leg.mode === 'walking' ? '🚶' : transition.leg.mode === 'driving' ? '🚗' : transition.leg.mode === 'bicycling' ? '🚲' : '🚇'} ${transition.leg.duration_minutes} min${transition.leg.distance_meters !== undefined ? ` · ${transition.leg.distance_meters < 1000 ? `${transition.leg.distance_meters} m` : `${(transition.leg.distance_meters / 1000).toFixed(1)} km`}` : ''}${transition.leg.source === 'openrouteservice' ? ' · ORS · OSM' : ''}`
+                                : (zh ? '❔ 交通时间未确认' : '❔ Travel time unknown')}
+                            </span>
+                            {transition?.status === 'ok' && transition.earliest_arrival ? (
+                              <span>{zh ? `预计 ${transition.earliest_arrival} 到达 · 余量 ${transition.slack_minutes} min` : `Arrive ${transition.earliest_arrival} · ${transition.slack_minutes} min slack`}</span>
+                            ) : null}
+                            {transition?.status === 'conflict' ? (
+                              <span>{zh ? `最早 ${transition.earliest_arrival ?? '次日'} 到达 · 晚 ${transition.late_by_minutes} min` : `Earliest ${transition.earliest_arrival ?? 'next day'} · ${transition.late_by_minutes} min late`}</span>
+                            ) : null}
+                            {transition?.unknown_reason === 'schedule_time_missing' ? (
+                              <span>{zh ? '补齐两站时间后可判断衔接' : 'Set both stop times to evaluate feasibility'}</span>
+                            ) : null}
+                            <a
+                              href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(scheduled[index + 1].address || scheduled[index + 1].title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline underline-offset-2 hover:text-stone-900"
+                            >
+                              Google Maps ↗
+                            </a>
+                          </div>
                         </div>
                       ) : null}
                     </li>

@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseMarkdownEntity } from '../../src/data/frontmatter';
+import { parseMarkdownEntity, serializeMarkdownEntity } from '../../src/data/frontmatter';
+import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTripPlace } from '../../src/domain/planner';
 import type { WYQDObject } from '../../src/domain/types';
 import { OwnlyWriteService } from './ownly-write-service';
 
@@ -15,10 +16,39 @@ function fixture(): { container: string; dataRoot: string } {
   const dataRoot = join(container, 'Ownly');
   for (const relative of [
     'Objects', 'Snapshots', 'Reviews', 'Logs/Object Experiences', 'Archive/Objects',
+    'Trips', 'Trip Places', 'Trip Legs',
   ]) {
     mkdirSync(join(dataRoot, relative), { recursive: true });
   }
   return { container, dataRoot };
+}
+
+function seedPlannerPair(dataRoot: string): { trip: PlannerTrip; from: PlannerTripPlace; to: PlannerTripPlace } {
+  const trip: PlannerTrip = {
+    schema_version: '0.1', type: 'trip', id: 'trip-1', title: 'Bangkok', status: 'planning',
+    start_date: '2026-10-05', end_date: '2026-10-06', destinations: ['Bangkok'], created_at: NOW.toISOString(),
+  };
+  const base = {
+    schema_version: '0.1' as const,
+    type: 'trip_place' as const,
+    trip_id: trip.id,
+    source_provider: 'google_maps' as const,
+    kind: 'attraction' as const,
+    tags: [], signals: [], risks: [], reservation_status: 'none' as const,
+    state: 'scheduled' as const,
+    scheduled_date: '2026-10-05',
+    created_at: NOW.toISOString(),
+  };
+  const from: PlannerTripPlace = {
+    ...base, id: 'a', title: 'A', source_url: 'https://maps.google.com/a', sort_order: 0,
+  };
+  const to: PlannerTripPlace = {
+    ...base, id: 'b', title: 'B', source_url: 'https://maps.google.com/b', sort_order: 1,
+  };
+  writeFileSync(join(dataRoot, 'Trips', 'trip--trip-1.md'), serializeMarkdownEntity(trip, ''), 'utf8');
+  writeFileSync(join(dataRoot, 'Trip Places', 'place--a.md'), serializeMarkdownEntity(from, ''), 'utf8');
+  writeFileSync(join(dataRoot, 'Trip Places', 'place--b.md'), serializeMarkdownEntity(to, ''), 'utf8');
+  return { trip, from, to };
 }
 
 afterEach(() => {
@@ -81,6 +111,29 @@ describe('OwnlyWriteService', () => {
 
     await expect(service.commit(prepared.operation_id)).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(readFileSync(objectFile, 'utf8')).not.toContain('title: New Camera');
+  });
+
+  it('persists travel legs only after explicit commit', async () => {
+    const { dataRoot } = fixture();
+    const { trip, from, to } = seedPlannerPair(dataRoot);
+    const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
+    const leg: PlannerTripLeg = {
+      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, from.id, to.id), trip_id: trip.id,
+      from_place_id: from.id, to_place_id: to.id, mode: 'transit', duration_minutes: 25,
+      source: 'manual', observed_at: NOW.toISOString(), created_at: NOW.toISOString(),
+    };
+    const prepared = service.preparePlannerUpsertTravelLegs([leg], 'planner_set_travel_leg');
+    expect(prepared).toMatchObject({ action: 'planner_set_travel_leg', write_enabled: true });
+    expect(readdirSync(join(dataRoot, 'Trip Legs'))).toEqual([]);
+
+    const committed = await service.commit(prepared.operation_id);
+    expect(committed.result).toMatchObject({ trip_id: trip.id, written: 1 });
+    const files = readdirSync(join(dataRoot, 'Trip Legs'));
+    expect(files).toHaveLength(1);
+    const stored = parseMarkdownEntity<PlannerTripLeg>(readFileSync(join(dataRoot, 'Trip Legs', files[0]), 'utf8')).frontmatter;
+    expect(stored).toMatchObject({
+      id: leg.id, from_place_id: from.id, to_place_id: to.id, mode: 'transit', duration_minutes: 25, source: 'manual',
+    });
   });
 
   it('supports lifecycle, log, review, snapshot, archive, and restore operations', async () => {

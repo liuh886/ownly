@@ -1,7 +1,9 @@
 import {
   checkOpeningHoursCollision,
   listTripDates,
+  sortPlannerPlaces,
   type PlannerTrip,
+  type PlannerTripLeg,
   type PlannerTripPlace,
 } from './planner';
 
@@ -146,6 +148,113 @@ export function findPlannerTimeOverlaps(
     }
   }
   return overlaps;
+}
+
+export type PlannerTravelTransitionStatus = 'ok' | 'unknown' | 'conflict';
+export type PlannerDayFeasibilityStatus = 'feasible' | 'unknown' | 'conflict';
+
+export interface PlannerTravelTransition {
+  from_id: string;
+  to_id: string;
+  from_title: string;
+  to_title: string;
+  status: PlannerTravelTransitionStatus;
+  unknown_reason?: 'travel_time_missing' | 'schedule_time_missing';
+  leg?: PlannerTripLeg;
+  departure_time?: string;
+  earliest_arrival?: string;
+  next_start?: string;
+  slack_minutes?: number;
+  late_by_minutes?: number;
+}
+
+export interface PlannerDayFeasibility {
+  date: string;
+  status: PlannerDayFeasibilityStatus;
+  valid: boolean;
+  transitions: PlannerTravelTransition[];
+}
+
+function transitionKey(fromId: string, toId: string): string {
+  return `${fromId}→${toId}`;
+}
+
+function formatClockWithinDay(totalMinutes: number): string | undefined {
+  if (!Number.isInteger(totalMinutes) || totalMinutes < 0 || totalMinutes >= 24 * 60) return undefined;
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
+}
+
+export function evaluatePlannerDayFeasibility(
+  trip: PlannerTrip,
+  places: PlannerTripPlace[],
+  legs: PlannerTripLeg[],
+  date: string,
+): PlannerDayFeasibility {
+  const dayPlaces = sortPlannerPlaces(
+    places.filter((place) => place.trip_id === trip.id && place.state === 'scheduled' && place.scheduled_date === date),
+  );
+  const legByPair = new Map(
+    legs
+      .filter((leg) => leg.trip_id === trip.id)
+      .map((leg) => [transitionKey(leg.from_place_id, leg.to_place_id), leg] as const),
+  );
+  const transitions: PlannerTravelTransition[] = [];
+
+  for (let index = 0; index < dayPlaces.length - 1; index += 1) {
+    const from = dayPlaces[index];
+    const to = dayPlaces[index + 1];
+    const leg = legByPair.get(transitionKey(from.id, to.id));
+    if (!leg) {
+      transitions.push({
+        from_id: from.id,
+        to_id: to.id,
+        from_title: from.title,
+        to_title: to.title,
+        status: 'unknown',
+        unknown_reason: 'travel_time_missing',
+      });
+      continue;
+    }
+
+    const departureTime = getScheduledEndTime(from.scheduled_start, from.duration_minutes);
+    const departureMinutes = plannerClockToMinutes(departureTime);
+    const nextStartMinutes = plannerClockToMinutes(to.scheduled_start);
+    if (departureMinutes === null || nextStartMinutes === null) {
+      transitions.push({
+        from_id: from.id,
+        to_id: to.id,
+        from_title: from.title,
+        to_title: to.title,
+        status: 'unknown',
+        unknown_reason: 'schedule_time_missing',
+        leg,
+        departure_time: departureTime ?? undefined,
+        next_start: to.scheduled_start,
+      });
+      continue;
+    }
+
+    const arrivalMinutes = departureMinutes + leg.duration_minutes;
+    const slack = nextStartMinutes - arrivalMinutes;
+    transitions.push({
+      from_id: from.id,
+      to_id: to.id,
+      from_title: from.title,
+      to_title: to.title,
+      status: slack < 0 ? 'conflict' : 'ok',
+      leg,
+      departure_time: departureTime ?? undefined,
+      earliest_arrival: formatClockWithinDay(arrivalMinutes),
+      next_start: to.scheduled_start,
+      slack_minutes: slack,
+      late_by_minutes: slack < 0 ? Math.abs(slack) : undefined,
+    });
+  }
+
+  const status: PlannerDayFeasibilityStatus = transitions.some((item) => item.status === 'conflict')
+    ? 'conflict'
+    : transitions.some((item) => item.status === 'unknown') ? 'unknown' : 'feasible';
+  return { date, status, valid: status === 'feasible', transitions };
 }
 
 function isHardConstraint(place: PlannerTripPlace): boolean {
