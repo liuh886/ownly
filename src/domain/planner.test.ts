@@ -708,12 +708,62 @@ describe('Ownly Planner domain', () => {
     expect(convertedMyr?.convertedMin).toBe(81);
 
     // Test with USD pivot table (Live market rates from background)
-    const pivotTable = { USD: 1, CNY: 0.14, GBP: 1.36, EUR: 1.09, JPY: 0.0067 };
+    const pivotTable = { USD: 1, CNY: 0.14, GBP: 1.36, EUR: 1.09, JPY: 0.0067, THB: 0.027, SGD: 0.74, PHP: 0.018, VND: 0.00004 };
     const convertedGbpWithPivot = convertPriceRange('£20', 'CNY', pivotTable);
     expect(convertedGbpWithPivot?.sourceCurrency).toBe('GBP');
     expect(convertedGbpWithPivot?.rate).toBeCloseTo(9.7143, 2);
     expect(convertedGbpWithPivot?.convertedMin).toBe(194.29);
     expect(convertedGbpWithPivot?.rateDescription).toBe('1 GBP ≈ 9.71 CNY');
+
+    // Test Target = THB (Arbitrary Trip Currency)
+    const convertedUsdToThb = convertPriceRange('$100', 'THB', pivotTable);
+    expect(convertedUsdToThb?.sourceCurrency).toBe('USD');
+    expect(convertedUsdToThb?.targetCurrency).toBe('THB');
+    expect(convertedUsdToThb?.rate).toBeCloseTo(37.037, 2);
+    expect(convertedUsdToThb?.convertedMin).toBe(3703.7);
+    expect(convertedUsdToThb?.formattedTarget).toBe('฿3,703.70');
+    expect(convertedUsdToThb?.rateDescription).toBe('1 USD ≈ 37.04 THB');
+
+    const convertedCnyToThb = convertPriceRange('¥100', 'THB', pivotTable);
+    expect(convertedCnyToThb?.sourceCurrency).toBe('CNY');
+    expect(convertedCnyToThb?.rate).toBeCloseTo(5.1852, 2);
+    expect(convertedCnyToThb?.convertedMin).toBe(518.52);
+    expect(convertedCnyToThb?.formattedTarget).toBe('฿518.52');
+
+    const convertedJpyToThb = convertPriceRange('10,000円', 'THB', pivotTable);
+    expect(convertedJpyToThb?.sourceCurrency).toBe('JPY');
+    expect(convertedJpyToThb?.rate).toBeCloseTo(0.2481, 2);
+    expect(convertedJpyToThb?.convertedMin).toBe(2481);
+    expect(convertedJpyToThb?.formattedTarget).toBe('฿2,481');
+
+    // Test Target = USD
+    const convertedThbToUsd = convertPriceRange('฿500', 'USD', pivotTable);
+    expect(convertedThbToUsd?.sourceCurrency).toBe('THB');
+    expect(convertedThbToUsd?.targetCurrency).toBe('USD');
+    expect(convertedThbToUsd?.convertedMin).toBe(13.5);
+    expect(convertedThbToUsd?.formattedTarget).toBe('$13.50');
+
+    // Test Target = EUR
+    const convertedGbpToEur = convertPriceRange('£100', 'EUR', pivotTable);
+    expect(convertedGbpToEur?.sourceCurrency).toBe('GBP');
+    expect(convertedGbpToEur?.targetCurrency).toBe('EUR');
+    expect(convertedGbpToEur?.rate).toBeCloseTo(1.2477, 2);
+    expect(convertedGbpToEur?.convertedMin).toBe(124.77);
+    expect(convertedGbpToEur?.formattedTarget).toBe('€124.77');
+
+    // Test Target = JPY
+    const convertedUsdToJpy = convertPriceRange('$10', 'JPY', pivotTable);
+    expect(convertedUsdToJpy?.sourceCurrency).toBe('USD');
+    expect(convertedUsdToJpy?.targetCurrency).toBe('JPY');
+    expect(convertedUsdToJpy?.convertedMin).toBe(1492.54);
+    expect(convertedUsdToJpy?.formattedTarget).toBe('¥1,492.54');
+
+    // Test Target = SGD
+    const convertedUsdToSgd = convertPriceRange('$100', 'SGD', pivotTable);
+    expect(convertedUsdToSgd?.sourceCurrency).toBe('USD');
+    expect(convertedUsdToSgd?.targetCurrency).toBe('SGD');
+    expect(convertedUsdToSgd?.convertedMin).toBe(135.14);
+    expect(convertedUsdToSgd?.formattedTarget).toBe('S$135.14');
   });
 
   it('estimates categorized trip budget based on scheduled places and traveler count', () => {

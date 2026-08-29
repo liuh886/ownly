@@ -83,6 +83,32 @@ const UNAMBIGUOUS_SYMBOLS: Record<string, string> = {
   'RMB': 'CNY',
   '人民币': 'CNY',
   'CHF': 'CHF',
+  'PHP': 'PHP',
+  '比索': 'PHP',
+  '₱': 'PHP',
+  'IDR': 'IDR',
+  '印尼盾': 'IDR',
+  'Rp': 'IDR',
+  'AED': 'AED',
+  '迪拉姆': 'AED',
+  'TRY': 'TRY',
+  '里拉': 'TRY',
+  '₺': 'TRY',
+  'SEK': 'SEK',
+  '克朗': 'SEK',
+  'NOK': 'NOK',
+  'DKK': 'DKK',
+  'PLN': 'PLN',
+  'zł': 'PLN',
+  'BRL': 'BRL',
+  '雷亚尔': 'BRL',
+  'R$': 'BRL',
+  'SAR': 'SAR',
+  '里亚尔': 'SAR',
+  'MOP': 'MOP',
+  'MOP$': 'MOP',
+  '澳门币': 'MOP',
+  '葡币': 'MOP',
 };
 
 const DOLLAR_CURRENCIES = ['SGD', 'HKD', 'AUD', 'CAD', 'NZD', 'USD', 'TWD'];
@@ -90,15 +116,16 @@ const DOLLAR_CURRENCIES = ['SGD', 'HKD', 'AUD', 'CAD', 'NZD', 'USD', 'TWD'];
 export function extractExplicitToken(raw?: string | null): string | null {
   if (!raw || typeof raw !== 'string') return null;
 
-  const specificMatch = /(?:S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|\bRM\b|新台币|人民币|日元|日币|泰铢|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑)/i.exec(raw);
+  const specificMatch = /(?:S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|ZL|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|PHP|IDR|AED|TRY|SEK|NOK|DKK|PLN|BRL|SAR|MOP|\bRM\b|\bRP\b|新台币|人民币|日元|日币|泰铢|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔)/i.exec(raw);
   if (specificMatch) {
-    const key = specificMatch[0].toUpperCase();
+    const rawKey = specificMatch[0];
+    const key = rawKey.toUpperCase();
+    if (UNAMBIGUOUS_SYMBOLS[rawKey]) return UNAMBIGUOUS_SYMBOLS[rawKey];
     if (UNAMBIGUOUS_SYMBOLS[key]) return UNAMBIGUOUS_SYMBOLS[key];
-    if (UNAMBIGUOUS_SYMBOLS[specificMatch[0]]) return UNAMBIGUOUS_SYMBOLS[specificMatch[0]];
     return key.replace(/\$$/, '');
   }
 
-  const singleMatch = /(?:[฿€£₩₫₹円铢원])/i.exec(raw);
+  const singleMatch = /(?:[฿€£₩₫₹円铢원₱₺])/i.exec(raw);
   if (singleMatch && UNAMBIGUOUS_SYMBOLS[singleMatch[0]]) {
     return UNAMBIGUOUS_SYMBOLS[singleMatch[0]];
   }

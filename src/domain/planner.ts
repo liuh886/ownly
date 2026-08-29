@@ -1130,7 +1130,9 @@ const SYMBOL_TO_CODE: Record<string, string> = {
 export const DEFAULT_USD_PIVOT: Record<string, number> = {
   USD: 1, CNY: 0.14, JPY: 0.0067, THB: 0.027, HKD: 0.128, TWD: 0.031,
   KRW: 0.00073, SGD: 0.74, MYR: 0.21, EUR: 1.08, GBP: 1.27, AUD: 0.66,
-  CAD: 0.73, CHF: 1.12, INR: 0.012, VND: 0.00004, NZD: 0.61,
+  CAD: 0.73, CHF: 1.12, INR: 0.012, VND: 0.00004, NZD: 0.61, PHP: 0.018,
+  IDR: 0.000062, AED: 0.27, TRY: 0.029, SEK: 0.093, NOK: 0.091, DKK: 0.145,
+  PLN: 0.25, BRL: 0.18, SAR: 0.27, MOP: 0.124, EGP: 0.021, ZAR: 0.055,
 };
 
 export interface FxSettings {
@@ -1205,15 +1207,17 @@ export interface TripBudgetEstimation {
 
 const CODE_TO_SYMBOL: Record<string, string> = {
   CNY: '¥', JPY: '¥', USD: '$', EUR: '€', GBP: '£', THB: '฿', KRW: '₩',
-  SGD: 'S$', HKD: 'HK$', TWD: 'NT$', AUD: 'A$', CAD: 'C$', CHF: 'CHF ', INR: '₹', MYR: 'RM', VND: '₫',
+  SGD: 'S$', HKD: 'HK$', TWD: 'NT$', AUD: 'A$', CAD: 'C$', CHF: 'CHF ', INR: '₹',
+  MYR: 'RM', VND: '₫', NZD: 'NZ$', PHP: '₱', IDR: 'Rp ', AED: 'AED ', TRY: '₺',
+  SEK: 'kr ', NOK: 'kr ', DKK: 'kr ', PLN: 'zł', MOP: 'MOP$ ', BRL: 'R$ ', SAR: 'SAR ',
 };
 
 /** Renders an ISO code (or raw symbol) as a display symbol for ledger summaries. */
 export function currencySymbolFor(code?: string | null): string {
   if (!code) return '¥';
-  const trimmed = code.trim();
-  if (CODE_TO_SYMBOL[trimmed.toUpperCase()]) return CODE_TO_SYMBOL[trimmed.toUpperCase()];
-  return trimmed;
+  const trimmed = code.trim().toUpperCase();
+  if (CODE_TO_SYMBOL[trimmed]) return CODE_TO_SYMBOL[trimmed];
+  return `${trimmed} `;
 }
 
 export const PLANNER_KIND_ICONS: Record<PlannerPlaceKind, string> = {
@@ -1446,14 +1450,24 @@ export function convertPriceRange(
   const targetSymbol = currencySymbolFor(target);
 
   const formatAmount = (num: number) => {
-    return num % 1 === 0 ? num.toLocaleString() : num.toFixed(2);
+    return num.toLocaleString('en-US', {
+      minimumFractionDigits: num % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
   };
 
   const formattedTarget = parsed.isRange
     ? `${targetSymbol}${formatAmount(convertedMin)} – ${formatAmount(convertedMax)}`
     : `${targetSymbol}${formatAmount(convertedMin)}`;
 
-  const rateDescription = `1 ${from} ≈ ${rate < 0.01 ? rate.toFixed(5) : (rate < 1 ? rate.toFixed(4) : rate.toFixed(2))} ${target}`;
+  const formatRate = (r: number) => {
+    if (r >= 100) return r % 1 === 0 ? r.toLocaleString() : r.toFixed(2);
+    if (r >= 1) return r.toFixed(2);
+    if (r >= 0.01) return r.toFixed(4);
+    return r.toFixed(6);
+  };
+
+  const rateDescription = `1 ${from} ≈ ${formatRate(rate)} ${target}`;
 
   return {
     sourceRaw: raw,

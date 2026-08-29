@@ -101,6 +101,11 @@
   - [x] 32.2 (Disambiguation Matrix): Resolve ambiguous `$` (SGD vs HKD vs AUD vs CAD vs NZD vs USD) and `¥` (JPY vs CNY) dynamically using the highest weighted contextual score.
   - [x] 32.3 (System Integration): Connect `currency-detector.ts` seamlessly across Google Maps place capture, webpage price extraction, and Selection FX tooltip in `content.ts` and `place-parser.ts`.
   - [x] 32.4 (Automated Testing & Parity): Write unit tests in `currency-detector.test.ts` covering Singapore (9% GST, +65, SGD), Hong Kong (+852, HKD), Japan (円, +81, JPY), Australia (+61, 10% GST, AUD), France/Germany (EUR), UK (+44, GBP), and US (USD). Run all validations.
+- [x] 33. (Universal Arbitrary Target Currency Conversion & Robust Formatting):
+  - [x] 33.1 (Global Pivot Table & Symbol Dictionary): Expand `DEFAULT_USD_PIVOT` and `CODE_TO_SYMBOL` with top world currencies (PHP, IDR, AED, TRY, SEK, NOK, DKK, PLN, BRL, SAR, MOP, NZD, etc.).
+  - [x] 33.2 (Universal Cross-Rate Matrix): Ensure `effectiveFxRate` and `convertPriceRange` accurately compute cross-rates from any currency $A$ to any target currency $B$ (e.g. USD -> THB, CNY -> THB, JPY -> THB, THB -> USD, GBP -> EUR, etc.).
+  - [x] 33.3 (Formatting Polish): Ensure clean symbol spacing and precision across large numbers (e.g. `25,000 VND`, `150,000 IDR`, `3,700 THB`).
+  - [x] 33.4 (Testing & Verification): Add comprehensive unit tests in `planner.test.ts` asserting arbitrary trip currencies (`targetCurrency: 'THB'`, `'USD'`, `'EUR'`, `'JPY'`, `'SGD'`, etc.). Run all validations.
 
 ## Review
 - **Architecture Evolution & Quality Hardening**:

@@ -21,6 +21,13 @@ describe('Unified Currency Detector & Cross-Validation Engine', () => {
       expect(extractExplicitToken('500新台币')).toBe('TWD');
       expect(extractExplicitToken('45新币')).toBe('SGD');
       expect(extractExplicitToken('80港币')).toBe('HKD');
+      expect(extractExplicitToken('₱500')).toBe('PHP');
+      expect(extractExplicitToken('Rp 150,000')).toBe('IDR');
+      expect(extractExplicitToken('AED 250')).toBe('AED');
+      expect(extractExplicitToken('120 ₺')).toBe('TRY');
+      expect(extractExplicitToken('MOP$ 300')).toBe('MOP');
+      expect(extractExplicitToken('R$ 80')).toBe('BRL');
+      expect(extractExplicitToken('45 zł')).toBe('PLN');
     });
 
     it('returns null for ambiguous symbols or non-currency text', () => {
