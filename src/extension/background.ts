@@ -280,4 +280,15 @@ chrome.runtime.onStartup.addListener(() => {
   void configureSidePanel();
   void refreshFxRates();
 });
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' || changeInfo.url) {
+    chrome.runtime.sendMessage({ type: 'OWNLY_TAB_CHANGED', tabId, url: tab.url }).catch(() => {});
+  }
+});
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  chrome.runtime.sendMessage({ type: 'OWNLY_TAB_CHANGED', tabId: activeInfo.tabId }).catch(() => {});
+});
+
 void configureSidePanel();
