@@ -253,10 +253,35 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     else if (/(?:\+44|\b44\s*\d)/i.test(phoneSource)) signals.push({ currency: 'GBP', source: 'phone_code', confidence: 90, detail: '+44 UK' });
   }
 
-  const coordMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(rawUrl);
-  if (coordMatch) {
-    const lat = parseFloat(coordMatch[1]);
-    const lng = parseFloat(coordMatch[2]);
+  // Coordinate matchers: @lat,lng, !3d(lat)!4d(lng), !1d(lng)!2d(lat), center=lat,lng, ll=lat,lng
+  let lat: number | null = null;
+  let lng: number | null = null;
+
+  const atCoord = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(rawUrl);
+  if (atCoord) {
+    lat = parseFloat(atCoord[1]);
+    lng = parseFloat(atCoord[2]);
+  } else {
+    const rpc3d4d = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/.exec(rawUrl);
+    if (rpc3d4d) {
+      lat = parseFloat(rpc3d4d[1]);
+      lng = parseFloat(rpc3d4d[2]);
+    } else {
+      const rpc1d2d = /!1d(-?\d+\.\d+)!2d(-?\d+\.\d+)/.exec(rawUrl);
+      if (rpc1d2d) {
+        lng = parseFloat(rpc1d2d[1]);
+        lat = parseFloat(rpc1d2d[2]);
+      } else {
+        const queryCoord = /(?:center|ll|coords?)=(-?\d+\.\d+)[,%2C](-?\d+\.\d+)/i.exec(rawUrl);
+        if (queryCoord) {
+          lat = parseFloat(queryCoord[1]);
+          lng = parseFloat(queryCoord[2]);
+        }
+      }
+    }
+  }
+
+  if (lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng)) {
     if (lat >= 1.15 && lat <= 1.48 && lng >= 103.55 && lng <= 104.08) {
       signals.push({ currency: 'SGD', source: 'geo_coord', confidence: 95, detail: 'Coordinates in Singapore' });
     } else if (lat >= 22.15 && lat <= 22.58 && lng >= 113.80 && lng <= 114.45) {
@@ -282,48 +307,76 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     }
   }
 
+  // Regional keywords in URL or Document Title / Snippet
+  const textContext = `${rawUrl} ${doc?.title || ''} ${ctx.pageText || (doc?.body?.textContent?.slice(0, 4000) || '')}`.toLowerCase();
+  if (/singapore|新加坡|marina bay|sentosa|orchard road|changi|tiong bahru|clarke quay/i.test(textContext)) {
+    signals.push({ currency: 'SGD', source: 'tax_clue', confidence: 85, detail: 'Singapore regional location keyword' });
+  }
+  if (/hong kong|香港|kowloon|九龙|mong kok|tsim sha tsui|causeway bay/i.test(textContext)) {
+    signals.push({ currency: 'HKD', source: 'tax_clue', confidence: 85, detail: 'Hong Kong regional location keyword' });
+  }
+  if (/taiwan|台湾|taipei|台北|kaohsiung|高雄|taichung|台中/i.test(textContext)) {
+    signals.push({ currency: 'TWD', source: 'tax_clue', confidence: 85, detail: 'Taiwan regional location keyword' });
+  }
+  if (/australia|澳大利亚|澳洲|sydney|悉尼|melbourne|墨尔本|brisbane|布里斯班|gold coast/i.test(textContext)) {
+    signals.push({ currency: 'AUD', source: 'tax_clue', confidence: 85, detail: 'Australia regional location keyword' });
+  }
+  if (/canada|加拿大|toronto|多伦多|vancouver|温哥华|montreal|蒙特利尔/i.test(textContext)) {
+    signals.push({ currency: 'CAD', source: 'tax_clue', confidence: 85, detail: 'Canada regional location keyword' });
+  }
+  if (/new zealand|新西兰|auckland|奥克兰|queenstown|皇后镇/i.test(textContext)) {
+    signals.push({ currency: 'NZD', source: 'tax_clue', confidence: 85, detail: 'New Zealand regional location keyword' });
+  }
+
   const pageSnippet = (ctx.pageText || (doc?.body?.textContent?.slice(0, 3000) || '')).toLowerCase();
   if (/(?:9%|8%)\s*gst|10%\s*service\s*charge\s*(?:and|&)\s*9%\s*gst/i.test(pageSnippet)) {
-    signals.push({ currency: 'SGD', source: 'tax_clue', confidence: 85, detail: 'Singapore 9% GST statutory structure' });
+    signals.push({ currency: 'SGD', source: 'tax_clue', confidence: 90, detail: 'Singapore 9% GST statutory structure' });
   }
   if (/加一服務費|加一服务费|10%\s*service\s*charge/i.test(pageSnippet) && /hong\s*kong|香港|kowloon|九龙/i.test(pageSnippet)) {
-    signals.push({ currency: 'HKD', source: 'tax_clue', confidence: 85, detail: 'Hong Kong 10% Service Charge structure' });
+    signals.push({ currency: 'HKD', source: 'tax_clue', confidence: 90, detail: 'Hong Kong 10% Service Charge structure' });
   }
   if (/10%\s*gst|incl\.\s*gst|plus\s*gst/i.test(pageSnippet) && /australia|sydney|melbourne|brisbane/i.test(pageSnippet)) {
-    signals.push({ currency: 'AUD', source: 'tax_clue', confidence: 85, detail: 'Australia 10% GST structure' });
+    signals.push({ currency: 'AUD', source: 'tax_clue', confidence: 90, detail: 'Australia 10% GST structure' });
   }
   if (/税込|税抜|消費税/i.test(pageSnippet)) {
-    signals.push({ currency: 'JPY', source: 'tax_clue', confidence: 85, detail: 'Japan Consumption Tax structure' });
+    signals.push({ currency: 'JPY', source: 'tax_clue', confidence: 90, detail: 'Japan Consumption Tax structure' });
   }
   if (/7%\s*vat|10%\s*service\s*charge\s*(?:and|&)\s*7%\s*vat/i.test(pageSnippet)) {
-    signals.push({ currency: 'THB', source: 'tax_clue', confidence: 85, detail: 'Thailand 7% VAT structure' });
+    signals.push({ currency: 'THB', source: 'tax_clue', confidence: 90, detail: 'Thailand 7% VAT structure' });
   }
 
   try {
     const urlObj = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`);
     const host = urlObj.hostname.toLowerCase();
-    if (/\.com\.sg$|\.sg$/i.test(host)) signals.push({ currency: 'SGD', source: 'domain_tld', confidence: 75, detail: '.sg Singapore' });
-    else if (/\.com\.hk$|\.hk$/i.test(host)) signals.push({ currency: 'HKD', source: 'domain_tld', confidence: 75, detail: '.hk Hong Kong' });
-    else if (/\.com\.tw$|\.tw$/i.test(host)) signals.push({ currency: 'TWD', source: 'domain_tld', confidence: 75, detail: '.tw Taiwan' });
-    else if (/\.co\.jp$|\.jp$/i.test(host)) signals.push({ currency: 'JPY', source: 'domain_tld', confidence: 75, detail: '.jp Japan' });
-    else if (/\.co\.th$|\.th$/i.test(host)) signals.push({ currency: 'THB', source: 'domain_tld', confidence: 75, detail: '.th Thailand' });
-    else if (/\.com\.au$|\.au$/i.test(host)) signals.push({ currency: 'AUD', source: 'domain_tld', confidence: 75, detail: '.au Australia' });
-    else if (/\.ca$/i.test(host)) signals.push({ currency: 'CAD', source: 'domain_tld', confidence: 75, detail: '.ca Canada' });
-    else if (/\.co\.uk$|\.uk$/i.test(host)) signals.push({ currency: 'GBP', source: 'domain_tld', confidence: 75, detail: '.uk UK' });
-    else if (/\.fr$|\.de$|\.it$|\.es$|\.nl$/i.test(host)) signals.push({ currency: 'EUR', source: 'domain_tld', confidence: 75, detail: 'Eurozone TLD' });
-    else if (/\.kr$/i.test(host)) signals.push({ currency: 'KRW', source: 'domain_tld', confidence: 75, detail: '.kr South Korea' });
-    else if (/\.vn$/i.test(host)) signals.push({ currency: 'VND', source: 'domain_tld', confidence: 75, detail: '.vn Vietnam' });
-    else if (/\.my$/i.test(host)) signals.push({ currency: 'MYR', source: 'domain_tld', confidence: 75, detail: '.my Malaysia' });
+    if (/\.com\.sg$|\.sg$/i.test(host)) signals.push({ currency: 'SGD', source: 'domain_tld', confidence: 80, detail: '.sg Singapore' });
+    else if (/\.com\.hk$|\.hk$/i.test(host)) signals.push({ currency: 'HKD', source: 'domain_tld', confidence: 80, detail: '.hk Hong Kong' });
+    else if (/\.com\.tw$|\.tw$/i.test(host)) signals.push({ currency: 'TWD', source: 'domain_tld', confidence: 80, detail: '.tw Taiwan' });
+    else if (/\.co\.jp$|\.jp$/i.test(host)) signals.push({ currency: 'JPY', source: 'domain_tld', confidence: 80, detail: '.jp Japan' });
+    else if (/\.co\.th$|\.th$/i.test(host)) signals.push({ currency: 'THB', source: 'domain_tld', confidence: 80, detail: '.th Thailand' });
+    else if (/\.com\.au$|\.au$/i.test(host)) signals.push({ currency: 'AUD', source: 'domain_tld', confidence: 80, detail: '.au Australia' });
+    else if (/\.ca$/i.test(host)) signals.push({ currency: 'CAD', source: 'domain_tld', confidence: 80, detail: '.ca Canada' });
+    else if (/\.co\.uk$|\.uk$/i.test(host)) signals.push({ currency: 'GBP', source: 'domain_tld', confidence: 80, detail: '.uk UK' });
+    else if (/\.fr$|\.de$|\.it$|\.es$|\.nl$/i.test(host)) signals.push({ currency: 'EUR', source: 'domain_tld', confidence: 80, detail: 'Eurozone TLD' });
+    else if (/\.kr$/i.test(host)) signals.push({ currency: 'KRW', source: 'domain_tld', confidence: 80, detail: '.kr South Korea' });
+    else if (/\.vn$/i.test(host)) signals.push({ currency: 'VND', source: 'domain_tld', confidence: 80, detail: '.vn Vietnam' });
+    else if (/\.my$/i.test(host)) signals.push({ currency: 'MYR', source: 'domain_tld', confidence: 80, detail: '.my Malaysia' });
   } catch {}
 
-  // Low confidence fallback: Trip currency
+  // Active Trip Currency Context
   if (ctx.hintCurrency) {
-    signals.push({ currency: ctx.hintCurrency.trim().toUpperCase(), source: 'hint', confidence: 30, detail: 'Active trip hint fallback' });
+    const hint = ctx.hintCurrency.trim().toUpperCase();
+    const isDollarHint = DOLLAR_CURRENCIES.includes(hint);
+    signals.push({
+      currency: hint,
+      source: 'hint',
+      confidence: isDollarHint ? 75 : 50,
+      detail: `Active trip context: ${hint}`,
+    });
   }
 
   // Decision Matrix
   const priceRaw = ctx.priceText || '';
-  const isBareDollar = priceRaw.includes('$') && !/S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$/i.test(priceRaw);
+  const isBareDollar = priceRaw.includes('$') && !/S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$/i.test(priceRaw);
   const isYenOrYuan = priceRaw.includes('¥') || priceRaw.includes('￥');
 
   const scores: Record<string, number> = {};
@@ -333,11 +386,13 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
 
   // 1. Bare "$" disambiguation
   if (isBareDollar) {
-    let bestCurr = 'USD';
-    let maxScore = -1;
+    const hint = ctx.hintCurrency?.trim().toUpperCase();
+    let bestCurr = (hint && DOLLAR_CURRENCIES.includes(hint)) ? hint : 'USD';
+    let maxScore = scores[bestCurr] || 0;
+
     for (const curr of DOLLAR_CURRENCIES) {
       const score = scores[curr] || 0;
-      if (score > maxScore && score >= 70) {
+      if (score > maxScore && score >= 60) {
         maxScore = score;
         bestCurr = curr;
       }

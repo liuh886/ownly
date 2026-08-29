@@ -114,6 +114,34 @@ describe('Unified Currency Detector & Cross-Validation Engine', () => {
       expect(result.isAmbiguousResolved).toBe(true);
     });
 
+    it('disambiguates bare "$" to SGD in Singapore via Google Maps RPC !3d!4d coordinates', () => {
+      const result = detectPageCurrency({
+        priceText: '$35.00',
+        url: 'https://www.google.com/maps/place/Marina+Bay+Sands/data=!4m2!3m1!1s0x0:0x0!3d1.2838!4d103.8591',
+      });
+      expect(result.currency).toBe('SGD');
+      expect(result.isAmbiguousResolved).toBe(true);
+    });
+
+    it('disambiguates bare "$" to SGD via Singapore location keywords in URL or title', () => {
+      const result = detectPageCurrency({
+        priceText: '$60.00',
+        url: 'https://travel-blog.com/top-food-in-singapore',
+      });
+      expect(result.currency).toBe('SGD');
+      expect(result.isAmbiguousResolved).toBe(true);
+    });
+
+    it('disambiguates bare "$" to SGD when active trip currency is SGD (hintCurrency)', () => {
+      const result = detectPageCurrency({
+        priceText: '$45.00',
+        url: 'https://generic-restaurant.com/menu',
+        hintCurrency: 'SGD',
+      });
+      expect(result.currency).toBe('SGD');
+      expect(result.isAmbiguousResolved).toBe(true);
+    });
+
     it('disambiguates bare "$" to SGD via Singapore 9% GST statutory tax signal', () => {
       const result = detectPageCurrency({
         priceText: '$85.00',

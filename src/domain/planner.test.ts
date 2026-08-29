@@ -168,6 +168,41 @@ describe('Ownly Planner domain', () => {
     expect(merged.types).toEqual(['tourist_attraction', 'restaurant']);
   });
 
+  it('preserves manually edited observed_price, notes, and tags when a bulk import has no price', () => {
+    const existingHotel = place('hotel_mbs', {
+      kind: 'stay',
+      title: 'Marina Bay Sands',
+      observed_price: 'S$850/night',
+      notes: 'Booked via official site with breakfast',
+      why: 'Iconic infinity pool',
+      tags: ['酒店住宿', 'Luxury', 'Bay Area'],
+      observed_rating: 4.8,
+      duration_minutes: 60,
+    });
+
+    // Thin incoming place from a saved collection list without prices or notes:
+    const incomingSavedItem = place('hotel_mbs', {
+      title: 'Marina Bay Sands',
+      source_provider: 'google_maps',
+      source_url: 'https://maps.google.com/?cid=12345',
+      kind: 'stay',
+      tags: ['酒店住宿'],
+      observed_price: undefined,
+      notes: undefined,
+      why: undefined,
+    });
+
+    const merged = mergeCapturedPlaceResearch(existingHotel, incomingSavedItem);
+    expect(merged.observed_price).toBe('S$850/night');
+    expect(merged.notes).toBe('Booked via official site with breakfast');
+    expect(merged.why).toBe('Iconic infinity pool');
+    expect(merged.observed_rating).toBe(4.8);
+    expect(merged.duration_minutes).toBe(60);
+    expect(merged.tags).toContain('Luxury');
+    expect(merged.tags).toContain('Bay Area');
+    expect(merged.tags).toContain('酒店住宿');
+  });
+
   it('normalizes prefixed dollar markers into ISO codes (B1)', () => {
     expect(extractPriceCurrency('S$25')).toBe('SGD');
     expect(extractPriceCurrency('HK$500')).toBe('HKD');

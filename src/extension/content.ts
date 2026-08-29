@@ -1279,7 +1279,7 @@ function initFxTooltipEngine() {
       return;
     }
 
-    const pageCurrency = detectCurrencyFromPage(window.location.href, selectedText);
+    const pageCurrency = detectCurrencyFromPage(window.location.href, selectedText, fxTargetCurrency);
     const converted = convertPriceRange(selectedText, fxTargetCurrency, fxPivotRates, pageCurrency);
     if (converted && converted.sourceCurrency !== converted.targetCurrency) {
       const range = selection.getRangeAt(0);

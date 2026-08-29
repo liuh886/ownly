@@ -2,6 +2,8 @@ import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter
 import {
   ensurePlaceKindTag,
   mergeCapturedPlaceResearch,
+  normalizePlaceIdentity,
+  placeIdentityKey,
   type PlannerTrip,
   type PlannerTripPlace,
   type TripExpenseItem,
@@ -148,7 +150,16 @@ export class PlannerRepository {
     const needsMerge = places.some((place) => place.locked === undefined);
     const existingMap = new Map<string, PlannerTripPlace>();
     if (needsMerge) {
-      for (const existing of await this.listPlaces()) existingMap.set(existing.id, existing);
+      for (const existing of await this.listPlaces()) {
+        existingMap.set(existing.id, existing);
+        if (existing.source_url) {
+          existingMap.set(placeIdentityKey(existing.trip_id, existing.source_url), existing);
+          existingMap.set(`${existing.trip_id}::${normalizePlaceIdentity(existing.source_url)}`, existing);
+        }
+        if (existing.source_place_id) {
+          existingMap.set(`${existing.trip_id}::pid:${existing.source_place_id}`, existing);
+        }
+      }
     }
     for (const place of places) {
       const normalizedPlace: PlannerTripPlace = {
@@ -156,7 +167,10 @@ export class PlannerRepository {
         tags: ensurePlaceKindTag(place.tags, place.kind),
       };
       if (normalizedPlace.locked === undefined) {
-        const existing = existingMap.get(normalizedPlace.id);
+        const existing = existingMap.get(normalizedPlace.id)
+          ?? (normalizedPlace.source_url ? existingMap.get(placeIdentityKey(normalizedPlace.trip_id, normalizedPlace.source_url)) : undefined)
+          ?? (normalizedPlace.source_url ? existingMap.get(`${normalizedPlace.trip_id}::${normalizePlaceIdentity(normalizedPlace.source_url)}`) : undefined)
+          ?? (normalizedPlace.source_place_id ? existingMap.get(`${normalizedPlace.trip_id}::pid:${normalizedPlace.source_place_id}`) : undefined);
         if (existing) {
           await this.upsert(mergeCapturedPlaceResearch(existing, normalizedPlace));
           continue;

@@ -213,39 +213,46 @@ export function mergeCapturedPlaceResearch(
   // normal capture, so it is honored explicitly instead of being swallowed.
   const lifecycleOverride = captured.state === 'dropped' ? { state: 'dropped' as const } : {};
   const mergedTypes = new Set<string>([...(captured.types ?? []), ...(existing.types ?? [])]);
+  const mergedTags = new Set<string>([...(existing.tags ?? []), ...(captured.tags ?? [])]);
+
+  const hasContent = (val?: string | null): boolean => typeof val === 'string' && val.trim().length > 0;
+
   return {
     ...existing,
     ...lifecycleOverride,
-    title: captured.title,
-    source_provider: captured.source_provider,
-    source_url: captured.source_url,
-    source_place_id: captured.source_place_id,
-    kind: captured.kind,
-    area: captured.area,
-    priority: captured.priority,
-    tags: ensurePlaceKindTag(captured.tags, captured.kind),
-    why: captured.why,
-    signals: captured.signals,
-    risks: captured.risks,
-    notes: captured.notes,
-    observed_rating: captured.observed_rating,
-    observed_price: captured.observed_price,
-    observed_at: captured.observed_at,
-    preferred_window: captured.preferred_window,
-    duration_minutes: captured.duration_minutes,
-    // Structured facts are usually missing on the first (bulk/name-only)
-    // capture and only appear on a later full place-page capture — never drop
-    // them just because the newer capture omits them.
-    address: captured.address ?? existing.address,
+    id: existing.id,
+    title: hasContent(captured.title) ? captured.title : existing.title,
+    source_provider: captured.source_provider ?? existing.source_provider,
+    source_url: captured.source_url ?? existing.source_url,
+    source_place_id: captured.source_place_id ?? existing.source_place_id,
+    kind: (captured.kind && captured.kind !== 'other') ? captured.kind : existing.kind,
+    area: hasContent(captured.area) ? captured.area : existing.area,
+    priority: captured.priority ?? existing.priority,
+    tags: ensurePlaceKindTag([...mergedTags], (captured.kind && captured.kind !== 'other') ? captured.kind : existing.kind),
+    why: hasContent(captured.why) ? captured.why : existing.why,
+    signals: (captured.signals && captured.signals.length > 0) ? captured.signals : existing.signals,
+    risks: (captured.risks && captured.risks.length > 0) ? captured.risks : existing.risks,
+    notes: hasContent(captured.notes) ? captured.notes : existing.notes,
+    observed_rating: (typeof captured.observed_rating === 'number' && Number.isFinite(captured.observed_rating))
+      ? captured.observed_rating
+      : existing.observed_rating,
+    // Never drop manually edited or previously captured prices just because a bulk list import omits price:
+    observed_price: hasContent(captured.observed_price) ? captured.observed_price : existing.observed_price,
+    observed_at: hasContent(captured.observed_at) ? captured.observed_at : existing.observed_at,
+    preferred_window: hasContent(captured.preferred_window) ? captured.preferred_window : existing.preferred_window,
+    duration_minutes: (typeof captured.duration_minutes === 'number' && Number.isFinite(captured.duration_minutes))
+      ? captured.duration_minutes
+      : existing.duration_minutes,
+    address: hasContent(captured.address) ? captured.address : existing.address,
     coordinates: captured.coordinates ?? existing.coordinates,
-    open_hours: captured.open_hours ?? existing.open_hours,
-    phone: captured.phone ?? existing.phone,
-    plus_code: captured.plus_code ?? existing.plus_code,
-    menu_url: captured.menu_url ?? existing.menu_url,
-    reservation_url: captured.reservation_url ?? existing.reservation_url,
-    review_topics: captured.review_topics ?? existing.review_topics,
+    open_hours: hasContent(captured.open_hours) ? captured.open_hours : existing.open_hours,
+    phone: hasContent(captured.phone) ? captured.phone : existing.phone,
+    plus_code: hasContent(captured.plus_code) ? captured.plus_code : existing.plus_code,
+    menu_url: hasContent(captured.menu_url) ? captured.menu_url : existing.menu_url,
+    reservation_url: hasContent(captured.reservation_url) ? captured.reservation_url : existing.reservation_url,
+    review_topics: (captured.review_topics && captured.review_topics.length > 0) ? captured.review_topics : existing.review_topics,
     types: mergedTypes.size > 0 ? [...mergedTypes] : undefined,
-    updated_at: captured.updated_at,
+    updated_at: captured.updated_at || new Date().toISOString(),
   };
 }
 
