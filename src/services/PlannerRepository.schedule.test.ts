@@ -109,9 +109,51 @@ describe('PlannerRepository scheduling lifecycle', () => {
     expect(all.map((p) => p.id)).toEqual(['b', 'a']);
   });
 
+  it('updatePlaceTiming updates and clears scheduled_start and duration_minutes', async () => {
+    const updated = await plannerRepository.updatePlaceTiming('a', {
+      scheduled_start: '09:30',
+      duration_minutes: 90,
+    });
+    expect(updated?.scheduled_start).toBe('09:30');
+    expect(updated?.duration_minutes).toBe(90);
+
+    const cleared = await plannerRepository.updatePlaceTiming('a', {
+      scheduled_start: undefined,
+      duration_minutes: undefined,
+    });
+    expect(cleared?.scheduled_start).toBeUndefined();
+    expect(cleared?.duration_minutes).toBeUndefined();
+  });
+
+  it('saveTripICalMarkdown generates and writes obsidian-ical-plugin-pro file', async () => {
+    const trip = {
+      schema_version: '0.1' as const,
+      type: 'trip' as const,
+      id: 'trip-1',
+      title: 'Bangkok 2026',
+      status: 'planning' as const,
+      start_date: '2026-11-01',
+      end_date: '2026-11-03',
+      destinations: ['Bangkok'],
+      created_at: '2026-08-24T00:00:00.000Z',
+    };
+    const fileName = await plannerRepository.saveTripICalMarkdown(trip, [
+      place('a', { state: 'scheduled', scheduled_date: '2026-11-01', scheduled_start: '09:00', duration_minutes: 90 }),
+    ]);
+    expect(fileName).toBe('trip--trip-1.itinerary.md');
+    const written = files.get('vault/Trips')?.get('trip--trip-1.itinerary.md');
+    expect(written).toBeDefined();
+    expect(written).toContain('09:00-10:30');
+  });
+
+  it('returns null when updating timing for non-existent place', async () => {
+    expect(await plannerRepository.updatePlaceTiming('ghost', { scheduled_start: '09:00' })).toBeNull();
+  });
+
   it('returns false when the place id does not exist', async () => {
     expect(await plannerRepository.schedulePlace('ghost', '2026-11-01')).toBeNull();
     expect(await plannerRepository.unschedulePlace('ghost')).toBeNull();
     expect(await plannerRepository.toggleLockPlace('ghost')).toBeNull();
   });
 });
+

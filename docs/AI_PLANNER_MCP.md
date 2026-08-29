@@ -83,3 +83,45 @@ Ownly 不反向解析 `.itinerary.md`，因此 Calendar 永远不是第二事实
 ## Calendar 同步边界
 
 `obsidian-ical-plugin-pro` 负责把 Markdown 投影为 iCalendar 订阅源，可供 Google Calendar、Apple Calendar、Outlook 等客户端订阅。订阅客户端自行决定刷新周期，因此不要把它描述成“实时双向同步”。
+
+---
+
+## 场景化 AI Planner 提示词模板 (Prompt Presets)
+
+你可以直接将以下 Prompt 复制给 Claude Desktop / Cursor / Antigravity 等 MCP 客户端：
+
+### 1. 🚀 高密度特种兵打卡模式 (High-Intensity Sprint)
+> “请调用 `ownly_planner_get_trip` 查看我的行程 `<trip_id>`。我希望以高效特种兵节奏打卡尽量多的地点：  
+> 1. 请根据经纬度进行严格的地理聚类（同区域集中游览，减少往返通勤）；  
+> 2. 每天从早晨 08:30 开始，安排 4~6 个地点，每个景点分配合理的 `scheduled_start` 与停留时长；  
+> 3. 检查每个地点的营业时间和定休日，避开冲突；  
+> 4. 调用 `ownly_planner_prepare_apply_schedule_proposal` 生成排期预览，待我确认后提交。”
+
+### 2. ☕ 慢节奏松弛感漫游模式 (Relaxed & Leisurely Exploration)
+> “请查看我的行程 `<trip_id>`。本次旅行追求舒适放松的松弛感：  
+> 1. 每天只安排 2~3 个核心地点，上午 10:00 出门，下午预留至少 1.5 小时咖啡馆/休憩时间；  
+> 2. 傍晚 18:00 之后不安排紧凑日程，留出自由漫步与晚餐时间；  
+> 3. 保持我已锁定的地点不变，将其他候选合理分布在各天；  
+> 4. 调用 `ownly_planner_prepare_apply_schedule_proposal` 生成排期预览。”
+
+### 3. 👨‍👩‍👧‍👦 家庭亲子友好模式 (Family & Child-Friendly)
+> “请查看我的行程 `<trip_id>`。本次有老人与小孩同行：  
+> 1. 每天上午 1 个景点，中午 12:00~14:30 安排就近午餐与休息；  
+> 2. 下午安排 1 个轻松的体验或公园类项目，单日总活动时长控制在 4 小时以内；  
+> 3. 避免跨区域长途奔波；  
+> 4. 生成包含合理起止时间与充足时长的 schedule proposal 并调用 `ownly_planner_prepare_apply_schedule_proposal`。”
+
+### 4. 🌅 摄影机位与日落夜景优先 (Photography & Sunset Prioritized)
+> “请查看我的行程 `<trip_id>`。我是摄影爱好者：  
+> 1. 将观景台、日落机位、海滩/地标精准安排在日落前 1 小时至蓝调时刻（约 17:00~18:30）；  
+> 2. 将夜景机位与夜市安排在 19:30 之后；  
+> 3. 将博物馆、寺庙、室内展馆安排在上午或正午光线较硬的时段；  
+> 4. 验证开放时间后生成排期提案并调用 `ownly_planner_prepare_apply_schedule_proposal`。”
+
+### 5. 🍜 美食寻味与预订对齐模式 (Foodie & Dining Reservation Oriented)
+> “请查看我的行程 `<trip_id>`。本次行程以美食体验为核心：  
+> 1. 将所有 `food` / `cafe` 类的地点作为主轴，午餐严格固定在 12:00~13:30，晚餐固定在 18:30~20:30；  
+> 2. 将周边的景点与购物点作为餐前/餐后的顺路搭配；  
+> 3. 特别注意餐厅的定休日与闭店时间；  
+> 4. 生成包含准确定点时间的 proposal 并调用 `ownly_planner_prepare_apply_schedule_proposal`。”
+

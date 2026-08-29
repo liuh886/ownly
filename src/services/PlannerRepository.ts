@@ -301,6 +301,24 @@ export class PlannerRepository {
     return next;
   }
 
+  async updatePlaceTiming(
+    placeId: string,
+    timing: { scheduled_start?: string | null; duration_minutes?: number | null },
+  ): Promise<PlannerTripPlace | null> {
+    await this.initialize();
+    const places = await this.listPlaces();
+    const existing = places.find((place) => place.id === placeId);
+    if (!existing) return null;
+    const next: PlannerTripPlace = {
+      ...existing,
+      scheduled_start: timing.scheduled_start?.trim() ? timing.scheduled_start.trim() : undefined,
+      duration_minutes: typeof timing.duration_minutes === 'number' && timing.duration_minutes > 0 ? timing.duration_minutes : undefined,
+      updated_at: new Date().toISOString(),
+    };
+    await this.upsert(next);
+    return next;
+  }
+
   /** Rewrites sort_order 0..n-1 for an explicitly ordered subset of one day. */
   async reorderScheduled(date: string, orderedIds: string[]): Promise<number> {
     await this.initialize();

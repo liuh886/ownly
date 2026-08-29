@@ -43,6 +43,7 @@ import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
 import { PlannerBudgetLedger } from './PlannerBudgetLedger';
 import { ImportCandidatesModal } from './ImportCandidatesModal';
+import { PlaceTimingModal } from './PlaceTimingModal';
 
 interface PlannerHomeProps {
   disabled: boolean;
@@ -162,6 +163,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [timingModalPlace, setTimingModalPlace] = useState<PlannerTripPlace | null>(null);
   const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
 
@@ -602,6 +604,19 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     await plannerRepository.dropPlace(hotelId);
     await load();
   }, [disabled, load]);
+
+  const handleSavePlaceTiming = useCallback(
+    async (
+      placeId: string,
+      timing: { scheduled_start?: string; duration_minutes?: number },
+    ) => {
+      await plannerRepository.updatePlaceTiming(placeId, timing);
+      await load();
+      setNotice(zh ? '已更新行程时段与停留时长！' : 'Updated schedule timing and duration!');
+      setTimeout(() => setNotice(''), 3000);
+    },
+    [load, zh],
+  );
 
   const areaCounts = useMemo(() => getTripAreaCounts(tripPlaces), [tripPlaces]);
   const maxAreaCount = Math.max(1, ...areaCounts.map((item) => item.count));
@@ -1207,11 +1222,19 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
-                            {place.scheduled_start ? (
-                              <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
-                                🕒 {place.scheduled_start}{scheduledEnd ? `-${scheduledEnd}` : ''}
-                              </span>
-                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => setTimingModalPlace(place)}
+                              className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9.5px] font-semibold transition hover:scale-102 ${
+                                place.scheduled_start
+                                  ? 'bg-stone-100 text-stone-700 hover:bg-stone-200 ring-1 ring-stone-300/60'
+                                  : 'border border-dashed border-stone-300 bg-white text-stone-400 hover:border-stone-400 hover:text-stone-700'
+                              }`}
+                              title={zh ? '点击设置/修改此站的开始时间与停留时长（自动投影至 Google Calendar）' : 'Click to adjust start time & duration for Google Calendar sync'}
+                            >
+                              <span>🕒</span>
+                              <span>{place.scheduled_start ? `${place.scheduled_start}${scheduledEnd ? `-${scheduledEnd}` : ''}` : (zh ? '设时间' : 'Time')}</span>
+                            </button>
                             {place.priority ? (
                               <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600" title="iCal Pro 优先级">
                                 {ICAL_PRO_PRIORITY_MAP[place.priority] || '🔼'}
@@ -1664,6 +1687,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         onSelectHotelForStaySpan={handleSelectHotelForStaySpan}
         onDropHotel={handleDropHotel}
         onHoverHotel={setHighlightedPlaceId}
+        language={language}
+      />
+
+      <PlaceTimingModal
+        key={`timing-${timingModalPlace?.id}-${timingModalPlace?.scheduled_start}-${timingModalPlace?.duration_minutes}`}
+        open={Boolean(timingModalPlace)}
+        place={timingModalPlace}
+        onClose={() => setTimingModalPlace(null)}
+        onSave={handleSavePlaceTiming}
         language={language}
       />
 
