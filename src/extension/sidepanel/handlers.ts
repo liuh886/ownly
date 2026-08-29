@@ -5,6 +5,7 @@ import {
   inferPlaceKind,
   inferSourceProvider,
   normalizeDelimitedText,
+  normalizeObservedPrice,
   reorderPendingPlaces,
   type PlannerPlaceKind,
   type PlannerPlacePriority,
@@ -97,34 +98,44 @@ function buildPlaceFromDetected(
 ): PlannerTripPlace {
   const cleanTitle = cleanExtractedText(item.title);
   const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
-    const inferredKind = inferPlaceKind(cleanTitle + ' ' + (item.category || '') + ' ' + (cleanAddress || ''));
-    return {
-      schema_version: '0.1',
-      type: 'trip_place',
-      id: crypto.randomUUID(),
-      trip_id: tripId,
-      title: cleanTitle,
-      source_provider: item.sourceProvider || 'google_maps',
-      source_url: item.sourceUrl,
-      kind: inferredKind,
-      area: cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined,
-      priority: 'want',
-      tags: ensurePlaceKindTag(
-        tripTags,
-        inferredKind,
-        store.lang,
-      ),
-      why: item.userNote || item.summary || undefined,
-      signals: [],
-      risks: [],
+  const inferredKind = inferPlaceKind([cleanTitle, item.category, cleanAddress, ...(item.types || [])].filter(Boolean).join(' '));
+  const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || store.pageDetectedCurrency);
+  return {
+    schema_version: '0.1',
+    type: 'trip_place',
+    id: crypto.randomUUID(),
+    trip_id: tripId,
+    title: cleanTitle,
+    source_provider: item.sourceProvider || 'google_maps',
+    source_url: item.sourceUrl,
+    source_place_id: item.sourcePlaceId,
+    source_category: item.category ? cleanExtractedText(item.category) : undefined,
+    kind: inferredKind,
+    area: cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined,
+    priority: 'want',
+    tags: ensurePlaceKindTag(tripTags, inferredKind, store.lang),
+    why: item.userNote || item.summary || undefined,
+    signals: [],
+    risks: [],
     notes: item.userNote || undefined,
     open_hours: item.openHours ? cleanExtractedText(item.openHours) : undefined,
     address: cleanAddress,
     observed_rating: item.rating,
+    observed_review_count: item.reviewCount,
     observed_price: item.priceLevel,
+    price_currency: normalizedPrice?.currency,
+    price_min: normalizedPrice?.min,
+    price_max: normalizedPrice?.max,
+    price_unit: normalizedPrice?.unit,
+    price_level: normalizedPrice?.level,
     observed_at: today(),
     coordinates: item.coordinates,
-    source_place_id: item.sourcePlaceId,
+    phone: item.phone,
+    plus_code: item.plusCode,
+    menu_url: item.menuUrl,
+    reservation_url: item.reservationUrl,
+    review_topics: item.reviewTopics,
+    types: item.types,
     reservation_status: 'none',
     state: 'candidate',
     created_at: now,
@@ -281,11 +292,13 @@ function initCandidateDelegation() {
             sourceUrl: editing.source_url,
             sourceProvider: editing.source_provider,
             sourcePlaceId: editing.source_place_id,
-            category: editing.kind,
+            category: editing.source_category ?? editing.kind,
             address: editing.address,
             coordinates: editing.coordinates,
             rating: editing.observed_rating,
+            reviewCount: editing.observed_review_count,
             priceLevel: editing.observed_price,
+            detectedCurrency: editing.price_currency,
             summary: editing.why,
             userNote: editing.notes,
             openHours: editing.open_hours,
@@ -339,11 +352,17 @@ function initCandidateDelegation() {
         ...store.state,
         pendingPlaces: store.state.pendingPlaces.map((p) => {
           if (p.id !== placeId) return p;
+          const normalizedPrice = normalizeObservedPrice(newPrice, p.price_currency || store.pageDetectedCurrency);
           return {
             ...p,
             kind: newKind,
             priority: newPriority,
             observed_price: newPrice,
+            price_currency: normalizedPrice?.currency,
+            price_min: normalizedPrice?.min,
+            price_max: normalizedPrice?.max,
+            price_unit: normalizedPrice?.unit,
+            price_level: normalizedPrice?.level,
             observed_rating: Number.isFinite(numRating) && numRating >= 1 && numRating <= 5 ? numRating : undefined,
             duration_minutes: Number.isFinite(numDuration) && numDuration > 0 ? Math.min(1440, numDuration) : undefined,
             tags: newTags,
@@ -526,12 +545,29 @@ export function initHandlers(): void {
     void (async () => {
       const dict = t();
       const context = store.state.activeContext;
-      const savedList = store.detectedSavedList;
+      let savedList = store.detectedSavedList;
       if (!context) {
         setStatus(dict.tripRequiredError, 'error');
         return;
       }
       if (!savedList || savedList.places.length === 0) return;
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+          setStatus(store.lang === 'zh' ? '正在补全评分、评论量、分类与价格…' : 'Enriching ratings, reviews, categories and prices…');
+          const enriched = await chrome.tabs.sendMessage(tab.id, {
+            type: 'OWNLY_ENRICH_SAVED_LIST',
+            savedList,
+            overrideCurrency: store.mapCurrencyOverride,
+          }) as { savedList?: DetectedSavedList | null; attempted?: number; enriched?: number; failed?: number } | undefined;
+          if (enriched?.savedList?.places?.length) {
+            savedList = enriched.savedList;
+            store.detectedSavedList = savedList;
+          }
+        }
+      } catch (error) {
+        console.warn('[Ownly Capture] Saved-list detail enrichment failed', error);
+      }
       const now = new Date().toISOString();
       const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
       let importedCount = 0;
@@ -542,6 +578,7 @@ export function initHandlers(): void {
         const id = existing?.id ?? crypto.randomUUID();
         const address = item.address ? cleanExtractedText(item.address) : undefined;
         const kind = inferPlaceKind([title, item.category, address, ...(item.types || [])].filter(Boolean).join(' '));
+        const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || savedList.detectedCurrency || store.pageDetectedCurrency);
         const captured: PlannerTripPlace = {
           schema_version: '0.1',
           type: 'trip_place',
@@ -551,6 +588,7 @@ export function initHandlers(): void {
           source_provider: item.sourceProvider || 'google_maps',
           source_url: item.sourceUrl,
           source_place_id: item.sourcePlaceId ?? existing?.source_place_id,
+          source_category: item.category ? cleanExtractedText(item.category) : existing?.source_category,
           kind: existing?.kind ?? kind,
           area: existing?.area ?? address?.split(/[,，·]/)[0]?.trim(),
           priority: existing?.priority ?? 'want',
@@ -560,7 +598,13 @@ export function initHandlers(): void {
           risks: existing?.risks ?? [],
           notes: existing?.notes ?? item.userNote,
           observed_rating: item.rating ?? existing?.observed_rating,
+          observed_review_count: item.reviewCount ?? existing?.observed_review_count,
           observed_price: item.priceLevel ?? existing?.observed_price,
+          price_currency: normalizedPrice?.currency ?? existing?.price_currency,
+          price_min: normalizedPrice?.min ?? existing?.price_min,
+          price_max: normalizedPrice?.max ?? existing?.price_max,
+          price_unit: normalizedPrice?.unit ?? existing?.price_unit,
+          price_level: normalizedPrice?.level ?? existing?.price_level,
           observed_at: today(),
           preferred_window: existing?.preferred_window,
           duration_minutes: existing?.duration_minutes,
@@ -585,7 +629,15 @@ export function initHandlers(): void {
       await saveState();
       store.smartListDismissed = true;
       renderSmartListCard();
-      setStatus(dict.savedListSynced(importedCount, savedList.listName), 'success');
+      const total = savedList.places.length;
+      const withRating = savedList.places.filter((p) => p.rating !== undefined).length;
+      const withReviews = savedList.places.filter((p) => p.reviewCount !== undefined).length;
+      const withPrice = savedList.places.filter((p) => Boolean(p.priceLevel)).length;
+      const withCategory = savedList.places.filter((p) => Boolean(p.category)).length;
+      const coverage = store.lang === 'zh'
+        ? ` · 评分 ${withRating}/${total} · 评论量 ${withReviews}/${total} · 价格 ${withPrice}/${total} · 分类 ${withCategory}/${total}`
+        : ` · rating ${withRating}/${total} · reviews ${withReviews}/${total} · price ${withPrice}/${total} · category ${withCategory}/${total}`;
+      setStatus(`${dict.savedListSynced(importedCount, savedList.listName)}${coverage}`, 'success');
     })().catch((error) => setStatus(String(error), 'error'));
   });
 
@@ -762,6 +814,8 @@ export function initHandlers(): void {
     );
     const kind = (el.kind.value as PlannerPlaceKind) || 'other';
     const tags = ensurePlaceKindTag(normalizeDelimitedText(el.tags.value), kind, store.lang);
+    const rawPrice = el.price.value.trim() || undefined;
+    const normalizedPrice = normalizeObservedPrice(rawPrice, store.currentPlace.detectedCurrency || existing?.price_currency || store.pageDetectedCurrency);
     const id = existing?.id ?? crypto.randomUUID();
     const place: PlannerTripPlace = {
       schema_version: '0.1',
@@ -772,6 +826,7 @@ export function initHandlers(): void {
       source_provider: store.currentPlace.sourceProvider || 'google_maps',
       source_url: store.currentPlace.sourceUrl,
       source_place_id: store.currentPlace.sourcePlaceId ?? existing?.source_place_id,
+      source_category: store.currentPlace.category ? cleanExtractedText(store.currentPlace.category) : existing?.source_category,
       kind,
       area: cleanExtractedText(el.area.value.trim()) || undefined,
       priority: existing?.priority ?? 'want',
@@ -781,7 +836,13 @@ export function initHandlers(): void {
       risks: normalizeDelimitedText(el.risks.value).map(cleanExtractedText).filter(Boolean),
       notes: cleanExtractedText(el.notes.value.trim()) || undefined,
       observed_rating: Number.isFinite(rating) && rating >= 1 && rating <= 5 ? rating : undefined,
-      observed_price: el.price.value.trim() || undefined,
+      observed_review_count: store.currentPlace.reviewCount ?? existing?.observed_review_count,
+      observed_price: rawPrice,
+      price_currency: normalizedPrice?.currency,
+      price_min: normalizedPrice?.min,
+      price_max: normalizedPrice?.max,
+      price_unit: normalizedPrice?.unit,
+      price_level: normalizedPrice?.level,
       observed_at: today(),
       preferred_window: el.window.value.trim() || undefined,
       duration_minutes: Number.isFinite(duration) && duration > 0 ? Math.min(1440, Math.round(duration)) : undefined,

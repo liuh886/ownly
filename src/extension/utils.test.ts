@@ -107,6 +107,12 @@ describe('findEntityListPlaceId & findEntityListCategory', () => {
     expect(findEntityListPlaceId(item)).toBe('0x3ba58a39c41ff829:0x715f5a08d2ca8f6f');
   });
 
+  it('reconstructs feature id from the decimal uint64 pair used by current entitylist payloads', () => {
+    const item = [null, [null, null, null, null, null, [null, null, 1.2893, 103.8631], ['3592211867340460493', '9202232323147137646']]];
+    const expected = `0x${BigInt('3592211867340460493').toString(16)}:0x${BigInt('9202232323147137646').toString(16)}`;
+    expect(findEntityListPlaceId(item)).toBe(expected);
+  });
+
   it('returns undefined when no feature id exists or input is invalid', () => {
     expect(findEntityListPlaceId(undefined)).toBeUndefined();
     expect(findEntityListPlaceId(['plain', ['nested', 'values']])).toBeUndefined();

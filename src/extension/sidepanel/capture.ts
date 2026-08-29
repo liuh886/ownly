@@ -1,5 +1,5 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
-import { findExistingTripPlace } from '../../domain/planner';
+import { findExistingTripPlace, normalizeObservedPrice } from '../../domain/planner';
 import { el } from '../dom';
 import { saveCaptureStateViaWorker } from '../capture-state';
 import { store, t } from './store';
@@ -139,10 +139,20 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
     );
     if (match && !match.observed_price) {
       const price = store.currentPlace.priceLevel;
+      const normalizedPrice = normalizeObservedPrice(price, store.currentPlace.detectedCurrency || store.pageDetectedCurrency);
       store.state = {
         ...store.state,
         pendingPlaces: store.state.pendingPlaces.map((place) =>
-          place.id === match.id ? { ...place, observed_price: price, updated_at: new Date().toISOString() } : place,
+          place.id === match.id ? {
+            ...place,
+            observed_price: price,
+            price_currency: normalizedPrice?.currency,
+            price_min: normalizedPrice?.min,
+            price_max: normalizedPrice?.max,
+            price_unit: normalizedPrice?.unit,
+            price_level: normalizedPrice?.level,
+            updated_at: new Date().toISOString(),
+          } : place,
         ),
       };
       try {

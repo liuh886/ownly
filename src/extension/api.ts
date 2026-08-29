@@ -1,5 +1,6 @@
-import { ensurePlaceKindTag, inferPlaceKind, type CaptureContext, type PlannerTripPlace } from '../domain/planner';
-import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, parseEntityListCoordinates, today } from './utils';
+import { ensurePlaceKindTag, inferPlaceKind, normalizeObservedPrice, type CaptureContext, type PlannerTripPlace } from '../domain/planner';
+import { cleanExtractedText, findEntityListCategory, findEntityListPlaceId, isJunkNavigationText, parseEntityListCoordinates, today } from './utils';
+import { PLACE_PARSER } from './place-parser';
 
 export interface ResolvedListRef {
   finalUrl: string;
@@ -69,11 +70,14 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeContext?:
         const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
 
         const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(placeTitle)}`;
+        const research = PLACE_PARSER.extractEntityListResearch(item, placeTitle);
+        const sourceCategory = research.category || findEntityListCategory(item, placeTitle);
+        const normalizedPrice = normalizeObservedPrice(research.priceLevel);
         const placeArea = (address && address.includes(','))
           ? address.split(/[,，]/).map((p: string) => p.trim()).filter(Boolean)[0]
           : undefined;
 
-        const inferredKind = inferPlaceKind(placeTitle + ' ' + (address || ''));
+        const inferredKind = inferPlaceKind([placeTitle, sourceCategory, address, ...(research.types || [])].filter(Boolean).join(' '));
         places.push({
           schema_version: '0.1',
           type: 'trip_place',
@@ -82,6 +86,7 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeContext?:
           title: placeTitle,
           source_provider: 'google_maps',
           source_url: sourceUrl,
+          source_category: sourceCategory,
           kind: inferredKind,
           area: placeArea,
           priority: 'want',
@@ -90,6 +95,15 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeContext?:
           signals: [],
           risks: [],
           notes: userNote,
+          observed_rating: research.rating,
+          observed_review_count: research.reviewCount,
+          observed_price: research.priceLevel,
+          price_currency: normalizedPrice?.currency,
+          price_min: normalizedPrice?.min,
+          price_max: normalizedPrice?.max,
+          price_unit: normalizedPrice?.unit,
+          price_level: normalizedPrice?.level,
+          types: research.types,
           address,
           coordinates: parseEntityListCoordinates(placeInfo),
           source_place_id: findEntityListPlaceId(item),

@@ -4,6 +4,7 @@ import {
 } from '../domain/planner';
 import {
   cleanExtractedText,
+  findEntityListCategory,
   isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
@@ -266,9 +267,69 @@ export function extractStructuredJsonLd(doc: Document | HTMLElement): Partial<Pa
   return result;
 }
 
+export interface EntityListResearchFacts {
+  rating?: number;
+  reviewCount?: number;
+  category?: string;
+  priceLevel?: string;
+  types?: string[];
+}
+
+const ENTITY_LIST_TYPES = new Set([
+  'restaurant', 'lodging', 'hotel', 'hostel', 'bed_and_breakfast', 'guest_house', 'motel',
+  'cafe', 'coffee_shop', 'bakery', 'bar', 'pub', 'meal_takeaway', 'meal_delivery', 'food_court',
+  'tourist_attraction', 'museum', 'art_gallery', 'park', 'national_park', 'historical_landmark',
+  'historical_place', 'scenic_viewpoint', 'spa', 'massage', 'gym', 'fitness_center',
+  'amusement_park', 'water_park', 'aquarium', 'zoo', 'shopping_mall', 'department_store',
+  'supermarket', 'grocery_or_supermarket', 'convenience_store', 'transit_station', 'subway_station',
+  'train_station', 'bus_station', 'airport', 'ferry_terminal', 'store', 'night_club',
+]);
+
+/** Best-effort facts that are actually present inside an entitylist node. */
+export function extractEntityListResearch(item: unknown, knownTitle?: string): EntityListResearchFacts {
+  const result: EntityListResearchFacts = {};
+  const types = new Set<string>();
+  const queue: unknown[] = [item];
+  let scanned = 0;
+
+  while (queue.length > 0 && scanned < 800) {
+    const current = queue.shift();
+    scanned += 1;
+    if (typeof current === 'string') {
+      const text = cleanExtractedText(current);
+      if (!text || text.length > 160) continue;
+      const lower = text.toLowerCase();
+      if (ENTITY_LIST_TYPES.has(lower)) types.add(lower);
+
+      if (!result.priceLevel && isPlausiblePriceText(text)) result.priceLevel = text;
+      if (!result.rating && (/[★☆]|\/\s*5|^[1-5][.,]\d$/.test(text))) {
+        result.rating = parseRatingNumber(text);
+      }
+      if (!result.reviewCount && /(reviews?|评价|评论|口コミ|rezensionen|avis|avaliações|\([\d.,kK万mM]+\))/i.test(text)) {
+        result.reviewCount = parseReviewCount(text);
+      }
+      if (/[·•|│\n・‧｜]/.test(text)) {
+        const subtitle = parseSubtitleInfo(text);
+        result.rating ??= subtitle.rating;
+        result.reviewCount ??= subtitle.reviewCount;
+        result.priceLevel ??= subtitle.priceLevel;
+      }
+      continue;
+    }
+    if (Array.isArray(current)) {
+      for (const child of current.slice(0, 80)) queue.push(child);
+    }
+  }
+
+  result.category = findEntityListCategory(item, knownTitle);
+  if (types.size > 0) result.types = [...types];
+  return result;
+}
+
 export const PLACE_PARSER = {
   parseRating: parseRatingNumber,
   parseReviewCount,
   parseSubtitleInfo,
+  extractEntityListResearch,
   extractJsonLd: extractStructuredJsonLd,
 };

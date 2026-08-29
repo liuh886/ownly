@@ -20,6 +20,7 @@ import {
   mergeCaptureState,
   normalizeDelimitedText,
   normalizePlaceIdentity,
+  normalizeObservedPrice,
   optimizeStopsSequence,
   calculateHotelProximity,
   calculateMultiDayHotelProximity,
@@ -205,6 +206,46 @@ describe('Ownly Planner domain', () => {
     expect(extractPriceCurrency('฿2,350')).toBe('THB');
     expect(extractPriceCurrency('¥18,000')).toBe('CNY');
     expect(extractPriceCurrency('free entry')).toBeNull();
+  });
+
+  it('normalizes captured price text into comparable source facts', () => {
+    expect(normalizeObservedPrice('人均 ฿400–600', 'THB')).toEqual({
+      currency: 'THB', min: 400, max: 600, unit: 'person',
+    });
+    expect(normalizeObservedPrice('S$1,024 night', 'SGD')).toEqual({
+      currency: 'SGD', min: 1024, max: 1024, unit: 'night',
+    });
+    expect(normalizeObservedPrice('$$$')).toEqual({ unit: 'level', level: 3 });
+    expect(normalizeObservedPrice('$50–100', 'SGD')).toEqual({
+      currency: 'SGD', min: 50, max: 100, unit: 'unknown',
+    });
+    expect(normalizeObservedPrice('¥3,500', 'JPY')).toEqual({
+      currency: 'JPY', min: 3500, max: 3500, unit: 'unknown',
+    });
+  });
+
+  it('refreshes raw category, review volume and structured price without touching Planner decisions', () => {
+    const existing = place('facts', { kind: 'food', priority: 'must', source_category: 'Restaurant' });
+    const captured = place('facts', {
+      kind: 'cafe',
+      priority: 'optional',
+      source_category: 'Thai restaurant',
+      observed_review_count: 12480,
+      observed_price: '人均 ฿400–600',
+      price_currency: 'THB',
+      price_min: 400,
+      price_max: 600,
+      price_unit: 'person',
+    });
+    const merged = mergeCapturedPlaceResearch(existing, captured);
+    expect(merged.kind).toBe('food');
+    expect(merged.priority).toBe('must');
+    expect(merged.source_category).toBe('Thai restaurant');
+    expect(merged.observed_review_count).toBe(12480);
+    expect(merged.price_currency).toBe('THB');
+    expect(merged.price_min).toBe(400);
+    expect(merged.price_max).toBe(600);
+    expect(merged.price_unit).toBe('person');
   });
 
   it('converts prefixed-dollar prices into the trip base currency in budget estimates (B1)', () => {
