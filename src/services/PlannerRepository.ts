@@ -158,9 +158,10 @@ export class PlannerRepository {
   /**
    * Capture import is an explicit boundary. Existing Planner-owned decisions
    * remain authoritative; only observed/source facts are refreshed.
+   * Returns array of place IDs that were successfully persisted.
    */
-  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<void> {
-    if (places.length === 0) return;
+  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<string[]> {
+    if (places.length === 0) return [];
     await this.initialize();
 
     const existing = await this.listPlaces();
@@ -181,7 +182,10 @@ export class PlannerRepository {
       if (geo) byCoordinates.set(geo, place);
     }
 
+    const importedIds: string[] = [];
+
     for (const rawPlace of places) {
+      if (!rawPlace.id || !rawPlace.trip_id) continue;
       const captured: PlannerTripPlace = {
         ...rawPlace,
         tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
@@ -200,12 +204,19 @@ export class PlannerRepository {
           ? byUrlIdentity.get(`${captured.trip_id}::${captured.source_provider}::${normalizePlaceIdentity(captured.source_url)}`)
           : undefined);
 
-      if (existingPlace) {
-        await this.upsert(mergeCapturedPlaceResearch(existingPlace, captured));
-      } else {
-        await this.upsert(captured);
+      try {
+        if (existingPlace) {
+          await this.upsert(mergeCapturedPlaceResearch(existingPlace, captured));
+        } else {
+          await this.upsert(captured);
+        }
+        importedIds.push(rawPlace.id);
+      } catch (err) {
+        console.warn(`[PlannerRepository] Failed to import place ${rawPlace.id} (${rawPlace.title}):`, err);
       }
     }
+
+    return importedIds;
   }
 
 

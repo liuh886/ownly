@@ -489,35 +489,132 @@ export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
   return 'other';
 }
 
-export function checkOpeningHoursCollision(openHours?: string, scheduledDate?: string): { isCollision: boolean; reason?: string } {
-  if (!openHours || !scheduledDate) return { isCollision: false };
-  const date = parseDateOnly(scheduledDate);
-  if (!date) return { isCollision: false };
+export function checkOpeningHoursCollision(
+  openHours?: string,
+  scheduledDate?: string,
+  preferredWindow?: string,
+): { isCollision: boolean; reason?: string } {
+  if (!openHours) return { isCollision: false };
 
-  const dayIndex = date.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-  const dayNamesEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const dayNamesZh = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  // 1. Day of week collision
+  if (scheduledDate) {
+    const date = parseDateOnly(scheduledDate);
+    if (date) {
+      const dayIndex = date.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+      const dayNamesEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayNamesZh = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
-  const currentDayEn = dayNamesEn[dayIndex];
-  const currentDayZh = dayNamesZh[dayIndex];
-  const lowerHours = openHours.toLowerCase();
+      const currentDayEn = dayNamesEn[dayIndex];
+      const currentDayZh = dayNamesZh[dayIndex];
+      const lowerHours = openHours.toLowerCase();
 
-  const isMonClosed = dayIndex === 1 && (/mon(day)?:\s*(closed|休)|周一(闭馆|休息|休)|星期一(闭馆|休息|休)|定休日[：:]?\s*月/i.test(lowerHours));
-  const isTueClosed = dayIndex === 2 && (/tue(sday)?:\s*(closed|休)|周二(闭馆|休息|休)|星期二(闭馆|休息|休)|定休日[：:]?\s*火/i.test(lowerHours));
-  const isWedClosed = dayIndex === 3 && (/wed(nesday)?:\s*(closed|休)|周三(闭馆|休息|休)|星期三(闭馆|休息|休)|定休日[：:]?\s*水/i.test(lowerHours));
-  const isThuClosed = dayIndex === 4 && (/thu(rsday)?:\s*(closed|休)|周四(闭馆|休息|休)|星期四(闭馆|休息|休)|定休日[：:]?\s*木/i.test(lowerHours));
-  const isFriClosed = dayIndex === 5 && (/fri(day)?:\s*(closed|休)|周五(闭馆|休息|休)|星期五(闭馆|休息|休)|定休日[：:]?\s*金/i.test(lowerHours));
-  const isSatClosed = dayIndex === 6 && (/sat(urday)?:\s*(closed|休)|周六(闭馆|休息|休)|星期六(闭馆|休息|休)|定休日[：:]?\s*土/i.test(lowerHours));
-  const isSunClosed = dayIndex === 0 && (/sun(day)?:\s*(closed|休)|周日(闭馆|休息|休)|星期日(闭馆|休息|休)|定休日[：:]?\s*日/i.test(lowerHours));
+      const isMonClosed = dayIndex === 1 && (/mon(day)?:\s*(closed|休)|周一(闭馆|休息|休)|星期一(闭馆|休息|休)|定休日[：:]?\s*月/i.test(lowerHours));
+      const isTueClosed = dayIndex === 2 && (/tue(sday)?:\s*(closed|休)|周二(闭馆|休息|休)|星期二(闭馆|休息|休)|定休日[：:]?\s*火/i.test(lowerHours));
+      const isWedClosed = dayIndex === 3 && (/wed(nesday)?:\s*(closed|休)|周三(闭馆|休息|休)|星期三(闭馆|休息|休)|定休日[：:]?\s*水/i.test(lowerHours));
+      const isThuClosed = dayIndex === 4 && (/thu(rsday)?:\s*(closed|休)|周四(闭馆|休息|休)|星期四(闭馆|休息|休)|定休日[：:]?\s*木/i.test(lowerHours));
+      const isFriClosed = dayIndex === 5 && (/fri(day)?:\s*(closed|休)|周五(闭馆|休息|休)|星期五(闭馆|休息|休)|定休日[：:]?\s*金/i.test(lowerHours));
+      const isSatClosed = dayIndex === 6 && (/sat(urday)?:\s*(closed|休)|周六(闭馆|休息|休)|星期六(闭馆|休息|休)|定休日[：:]?\s*土/i.test(lowerHours));
+      const isSunClosed = dayIndex === 0 && (/sun(day)?:\s*(closed|休)|周日(闭馆|休息|休)|星期日(闭馆|休息|休)|定休日[：:]?\s*日/i.test(lowerHours));
 
-  if (isMonClosed || isTueClosed || isWedClosed || isThuClosed || isFriClosed || isSatClosed || isSunClosed) {
-    return {
-      isCollision: true,
-      reason: `${currentDayZh}通常休息 (${currentDayEn} Closed)`,
-    };
+      if (isMonClosed || isTueClosed || isWedClosed || isThuClosed || isFriClosed || isSatClosed || isSunClosed) {
+        return {
+          isCollision: true,
+          reason: `${currentDayZh}通常休息 (${currentDayEn} Closed)`,
+        };
+      }
+    }
+  }
+
+  // 2. Preferred window vs Open Hours time conflict
+  if (preferredWindow) {
+    const lowerWindow = preferredWindow.toLowerCase().trim();
+    const lowerHours = openHours.toLowerCase();
+
+    // Check evening/night window collision when hours indicate closing early (<= 17:30)
+    if (lowerWindow === 'night' || lowerWindow === 'evening' || /晚上|夜间|傍晚/.test(lowerWindow)) {
+      const closingMatch = /(?:~|-|至|到)\s*(0?\d|1[0-7]):([0-5]\d)/.exec(lowerHours);
+      if (closingMatch && !/(?:2[0-4]|1[8-9]):[0-5]\d/.test(lowerHours) && !/24小时|24\s*hours/i.test(lowerHours)) {
+        return {
+          isCollision: true,
+          reason: `地点约 ${closingMatch[1]}:${closingMatch[2]} 闭馆，傍晚/夜间不开放`,
+        };
+      }
+    }
+
+    // Check morning window collision when hours indicate opening late (>= 16:00)
+    if (lowerWindow === 'morning' || /上午|早晨/.test(lowerWindow)) {
+      const openingMatch = /(?:从|open|营业|:\s*)?\s*(1[6-9]|2[0-3]):([0-5]\d)\s*(?:~|-|至|到)/.exec(lowerHours);
+      if (openingMatch && !/24小时|24\s*hours/i.test(lowerHours)) {
+        return {
+          isCollision: true,
+          reason: `地点约 ${openingMatch[1]}:${openingMatch[2]} 开始营业，上午不开放`,
+        };
+      }
+    }
   }
 
   return { isCollision: false };
+}
+
+export interface DayScheduleCollisionSummary {
+  hasCollision: boolean;
+  placeCollisions: Record<string, { isCollision: boolean; reason?: string }>;
+  totalDurationMinutes: number;
+  isOverloaded: boolean;
+  overloadReason?: string;
+  longTransits: Array<{ fromTitle: string; toTitle: string; distanceKm: number; warning: string }>;
+}
+
+export function checkDayScheduleCollisions(
+  places: PlannerTripPlace[],
+  date: string,
+): DayScheduleCollisionSummary {
+  const scheduled = sortPlannerPlaces(places).filter((p) => p.scheduled_date === date && p.state === 'scheduled');
+  const placeCollisions: Record<string, { isCollision: boolean; reason?: string }> = {};
+  let hasCollision = false;
+  let totalDurationMinutes = 0;
+
+  scheduled.forEach((p) => {
+    const col = checkOpeningHoursCollision(p.open_hours, date, p.preferred_window);
+    if (col.isCollision) {
+      placeCollisions[p.id] = col;
+      hasCollision = true;
+    }
+    totalDurationMinutes += p.duration_minutes || 60;
+  });
+
+  const isOverloaded = totalDurationMinutes > 600; // > 10 hours
+  const overloadReason = isOverloaded
+    ? `单日预估活动耗时约 ${(totalDurationMinutes / 60).toFixed(1)} 小时，日程可能过紧`
+    : undefined;
+  if (isOverloaded) hasCollision = true;
+
+  const longTransits: Array<{ fromTitle: string; toTitle: string; distanceKm: number; warning: string }> = [];
+  for (let i = 0; i < scheduled.length - 1; i++) {
+    const c1 = extractPlaceCoordinates(scheduled[i]);
+    const c2 = extractPlaceCoordinates(scheduled[i + 1]);
+    if (c1 && c2) {
+      const dist = haversineDistanceKm(c1, c2);
+      if (dist > 20) {
+        longTransits.push({
+          fromTitle: scheduled[i].title,
+          toTitle: scheduled[i + 1].title,
+          distanceKm: dist,
+          warning: `跨区移动距离较远 (${dist.toFixed(1)} km)，建议合理安排交通`,
+        });
+        hasCollision = true;
+      }
+    }
+  }
+
+  return {
+    hasCollision,
+    placeCollisions,
+    totalDurationMinutes,
+    isOverloaded,
+    overloadReason,
+    longTransits,
+  };
 }
 
 export function buildGoogleMapsRouteUrl(
@@ -1826,4 +1923,328 @@ export function calculateTripSettlement(
     summaryText: lines.join('\n'),
   };
 }
+
+function splitCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result.map((c) => c.replace(/^["']|["']$/g, '').trim());
+}
+
+export function parseImportPayload(rawText: string, tripId: string): PlannerTripPlace[] {
+  const trimmed = rawText.trim();
+  if (!trimmed) return [];
+
+  const results: PlannerTripPlace[] = [];
+  const now = new Date().toISOString();
+
+  const makePlace = (partial: Partial<PlannerTripPlace> & { title: string; category?: string }): PlannerTripPlace => {
+    const kind = partial.kind
+      || (partial.category ? inferPlaceKind(partial.category) : undefined)
+      || inferPlaceKind(partial.title);
+    return {
+      schema_version: '0.1',
+      type: 'trip_place',
+      id: partial.id || crypto.randomUUID(),
+      trip_id: tripId,
+      title: partial.title.trim(),
+      source_provider: partial.source_provider || (partial.source_url ? inferSourceProvider(partial.source_url) : 'other'),
+      source_url: partial.source_url || '',
+      source_place_id: partial.source_place_id,
+      kind,
+      area: partial.area?.trim() || undefined,
+      priority: partial.priority || 'want',
+      tags: ensurePlaceKindTag(partial.tags || [], kind),
+      why: partial.why?.trim() || undefined,
+      signals: partial.signals || [],
+      risks: partial.risks || [],
+      notes: partial.notes?.trim() || undefined,
+      observed_rating: typeof partial.observed_rating === 'number' ? partial.observed_rating : undefined,
+      observed_price: partial.observed_price?.trim() || undefined,
+      preferred_window: partial.preferred_window,
+      duration_minutes: typeof partial.duration_minutes === 'number' ? partial.duration_minutes : undefined,
+      open_hours: partial.open_hours?.trim() || undefined,
+      address: partial.address?.trim() || undefined,
+      coordinates: partial.coordinates,
+      phone: partial.phone?.trim() || undefined,
+      plus_code: partial.plus_code?.trim() || undefined,
+      menu_url: partial.menu_url?.trim() || undefined,
+      reservation_url: partial.reservation_url?.trim() || undefined,
+      reservation_status: partial.reservation_status || 'none',
+      state: 'candidate',
+      created_at: partial.created_at || now,
+      updated_at: partial.updated_at || now,
+    };
+  };
+
+  // 1. Try JSON
+  if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      for (const item of items) {
+        if (typeof item === 'object' && item !== null) {
+          const title = String(item.title || item.name || item.placeName || '').trim();
+          if (!title) continue;
+          const coords = item.coordinates || (
+            typeof item.lat === 'number' && typeof item.lng === 'number'
+              ? { lat: item.lat, lng: item.lng }
+              : undefined
+          );
+          results.push(makePlace({
+            ...item,
+            title,
+            coordinates: coords,
+          }));
+        }
+      }
+      if (results.length > 0) return results;
+    } catch {}
+  }
+
+  // 2. Try KML
+  if (trimmed.includes('<Placemark') || trimmed.includes('<kml')) {
+    const placemarkRegex = /<Placemark[\s\S]*?<\/Placemark>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = placemarkRegex.exec(trimmed)) !== null) {
+      const chunk = match[0];
+      const nameMatch = /<name>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/name>/i.exec(chunk);
+      const title = nameMatch ? nameMatch[1].trim() : '';
+      if (!title) continue;
+
+      const descMatch = /<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i.exec(chunk);
+      const addressMatch = /<address>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/address>/i.exec(chunk);
+      const coordMatch = /<coordinates>\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/i.exec(chunk);
+
+      let coordinates: { lat: number; lng: number } | undefined;
+      if (coordMatch) {
+        const lng = parseFloat(coordMatch[1]);
+        const lat = parseFloat(coordMatch[2]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          coordinates = { lat, lng };
+        }
+      }
+
+      results.push(makePlace({
+        title: title.replace(/^\d+\.\s*/, ''),
+        notes: descMatch ? descMatch[1].replace(/<[^>]+>/g, ' ').trim() : undefined,
+        address: addressMatch ? addressMatch[1].trim() : undefined,
+        coordinates,
+      }));
+    }
+    if (results.length > 0) return results;
+  }
+
+  // 3. Try CSV
+  if (trimmed.includes(',') && trimmed.includes('\n')) {
+    const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length > 1) {
+      const headerLine = lines[0].toLowerCase();
+      if (headerLine.includes('title') || headerLine.includes('kind') || headerLine.includes('name') || headerLine.includes('order')) {
+        const headers = splitCsvLine(lines[0]).map((h) => h.toLowerCase());
+        const titleIdx = headers.findIndex((h) => h === 'title' || h === 'name');
+        const kindIdx = headers.findIndex((h) => h === 'kind' || h === 'category');
+        const addrIdx = headers.findIndex((h) => h === 'address');
+        const priceIdx = headers.findIndex((h) => h === 'price' || h === 'observed_price');
+        const ratingIdx = headers.findIndex((h) => h === 'rating' || h === 'observed_rating');
+        const notesIdx = headers.findIndex((h) => h === 'notes' || h === 'why');
+        const urlIdx = headers.findIndex((h) => h.includes('url') || h.includes('link'));
+
+        if (titleIdx !== -1) {
+          for (let i = 1; i < lines.length; i++) {
+            const cells = splitCsvLine(lines[i]);
+            const title = cells[titleIdx];
+            if (!title) continue;
+            results.push(makePlace({
+              title,
+              kind: kindIdx !== -1 && cells[kindIdx] ? inferPlaceKind(cells[kindIdx]) : undefined,
+              address: addrIdx !== -1 ? cells[addrIdx] : undefined,
+              observed_price: priceIdx !== -1 ? cells[priceIdx] : undefined,
+              observed_rating: ratingIdx !== -1 && !isNaN(Number(cells[ratingIdx])) ? Number(cells[ratingIdx]) : undefined,
+              notes: notesIdx !== -1 ? cells[notesIdx] : undefined,
+              source_url: urlIdx !== -1 ? cells[urlIdx] : undefined,
+            }));
+          }
+          if (results.length > 0) return results;
+        }
+      }
+    }
+  }
+
+  // 4. Line-by-line / text & Google Maps links fallback
+  const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (/^https?:\/\//i.test(line)) {
+      const coords = extractPlaceCoordinates(line);
+      let title = 'Saved Place';
+      const placeMatch = /\/maps\/place\/([^/@?]+)/.exec(line);
+      if (placeMatch?.[1]) {
+        try { title = decodeURIComponent(placeMatch[1].replace(/\+/g, ' ')); } catch { title = placeMatch[1]; }
+      }
+      results.push(makePlace({
+        title,
+        source_url: line,
+        coordinates: coords ?? undefined,
+      }));
+    } else {
+      const cleanTitle = line.replace(/^[-*•\d+.)\]\s]+/, '').trim();
+      if (cleanTitle.length > 0) {
+        results.push(makePlace({
+          title: cleanTitle,
+        }));
+      }
+    }
+  }
+
+  return results;
+}
+
+export function parsePlaceExpenseEstimate(
+  place: PlannerTripPlace,
+  fallbackCurrency = 'USD',
+): { title: string; amount: number; currency: string; category: TripExpenseCategory } | null {
+  if (!place.observed_price && !place.title) return null;
+
+  const rawPrice = place.observed_price || '';
+  const numMatch = /(?:[¥￥$€£฿₩]|NT\$|HK\$|S\$|US\$|THB|USD|CNY|JPY|EUR|GBP)?\s*([\d,]+(?:\.\d+)?)/i.exec(rawPrice);
+  const amount = numMatch ? parseFloat(numMatch[1].replace(/,/g, '')) : 0;
+  if (!amount || isNaN(amount) || amount <= 0) return null;
+
+  const currency = extractPriceCurrency(rawPrice) || fallbackCurrency;
+
+  let category: TripExpenseCategory = 'other';
+  switch (place.kind) {
+    case 'stay':
+      category = 'stay';
+      break;
+    case 'food':
+    case 'cafe':
+      category = 'food';
+      break;
+    case 'attraction':
+    case 'experience':
+      category = 'ticket';
+      break;
+    case 'shopping':
+      category = 'shopping';
+      break;
+    case 'transit':
+      category = 'transit';
+      break;
+    default:
+      category = 'other';
+  }
+
+  return {
+    title: place.title,
+    amount,
+    currency,
+    category,
+  };
+}
+
+export function exportTripToMarkdown(
+  trip: PlannerTrip,
+  places: PlannerTripPlace[],
+  expenses: TripExpenseItem[] = [],
+  language: 'en' | 'zh' = 'zh',
+): string {
+  const zh = language === 'zh';
+  const tripPlaces = places.filter((p) => p.trip_id === trip.id && p.state !== 'dropped');
+  const dates = listTripDates(trip.start_date, trip.end_date);
+
+  const lines: string[] = [
+    `# ✈️ ${trip.title}`,
+    ``,
+    `> 📅 **${zh ? '行程日期' : 'Dates'}:** ${trip.start_date} ~ ${trip.end_date}  `,
+    `> 📍 **${zh ? '目的地' : 'Destinations'}:** ${(trip.destinations || []).join(', ') || (zh ? '未设定' : 'None')}  `,
+    `> 💰 **${zh ? '基础币种' : 'Currency'}:** ${trip.currency || 'USD'}  `,
+    `> 👥 **${zh ? '出行成员' : 'Members'}:** ${(trip.members || [zh ? '我' : 'Me']).join(', ')}  `,
+    ``,
+    `---`,
+    ``,
+    `## 📋 ${zh ? '每日日程安排' : 'Daily Itinerary'}`,
+    ``,
+  ];
+
+  dates.forEach((date, dayIdx) => {
+    const dayPlaces = sortPlannerPlaces(tripPlaces.filter((p) => p.scheduled_date === date && p.state === 'scheduled'));
+    lines.push(`### Day ${dayIdx + 1} (${date})`);
+
+    if (dayPlaces.length === 0) {
+      lines.push(`*${zh ? '暂未安排地点' : 'No places scheduled for this day.'}*\n`);
+      return;
+    }
+
+    const routeUrl = buildGoogleMapsRouteUrl(dayPlaces, trip.transport_mode);
+    if (routeUrl) {
+      lines.push(`🔗 [${zh ? 'Google Maps 路线导航' : 'Google Maps Directions'}](${routeUrl})\n`);
+    }
+
+    dayPlaces.forEach((p, idx) => {
+      const icon = PLANNER_KIND_ICONS[p.kind] || '📍';
+      const kindLabel = getPlannerKindLabel(p.kind, language);
+      const metaParts = [
+        kindLabel,
+        p.area,
+        p.preferred_window ? (zh ? `时段: ${p.preferred_window}` : `Window: ${p.preferred_window}`) : null,
+        p.duration_minutes ? (zh ? `${p.duration_minutes} 分钟` : `${p.duration_minutes} min`) : null,
+        p.observed_rating ? `★ ${p.observed_rating}` : null,
+        p.observed_price ? (zh ? `预估: ${p.observed_price}` : `Est: ${p.observed_price}`) : null,
+      ].filter(Boolean);
+
+      lines.push(`${idx + 1}. **${icon} ${p.title}** (${metaParts.join(' · ')})`);
+      if (p.address) lines.push(`   - 📍 ${zh ? '地址' : 'Address'}: ${p.address}`);
+      if (p.open_hours) lines.push(`   - ⏰ ${zh ? '营业时间' : 'Hours'}: ${p.open_hours}`);
+      if (p.phone) lines.push(`   - 📞 ${zh ? '电话' : 'Phone'}: ${p.phone}`);
+      if (p.why) lines.push(`   - 💡 ${zh ? '理由' : 'Why'}: ${p.why}`);
+      if (p.notes) lines.push(`   - 📝 ${zh ? '备注' : 'Notes'}: ${p.notes}`);
+      if (p.source_url) lines.push(`   - 🔗 [${zh ? '地点链接' : 'Place Link'}](${p.source_url})`);
+    });
+
+    lines.push(``);
+  });
+
+  const candidates = tripPlaces.filter((p) => p.state === 'candidate');
+  if (candidates.length > 0) {
+    lines.push(`---`, ``, `## 💡 ${zh ? '待选研究灵感池' : 'Candidate Research Pool'} (${candidates.length})`, ``);
+    candidates.forEach((c) => {
+      const icon = PLANNER_KIND_ICONS[c.kind] || '📍';
+      lines.push(`- **${icon} ${c.title}** (${getPlannerKindLabel(c.kind, language)}${c.area ? ` · ${c.area}` : ''}${c.observed_price ? ` · ${c.observed_price}` : ''})`);
+      if (c.why || c.notes) lines.push(`  *${c.why || c.notes}*`);
+    });
+    lines.push(``);
+  }
+
+  const tripExpenses = expenses.filter((e) => e.trip_id === trip.id);
+  if (tripExpenses.length > 0) {
+    lines.push(`---`, ``, `## 💰 ${zh ? '费用账本汇总' : 'Expense Summary'}`, ``);
+    let total = 0;
+    tripExpenses.forEach((e) => {
+      total += e.amount;
+      lines.push(`- **${e.date || '-'}** | ${e.title} (${e.category}): ${e.currency} ${e.amount} (${zh ? '付款人' : 'Paid by'}: ${e.paid_by})`);
+    });
+    lines.push(``, `**${zh ? '总支出笔数' : 'Total Entries'}:** ${tripExpenses.length} | **${zh ? '累计金额' : 'Total Amount'}:** ${total.toFixed(2)} ${trip.currency || ''}`, ``);
+  }
+
+  return lines.join('\n');
+}
+
 
