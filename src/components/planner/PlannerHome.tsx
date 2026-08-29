@@ -1356,7 +1356,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           }`}>
                             <span>
                               {transition?.leg
-                                ? `${transition.leg.mode === 'walking' ? '🚶' : transition.leg.mode === 'driving' ? '🚗' : transition.leg.mode === 'bicycling' ? '🚲' : '🚇'} ${transition.leg.duration_minutes} min${transition.leg.distance_meters !== undefined ? ` · ${transition.leg.distance_meters < 1000 ? `${transition.leg.distance_meters} m` : `${(transition.leg.distance_meters / 1000).toFixed(1)} km`}` : ''}`
+                                ? `${transition.leg.mode === 'walking' ? '🚶' : transition.leg.mode === 'driving' ? '🚗' : transition.leg.mode === 'bicycling' ? '🚲' : '🚇'} ${transition.leg.duration_minutes} min${transition.leg.distance_meters !== undefined ? ` · ${transition.leg.distance_meters < 1000 ? `${transition.leg.distance_meters} m` : `${(transition.leg.distance_meters / 1000).toFixed(1)} km`}` : ''}${transition.leg.source === 'openrouteservice' ? ' · ORS · OSM' : ''}`
                                 : (zh ? '❔ 交通时间未确认' : '❔ Travel time unknown')}
                             </span>
                             {transition?.status === 'ok' && transition.earliest_arrival ? (

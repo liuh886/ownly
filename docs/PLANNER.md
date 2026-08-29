@@ -96,4 +96,4 @@ MCP offers two explicit prepare/commit paths:
 - `ownly_planner_prepare_set_travel_leg`: save a user-verified leg, including public-transit time.
 - `ownly_planner_prepare_refresh_day_travel`: refresh only adjacent walking/driving/bicycling pairs through OpenRouteService using `OPENROUTESERVICE_API_KEY`; manual legs are preserved.
 
-The browser remains a consumer of canonical `Trip Legs/` facts. API keys are not shipped in the static Web/PWA bundle. Google Maps remains the live-navigation handoff.
+The browser remains a consumer of canonical `Trip Legs/` facts. API keys are not shipped in the static Web/PWA bundle. OpenRouteService-derived facts are labeled `ORS · OSM` in the Planner UI. Google Maps remains the live-navigation handoff.

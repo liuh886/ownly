@@ -38,6 +38,10 @@ const PREPARE_WRITE_ANNOTATIONS = {
   idempotentHint: false,
   openWorldHint: false,
 };
+const PREPARE_OPEN_WORLD_ANNOTATIONS = {
+  ...PREPARE_WRITE_ANNOTATIONS,
+  openWorldHint: true,
+};
 const COMMIT_WRITE_ANNOTATIONS = {
   readOnlyHint: false,
   destructiveHint: true,
@@ -332,7 +336,7 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
         trip_id: z.string().min(1),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       }),
-      annotations: PREPARE_WRITE_ANNOTATIONS,
+      annotations: PREPARE_OPEN_WORLD_ANNOTATIONS,
     },
     safeHandler(async ({ trip_id, date }) => {
       const refresh = await buildOpenRouteServiceDayLegs(
