@@ -14,6 +14,7 @@ import {
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
+import { findPlannerTimeOverlaps } from '../../src/domain/planner-schedule';
 import { exportTripToICalProMarkdown, type ICalProExportOptions } from '../../src/domain/ical-pro';
 
 function requireTrip(dataLocation: string, tripId: string) {
@@ -62,6 +63,7 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
   const conflicts = listTripDates(trip.start_date, trip.end_date)
     .map((date) => {
       const summary = checkDayScheduleCollisions(places, date);
+      const timeOverlaps = findPlannerTimeOverlaps(places, date);
       const collisions = places
         .filter((place) => place.scheduled_date === date && summary.placeCollisions[place.id]?.isCollision)
         .map((place) => ({
@@ -71,15 +73,15 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
         }));
       return {
         date,
-        has_collision: summary.hasCollision,
+        has_collision: summary.hasCollision || timeOverlaps.length > 0,
         collisions,
-        time_overlaps: summary.timeOverlaps,
+        time_overlaps: timeOverlaps,
         is_overloaded: summary.isOverloaded,
         overload_reason: summary.overloadReason,
         long_transits: summary.longTransits,
       };
     })
-    .filter((day) => day.has_collision || day.collisions.length > 0);
+    .filter((day) => day.has_collision);
 
   return {
     trip,

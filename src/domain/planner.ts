@@ -560,12 +560,6 @@ export function checkOpeningHoursCollision(
   return { isCollision: false };
 }
 
-function parseClockMinutes(value?: string | null): number | null {
-  if (!value || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
-  const [h, m] = value.split(':').map(Number);
-  return h * 60 + m;
-}
-
 export interface DayScheduleCollisionSummary {
   hasCollision: boolean;
   placeCollisions: Record<string, { isCollision: boolean; reason?: string }>;
@@ -573,7 +567,6 @@ export interface DayScheduleCollisionSummary {
   isOverloaded: boolean;
   overloadReason?: string;
   longTransits: Array<{ fromTitle: string; toTitle: string; distanceKm: number; warning: string }>;
-  timeOverlaps: Array<{ fromTitle: string; toTitle: string; fromTime: string; toTime: string; warning: string }>;
 }
 
 export function checkDayScheduleCollisions(
@@ -618,39 +611,6 @@ export function checkDayScheduleCollisions(
     }
   }
 
-  const timeOverlaps: Array<{ fromTitle: string; toTitle: string; fromTime: string; toTime: string; warning: string }> = [];
-  const timedItems: Array<{ place: PlannerTripPlace; start: number; end: number; startStr: string; endStr: string }> = [];
-  scheduled.forEach((p) => {
-    const s = parseClockMinutes(p.scheduled_start);
-    if (s !== null && p.duration_minutes && p.duration_minutes > 0) {
-      const e = s + p.duration_minutes;
-      const endH = Math.floor(e / 60) % 24;
-      const endM = e % 60;
-      const endStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
-      timedItems.push({ place: p, start: s, end: e, startStr: p.scheduled_start!, endStr });
-    }
-  });
-
-  timedItems.sort((a, b) => a.start - b.start);
-  for (let i = 1; i < timedItems.length; i++) {
-    const prev = timedItems[i - 1];
-    const curr = timedItems[i];
-    if (curr.start < prev.end) {
-      const warning = `与【${prev.place.title}】(${prev.startStr}-${prev.endStr}) 存在时间重叠 (${curr.startStr}-${curr.endStr})`;
-      timeOverlaps.push({
-        fromTitle: prev.place.title,
-        toTitle: curr.place.title,
-        fromTime: `${prev.startStr}-${prev.endStr}`,
-        toTime: `${curr.startStr}-${curr.endStr}`,
-        warning,
-      });
-      placeCollisions[curr.place.id] = { isCollision: true, reason: warning };
-      if (!placeCollisions[prev.place.id]?.isCollision) {
-        placeCollisions[prev.place.id] = { isCollision: true, reason: `与【${curr.place.title}】(${curr.startStr}-${curr.endStr}) 存在时间重叠` };
-      }
-      hasCollision = true;
-    }
-  }
 
   return {
     hasCollision,
@@ -659,7 +619,6 @@ export function checkDayScheduleCollisions(
     isOverloaded,
     overloadReason,
     longTransits,
-    timeOverlaps,
   };
 }
 

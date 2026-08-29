@@ -1110,39 +1110,6 @@ describe('checkOpeningHoursCollision & checkDayScheduleCollisions', () => {
     expect(summary.longTransits[0].distanceKm).toBeGreaterThan(20);
   });
 
-  it('detects time overlaps between timed places on the same date', () => {
-    const places: PlannerTripPlace[] = [
-      place('stop1', {
-        title: 'Morning Temple',
-        state: 'scheduled',
-        scheduled_date: '2026-10-20',
-        scheduled_start: '09:00',
-        duration_minutes: 90, // 09:00 - 10:30
-      }),
-      place('stop2', {
-        title: 'Overlapping Museum',
-        state: 'scheduled',
-        scheduled_date: '2026-10-20',
-        scheduled_start: '10:00',
-        duration_minutes: 60, // 10:00 - 11:00 (overlaps with stop1 from 10:00 to 10:30)
-      }),
-      place('stop3', {
-        title: 'Afternoon Lunch',
-        state: 'scheduled',
-        scheduled_date: '2026-10-20',
-        scheduled_start: '11:30',
-        duration_minutes: 60, // 11:30 - 12:30 (no overlap)
-      }),
-    ];
-
-    const summary = checkDayScheduleCollisions(places, '2026-10-20');
-    expect(summary.hasCollision).toBe(true);
-    expect(summary.timeOverlaps).toHaveLength(1);
-    expect(summary.timeOverlaps[0].fromTitle).toBe('Morning Temple');
-    expect(summary.timeOverlaps[0].toTitle).toBe('Overlapping Museum');
-    expect(summary.placeCollisions['stop2']?.isCollision).toBe(true);
-    expect(summary.placeCollisions['stop2']?.reason).toContain('Morning Temple');
-  });
 });
 
 describe('parseImportPayload', () => {

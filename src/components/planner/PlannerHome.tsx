@@ -35,7 +35,7 @@ import {
   PLANNER_KIND_LABELS,
 } from '@/domain/planner';
 import { exportTripToICalProMarkdown, ICAL_PRO_PRIORITY_MAP } from '@/domain/ical-pro';
-import { getScheduledEndTime } from '@/domain/planner-schedule';
+import { findPlannerTimeOverlaps, getScheduledEndTime } from '@/domain/planner-schedule';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';
@@ -689,6 +689,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     return checkDayScheduleCollisions(tripPlaces, activeDate);
   }, [tripPlaces, activeDate]);
 
+  const dayTimeOverlaps = useMemo(() => {
+    return findPlannerTimeOverlaps(tripPlaces, activeDate);
+  }, [tripPlaces, activeDate]);
+
   const dayEstimatedCost = useMemo(() => {
     if (!selectedTrip) return { total: 0, unconverted: 0 };
     let total = 0;
@@ -763,18 +767,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const saveICalProMarkdownToVault = useCallback(async () => {
     if (!selectedTrip) return;
     try {
-      const fileName = await plannerRepository.saveTripICalMarkdown(selectedTrip, places);
+      const fileName = await plannerRepository.saveTripICalMarkdown(selectedTrip.id);
       setNotice(
         zh
-          ? `已成功保存行程单至 Trips/${fileName}，Obsidian iCal Pro 插件将自动索引并同步至 Google Calendar！`
-          : `Saved itinerary to Trips/${fileName} for Obsidian iCal Pro plugin!`,
+          ? `已更新 Trips/${fileName} 日历投影；订阅日历将在客户端下一次刷新时更新。`
+          : `Updated Trips/${fileName}; subscribed calendars will update on their next client refresh.`,
       );
       setTimeout(() => setNotice(''), 4000);
     } catch (err) {
       setNotice(zh ? `保存至 Vault 失败: ${String(err)}` : `Failed to save to Vault: ${String(err)}`);
       setTimeout(() => setNotice(''), 4000);
     }
-  }, [selectedTrip, places, zh]);
+  }, [selectedTrip, zh]);
 
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;
@@ -949,7 +953,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             type="button"
             onClick={() => void saveICalProMarkdownToVault()}
             className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
-            title={zh ? '一键生成并保存 iCal Pro 行程单至 Vault 的 Trips/ 目录（由 iCal Pro 插件直接同步 Google Calendar）' : 'Save iCal Pro itinerary to Vault (Trips/) for calendar sync'}
+            title={zh ? '从当前 Planner/Vault 权威状态重新生成 iCal Pro 日历投影' : 'Regenerate the iCal Pro projection from canonical Planner/Vault state'}
           >
             <span>💾</span>
             <span>{zh ? '保存日历至 Vault' : 'Save to Vault'}</span>
@@ -1209,8 +1213,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               </span>
             </div>
           ) : null}
-          {dayCollisions.isOverloaded || dayCollisions.longTransits.length > 0 ? (
+          {dayCollisions.isOverloaded || dayCollisions.longTransits.length > 0 || dayTimeOverlaps.length > 0 ? (
             <div className="mx-4 mt-2 space-y-1">
+              {dayTimeOverlaps.map((overlap) => (
+                <div key={`${overlap.fromId}-${overlap.toId}`} className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900 shadow-2xs font-medium">
+                  <span>⚠️</span>
+                  <span>{zh ? `${overlap.fromTitle} 与 ${overlap.toTitle} 时段重叠（${overlap.fromTime} / ${overlap.toTime}）` : `${overlap.fromTitle} overlaps ${overlap.toTitle} (${overlap.fromTime} / ${overlap.toTime})`}</span>
+                </div>
+              ))}
               {dayCollisions.isOverloaded ? (
                 <div className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 shadow-2xs font-medium">
                   <span>⚠️</span>
@@ -1233,7 +1243,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             ) : (
               <ol className="space-y-1.5">
                 {scheduled.map((place, index) => {
-                  const col = dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
+                  const timeOverlap = dayTimeOverlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
+                  const col = timeOverlap
+                    ? { isCollision: true, reason: zh ? '与当天其它地点存在时间重叠' : 'Overlaps another timed stop on this day' }
+                    : dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
                   const scheduledEnd = getScheduledEndTime(place.scheduled_start, place.duration_minutes);
                   return (
                     <li
@@ -1255,7 +1268,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                   ? 'bg-stone-100 text-stone-700 hover:bg-stone-200 ring-1 ring-stone-300/60'
                                   : 'border border-dashed border-stone-300 bg-white text-stone-400 hover:border-stone-400 hover:text-stone-700'
                               }`}
-                              title={zh ? '点击设置/修改此站的开始时间与停留时长（自动投影至 Google Calendar）' : 'Click to adjust start time & duration for Google Calendar sync'}
+                              title={zh ? '设置此站的开始时间与停留时长；日历投影由 Planner 权威状态生成' : 'Set start time and duration; calendar output is derived from Planner state'}
                             >
                               <span>🕒</span>
                               <span>{place.scheduled_start ? `${place.scheduled_start}${scheduledEnd ? `-${scheduledEnd}` : ''}` : (zh ? '设时间' : 'Time')}</span>
