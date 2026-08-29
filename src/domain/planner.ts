@@ -80,6 +80,8 @@ export interface PlannerTripPlace {
   reservation_status: PlannerReservationStatus;
   state: PlannerPlaceState;
   scheduled_date?: string;
+  /** Canonical local start time for an executable itinerary item (HH:mm). */
+  scheduled_start?: string;
   sort_order?: number;
   locked?: boolean;
   /** Contact & structured extras captured from Google Maps. */
@@ -124,6 +126,7 @@ export function asCaptureCandidate(place: PlannerTripPlace): PlannerTripPlace {
     reservation_status: place.reservation_status ?? 'none',
     state: 'candidate',
     scheduled_date: undefined,
+    scheduled_start: undefined,
     sort_order: undefined,
     locked: undefined,
   };
@@ -2311,14 +2314,3 @@ export function exportTripToMarkdown(
   return lines.join('\n');
 }
 
-export {
-  calculateDayTimeSlots,
-  exportTripToICalProMarkdown,
-  generateAiItineraryPlan,
-  parseICalProMarkdown,
-  ICAL_PRO_PRIORITY_MAP,
-  REVERSE_PRIORITY_MAP,
-  type ICalProExportOptions,
-  type AiPlanOptions,
-  type AiItineraryResult,
-} from './ical-pro';

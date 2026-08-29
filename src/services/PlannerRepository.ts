@@ -1,13 +1,13 @@
 import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
 import {
   ensurePlaceKindTag,
-  exportTripToICalProMarkdown,
   mergeCapturedPlaceResearch,
   normalizePlaceIdentity,
   type PlannerTrip,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '@/domain/planner';
+import { exportTripToICalProMarkdown } from '@/domain/ical-pro';
 import { obsidianService } from './ObsidianFileSystemService';
 
 export interface PlannerFileStore {
@@ -278,6 +278,7 @@ export class PlannerRepository {
       ...existing,
       state: 'candidate',
       scheduled_date: undefined,
+      scheduled_start: undefined,
       sort_order: undefined,
       locked: false,
       updated_at: new Date().toISOString(),

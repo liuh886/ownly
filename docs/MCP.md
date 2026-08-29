@@ -90,8 +90,7 @@ claude mcp list
 | `ownly_planner_summary` | Trips overview with place-state and expense counts |
 | `ownly_planner_get_trip` | Full trip context: budget (FX-aware), day conflicts, places, bookings, expenses |
 | `ownly_planner_budget_estimate` | Scheduled-day budget converted into the trip base currency |
-| `ownly_planner_get_ical_markdown` | Export trip in obsidian-ical-plugin-pro syntax (VEVENT time slots for Google Calendar) |
-| `ownly_planner_ai_plan` | Deterministic AI planner itinerary generator with proximity clustering and realistic time slot allocation |
+| `ownly_planner_get_ical_markdown` | Project confirmed Planner/Vault schedule facts into obsidian-ical-plugin-pro Markdown |
 
 ## Opt-in write mode
 
@@ -137,8 +136,8 @@ Write tools:
 | `ownly_planner_prepare_drop_place` | Preview marking a place dropped |
 | `ownly_planner_prepare_add_expense` | Preview appending an AA-ledger expense |
 | `ownly_planner_prepare_set_fx_rates` | Preview persisting trip FX-rate overrides |
-| `ownly_planner_prepare_apply_ai_plan` | Preview bulk applying an AI planned itinerary to the Vault |
-| `ownly_planner_prepare_save_ical_markdown` | Preview saving an iCal Pro Markdown file into Trips/ for Google Calendar sync |
+| `ownly_planner_prepare_apply_schedule_proposal` | Validate and preview an MCP client/LLM schedule proposal without changing locked/anchored stops |
+| `ownly_planner_prepare_save_ical_markdown` | Preview regenerating the derived iCal Pro Markdown projection from canonical Planner facts |
 | `ownly_commit_operation` | Back up and persist a confirmed preview |
 | `ownly_discard_operation` | Remove a preview without touching files |
 

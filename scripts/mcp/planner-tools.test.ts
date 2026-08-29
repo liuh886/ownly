@@ -8,7 +8,6 @@ import {
   getPlannerSummary,
   getPlannerTripDetail,
   getPlannerTripICalMarkdown,
-  generatePlannerAiPlan,
 } from './planner-tools';
 
 const temporaryRoots: string[] = [];
@@ -61,6 +60,8 @@ function createFixture(): { root: string; trip: PlannerTrip; place: PlannerTripP
     scheduled_date: '2026-11-01',
     sort_order: 0,
     locked: true,
+    scheduled_start: '09:00',
+    duration_minutes: 90,
     observed_price: '฿500',
     open_hours: 'Sunday: Closed; Mon-Sat: 08:30-15:30',
   });
@@ -150,30 +151,13 @@ describe('Planner ledger via vault (smoke through repository contract)', () => {
   });
 });
 
-describe('Planner MCP iCal Pro & AI Planner', () => {
-  it('exports trip to obsidian-ical-plugin-pro compatible markdown', () => {
+describe('Planner MCP calendar projection', () => {
+  it('exports only canonical Planner time facts to iCal Pro Markdown', () => {
     const { root } = createFixture();
     const result = getPlannerTripICalMarkdown(root, 'trip-1');
     expect(result.tripId).toBe('trip-1');
     expect(result.title).toBe('Bangkok 2026');
-    expect(result.markdown).toContain('type: trip_itinerary');
-    expect(result.markdown).toContain('## Day 1 · 2026-11-01');
-    expect(result.markdown).toContain('Grand Palace');
-  });
-
-  it('generates an AI planned itinerary with realistic time slots and distributes candidates', () => {
-    const { root } = createFixture();
-    const result = generatePlannerAiPlan(root, 'trip-1', { maxPlacesPerDay: 2 }) as {
-      trip_id: string;
-      scheduled_count: number;
-      planned_places: Array<{ id: string; state: string; scheduled_date: string | null }>;
-      ical_pro_markdown: string;
-    };
-    expect(result.trip_id).toBe('trip-1');
-    expect(result.scheduled_count).toBe(2);
-    expect(result.planned_places.map((p) => p.id)).toContain('grand-palace');
-    expect(result.planned_places.map((p) => p.id)).toContain('wat-pho');
-    expect(result.ical_pro_markdown).toContain('Bangkok 2026');
+    expect(result.markdown).toContain('2026-11-01 09:00-10:30');
+    expect(result.markdown).not.toContain('ownly-ai-planner');
   });
 });
-

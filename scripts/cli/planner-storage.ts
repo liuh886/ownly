@@ -100,6 +100,7 @@ export function returnPlaceToPool(place: PlannerTripPlace): PlannerTripPlace {
     ...place,
     state: 'candidate',
     scheduled_date: undefined,
+    scheduled_start: undefined,
     sort_order: undefined,
   };
 }

@@ -44,7 +44,6 @@ import {
   writeEntry,
 } from '../cli/storage';
 import {
-  exportTripToICalProMarkdown,
   generateStaySpanPlaces,
   optimizeStopsSequence,
   type FxSettings,
@@ -52,6 +51,8 @@ import {
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
+import { exportTripToICalProMarkdown } from '../../src/domain/ical-pro';
+import { evaluatePlannerScheduleProposal, type PlannerScheduleProposalItem } from '../../src/domain/planner-schedule';
 
 export type OwnlyMutationErrorCode =
   | 'WRITE_DISABLED'
@@ -754,98 +755,95 @@ export class OwnlyWriteService {
     });
   }
 
-  preparePlannerApplyAiPlan(
+  preparePlannerApplyScheduleProposal(
     tripId: string,
-    plan: {
-      planned_places: Array<{
-        id: string;
-        state: 'scheduled' | 'candidate';
-        scheduled_date?: string | null;
-        sort_order?: number | null;
-        locked?: boolean;
-        duration_minutes?: number | null;
-      }>;
-    },
+    proposal: { places: PlannerScheduleProposalItem[] },
   ): PreparedOwnlyOperation {
     const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), tripId);
     if (!tripEntry) {
       throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
     }
-    const allPlaces = listPlannerPlaces(this.dataLocation);
-    const planMap = new Map(plan.planned_places.map((p) => [p.id, p] as const));
-    const updates: Array<{ entry: (typeof allPlaces)[0]; next: PlannerTripPlace }> = [];
-    const expectedMap = new Map<string, string | null>();
-
-    for (const entry of allPlaces) {
-      const p = planMap.get(entry.frontmatter.id);
-      if (!p) continue;
-      expectedMap.set(entry.filePath, fingerprint(entry.filePath));
-      const next: PlannerTripPlace = {
-        ...entry.frontmatter,
-        state: p.state,
-        scheduled_date: p.scheduled_date || undefined,
-        sort_order: typeof p.sort_order === 'number' ? p.sort_order : undefined,
-        locked: p.locked ?? Boolean(p.scheduled_date),
-        duration_minutes: p.duration_minutes ?? entry.frontmatter.duration_minutes,
-        updated_at: todayISO(this.now()),
-      };
-      updates.push({ entry, next });
+    const trip = tripEntry.frontmatter as unknown as PlannerTrip;
+    const allEntries = listPlannerPlaces(this.dataLocation);
+    const tripEntries = allEntries.filter((entry) => entry.frontmatter.trip_id === tripId);
+    const currentPlaces = tripEntries.map((entry) => entry.frontmatter as unknown as PlannerTripPlace);
+    const evaluation = evaluatePlannerScheduleProposal(trip, currentPlaces, proposal.places);
+    const errors = evaluation.issues.filter((issue) => issue.severity === 'error');
+    if (errors.length > 0) {
+      throw new OwnlyMutationError(
+        `Schedule proposal is invalid: ${errors.map((issue) => issue.message).join(' | ')}`,
+        'INVALID_INPUT' as OwnlyMutationErrorCode,
+      );
     }
+
+    const nextById = new Map(evaluation.places.map((place) => [place.id, place] as const));
+    const proposedIds = new Set(proposal.places.map((place) => place.id));
+    const updates = tripEntries
+      .filter((entry) => proposedIds.has(entry.frontmatter.id))
+      .map((entry) => ({ entry, next: nextById.get(entry.frontmatter.id)! }))
+      .filter(({ entry, next }) => (
+        entry.frontmatter.state !== next.state
+        || entry.frontmatter.scheduled_date !== next.scheduled_date
+        || entry.frontmatter.scheduled_start !== next.scheduled_start
+        || entry.frontmatter.sort_order !== next.sort_order
+        || entry.frontmatter.duration_minutes !== next.duration_minutes
+      ));
 
     if (updates.length === 0) {
-      throw new OwnlyMutationError('No matching places to update from AI plan.', 'INVALID_INPUT' as OwnlyMutationErrorCode);
+      throw new OwnlyMutationError('Schedule proposal does not change any Planner decision.', 'INVALID_INPUT' as OwnlyMutationErrorCode);
     }
+    const expectedMap = new Map(updates.map(({ entry }) => [entry.filePath, fingerprint(entry.filePath)] as const));
+    const warnings = evaluation.issues.filter((issue) => issue.severity === 'warning');
 
     return this.prepare(
-      'planner_apply_ai_plan',
+      'planner_apply_schedule_proposal',
       {
         trip_id: tripId,
-        planned_count: updates.length,
-        updates: updates.map((u) => ({
-          id: u.entry.frontmatter.id,
-          title: u.entry.frontmatter.title,
-          state: u.next.state,
-          date: u.next.scheduled_date,
-          order: u.next.sort_order,
+        updated_count: updates.length,
+        warnings,
+        updates: updates.map(({ entry, next }) => ({
+          id: entry.frontmatter.id,
+          title: entry.frontmatter.title,
+          scheduled_date: next.scheduled_date,
+          scheduled_start: next.scheduled_start,
+          duration_minutes: next.duration_minutes,
+          sort_order: next.sort_order,
+          locked: next.locked ?? false,
         })),
       },
       () => {
         for (const { entry, next } of updates) {
           assertUnchanged(entry.filePath, expectedMap.get(entry.filePath)!);
-          writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
+          const persisted = { ...next, updated_at: todayISO(this.now()) };
+          writeEntry(dirname(entry.filePath), entry.fileName, persisted, entry.body);
         }
-        writeAgentLog(this.dataLocation, 'planner_apply_ai_plan', tripId, null, { updated_count: updates.length });
-        return { trip_id: tripId, applied_count: updates.length };
+        writeAgentLog(this.dataLocation, 'planner_apply_schedule_proposal', tripId, null, { updated_count: updates.length, warnings });
+        return { trip_id: tripId, applied_count: updates.length, warnings };
       },
     );
   }
 
-  preparePlannerSaveICalMarkdown(tripId: string, customMarkdown?: string): PreparedOwnlyOperation {
+  preparePlannerSaveICalMarkdown(tripId: string): PreparedOwnlyOperation {
     const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), tripId);
     if (!tripEntry) {
       throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
     }
     const trip = tripEntry.frontmatter as unknown as PlannerTrip;
-    let markdown = customMarkdown;
-    if (!markdown) {
-      const places = listPlannerPlaces(this.dataLocation)
-        .map((e) => e.frontmatter as unknown as PlannerTripPlace)
-        .filter((p) => p.trip_id === tripId);
-      markdown = exportTripToICalProMarkdown(trip, places);
-    }
-
+    const placeEntries = listPlannerPlaces(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === tripId);
+    const places = placeEntries.map((entry) => entry.frontmatter as unknown as PlannerTripPlace);
+    const markdown = exportTripToICalProMarkdown(trip, places);
+    const expectedTrip = fingerprint(tripEntry.filePath);
+    const expectedPlaces = new Map(placeEntries.map((entry) => [entry.filePath, fingerprint(entry.filePath)] as const));
     const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.trips);
     const fileName = `trip--${trip.id}.itinerary.md`;
     const targetPath = join(directory, fileName);
 
     return this.prepare(
       'planner_save_ical_markdown',
-      {
-        trip_id: tripId,
-        target_file: fileName,
-        length: markdown.length,
-      },
+      { trip_id: tripId, target_file: fileName, length: markdown.length },
       () => {
+        assertUnchanged(tripEntry.filePath, expectedTrip);
+        for (const entry of placeEntries) assertUnchanged(entry.filePath, expectedPlaces.get(entry.filePath)!);
         mkdirSync(directory, { recursive: true });
         writeFileSync(targetPath, markdown, 'utf8');
         writeAgentLog(this.dataLocation, 'planner_save_ical_markdown', tripId, null, { file_name: fileName });

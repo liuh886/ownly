@@ -12,7 +12,6 @@ import {
 } from '@/domain/departure';
 import {
   buildGoogleMapsRouteUrl,
-  calculateDayTimeSlots,
   checkOpeningHoursCollision,
   checkDayScheduleCollisions,
   currencySymbolFor,
@@ -20,7 +19,6 @@ import {
   ensurePlaceKindTag,
   exportPlacesToCSV,
   exportPlacesToKML,
-  exportTripToICalProMarkdown,
   exportTripToMarkdown,
   extractPlaceCoordinates,
   getPlannerKindLabel,
@@ -33,10 +31,11 @@ import {
   optimizeStopsSequence,
   parsePlaceExpenseEstimate,
   sortPlannerPlaces,
-  ICAL_PRO_PRIORITY_MAP,
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
 } from '@/domain/planner';
+import { exportTripToICalProMarkdown, ICAL_PRO_PRIORITY_MAP } from '@/domain/ical-pro';
+import { getScheduledEndTime } from '@/domain/planner-schedule';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';
@@ -709,10 +708,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     return { total: Math.round(total * 100) / 100, unconverted };
   }, [currentExpenses, activeDate, selectedTrip]);
 
-  const dayTimeSlots = useMemo(() => {
-    return calculateDayTimeSlots(scheduled);
-  }, [scheduled]);
-
   const copyMarkdownItinerary = useCallback(async () => {
     if (!selectedTrip) return;
     const md = exportTripToMarkdown(selectedTrip, places, currentExpenses, language);
@@ -727,8 +722,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     await navigator.clipboard.writeText(md);
     setNotice(
       zh
-        ? '已生成 iCal Pro Markdown 行程单！已复制到剪贴板，可供 obsidian-ical-plugin-pro 自动同步至 Google Calendar。'
-        : 'Copied iCal Pro Markdown itinerary! Compatible with obsidian-ical-plugin-pro for Google Calendar sync.',
+        ? '已复制 iCal Pro 日历投影；时间只来自 Planner 已确认的开始时间与时长。'
+        : 'Copied the iCal Pro calendar projection; timed events only use confirmed Planner start times and durations.',
     );
     setTimeout(() => setNotice(''), 4000);
   }, [selectedTrip, places, language, zh]);
@@ -745,8 +740,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     URL.revokeObjectURL(url);
     setNotice(
       zh
-        ? '已下载 iCal Pro 行程单文件 (.md)，放入 Obsidian Vault 即可被 iCal Pro 插件同步至 Google Calendar！'
-        : 'Downloaded iCal Pro itinerary file (.md)!',
+        ? '已下载 iCal Pro 日历投影 (.md)；可放入 Obsidian Vault 由 iCal Pro 生成订阅源。'
+        : 'Downloaded the iCal Pro calendar projection (.md).',
     );
   }, [selectedTrip, places, language, zh]);
 
@@ -1199,7 +1194,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <ol className="space-y-1.5">
                 {scheduled.map((place, index) => {
                   const col = dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
-                  const slot = dayTimeSlots[index];
+                  const scheduledEnd = getScheduledEndTime(place.scheduled_start, place.duration_minutes);
                   return (
                     <li
                       key={place.id}
@@ -1212,9 +1207,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
-                            {slot ? (
+                            {place.scheduled_start ? (
                               <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
-                                🕒 {slot.startTime}-{slot.endTime}
+                                🕒 {place.scheduled_start}{scheduledEnd ? `-${scheduledEnd}` : ''}
                               </span>
                             ) : null}
                             {place.priority ? (

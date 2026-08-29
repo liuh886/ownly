@@ -8,29 +8,24 @@ import { OwnlyMcpError } from './ownly-tools';
 import {
   estimateTripBudget,
   checkOpeningHoursCollision,
-  exportTripToICalProMarkdown,
-  generateAiItineraryPlan,
   listTripDates,
-  type AiPlanOptions,
   type FxSettings,
-  type ICalProExportOptions,
   type PlannerTrip,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
+import { exportTripToICalProMarkdown, type ICalProExportOptions } from '../../src/domain/ical-pro';
 
 function requireTrip(dataLocation: string, tripId: string) {
-  const entry = listPlannerTrips(dataLocation).find((e) => e.frontmatter.id === tripId);
-  if (!entry) {
-    throw new OwnlyMcpError(`Planner trip was not found: ${tripId}`, 'NOT_FOUND');
-  }
+  const entry = listPlannerTrips(dataLocation).find((item) => item.frontmatter.id === tripId);
+  if (!entry) throw new OwnlyMcpError(`Planner trip was not found: ${tripId}`, 'NOT_FOUND');
   return entry.frontmatter as unknown as PlannerTrip;
 }
 
 export function getPlannerSummary(dataLocation: string): Record<string, unknown> {
-  const trips = listPlannerTrips(dataLocation).map((e) => e.frontmatter);
-  const places = listPlannerPlaces(dataLocation).map((e) => e.frontmatter);
-  const expenses = listPlannerExpenses(dataLocation).map((e) => e.frontmatter);
+  const trips = listPlannerTrips(dataLocation).map((item) => item.frontmatter);
+  const places = listPlannerPlaces(dataLocation).map((item) => item.frontmatter);
+  const expenses = listPlannerExpenses(dataLocation).map((item) => item.frontmatter);
   return {
     trips: trips.map((trip) => ({
       id: trip.id,
@@ -38,47 +33,41 @@ export function getPlannerSummary(dataLocation: string): Record<string, unknown>
       status: trip.status,
       dates: `${trip.start_date} → ${trip.end_date}`,
       currency: trip.currency ?? null,
-      places_total: places.filter((p) => p.trip_id === trip.id).length,
-      scheduled: places.filter((p) => p.trip_id === trip.id && p.state === 'scheduled').length,
-      candidates: places.filter((p) => p.trip_id === trip.id && p.state === 'candidate').length,
-      dropped: places.filter((p) => p.trip_id === trip.id && p.state === 'dropped').length,
-      expenses: expenses.filter((e) => e.trip_id === trip.id).length,
+      places_total: places.filter((place) => place.trip_id === trip.id).length,
+      scheduled: places.filter((place) => place.trip_id === trip.id && place.state === 'scheduled').length,
+      candidates: places.filter((place) => place.trip_id === trip.id && place.state === 'candidate').length,
+      dropped: places.filter((place) => place.trip_id === trip.id && place.state === 'dropped').length,
+      expenses: expenses.filter((expense) => expense.trip_id === trip.id).length,
     })),
-    totals: {
-      trips: trips.length,
-      places: places.length,
-      expenses: expenses.length,
-    },
+    totals: { trips: trips.length, places: places.length, expenses: expenses.length },
   };
 }
 
 export function getPlannerTripDetail(dataLocation: string, tripId: string): Record<string, unknown> {
   const trip = requireTrip(dataLocation, tripId);
   const places = listPlannerPlaces(dataLocation)
-    .map((e) => e.frontmatter as unknown as PlannerTripPlace)
-    .filter((p) => p.trip_id === tripId && p.state !== 'dropped')
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    .map((item) => item.frontmatter as unknown as PlannerTripPlace)
+    .filter((place) => place.trip_id === tripId && place.state !== 'dropped')
+    .sort((left, right) => (left.sort_order ?? Number.MAX_SAFE_INTEGER) - (right.sort_order ?? Number.MAX_SAFE_INTEGER));
   const bookings = listPlannerBookings(dataLocation)
-    .map((e) => e.frontmatter as unknown as { trip_id: string; [k: string]: unknown })
-    .filter((b) => b.trip_id === tripId);
+    .map((item) => item.frontmatter as unknown as { trip_id: string; [key: string]: unknown })
+    .filter((booking) => booking.trip_id === tripId);
   const expenses = listPlannerExpenses(dataLocation)
-    .map((e) => e.frontmatter as unknown as TripExpenseItem)
-    .filter((x) => x.trip_id === tripId);
+    .map((item) => item.frontmatter as unknown as TripExpenseItem)
+    .filter((expense) => expense.trip_id === tripId);
 
   const fx: FxSettings = { base: (trip.currency || 'CNY').toUpperCase(), overrides: trip.fx_rates };
-  const scheduled = places.filter((p) => p.state === 'scheduled');
+  const scheduled = places.filter((place) => place.state === 'scheduled');
   const budget = estimateTripBudget(scheduled, Math.max(1, trip.members?.length ?? 1), fx);
-
-  const dates = listTripDates(trip.start_date, trip.end_date);
-  const conflicts = dates
+  const conflicts = listTripDates(trip.start_date, trip.end_date)
     .map((date) => ({
       date,
       collisions: places
-        .filter((p) => p.scheduled_date === date && p.open_hours)
-        .map((p) => ({ place: p.title, ...checkOpeningHoursCollision(p.open_hours, date) }))
-        .filter((c) => c.isCollision),
+        .filter((place) => place.scheduled_date === date && place.open_hours)
+        .map((place) => ({ place: place.title, ...checkOpeningHoursCollision(place.open_hours, date, place.preferred_window) }))
+        .filter((collision) => collision.isCollision),
     }))
-    .filter((d) => d.collisions.length > 0);
+    .filter((day) => day.collisions.length > 0);
 
   return {
     trip,
@@ -91,25 +80,44 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
       fx_overrides: trip.fx_rates ?? {},
     },
     conflicts,
-    places: places.map((p) => ({
-      id: p.id,
-      title: p.title,
-      kind: p.kind,
-      state: p.state,
-      priority: p.priority,
-      date: p.scheduled_date ?? null,
-      order: p.sort_order ?? null,
-      locked: p.locked ?? false,
-      rating: p.observed_rating ?? null,
-      price: p.observed_price ?? null,
-      area: p.area ?? null,
-      phone: p.phone ?? null,
-      source_url: p.source_url,
+    places: places.map((place) => ({
+      id: place.id,
+      title: place.title,
+      kind: place.kind,
+      state: place.state,
+      priority: place.priority ?? null,
+      scheduled_date: place.scheduled_date ?? null,
+      scheduled_start: place.scheduled_start ?? null,
+      duration_minutes: place.duration_minutes ?? null,
+      sort_order: place.sort_order ?? null,
+      locked: place.locked ?? false,
+      is_anchor: place.is_anchor ?? false,
+      anchor_type: place.anchor_type ?? null,
+      preferred_window: place.preferred_window ?? null,
+      open_hours: place.open_hours ?? null,
+      reservation_status: place.reservation_status,
+      rating: place.observed_rating ?? null,
+      review_count: place.observed_review_count ?? null,
+      price: place.observed_price ?? null,
+      price_currency: place.price_currency ?? null,
+      price_min: place.price_min ?? null,
+      price_max: place.price_max ?? null,
+      price_unit: place.price_unit ?? null,
+      area: place.area ?? null,
+      address: place.address ?? null,
+      coordinates: place.coordinates ?? null,
+      phone: place.phone ?? null,
+      source_url: place.source_url,
     })),
     bookings,
-    expenses: expenses.map((e) => ({
-      id: e.id, title: e.title, amount: e.amount, currency: e.currency,
-      category: e.category, paid_by: e.paid_by, split_members: e.split_members,
+    expenses: expenses.map((expense) => ({
+      id: expense.id,
+      title: expense.title,
+      amount: expense.amount,
+      currency: expense.currency,
+      category: expense.category,
+      paid_by: expense.paid_by,
+      split_members: expense.split_members,
     })),
   };
 }
@@ -121,45 +129,7 @@ export function getPlannerTripICalMarkdown(
 ): { tripId: string; title: string; markdown: string } {
   const trip = requireTrip(dataLocation, tripId);
   const places = listPlannerPlaces(dataLocation)
-    .map((e) => e.frontmatter as unknown as PlannerTripPlace)
-    .filter((p) => p.trip_id === tripId);
-  const markdown = exportTripToICalProMarkdown(trip, places, options);
-  return {
-    tripId: trip.id,
-    title: trip.title,
-    markdown,
-  };
+    .map((item) => item.frontmatter as unknown as PlannerTripPlace)
+    .filter((place) => place.trip_id === tripId);
+  return { tripId: trip.id, title: trip.title, markdown: exportTripToICalProMarkdown(trip, places, options) };
 }
-
-export function generatePlannerAiPlan(
-  dataLocation: string,
-  tripId: string,
-  options: AiPlanOptions & ICalProExportOptions = {},
-): Record<string, unknown> {
-  const trip = requireTrip(dataLocation, tripId);
-  const places = listPlannerPlaces(dataLocation)
-    .map((e) => e.frontmatter as unknown as PlannerTripPlace)
-    .filter((p) => p.trip_id === tripId && p.state !== 'dropped');
-
-  const result = generateAiItineraryPlan(places, trip, options);
-  return {
-    trip_id: trip.id,
-    title: trip.title,
-    scheduled_count: result.scheduledCount,
-    unscheduled_count: result.unscheduledCount,
-    warnings: result.warnings,
-    planned_places: result.plannedPlaces.map((p) => ({
-      id: p.id,
-      title: p.title,
-      state: p.state,
-      scheduled_date: p.scheduled_date ?? null,
-      sort_order: p.sort_order ?? null,
-      duration_minutes: p.duration_minutes ?? null,
-      locked: p.locked ?? false,
-      priority: p.priority ?? null,
-      area: p.area ?? null,
-    })),
-    ical_pro_markdown: result.icalProMarkdown,
-  };
-}
-

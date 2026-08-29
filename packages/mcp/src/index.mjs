@@ -20,7 +20,6 @@ import {
   getPlannerSummary,
   getPlannerTripDetail,
   getPlannerTripICalMarkdown,
-  generatePlannerAiPlan,
 } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
@@ -130,7 +129,7 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       instructions:
-        'Ownly is a local-first evidence source. Use Doctor before high-stakes analysis when data quality matters. Treat tool results as recorded facts and keep recommendations or interpretations clearly separate from those facts. Persistent mutations use two phases: call an ownly_prepare_* tool, show the preview to the user, then call ownly_commit_operation only after confirmation. Writes must also be enabled when the server starts. Planner tools follow the same discipline: propose schedules/routes/budgets with read tools and planner_prepare_*, never silently overwrite locked stops (optimization pins them), and convert foreign prices only for display using trip fx_rates. Do not claim that all Ownly data stays outside the model context: only the source-of-truth remains local; returned tool results are shared with this MCP client.',
+        'Ownly is a local-first evidence source. Use Doctor before high-stakes analysis when data quality matters. Treat tool results as recorded facts and keep recommendations or interpretations clearly separate from those facts. Persistent mutations use two phases: call an ownly_prepare_* tool, show the preview to the user, then call ownly_commit_operation only after confirmation. Writes must also be enabled when the server starts. Planner tools follow the same discipline: MCP clients/LLMs may propose schedules, but Ownly validates hard constraints and persists only confirmed decisions through planner_prepare_* + commit. Never invent missing start times, durations, prices, or transit facts; never silently overwrite locked/anchored stops; convert foreign prices only for display using trip fx_rates. Do not claim that all Ownly data stays outside the model context: only the source-of-truth remains local; returned tool results are shared with this MCP client.',
     },
   );
 
@@ -406,9 +405,8 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
   server.registerTool(
     'ownly_planner_get_ical_markdown',
     {
-      title: 'Planner iCal Pro Markdown',
-      description:
-        'Generate an obsidian-ical-plugin-pro compliant Markdown document for a trip (with VEVENT time slots, priorities ⏫/🔼/🔽, and metadata for Google Calendar / Apple Calendar sync).',
+      title: 'Planner iCal Pro Projection',
+      description: 'Project confirmed Planner/Vault schedule facts into obsidian-ical-plugin-pro Markdown. Missing start times or durations are never invented.',
       inputSchema: z.object({
         trip_id: z.string().min(1),
         language: z.enum(['zh', 'en']).optional(),
@@ -419,67 +417,35 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
   );
 
   server.registerTool(
-    'ownly_planner_ai_plan',
+    'ownly_planner_prepare_apply_schedule_proposal',
     {
-      title: 'AI Planner Itinerary Generation',
-      description:
-        'Run the local deterministic AI planner engine to distribute candidate research places across trip dates with opening hours validation, proximity clustering, and realistic time slot allocation in iCal Pro syntax.',
+      title: 'Preview Schedule Proposal',
+      description: 'Validate and preview an MCP client/LLM schedule proposal. Locked or anchored stops cannot be changed; accepted AI decisions remain unlocked until the user explicitly pins them.',
       inputSchema: z.object({
         trip_id: z.string().min(1),
-        max_places_per_day: z.number().int().positive().optional(),
-        start_time: z.string().optional(),
-      }),
-      annotations: READ_ONLY_ANNOTATIONS,
-    },
-    safeHandler(({ trip_id, max_places_per_day, start_time }) =>
-      generatePlannerAiPlan(dataLocation, trip_id, { maxPlacesPerDay: max_places_per_day, startTime: start_time }),
-    ),
-  );
-
-  server.registerTool(
-    'ownly_planner_prepare_apply_ai_plan',
-    {
-      title: 'Preview Applying AI Plan',
-      description: 'Preview bulk scheduling and updating planner places from an AI generated itinerary plan.',
-      inputSchema: z.object({
-        trip_id: z.string().min(1),
-        planned_places: z
-          .array(
-            z.object({
-              id: z.string().min(1),
-              state: z.enum(['scheduled', 'candidate']),
-              scheduled_date: z.string().nullable().optional(),
-              sort_order: z.number().int().nullable().optional(),
-              duration_minutes: z.number().int().nullable().optional(),
-              locked: z.boolean().optional(),
-            }),
-          )
-          .min(1),
+        places: z.array(z.object({
+          id: z.string().min(1),
+          scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          scheduled_start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional(),
+          sort_order: z.number().int().nonnegative(),
+          duration_minutes: z.number().int().positive().max(1440).optional(),
+        })).min(1),
       }),
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
-    safeHandler(({ trip_id, planned_places }) =>
-      writeService.preparePlannerApplyAiPlan(trip_id, { planned_places }),
-    ),
+    safeHandler(({ trip_id, places }) => writeService.preparePlannerApplyScheduleProposal(trip_id, { places })),
   );
 
   server.registerTool(
     'ownly_planner_prepare_save_ical_markdown',
     {
-      title: 'Preview Saving iCal Pro Markdown File',
-      description:
-        'Preview saving the iCal Pro formatted Markdown itinerary file into the Vault Trips/ folder for automatic Google Calendar sync via obsidian-ical-plugin-pro.',
-      inputSchema: z.object({
-        trip_id: z.string().min(1),
-        custom_markdown: z.string().optional(),
-      }),
+      title: 'Preview Saving iCal Pro Projection',
+      description: 'Preview regenerating the derived iCal Pro Markdown file from current canonical Planner/Vault facts. Arbitrary custom Markdown is not accepted.',
+      inputSchema: z.object({ trip_id: z.string().min(1) }),
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
-    safeHandler(({ trip_id, custom_markdown }) =>
-      writeService.preparePlannerSaveICalMarkdown(trip_id, custom_markdown),
-    ),
+    safeHandler(({ trip_id }) => writeService.preparePlannerSaveICalMarkdown(trip_id)),
   );
-
 
   server.registerTool(
     'ownly_prepare_create_object',
