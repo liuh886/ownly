@@ -26,8 +26,8 @@ jobs:
           node-version: '24'
           cache: npm
 
-      - name: Apply implementation
-        run: python .github/pr130-run.py
+      - name: Apply final contract polish
+        run: python .github/pr130-polish.py
 
       - name: Install locked dependencies
         run: npm ci
@@ -44,14 +44,12 @@ jobs:
       - name: Diff sanity
         run: git diff --check
 
-      - name: Commit implementation
+      - name: Commit final contract polish
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package.json docs/PLANNER.md packages/mcp/package.json packages/mcp/src/index.mjs scripts/cli/planner-storage.ts scripts/mcp/openrouteservice.ts scripts/mcp/openrouteservice.test.ts scripts/mcp/planner-tools.ts scripts/shared/ownly-write-service.ts server.json src/components/planner/PlannerHome.tsx src/domain/planner-schedule.test.ts src/domain/planner-schedule.ts src/domain/planner.ts src/services/PlannerRepository.schedule.test.ts src/services/PlannerRepository.ts src/services/ownly-data-layout.test.ts src/services/ownly-data-layout.ts
-          git commit -m 'feat(planner): add travel legs and day feasibility'
+          git add docs/PLANNER.md packages/mcp/src/index.mjs src/components/planner/PlannerHome.tsx
+          git commit -m 'fix(planner): make route facts explicit and attributable'
           git push origin HEAD:feat/planner-travel-leg-feasibility
-
-# rerun marker: type-fix
