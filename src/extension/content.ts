@@ -1072,6 +1072,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     })();
     return true;
   }
+  if (msgType === 'OWNLY_CURRENCY_OVERRIDE_CHANGED') {
+    const override = (message as { overrideCurrency?: string }).overrideCurrency;
+    fxOverrideCurrency = override && override !== 'AUTO' ? override : undefined;
+    sendResponse({ ok: true, override: fxOverrideCurrency });
+    return true;
+  }
+  if (msgType === 'OWNLY_REDETECT_PAGE_CURRENCY') {
+    const target = (message as { targetCurrency?: string }).targetCurrency;
+    const detected = detectCurrencyFromPage(window.location.href, undefined, target);
+    sendResponse({ detectedCurrency: detected });
+    return true;
+  }
   if (msgType === 'OWNLY_FX_TOOLTIP_STATUS_CHANGED') {
     const enabled = (message as { enabled?: boolean }).enabled !== false;
     fxTooltipEnabled = enabled;
@@ -1098,6 +1110,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 let fxTargetCurrency = 'CNY';
 let fxPivotRates: Record<string, number> = DEFAULT_USD_PIVOT;
 let fxTooltipEnabled = true;
+let fxOverrideCurrency: string | undefined = undefined;
 let tooltipHideFn: (() => void) | null = null;
 
 function initFxTooltipEngine() {
@@ -1279,7 +1292,7 @@ function initFxTooltipEngine() {
       return;
     }
 
-    const pageCurrency = detectCurrencyFromPage(window.location.href, selectedText, fxTargetCurrency);
+    const pageCurrency = fxOverrideCurrency || detectCurrencyFromPage(window.location.href, selectedText, fxTargetCurrency, fxOverrideCurrency);
     const converted = convertPriceRange(selectedText, fxTargetCurrency, fxPivotRates, pageCurrency);
     if (converted && converted.sourceCurrency !== converted.targetCurrency) {
       const range = selection.getRangeAt(0);

@@ -59,6 +59,12 @@
   - Horizontal filter chips bar with category and custom tags counts.
   - Responsive multi-column grid layout (`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-4`) for candidate place cards.
   - Retain drag-and-drop upward into Day Skeleton, hover highlight sync with Map above, and one-click `+ 当天` (`+ Day`) scheduling.
+- [x] 33. (Mathematical Full Precision & Arbitrary Currency Matrix): Full 64-bit IEEE-754 float precision without intermediate rounding, ISO 4217 zero-decimal formatting for JPY/KRW/VND, and arbitrary cross-rate pivot conversion matrix.
+- [x] 34. (Price Preservation on Recapture & SGD Disambiguation): Protect manually-edited place prices, notes, and tags during bulk saved list re-import via non-destructive merge; add Google Maps RPC coordinates & Singapore keywords.
+- [x] 35. (Explicit Currency Control & Distance-Based Candidate Pool Sorting):
+  - [x] 35.1 (Explicit Currency Control in Extension): Prominently show detected currency in sidepanel toolbar, provide interactive dropdown selector (Auto / manual currency list) and 🔄 Re-detect button, persisting override and broadcasting to content script Selection FX.
+  - [x] 35.2 (Distance-Based Candidate Pool Sorting in Planner): Sort candidates dynamically by distance relative to the last scheduled stop of the current day (`haversineDistanceKm`), display distance badges (`📍 距上一站 X km`), and auto-recalculate upon adding stops.
+  - [x] 35.3 (Verification & Tests): Add unit tests in `planner.test.ts` and `currency-detector.test.ts`, run `validate:extension` and `validate:fast`, build and push.
 - [x] 23. (Verification & Sync) Run full test suite (`validate:fast`, `validate:extension`), verify responsive design, commit and push to `origin main`.
 - [x] 24. (Basemap Research) Analyze and discuss free basemap solutions for the spatial map.
 - [x] 25. (Free Basemap Switcher) Implement multi-style basemap switcher in `PlannerMap.tsx`:

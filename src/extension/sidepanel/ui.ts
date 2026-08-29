@@ -413,24 +413,82 @@ export function renderState() {
   populateEditTripForm();
 }
 
-const CURRENCY_OPTIONS = ['CNY', 'THB', 'JPY', 'USD', 'EUR', 'GBP', 'SGD', 'HKD', 'TWD', 'KRW', 'MYR', 'VND', 'AUD', 'CAD', 'INR', 'CHF'];
+export const CURRENCY_OPTIONS_CONFIG: Array<{ code: string; nameZh: string; nameEn: string; symbol: string }> = [
+  { code: 'SGD', nameZh: '新加坡元', nameEn: 'Singapore Dollar', symbol: 'S$' },
+  { code: 'CNY', nameZh: '人民币', nameEn: 'Chinese Yuan', symbol: '¥' },
+  { code: 'USD', nameZh: '美元', nameEn: 'US Dollar', symbol: '$' },
+  { code: 'THB', nameZh: '泰铢', nameEn: 'Thai Baht', symbol: '฿' },
+  { code: 'JPY', nameZh: '日元', nameEn: 'Japanese Yen', symbol: '¥' },
+  { code: 'HKD', nameZh: '港币', nameEn: 'Hong Kong Dollar', symbol: 'HK$' },
+  { code: 'TWD', nameZh: '新台币', nameEn: 'New Taiwan Dollar', symbol: 'NT$' },
+  { code: 'EUR', nameZh: '欧元', nameEn: 'Euro', symbol: '€' },
+  { code: 'GBP', nameZh: '英镑', nameEn: 'British Pound', symbol: '£' },
+  { code: 'AUD', nameZh: '澳元', nameEn: 'Australian Dollar', symbol: 'A$' },
+  { code: 'CAD', nameZh: '加元', nameEn: 'Canadian Dollar', symbol: 'C$' },
+  { code: 'KRW', nameZh: '韩元', nameEn: 'South Korean Won', symbol: '₩' },
+  { code: 'MYR', nameZh: '马来西亚令吉', nameEn: 'Malaysian Ringgit', symbol: 'RM' },
+  { code: 'VND', nameZh: '越南盾', nameEn: 'Vietnamese Dong', symbol: '₫' },
+  { code: 'PHP', nameZh: '菲律宾比索', nameEn: 'Philippine Peso', symbol: '₱' },
+  { code: 'IDR', nameZh: '印尼盾', nameEn: 'Indonesian Rupiah', symbol: 'Rp' },
+  { code: 'AED', nameZh: '阿联酋迪拉姆', nameEn: 'UAE Dirham', symbol: 'AED' },
+  { code: 'NZD', nameZh: '新西兰元', nameEn: 'New Zealand Dollar', symbol: 'NZ$' },
+  { code: 'CHF', nameZh: '瑞士法郎', nameEn: 'Swiss Franc', symbol: 'CHF' },
+];
 
 export function renderCurrencyPill() {
+  const bar = el.pageCurrencyBar;
   const sel = el.currencySelector;
-  // The selector IS the map currency: manual override first, else page detection.
-  // Trip currency is intentionally NOT a fallback — it is the stats base, a separate concept.
-  const current = store.mapCurrencyOverride || store.pageDetectedCurrency || '';
-  if (!current) { sel.style.display = 'none'; return; }
-  sel.style.display = 'inline-block';
-  sel.innerHTML = '';
-  const codes = ['AUTO', ...new Set([current, ...CURRENCY_OPTIONS])];
-  for (const code of codes) {
-    const opt = document.createElement('option');
-    opt.value = code;
-    opt.textContent = code === 'AUTO' ? (store.lang === 'zh' ? '自动' : 'AUTO') : code;
-    sel.append(opt);
+  const txtDetected = el.txtDetectedCurrency;
+  const lblCaption = el.lblPageCurrency;
+
+  const detected = store.pageDetectedCurrency || '';
+  const isZh = store.lang === 'zh';
+
+  if (bar) bar.style.display = 'flex';
+  if (lblCaption) lblCaption.textContent = isZh ? '页面货币:' : 'Page currency:';
+
+  if (txtDetected) {
+    if (store.mapCurrencyOverride) {
+      txtDetected.textContent = `${store.mapCurrencyOverride} (${isZh ? '手动指定' : 'Manual'})`;
+      txtDetected.style.background = 'var(--warn-bg)';
+      txtDetected.style.color = 'var(--warn-text)';
+      txtDetected.style.borderColor = 'var(--warn-border)';
+    } else if (detected) {
+      txtDetected.textContent = `${detected} (${isZh ? '自动检测' : 'Auto'})`;
+      txtDetected.style.background = 'var(--accent-soft)';
+      txtDetected.style.color = 'var(--accent-text)';
+      txtDetected.style.borderColor = 'var(--accent-border)';
+    } else {
+      txtDetected.textContent = isZh ? '自动检测中…' : 'Detecting…';
+      txtDetected.style.background = 'var(--surface-3)';
+      txtDetected.style.color = 'var(--text-3)';
+      txtDetected.style.borderColor = 'var(--border)';
+    }
   }
-  sel.value = store.mapCurrencyOverride || current;
+
+  if (sel) {
+    sel.innerHTML = '';
+
+    // 1. AUTO Option with live detected indicator
+    const autoOpt = document.createElement('option');
+    autoOpt.value = 'AUTO';
+    autoOpt.textContent = isZh
+      ? `自动检测 ${detected ? `(${detected})` : ''}`
+      : `Auto ${detected ? `(${detected})` : ''}`;
+    sel.append(autoOpt);
+
+    // 2. Full currency options list
+    for (const item of CURRENCY_OPTIONS_CONFIG) {
+      const opt = document.createElement('option');
+      opt.value = item.code;
+      opt.textContent = isZh
+        ? `${item.code} - ${item.nameZh} (${item.symbol})`
+        : `${item.code} - ${item.nameEn} (${item.symbol})`;
+      sel.append(opt);
+    }
+
+    sel.value = store.mapCurrencyOverride || 'AUTO';
+  }
 }
 
 export function renderSmartListCard() {

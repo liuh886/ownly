@@ -9,6 +9,7 @@ import { readCaptureState } from '../capture-state';
 import { I18N, type Lang } from '../i18n';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
+export const MAP_CURRENCY_OVERRIDE_KEY = 'ownlyMapCurrencyOverride';
 
 export interface SavedListSummary {
   listId?: string;
@@ -45,13 +46,18 @@ export function t() {
 }
 
 export async function loadState(): Promise<void> {
-  const [result, fresh] = await Promise.all([
+  const [langRes, currRes, fresh] = await Promise.all([
     chrome.storage.local.get(LANG_STORAGE_KEY),
+    chrome.storage.local.get(MAP_CURRENCY_OVERRIDE_KEY),
     readCaptureState(),
   ]);
-  const langVal = result[LANG_STORAGE_KEY];
+  const langVal = langRes[LANG_STORAGE_KEY];
   if (langVal === 'zh' || langVal === 'en') {
     store.lang = langVal;
+  }
+  const currVal = currRes[MAP_CURRENCY_OVERRIDE_KEY];
+  if (typeof currVal === 'string' && currVal.trim().length > 0 && currVal !== 'AUTO') {
+    store.mapCurrencyOverride = currVal.trim().toUpperCase();
   }
   store.state = fresh;
 }

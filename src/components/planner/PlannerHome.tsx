@@ -19,6 +19,7 @@ import {
   extractPlaceCoordinates,
   getPlannerKindLabel,
   getTripAreaCounts,
+  haversineDistanceKm,
   detectHotelTransferDays,
   generateStaySpanPlaces,
   isPlausibleCustomTag,
@@ -65,6 +66,14 @@ function placeMeta(place: PlannerTripPlace, language: 'en' | 'zh' = 'zh'): strin
     durationLabel,
     windowLabel,
   ].filter(Boolean).join(' · ');
+}
+
+function formatDistanceBadge(distKm: number, zh: boolean): string {
+  if (!Number.isFinite(distKm)) return '';
+  if (distKm < 1) {
+    return zh ? `距上一站 ${Math.round(distKm * 1000)} m` : `${Math.round(distKm * 1000)}m from last stop`;
+  }
+  return zh ? `距上一站 ${distKm.toFixed(1)} km` : `${distKm.toFixed(1)}km from last stop`;
 }
 
 export function PlannerHome({ disabled }: PlannerHomeProps) {
@@ -437,10 +446,54 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     );
   }, [filteredCandidates, poolSearch]);
 
+  const [candidateSortMode, setCandidateSortMode] = useState<'default' | 'distance' | 'must' | 'rating'>('default');
+
   const scheduled = useMemo(
     () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === activeDate && place.state === 'scheduled')),
     [activeDate, tripPlaces],
   );
+
+  const scheduledWithCoords = useMemo(
+    () => scheduled.filter((p) => extractPlaceCoordinates(p) !== null),
+    [scheduled],
+  );
+  const lastScheduledStop = scheduledWithCoords.length > 0 ? scheduledWithCoords[scheduledWithCoords.length - 1] : null;
+  const lastStopCoords = useMemo(() => (lastScheduledStop ? extractPlaceCoordinates(lastScheduledStop) : null), [lastScheduledStop]);
+
+  const candidateDistances = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!lastStopCoords) return map;
+    for (const p of candidates) {
+      const coords = extractPlaceCoordinates(p);
+      if (coords) {
+        map.set(p.id, haversineDistanceKm(lastStopCoords, coords));
+      }
+    }
+    return map;
+  }, [candidates, lastStopCoords]);
+
+  const sortedCandidates = useMemo(() => {
+    const list = [...searchFilteredCandidates];
+    if (candidateSortMode === 'distance' && lastStopCoords) {
+      return list.sort((a, b) => {
+        const distA = candidateDistances.get(a.id) ?? Infinity;
+        const distB = candidateDistances.get(b.id) ?? Infinity;
+        if (distA !== distB) return distA - distB;
+        return a.title.localeCompare(b.title);
+      });
+    }
+    if (candidateSortMode === 'rating') {
+      return list.sort((a, b) => (b.observed_rating ?? 0) - (a.observed_rating ?? 0));
+    }
+    if (candidateSortMode === 'must') {
+      return list.sort((a, b) => {
+        const pA = a.priority === 'must' ? 0 : (a.priority === 'want' ? 1 : 2);
+        const pB = b.priority === 'must' ? 0 : (b.priority === 'want' ? 1 : 2);
+        return pA - pB;
+      });
+    }
+    return list;
+  }, [searchFilteredCandidates, candidateSortMode, candidateDistances, lastStopCoords]);
 
   const candidateHotels = useMemo(
     () => candidates.filter((p) => p.kind === 'stay'),
@@ -1225,7 +1278,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="flex-1 p-2">
               <PlannerMap
                 scheduledPlaces={scheduled}
-                candidatePlaces={filteredCandidates}
+                candidatePlaces={sortedCandidates}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
@@ -1280,6 +1333,23 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 </button>
               ) : null}
             </div>
+
+            {/* Candidate Pool Sort Selector */}
+            <select
+              value={candidateSortMode}
+              onChange={(e) => setCandidateSortMode(e.target.value as 'default' | 'distance' | 'must' | 'rating')}
+              aria-label={zh ? '候选池排序' : 'Sort candidates'}
+              className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 focus:border-stone-400 focus:outline-hidden shadow-2xs"
+            >
+              <option value="default">{zh ? '⚡ 默认排序' : '⚡ Default'}</option>
+              <option value="distance" disabled={!lastStopCoords}>
+                {zh
+                  ? (lastScheduledStop ? `📍 距上一站最近 (${lastScheduledStop.title.slice(0, 7)})` : '📍 距上一站最近')
+                  : (lastScheduledStop ? `📍 Closest to last stop (${lastScheduledStop.title.slice(0, 7)})` : '📍 Closest to last stop')}
+              </option>
+              <option value="must">{zh ? '🎯 优先必去 (Must)' : '🎯 Priority (Must)'}</option>
+              <option value="rating">{zh ? '⭐ 评分最高 (Rating)' : '⭐ Highest Rating'}</option>
+            </select>
 
             {/* Multi-dimensional Hotel Compare */}
             {candidateHotels.length > 0 ? (
@@ -1336,14 +1406,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
             {/* Candidate Place Cards Grid (Multi-column responsive horizontal grid!) */}
             <div className="p-4">
-              {searchFilteredCandidates.length === 0 ? (
+              {sortedCandidates.length === 0 ? (
                 <div className="py-12 text-center text-xs text-stone-400">
                   <p className="text-2xl mb-1.5">📭</p>
                   <p>{candidates.length === 0 ? (zh ? '当前行程暂无候选地点，浏览地图或导入收藏夹即可添加。' : 'No candidates yet.') : (zh ? '没有匹配的候选地点。' : 'No matching candidates.')}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {searchFilteredCandidates.map((place) => (
+                  {sortedCandidates.map((place) => (
                     <article
                       key={place.id}
                       draggable
@@ -1378,6 +1448,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
 
                         <div className="mt-2 flex flex-wrap gap-1">
+                          {candidateDistances.has(place.id) ? (
+                            <span
+                              className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-semibold text-emerald-800"
+                              title={zh ? `距当天最后一站「${lastScheduledStop?.title}」的直线距离` : `Distance to ${lastScheduledStop?.title}`}
+                            >
+                              📍 {formatDistanceBadge(candidateDistances.get(place.id)!, zh)}
+                            </span>
+                          ) : null}
                           <span className={`rounded-full px-1.5 py-0.2 text-[9.5px] font-semibold ${place.priority === 'must' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
                             {place.priority}
                           </span>

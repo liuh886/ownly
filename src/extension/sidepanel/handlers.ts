@@ -18,7 +18,7 @@ import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
-import { getExistingPlaceForUrl, store, t } from './store';
+import { getExistingPlaceForUrl, MAP_CURRENCY_OVERRIDE_KEY, store, t } from './store';
 import {
   applyI18n,
   autoFillPlaceForm,
@@ -510,6 +510,8 @@ export function initHandlers(): void {
     const selected = el.currencySelector.value;
     if (!selected) return;
     store.mapCurrencyOverride = selected === 'AUTO' ? undefined : selected;
+    void chrome.storage.local.set({ [MAP_CURRENCY_OVERRIDE_KEY]: store.mapCurrencyOverride || '' });
+
     if (store.mapCurrencyOverride) {
       store.pageDetectedCurrency = store.mapCurrencyOverride;
       if (store.currentPlace) {
@@ -519,9 +521,53 @@ export function initHandlers(): void {
         store.detectedSavedList = { ...store.detectedSavedList, detectedCurrency: store.mapCurrencyOverride };
       }
     }
+
+    // Broadcast override change to active tab for real-time Selection FX conversion
+    void (async () => {
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs[0]?.id) {
+          await chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'OWNLY_CURRENCY_OVERRIDE_CHANGED',
+            overrideCurrency: store.mapCurrencyOverride,
+          });
+        }
+      } catch {}
+    })();
+
     renderCurrencyPill();
     renderCurrentPlace();
     setStatus(dict.currencyApplied(selected), 'success');
+  });
+
+  // Re-detect currency on demand
+  el.btnRedetectCurrency.addEventListener('click', () => {
+    store.mapCurrencyOverride = undefined;
+    void chrome.storage.local.set({ [MAP_CURRENCY_OVERRIDE_KEY]: '' });
+
+    const activeTrip = store.state.trips.find((t) => t.id === store.state.activeTripId);
+    void (async () => {
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs[0]?.id) {
+          const response = (await chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'OWNLY_REDETECT_PAGE_CURRENCY',
+            targetCurrency: activeTrip?.currency,
+          })) as { detectedCurrency?: string } | undefined;
+          const detected = response?.detectedCurrency || 'USD';
+          store.pageDetectedCurrency = detected;
+          if (store.currentPlace) {
+            store.currentPlace = { ...store.currentPlace, detectedCurrency: detected };
+          }
+          renderCurrencyPill();
+          renderCurrentPlace();
+          setStatus(
+            store.lang === 'zh' ? `已重新检测页面货币：${detected}` : `Page currency re-detected: ${detected}`,
+            'success',
+          );
+        }
+      } catch {}
+    })();
   });
 
   // Select all / deselect all in bulk mode

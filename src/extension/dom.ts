@@ -4,7 +4,11 @@ export type ElementMap = {
   lblFxTooltipToggle: HTMLElement;
   txtFxTooltipToggle: HTMLElement;
   lblActiveTrip: HTMLElement;
+  pageCurrencyBar: HTMLElement;
+  lblPageCurrency: HTMLElement;
+  txtDetectedCurrency: HTMLElement;
   currencySelector: HTMLSelectElement;
+  btnRedetectCurrency: HTMLButtonElement;
   tripSelect: HTMLSelectElement;
   tripActiveRow: HTMLElement;
   tripManageSection: HTMLDetailsElement;
@@ -134,7 +138,11 @@ export const el: ElementMap = {
   lblFxTooltipToggle: required('lblFxTooltipToggle'),
   txtFxTooltipToggle: required('txtFxTooltipToggle'),
   lblActiveTrip: required('lblActiveTrip'),
+  pageCurrencyBar: required('pageCurrencyBar'),
+  lblPageCurrency: required('lblPageCurrency'),
+  txtDetectedCurrency: required('txtDetectedCurrency'),
   currencySelector: required<HTMLSelectElement>('currencySelector'),
+  btnRedetectCurrency: required<HTMLButtonElement>('btnRedetectCurrency'),
   tripSelect: required('tripSelect'),
   tripActiveRow: required('tripActiveRow'),
   tripManageSection: required<HTMLDetailsElement>('tripManageSection'),

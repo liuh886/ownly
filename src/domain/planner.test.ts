@@ -223,6 +223,47 @@ describe('Ownly Planner domain', () => {
     expect(est.currencies).toEqual(['SGD']);
   });
 
+  it('correctly calculates distance to last stop and sorts candidates closest first', () => {
+    const lastStop = place('last_stop', {
+      title: 'Marina Bay Sands',
+      coordinates: { lat: 1.2838, lng: 103.8591 },
+    });
+
+    const candidateNear = place('cand_near', {
+      title: 'Gardens by the Bay',
+      coordinates: { lat: 1.2815, lng: 103.8636 }, // ~0.5 km
+    });
+
+    const candidateFar = place('cand_far', {
+      title: 'Changi Airport',
+      coordinates: { lat: 1.3644, lng: 103.9915 }, // ~16 km
+    });
+
+    const candidateNoCoords = place('cand_no_coords', {
+      title: 'Unknown Cafe',
+    });
+
+    const lastCoords = extractPlaceCoordinates(lastStop)!;
+    const distNear = haversineDistanceKm(lastCoords, extractPlaceCoordinates(candidateNear)!);
+    const distFar = haversineDistanceKm(lastCoords, extractPlaceCoordinates(candidateFar)!);
+
+    expect(distNear).toBeLessThan(1.0);
+    expect(distFar).toBeGreaterThan(10.0);
+
+    const candidatesList = [candidateFar, candidateNoCoords, candidateNear];
+    const sorted = [...candidatesList].sort((a, b) => {
+      const cA = extractPlaceCoordinates(a);
+      const cB = extractPlaceCoordinates(b);
+      const dA = cA ? haversineDistanceKm(lastCoords, cA) : Infinity;
+      const dB = cB ? haversineDistanceKm(lastCoords, cB) : Infinity;
+      return dA - dB;
+    });
+
+    expect(sorted[0].id).toBe('cand_near');
+    expect(sorted[1].id).toBe('cand_far');
+    expect(sorted[2].id).toBe('cand_no_coords');
+  });
+
   it('mergeCaptureState keeps background quick-captures and honors local tombstones', () => {
     const fresh: OwnlyCaptureState = {
       version: 1,
