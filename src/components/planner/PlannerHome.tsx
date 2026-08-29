@@ -760,6 +760,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     );
   }, [selectedTrip, places, language, zh]);
 
+  const saveICalProMarkdownToVault = useCallback(async () => {
+    if (!selectedTrip) return;
+    try {
+      const fileName = await plannerRepository.saveTripICalMarkdown(selectedTrip, places);
+      setNotice(
+        zh
+          ? `已成功保存行程单至 Trips/${fileName}，Obsidian iCal Pro 插件将自动索引并同步至 Google Calendar！`
+          : `Saved itinerary to Trips/${fileName} for Obsidian iCal Pro plugin!`,
+      );
+      setTimeout(() => setNotice(''), 4000);
+    } catch (err) {
+      setNotice(zh ? `保存至 Vault 失败: ${String(err)}` : `Failed to save to Vault: ${String(err)}`);
+      setTimeout(() => setNotice(''), 4000);
+    }
+  }, [selectedTrip, places, zh]);
+
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;
     const lines = [
@@ -928,6 +944,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           >
             <span>📅</span>
             <span>{zh ? 'iCal Pro 日历' : 'iCal Pro'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void saveICalProMarkdownToVault()}
+            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
+            title={zh ? '一键生成并保存 iCal Pro 行程单至 Vault 的 Trips/ 目录（由 iCal Pro 插件直接同步 Google Calendar）' : 'Save iCal Pro itinerary to Vault (Trips/) for calendar sync'}
+          >
+            <span>💾</span>
+            <span>{zh ? '保存日历至 Vault' : 'Save to Vault'}</span>
           </button>
           <button
             type="button"
@@ -1694,6 +1719,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         key={`timing-${timingModalPlace?.id}-${timingModalPlace?.scheduled_start}-${timingModalPlace?.duration_minutes}`}
         open={Boolean(timingModalPlace)}
         place={timingModalPlace}
+        dayOtherPlaces={scheduled.filter((p) => p.id !== timingModalPlace?.id)}
         onClose={() => setTimingModalPlace(null)}
         onSave={handleSavePlaceTiming}
         language={language}

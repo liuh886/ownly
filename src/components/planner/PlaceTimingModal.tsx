@@ -8,6 +8,7 @@ import { getScheduledEndTime } from '@/domain/planner-schedule';
 interface PlaceTimingModalProps {
   open: boolean;
   place: PlannerTripPlace | null;
+  dayOtherPlaces?: PlannerTripPlace[];
   onClose: () => void;
   onSave: (placeId: string, timing: { scheduled_start?: string; duration_minutes?: number }) => Promise<void>;
   language?: 'zh' | 'en';
@@ -32,6 +33,7 @@ const QUICK_DURATIONS = [
 export const PlaceTimingModal: React.FC<PlaceTimingModalProps> = ({
   open,
   place,
+  dayOtherPlaces = [],
   onClose,
   onSave,
   language = 'zh',
@@ -51,6 +53,32 @@ export const PlaceTimingModal: React.FC<PlaceTimingModalProps> = ({
     const res = checkOpeningHoursCollision(place.open_hours, place.scheduled_date, startTime);
     return res.isCollision ? res.reason : null;
   }, [place, startTime]);
+
+  const overlapWarning = useMemo(() => {
+    if (!place || !startTime || !durationMinutes || typeof durationMinutes !== 'number' || !dayOtherPlaces.length) {
+      return null;
+    }
+    const [startH, startM] = startTime.split(':').map(Number);
+    if (isNaN(startH) || isNaN(startM)) return null;
+    const currentStart = startH * 60 + startM;
+    const currentEnd = currentStart + durationMinutes;
+
+    for (const other of dayOtherPlaces) {
+      if (!other.scheduled_start || !other.duration_minutes || other.id === place.id) continue;
+      const [otherH, otherM] = other.scheduled_start.split(':').map(Number);
+      if (isNaN(otherH) || isNaN(otherM)) continue;
+      const oStart = otherH * 60 + otherM;
+      const oEnd = oStart + other.duration_minutes;
+
+      if (Math.max(currentStart, oStart) < Math.min(currentEnd, oEnd)) {
+        const oEndStr = getScheduledEndTime(other.scheduled_start, other.duration_minutes);
+        return zh
+          ? `所选时段 (${startTime}-${computedEndTime}) 与已安排的【${other.title}】(${other.scheduled_start}-${oEndStr}) 存在时间重叠。`
+          : `Selected time (${startTime}-${computedEndTime}) overlaps with [${other.title}] (${other.scheduled_start}-${oEndStr}).`;
+      }
+    }
+    return null;
+  }, [startTime, durationMinutes, dayOtherPlaces, place, computedEndTime, zh]);
 
   if (!open || !place) return null;
 
@@ -218,13 +246,23 @@ export const PlaceTimingModal: React.FC<PlaceTimingModalProps> = ({
           </p>
         </div>
 
-        {/* Collision Warning */}
+        {/* Collision & Overlap Warnings */}
         {hoursWarning ? (
           <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
             <span className="text-base leading-none">⚠️</span>
             <div className="flex-1">
               <span className="font-semibold">{zh ? '营业时间冲突提示:' : 'Opening Hours Warning:'}</span>
               <p className="text-[11px] text-amber-800 mt-0.5">{hoursWarning}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {overlapWarning ? (
+          <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-900 animate-in fade-in duration-100">
+            <span className="text-base leading-none">⚠️</span>
+            <div className="flex-1">
+              <span className="font-semibold">{zh ? '时段重叠预警:' : 'Time Overlap Warning:'}</span>
+              <p className="text-[11px] text-rose-800 mt-0.5">{overlapWarning}</p>
             </div>
           </div>
         ) : null}

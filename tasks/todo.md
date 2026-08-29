@@ -1,38 +1,26 @@
-# AI Planner 体验增强与场景化 Prompt 落地计划
+# AI Planner 体验增强与时段冲突检测计划 (PR #129 增强)
 
 > 核心目标：
-> 1. 在 Web / Obsidian UI 中落地地点时段与时长的手动微调控件（时间选择、快捷时长、实时结束时间预览、冲突反馈）。
-> 2. 在 `PlannerRepository.ts` 中增加 `updatePlaceTiming` 支持。
-> 3. 在 `docs/AI_PLANNER_MCP.md` 中丰富场景化 Prompt 预设库（特种兵、松弛感漫游、亲子家庭、日落夜景摄影、美食寻味预订）。
-> 4. 执行全套验证与测试。
+> 1. 在领域层 `checkDayScheduleCollisions` 中增加同日排期**时段重叠冲突检测**，并在 MCP `getPlannerTripDetail` 中输出完整冲突情报。
+> 2. 在 `PlaceTimingModal.tsx` 中增加**实时时段重叠预警**，防止用户或 AI 排期出现时间撞车。
+> 3. 在 `PlannerHome.tsx` 中增加**一键保存至 Vault** 动作（直接写入 `Trips/trip--<id>.itinerary.md`，使 Obsidian 插件零阻力即时同步至 Google Calendar）。
+> 4. 补充相关单元测试，执行全套自动化验证。
 
 ---
 
 ## 任务清单 (Todo Items)
 
-### 阶段一：领域与仓储层 (Domain & Repository)
-- [x] 1.1 在 `PlannerRepository.ts` 中实现 `updatePlaceTiming(placeId, { scheduled_start, duration_minutes })`
-- [x] 1.2 在 `PlannerRepository.schedule.test.ts` 中补充时段更新与清除单元测试
+### 阶段一：领域层时段冲突检测 (Domain Time Overlap Detection)
+- [x] 1.1 在 `src/domain/planner.ts` 中增强 `checkDayScheduleCollisions`，检测同一天内有时间段地点之间的 `TIME_OVERLAP` 冲突并汇总到 `timeOverlaps` 与 `placeCollisions`
+- [x] 1.2 在 `scripts/mcp/planner-tools.ts` 中升级 `getPlannerTripDetail` 的 `conflicts`，输出包含时段重叠与营业时间冲突的完整情报
+- [x] 1.3 在 `src/domain/planner.test.ts` 中添加时段重叠检测测试用例 (64/64 passed)
 
-### 阶段二：Web 界面手动排期时段微调 (UI Time Scheduling Widget)
-- [x] 2.1 创建 `PlaceTimingModal.tsx` 地点时段微调弹层：
-  - 24 小时制时间选择器与快捷时间胶囊（`09:00`, `11:30`, `14:00`, `17:00`, `19:30`）
-  - 游览耗时选择器（30分、1小时、1.5小时、2小时、3小时）与实时计算结束时间
-  - 日历投影 VEVENT / VTODO 效果实时预览
-  - 营业时间与定休日冲突实时预警
-  - 清除时段与一键保存
-- [x] 2.2 在 `PlannerHome.tsx` 中将排期卡片的时段标签升级为可交互按钮（无时段展示 `+ 设时间`，有时段展示 `🕒 09:00-10:30` 并支持点击修改）
+### 阶段二：UI 弹窗实时重叠预警与 Vault 一键保存 (UI Timing Modal & Vault Save)
+- [x] 2.1 在 `PlaceTimingModal.tsx` 中接收 `dayOtherPlaces`，实时计算并展示与当天其他地点的时段重叠警示
+- [x] 2.2 在 `PlannerHome.tsx` 中增加 `saveICalProMarkdownToVault` 动作及顶部/Day 工具栏按钮，一键写入 Vault
 
-### 阶段三：场景化 AI 提示词库 (Documentation & Scenario Prompts)
-- [x] 3.1 在 `docs/AI_PLANNER_MCP.md` 中新增 5 大场景化 Prompt 预设模板库：
-  - 🚀 特种兵高密度打卡模式
-  - ☕ 慢节奏松弛感漫游模式
-  - 👨‍👩‍👧‍👦 家庭亲子友好模式
-  - 🌅 摄影机位与日落夜景优先模式
-  - 🍜 美食寻味与预订对齐模式
-
-### 阶段四：全套自动化验证 (Verification)
-- [x] 4.1 执行 `npm run validate:fast` (0 error)
-- [x] 4.2 执行 `npm run validate:extension` (112/112 tests passed)
-- [x] 4.3 执行 `npm run validate:shared` (All parity, CLI, MCP & portability tests passed)
-- [x] 4.4 执行 `npm run validate:web` (Turbopack production build + Static export + PWA passed)
+### 阶段三：全套自动化验证 (Verification)
+- [x] 3.1 执行 `npm run validate:fast` (0 error)
+- [x] 3.2 执行 `npm run validate:extension` (113/113 tests passed)
+- [x] 3.3 执行 `npm run validate:shared` (All parity, CLI, MCP & portability tests passed)
+- [x] 3.4 执行 `npm run validate:web` (Turbopack production build + Static export + PWA passed)
