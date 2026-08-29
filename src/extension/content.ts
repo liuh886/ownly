@@ -11,6 +11,7 @@ import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListCategory, fi
 import { SELECTORS, driftCheck } from './selectors';
 import { PLACE_PARSER } from './place-parser';
 import { detectPageCurrency } from './currency-detector';
+import { extractGoogleMapsResearchFromHtml, googleMapsDetailUrlFromSourceId, type GoogleMapsResearchFacts } from './google-maps-research';
 
 export interface CurrentResearchPlace {
   title: string;
@@ -366,10 +367,16 @@ function applyEnriched(target: CurrentResearchPlace, enriched: CurrentResearchPl
   return {
     ...target,
     sourcePlaceId: target.sourcePlaceId ?? enriched.sourcePlaceId,
+    rating: target.rating ?? enriched.rating,
+    reviewCount: target.reviewCount ?? enriched.reviewCount,
+    category: target.category ?? enriched.category,
+    address: target.address ?? enriched.address,
+    website: target.website ?? enriched.website,
     phone: target.phone ?? enriched.phone,
     plusCode: target.plusCode ?? enriched.plusCode,
     types: target.types && target.types.length > 0 ? target.types : enriched.types,
     priceLevel: target.priceLevel ?? enriched.priceLevel,
+    detectedCurrency: target.detectedCurrency ?? enriched.detectedCurrency,
   };
 }
 
@@ -401,6 +408,16 @@ async function enrichFromPlaceHtml(
     const res = await fetch(window.location.href, { credentials: 'include' });
     if (!res.ok) return place;
     const html = (await res.text()).slice(0, 3_000_000);
+    const research = extractGoogleMapsResearchFromHtml(html);
+    place.rating ??= research.rating;
+    place.reviewCount ??= research.reviewCount;
+    place.category ??= research.category;
+    place.priceLevel ??= research.priceLevel;
+    place.detectedCurrency ??= research.priceCurrency;
+    place.address ??= research.address;
+    place.website ??= research.website;
+    place.phone ??= research.phone;
+    if ((!place.types || place.types.length === 0) && research.types?.length) place.types = research.types;
 
     if (!place.sourcePlaceId) {
       const chij = /"(ChIJ[A-Za-z0-9_-]{8,})"/.exec(html)?.[1];
@@ -769,7 +786,10 @@ async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: stri
           const coordinates = parseEntityListCoordinates(placeInfo);
           const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
 
-          const category = findEntityListCategory(item) || ((address && address.includes(',')) ? address.split(',').slice(-2, -1)[0]?.trim() : undefined);
+          const research = PLACE_PARSER.extractEntityListResearch(item, title);
+          const category = research.category || findEntityListCategory(item, title);
+          const priceLevel = research.priceLevel;
+          const detectedCurrency = detectCurrencyFromPage(window.location.href, priceLevel, undefined, overrideCurrency);
 
           places.push({
             title,
@@ -778,8 +798,12 @@ async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: stri
             address,
             userNote,
             summary: userNote,
+            rating: research.rating,
+            reviewCount: research.reviewCount,
             category,
-            detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, undefined, overrideCurrency),
+            priceLevel,
+            detectedCurrency,
+            types: research.types,
             coordinates,
             sourcePlaceId: findEntityListPlaceId(item),
           });
@@ -800,6 +824,82 @@ async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: stri
     console.warn('Entitylist direct fetch failed:', e);
   }
   return null;
+}
+
+const SAVED_LIST_DETAIL_CONCURRENCY = 4;
+const SAVED_LIST_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+const savedListDetailCache = new Map<string, { at: number; facts: GoogleMapsResearchFacts }>();
+
+async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<GoogleMapsResearchFacts | null> {
+  const key = place.sourcePlaceId;
+  if (!key) return null;
+  const cached = savedListDetailCache.get(key);
+  if (cached && Date.now() - cached.at < SAVED_LIST_DETAIL_CACHE_TTL_MS) return cached.facts;
+
+  const detailUrl = googleMapsDetailUrlFromSourceId(key, place.title, window.location.origin);
+  if (!detailUrl) return null;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(detailUrl, { credentials: 'include', signal: controller.signal });
+    if (!res.ok) return null;
+    const html = (await res.text()).slice(0, 3_000_000);
+    const facts = extractGoogleMapsResearchFromHtml(html);
+    savedListDetailCache.set(key, { at: Date.now(), facts });
+    return facts;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function enrichSavedListDetails(
+  list: DetectedSavedList,
+  overrideCurrency?: string,
+): Promise<{ list: DetectedSavedList; attempted: number; enriched: number; failed: number }> {
+  const places = [...list.places];
+  let cursor = 0;
+  let attempted = 0;
+  let enriched = 0;
+  let failed = 0;
+
+  const worker = async () => {
+    while (cursor < places.length) {
+      const index = cursor++;
+      const place = places[index];
+      if (!place.sourcePlaceId) continue;
+      if (place.rating !== undefined && place.reviewCount !== undefined && place.category && place.priceLevel) continue;
+      attempted += 1;
+      const facts = await fetchSavedListDetail(place);
+      if (!facts) {
+        failed += 1;
+        continue;
+      }
+      const nextPrice = place.priceLevel ?? facts.priceLevel;
+      places[index] = {
+        ...place,
+        rating: place.rating ?? facts.rating,
+        reviewCount: place.reviewCount ?? facts.reviewCount,
+        category: place.category ?? facts.category,
+        priceLevel: nextPrice,
+        detectedCurrency: detectCurrencyFromPage(
+          place.sourceUrl,
+          nextPrice,
+          facts.priceCurrency ?? place.detectedCurrency ?? list.detectedCurrency,
+          overrideCurrency,
+        ),
+        address: place.address ?? facts.address,
+        website: place.website ?? facts.website,
+        phone: place.phone ?? facts.phone,
+        types: place.types?.length ? place.types : facts.types,
+      };
+      if (facts.rating !== undefined || facts.reviewCount !== undefined || facts.category || facts.priceLevel) enriched += 1;
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(SAVED_LIST_DETAIL_CONCURRENCY, places.length) }, () => worker()));
+  return { list: { ...list, places }, attempted, enriched, failed };
 }
 
 async function resolveGoogleMapsList(overrideCurrency?: string): Promise<DetectedSavedList | null> {
@@ -1033,6 +1133,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         console.warn('OWNLY_GET_CURRENT_PLACE failed:', e);
         sendResponse({ place: null, savedList: null, allLists: [] });
       }
+    })();
+    return true;
+  }
+  if (msgType === 'OWNLY_ENRICH_SAVED_LIST') {
+    void (async () => {
+      const incoming = (message as { savedList?: DetectedSavedList; overrideCurrency?: string }).savedList;
+      const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
+      if (!incoming?.places?.length) {
+        sendResponse({ savedList: incoming ?? null, attempted: 0, enriched: 0, failed: 0 });
+        return;
+      }
+      const result = await enrichSavedListDetails(incoming, overrideCurrency);
+      sendResponse({ savedList: result.list, attempted: result.attempted, enriched: result.enriched, failed: result.failed });
     })();
     return true;
   }

@@ -2,6 +2,7 @@ export type PlannerTripStatus = 'planning' | 'active' | 'completed';
 export type PlannerPlaceState = 'candidate' | 'scheduled' | 'done' | 'dropped';
 export type PlannerPlacePriority = 'must' | 'want' | 'optional';
 export type PlannerReservationStatus = 'none' | 'needed' | 'booked';
+export type PlannerPriceUnit = 'person' | 'night' | 'item' | 'level' | 'unknown';
 export type PlannerPlaceKind =
   | 'attraction'
   | 'food'
@@ -58,8 +59,16 @@ export interface PlannerTripPlace {
   signals: string[];
   risks: string[];
   notes?: string;
+  /** Raw source facts retained at full fidelity for downstream comparison. */
+  source_category?: string;
   observed_rating?: number;
+  observed_review_count?: number;
   observed_price?: string;
+  price_currency?: string;
+  price_min?: number;
+  price_max?: number;
+  price_unit?: PlannerPriceUnit;
+  price_level?: number;
   observed_at?: string;
   preferred_window?: string;
   duration_minutes?: number;
@@ -240,10 +249,19 @@ export function mergeCapturedPlaceResearch(
     duration_minutes: existing.duration_minutes,
 
     // Capture may refresh observed/source facts:
+    source_category: hasContent(captured.source_category) ? captured.source_category : existing.source_category,
     observed_rating: (typeof captured.observed_rating === 'number' && Number.isFinite(captured.observed_rating))
       ? captured.observed_rating
       : existing.observed_rating,
+    observed_review_count: (typeof captured.observed_review_count === 'number' && Number.isFinite(captured.observed_review_count))
+      ? captured.observed_review_count
+      : existing.observed_review_count,
     observed_price: hasContent(captured.observed_price) ? captured.observed_price : existing.observed_price,
+    price_currency: hasContent(captured.price_currency) ? captured.price_currency : existing.price_currency,
+    price_min: (typeof captured.price_min === 'number' && Number.isFinite(captured.price_min)) ? captured.price_min : existing.price_min,
+    price_max: (typeof captured.price_max === 'number' && Number.isFinite(captured.price_max)) ? captured.price_max : existing.price_max,
+    price_unit: captured.price_unit ?? existing.price_unit,
+    price_level: (typeof captured.price_level === 'number' && Number.isFinite(captured.price_level)) ? captured.price_level : existing.price_level,
     observed_at: hasContent(captured.observed_at) ? captured.observed_at : existing.observed_at,
     address: hasContent(captured.address) ? captured.address : existing.address,
     coordinates: captured.coordinates ?? existing.coordinates,
@@ -1428,6 +1446,63 @@ export function parseDetailedPrice(raw?: string | null): ParsedPriceDetail | nul
   }
 
   return null;
+}
+
+export interface NormalizedObservedPrice {
+  currency?: string;
+  min?: number;
+  max?: number;
+  unit: PlannerPriceUnit;
+  level?: number;
+}
+
+/**
+ * Turns a captured price label into comparable facts while retaining the raw
+ * source text separately on PlannerTripPlace.observed_price.
+ *
+ * Ambiguous bare symbols use the page-currency detector as the authority:
+ * "$" can therefore become SGD/HKD/AUD/etc. and "¥" can become JPY/CNY.
+ */
+export function normalizeObservedPrice(
+  raw?: string | null,
+  detectedCurrency?: string | null,
+): NormalizedObservedPrice | null {
+  const text = raw?.trim();
+  if (!text) return null;
+
+  const levelMatch = /^([$€£¥￥฿₩])\1{0,3}$/.exec(text);
+  if (levelMatch) {
+    return { unit: 'level', level: Math.min(4, text.length) };
+  }
+
+  const parsed = parseDetailedPrice(text);
+  if (!parsed) return null;
+
+  const hint = detectedCurrency?.trim().toUpperCase() || undefined;
+  let currency = parsed.currency || hint;
+
+  const hasBareDollar = text.includes('$')
+    && !/(?:S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$)/i.test(text);
+  if (hasBareDollar && hint && ['USD', 'SGD', 'HKD', 'AUD', 'CAD', 'NZD', 'TWD'].includes(hint)) {
+    currency = hint;
+  }
+
+  const hasBareYen = /[¥￥]/.test(text) && !/(?:JPY|CNY|RMB|円|日元|人民币)/i.test(text);
+  if (hasBareYen && hint && ['JPY', 'CNY'].includes(hint)) {
+    currency = hint;
+  }
+
+  let unit: PlannerPriceUnit = 'unknown';
+  if (/(?:人均|每人|per\s*person|\/\s*person\b|\bpp\b)/i.test(text)) unit = 'person';
+  else if (/(?:每晚|per\s*night|\/\s*night\b|nightly|\bnight\b|晚\/)/i.test(text)) unit = 'night';
+  else if (/(?:每件|per\s*item|\/\s*item\b|\beach\b)/i.test(text)) unit = 'item';
+
+  return {
+    currency: currency || undefined,
+    min: parsed.minAmount,
+    max: parsed.maxAmount,
+    unit,
+  };
 }
 
 export function convertPriceRange(

@@ -3,7 +3,9 @@ import {
   parseRatingNumber,
   parseReviewCount,
   parseSubtitleInfo,
+  extractEntityListResearch,
 } from './place-parser';
+import { extractGoogleMapsResearchFromHtml, featureIdToCid, googleMapsDetailUrlFromSourceId } from './google-maps-research';
 
 describe('PLACE_PARSER.parseRating', () => {
   it('parses various standard and localized rating formats', () => {
@@ -95,5 +97,46 @@ describe('PLACE_PARSER.parseSubtitleInfo', () => {
     expect(result.category).toBe('咖啡厅');
     expect(result.openStatus).toBe('营业中');
     expect(result.area).toBe('清迈');
+  });
+});
+
+
+describe('Google Maps saved-list enrichment', () => {
+  it('extracts any research facts already embedded in an entitylist node', () => {
+    const item = ['meta', ['Thai restaurant', '4.7 ★ (2,134)', '人均 ฿400–600', 'restaurant']];
+    expect(extractEntityListResearch(item, 'Example Place')).toEqual({
+      rating: 4.7,
+      reviewCount: 2134,
+      category: 'Thai restaurant',
+      priceLevel: '人均 ฿400–600',
+      types: ['restaurant'],
+    });
+  });
+
+  it('converts feature ids to canonical cid detail URLs losslessly', () => {
+    expect(featureIdToCid('0x1:0x2a')).toBe('42');
+    expect(googleMapsDetailUrlFromSourceId('0x1:0x2a', 'Place')).toBe('https://www.google.com/maps?cid=42');
+  });
+
+  it('parses rating, reviews, category, price and contact facts from place JSON-LD', () => {
+    const html = `<!doctype html><html><head><script type="application/ld+json">${JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Restaurant',
+      name: 'Example Thai',
+      aggregateRating: { ratingValue: '4.7', reviewCount: '2134' },
+      priceRange: '฿400–600',
+      priceCurrency: 'THB',
+      telephone: '+66 2 123 4567',
+      url: 'https://example.test',
+      address: { streetAddress: '1 Sukhumvit Rd', addressLocality: 'Bangkok', addressCountry: 'TH' },
+    })}</script></head></html>`;
+    const facts = extractGoogleMapsResearchFromHtml(html);
+    expect(facts.rating).toBe(4.7);
+    expect(facts.reviewCount).toBe(2134);
+    expect(facts.category).toBe('Restaurant');
+    expect(facts.priceLevel).toBe('฿400–600');
+    expect(facts.priceCurrency).toBe('THB');
+    expect(facts.phone).toBe('+66 2 123 4567');
+    expect(facts.address).toContain('Bangkok');
   });
 });

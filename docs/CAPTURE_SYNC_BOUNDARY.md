@@ -44,3 +44,16 @@ The old append-only `knownPlaceIds` tombstone map is removed.
 ## Permissions
 
 The extension no longer injects on every HTTP/S page. Static content scripts are restricted to supported travel providers; the FX endpoint and short-link hosts are explicit host permissions. Manual page-currency override is scoped to the active tab/session.
+
+
+## Research fact contract
+
+Capture keeps raw source evidence and normalized comparable facts together. The canonical place may store:
+
+- `source_category`: the provider's high-resolution category label
+- `observed_rating` + `observed_review_count`
+- `observed_price`: untouched source text
+- `price_currency`, `price_min`, `price_max`, `price_unit`, `price_level`
+- `types`, hours, address, coordinates and contact/source links
+
+Google Maps saved lists are intentionally treated as thin identity payloads. When a list is imported, Capture uses each stable Google feature id to fetch the canonical `?cid=` detail page with bounded concurrency, enriches from structured page metadata, then reports field coverage. It does not fabricate category from an address and it does not persist converted prices; FX conversion remains a view-time operation against the trip currency.
