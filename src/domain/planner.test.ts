@@ -733,8 +733,8 @@ describe('Ownly Planner domain', () => {
     const convertedJpyToThb = convertPriceRange('10,000円', 'THB', pivotTable);
     expect(convertedJpyToThb?.sourceCurrency).toBe('JPY');
     expect(convertedJpyToThb?.rate).toBeCloseTo(0.2481, 2);
-    expect(convertedJpyToThb?.convertedMin).toBe(2481);
-    expect(convertedJpyToThb?.formattedTarget).toBe('฿2,481');
+    expect(convertedJpyToThb?.convertedMin).toBe(2481.48);
+    expect(convertedJpyToThb?.formattedTarget).toBe('฿2,481.48');
 
     // Test Target = USD
     const convertedThbToUsd = convertPriceRange('฿500', 'USD', pivotTable);
@@ -751,12 +751,12 @@ describe('Ownly Planner domain', () => {
     expect(convertedGbpToEur?.convertedMin).toBe(124.77);
     expect(convertedGbpToEur?.formattedTarget).toBe('€124.77');
 
-    // Test Target = JPY
+    // Test Target = JPY (0-decimal currency)
     const convertedUsdToJpy = convertPriceRange('$10', 'JPY', pivotTable);
     expect(convertedUsdToJpy?.sourceCurrency).toBe('USD');
     expect(convertedUsdToJpy?.targetCurrency).toBe('JPY');
-    expect(convertedUsdToJpy?.convertedMin).toBe(1492.54);
-    expect(convertedUsdToJpy?.formattedTarget).toBe('¥1,492.54');
+    expect(convertedUsdToJpy?.convertedMin).toBe(1493);
+    expect(convertedUsdToJpy?.formattedTarget).toBe('¥1,493');
 
     // Test Target = SGD
     const convertedUsdToSgd = convertPriceRange('$100', 'SGD', pivotTable);

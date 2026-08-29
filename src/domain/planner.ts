@@ -1167,7 +1167,7 @@ export function effectiveFxRate(
   const baseUsd = pivots?.[base] ?? DEFAULT_USD_PIVOT[base];
 
   if (fromUsd && baseUsd && baseUsd > 0) {
-    return Math.round((fromUsd / baseUsd) * 10000) / 10000;
+    return fromUsd / baseUsd;
   }
   return null;
 }
@@ -1218,6 +1218,20 @@ export function currencySymbolFor(code?: string | null): string {
   const trimmed = code.trim().toUpperCase();
   if (CODE_TO_SYMBOL[trimmed]) return CODE_TO_SYMBOL[trimmed];
   return `${trimmed} `;
+}
+
+/** Standard minor unit decimal places per ISO 4217. */
+export const CURRENCY_DECIMAL_DIGITS: Record<string, number> = {
+  // 0 decimal currencies (no sub-units in common circulation)
+  JPY: 0, KRW: 0, VND: 0, IDR: 0, CLP: 0, PYG: 0, HUF: 0, ISK: 0, UGX: 0, TWD: 0,
+  // 3 decimal currencies
+  BHD: 3, JOD: 3, KWD: 3, OMR: 3, TND: 3,
+};
+
+export function getCurrencyDecimals(code?: string | null): number {
+  if (!code) return 2;
+  const upper = code.trim().toUpperCase();
+  return CURRENCY_DECIMAL_DIGITS[upper] ?? 2;
 }
 
 export const PLANNER_KIND_ICONS: Record<PlannerPlaceKind, string> = {
@@ -1445,14 +1459,16 @@ export function convertPriceRange(
   const rate = effectiveFxRate(from, fx);
   if (!rate || rate <= 0) return null;
 
-  const convertedMin = Math.round(parsed.minAmount * rate * 100) / 100;
-  const convertedMax = Math.round(parsed.maxAmount * rate * 100) / 100;
+  const decimals = getCurrencyDecimals(target);
+  const factor = Math.pow(10, decimals);
+  const convertedMin = Math.round(parsed.minAmount * rate * factor) / factor;
+  const convertedMax = Math.round(parsed.maxAmount * rate * factor) / factor;
   const targetSymbol = currencySymbolFor(target);
 
   const formatAmount = (num: number) => {
     return num.toLocaleString('en-US', {
-      minimumFractionDigits: num % 1 === 0 ? 0 : 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: decimals === 0 ? 0 : (num % 1 === 0 ? 0 : decimals),
+      maximumFractionDigits: decimals,
     });
   };
 
