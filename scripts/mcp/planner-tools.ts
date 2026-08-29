@@ -1,6 +1,7 @@
 import {
   listPlannerBookings,
   listPlannerExpenses,
+  listPlannerLegs,
   listPlannerPlaces,
   listPlannerTrips,
 } from '../cli/planner-storage';
@@ -11,10 +12,11 @@ import {
   listTripDates,
   type FxSettings,
   type PlannerTrip,
+  type PlannerTripLeg,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
-import { findPlannerTimeOverlaps } from '../../src/domain/planner-schedule';
+import { evaluatePlannerDayFeasibility, findPlannerTimeOverlaps } from '../../src/domain/planner-schedule';
 import { exportTripToICalProMarkdown, type ICalProExportOptions } from '../../src/domain/ical-pro';
 
 function requireTrip(dataLocation: string, tripId: string) {
@@ -50,6 +52,9 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
     .map((item) => item.frontmatter as unknown as PlannerTripPlace)
     .filter((place) => place.trip_id === tripId && place.state !== 'dropped')
     .sort((left, right) => (left.sort_order ?? Number.MAX_SAFE_INTEGER) - (right.sort_order ?? Number.MAX_SAFE_INTEGER));
+  const legs = listPlannerLegs(dataLocation)
+    .map((item) => item.frontmatter as unknown as PlannerTripLeg)
+    .filter((leg) => leg.trip_id === tripId);
   const bookings = listPlannerBookings(dataLocation)
     .map((item) => item.frontmatter as unknown as { trip_id: string; [key: string]: unknown })
     .filter((booking) => booking.trip_id === tripId);
@@ -83,6 +88,9 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
     })
     .filter((day) => day.has_collision);
 
+  const feasibility = listTripDates(trip.start_date, trip.end_date)
+    .map((date) => evaluatePlannerDayFeasibility(trip, places, legs, date));
+
   return {
     trip,
     budget: {
@@ -94,6 +102,8 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
       fx_overrides: trip.fx_rates ?? {},
     },
     conflicts,
+    travel_legs: legs,
+    feasibility,
     places: places.map((place) => ({
       id: place.id,
       title: place.title,

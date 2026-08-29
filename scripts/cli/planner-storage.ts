@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { parseMarkdownEntity } from '../../src/data/frontmatter';
 import {
   calculateTotalRouteDistanceKm,
+  type PlannerTripLeg,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
@@ -11,6 +12,7 @@ import {
 export const PLANNER_DIRECTORIES = {
   trips: 'Trips',
   places: 'Trip Places',
+  legs: 'Trip Legs',
   expenses: 'Trip Expenses',
 } as const;
 
@@ -49,6 +51,9 @@ export function listPlannerTrips(dataLocation: string) {
 }
 export function listPlannerPlaces(dataLocation: string) {
   return readPlannerDir<PlannerTripPlace>(dataLocation, PLANNER_DIRECTORIES.places, 'trip_place');
+}
+export function listPlannerLegs(dataLocation: string) {
+  return readPlannerDir<PlannerTripLeg>(dataLocation, PLANNER_DIRECTORIES.legs, 'trip_leg');
 }
 export function listPlannerBookings(dataLocation: string) {
   return readPlannerDir(dataLocation, PLANNER_DIRECTORIES.expenses, 'trip_expense');

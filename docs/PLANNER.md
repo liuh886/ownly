@@ -19,6 +19,7 @@ The selected Ownly data directory is authoritative:
 Ownly/
   Trips/
   Trip Places/
+  Trip Legs/
   Trip Expenses/
 ```
 
@@ -82,3 +83,17 @@ Planner deliberately starts manual-first. Manual placement locks the item so a l
 - collaboration
 - AI proposal generation
 - changes to the existing `components/travel/*` surface
+
+
+## Travel legs and day feasibility
+
+`Trip Legs/` stores one canonical travel fact for an ordered place pair. A leg records the chosen mode, duration, optional distance, source and observation time; it is never embedded into a place because reordering must not change place semantics.
+
+The deterministic schedule engine combines stop end time + adjacent travel duration + next stop start time. Each transition is `ok`, `unknown`, or `conflict`. Missing route facts remain unknown; Ownly never inserts a default transfer duration.
+
+MCP offers two explicit prepare/commit paths:
+
+- `ownly_planner_prepare_set_travel_leg`: save a user-verified leg, including public-transit time.
+- `ownly_planner_prepare_refresh_day_travel`: refresh only adjacent walking/driving/bicycling pairs through OpenRouteService using `OPENROUTESERVICE_API_KEY`; manual legs are preserved.
+
+The browser remains a consumer of canonical `Trip Legs/` facts. API keys are not shipped in the static Web/PWA bundle. Google Maps remains the live-navigation handoff.

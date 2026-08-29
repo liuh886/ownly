@@ -1,4 +1,6 @@
 export type PlannerTripStatus = 'planning' | 'active' | 'completed';
+export type PlannerTravelMode = 'driving' | 'walking' | 'bicycling' | 'transit';
+export type PlannerTripLegSource = 'manual' | 'openrouteservice';
 export type PlannerPlaceState = 'candidate' | 'scheduled' | 'done' | 'dropped';
 export type PlannerPlacePriority = 'must' | 'want' | 'optional';
 export type PlannerReservationStatus = 'none' | 'needed' | 'booked';
@@ -25,7 +27,7 @@ export interface PlannerTrip {
   tags?: string[];
   saved_list_name?: string;
   currency?: string;
-  transport_mode?: 'driving' | 'walking' | 'bicycling' | 'transit';
+  transport_mode?: PlannerTravelMode;
   travel_preferences?: string[];
   /** AA ledger participants, persisted so the ledger survives browsers/devices. */
   members?: string[];
@@ -94,6 +96,40 @@ export interface PlannerTripPlace {
   types?: string[];
   created_at: string;
   updated_at?: string;
+}
+
+export interface PlannerTripLeg {
+  schema_version: '0.1';
+  type: 'trip_leg';
+  id: string;
+  trip_id: string;
+  from_place_id: string;
+  to_place_id: string;
+  mode: PlannerTravelMode;
+  duration_minutes: number;
+  distance_meters?: number;
+  source: PlannerTripLegSource;
+  observed_at?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+function stablePlannerHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+export function plannerTripLegId(tripId: string, fromPlaceId: string, toPlaceId: string): string {
+  return `leg:${tripId}:${fromPlaceId}:${toPlaceId}`;
+}
+
+export function plannerTripLegFileName(id: string): string {
+  const safe = id.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72) || 'travel-leg';
+  return `leg--${safe}-${stablePlannerHash(id)}.md`;
 }
 
 export interface CaptureContext {

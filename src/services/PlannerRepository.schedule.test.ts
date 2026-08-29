@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PlannerTrip, PlannerTripPlace } from '@/domain/planner';
+import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTripPlace } from '@/domain/planner';
 
 const files = vi.hoisted(() => new Map<string, Map<string, string>>());
 
@@ -123,6 +123,17 @@ describe('PlannerRepository scheduling lifecycle', () => {
     });
     expect(cleared?.scheduled_start).toBeUndefined();
     expect(cleared?.duration_minutes).toBeUndefined();
+  });
+
+  it('persists travel legs in their own canonical directory', async () => {
+    const leg: PlannerTripLeg = {
+      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId('trip-1', 'a', 'b'), trip_id: 'trip-1',
+      from_place_id: 'a', to_place_id: 'b', mode: 'walking', duration_minutes: 18, distance_meters: 1200,
+      source: 'manual', created_at: '2026-08-29T00:00:00.000Z',
+    };
+    await plannerRepository.upsertLeg(leg);
+    expect(await plannerRepository.listLegs()).toEqual([leg]);
+    expect(files.get('vault/Trip Legs')?.size).toBe(1);
   });
 
   it('saveTripICalMarkdown re-reads canonical Planner state before projection', async () => {
