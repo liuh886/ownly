@@ -26,4 +26,9 @@ new = "text = text[:start_index] + replacement + text[end_index:]"
 if old not in source:
     raise RuntimeError('connector replacement expression not found')
 source = source.replace(old, new, 1)
+source = source.replace(
+    "const existingByPair = new Map(existing.filter((leg) => leg.trip_id === tripId).map((leg) => [`${leg.from_place_id}→${leg.to_place_id}`, leg] as const));",
+    "const existingByPair = new Map<string, PlannerTripLeg>(existing.filter((leg) => leg.trip_id === tripId).map((leg) => [`${leg.from_place_id}→${leg.to_place_id}`, leg] as const));",
+    1,
+)
 exec(compile(source, str(source_path), 'exec'), {'__name__': '__main__'})
