@@ -55,6 +55,15 @@ describe('Planner schedule proposal', () => {
     expect(result.issues.some((issue) => issue.code === 'TIME_OVERLAP')).toBe(true);
   });
 
+  it('validates a proposed start time against an inherited duration', () => {
+    const candidate = place('late-stop', { duration_minutes: 90 });
+    const result = evaluatePlannerScheduleProposal(trip, [candidate], [{
+      id: candidate.id, scheduled_date: '2026-10-05', scheduled_start: '23:00', sort_order: 0,
+    }]);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((issue) => issue.code === 'CROSSES_MIDNIGHT')).toBe(true);
+  });
+
   it('detects every nested overlap, not only adjacent intervals', () => {
     const places = [
       place('a', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '09:00', duration_minutes: 180 }),
