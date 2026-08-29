@@ -31,7 +31,7 @@ import {
 } from '@/domain/planner';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
-import { ackCapturedPlaces, pullCaptureState } from './capture-bridge';
+import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';
 import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
 import { PlannerBudgetLedger } from './PlannerBudgetLedger';
@@ -106,99 +106,66 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   }, [selectedTripId, membersByTrip, zh]);
 
   const handleAddExpense = useCallback(
-    (item: Omit<TripExpenseItem, 'id' | 'created_at'>) => {
+    async (item: Omit<TripExpenseItem, 'id' | 'created_at'>) => {
       if (!selectedTripId) return;
-      const newExp: TripExpenseItem = {
-        ...item,
-        id: crypto.randomUUID(),
-        created_at: new Date().toISOString(),
-      };
-      const next = [newExp, ...currentExpenses];
-      setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: next }));
-      void plannerRepository.upsertExpense(newExp).catch((error) => {
+      const newExp: TripExpenseItem = { ...item, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+      try {
+        await plannerRepository.upsertExpense(newExp);
+        setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: [newExp, ...(prev[selectedTripId] ?? [])] }));
+      } catch (error) {
         console.warn('[Planner] Failed to persist expense', error);
-      });
+        setNotice(zh ? '费用保存失败，界面未写入未持久化数据。' : 'Expense save failed; the UI was not updated with unsaved data.');
+      }
     },
-    [selectedTripId, currentExpenses],
+    [selectedTripId, zh],
   );
 
   const handleDeleteExpense = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (!selectedTripId) return;
-      const next = currentExpenses.filter((e) => e.id !== id);
-      setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: next }));
-      void plannerRepository.deleteExpense(id).catch((error) => {
+      try {
+        await plannerRepository.deleteExpense(id);
+        setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: (prev[selectedTripId] ?? []).filter((expense) => expense.id !== id) }));
+      } catch (error) {
         console.warn('[Planner] Failed to delete expense', error);
-      });
+        setNotice(zh ? '费用删除失败，原记录仍保留。' : 'Expense delete failed; the original record is still present.');
+      }
     },
-    [selectedTripId, currentExpenses],
+    [selectedTripId, zh],
   );
 
   const handleUpdateMembers = useCallback(
-    (nextMembers: string[]) => {
+    async (nextMembers: string[]) => {
       if (!selectedTripId) return;
-      setMembersByTrip((prev) => ({ ...prev, [selectedTripId]: nextMembers }));
-      setTrips((prev) => prev.map((t) => (t.id === selectedTripId ? { ...t, members: nextMembers } : t)));
       const trip = trips.find((item) => item.id === selectedTripId);
       if (!trip) return;
-      void plannerRepository
-        .upsertTrip({ ...trip, members: nextMembers, updated_at: new Date().toISOString() })
-        .catch((error) => {
-          console.warn('[Planner] Failed to persist trip members', error);
-        });
+      try {
+        const nextTrip = { ...trip, members: nextMembers, updated_at: new Date().toISOString() };
+        await plannerRepository.upsertTrip(nextTrip);
+        setMembersByTrip((prev) => ({ ...prev, [selectedTripId]: nextMembers }));
+        setTrips((prev) => prev.map((item) => (item.id === selectedTripId ? nextTrip : item)));
+      } catch (error) {
+        console.warn('[Planner] Failed to persist trip members', error);
+        setNotice(zh ? '成员保存失败，未更新界面。' : 'Member save failed; the UI was not updated.');
+      }
     },
-    [selectedTripId, trips],
+    [selectedTripId, trips, zh],
   );
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
 
-  const hydrateLedgerFromVault = useCallback(async (trips: PlannerTrip[]) => {
+  const hydrateLedgerFromVault = useCallback(async (nextTrips: PlannerTrip[]) => {
     const stored = await plannerRepository.listExpenses();
-
-    // One-time migration: pull legacy localStorage ledgers/members into the vault.
-    for (const trip of trips) {
-      try {
-        const expKey = `ownly_trip_expenses_${trip.id}`;
-        const rawExpenses = typeof window !== 'undefined' ? localStorage.getItem(expKey) : null;
-        if (rawExpenses !== null) {
-          localStorage.removeItem(expKey);
-          const legacy = JSON.parse(rawExpenses) as TripExpenseItem[];
-          if (Array.isArray(legacy) && legacy.length > 0 && !stored.some((e) => e.trip_id === trip.id)) {
-            await Promise.all(legacy.map((e) => plannerRepository.upsertExpense(e)));
-            stored.push(...legacy);
-          }
-        }
-      } catch (error) {
-        console.warn('[Planner] expense migration skipped', error);
-      }
-
-      try {
-        const memberKey = `ownly_trip_members_${trip.id}`;
-        const rawMembers = typeof window !== 'undefined' ? localStorage.getItem(memberKey) : null;
-        let members = trip.members;
-        if (rawMembers !== null) {
-          localStorage.removeItem(memberKey);
-          const parsed = JSON.parse(rawMembers) as string[];
-          if (Array.isArray(parsed) && parsed.length > 0 && JSON.stringify(trip.members ?? []) !== JSON.stringify(parsed)) {
-            members = parsed;
-            await plannerRepository.upsertTrip({ ...trip, members, updated_at: new Date().toISOString() });
-          }
-        }
-        if (members && members.length > 0) {
-          setMembersByTrip((prev) => ({ ...prev, [trip.id]: members as string[] }));
-        }
-      } catch (error) {
-        console.warn('[Planner] member migration skipped', error);
-      }
-    }
-
     const grouped: Record<string, TripExpenseItem[]> = {};
-    for (const expense of stored) {
-      (grouped[expense.trip_id] ??= []).push(expense);
-    }
+    for (const expense of stored) (grouped[expense.trip_id] ??= []).push(expense);
     setExpensesByTrip(grouped);
+    const nextMembers: Record<string, string[]> = {};
+    for (const trip of nextTrips) {
+      if (trip.members?.length) nextMembers[trip.id] = trip.members;
+    }
+    setMembersByTrip(nextMembers);
   }, []);
 
   const load = useCallback(async () => {
@@ -251,6 +218,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
     [selectedTripId, trips],
   );
+
+  useEffect(() => {
+    const context = selectedTrip
+      ? { tripId: selectedTrip.id, title: selectedTrip.title, currency: selectedTrip.currency, tags: selectedTrip.tags }
+      : null;
+    void setCaptureContext(context);
+  }, [selectedTrip]);
 
   const tripDates = useMemo(
     () => selectedTrip ? listTripDates(selectedTrip.start_date, selectedTrip.end_date) : [],
@@ -728,17 +702,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       }
 
       await plannerRepository.initialize();
-      const existingTripIds = new Set(trips.map((trip) => trip.id));
-      for (const trip of state.trips) {
-        if (!existingTripIds.has(trip.id)) await plannerRepository.upsertTrip(trip);
-      }
       if (state.pendingPlaces.length > 0) {
-        await plannerRepository.upsertPlaces(state.pendingPlaces);
-        await ackCapturedPlaces(state.pendingPlaces.map((place) => place.id));
+        await plannerRepository.importCapturedPlaces(state.pendingPlaces);
+        const acknowledged = await ackCapturedPlaces(state.pendingPlaces.map((place) => place.id));
+        if (!acknowledged) throw new Error('Capture ACK failed');
       }
       setCapturePending(0);
       await load();
-      setSelectedTripId((current) => current || state.activeTripId || state.trips[0]?.id || '');
+      setSelectedTripId((current) => current || state.activeContext?.tripId || '');
       setNotice(zh
         ? `已同步 ${state.pendingPlaces.length} 个研究候选。`
         : `Synced ${state.pendingPlaces.length} research candidates.`);

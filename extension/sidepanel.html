@@ -23,89 +23,29 @@
     </header>
 
     <section class="panel stack">
-      <div class="row" id="tripActiveRow" style="justify-content: space-between; align-items: center; margin-bottom: 2px;">
-        <label id="lblActiveTrip" class="label" for="tripSelect" style="margin: 0;">当前行程</label>
+      <div class="row" style="justify-content: space-between; align-items: center;">
+        <div style="min-width: 0;">
+          <div id="lblActiveTrip" class="label">当前行程</div>
+          <strong id="captureContextTitle" style="display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">未连接 Planner 行程</strong>
+          <span id="captureContextHint" class="url" style="display:block; margin-top:2px;">请先在 Ownly Planner 选择一个行程</span>
+        </div>
         <div id="pageCurrencyBar" class="row" style="align-items: center; gap: 3px;">
           <span style="font-size: 10px; opacity: 0.65;" title="页面货币 / Page currency">💱</span>
           <select id="currencySelector" class="mini-currency-select" aria-label="页面货币 / Page currency"></select>
           <button id="btnRedetectCurrency" class="mini-icon-btn" type="button" title="重新自动检测 / Re-detect">🔄</button>
         </div>
       </div>
-      <select id="tripSelect"></select>
-      <details id="tripManageSection" class="new-trip">
-        <summary id="sumTripManage">⚙️ 行程管理</summary>
+      <details class="new-trip">
+        <summary id="sumBulkImport">📥 导入工具</summary>
         <div class="stack" style="margin-top: 8px;">
-          <div class="manage-block" id="editTripSection" style="display: none;">
-            <p class="manage-title" id="sumEditTrip">✏️ 编辑当前行程设置</p>
-            <form id="editTripForm" class="stack" style="margin-top: 6px;">
-              <label id="lblEditTripTitle">行程名称<input id="editTripTitle" required placeholder="例如：东京赏樱 2026" /></label>
-              <div class="two">
-                <label id="lblEditTripStart">开始日期<input id="editTripStart" type="date" required /></label>
-                <label id="lblEditTripEnd">结束日期<input id="editTripEnd" type="date" required /></label>
-              </div>
-              <label id="lblEditTripDestinations">目的地<input id="editTripDestinations" placeholder="例如：东京, 浅草, 涩谷" /></label>
-              <label id="lblEditTripTags">行程标签 / 收藏夹名<input id="editTripTags" placeholder="例如：TH26, 美食清单" /></label>
-              <div class="two">
-                <label id="lblEditTripCurrency">货币<input id="editTripCurrency" placeholder="THB / JPY / CNY" /></label>
-                <label id="lblEditTripTransport">主要交通
-                  <select id="editTripTransport">
-                    <option value="transit">公共交通 (Transit)</option>
-                    <option value="walking">步行 (Walking)</option>
-                    <option value="driving">自驾 (Driving)</option>
-                    <option value="bicycling">骑行 (Bicycling)</option>
-                  </select>
-                </label>
-              </div>
-              <div class="row" style="gap: 8px; margin-top: 4px;">
-                <button id="btnSaveTripEdit" class="primary" type="submit" style="flex: 2; min-height: 32px; font-size: 11px;">✓ 保存行程修改</button>
-                <button id="btnDeleteTrip" class="danger-btn" type="button" style="flex: 1; min-height: 32px;">🗑️ 删除行程</button>
-              </div>
-            </form>
-          </div>
-
-          <div class="manage-block" id="createTripSection">
-            <p class="manage-title" id="sumCreateTrip">➕ 新建行程</p>
-            <form id="tripForm" class="stack" style="margin-top: 6px;">
-              <label id="lblTripTitle">行程名称<input id="tripTitle" required placeholder="例如：东京赏樱 2026" /></label>
-              <div class="two">
-                <label id="lblTripStart">开始日期<input id="tripStart" type="date" required /></label>
-                <label id="lblTripEnd">结束日期<input id="tripEnd" type="date" required /></label>
-              </div>
-              <label id="lblTripDestinations">目的地<input id="tripDestinations" placeholder="例如：东京, 浅草, 涩谷" /></label>
-              <label id="lblTripTags">行程标签 / 收藏夹名<input id="tripTags" placeholder="例如：TH26, 美食清单, Want to go" /></label>
-              <div class="two">
-                <label id="lblTripCurrency">货币<input id="tripCurrency" value="CNY" /></label>
-                <label id="lblTripTransport">主要交通
-                  <select id="tripTransport">
-                    <option value="transit">公共交通 (Transit)</option>
-                    <option value="walking">步行 (Walking)</option>
-                    <option value="driving">自驾 (Driving)</option>
-                    <option value="bicycling">骑行 (Bicycling)</option>
-                  </select>
-                </label>
-              </div>
-              <button id="btnCreateTrip" class="secondary" type="submit">创建并设为当前行程</button>
-            </form>
-          </div>
-
-          <hr class="divider" />
-
-          <div class="manage-block" id="bulkImportSection">
-            <p class="manage-title" id="sumBulkImport">📥 批量导入 / 粘贴地点或列表链接</p>
-            <div class="stack" style="margin-top: 6px;">
-              <label id="lblBulkText">批量粘贴链接或地点名
-                <textarea id="bulkInputText" rows="3" placeholder="每行一个链接或地点名：&#10;https://maps.google.com/...&#10;浅草寺&#10;东京塔"></textarea>
-              </label>
-              <button id="btnParseBulkImport" class="secondary" type="button">📥 解析并快速加入候选池</button>
-            </div>
-          </div>
-
-          <hr class="divider" />
-
-          <div class="manage-block" style="display: flex; gap: 6px; align-items: center;">
-            <button id="btnBackupState" class="link" type="button">⬇️ 备份</button>
-            <button id="btnRestoreState" class="link" type="button">⬆️ 恢复</button>
-            <input id="fileRestoreState" type="file" accept="application/json,.json" style="display: none;" />
+          <label id="lblBulkText">批量粘贴链接或地点名
+            <textarea id="bulkInputText" rows="3" placeholder="每行一个链接或地点名"></textarea>
+          </label>
+          <button id="btnParseBulkImport" class="secondary" type="button">📥 解析并加入候选池</button>
+          <div class="row" style="gap:6px;">
+            <button id="btnBackupState" class="link" type="button">⬇️ 备份 Inbox</button>
+            <button id="btnRestoreState" class="link" type="button">⬆️ 恢复 Inbox</button>
+            <input id="fileRestoreState" type="file" accept="application/json,.json" style="display:none;" />
           </div>
         </div>
       </details>
@@ -218,7 +158,6 @@
       <input id="candidatesSearch" placeholder="🔍 搜索候选地点、区域或标签..." />
       <div id="candidatesFilterBar" class="filter-bar"></div>
       <div id="bulkActionBar" class="bulk-bar" style="display: none;">
-        <select id="bulkDaySelect" class="day-select"></select>
         <select id="bulkPrioritySelect" class="bulk-select">
           <option value="">设为优先级…</option>
           <option value="must">必去 (Must)</option>

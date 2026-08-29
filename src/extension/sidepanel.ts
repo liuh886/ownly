@@ -5,7 +5,6 @@ import { readCurrentPlace } from './sidepanel/capture';
 import { initHandlers } from './sidepanel/handlers';
 import {
   applyI18n,
-  populateEditTripForm,
   renderCandidatesList,
   renderCurrentPlace,
   renderSmartListCard,
@@ -19,7 +18,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
   const incoming = normalizeCaptureState(changes[CAPTURE_STORAGE_KEY].newValue);
   if (JSON.stringify(incoming) === JSON.stringify(store.state)) return;
   store.state = incoming;
-  populateEditTripForm();
   renderState();
   renderCurrentPlace();
   renderSmartListCard();

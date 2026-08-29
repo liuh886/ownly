@@ -85,20 +85,23 @@ export interface PlannerTripPlace {
   updated_at?: string;
 }
 
+export interface CaptureContext {
+  tripId: string;
+  title: string;
+  currency?: string;
+  tags?: string[];
+}
+
 export interface OwnlyCaptureState {
-  version: 1;
-  trips: PlannerTrip[];
-  activeTripId: string | null;
+  version: 2;
+  activeContext: CaptureContext | null;
   pendingPlaces: PlannerTripPlace[];
-  knownPlaceIds: Record<string, string>;
 }
 
 export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
-  version: 1,
-  trips: [],
-  activeTripId: null,
+  version: 2,
+  activeContext: null,
   pendingPlaces: [],
-  knownPlaceIds: {},
 };
 
 export function acknowledgeCapturedPlaces(state: OwnlyCaptureState, placeIds: string[]): OwnlyCaptureState {
@@ -106,15 +109,21 @@ export function acknowledgeCapturedPlaces(state: OwnlyCaptureState, placeIds: st
   return { ...state, pendingPlaces: state.pendingPlaces.filter((place) => !ids.has(place.id)) };
 }
 
+export function asCaptureCandidate(place: PlannerTripPlace): PlannerTripPlace {
+  return {
+    ...place,
+    reservation_status: place.reservation_status ?? 'none',
+    state: 'candidate',
+    scheduled_date: undefined,
+    sort_order: undefined,
+    locked: undefined,
+  };
+}
+
 /**
- * Merges a freshly-read storage state with the side panel's local state for a
- * safe read-modify-write. Rules:
- * - trips / activeTripId: the side panel owns them (only it edits trips).
- * - pendingPlaces: local wins per id; places that exist only in storage are
- *   kept UNLESS the side panel deleted them locally (tombstone set) — this
- *   preserves quick-captures made by the background worker in between, without
- *   resurrecting places the user removed.
- * - knownPlaceIds: union (append-only identity map).
+ * Merge a panel snapshot with the freshest inbox. The background worker owns
+ * activeContext; the panel only edits pending candidates. Tombstones prevent a
+ * concurrent quick-capture merge from resurrecting a user deletion.
  */
 export function mergeCaptureState(
   fresh: OwnlyCaptureState,
@@ -122,19 +131,17 @@ export function mergeCaptureState(
   locallyDeletedIds?: ReadonlySet<string>,
 ): OwnlyCaptureState {
   const tombstones = locallyDeletedIds;
-  const localPlaces = tombstones
+  const localPlaces = (tombstones
     ? local.pendingPlaces.filter((place) => !tombstones.has(place.id))
-    : local.pendingPlaces;
+    : local.pendingPlaces).map(asCaptureCandidate);
   const localPlaceIds = new Set(localPlaces.map((place) => place.id));
   const backgroundOnly = fresh.pendingPlaces.filter(
     (place) => !localPlaceIds.has(place.id) && !(tombstones && tombstones.has(place.id)),
   );
   return {
-    version: 1,
-    trips: local.trips,
-    activeTripId: local.activeTripId,
+    version: 2,
+    activeContext: fresh.activeContext,
     pendingPlaces: [...localPlaces, ...backgroundOnly],
-    knownPlaceIds: { ...fresh.knownPlaceIds, ...local.knownPlaceIds },
   };
 }
 
@@ -209,40 +216,35 @@ export function mergeCapturedPlaceResearch(
   existing: PlannerTripPlace,
   captured: PlannerTripPlace,
 ): PlannerTripPlace {
-  // 'dropped' is a terminal lifecycle command that never originates from a
-  // normal capture, so it is honored explicitly instead of being swallowed.
-  const lifecycleOverride = captured.state === 'dropped' ? { state: 'dropped' as const } : {};
   const mergedTypes = new Set<string>([...(captured.types ?? []), ...(existing.types ?? [])]);
-  const mergedTags = new Set<string>([...(existing.tags ?? []), ...(captured.tags ?? [])]);
-
   const hasContent = (val?: string | null): boolean => typeof val === 'string' && val.trim().length > 0;
 
   return {
     ...existing,
-    ...lifecycleOverride,
     id: existing.id,
     title: hasContent(captured.title) ? captured.title : existing.title,
     source_provider: captured.source_provider ?? existing.source_provider,
     source_url: captured.source_url ?? existing.source_url,
     source_place_id: captured.source_place_id ?? existing.source_place_id,
-    kind: (captured.kind && captured.kind !== 'other') ? captured.kind : existing.kind,
-    area: hasContent(captured.area) ? captured.area : existing.area,
-    priority: captured.priority ?? existing.priority,
-    tags: ensurePlaceKindTag([...mergedTags], (captured.kind && captured.kind !== 'other') ? captured.kind : existing.kind),
-    why: hasContent(captured.why) ? captured.why : existing.why,
-    signals: (captured.signals && captured.signals.length > 0) ? captured.signals : existing.signals,
-    risks: (captured.risks && captured.risks.length > 0) ? captured.risks : existing.risks,
-    notes: hasContent(captured.notes) ? captured.notes : existing.notes,
+
+    // Planner-owned decisions intentionally stay on the canonical record:
+    kind: existing.kind,
+    area: existing.area,
+    priority: existing.priority,
+    tags: existing.tags,
+    why: existing.why,
+    signals: existing.signals,
+    risks: existing.risks,
+    notes: existing.notes,
+    preferred_window: existing.preferred_window,
+    duration_minutes: existing.duration_minutes,
+
+    // Capture may refresh observed/source facts:
     observed_rating: (typeof captured.observed_rating === 'number' && Number.isFinite(captured.observed_rating))
       ? captured.observed_rating
       : existing.observed_rating,
-    // Never drop manually edited or previously captured prices just because a bulk list import omits price:
     observed_price: hasContent(captured.observed_price) ? captured.observed_price : existing.observed_price,
     observed_at: hasContent(captured.observed_at) ? captured.observed_at : existing.observed_at,
-    preferred_window: hasContent(captured.preferred_window) ? captured.preferred_window : existing.preferred_window,
-    duration_minutes: (typeof captured.duration_minutes === 'number' && Number.isFinite(captured.duration_minutes))
-      ? captured.duration_minutes
-      : existing.duration_minutes,
     address: hasContent(captured.address) ? captured.address : existing.address,
     coordinates: captured.coordinates ?? existing.coordinates,
     open_hours: hasContent(captured.open_hours) ? captured.open_hours : existing.open_hours,
@@ -260,20 +262,41 @@ function canonicalizePlaceName(value: string): string {
   return value.replace(/\+/g, ' ').trim().toLowerCase();
 }
 
+function roundedCoordinateIdentity(coordinates?: { lat: number; lng: number }): string | null {
+  if (!coordinates) return null;
+  if (!Number.isFinite(coordinates.lat) || !Number.isFinite(coordinates.lng)) return null;
+  return `${coordinates.lat.toFixed(5)},${coordinates.lng.toFixed(5)}`;
+}
+
 export function normalizePlaceIdentity(rawUrl: string): string {
   const trimmed = rawUrl.trim();
   try {
     const parsed = new URL(trimmed);
-    if (parsed.hostname === 'maps.google.com' || /(^|\.)google\.[a-z.]{2,}$/.test(parsed.hostname)) {
-      const query = parsed.searchParams.get('query') || parsed.searchParams.get('q');
-      if (query) return canonicalizePlaceName(query);
+    const host = parsed.hostname.toLowerCase();
+    const isGoogleMaps = host === 'maps.google.com' || /(^|\.)google\.[a-z.]{2,}$/.test(host);
+    if (isGoogleMaps) {
+      const explicitPlaceId = parsed.searchParams.get('query_place_id') || parsed.searchParams.get('cid');
+      if (explicitPlaceId) return `g:pid:${explicitPlaceId.toLowerCase()}`;
+
       const placeMatch = /\/maps\/place\/([^/]+)/.exec(parsed.pathname);
+      let placeName = '';
       if (placeMatch?.[1]) {
-        let name = placeMatch[1];
-        try { name = decodeURIComponent(name); } catch {}
-        return canonicalizePlaceName(name);
+        try { placeName = decodeURIComponent(placeMatch[1]); } catch { placeName = placeMatch[1]; }
       }
+      const coordinateMatch = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(`${parsed.pathname}${parsed.hash}`);
+      if (coordinateMatch) {
+        const lat = Number(coordinateMatch[1]);
+        const lng = Number(coordinateMatch[2]);
+        const geo = roundedCoordinateIdentity({ lat, lng });
+        if (geo) return `g:${canonicalizePlaceName(placeName || 'place')}@${geo}`;
+      }
+
+      const query = parsed.searchParams.get('query') || parsed.searchParams.get('q');
+      if (query) return `g:name:${canonicalizePlaceName(query)}`;
+      if (placeName) return `g:name:${canonicalizePlaceName(placeName)}`;
     }
+    parsed.hash = '';
+    return `u:${parsed.hostname.toLowerCase()}${parsed.pathname}${parsed.search}`.toLowerCase();
   } catch {}
   return `u:${trimmed.toLowerCase()}`;
 }
@@ -283,26 +306,28 @@ export function placeIdentityKey(tripId: string, sourceUrl: string): string {
 }
 
 export function findExistingTripPlace(
-  knownPlaceIds: Record<string, string>,
   places: PlannerTripPlace[],
   tripId: string,
   sourceUrl: string,
   sourcePlaceId?: string,
+  coordinates?: { lat: number; lng: number },
 ): PlannerTripPlace | undefined {
   const tripPlaces = places.filter((place) => place.trip_id === tripId);
 
   if (sourcePlaceId) {
-    const byPlaceId = tripPlaces.filter((place) => place.source_place_id === sourcePlaceId);
-    if (byPlaceId.length === 1) return byPlaceId[0];
+    const byPlaceId = tripPlaces.find((place) =>
+      place.source_provider === inferSourceProvider(sourceUrl) && place.source_place_id === sourcePlaceId
+    );
+    if (byPlaceId) return byPlaceId;
+  }
+
+  const coordinateIdentity = roundedCoordinateIdentity(coordinates);
+  if (coordinateIdentity) {
+    const byCoordinates = tripPlaces.find((place) => roundedCoordinateIdentity(place.coordinates) === coordinateIdentity);
+    if (byCoordinates) return byCoordinates;
   }
 
   const identity = normalizePlaceIdentity(sourceUrl);
-  const knownId = knownPlaceIds[placeIdentityKey(tripId, sourceUrl)] ?? knownPlaceIds[`${tripId}::${sourceUrl}`];
-  if (knownId) {
-    const byKnown = tripPlaces.find((place) => place.id === knownId);
-    if (byKnown) return byKnown;
-  }
-
   return tripPlaces.find((place) => normalizePlaceIdentity(place.source_url) === identity)
     ?? tripPlaces.find((place) => place.source_url === sourceUrl);
 }

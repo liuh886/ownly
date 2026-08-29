@@ -1,12 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Ownly Capture",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Capture personal travel research from Google Maps into Ownly Planner.",
-  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "scripting",
+    "activeTab",
+    "tabs"
+  ],
   "host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "https://www.google.com/*",
+    "https://maps.google.com/*",
+    "https://maps.app.goo.gl/*",
+    "https://goo.gl/*",
+    "https://www.booking.com/*",
+    "https://tabelog.com/*",
+    "https://*.tabelog.com/*",
+    "https://www.xiaohongshu.com/*",
+    "https://open.er-api.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -29,10 +42,16 @@
   "content_scripts": [
     {
       "matches": [
-        "http://*/*",
-        "https://*/*"
+        "https://www.google.com/maps/*",
+        "https://maps.google.com/*",
+        "https://www.booking.com/*",
+        "https://tabelog.com/*",
+        "https://*.tabelog.com/*",
+        "https://www.xiaohongshu.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -42,7 +61,9 @@
         "http://localhost/*",
         "http://127.0.0.1/*"
       ],
-      "js": ["ownly-bridge.js"],
+      "js": [
+        "ownly-bridge.js"
+      ],
       "run_at": "document_start"
     }
   ]
