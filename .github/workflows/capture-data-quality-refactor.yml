@@ -20,6 +20,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - name: Scope the refactor driver
+        run: python scripts/repair_capture_data_quality_driver.py
       - name: Apply focused Capture data-quality repair
         run: python scripts/apply_capture_data_quality.py
       - name: Validate fast path
