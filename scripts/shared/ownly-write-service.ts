@@ -44,9 +44,11 @@ import {
   writeEntry,
 } from '../cli/storage';
 import {
+  exportTripToICalProMarkdown,
   generateStaySpanPlaces,
   optimizeStopsSequence,
   type FxSettings,
+  type PlannerTrip,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
@@ -750,6 +752,106 @@ export class OwnlyWriteService {
       writeAgentLog(this.dataLocation, 'planner_set_fx_rates', tripId, before.fx_rates ?? {}, rates);
       return { trip_id: tripId, fx_rates: rates };
     });
+  }
+
+  preparePlannerApplyAiPlan(
+    tripId: string,
+    plan: {
+      planned_places: Array<{
+        id: string;
+        state: 'scheduled' | 'candidate';
+        scheduled_date?: string | null;
+        sort_order?: number | null;
+        locked?: boolean;
+        duration_minutes?: number | null;
+      }>;
+    },
+  ): PreparedOwnlyOperation {
+    const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), tripId);
+    if (!tripEntry) {
+      throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
+    }
+    const allPlaces = listPlannerPlaces(this.dataLocation);
+    const planMap = new Map(plan.planned_places.map((p) => [p.id, p] as const));
+    const updates: Array<{ entry: (typeof allPlaces)[0]; next: PlannerTripPlace }> = [];
+    const expectedMap = new Map<string, string | null>();
+
+    for (const entry of allPlaces) {
+      const p = planMap.get(entry.frontmatter.id);
+      if (!p) continue;
+      expectedMap.set(entry.filePath, fingerprint(entry.filePath));
+      const next: PlannerTripPlace = {
+        ...entry.frontmatter,
+        state: p.state,
+        scheduled_date: p.scheduled_date || undefined,
+        sort_order: typeof p.sort_order === 'number' ? p.sort_order : undefined,
+        locked: p.locked ?? Boolean(p.scheduled_date),
+        duration_minutes: p.duration_minutes ?? entry.frontmatter.duration_minutes,
+        updated_at: todayISO(this.now()),
+      };
+      updates.push({ entry, next });
+    }
+
+    if (updates.length === 0) {
+      throw new OwnlyMutationError('No matching places to update from AI plan.', 'INVALID_INPUT' as OwnlyMutationErrorCode);
+    }
+
+    return this.prepare(
+      'planner_apply_ai_plan',
+      {
+        trip_id: tripId,
+        planned_count: updates.length,
+        updates: updates.map((u) => ({
+          id: u.entry.frontmatter.id,
+          title: u.entry.frontmatter.title,
+          state: u.next.state,
+          date: u.next.scheduled_date,
+          order: u.next.sort_order,
+        })),
+      },
+      () => {
+        for (const { entry, next } of updates) {
+          assertUnchanged(entry.filePath, expectedMap.get(entry.filePath)!);
+          writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
+        }
+        writeAgentLog(this.dataLocation, 'planner_apply_ai_plan', tripId, null, { updated_count: updates.length });
+        return { trip_id: tripId, applied_count: updates.length };
+      },
+    );
+  }
+
+  preparePlannerSaveICalMarkdown(tripId: string, customMarkdown?: string): PreparedOwnlyOperation {
+    const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), tripId);
+    if (!tripEntry) {
+      throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
+    }
+    const trip = tripEntry.frontmatter as unknown as PlannerTrip;
+    let markdown = customMarkdown;
+    if (!markdown) {
+      const places = listPlannerPlaces(this.dataLocation)
+        .map((e) => e.frontmatter as unknown as PlannerTripPlace)
+        .filter((p) => p.trip_id === tripId);
+      markdown = exportTripToICalProMarkdown(trip, places);
+    }
+
+    const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.trips);
+    const fileName = `trip--${trip.id}.itinerary.md`;
+    const targetPath = join(directory, fileName);
+
+    return this.prepare(
+      'planner_save_ical_markdown',
+      {
+        trip_id: tripId,
+        target_file: fileName,
+        length: markdown.length,
+      },
+      () => {
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(targetPath, markdown, 'utf8');
+        writeAgentLog(this.dataLocation, 'planner_save_ical_markdown', tripId, null, { file_name: fileName });
+        return { trip_id: tripId, file_name: fileName, file_path: targetPath, saved: true };
+      },
+    );
   }
 
   prepareRestoreObject(id: string): PreparedOwnlyOperation {

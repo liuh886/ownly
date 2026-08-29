@@ -16,7 +16,12 @@ import {
   toOwnlyMcpErrorPayload,
 } from '../../../scripts/mcp/ownly-tools.ts';
 import { OwnlyWriteService } from '../../../scripts/shared/ownly-write-service.ts';
-import { getPlannerSummary, getPlannerTripDetail } from '../../../scripts/mcp/planner-tools.ts';
+import {
+  getPlannerSummary,
+  getPlannerTripDetail,
+  getPlannerTripICalMarkdown,
+  generatePlannerAiPlan,
+} from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
 const SERVER_VERSION = '0.2.0';
@@ -396,6 +401,83 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
     safeHandler(({ trip_id, rates }) => writeService.prepareSetFxRates(trip_id, rates)),
+  );
+
+  server.registerTool(
+    'ownly_planner_get_ical_markdown',
+    {
+      title: 'Planner iCal Pro Markdown',
+      description:
+        'Generate an obsidian-ical-plugin-pro compliant Markdown document for a trip (with VEVENT time slots, priorities ⏫/🔼/🔽, and metadata for Google Calendar / Apple Calendar sync).',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        language: z.enum(['zh', 'en']).optional(),
+      }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id, language }) => getPlannerTripICalMarkdown(dataLocation, trip_id, { language })),
+  );
+
+  server.registerTool(
+    'ownly_planner_ai_plan',
+    {
+      title: 'AI Planner Itinerary Generation',
+      description:
+        'Run the local deterministic AI planner engine to distribute candidate research places across trip dates with opening hours validation, proximity clustering, and realistic time slot allocation in iCal Pro syntax.',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        max_places_per_day: z.number().int().positive().optional(),
+        start_time: z.string().optional(),
+      }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id, max_places_per_day, start_time }) =>
+      generatePlannerAiPlan(dataLocation, trip_id, { maxPlacesPerDay: max_places_per_day, startTime: start_time }),
+    ),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_apply_ai_plan',
+    {
+      title: 'Preview Applying AI Plan',
+      description: 'Preview bulk scheduling and updating planner places from an AI generated itinerary plan.',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        planned_places: z
+          .array(
+            z.object({
+              id: z.string().min(1),
+              state: z.enum(['scheduled', 'candidate']),
+              scheduled_date: z.string().nullable().optional(),
+              sort_order: z.number().int().nullable().optional(),
+              duration_minutes: z.number().int().nullable().optional(),
+              locked: z.boolean().optional(),
+            }),
+          )
+          .min(1),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id, planned_places }) =>
+      writeService.preparePlannerApplyAiPlan(trip_id, { planned_places }),
+    ),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_save_ical_markdown',
+    {
+      title: 'Preview Saving iCal Pro Markdown File',
+      description:
+        'Preview saving the iCal Pro formatted Markdown itinerary file into the Vault Trips/ folder for automatic Google Calendar sync via obsidian-ical-plugin-pro.',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        custom_markdown: z.string().optional(),
+      }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ trip_id, custom_markdown }) =>
+      writeService.preparePlannerSaveICalMarkdown(trip_id, custom_markdown),
+    ),
   );
 
 

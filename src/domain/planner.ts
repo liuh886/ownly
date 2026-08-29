@@ -2311,4 +2311,14 @@ export function exportTripToMarkdown(
   return lines.join('\n');
 }
 
-
+export {
+  calculateDayTimeSlots,
+  exportTripToICalProMarkdown,
+  generateAiItineraryPlan,
+  parseICalProMarkdown,
+  ICAL_PRO_PRIORITY_MAP,
+  REVERSE_PRIORITY_MAP,
+  type ICalProExportOptions,
+  type AiPlanOptions,
+  type AiItineraryResult,
+} from './ical-pro';

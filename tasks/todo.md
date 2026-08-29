@@ -1,41 +1,54 @@
-# Planner Milestones 1-5 实施计划与进度追踪
+# AI Planner & iCal Pro 语法落地计划
 
-## 一、Milestone 1: 可靠导入与精准 ACK
-- [x] 1.1 `PlannerRepository.importCapturedPlaces()` 返回实际成功持久化的 place IDs
-- [x] 1.2 `syncCapture()` 仅 ACK 已成功写入的 IDs，失败条目保留在 Capture Inbox
-- [x] 1.3 同批导入即时更新身份索引，避免同一地点在一批数据中重复写入
-
-## 二、Milestone 2: 排期冲突感知
-- [x] 2.1 增强营业时间与 preferred window 冲突检测，并处理跨午夜营业场景
-- [x] 2.2 实现 `checkDayScheduleCollisions(places, date)`：显式时长过载与相邻站点长距离提醒
-- [x] 2.3 在 Day Skeleton 与地点卡片展示结构化警告
-- [x] 2.4 缺失 `duration_minutes` 不再假定 60 分钟，避免虚构日程负荷
-
-## 三、Milestone 3: 外部候选导入
-- [x] 3.1 `parseImportPayload(rawText, tripId)` 支持 JSON、CSV、KML、纯文本与 Google Maps 链接
-- [x] 3.2 `ImportCandidatesModal` 支持粘贴或上传文件导入 Research Pool
-- [x] 3.3 外部导入使用独立 `importExternalCandidates()` 入口，不借用 Capture ACK 语义
-- [x] 3.4 保留 `source_category`、评论量及结构化价格等高价值 research facts
-
-## 四、Milestone 4: 预算估算与真实账本分离
-- [x] 4.1 `parsePlaceExpenseEstimate(place)` 直接消费 `price_currency/min/max/unit` 等结构化价格事实，原始 `observed_price` 仅作为证据与补充解析来源
-- [x] 4.2 Day 头部并列展示“预估”与“实记”，但预估值不会自动写入真实 AA 账本
-- [x] 4.3 `person` 单位按行程成员数计算；缺失汇率的金额显式排除并提示，不使用 1:1 fallback
-- [x] 4.4 Markdown 账本汇总先统一折算至 Trip Currency，再计算总额
-
-## 五、Milestone 5: 行程交付
-- [x] 5.1 `exportTripToMarkdown()` 输出每日安排、Google Maps 路线、候选池与真实费用账本
-- [x] 5.2 Planner 增加一键复制 Markdown 行程单
-- [x] 5.3 保留 Candidate Pool → Day 的快速排期、顺序调整、锁定与退回闭环
-- [x] 5.4 完整验证 `validate:fast / shared / web / obsidian / extension`
+> 核心目标：引入基于本地 MCP 的 AI Planner 能力，采用与 `obsidian-ical-plugin-pro` 100% 兼容的 Markdown 语法，让本地旅行日程可无缝投射到 Google Calendar。坚持本地优先，不开发冗余的在线 AI 对话框，由本地 MCP 服务承接 AI 交互。
 
 ---
 
-## Review 结论
+## 阶段一：领域层 iCal Pro 语法与 AI 排期算法 (Domain & iCal Pro Engine)
+- [x] 1.1 实现 `exportTripToICalProMarkdown(trip, places, options)`：生成符合 `obsidian-ical-plugin-pro` 的 Markdown（包含时间段 `09:00-11:30`、优先级 `⏫/🔼/🔽`、分类 Emoji、缩进详情）
+- [x] 1.2 实现 `parseICalProMarkdown(markdown, tripId)`：支持从 iCal Pro Markdown 双向解析还原出排期地点与时间
+- [x] 1.3 实现 `generateAiItineraryPlan(places, trip, options)`：基于地点营业时间、地理聚类、建议停留时长与优先级，生成合理时段分配的智能日程
+- [x] 1.4 编写全套领域单元测试，覆盖 iCal Pro 导出、解析与排期算法
 
-- **导入可靠性**：成功写入与 ACK 一一对应；单条失败不会导致其从 Capture Inbox 消失，重试保持幂等。
-- **数据边界**：Capture 与外部文件都是 Research 输入；Planner/Vault 仍是 Trip、排期和用户决策的唯一权威。
-- **冲突提示**：当前提供确定性的启发式提醒，不把缺失时长或未知交通时间伪装成事实。
-- **预算语义**：地点价格属于 estimate，AA Ledger 属于 actual；二者可比较但不自动互相转换。
-- **币种语义**：结构化 `price_currency` 优先于裸 `$ / ¥` 推断；未知汇率显式暴露。
-- **验证**：修正后 `validate:fast`、`validate:shared`、`validate:web`、`validate:obsidian`、`validate:extension` 全部通过。
+---
+
+## 阶段二：本地 MCP AI Planner 工具增强 (MCP Server & Write Service)
+- [x] 2.1 在 `scripts/mcp/planner-tools.ts` 中新增：
+  - `getPlannerTripICalMarkdown(dataLocation, tripId)`：获取 iCal Pro 格式的 Markdown
+  - `generatePlannerAiPlan(dataLocation, tripId, options)`：为外部 AI 客户端提供结构化排期与 iCal Pro 建议
+- [x] 2.2 在 `scripts/shared/ownly-write-service.ts` 中新增两阶段写入（Prepare + Commit）：
+  - `preparePlannerApplyAiPlan(tripId, plan)`：批量排期与更新
+  - `preparePlannerSaveICalMarkdown(tripId, customMarkdown?)`：直接保存 iCal Pro Markdown 文件至 Vault 的 `Trips/` 目录供日历插件自动索引
+- [x] 2.3 在 `packages/mcp/src/index.mjs` 中注册新 MCP 工具与文档说明
+- [x] 2.4 编写 MCP 工具与写入服务契约测试
+
+---
+
+## 阶段三：Web 与 Obsidian 界面适配 (UI & Calendar Projection)
+- [x] 3.1 在 `PlannerHome.tsx` 中增加 "📅 导出 Google Calendar (iCal Pro)" 动作
+- [x] 3.2 在 Day 排期卡片上呈现 iCal Pro 风格的时间段（如 `09:00 - 11:30`）与优先级标记（`⏫/🔼/🔽`）
+- [x] 3.3 在 `PlannerRepository.ts` 中支持将 iCal Pro Markdown 写入 Vault
+
+---
+
+## 阶段四：文档与使用指南 (Documentation & Guides)
+- [x] 4.1 新增 `docs/AI_PLANNER_MCP.md`，介绍如何使用 Claude Desktop / Cursor / Antigravity + 本地 MCP 进行 AI 行程规划与 Google Calendar 同步
+- [x] 4.2 更新 `docs/MCP.md`
+
+---
+
+## 阶段五：验证与提交 PR (Verification & PR)
+- [x] 5.1 执行全套自动化验证（`validate:fast`, `validate:extension`, `validate:shared`, `validate:web`）
+- [x] 5.2 提交 feature 分支并创建 Pull Request
+
+---
+
+## 六、Review 总结
+
+- **去中心化 AI 架构**：不开发云端依赖或内置对话框，通过 `@ownly-app/mcp` 协议让 Claude Desktop / Cursor / Antigravity 等任意 MCP 客户端直接作为 AI Planner 驱动。
+- **iCal Pro 语法双向互通**：100% 遵循 `obsidian-ical-plugin-pro` 规范（RFC 5545 VEVENT 时间块、优先级 `⏫/🔼/🔽`、闹钟 `⏰ 15`、缩进 Description），由 Obsidian iCal Pro 插件即可直接订阅并无缝同步至 Google Calendar。
+- **全套验证指标**：
+  - `validate:fast`: 0 error
+  - `validate:extension`: 112/112 tests 全部通过
+  - `validate:shared`: 全部通过
+  - `validate:web`: Turbopack 编译成功，页面与 PWA 验证全部通过

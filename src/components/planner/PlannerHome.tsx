@@ -12,6 +12,7 @@ import {
 } from '@/domain/departure';
 import {
   buildGoogleMapsRouteUrl,
+  calculateDayTimeSlots,
   checkOpeningHoursCollision,
   checkDayScheduleCollisions,
   currencySymbolFor,
@@ -19,6 +20,7 @@ import {
   ensurePlaceKindTag,
   exportPlacesToCSV,
   exportPlacesToKML,
+  exportTripToICalProMarkdown,
   exportTripToMarkdown,
   extractPlaceCoordinates,
   getPlannerKindLabel,
@@ -31,6 +33,7 @@ import {
   optimizeStopsSequence,
   parsePlaceExpenseEstimate,
   sortPlannerPlaces,
+  ICAL_PRO_PRIORITY_MAP,
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
 } from '@/domain/planner';
@@ -706,6 +709,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     return { total: Math.round(total * 100) / 100, unconverted };
   }, [currentExpenses, activeDate, selectedTrip]);
 
+  const dayTimeSlots = useMemo(() => {
+    return calculateDayTimeSlots(scheduled);
+  }, [scheduled]);
+
   const copyMarkdownItinerary = useCallback(async () => {
     if (!selectedTrip) return;
     const md = exportTripToMarkdown(selectedTrip, places, currentExpenses, language);
@@ -713,6 +720,35 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     setNotice(zh ? '已复制 Markdown 完整行程单至剪贴板！' : 'Copied Markdown itinerary to clipboard!');
     setTimeout(() => setNotice(''), 3000);
   }, [selectedTrip, places, currentExpenses, language, zh]);
+
+  const copyICalProMarkdown = useCallback(async () => {
+    if (!selectedTrip) return;
+    const md = exportTripToICalProMarkdown(selectedTrip, places, { language });
+    await navigator.clipboard.writeText(md);
+    setNotice(
+      zh
+        ? '已生成 iCal Pro Markdown 行程单！已复制到剪贴板，可供 obsidian-ical-plugin-pro 自动同步至 Google Calendar。'
+        : 'Copied iCal Pro Markdown itinerary! Compatible with obsidian-ical-plugin-pro for Google Calendar sync.',
+    );
+    setTimeout(() => setNotice(''), 4000);
+  }, [selectedTrip, places, language, zh]);
+
+  const downloadICalProMarkdown = useCallback(() => {
+    if (!selectedTrip) return;
+    const md = exportTripToICalProMarkdown(selectedTrip, places, { language });
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trip--${selectedTrip.id}.itinerary.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(
+      zh
+        ? '已下载 iCal Pro 行程单文件 (.md)，放入 Obsidian Vault 即可被 iCal Pro 插件同步至 Google Calendar！'
+        : 'Downloaded iCal Pro itinerary file (.md)!',
+    );
+  }, [selectedTrip, places, language, zh]);
 
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;
@@ -873,6 +909,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           >
             <span>📋</span>
             <span>{zh ? '复制行程单' : 'Copy Markdown'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void copyICalProMarkdown()}
+            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
+            title={zh ? '一键生成并复制符合 obsidian-ical-plugin-pro 语法的 Markdown 日历单（支持 Google Calendar 同步）' : 'Copy iCal Pro Markdown for Google Calendar sync'}
+          >
+            <span>📅</span>
+            <span>{zh ? 'iCal Pro 日历' : 'iCal Pro'}</span>
           </button>
           <button
             type="button"
@@ -1076,6 +1121,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 </button>
                 <button
                   type="button"
+                  onClick={downloadICalProMarkdown}
+                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  title={zh ? '下载 iCal Pro (.md) 日历文件（支持 Google Calendar 同步）' : 'Download iCal Pro (.md) calendar file'}
+                >
+                  📅 iCal
+                </button>
+                <button
+                  type="button"
                   onClick={() => void copyItineraryText()}
                   className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
                   title={zh ? '复制路线文字清单' : 'Copy itinerary text'}
@@ -1146,6 +1199,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <ol className="space-y-1.5">
                 {scheduled.map((place, index) => {
                   const col = dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
+                  const slot = dayTimeSlots[index];
                   return (
                     <li
                       key={place.id}
@@ -1158,6 +1212,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
+                            {slot ? (
+                              <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
+                                🕒 {slot.startTime}-{slot.endTime}
+                              </span>
+                            ) : null}
+                            {place.priority ? (
+                              <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600" title="iCal Pro 优先级">
+                                {ICAL_PRO_PRIORITY_MAP[place.priority] || '🔼'}
+                              </span>
+                            ) : null}
                             {place.locked ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">📌 {zh ? '固定顺位' : 'pinned'}</span> : null}
                             {place.observed_price ? <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[10px] text-stone-500">{place.observed_price}</span> : null}
                             {place.tags.map((tag) => (

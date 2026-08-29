@@ -8,8 +8,12 @@ import { OwnlyMcpError } from './ownly-tools';
 import {
   estimateTripBudget,
   checkOpeningHoursCollision,
+  exportTripToICalProMarkdown,
+  generateAiItineraryPlan,
   listTripDates,
+  type AiPlanOptions,
   type FxSettings,
+  type ICalProExportOptions,
   type PlannerTrip,
   type PlannerTripPlace,
   type TripExpenseItem,
@@ -109,3 +113,53 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
     })),
   };
 }
+
+export function getPlannerTripICalMarkdown(
+  dataLocation: string,
+  tripId: string,
+  options: ICalProExportOptions = {},
+): { tripId: string; title: string; markdown: string } {
+  const trip = requireTrip(dataLocation, tripId);
+  const places = listPlannerPlaces(dataLocation)
+    .map((e) => e.frontmatter as unknown as PlannerTripPlace)
+    .filter((p) => p.trip_id === tripId);
+  const markdown = exportTripToICalProMarkdown(trip, places, options);
+  return {
+    tripId: trip.id,
+    title: trip.title,
+    markdown,
+  };
+}
+
+export function generatePlannerAiPlan(
+  dataLocation: string,
+  tripId: string,
+  options: AiPlanOptions & ICalProExportOptions = {},
+): Record<string, unknown> {
+  const trip = requireTrip(dataLocation, tripId);
+  const places = listPlannerPlaces(dataLocation)
+    .map((e) => e.frontmatter as unknown as PlannerTripPlace)
+    .filter((p) => p.trip_id === tripId && p.state !== 'dropped');
+
+  const result = generateAiItineraryPlan(places, trip, options);
+  return {
+    trip_id: trip.id,
+    title: trip.title,
+    scheduled_count: result.scheduledCount,
+    unscheduled_count: result.unscheduledCount,
+    warnings: result.warnings,
+    planned_places: result.plannedPlaces.map((p) => ({
+      id: p.id,
+      title: p.title,
+      state: p.state,
+      scheduled_date: p.scheduled_date ?? null,
+      sort_order: p.sort_order ?? null,
+      duration_minutes: p.duration_minutes ?? null,
+      locked: p.locked ?? false,
+      priority: p.priority ?? null,
+      area: p.area ?? null,
+    })),
+    ical_pro_markdown: result.icalProMarkdown,
+  };
+}
+
