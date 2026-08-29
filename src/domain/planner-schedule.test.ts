@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PlannerTrip, PlannerTripPlace } from './planner';
-import { evaluatePlannerScheduleProposal, getScheduledEndTime } from './planner-schedule';
+import {
+  evaluatePlannerScheduleProposal,
+  findPlannerTimeOverlaps,
+  getScheduledEndTime,
+  validatePlannerTiming,
+} from './planner-schedule';
 
 const trip: PlannerTrip = {
   schema_version: '0.1', type: 'trip', id: 'trip-1', title: 'Bangkok', status: 'planning',
@@ -48,6 +53,36 @@ describe('Planner schedule proposal', () => {
     }]);
     expect(result.valid).toBe(false);
     expect(result.issues.some((issue) => issue.code === 'TIME_OVERLAP')).toBe(true);
+  });
+
+  it('validates a proposed start time against an inherited duration', () => {
+    const candidate = place('late-stop', { duration_minutes: 90 });
+    const result = evaluatePlannerScheduleProposal(trip, [candidate], [{
+      id: candidate.id, scheduled_date: '2026-10-05', scheduled_start: '23:00', sort_order: 0,
+    }]);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((issue) => issue.code === 'CROSSES_MIDNIGHT')).toBe(true);
+  });
+
+  it('detects every nested overlap, not only adjacent intervals', () => {
+    const places = [
+      place('a', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '09:00', duration_minutes: 180 }),
+      place('b', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '10:00', duration_minutes: 30 }),
+      place('c', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '11:00', duration_minutes: 30 }),
+    ];
+    const overlaps = findPlannerTimeOverlaps(places, '2026-10-05');
+    expect(overlaps.map((item) => [item.fromId, item.toId])).toEqual([
+      ['a', 'b'],
+      ['a', 'c'],
+    ]);
+  });
+
+  it('uses one validation contract for manual and MCP time facts', () => {
+    expect(validatePlannerTiming('24:00', 60).some((issue) => issue.code === 'INVALID_START_TIME')).toBe(true);
+    expect(validatePlannerTiming('09:00', 1441).some((issue) => issue.code === 'INVALID_DURATION')).toBe(true);
+    expect(validatePlannerTiming('23:30', 60).some((issue) => issue.code === 'CROSSES_MIDNIGHT')).toBe(true);
+    expect(validatePlannerTiming('23:30', 60, { allowCrossMidnight: true })).toEqual([]);
+    expect(validatePlannerTiming(undefined, 90)).toEqual([]);
   });
 
   it('derives end time instead of persisting a second authority', () => {

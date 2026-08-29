@@ -8,6 +8,7 @@ import {
   type TripExpenseItem,
 } from '@/domain/planner';
 import { exportTripToICalProMarkdown } from '@/domain/ical-pro';
+import { validatePlannerTiming } from '@/domain/planner-schedule';
 import { obsidianService } from './ObsidianFileSystemService';
 
 export interface PlannerFileStore {
@@ -301,6 +302,36 @@ export class PlannerRepository {
     return next;
   }
 
+  async updatePlaceTiming(
+    placeId: string,
+    timing: { scheduled_start?: string | null; duration_minutes?: number | null },
+  ): Promise<PlannerTripPlace | null> {
+    await this.initialize();
+    const places = await this.listPlaces();
+    const existing = places.find((place) => place.id === placeId);
+    if (!existing) return null;
+
+    const scheduledStart = timing.scheduled_start?.trim() || undefined;
+    const durationMinutes = timing.duration_minutes ?? undefined;
+    const timingErrors = validatePlannerTiming(
+      scheduledStart,
+      durationMinutes,
+      { allowCrossMidnight: Boolean(existing.is_anchor) },
+    ).filter((issue) => issue.severity === 'error');
+    if (timingErrors.length > 0) {
+      throw new Error(timingErrors.map((issue) => issue.message).join(' | '));
+    }
+
+    const next: PlannerTripPlace = {
+      ...existing,
+      scheduled_start: scheduledStart,
+      duration_minutes: durationMinutes,
+      updated_at: new Date().toISOString(),
+    };
+    await this.upsert(next);
+    return next;
+  }
+
   /** Rewrites sort_order 0..n-1 for an explicitly ordered subset of one day. */
   async reorderScheduled(date: string, orderedIds: string[]): Promise<number> {
     await this.initialize();
@@ -341,12 +372,12 @@ export class PlannerRepository {
     );
   }
 
-  /**
-   * Generates and writes an obsidian-ical-plugin-pro compliant Markdown file to Trips/
-   * so Obsidian can immediately sync it to Google Calendar via the iCal Pro plugin.
-   */
-  async saveTripICalMarkdown(trip: PlannerTrip, places: PlannerTripPlace[]): Promise<string> {
+  /** Writes a one-way iCal Pro projection from freshly re-read canonical Planner/Vault state. */
+  async saveTripICalMarkdown(tripId: string): Promise<string> {
     await this.initialize();
+    const trip = (await this.listTrips()).find((item) => item.id === tripId);
+    if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+    const places = (await this.listPlaces()).filter((place) => place.trip_id === tripId);
     const markdown = exportTripToICalProMarkdown(trip, places);
     const fileName = `trip--${trip.id}.itinerary.md`;
     await this.store.writeMarkdownFile(

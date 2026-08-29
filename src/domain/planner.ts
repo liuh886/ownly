@@ -611,6 +611,7 @@ export function checkDayScheduleCollisions(
     }
   }
 
+
   return {
     hasCollision,
     placeCollisions,

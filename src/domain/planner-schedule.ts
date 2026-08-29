@@ -26,6 +26,20 @@ export interface PlannerScheduleEvaluation {
   places: PlannerTripPlace[];
 }
 
+export interface PlannerTimeOverlap {
+  fromId: string;
+  toId: string;
+  fromTitle: string;
+  toTitle: string;
+  fromTime: string;
+  toTime: string;
+  warning: string;
+}
+
+export interface PlannerTimingValidationOptions {
+  allowCrossMidnight?: boolean;
+}
+
 const CLOCK_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 export function plannerClockToMinutes(value?: string | null): number | null {
@@ -44,6 +58,94 @@ export function getScheduledEndTime(
   }
   const end = (startMinutes + durationMinutes) % (24 * 60);
   return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+}
+
+export function validatePlannerTiming(
+  start?: string | null,
+  durationMinutes?: number | null,
+  options: PlannerTimingValidationOptions = {},
+): PlannerScheduleIssue[] {
+  const issues: PlannerScheduleIssue[] = [];
+  const hasStart = start !== undefined && start !== null && start !== '';
+  const hasDuration = durationMinutes !== undefined && durationMinutes !== null;
+  const startMinutes = plannerClockToMinutes(start);
+
+  if (hasStart && startMinutes === null) {
+    issues.push({
+      severity: 'error',
+      code: 'INVALID_START_TIME',
+      message: 'scheduled_start must use 24-hour HH:mm format.',
+    });
+  }
+
+  if (hasDuration && (!Number.isInteger(durationMinutes) || !durationMinutes || durationMinutes <= 0 || durationMinutes > 24 * 60)) {
+    issues.push({
+      severity: 'error',
+      code: 'INVALID_DURATION',
+      message: 'duration_minutes must be an integer between 1 and 1440.',
+    });
+  }
+
+  if (
+    !options.allowCrossMidnight
+    && startMinutes !== null
+    && Number.isInteger(durationMinutes)
+    && Boolean(durationMinutes)
+    && durationMinutes! > 0
+    && startMinutes + durationMinutes! > 24 * 60
+  ) {
+    issues.push({
+      severity: 'error',
+      code: 'CROSSES_MIDNIGHT',
+      message: 'Movable schedule items must finish on the same calendar day; overnight anchors should be modeled explicitly.',
+    });
+  }
+
+  return issues;
+}
+
+export function findPlannerTimeOverlaps(
+  places: PlannerTripPlace[],
+  date: string,
+): PlannerTimeOverlap[] {
+  const timed = places
+    .filter((place) => place.state === 'scheduled' && place.scheduled_date === date)
+    .map((place) => {
+      const start = plannerClockToMinutes(place.scheduled_start);
+      if (start === null || !Number.isInteger(place.duration_minutes) || !place.duration_minutes || place.duration_minutes <= 0) {
+        return null;
+      }
+      return { place, start, end: start + place.duration_minutes };
+    })
+    .filter((item): item is { place: PlannerTripPlace; start: number; end: number } => item !== null)
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+
+  const overlaps: PlannerTimeOverlap[] = [];
+  for (let leftIndex = 0; leftIndex < timed.length; leftIndex += 1) {
+    const left = timed[leftIndex];
+    for (let rightIndex = leftIndex + 1; rightIndex < timed.length; rightIndex += 1) {
+      const right = timed[rightIndex];
+      if (right.start >= left.end) break;
+      if (Math.max(left.start, right.start) >= Math.min(left.end, right.end)) continue;
+
+      const leftEnd = getScheduledEndTime(left.place.scheduled_start, left.place.duration_minutes);
+      const rightEnd = getScheduledEndTime(right.place.scheduled_start, right.place.duration_minutes);
+      if (!left.place.scheduled_start || !right.place.scheduled_start || !leftEnd || !rightEnd) continue;
+
+      const fromTime = `${left.place.scheduled_start}-${leftEnd}`;
+      const toTime = `${right.place.scheduled_start}-${rightEnd}`;
+      overlaps.push({
+        fromId: left.place.id,
+        toId: right.place.id,
+        fromTitle: left.place.title,
+        toTitle: right.place.title,
+        fromTime,
+        toTime,
+        warning: `${left.place.title} (${fromTime}) overlaps ${right.place.title} (${toTime}).`,
+      });
+    }
+  }
+  return overlaps;
 }
 
 function isHardConstraint(place: PlannerTripPlace): boolean {
@@ -81,15 +183,16 @@ export function evaluatePlannerScheduleProposal(
     if (!dates.has(item.scheduled_date)) {
       issues.push({ severity: 'error', code: 'DATE_OUTSIDE_TRIP', place_id: item.id, message: `${item.scheduled_date} is outside the trip date range.` });
     }
-    if (item.scheduled_start !== undefined && plannerClockToMinutes(item.scheduled_start) === null) {
-      issues.push({ severity: 'error', code: 'INVALID_START_TIME', place_id: item.id, message: 'scheduled_start must use 24-hour HH:mm format.' });
-    }
     if (!Number.isInteger(item.sort_order) || item.sort_order < 0) {
       issues.push({ severity: 'error', code: 'INVALID_SORT_ORDER', place_id: item.id, message: 'sort_order must be a non-negative integer.' });
     }
-    if (item.duration_minutes !== undefined && (!Number.isInteger(item.duration_minutes) || item.duration_minutes <= 0 || item.duration_minutes > 24 * 60)) {
-      issues.push({ severity: 'error', code: 'INVALID_DURATION', place_id: item.id, message: 'duration_minutes must be an integer between 1 and 1440.' });
-    }
+
+    const effectiveDuration = item.duration_minutes ?? existing.duration_minutes;
+    issues.push(...validatePlannerTiming(
+      item.scheduled_start,
+      effectiveDuration,
+      { allowCrossMidnight: isHardConstraint(existing) },
+    ).map((issue) => ({ ...issue, place_id: item.id })));
 
     if (isHardConstraint(existing)) {
       const unchanged = item.scheduled_date === existing.scheduled_date
@@ -108,23 +211,13 @@ export function evaluatePlannerScheduleProposal(
       continue;
     }
 
-    const startMinutes = plannerClockToMinutes(item.scheduled_start);
-    if (startMinutes !== null && item.duration_minutes && startMinutes + item.duration_minutes > 24 * 60) {
-      issues.push({
-        severity: 'error',
-        code: 'CROSSES_MIDNIGHT',
-        place_id: item.id,
-        message: 'Movable proposal items must finish on the same calendar day; overnight anchors should be modeled explicitly.',
-      });
-    }
-
     proposed.set(item.id, {
       ...existing,
       state: 'scheduled',
       scheduled_date: item.scheduled_date,
       scheduled_start: item.scheduled_start,
       sort_order: item.sort_order,
-      duration_minutes: item.duration_minutes ?? existing.duration_minutes,
+      duration_minutes: effectiveDuration,
       // AI proposals never promote their own decisions to hard constraints.
       locked: existing.locked,
     });
@@ -135,16 +228,10 @@ export function evaluatePlannerScheduleProposal(
   }
 
   const nextPlaces = places.map((place) => proposed.get(place.id) ?? place);
-  const timedByDate = new Map<string, Array<{ place: PlannerTripPlace; start: number; end: number }>>();
 
   for (const place of nextPlaces) {
     if (place.trip_id !== trip.id || place.state !== 'scheduled' || !place.scheduled_date) continue;
-    const start = plannerClockToMinutes(place.scheduled_start);
-    if (start !== null && place.duration_minutes && place.duration_minutes > 0) {
-      const bucket = timedByDate.get(place.scheduled_date) ?? [];
-      bucket.push({ place, start, end: start + place.duration_minutes });
-      timedByDate.set(place.scheduled_date, bucket);
-    } else if (place.scheduled_start) {
+    if (place.scheduled_start && !place.duration_minutes) {
       issues.push({
         severity: 'warning',
         code: 'TIMED_ITEM_MISSING_DURATION',
@@ -159,19 +246,14 @@ export function evaluatePlannerScheduleProposal(
     }
   }
 
-  for (const [date, items] of timedByDate) {
-    items.sort((a, b) => a.start - b.start);
-    for (let index = 1; index < items.length; index += 1) {
-      const previous = items[index - 1];
-      const current = items[index];
-      if (current.start < previous.end) {
-        issues.push({
-          severity: 'error',
-          code: 'TIME_OVERLAP',
-          place_id: current.place.id,
-          message: `${date}: ${previous.place.title} overlaps ${current.place.title}.`,
-        });
-      }
+  for (const date of dates) {
+    for (const overlap of findPlannerTimeOverlaps(nextPlaces, date)) {
+      issues.push({
+        severity: 'error',
+        code: 'TIME_OVERLAP',
+        place_id: overlap.toId,
+        message: `${date}: ${overlap.warning}`,
+      });
     }
   }
 

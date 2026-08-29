@@ -1109,6 +1109,7 @@ describe('checkOpeningHoursCollision & checkDayScheduleCollisions', () => {
     expect(summary.longTransits.length).toBeGreaterThanOrEqual(1);
     expect(summary.longTransits[0].distanceKm).toBeGreaterThan(20);
   });
+
 });
 
 describe('parseImportPayload', () => {

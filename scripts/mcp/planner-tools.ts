@@ -7,13 +7,14 @@ import {
 import { OwnlyMcpError } from './ownly-tools';
 import {
   estimateTripBudget,
-  checkOpeningHoursCollision,
+  checkDayScheduleCollisions,
   listTripDates,
   type FxSettings,
   type PlannerTrip,
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
+import { findPlannerTimeOverlaps } from '../../src/domain/planner-schedule';
 import { exportTripToICalProMarkdown, type ICalProExportOptions } from '../../src/domain/ical-pro';
 
 function requireTrip(dataLocation: string, tripId: string) {
@@ -60,14 +61,27 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
   const scheduled = places.filter((place) => place.state === 'scheduled');
   const budget = estimateTripBudget(scheduled, Math.max(1, trip.members?.length ?? 1), fx);
   const conflicts = listTripDates(trip.start_date, trip.end_date)
-    .map((date) => ({
-      date,
-      collisions: places
-        .filter((place) => place.scheduled_date === date && place.open_hours)
-        .map((place) => ({ place: place.title, ...checkOpeningHoursCollision(place.open_hours, date, place.preferred_window) }))
-        .filter((collision) => collision.isCollision),
-    }))
-    .filter((day) => day.collisions.length > 0);
+    .map((date) => {
+      const summary = checkDayScheduleCollisions(places, date);
+      const timeOverlaps = findPlannerTimeOverlaps(places, date);
+      const collisions = places
+        .filter((place) => place.scheduled_date === date && summary.placeCollisions[place.id]?.isCollision)
+        .map((place) => ({
+          place: place.title,
+          isCollision: true,
+          reason: summary.placeCollisions[place.id]?.reason,
+        }));
+      return {
+        date,
+        has_collision: summary.hasCollision || timeOverlaps.length > 0,
+        collisions,
+        time_overlaps: timeOverlaps,
+        is_overloaded: summary.isOverloaded,
+        overload_reason: summary.overloadReason,
+        long_transits: summary.longTransits,
+      };
+    })
+    .filter((day) => day.has_collision);
 
   return {
     trip,
