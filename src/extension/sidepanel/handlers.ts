@@ -1,28 +1,25 @@
 import { expandAndExtractListId, resolveGoogleMapsListByUrl } from '../api';
 import {
-  checkOpeningHoursCollision,
   ensurePlaceKindTag,
   findExistingTripPlace,
   inferPlaceKind,
   inferSourceProvider,
   normalizeDelimitedText,
-  placeIdentityKey,
   reorderPendingPlaces,
   type PlannerPlaceKind,
   type PlannerPlacePriority,
-  type PlannerTrip,
+  type CaptureContext,
   type PlannerTripPlace,
 } from '../../domain/planner';
-import { mergeWriteCaptureState, normalizeCaptureState, saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
+import { normalizeCaptureState, saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
-import { getExistingPlaceForUrl, MAP_CURRENCY_OVERRIDE_KEY, MAP_CURRENCY_OVERRIDE_ORIGIN_KEY, store, t } from './store';
+import { getExistingPlaceForUrl, store, t } from './store';
 import {
   applyI18n,
   autoFillPlaceForm,
-  populateEditTripForm,
   renderCandidatesList,
   renderCurrencyPill,
   renderCurrentPlace,
@@ -36,21 +33,15 @@ const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 
 export async function saveState(): Promise<void> {
   try {
-    // Merge-write inside the single-writer queue: quick captures added by the
-    // background worker in between survive; locally deleted ids never return.
     const viaWorker = await saveCaptureStateViaWorker(store.state, store.locallyDeletedIds);
-    if (viaWorker?.ok && viaWorker.state) {
-      store.state = viaWorker.state;
-    } else {
-      store.state = await mergeWriteCaptureState(store.state, store.locallyDeletedIds);
-    }
+    store.state = viaWorker.state;
     store.locallyDeletedIds.clear();
   } catch (error) {
     console.warn('[Ownly Capture] Failed to persist capture state', error);
     setStatus(
       store.lang === 'zh'
-        ? '⚠️ 状态保存失败：请重试或重新打开侧栏（扩展可能刚被重载）。'
-        : '⚠️ Failed to save state. Retry or reopen the panel (the extension may have been reloaded).',
+        ? '⚠️ 状态保存失败：后台写入未完成，请重试。'
+        : '⚠️ Failed to save state through the background worker. Retry.',
       'error',
     );
   }
@@ -84,11 +75,6 @@ function flashNewCandidate(placeId: string): void {
 
 let searchDebounce: number | undefined;
 
-function nextSortOrderFor(date: string): number {
-  return store.state.pendingPlaces
-    .filter((p) => p.trip_id === store.state.activeTripId && p.scheduled_date === date)
-    .reduce((max, p) => Math.max(max, p.sort_order ?? -1), -1) + 1;
-}
 
 function applyBulk(mutate: (place: PlannerTripPlace, value?: string) => PlannerTripPlace, value?: string): void {
   const dict = t();
@@ -153,7 +139,7 @@ function buildPlaceFromDetected(
  */
 async function resolveListPlacesSmart(
   line: string,
-  activeTrip?: PlannerTrip,
+  activeTrip?: CaptureContext,
 ): Promise<PlannerTripPlace[] | null> {
   const ref = await expandAndExtractListId(line);
   if (!ref) return null;
@@ -170,7 +156,7 @@ async function resolveListPlacesSmart(
         const places = resp.savedList?.places ?? [];
         const now = new Date().toISOString();
         const tripTags = activeTrip?.tags ?? [];
-        return places.map((p) => buildPlaceFromDetected(p, activeTrip?.id || '', tripTags, now));
+        return places.map((p) => buildPlaceFromDetected(p, activeTrip?.tripId || '', tripTags, now));
       }
     }
   } catch {}
@@ -265,29 +251,6 @@ function initCandidateDelegation() {
       else store.bulkSelected.delete(id);
       chk.closest<HTMLElement>('.candidate-card')?.classList.toggle('bulk-selected', chk.checked);
       return;
-    }
-    if (target.matches('.day-select')) {
-      const placeId = target.dataset.placeId;
-      const select = target as HTMLSelectElement;
-      const selectedDate = select.value;
-      if (!placeId) return;
-
-      const updatedPlaces = store.state.pendingPlaces.map((p) => {
-        if (p.id !== placeId) return p;
-        return {
-          ...p,
-          scheduled_date: selectedDate || undefined,
-          state: selectedDate ? ('scheduled' as const) : ('candidate' as const),
-          updated_at: new Date().toISOString(),
-        };
-      });
-      store.state = { ...store.state, pendingPlaces: updatedPlaces };
-      void saveState();
-      if (selectedDate) {
-        const changed = store.state.pendingPlaces.find((p) => p.id === placeId);
-        const col = checkOpeningHoursCollision(changed?.open_hours, selectedDate);
-        if (col.isCollision) setStatus(t().dayConflictWarn(col.reason ?? ''), 'error');
-      }
     }
   });
 
@@ -401,34 +364,6 @@ function initCandidateDelegation() {
   });
 }
 
-function createTripFromForm(): PlannerTrip | null {
-  const title = el.tripTitle.value.trim();
-  const start = el.tripStart.value;
-  const end = el.tripEnd.value;
-  if (!title || !start || !end || end < start) {
-    setStatus(t().tripValidateError, 'error');
-    return null;
-  }
-  const now = new Date().toISOString();
-  const tripTags = normalizeDelimitedText(el.tripTags.value);
-  return {
-    schema_version: '0.1',
-    type: 'trip',
-    id: crypto.randomUUID(),
-    title,
-    status: 'planning',
-    start_date: start,
-    end_date: end,
-    destinations: normalizeDelimitedText(el.tripDestinations.value),
-    tags: tripTags.length ? tripTags : undefined,
-    saved_list_name: tripTags[0],
-    currency: el.tripCurrency.value.trim() || store.pageDetectedCurrency || undefined,
-    transport_mode: el.tripTransport.value as PlannerTrip['transport_mode'],
-    created_at: now,
-    updated_at: now,
-  };
-}
-
 export function initHandlers(): void {
   el.btnDismissPlace.addEventListener('click', () => {
     if (store.currentPlace) {
@@ -491,97 +426,49 @@ export function initHandlers(): void {
     el.bulkPrioritySelect.value = '';
   });
 
-  el.bulkDaySelect.addEventListener('change', () => {
-    const date = el.bulkDaySelect.value;
-    if (!date) return;
-    applyBulk((place) => ({
-      ...place,
-      scheduled_date: date,
-      state: 'scheduled' as const,
-      sort_order: nextSortOrderFor(date),
-    }));
-    el.bulkDaySelect.value = '';
-  });
 
-  // Currency selector: user picks the MAP currency used to read prices on this
-  // page. AUTO restores auto-detection. Trip currency (stats base) is untouched.
+  // Page-currency override is tab/session scoped. Trip currency remains Planner-owned.
   el.currencySelector.addEventListener('change', () => {
-    const dict = t();
     const selected = el.currencySelector.value;
     if (!selected) return;
     store.mapCurrencyOverride = selected === 'AUTO' ? undefined : selected;
-
     void (async () => {
-      try {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        const currentTab = tabs[0];
-        let origin: string | undefined = undefined;
-        if (currentTab?.url) {
-          try { origin = new URL(currentTab.url).origin; } catch {}
-        }
-        store.mapCurrencyOverrideOrigin = store.mapCurrencyOverride ? origin : undefined;
-
-        await chrome.storage.local.set({
-          [MAP_CURRENCY_OVERRIDE_KEY]: store.mapCurrencyOverride || '',
-          [MAP_CURRENCY_OVERRIDE_ORIGIN_KEY]: store.mapCurrencyOverrideOrigin || '',
-        });
-
-        if (currentTab?.id) {
-          await chrome.tabs.sendMessage(currentTab.id, {
-            type: 'OWNLY_CURRENCY_OVERRIDE_CHANGED',
-            overrideCurrency: store.mapCurrencyOverride,
-          });
-        }
-      } catch {}
-    })();
-
-    if (store.mapCurrencyOverride) {
-      store.pageDetectedCurrency = store.mapCurrencyOverride;
-      if (store.currentPlace) {
-        store.currentPlace = { ...store.currentPlace, detectedCurrency: store.mapCurrencyOverride };
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return;
+      const response = await chrome.runtime.sendMessage({
+        type: 'OWNLY_SET_FX_OVERRIDE',
+        tabId: tab.id,
+        currency: store.mapCurrencyOverride,
+      }) as { ok?: boolean } | undefined;
+      if (!response?.ok) throw new Error('FX override was not persisted');
+      if (store.mapCurrencyOverride) {
+        store.pageDetectedCurrency = store.mapCurrencyOverride;
+        if (store.currentPlace) store.currentPlace = { ...store.currentPlace, detectedCurrency: store.mapCurrencyOverride };
+        if (store.detectedSavedList) store.detectedSavedList = { ...store.detectedSavedList, detectedCurrency: store.mapCurrencyOverride };
       }
-      if (store.detectedSavedList) {
-        store.detectedSavedList = { ...store.detectedSavedList, detectedCurrency: store.mapCurrencyOverride };
-      }
-    }
-
-    renderCurrencyPill();
-    renderCurrentPlace();
-    setStatus(dict.currencyApplied(selected), 'success');
+      renderCurrencyPill();
+      renderCurrentPlace();
+      setStatus(t().currencyApplied(selected), 'success');
+    })().catch((error) => setStatus(String(error), 'error'));
   });
 
-  // Re-detect currency on demand
   el.btnRedetectCurrency.addEventListener('click', () => {
     store.mapCurrencyOverride = undefined;
-    store.mapCurrencyOverrideOrigin = undefined;
-    void chrome.storage.local.set({
-      [MAP_CURRENCY_OVERRIDE_KEY]: '',
-      [MAP_CURRENCY_OVERRIDE_ORIGIN_KEY]: '',
-    });
-
-    const activeTrip = store.state.trips.find((t) => t.id === store.state.activeTripId);
     void (async () => {
-      try {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tabs[0]?.id) {
-          const response = (await chrome.tabs.sendMessage(tabs[0].id, {
-            type: 'OWNLY_REDETECT_PAGE_CURRENCY',
-            targetCurrency: activeTrip?.currency,
-          })) as { detectedCurrency?: string } | undefined;
-          const detected = response?.detectedCurrency || 'USD';
-          store.pageDetectedCurrency = detected;
-          if (store.currentPlace) {
-            store.currentPlace = { ...store.currentPlace, detectedCurrency: detected };
-          }
-          renderCurrencyPill();
-          renderCurrentPlace();
-          setStatus(
-            store.lang === 'zh' ? `已重新检测页面货币：${detected}` : `Page currency re-detected: ${detected}`,
-            'success',
-          );
-        }
-      } catch {}
-    })();
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return;
+      await chrome.runtime.sendMessage({ type: 'OWNLY_SET_FX_OVERRIDE', tabId: tab.id, currency: null });
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        type: 'OWNLY_REDETECT_PAGE_CURRENCY',
+        targetCurrency: store.state.activeContext?.currency,
+      }) as { detectedCurrency?: string } | undefined;
+      const detected = response?.detectedCurrency || 'USD';
+      store.pageDetectedCurrency = detected;
+      if (store.currentPlace) store.currentPlace = { ...store.currentPlace, detectedCurrency: detected };
+      renderCurrencyPill();
+      renderCurrentPlace();
+      setStatus(store.lang === 'zh' ? `已重新检测页面货币：${detected}` : `Page currency re-detected: ${detected}`, 'success');
+    })().catch((error) => setStatus(String(error), 'error'));
   });
 
   // Select all / deselect all in bulk mode
@@ -618,8 +505,7 @@ export function initHandlers(): void {
         await writeCaptureState(next);
         store.state = next;
         renderState();
-        populateEditTripForm();
-        renderCurrentPlace();
+            renderCurrentPlace();
         renderSmartListCard();
         renderCandidatesList();
         setStatus(t().restoredCount(next.pendingPlaces.length), 'success');
@@ -635,148 +521,72 @@ export function initHandlers(): void {
     renderSmartListCard();
   });
 
-  // ⚡ 1-Click Sync Matched Saved List
+  // Smart-list import only fills the Capture inbox for the Planner-selected context.
   el.btnSmartSyncAll.addEventListener('click', () => {
-    const dict = t();
-    if (!store.detectedSavedList || store.detectedSavedList.places.length === 0) return;
-
-    el.btnSmartSyncAll.classList.add('btn-loading');
-    const origText = el.btnSmartSyncAll.textContent;
-    el.btnSmartSyncAll.textContent = `⏳ ${dict.syncingBtn}`;
-
-    try {
-      const now = new Date().toISOString();
-      let activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-
-      // If no active trip is selected, pick the first trip or create a new one automatically
-      if (!activeTrip) {
-        if (store.state.trips.length > 0) {
-          activeTrip = store.state.trips[0];
-          store.state.activeTripId = activeTrip.id;
-        } else {
-          const newTripId = crypto.randomUUID();
-          activeTrip = {
-            schema_version: '0.1',
-            type: 'trip',
-            id: newTripId,
-            title: store.detectedSavedList.listName || '探索之旅',
-            status: 'planning',
-            start_date: today(),
-            end_date: today(),
-            destinations: [store.detectedSavedList.listName || '旅行目的地'],
-            tags: [store.detectedSavedList.listName || '收藏列表'],
-            saved_list_name: store.detectedSavedList.listName,
-            currency: store.pageDetectedCurrency || 'CNY',
-            transport_mode: 'transit',
-            created_at: now,
-            updated_at: now,
-          };
-          store.state.trips = [activeTrip];
-          store.state.activeTripId = newTripId;
-        }
+    void (async () => {
+      const dict = t();
+      const context = store.state.activeContext;
+      const savedList = store.detectedSavedList;
+      if (!context) {
+        setStatus(dict.tripRequiredError, 'error');
+        return;
       }
-
-      const tripId = store.state.activeTripId!;
-      const updatedKnown = { ...store.state.knownPlaceIds };
-      const mergedPending = new Map(store.state.pendingPlaces.map((p) => [p.id, p]));
-      const listTag = store.detectedSavedList.listName;
+      if (!savedList || savedList.places.length === 0) return;
+      const now = new Date().toISOString();
+      const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
       let importedCount = 0;
-      let droppedCount = 0;
-      const incomingIds = new Set<string>();
-
-      for (const item of store.detectedSavedList.places) {
-        const placeTitle = cleanExtractedText(item.title);
-        if (!placeTitle || isJunkNavigationText(placeTitle)) continue;
-
-        const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, tripId, item.sourceUrl, item.sourcePlaceId);
-        const idKey = placeIdentityKey(tripId, item.sourceUrl);
-        const stableId = found?.id ?? store.state.knownPlaceIds[idKey] ?? crypto.randomUUID();
-        updatedKnown[idKey] = stableId;
-        incomingIds.add(stableId);
-
-        const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
-        const placeArea = cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined;
-        const cleanNote = (!item.userNote || isJunkNavigationText(item.userNote)) ? undefined : cleanExtractedText(item.userNote);
-        const cleanWhy = cleanNote || ((!item.summary || isJunkNavigationText(item.summary)) ? undefined : cleanExtractedText(item.summary));
-        const inferredKind = inferPlaceKind(placeTitle + ' ' + (item.category || '') + ' ' + (cleanAddress || ''));
-        const combinedTags = ensurePlaceKindTag(
-          Array.from(new Set([...(found?.tags ?? []), ...(activeTrip.tags ?? []), listTag])),
-          inferredKind,
-          store.lang,
-        );
-
+      for (const item of savedList.places) {
+        const title = cleanExtractedText(item.title);
+        if (!title || isJunkNavigationText(title)) continue;
+        const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, item.sourceUrl, item.sourcePlaceId, item.coordinates);
+        const id = existing?.id ?? crypto.randomUUID();
+        const address = item.address ? cleanExtractedText(item.address) : undefined;
+        const kind = inferPlaceKind([title, item.category, address, ...(item.types || [])].filter(Boolean).join(' '));
         const captured: PlannerTripPlace = {
           schema_version: '0.1',
           type: 'trip_place',
-          id: stableId,
-          trip_id: tripId,
-          title: placeTitle,
+          id,
+          trip_id: context.tripId,
+          title,
           source_provider: item.sourceProvider || 'google_maps',
           source_url: item.sourceUrl,
-          kind: inferredKind,
-          area: found?.area ?? placeArea,
-          priority: found?.priority ?? 'want',
-          tags: combinedTags,
-          why: found?.why ?? cleanWhy,
-          signals: found?.signals ?? [],
-          risks: found?.risks ?? [],
-          notes: found?.notes ?? cleanNote,
-          open_hours: item.openHours ? cleanExtractedText(item.openHours) : (found?.open_hours ?? undefined),
-          address: cleanAddress ?? found?.address,
-          observed_rating: found?.observed_rating ?? item.rating,
-          observed_price: found?.observed_price ?? item.priceLevel,
+          source_place_id: item.sourcePlaceId ?? existing?.source_place_id,
+          kind: existing?.kind ?? kind,
+          area: existing?.area ?? address?.split(/[,，·]/)[0]?.trim(),
+          priority: existing?.priority ?? 'want',
+          tags: ensurePlaceKindTag(Array.from(new Set([...(existing?.tags ?? []), ...(context.tags ?? []), savedList.listName])), existing?.kind ?? kind, store.lang),
+          why: existing?.why ?? item.userNote ?? item.summary,
+          signals: existing?.signals ?? [],
+          risks: existing?.risks ?? [],
+          notes: existing?.notes ?? item.userNote,
+          observed_rating: item.rating ?? existing?.observed_rating,
+          observed_price: item.priceLevel ?? existing?.observed_price,
           observed_at: today(),
-          duration_minutes: found?.duration_minutes,
-          preferred_window: found?.preferred_window,
-      coordinates: item.coordinates ?? found?.coordinates,
-      source_place_id: item.sourcePlaceId ?? found?.source_place_id,
-      phone: item.phone ?? found?.phone,
-      plus_code: item.plusCode ?? found?.plus_code,
-      menu_url: item.menuUrl ?? found?.menu_url,
-      reservation_url: item.reservationUrl ?? found?.reservation_url,
-      review_topics: item.reviewTopics ?? found?.review_topics,
-      types: item.types ?? found?.types,
-      reservation_status: found?.reservation_status ?? 'none',
-          state: found?.state ?? 'candidate',
-          scheduled_date: found?.scheduled_date,
-          sort_order: found?.sort_order,
-          locked: found?.locked,
-          created_at: found?.created_at ?? now,
+          preferred_window: existing?.preferred_window,
+          duration_minutes: existing?.duration_minutes,
+          open_hours: item.openHours ?? existing?.open_hours,
+          address: address ?? existing?.address,
+          coordinates: item.coordinates ?? existing?.coordinates,
+          phone: item.phone ?? existing?.phone,
+          plus_code: item.plusCode ?? existing?.plus_code,
+          menu_url: item.menuUrl ?? existing?.menu_url,
+          reservation_url: item.reservationUrl ?? existing?.reservation_url,
+          review_topics: item.reviewTopics ?? existing?.review_topics,
+          types: Array.from(new Set([...(item.types ?? []), ...(existing?.types ?? [])])),
+          reservation_status: 'none',
+          state: 'candidate',
+          created_at: existing?.created_at ?? now,
           updated_at: now,
         };
-        mergedPending.set(stableId, captured);
+        mergedPending.set(id, captured);
         importedCount += 1;
       }
-
-      const missing = store.state.pendingPlaces.filter((p) =>
-        p.trip_id === tripId
-        && p.state === 'candidate'
-        && !p.scheduled_date
-        && p.tags.includes(listTag)
-        && !incomingIds.has(p.id));
-      if (missing.length > 0 && window.confirm(dict.removedDetected(missing.length, listTag))) {
-        const dropIds = new Set(missing.map((m) => m.id));
-        for (const [id, place] of mergedPending) {
-          if (dropIds.has(id)) mergedPending.set(id, { ...place, state: 'dropped' as const, updated_at: new Date().toISOString() });
-        }
-        droppedCount = missing.length;
-      }
-
-      store.state = {
-        ...store.state,
-        knownPlaceIds: updatedKnown,
-        pendingPlaces: [...mergedPending.values()],
-      };
-
-      void saveState().then(() => {
-        setStatus(dict.savedListSynced(importedCount, listTag) + (droppedCount > 0 ? ` · ${dict.markedDropped(droppedCount)}` : ''), 'success');
-        store.smartListDismissed = true;
-        renderSmartListCard();
-      });
-    } finally {
-      el.btnSmartSyncAll.classList.remove('btn-loading');
-      el.btnSmartSyncAll.textContent = origText;
-    }
+      store.state = { ...store.state, pendingPlaces: [...mergedPending.values()] };
+      await saveState();
+      store.smartListDismissed = true;
+      renderSmartListCard();
+      setStatus(dict.savedListSynced(importedCount, savedList.listName), 'success');
+    })().catch((error) => setStatus(String(error), 'error'));
   });
 
   el.btnToggleListPreview.addEventListener('click', () => {
@@ -784,11 +594,12 @@ export function initHandlers(): void {
     renderSmartListCard();
   });
 
-  // Bulk Text / Links Parser
+  // Bulk text/list import targets the active Planner context only.
   el.btnParseBulkImport.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      if (!store.state.activeTripId) {
+      const context = store.state.activeContext;
+      if (!context) {
         setStatus(dict.tripRequiredError, 'error');
         return;
       }
@@ -797,100 +608,69 @@ export function initHandlers(): void {
         setStatus(dict.bulkImportEmpty, 'error');
         return;
       }
-
-      const lines = text.split(/[\r\n;]+/).map((l) => l.trim()).filter(Boolean);
-      if (lines.length === 0) return;
-
-      el.btnParseBulkImport.classList.add('btn-loading');
-      const origText = el.btnParseBulkImport.textContent;
-      el.btnParseBulkImport.textContent = `⏳ ${dict.syncingBtn}`;
-
-      try {
-        setStatus(dict.parsingStatus);
-        const now = new Date().toISOString();
-        const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-        const updatedKnown = { ...store.state.knownPlaceIds };
-        const mergedPending = new Map(store.state.pendingPlaces.map((p) => [p.id, p]));
-        let importedCount = 0;
-        const errors: string[] = [];
-
-        for (const line of lines) {
-          const isUrl = /^https?:\/\//i.test(line);
-          if (isUrl && (line.includes('maps.app.goo.gl') || line.includes('!2s') || line.includes('placelists/list') || line.includes('goo.gl/maps'))) {
-            try {
-              const listItems = await resolveListPlacesSmart(line, activeTrip);
-              if (listItems && listItems.length > 0) {
-                for (const item of listItems) {
-                  const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, item.source_url, item.source_place_id);
-                  if (found) continue;
-                  item.trip_id = store.state.activeTripId;
-                  const idKey = placeIdentityKey(store.state.activeTripId, item.source_url);
-                  item.id = store.state.knownPlaceIds[idKey] ?? crypto.randomUUID();
-                  updatedKnown[idKey] = item.id;
-                  mergedPending.set(item.id, item);
-                  importedCount += 1;
-                }
-                continue;
-              } else {
-                errors.push(dict.parseNotFoundLine(line));
+      const lines = text.split(/[\r\n;]+/).map((line) => line.trim()).filter(Boolean);
+      const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
+      let importedCount = 0;
+      const errors: string[] = [];
+      for (const line of lines) {
+        const isUrl = /^https?:\/\//i.test(line);
+        if (isUrl && (line.includes('maps.app.goo.gl') || line.includes('!2s') || line.includes('placelists/list') || line.includes('goo.gl/maps'))) {
+          try {
+            const listItems = await resolveListPlacesSmart(line, context);
+            if (listItems && listItems.length > 0) {
+              for (const item of listItems) {
+                const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, item.source_url, item.source_place_id, item.coordinates);
+                if (existing) continue;
+                item.id = crypto.randomUUID();
+                item.trip_id = context.tripId;
+                item.state = 'candidate';
+                item.scheduled_date = undefined;
+                item.sort_order = undefined;
+                item.locked = undefined;
+                mergedPending.set(item.id, item);
+                importedCount += 1;
               }
-            } catch (e: unknown) {
-              errors.push(dict.parseFailedLine(line, e instanceof Error ? e.message : 'unknown'));
+              continue;
             }
+            errors.push(dict.parseNotFoundLine(line));
+          } catch (error) {
+            errors.push(dict.parseFailedLine(line, error instanceof Error ? error.message : 'unknown'));
           }
-
-          const sourceUrl = isUrl ? line : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(line)}`;
-          const title = isUrl ? (line.match(/\/maps\/place\/([^/?#]+)/)?.[1]?.replace(/\+/g, ' ') || line) : line;
-
-          const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, sourceUrl);
-          if (found) continue;
-
-          const idKey = placeIdentityKey(store.state.activeTripId, sourceUrl);
-          const stableId = store.state.knownPlaceIds[idKey] ?? crypto.randomUUID();
-          updatedKnown[idKey] = stableId;
-
-          const inferredKind = inferPlaceKind(safeDecodeUri(title));
-          const place: PlannerTripPlace = {
-            schema_version: '0.1',
-            type: 'trip_place',
-            id: stableId,
-            trip_id: store.state.activeTripId,
-            title: safeDecodeUri(title),
-            source_provider: inferSourceProvider(sourceUrl),
-            source_url: sourceUrl,
-            kind: inferredKind,
-            priority: 'want',
-            tags: ensurePlaceKindTag(activeTrip?.tags ?? [], inferredKind, store.lang),
-            signals: [],
-            risks: [],
-            observed_at: today(),
-            reservation_status: 'none',
-            state: 'candidate',
-            created_at: now,
-            updated_at: now,
-          };
-          mergedPending.set(stableId, place);
-          importedCount += 1;
         }
 
-        store.state = {
-          ...store.state,
-          knownPlaceIds: updatedKnown,
-          pendingPlaces: [...mergedPending.values()],
+        const sourceUrl = isUrl ? line : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(line)}`;
+        const title = isUrl ? (line.match(/\/maps\/place\/([^/?#]+)/)?.[1]?.replace(/\+/g, ' ') || line) : line;
+        const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, sourceUrl);
+        if (existing) continue;
+        const kind = inferPlaceKind(safeDecodeUri(title));
+        const now = new Date().toISOString();
+        const place: PlannerTripPlace = {
+          schema_version: '0.1',
+          type: 'trip_place',
+          id: crypto.randomUUID(),
+          trip_id: context.tripId,
+          title: safeDecodeUri(title),
+          source_provider: inferSourceProvider(sourceUrl),
+          source_url: sourceUrl,
+          kind,
+          priority: 'want',
+          tags: ensurePlaceKindTag(context.tags ?? [], kind, store.lang),
+          signals: [],
+          risks: [],
+          observed_at: today(),
+          reservation_status: 'none',
+          state: 'candidate',
+          created_at: now,
+          updated_at: now,
         };
-
-        await saveState();
-        el.bulkInputText.value = '';
-        if (errors.length > 0) {
-          setStatus(dict.importedWithWarnings(importedCount, errors.join(', ')), 'success');
-        } else {
-          setStatus(dict.importedCount(importedCount), 'success');
-        }
-      } finally {
-        el.btnParseBulkImport.classList.remove('btn-loading');
-        el.btnParseBulkImport.textContent = origText;
+        mergedPending.set(place.id, place);
+        importedCount += 1;
       }
-    })();
+      store.state = { ...store.state, pendingPlaces: [...mergedPending.values()] };
+      await saveState();
+      el.bulkInputText.value = '';
+      setStatus(errors.length > 0 ? dict.importedWithWarnings(importedCount, errors.join(', ')) : dict.importedCount(importedCount), 'success');
+    })().catch((error) => setStatus(String(error), 'error'));
   });
 
   el.btnToggleSelectAll.addEventListener('click', () => {
@@ -900,166 +680,42 @@ export function initHandlers(): void {
   });
 
   el.btnBatchAdd.addEventListener('click', () => {
-    const dict = t();
-    if (!store.state.activeTripId) {
-      setStatus(dict.tripRequiredError, 'error');
-      return;
-    }
-    const checkboxes = el.batchListContainer.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked');
-    const selectedUrls = new Set(Array.from(checkboxes).map((c) => c.dataset.url).filter(Boolean));
-    const allPlaces = (store.detectedSavedList?.places && store.detectedSavedList.places.length > 0)
-      ? store.detectedSavedList.places
-      : store.detectedListPlaces;
-    const toAdd = allPlaces.filter((item) => selectedUrls.has(item.sourceUrl));
-    if (toAdd.length === 0) return;
-
-    const now = new Date().toISOString();
-    const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-    const tripId = store.state.activeTripId;
-    const updatedKnown = { ...store.state.knownPlaceIds };
-    const mergedPending = new Map(store.state.pendingPlaces.map((p) => [p.id, p]));
-    let addedCount = 0;
-
-    for (const item of toAdd) {
-      const found = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, tripId, item.sourceUrl, item.sourcePlaceId);
-      if (found) continue;
-      const idKey = placeIdentityKey(tripId, item.sourceUrl);
-      const stableId = store.state.knownPlaceIds[idKey] ?? crypto.randomUUID();
-      updatedKnown[idKey] = stableId;
-
-      const inferredKind = inferPlaceKind((item.title || '') + ' ' + (item.category || '') + ' ' + (item.address || ''));
-      const place: PlannerTripPlace = {
-        schema_version: '0.1',
-        type: 'trip_place',
-        id: stableId,
-        trip_id: tripId,
-        title: item.title,
-        source_provider: item.sourceProvider || 'google_maps',
-        source_url: item.sourceUrl,
-        kind: inferredKind,
-        priority: 'want',
-        tags: ensurePlaceKindTag(activeTrip?.tags ?? [], inferredKind, store.lang),
-        why: item.userNote || item.summary,
-        signals: [],
-        risks: [],
-        notes: item.userNote,
-        open_hours: item.openHours,
-        address: item.address,
-        observed_rating: item.rating,
-        observed_price: item.priceLevel,
-        observed_at: today(),
-        coordinates: item.coordinates,
-        source_place_id: item.sourcePlaceId,
-        reservation_status: 'none',
-        state: 'candidate',
-        created_at: now,
-        updated_at: now,
-      };
-      mergedPending.set(stableId, place);
-      addedCount += 1;
-    }
-
-    store.state = {
-      ...store.state,
-      knownPlaceIds: updatedKnown,
-      pendingPlaces: [...mergedPending.values()],
-    };
-
-    void saveState().then(() => {
-      setStatus(dict.batchAddedSuccess(addedCount), 'success');
-    });
-  });
-
-  // Edit active trip form submission
-  el.editTripForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const dict = t();
-    if (!store.state.activeTripId) return;
-
-    const title = el.editTripTitle.value.trim();
-    const start = el.editTripStart.value;
-    const end = el.editTripEnd.value;
-    if (!title || !start || !end || end < start) {
-      setStatus(dict.tripValidateError, 'error');
-      return;
-    }
-
-    const tripTags = normalizeDelimitedText(el.editTripTags.value);
-    const now = new Date().toISOString();
-
-    store.state = {
-      ...store.state,
-      trips: store.state.trips.map((trip) => {
-        if (trip.id !== store.state.activeTripId) return trip;
-        return {
-          ...trip,
-          title,
-          start_date: start,
-          end_date: end,
-          destinations: normalizeDelimitedText(el.editTripDestinations.value),
-          tags: tripTags.length ? tripTags : undefined,
-          saved_list_name: tripTags[0] || undefined,
-          currency: el.editTripCurrency.value.trim() || undefined,
-          transport_mode: el.editTripTransport.value as PlannerTrip['transport_mode'],
-          updated_at: now,
+    void (async () => {
+      const context = store.state.activeContext;
+      if (!context) {
+        setStatus(t().tripRequiredError, 'error');
+        return;
+      }
+      const selectedUrls = new Set(Array.from(el.batchListContainer.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked'))
+        .map((checkbox) => checkbox.dataset.url).filter(Boolean));
+      const source = store.detectedSavedList?.places?.length ? store.detectedSavedList.places : store.detectedListPlaces;
+      const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
+      let added = 0;
+      const now = new Date().toISOString();
+      for (const item of source.filter((place) => selectedUrls.has(place.sourceUrl))) {
+        const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, item.sourceUrl, item.sourcePlaceId, item.coordinates);
+        if (existing) continue;
+        const kind = inferPlaceKind([item.title, item.category, item.address, ...(item.types || [])].filter(Boolean).join(' '));
+        const place: PlannerTripPlace = {
+          schema_version: '0.1', type: 'trip_place', id: crypto.randomUUID(), trip_id: context.tripId,
+          title: item.title, source_provider: item.sourceProvider || 'google_maps', source_url: item.sourceUrl,
+          source_place_id: item.sourcePlaceId, kind, priority: 'want', tags: ensurePlaceKindTag(context.tags ?? [], kind, store.lang),
+          why: item.userNote || item.summary, signals: [], risks: [], notes: item.userNote,
+          open_hours: item.openHours, address: item.address, observed_rating: item.rating, observed_price: item.priceLevel,
+          observed_at: today(), coordinates: item.coordinates, phone: item.phone, plus_code: item.plusCode,
+          menu_url: item.menuUrl, reservation_url: item.reservationUrl, review_topics: item.reviewTopics, types: item.types,
+          reservation_status: 'none', state: 'candidate', created_at: now, updated_at: now,
         };
-      }),
-    };
-
-    void saveState().then(() => {
-      setStatus(dict.tripSavedSuccess, 'success');
-    });
+        mergedPending.set(place.id, place);
+        added += 1;
+      }
+      store.state = { ...store.state, pendingPlaces: [...mergedPending.values()] };
+      await saveState();
+      setStatus(t().batchAddedSuccess(added), 'success');
+    })().catch((error) => setStatus(String(error), 'error'));
   });
 
-  // Delete active trip
-  el.btnDeleteTrip.addEventListener('click', () => {
-    const dict = t();
-    if (!store.state.activeTripId) return;
-    const trip = store.state.trips.find((item) => item.id === store.state.activeTripId);
-    if (!trip) return;
-
-    if (!window.confirm(dict.confirmDeleteTrip(trip.title))) return;
-
-    const deletedTripId = store.state.activeTripId;
-    const remainingTrips = store.state.trips.filter((item) => item.id !== deletedTripId);
-    const nextActiveId = remainingTrips[0]?.id || null;
-    const removedPlaces = store.state.pendingPlaces.filter((p) => p.trip_id === deletedTripId);
-    for (const place of removedPlaces) store.locallyDeletedIds.add(place.id);
-
-    store.state = {
-      ...store.state,
-      trips: remainingTrips,
-      activeTripId: nextActiveId,
-      pendingPlaces: store.state.pendingPlaces.filter((p) => p.trip_id !== deletedTripId),
-    };
-
-    void saveState().then(() => {
-      setStatus(dict.tripDeletedSuccess, 'success');
-    });
-  });
-
-  el.tripForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const trip = createTripFromForm();
-    if (!trip) return;
-    store.state = { ...store.state, trips: [...store.state.trips, trip], activeTripId: trip.id };
-    void saveState().then(() => {
-      el.tripForm.reset();
-      el.tripCurrency.value = store.pageDetectedCurrency || 'CNY';
-      el.tripTransport.value = 'transit';
-      setStatus(t().tripCreated(trip.title), 'success');
-    });
-  });
-
-  el.tripSelect.addEventListener('change', () => {
-    store.state = { ...store.state, activeTripId: el.tripSelect.value || null };
-    void saveState();
-    populateEditTripForm();
-    const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-    if (activeTrip?.tags?.length && !el.tags.value) {
-      el.tags.value = activeTrip.tags.join(', ');
-    }
-  });
+  // Trip CRUD lives in Planner/Vault. Capture has no local Trip editor.
 
   el.refreshPlace.addEventListener('click', () => {
     store.userDismissedPlaceUrl = null;
@@ -1068,7 +724,7 @@ export function initHandlers(): void {
 
   el.btnRemoveCandidate.addEventListener('click', () => {
     const dict = t();
-    if (!store.currentPlace || !store.state.activeTripId) return;
+    if (!store.currentPlace || !store.state.activeContext?.tripId) return;
     const existing = getExistingPlaceForUrl(store.currentPlace.sourceUrl, store.currentPlace.sourcePlaceId);
     if (!existing) return;
 
@@ -1085,7 +741,8 @@ export function initHandlers(): void {
   el.captureForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const dict = t();
-    if (!store.state.activeTripId) {
+    const context = store.state.activeContext;
+    if (!context) {
       setStatus(dict.tripRequiredError, 'error');
       return;
     }
@@ -1093,35 +750,32 @@ export function initHandlers(): void {
       setStatus(dict.placeRequiredError, 'error');
       return;
     }
-
     const duration = Number(el.duration.value);
     const rating = Number(el.rating.value);
     const now = new Date().toISOString();
-    const existing = findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, store.currentPlace.sourceUrl, store.currentPlace.sourcePlaceId);
-    // Reuse the identity of an already-synced (acked) place so a re-capture
-    // updates the Vault entry instead of creating a duplicate.
-    const placeKey = placeIdentityKey(store.state.activeTripId, store.currentPlace.sourceUrl);
-    const stableId = existing?.id ?? store.state.knownPlaceIds[placeKey] ?? crypto.randomUUID();
-
-    const selectedKind = (el.kind.value as PlannerPlaceKind) || 'other';
-    const placeTags = normalizeDelimitedText(el.tags.value);
-    const combinedTags = ensurePlaceKindTag(
-      placeTags,
-      selectedKind,
-      store.lang,
+    const existing = findExistingTripPlace(
+      store.state.pendingPlaces,
+      context.tripId,
+      store.currentPlace.sourceUrl,
+      store.currentPlace.sourcePlaceId,
+      store.currentPlace.coordinates,
     );
-
+    const kind = (el.kind.value as PlannerPlaceKind) || 'other';
+    const tags = ensurePlaceKindTag(normalizeDelimitedText(el.tags.value), kind, store.lang);
+    const id = existing?.id ?? crypto.randomUUID();
     const place: PlannerTripPlace = {
       schema_version: '0.1',
       type: 'trip_place',
-      id: stableId,
-      trip_id: store.state.activeTripId,
+      id,
+      trip_id: context.tripId,
       title: cleanExtractedText(store.currentPlace.title),
       source_provider: store.currentPlace.sourceProvider || 'google_maps',
       source_url: store.currentPlace.sourceUrl,
-      kind: selectedKind,
+      source_place_id: store.currentPlace.sourcePlaceId ?? existing?.source_place_id,
+      kind,
       area: cleanExtractedText(el.area.value.trim()) || undefined,
-      tags: combinedTags,
+      priority: existing?.priority ?? 'want',
+      tags,
       why: cleanExtractedText(el.why.value.trim()) || undefined,
       signals: normalizeDelimitedText(el.signals.value).map(cleanExtractedText).filter(Boolean),
       risks: normalizeDelimitedText(el.risks.value).map(cleanExtractedText).filter(Boolean),
@@ -1134,28 +788,18 @@ export function initHandlers(): void {
       open_hours: cleanExtractedText(store.currentPlace.openHours ?? existing?.open_hours) || undefined,
       address: cleanExtractedText(store.currentPlace.address ?? existing?.address) || undefined,
       coordinates: store.currentPlace.coordinates ?? existing?.coordinates,
-      source_place_id: store.currentPlace.sourcePlaceId ?? existing?.source_place_id,
       phone: store.currentPlace.phone ?? existing?.phone,
       plus_code: store.currentPlace.plusCode ?? existing?.plus_code,
       menu_url: store.currentPlace.menuUrl ?? existing?.menu_url,
       reservation_url: store.currentPlace.reservationUrl ?? existing?.reservation_url,
       review_topics: store.currentPlace.reviewTopics ?? existing?.review_topics,
-      types: (() => {
-        const merged = new Set<string>([...(store.currentPlace.types ?? []), ...(existing?.types ?? [])]);
-        return merged.size > 0 ? [...merged] : undefined;
-      })(),
-      reservation_status: existing?.reservation_status ?? 'none',
-      state: existing?.state ?? 'candidate',
-      scheduled_date: existing?.scheduled_date,
+      types: Array.from(new Set([...(store.currentPlace.types ?? []), ...(existing?.types ?? [])])),
+      reservation_status: 'none',
+      state: 'candidate',
       created_at: existing?.created_at ?? now,
       updated_at: now,
     };
-
-    store.state = {
-      ...store.state,
-      knownPlaceIds: { ...store.state.knownPlaceIds, [placeKey]: place.id },
-      pendingPlaces: [...store.state.pendingPlaces.filter((item) => item.id !== place.id), place],
-    };
+    store.state = { ...store.state, pendingPlaces: [...store.state.pendingPlaces.filter((item) => item.id !== id), place] };
     void saveState().then(() => {
       syncQuickChipStates();
       setStatus(existing ? dict.candidateUpdated : dict.candidateAdded, 'success');
@@ -1163,7 +807,7 @@ export function initHandlers(): void {
     });
   });
 
-  el.captureForm.addEventListener('keydown', (event) => {
+  el.captureForm.addEventListener('keydown' , (event) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       el.btnCaptureSubmit.click();

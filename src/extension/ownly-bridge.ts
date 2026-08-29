@@ -1,5 +1,5 @@
-import { acknowledgeCapturedPlaces } from '../domain/planner';
-import { ackPlacesViaWorker, readCaptureState, updateCaptureState } from './capture-state';
+import type { CaptureContext } from '../domain/planner';
+import { ackPlacesViaWorker, readCaptureState, setCaptureContextViaWorker } from './capture-state';
 
 const REQUEST_SOURCE = 'ownly-planner-web';
 const RESPONSE_SOURCE = 'ownly-capture-extension';
@@ -22,18 +22,17 @@ window.addEventListener('message', (event) => {
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'CAPTURE_STATE', payload: state }, getTargetOrigin());
         return;
       }
-
       if (message.type === 'ACK_CAPTURED_PLACES') {
         const payload = message.payload as { placeIds?: string[] } | undefined;
         const ids = Array.isArray(payload?.placeIds) ? payload.placeIds : [];
-        const viaWorker = await ackPlacesViaWorker(ids);
-        if (!viaWorker?.ok) {
-          await updateCaptureState((current) => ({
-            state: acknowledgeCapturedPlaces(current, ids),
-            result: { ok: true },
-          }));
-        }
+        await ackPlacesViaWorker(ids);
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'ACK_CAPTURED_PLACES_RESULT', payload: { ok: true } }, getTargetOrigin());
+        return;
+      }
+      if (message.type === 'SET_CAPTURE_CONTEXT') {
+        const payload = message.payload as { context?: CaptureContext | null } | undefined;
+        await setCaptureContextViaWorker(payload?.context ?? null);
+        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'SET_CAPTURE_CONTEXT_RESULT', payload: { ok: true } }, getTargetOrigin());
       }
     } catch (error) {
       window.postMessage({

@@ -1,4 +1,4 @@
-import { ensurePlaceKindTag, inferPlaceKind, type PlannerTrip, type PlannerTripPlace } from '../domain/planner';
+import { ensurePlaceKindTag, inferPlaceKind, type CaptureContext, type PlannerTripPlace } from '../domain/planner';
 import { cleanExtractedText, findEntityListPlaceId, isJunkNavigationText, parseEntityListCoordinates, today } from './utils';
 
 export interface ResolvedListRef {
@@ -26,7 +26,7 @@ export async function expandAndExtractListId(rawUrl: string): Promise<ResolvedLi
   return listId ? { finalUrl, listId } : null;
 }
 
-export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: PlannerTrip): Promise<PlannerTripPlace[]> {
+export async function resolveGoogleMapsListByUrl(rawUrl: string, activeContext?: CaptureContext): Promise<PlannerTripPlace[]> {
   try {
     let finalUrl = rawUrl;
     if (rawUrl.includes('maps.app.goo.gl') || rawUrl.includes('goo.gl/maps')) {
@@ -54,7 +54,7 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: Pl
     const rawItems = data[0]?.[8];
     if (Array.isArray(rawItems)) {
       const now = new Date().toISOString();
-      const combinedTags = Array.from(new Set([...(activeTrip?.tags ?? []), listName]));
+      const combinedTags = Array.from(new Set([...(activeContext?.tags ?? []), listName]));
       const places: PlannerTripPlace[] = [];
       for (const item of rawItems) {
         const placeInfo = item[1];
@@ -78,7 +78,7 @@ export async function resolveGoogleMapsListByUrl(rawUrl: string, activeTrip?: Pl
           schema_version: '0.1',
           type: 'trip_place',
           id: crypto.randomUUID(),
-          trip_id: activeTrip?.id || '',
+          trip_id: activeContext?.tripId || '',
           title: placeTitle,
           source_provider: 'google_maps',
           source_url: sourceUrl,

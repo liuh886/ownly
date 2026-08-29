@@ -7,10 +7,10 @@ import {
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { readCaptureState } from '../capture-state';
 import { I18N, type Lang } from '../i18n';
+import { sessionStorage } from '../session-storage';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
-export const MAP_CURRENCY_OVERRIDE_KEY = 'ownlyMapCurrencyOverride';
-export const MAP_CURRENCY_OVERRIDE_ORIGIN_KEY = 'ownlyMapCurrencyOverrideOrigin';
+const fxOverrideKey = (tabId: number) => `ownlyFxOverride:${tabId}`;
 
 export interface SavedListSummary {
   listId?: string;
@@ -29,11 +29,7 @@ export const store = {
   activeFilter: 'all',
   searchQuery: '',
   pageDetectedCurrency: undefined as string | undefined,
-  /** Manual map-currency override picked in the selector; undefined = auto-detect. */
   mapCurrencyOverride: undefined as string | undefined,
-  /** Origin/domain for which the manual override was selected. */
-  mapCurrencyOverrideOrigin: undefined as string | undefined,
-  /** Place ids deleted locally since last successful persist; guards merge-write resurrection. */
   locallyDeletedIds: new Set<string>(),
   userDismissedPlaceUrl: null as string | null,
   smartListDismissed: false,
@@ -49,28 +45,24 @@ export function t() {
 }
 
 export async function loadState(): Promise<void> {
-  const [langRes, currRes, originRes, fresh] = await Promise.all([
+  const [langRes, fresh, tabs] = await Promise.all([
     chrome.storage.local.get(LANG_STORAGE_KEY),
-    chrome.storage.local.get(MAP_CURRENCY_OVERRIDE_KEY),
-    chrome.storage.local.get(MAP_CURRENCY_OVERRIDE_ORIGIN_KEY),
     readCaptureState(),
+    chrome.tabs.query({ active: true, currentWindow: true }),
   ]);
   const langVal = langRes[LANG_STORAGE_KEY];
-  if (langVal === 'zh' || langVal === 'en') {
-    store.lang = langVal;
-  }
-  const currVal = currRes[MAP_CURRENCY_OVERRIDE_KEY];
-  if (typeof currVal === 'string' && currVal.trim().length > 0 && currVal !== 'AUTO') {
-    store.mapCurrencyOverride = currVal.trim().toUpperCase();
-  }
-  const originVal = originRes[MAP_CURRENCY_OVERRIDE_ORIGIN_KEY];
-  if (typeof originVal === 'string' && originVal.trim().length > 0) {
-    store.mapCurrencyOverrideOrigin = originVal.trim();
+  if (langVal === 'zh' || langVal === 'en') store.lang = langVal;
+  const tabId = tabs[0]?.id;
+  if (typeof tabId === 'number') {
+    const session = await sessionStorage.get(fxOverrideKey(tabId));
+    const raw = session[fxOverrideKey(tabId)];
+    if (typeof raw === 'string' && raw.trim()) store.mapCurrencyOverride = raw.trim().toUpperCase();
   }
   store.state = fresh;
 }
 
 export function getExistingPlaceForUrl(sourceUrl: string, sourcePlaceId?: string): PlannerTripPlace | undefined {
-  if (!store.state.activeTripId) return undefined;
-  return findExistingTripPlace(store.state.knownPlaceIds, store.state.pendingPlaces, store.state.activeTripId, sourceUrl, sourcePlaceId);
+  const tripId = store.state.activeContext?.tripId;
+  if (!tripId) return undefined;
+  return findExistingTripPlace(store.state.pendingPlaces, tripId, sourceUrl, sourcePlaceId, store.currentPlace?.coordinates);
 }

@@ -3,7 +3,6 @@ import {
   ensurePlaceKindTag,
   mergeCapturedPlaceResearch,
   normalizePlaceIdentity,
-  placeIdentityKey,
   type PlannerTrip,
   type PlannerTripPlace,
   type TripExpenseItem,
@@ -112,6 +111,7 @@ export class PlannerRepository {
   }
 
   async listExpenses(): Promise<TripExpenseItem[]> {
+    await this.initialize();
     const files = await this.store.readMarkdownFiles(this.directory(PLANNER_DIRECTORIES.expenses));
     const result: TripExpenseItem[] = [];
     for (const file of files) {
@@ -142,41 +142,69 @@ export class PlannerRepository {
   }
 
   async upsertPlace(place: PlannerTripPlace): Promise<void> {
-    await this.upsertPlaces([place]);
+    await this.upsert({
+      ...place,
+      tags: ensurePlaceKindTag(place.tags, place.kind),
+    });
   }
 
+  /** Canonical Planner writes: no Capture merge heuristics. */
   async upsertPlaces(places: PlannerTripPlace[]): Promise<void> {
-    if (places.length === 0) return;
-    const needsMerge = places.some((place) => place.locked === undefined);
-    const existingMap = new Map<string, PlannerTripPlace>();
-    if (needsMerge) {
-      for (const existing of await this.listPlaces()) {
-        existingMap.set(existing.id, existing);
-        if (existing.source_url) {
-          existingMap.set(placeIdentityKey(existing.trip_id, existing.source_url), existing);
-          existingMap.set(`${existing.trip_id}::${normalizePlaceIdentity(existing.source_url)}`, existing);
-        }
-        if (existing.source_place_id) {
-          existingMap.set(`${existing.trip_id}::pid:${existing.source_place_id}`, existing);
-        }
-      }
-    }
     for (const place of places) {
-      const normalizedPlace: PlannerTripPlace = {
-        ...place,
-        tags: ensurePlaceKindTag(place.tags, place.kind),
+      await this.upsertPlace(place);
+    }
+  }
+
+  /**
+   * Capture import is an explicit boundary. Existing Planner-owned decisions
+   * remain authoritative; only observed/source facts are refreshed.
+   */
+  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<void> {
+    if (places.length === 0) return;
+    await this.initialize();
+
+    const existing = await this.listPlaces();
+    const byId = new Map(existing.map((place) => [place.id, place] as const));
+    const byPlaceId = new Map<string, PlannerTripPlace>();
+    const byUrlIdentity = new Map<string, PlannerTripPlace>();
+    const byCoordinates = new Map<string, PlannerTripPlace>();
+
+    const coordinateKey = (place: PlannerTripPlace): string | null => {
+      if (!place.coordinates) return null;
+      return `${place.trip_id}::geo:${place.coordinates.lat.toFixed(5)},${place.coordinates.lng.toFixed(5)}`;
+    };
+
+    for (const place of existing) {
+      if (place.source_place_id) byPlaceId.set(`${place.trip_id}::${place.source_provider}::${place.source_place_id}`, place);
+      if (place.source_url) byUrlIdentity.set(`${place.trip_id}::${place.source_provider}::${normalizePlaceIdentity(place.source_url)}`, place);
+      const geo = coordinateKey(place);
+      if (geo) byCoordinates.set(geo, place);
+    }
+
+    for (const rawPlace of places) {
+      const captured: PlannerTripPlace = {
+        ...rawPlace,
+        tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
+        reservation_status: rawPlace.reservation_status ?? 'none',
+        state: 'candidate',
+        scheduled_date: undefined,
+        sort_order: undefined,
+        locked: undefined,
       };
-      if (normalizedPlace.locked === undefined) {
-        const existing = existingMap.get(normalizedPlace.id)
-          ?? (normalizedPlace.source_url ? existingMap.get(placeIdentityKey(normalizedPlace.trip_id, normalizedPlace.source_url)) : undefined)
-          ?? (normalizedPlace.source_url ? existingMap.get(`${normalizedPlace.trip_id}::${normalizePlaceIdentity(normalizedPlace.source_url)}`) : undefined)
-          ?? (normalizedPlace.source_place_id ? existingMap.get(`${normalizedPlace.trip_id}::pid:${normalizedPlace.source_place_id}`) : undefined);
-        if (existing) {
-          await this.upsert(mergeCapturedPlaceResearch(existing, normalizedPlace));
-          continue;
-        }
+      const existingPlace = byId.get(captured.id)
+        ?? (captured.source_place_id
+          ? byPlaceId.get(`${captured.trip_id}::${captured.source_provider}::${captured.source_place_id}`)
+          : undefined)
+        ?? (coordinateKey(captured) ? byCoordinates.get(coordinateKey(captured)!) : undefined)
+        ?? (captured.source_url
+          ? byUrlIdentity.get(`${captured.trip_id}::${captured.source_provider}::${normalizePlaceIdentity(captured.source_url)}`)
+          : undefined);
+
+      if (existingPlace) {
+        await this.upsert(mergeCapturedPlaceResearch(existingPlace, captured));
+      } else {
+        await this.upsert(captured);
       }
-      await this.upsert(normalizedPlace);
     }
   }
 

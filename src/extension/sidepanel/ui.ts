@@ -1,12 +1,10 @@
 import {
-  checkOpeningHoursCollision,
   classifyResearchChip,
   convertPriceRange,
   ensurePlaceKindTag,
   getPlannerKindLabel,
   inferPlaceKind,
   isPlausibleCustomTag,
-  listTripDates,
   normalizeDelimitedText,
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
@@ -64,35 +62,6 @@ export function applyI18n() {
   el.lblFxTooltipToggle.title = dict.toggleFxTooltipDesc;
   el.txtFxTooltipToggle.textContent = dict.toggleFxTooltipLabel;
   el.lblActiveTrip.textContent = dict.activeTrip;
-  el.sumTripManage.textContent = dict.tripManage;
-  el.sumCreateTrip.textContent = dict.createTripSummary;
-  el.sumEditTrip.textContent = dict.editTripSummary;
-
-  setLeadingLabel(el.lblTripTitle, dict.tripTitleLabel);
-  el.tripTitle.placeholder = dict.tripTitlePlaceholder;
-  setLeadingLabel(el.lblTripStart, dict.tripStartLabel);
-  setLeadingLabel(el.lblTripEnd, dict.tripEndLabel);
-  setLeadingLabel(el.lblTripDestinations, dict.tripDestinationsLabel);
-  el.tripDestinations.placeholder = dict.tripDestinationsPlaceholder;
-  setLeadingLabel(el.lblTripTags, dict.tripTagsLabel);
-  el.tripTags.placeholder = dict.tripTagsPlaceholder;
-  setLeadingLabel(el.lblTripCurrency, dict.tripCurrencyLabel);
-  setLeadingLabel(el.lblTripTransport, dict.tripTransportLabel);
-  el.btnCreateTrip.textContent = dict.btnCreateTrip;
-
-  setLeadingLabel(el.lblEditTripTitle, dict.tripTitleLabel);
-  el.editTripTitle.placeholder = dict.tripTitlePlaceholder;
-  setLeadingLabel(el.lblEditTripStart, dict.tripStartLabel);
-  setLeadingLabel(el.lblEditTripEnd, dict.tripEndLabel);
-  setLeadingLabel(el.lblEditTripDestinations, dict.tripDestinationsLabel);
-  el.editTripDestinations.placeholder = dict.tripDestinationsPlaceholder;
-  setLeadingLabel(el.lblEditTripTags, dict.tripTagsLabel);
-  el.editTripTags.placeholder = dict.tripTagsPlaceholder;
-  setLeadingLabel(el.lblEditTripCurrency, dict.tripCurrencyLabel);
-  setLeadingLabel(el.lblEditTripTransport, dict.tripTransportLabel);
-  el.btnSaveTripEdit.textContent = dict.btnSaveTripEdit;
-  el.btnDeleteTrip.textContent = dict.btnDeleteTrip;
-
   el.sumBulkImport.textContent = dict.sumBulkImport;
   setLeadingLabel(el.lblBulkText, dict.lblBulkText);
   el.bulkInputText.placeholder = dict.bulkPlaceholder;
@@ -112,15 +81,6 @@ export function applyI18n() {
   }
 
 
-  for (const opt of Array.from(el.tripTransport.options)) {
-    const val = opt.value as keyof typeof dict.transport;
-    if (dict.transport[val]) opt.textContent = dict.transport[val];
-  }
-
-  for (const opt of Array.from(el.editTripTransport.options)) {
-    const val = opt.value as keyof typeof dict.transport;
-    if (dict.transport[val]) opt.textContent = dict.transport[val];
-  }
 
   setLeadingLabel(el.lblArea, dict.areaLabel);
   el.area.placeholder = dict.areaPlaceholder;
@@ -164,7 +124,7 @@ function renderChips() {
   const dict = t();
   el.quickChips.innerHTML = '';
 
-  const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
+  const activeTrip = store.state.activeContext;
   const customTags = activeTrip?.tags || [];
 
   // Render custom trip sub-tags first (e.g. 曼谷, 清迈, 普吉)
@@ -232,9 +192,9 @@ export function syncQuickChipStates(): void {
 
 function renderFilters() {
   const dict = t();
-  const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
+  const activeTrip = store.state.activeContext;
   const tripPlaces = store.state.pendingPlaces.filter(
-    (p) => p.trip_id === store.state.activeTripId && (p.state as string) !== 'dropped' && (p.state as string) !== 'tombstone',
+    (p) => p.trip_id === store.state.activeContext?.tripId,
   );
 
   const filters: { id: string; label: string; count: number }[] = [
@@ -343,74 +303,20 @@ function renderFilters() {
   }
 }
 
-export function populateEditTripForm() {
-  const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-  if (!activeTrip) {
-    el.editTripSection.style.display = 'none';
-    return;
-  }
-  el.editTripSection.style.display = 'block';
-  el.editTripTitle.value = activeTrip.title;
-  el.editTripStart.value = activeTrip.start_date;
-  el.editTripEnd.value = activeTrip.end_date;
-  el.editTripDestinations.value = activeTrip.destinations?.join(', ') || '';
-  el.editTripTags.value = activeTrip.tags?.join(', ') || '';
-  el.editTripCurrency.value = activeTrip.currency || store.pageDetectedCurrency || 'CNY';
-  el.editTripTransport.value = activeTrip.transport_mode || 'transit';
-}
-
-/** Fills the bulk "schedule to day" select with the active trip's dates. */
-function populateBulkDaySelect(): void {
-  const dict = t();
-  const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-  const days = activeTrip ? listTripDates(activeTrip.start_date, activeTrip.end_date) : [];
-  el.bulkDaySelect.innerHTML = '';
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = dict.bulkDayPlaceholder;
-  el.bulkDaySelect.append(placeholder);
-  days.forEach((date, index) => {
-    const opt = document.createElement('option');
-    opt.value = date;
-    opt.textContent = dict.dayOption(index + 1, date.slice(5));
-    el.bulkDaySelect.append(opt);
-  });
-}
 
 export function renderState() {
   const dict = t();
   el.pending.textContent = `${store.state.pendingPlaces.length} ${dict.pendingSuffix}`;
-  el.tripSelect.innerHTML = '';
-  if (store.state.trips.length === 0) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = dict.noTripOption;
-    el.tripSelect.append(option);
-    el.editTripSection.style.display = 'none';
-    el.tripActiveRow.style.display = 'none';
-    el.tripSelect.style.display = 'none';
-    el.tripManageSection.classList.add('first-run');
-    el.tripManageSection.open = true;
-    return;
-  }
-  el.tripActiveRow.style.display = 'flex';
-  el.tripSelect.style.display = 'block';
-  el.tripManageSection.classList.remove('first-run');
-  populateBulkDaySelect();
-  for (const trip of store.state.trips) {
-    const option = document.createElement('option');
-    option.value = trip.id;
-    const title = trip.title?.trim() || (store.lang === 'zh' ? '未命名行程' : 'Untitled trip');
-    const currencyBadge = trip.currency ? ` [${trip.currency}]` : '';
-    option.textContent = trip.tags?.length ? `${title} (${trip.tags.join(', ')})${currencyBadge}` : `${title}${currencyBadge}`;
-    el.tripSelect.append(option);
-  }
-  const active = store.state.trips.some((trip) => trip.id === store.state.activeTripId)
-    ? store.state.activeTripId
-    : store.state.trips[0].id;
-  store.state.activeTripId = active;
-  el.tripSelect.value = active ?? '';
-  populateEditTripForm();
+  const context = store.state.activeContext;
+  el.captureContextTitle.textContent = context
+    ? `${context.title}${context.currency ? ` [${context.currency}]` : ''}`
+    : (store.lang === 'zh' ? '未连接 Planner 行程' : 'No Planner trip selected');
+  el.captureContextHint.textContent = context
+    ? (store.lang === 'zh' ? '由 Planner 控制 · Capture 只收集研究候选' : 'Controlled by Planner · Capture only collects research candidates')
+    : (store.lang === 'zh' ? '请先在 Ownly Planner 选择一个行程' : 'Select a trip in Ownly Planner first');
+  el.btnCaptureSubmit.disabled = !context;
+  renderChips();
+  renderFilters();
 }
 
 export const CURRENCY_OPTIONS_CONFIG: Array<{ code: string; nameZh: string; nameEn: string; symbol: string }> = [
@@ -493,7 +399,7 @@ export function renderSmartListCard() {
     el.smartListSection.style.display = 'none';
     return;
   }
-  const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
+  const activeTrip = store.state.activeContext;
 
   // 1. Overview page with multiple lists found
   if ((!store.detectedSavedList || store.detectedSavedList.places.length === 0) && store.detectedAllLists.length > 0) {
@@ -553,12 +459,9 @@ export function renderSmartListCard() {
     const listNameNorm = store.detectedSavedList.listName.trim().toLowerCase();
     const tripTags = (activeTrip.tags || []).map((tag) => tag.trim().toLowerCase());
     const tripTitleNorm = activeTrip.title.trim().toLowerCase();
-    const savedListNameNorm = (activeTrip.saved_list_name || '').trim().toLowerCase();
-
     isMatched =
       tripTags.includes(listNameNorm) ||
       tripTags.some((tag) => tag && (listNameNorm.includes(tag) || tag.includes(listNameNorm))) ||
-      listNameNorm === savedListNameNorm ||
       listNameNorm.includes(tripTitleNorm) ||
       tripTitleNorm.includes(listNameNorm);
 
@@ -673,8 +576,8 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   if (place.userNote && !el.notes.value) {
     el.notes.value = place.userNote;
   }
-  const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-  const baseTags = (activeTrip?.tags || []).filter(Boolean);
+  const activeTrip = store.state.activeContext;
+  const baseTags = (store.state.activeContext?.tags || []).filter(Boolean);
   el.tags.value = ensurePlaceKindTag(baseTags, freshDetectedKind, store.lang).join(', ');
 }
 
@@ -779,13 +682,12 @@ function sanitizeSafeHref(url: string | undefined): string | null {
 
 const cardCache = new Map<string, { sig: string; node: HTMLDivElement }>();
 
-function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace, dictKey: string, tripDays: string[]): string {
+function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace, dictKey: string): string {
   return [
     place.updated_at || '',
     store.editingCandidateId === place.id ? 'edit' : 'view',
     store.bulkMode ? 'bulk' : 'single',
     store.bulkSelected.has(place.id) ? 'sel' : 'unsel',
-    tripDays.join(','),
     dictKey,
   ].join('|');
 }
@@ -793,11 +695,10 @@ function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace
 export function renderCandidatesList() {
   const dict = t();
   const dictKey = store.lang;
-  const activeTrip = store.state.trips.find((trip) => trip.id === store.state.activeTripId);
-  const tripDays = activeTrip ? listTripDates(activeTrip.start_date, activeTrip.end_date) : [];
+  const activeTrip = store.state.activeContext;
 
   let candidates = store.state.pendingPlaces.filter(
-    (p) => p.trip_id === store.state.activeTripId && (p.state as string) !== 'dropped' && (p.state as string) !== 'tombstone',
+    (p) => p.trip_id === store.state.activeContext?.tripId,
   );
   el.candidatesCountBadge.textContent = String(candidates.length);
 
@@ -852,14 +753,14 @@ export function renderCandidatesList() {
   const seen = new Set<string>();
   for (const place of candidates) {
     seen.add(place.id);
-    const sig = candidateCardSig(place, dictKey, tripDays);
+    const sig = candidateCardSig(place, dictKey);
     let node = place.scheduled_date ? undefined : cardCache.get(place.id)?.node;
     const cached = place.scheduled_date ? undefined : cardCache.get(place.id);
     if (cached && cached.sig === sig) {
       el.candidatesListContainer.append(cached.node);
       continue;
     }
-    node = buildCandidateCard(place, dict, tripDays);
+    node = buildCandidateCard(place, dict);
     cardCache.set(place.id, { sig, node });
     el.candidatesListContainer.append(node);
   }
@@ -871,7 +772,6 @@ export function renderCandidatesList() {
 function buildCandidateCard(
   place: PlannerTripPlace,
   dict: ReturnType<typeof t>,
-  tripDays: string[],
 ): HTMLDivElement {
   const card = document.createElement('div');
   card.className = 'candidate-card' + (store.bulkMode && store.bulkSelected.has(place.id) ? ' bulk-selected' : '');
@@ -895,7 +795,7 @@ function buildCandidateCard(
     if (store.editingCandidateId === place.id) {
       card.append(header, buildInlineEditor(place, dict));
     } else {
-      card.append(header, buildCandidateDetails(place, dict, tripDays));
+      card.append(header, buildCandidateDetails(place, dict));
     }
   return card;
 }
@@ -1039,7 +939,6 @@ function buildInlineEditor(
 function buildCandidateDetails(
   place: PlannerTripPlace,
   dict: ReturnType<typeof t>,
-  tripDays: string[],
 ): HTMLDivElement {
   const wrapper = document.createElement('div');
 
@@ -1073,7 +972,7 @@ function buildCandidateDetails(
   }
   if (place.observed_rating) parts.push(`<span>★ ${place.observed_rating}</span>`);
   if (place.observed_price) {
-    const activeTrip = store.state.trips?.find((t) => t.id === store.state.activeTripId);
+    const activeTrip = store.state.activeContext;
     const converted = activeTrip?.currency
       ? convertPriceRange(place.observed_price, activeTrip.currency)
       : null;
@@ -1095,33 +994,11 @@ function buildCandidateDetails(
   if (noteText) {
     parts.push(`<div class="note-line">📝 ${escapeHtml(noteText)}</div>`);
   }
-  if (place.scheduled_date && place.open_hours) {
-    const col = checkOpeningHoursCollision(place.open_hours, place.scheduled_date);
-    if (col.isCollision) {
-      parts.push(`<span class="risk-flag">⚠️ ${escapeHtml(col.reason ?? '')}</span>`);
-    }
-  }
   details.innerHTML = parts.join('');
 
   const actions = document.createElement('div');
   actions.className = 'candidate-actions';
 
-  const daySelect = document.createElement('select');
-  daySelect.className = 'day-select';
-  daySelect.dataset.action = 'day-select';
-  daySelect.dataset.placeId = place.id;
-  const optPool = document.createElement('option');
-  optPool.value = '';
-  optPool.textContent = dict.unassignedDay;
-  daySelect.append(optPool);
-
-  tripDays.forEach((d, idx) => {
-    const opt = document.createElement('option');
-    opt.value = d;
-    opt.textContent = dict.dayOption(idx + 1, d.slice(5));
-    daySelect.append(opt);
-  });
-  daySelect.value = place.scheduled_date || '';
 
   const btnGroup = document.createElement('div');
   btnGroup.className = 'card-btns';
@@ -1141,7 +1018,7 @@ function buildCandidateDetails(
   delBtn.textContent = `🗑️ ${dict.deleteAction}`;
 
   btnGroup.append(editBtn, delBtn);
-  actions.append(daySelect, btnGroup);
+  actions.append(btnGroup);
 
   wrapper.append(details, actions);
   return wrapper;

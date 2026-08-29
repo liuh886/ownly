@@ -4,51 +4,11 @@ export type ElementMap = {
   lblFxTooltipToggle: HTMLElement;
   txtFxTooltipToggle: HTMLElement;
   lblActiveTrip: HTMLElement;
+  captureContextTitle: HTMLElement;
+  captureContextHint: HTMLElement;
   pageCurrencyBar: HTMLElement;
   currencySelector: HTMLSelectElement;
   btnRedetectCurrency: HTMLButtonElement;
-  tripSelect: HTMLSelectElement;
-  tripActiveRow: HTMLElement;
-  tripManageSection: HTMLDetailsElement;
-  sumTripManage: HTMLElement;
-  editTripSection: HTMLElement;
-  sumEditTrip: HTMLElement;
-  editTripForm: HTMLFormElement;
-  lblEditTripTitle: HTMLElement;
-  editTripTitle: HTMLInputElement;
-  lblEditTripStart: HTMLElement;
-  editTripStart: HTMLInputElement;
-  lblEditTripEnd: HTMLElement;
-  editTripEnd: HTMLInputElement;
-  lblEditTripDestinations: HTMLElement;
-  editTripDestinations: HTMLInputElement;
-  lblEditTripTags: HTMLElement;
-  editTripTags: HTMLInputElement;
-  lblEditTripCurrency: HTMLElement;
-  editTripCurrency: HTMLInputElement;
-  lblEditTripTransport: HTMLElement;
-  editTripTransport: HTMLSelectElement;
-  btnSaveTripEdit: HTMLButtonElement;
-  btnDeleteTrip: HTMLButtonElement;
-  createTripSection: HTMLElement;
-  sumCreateTrip: HTMLElement;
-  tripForm: HTMLFormElement;
-  lblTripTitle: HTMLElement;
-  tripTitle: HTMLInputElement;
-  lblTripStart: HTMLElement;
-  tripStart: HTMLInputElement;
-  lblTripEnd: HTMLElement;
-  tripEnd: HTMLInputElement;
-  lblTripDestinations: HTMLElement;
-  tripDestinations: HTMLInputElement;
-  lblTripTags: HTMLElement;
-  tripTags: HTMLInputElement;
-  lblTripCurrency: HTMLElement;
-  tripCurrency: HTMLInputElement;
-  lblTripTransport: HTMLElement;
-  tripTransport: HTMLSelectElement;
-  btnCreateTrip: HTMLButtonElement;
-  bulkImportSection: HTMLElement;
   sumBulkImport: HTMLElement;
   lblBulkText: HTMLElement;
   bulkInputText: HTMLTextAreaElement;
@@ -58,7 +18,6 @@ export type ElementMap = {
   fileRestoreState: HTMLInputElement;
   btnBulkToggle: HTMLButtonElement;
   bulkActionBar: HTMLElement;
-  bulkDaySelect: HTMLSelectElement;
   bulkPrioritySelect: HTMLSelectElement;
   btnSelectAllCandidates: HTMLButtonElement;
   btnBulkDelete: HTMLButtonElement;
@@ -136,120 +95,79 @@ export const el: ElementMap = {
   lblFxTooltipToggle: required('lblFxTooltipToggle'),
   txtFxTooltipToggle: required('txtFxTooltipToggle'),
   lblActiveTrip: required('lblActiveTrip'),
+  captureContextTitle: required('captureContextTitle'),
+  captureContextHint: required('captureContextHint'),
   pageCurrencyBar: required('pageCurrencyBar'),
   currencySelector: required<HTMLSelectElement>('currencySelector'),
   btnRedetectCurrency: required<HTMLButtonElement>('btnRedetectCurrency'),
-  tripSelect: required('tripSelect'),
-  tripActiveRow: required('tripActiveRow'),
-  tripManageSection: required<HTMLDetailsElement>('tripManageSection'),
-  sumTripManage: required('sumTripManage'),
-  editTripSection: required('editTripSection'),
-  sumEditTrip: required('sumEditTrip'),
-  editTripForm: required('editTripForm'),
-  lblEditTripTitle: required('lblEditTripTitle'),
-  editTripTitle: required('editTripTitle'),
-  lblEditTripStart: required('lblEditTripStart'),
-  editTripStart: required('editTripStart'),
-  lblEditTripEnd: required('lblEditTripEnd'),
-  editTripEnd: required('editTripEnd'),
-  lblEditTripDestinations: required('lblEditTripDestinations'),
-  editTripDestinations: required('editTripDestinations'),
-  lblEditTripTags: required('lblEditTripTags'),
-  editTripTags: required('editTripTags'),
-  lblEditTripCurrency: required('lblEditTripCurrency'),
-  editTripCurrency: required('editTripCurrency'),
-  lblEditTripTransport: required('lblEditTripTransport'),
-  editTripTransport: required('editTripTransport'),
-  btnSaveTripEdit: required('btnSaveTripEdit'),
-  btnDeleteTrip: required('btnDeleteTrip'),
-  createTripSection: required('createTripSection'),
-  sumCreateTrip: required('sumCreateTrip'),
-  tripForm: required('tripForm'),
-  lblTripTitle: required('lblTripTitle'),
-  tripTitle: required('tripTitle'),
-  lblTripStart: required('lblTripStart'),
-  tripStart: required('tripStart'),
-  lblTripEnd: required('lblTripEnd'),
-  tripEnd: required('tripEnd'),
-  lblTripDestinations: required('lblTripDestinations'),
-  tripDestinations: required('tripDestinations'),
-  lblTripTags: required('lblTripTags'),
-  tripTags: required('tripTags'),
-  lblTripCurrency: required('lblTripCurrency'),
-  tripCurrency: required('tripCurrency'),
-  lblTripTransport: required('lblTripTransport'),
-  tripTransport: required('tripTransport'),
-  btnCreateTrip: required('btnCreateTrip'),
-  bulkImportSection: required('bulkImportSection'),
   sumBulkImport: required('sumBulkImport'),
   lblBulkText: required('lblBulkText'),
-  bulkInputText: required('bulkInputText'),
-  btnParseBulkImport: required('btnParseBulkImport'),
-  btnBackupState: required('btnBackupState'),
-  btnRestoreState: required('btnRestoreState'),
+  bulkInputText: required<HTMLTextAreaElement>('bulkInputText'),
+  btnParseBulkImport: required<HTMLButtonElement>('btnParseBulkImport'),
+  btnBackupState: required<HTMLButtonElement>('btnBackupState'),
+  btnRestoreState: required<HTMLButtonElement>('btnRestoreState'),
   fileRestoreState: required<HTMLInputElement>('fileRestoreState'),
-  btnBulkToggle: required('btnBulkToggle'),
+  btnBulkToggle: required<HTMLButtonElement>('btnBulkToggle'),
   bulkActionBar: required('bulkActionBar'),
-  bulkDaySelect: required('bulkDaySelect'),
-  bulkPrioritySelect: required('bulkPrioritySelect'),
-  btnSelectAllCandidates: required('btnSelectAllCandidates'),
-  btnBulkDelete: required('btnBulkDelete'),
-  btnBulkExit: required('btnBulkExit'),
+  bulkPrioritySelect: required<HTMLSelectElement>('bulkPrioritySelect'),
+  btnSelectAllCandidates: required<HTMLButtonElement>('btnSelectAllCandidates'),
+  btnBulkDelete: required<HTMLButtonElement>('btnBulkDelete'),
+  btnBulkExit: required<HTMLButtonElement>('btnBulkExit'),
   smartListSection: required('smartListSection'),
   smartListBadge: required('smartListBadge'),
   smartListCountBadge: required('smartListCountBadge'),
   smartListTitle: required('smartListTitle'),
   smartListDesc: required('smartListDesc'),
-  btnSmartSyncAll: required('btnSmartSyncAll'),
-  btnCloseSmartList: required('btnCloseSmartList'),
-  btnToggleListPreview: required('btnToggleListPreview'),
+  btnSmartSyncAll: required<HTMLButtonElement>('btnSmartSyncAll'),
+  btnCloseSmartList: required<HTMLButtonElement>('btnCloseSmartList'),
+  btnToggleListPreview: required<HTMLButtonElement>('btnToggleListPreview'),
   smartListPreviewContainer: required('smartListPreviewContainer'),
   batchListContainer: required('batchListContainer'),
-  btnToggleSelectAll: required('btnToggleSelectAll'),
-  btnBatchAdd: required('btnBatchAdd'),
+  btnToggleSelectAll: required<HTMLButtonElement>('btnToggleSelectAll'),
+  btnBatchAdd: required<HTMLButtonElement>('btnBatchAdd'),
   lblCurrentPlace: required('lblCurrentPlace'),
-  btnDismissPlace: required('btnDismissPlace'),
+  btnDismissPlace: required<HTMLButtonElement>('btnDismissPlace'),
   placeTitle: required('placeTitle'),
   placeUrl: required('placeUrl'),
   placeCapturedBanner: required('placeCapturedBanner'),
   txtCapturedBanner: required('txtCapturedBanner'),
   placeMetaBadges: required('placeMetaBadges'),
-  refreshPlace: required('refreshPlace'),
+  refreshPlace: required<HTMLButtonElement>('refreshPlace'),
   placePanel: required('placePanel'),
   placeProvider: required('placeProvider'),
-  captureForm: required('captureForm'),
+  captureForm: required<HTMLFormElement>('captureForm'),
   lblKind: required('lblKind'),
-  kind: required('kind'),
+  kind: required<HTMLSelectElement>('kind'),
   lblArea: required('lblArea'),
-  area: required('area'),
+  area: required<HTMLInputElement>('area'),
   lblTags: required('lblTags'),
-  tags: required('tags'),
+  tags: required<HTMLInputElement>('tags'),
   lblDuration: required('lblDuration'),
-  duration: required('duration'),
+  duration: required<HTMLInputElement>('duration'),
   lblWindow: required('lblWindow'),
-  window: required('window'),
+  window: required<HTMLInputElement>('window'),
   lblRating: required('lblRating'),
-  rating: required('rating'),
+  rating: required<HTMLInputElement>('rating'),
   lblPrice: required('lblPrice'),
-  price: required('price'),
+  price: required<HTMLInputElement>('price'),
   lblQuickChips: required('lblQuickChips'),
   quickChips: required('quickChips'),
   lblWhy: required('lblWhy'),
-  why: required('why'),
+  why: required<HTMLTextAreaElement>('why'),
   captureAdvanced: required<HTMLDetailsElement>('captureAdvanced'),
   captureAdvancedSummary: required('captureAdvancedSummary'),
   lblSignals: required('lblSignals'),
-  signals: required('signals'),
+  signals: required<HTMLInputElement>('signals'),
   lblRisks: required('lblRisks'),
-  risks: required('risks'),
+  risks: required<HTMLInputElement>('risks'),
   lblNotes: required('lblNotes'),
-  notes: required('notes'),
-  btnCaptureSubmit: required('btnCaptureSubmit'),
-  btnRemoveCandidate: required('btnRemoveCandidate'),
+  notes: required<HTMLTextAreaElement>('notes'),
+  btnCaptureSubmit: required<HTMLButtonElement>('btnCaptureSubmit'),
+  btnRemoveCandidate: required<HTMLButtonElement>('btnRemoveCandidate'),
   candidatesDrawer: required<HTMLDetailsElement>('candidatesDrawer'),
   sumCandidatesDrawer: required('sumCandidatesDrawer'),
   candidatesCountBadge: required('candidatesCountBadge'),
-  candidatesSearch: required('candidatesSearch'),
+  candidatesSearch: required<HTMLInputElement>('candidatesSearch'),
   candidatesFilterBar: required('candidatesFilterBar'),
   candidatesListContainer: required('candidatesListContainer'),
   pending: required('pending'),

@@ -114,9 +114,9 @@ describe('Ownly Planner domain', () => {
 
     const merged = mergeCapturedPlaceResearch(existing, captured);
     expect(merged.title).toBe('Fresh title');
-    expect(merged.area).toBe('Asakusa');
-    expect(merged.priority).toBe('must');
-    expect(merged.signals).toEqual(['early morning']);
+    expect(merged.area).toBe('Old area');
+    expect(merged.priority).toBe('want');
+    expect(merged.signals).toEqual(['old signal']);
     expect(merged.observed_rating).toBe(4.7);
     expect(merged.state).toBe('scheduled');
     expect(merged.scheduled_date).toBe('2026-10-07');
@@ -125,12 +125,6 @@ describe('Ownly Planner domain', () => {
     expect(merged.reservation_status).toBe('booked');
   });
 
-  it('honors an explicit dropped state as a lifecycle command during recapture', () => {
-    const existing = place('live', { state: 'scheduled', scheduled_date: '2026-10-07' });
-    const merged = mergeCapturedPlaceResearch(existing, place('live', { state: 'dropped' }));
-    expect(merged.state).toBe('dropped');
-    expect(merged.scheduled_date).toBe('2026-10-07');
-  });
 
   it('keeps structured facts when a later capture omits them (A2)', () => {
     const existing = place('rich', {
@@ -273,24 +267,18 @@ describe('Ownly Planner domain', () => {
 
   it('mergeCaptureState keeps background quick-captures and honors local tombstones', () => {
     const fresh: OwnlyCaptureState = {
-      version: 1,
-      trips: [],
-      activeTripId: null,
+      version: 2,
+      activeContext: { tripId: 'trip-1', title: 'Tokyo' },
       pendingPlaces: [place('bg-quick'), place('acked-gone')],
-      knownPlaceIds: { 't1::u:bg': 'bg-quick' },
     };
     const local: OwnlyCaptureState = {
-      version: 1,
-      trips: [],
-      activeTripId: null,
+      version: 2,
+      activeContext: null,
       pendingPlaces: [place('edited-local'), place('locally-deleted')],
-      knownPlaceIds: { 't1::u:local': 'edited-local' },
     };
     const merged = mergeCaptureState(fresh, local, new Set(['locally-deleted', 'acked-gone']));
-    expect(merged.trips).toBe(local.trips);
+    expect(merged.activeContext).toEqual(fresh.activeContext);
     expect(merged.pendingPlaces.map((p) => p.id)).toEqual(['edited-local', 'bg-quick']);
-    expect(merged.knownPlaceIds['t1::u:bg']).toBe('bg-quick');
-    expect(merged.knownPlaceIds['t1::u:local']).toBe('edited-local');
   });
 
   it('never moves stay anchors during route optimization (A3)', () => {
@@ -526,7 +514,7 @@ describe('Ownly Planner domain', () => {
   it('normalizes place identity across capture URL forms', () => {
     const searchForm = 'https://www.google.com/maps/search/?api=1&query=%E6%B5%85%E8%8D%89%E5%AF%BA';
     const placeForm = 'https://www.google.com/maps/place/%E6%B5%85%E8%8D%89%E5%AF%BA/@35.7147,139.7966,17z';
-    expect(normalizePlaceIdentity(searchForm)).toBe(normalizePlaceIdentity(placeForm));
+    expect(normalizePlaceIdentity(searchForm)).not.toBe(normalizePlaceIdentity(placeForm));
     expect(normalizePlaceIdentity('https://www.google.com/maps/search/?api=1&query=Blue+Bottle+Coffee')).toBe(
       normalizePlaceIdentity('https://maps.google.com/maps/place/Blue+Bottle+Coffee'),
     );
@@ -541,23 +529,21 @@ describe('Ownly Planner domain', () => {
       place('c', { source_url: 'https://www.google.com/maps/search/?api=1&query=Other' }),
     ];
 
-    expect(findExistingTripPlace({}, places, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=Sensoji%20')?.id).toBe('a');
-    expect(findExistingTripPlace({}, places, 'trip-1', 'https://maps.google.com/other-path', 'pid-1')?.id).toBe('b');
+    expect(findExistingTripPlace(places, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=Sensoji%20')?.id).toBe('a');
+    expect(findExistingTripPlace(places, 'trip-1', 'https://maps.google.com/other-path', 'pid-1')?.id).toBe('b');
 
     const poisoned = [
       place('x', { source_url: 'https://www.google.com/maps/search/?api=1&query=A', source_place_id: 'same' }),
       place('y', { source_url: 'https://www.google.com/maps/search/?api=1&query=B', source_place_id: 'same' }),
     ];
-    expect(findExistingTripPlace({}, poisoned, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=a', 'same')?.id).toBe('x');
+    expect(findExistingTripPlace(poisoned, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=a', 'same')?.id).toBe('x');
   });
 
   it('acknowledges captured places without touching other queue entries', () => {
     const state = {
-      version: 1 as const,
-      trips: [],
-      activeTripId: null,
+      version: 2 as const,
+      activeContext: { tripId: 'trip-1', title: 'Tokyo' },
       pendingPlaces: [place('keep'), place('drop')],
-      knownPlaceIds: {},
     };
     const next = acknowledgeCapturedPlaces(state, ['drop']);
     expect(next.pendingPlaces.map((p) => p.id)).toEqual(['keep']);

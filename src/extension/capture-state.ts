@@ -1,69 +1,52 @@
-import { ensurePlaceKindTag, mergeCaptureState, type PlannerTrip, type PlannerTripPlace } from '../domain/planner';
+import {
+  asCaptureCandidate,
+  mergeCaptureState,
+  type CaptureContext,
+  type OwnlyCaptureState,
+  type PlannerTripPlace,
+} from '../domain/planner';
 
-export const CAPTURE_STORAGE_KEY = 'ownlyCaptureStateV1';
-
-export interface OwnlyCaptureState {
-  version: 1;
-  trips: PlannerTrip[];
-  activeTripId: string | null;
-  pendingPlaces: PlannerTripPlace[];
-  knownPlaceIds: Record<string, string>;
-}
+export const CAPTURE_STORAGE_KEY = 'ownlyCaptureStateV2';
 
 export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
-  version: 1,
-  trips: [],
-  activeTripId: null,
+  version: 2,
+  activeContext: null,
   pendingPlaces: [],
-  knownPlaceIds: {},
 };
 
-/** Drops structurally-broken trips and guarantees a non-empty title. */
-function normalizeTrips(value: unknown): PlannerTrip[] {
-  if (!Array.isArray(value)) return [];
-  const trips = value.filter((item): item is PlannerTrip => {
-    return Boolean(item && typeof item === 'object' && typeof (item as PlannerTrip).id === 'string');
-  });
-  for (const trip of trips) {
-    if (!trip.status) trip.status = 'planning';
-    if (!Array.isArray(trip.tags)) trip.tags = [];
-    if (!Array.isArray(trip.destinations)) trip.destinations = [];
-  }
-  return trips;
+function normalizeContext(value: unknown): CaptureContext | null {
+  if (!value || typeof value !== 'object') return null;
+  const context = value as Partial<CaptureContext>;
+  if (typeof context.tripId !== 'string' || !context.tripId.trim()) return null;
+  if (typeof context.title !== 'string' || !context.title.trim()) return null;
+  return {
+    tripId: context.tripId,
+    title: context.title,
+    currency: typeof context.currency === 'string' && context.currency.trim() ? context.currency.trim().toUpperCase() : undefined,
+    tags: Array.isArray(context.tags) ? context.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0) : undefined,
+  };
 }
 
 function normalizePlaces(value: unknown): PlannerTripPlace[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is PlannerTripPlace => {
-    return Boolean(item && typeof item === 'object' && typeof (item as PlannerTripPlace).id === 'string');
-  }).map((item) => {
-    const kind = item.kind || 'other';
-    return {
-      ...item,
-      kind,
-      tags: ensurePlaceKindTag(Array.isArray(item.tags) ? item.tags : [], kind),
-      signals: Array.isArray(item.signals) ? item.signals : [],
-      risks: Array.isArray(item.risks) ? item.risks : [],
-    };
-  });
+  return value
+    .filter((item): item is PlannerTripPlace => Boolean(
+      item
+      && typeof item === 'object'
+      && typeof (item as PlannerTripPlace).id === 'string'
+      && typeof (item as PlannerTripPlace).trip_id === 'string'
+    ))
+    .map(asCaptureCandidate);
 }
 
 export function normalizeCaptureState(value: unknown): OwnlyCaptureState {
   if (!value || typeof value !== 'object') return { ...EMPTY_CAPTURE_STATE };
-  const state = value as Partial<OwnlyCaptureState>;
-  const trips = normalizeTrips(state.trips);
-  const activeTripId =
-    typeof state.activeTripId === 'string' && trips.some((trip) => trip.id === state.activeTripId)
-      ? state.activeTripId
-      : null;
+  const state = value as Partial<OwnlyCaptureState> & { version?: unknown };
+  if (state.version !== 2) return { ...EMPTY_CAPTURE_STATE };
   return {
-    version: 1,
-    trips,
-    activeTripId,
+    version: 2,
+    activeContext: normalizeContext(state.activeContext),
     pendingPlaces: normalizePlaces(state.pendingPlaces),
-    knownPlaceIds: state.knownPlaceIds && !Array.isArray(state.knownPlaceIds) && typeof state.knownPlaceIds === 'object'
-      ? state.knownPlaceIds as Record<string, string>
-      : {},
   };
 }
 
@@ -72,72 +55,63 @@ export async function readCaptureState(): Promise<OwnlyCaptureState> {
   return normalizeCaptureState(result[CAPTURE_STORAGE_KEY]);
 }
 
-let opChain: Promise<unknown> = Promise.resolve();
+type WorkerSuccess<T> = { ok: true; state?: OwnlyCaptureState; result?: T };
+type WorkerResult<T> = WorkerSuccess<T> | { ok: false; error?: string };
 
-function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const run = opChain.then(task, task);
-  opChain = run.then(() => undefined, () => undefined);
-  return run;
+async function sendWorker<T>(message: Record<string, unknown>): Promise<WorkerSuccess<T>> {
+  const response = await chrome.runtime.sendMessage(message) as WorkerResult<T> | undefined;
+  if (!response || response.ok !== true) throw new Error(response?.error || 'Ownly Capture background worker did not persist state');
+  return response;
 }
 
-export function enqueueWrite<T>(task: () => Promise<T>): Promise<T> {
-  return enqueue(task);
+export async function saveCaptureStateViaWorker(
+  next: OwnlyCaptureState,
+  locallyDeletedIds?: ReadonlySet<string>,
+): Promise<{ ok: true; state: OwnlyCaptureState }> {
+  const response = await sendWorker<void>({
+    type: 'CAPTURE_SAVE_STATE',
+    state: next,
+    locallyDeletedIds: locallyDeletedIds ? [...locallyDeletedIds] : [],
+  });
+  if (!response.state) throw new Error('Capture worker returned no state');
+  return { ok: true, state: response.state };
 }
 
-export async function writeCaptureState(next: OwnlyCaptureState): Promise<void> {
-  await enqueue(() => chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: next }));
-}
-
-/**
- * Side-panel save path: re-reads the freshest storage state inside the
- * single-writer queue and merges it with the panel's local state, so a
- * quick-capture written by the background worker in between is never lost.
- */
 export async function mergeWriteCaptureState(
   local: OwnlyCaptureState,
   locallyDeletedIds?: ReadonlySet<string>,
 ): Promise<OwnlyCaptureState> {
-  return enqueue(async () => {
-    let fresh: OwnlyCaptureState;
-    try {
-      fresh = await readCaptureState();
-    } catch {
-      fresh = { ...EMPTY_CAPTURE_STATE };
-    }
-    const merged = mergeCaptureState(fresh, local, locallyDeletedIds);
-    await chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: merged });
-    return merged;
-  });
+  return (await saveCaptureStateViaWorker(local, locallyDeletedIds)).state;
 }
 
-export function saveCaptureStateViaWorker(
-  next: OwnlyCaptureState,
-  locallyDeletedIds?: ReadonlySet<string>,
-): Promise<{ ok: boolean; state?: OwnlyCaptureState } | null> {
-  return chrome.runtime
-    .sendMessage({
-      type: 'CAPTURE_SAVE_STATE',
-      state: next,
-      locallyDeletedIds: locallyDeletedIds ? [...locallyDeletedIds] : [],
-    })
-    .then((response) => response as { ok: boolean; state?: OwnlyCaptureState } | null)
-    .catch(() => null);
+export async function writeCaptureState(next: OwnlyCaptureState): Promise<void> {
+  await sendWorker<void>({ type: 'CAPTURE_REPLACE_STATE', state: next });
 }
 
-export function ackPlacesViaWorker(placeIds: string[]): Promise<{ ok: boolean } | null> {
-  return chrome.runtime
-    .sendMessage({ type: 'CAPTURE_ACK_PLACES', placeIds })
-    .then((response) => response as { ok: boolean } | null)
-    .catch(() => null);
+export async function ackPlacesViaWorker(placeIds: string[]): Promise<{ ok: true }> {
+  await sendWorker<void>({ type: 'CAPTURE_ACK_PLACES', placeIds });
+  return { ok: true };
 }
 
-export function updateCaptureState<R>(
+export async function setCaptureContextViaWorker(context: CaptureContext | null): Promise<{ ok: true }> {
+  await sendWorker<void>({ type: 'CAPTURE_SET_CONTEXT', context });
+  return { ok: true };
+}
+
+let workerOpChain: Promise<unknown> = Promise.resolve();
+
+/** Background-service-worker only: the sole direct writer to capture storage. */
+export function mutateCaptureStateInWorker<R>(
   mutate: (current: OwnlyCaptureState) => { state: OwnlyCaptureState; result: R },
 ): Promise<R> {
-  return enqueue(async () => {
+  const run = workerOpChain.then(async () => {
     const current = await readCaptureState();
     const { state, result } = mutate(current);
-    await chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: state });
+    await chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: normalizeCaptureState(state) });
     return result;
   });
+  workerOpChain = run.then(() => undefined, () => undefined);
+  return run;
 }
+
+export { mergeCaptureState };
