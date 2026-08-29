@@ -1,45 +1,41 @@
 # Planner Milestones 1-5 实施计划与进度追踪
 
-## 一、Milestone 1: 导入事务性与原子 ACK (Import Transactionality)
-- [x] 1.1 修改 `PlannerRepository.importCapturedPlaces()` 返回 `Promise<string[]>` (成功写入的 place IDs)
-- [x] 1.2 更新 `PlannerHome.tsx` 中 `syncCapture()`，仅对 `importedIds` 调用 `ackCapturedPlaces(importedIds)`
-- [x] 1.3 编写与更新相关单元测试，覆盖部分导入容错与精准 ACK 场景
+## 一、Milestone 1: 可靠导入与精准 ACK
+- [x] 1.1 `PlannerRepository.importCapturedPlaces()` 返回实际成功持久化的 place IDs
+- [x] 1.2 `syncCapture()` 仅 ACK 已成功写入的 IDs，失败条目保留在 Capture Inbox
+- [x] 1.3 同批导入即时更新身份索引，避免同一地点在一批数据中重复写入
 
-## 二、Milestone 2: 智能排期与行程冲突感知 (Smart Scheduling & Collision Guard)
-- [x] 2.1 增强 `src/domain/planner.ts` 中的冲突检测逻辑（时段与营业时间冲突、单日总时长超标、跨区远距离转场）
-- [x] 2.2 实现 `checkDayScheduleCollisions(places, date)` 综合感知函数
-- [x] 2.3 在 `PlannerHome.tsx` 中为地点卡片与 Day 头部呈现结构化冲突与警告徽章
-- [x] 2.4 编写针对冲突与过载算法的单元测试
+## 二、Milestone 2: 排期冲突感知
+- [x] 2.1 增强营业时间与 preferred window 冲突检测，并处理跨午夜营业场景
+- [x] 2.2 实现 `checkDayScheduleCollisions(places, date)`：显式时长过载与相邻站点长距离提醒
+- [x] 2.3 在 Day Skeleton 与地点卡片展示结构化警告
+- [x] 2.4 缺失 `duration_minutes` 不再假定 60 分钟，避免虚构日程负荷
 
-## 三、Milestone 3: Obsidian 原生环境适配与外部互通 (Obsidian Native Interop)
-- [x] 3.1 在 `src/domain/planner.ts` 中实现通用导入解析器 `parseImportPayload(rawText, tripId)`（支持 JSON、CSV、KML、纯文本链接/列表）
-- [x] 3.2 在 `PlannerHome.tsx` 中新增“外部导入候选”弹窗 (`ImportCandidatesModal.tsx`，支持直接粘贴文本/链接/JSON/CSV/KML 或上传文件)
-- [x] 3.3 编写针对多格式导入解析器的单元测试
+## 三、Milestone 3: 外部候选导入
+- [x] 3.1 `parseImportPayload(rawText, tripId)` 支持 JSON、CSV、KML、纯文本与 Google Maps 链接
+- [x] 3.2 `ImportCandidatesModal` 支持粘贴或上传文件导入 Research Pool
+- [x] 3.3 外部导入使用独立 `importExternalCandidates()` 入口，不借用 Capture ACK 语义
+- [x] 3.4 保留 `source_category`、评论量及结构化价格等高价值 research facts
 
-## 四、Milestone 4: 预算账本与 AA 结算深度集成 (Budget & Ledger Enhancements)
-- [x] 4.1 在 `src/domain/planner.ts` 中实现地点预估价解析与支出类别推导 `parsePlaceExpenseEstimate(place)`
-- [x] 4.2 在 `PlannerHome.tsx` 地点卡片上新增“一键转记账（+ 记账）”快捷动作
-- [x] 4.3 在 Day 排期头部展示当日预估消费与实际支出汇总
-- [x] 4.4 编写支出推导与金额换算测试
+## 四、Milestone 4: 预算估算与真实账本分离
+- [x] 4.1 `parsePlaceExpenseEstimate(place)` 直接消费 `price_currency/min/max/unit` 等结构化价格事实，原始 `observed_price` 仅作为证据与补充解析来源
+- [x] 4.2 Day 头部并列展示“预估”与“实记”，但预估值不会自动写入真实 AA 账本
+- [x] 4.3 `person` 单位按行程成员数计算；缺失汇率的金额显式排除并提示，不使用 1:1 fallback
+- [x] 4.4 Markdown 账本汇总先统一折算至 Trip Currency，再计算总额
 
-## 五、Milestone 5: 排期交互体验与多格式导出交付 (UX Refinement & Delivery)
-- [x] 5.1 在 `src/domain/planner.ts` 中实现 `exportTripToMarkdown(trip, places, expenses, language)` 结构化行程单导出
-- [x] 5.2 在 `PlannerHome.tsx` 增加一键复制 Markdown 行程单 / 导出入口
-- [x] 5.3 完善 Candidate Pool 与 Day 视图的快速排期、上移下移、锁定与退回操作
-- [x] 5.4 验证全套回归测试（`validate:fast`, `validate:extension`, `validate:shared`, `validate:web`）
-- [x] 5.5 提交 PR 并记录 Review 总结
+## 五、Milestone 5: 行程交付
+- [x] 5.1 `exportTripToMarkdown()` 输出每日安排、Google Maps 路线、候选池与真实费用账本
+- [x] 5.2 Planner 增加一键复制 Markdown 行程单
+- [x] 5.3 保留 Candidate Pool → Day 的快速排期、顺序调整、锁定与退回闭环
+- [x] 5.4 完整验证 `validate:fast / shared / web / obsidian / extension`
 
 ---
 
-## 六、Review 总结与成果验证
+## Review 结论
 
-- **事务原子性**：`PlannerRepository.importCapturedPlaces()` 精准返回持久化成功的 `importedIds`，Web 端按需 ACK，彻底杜绝异常掉盘导致候选丢失问题。
-- **智能排期与冲突守卫**：支持闭馆日 + 时段冲突（如夜间开放性判断）、单日活动时长超负荷（>10h）预警、跨区长距离转场（>20km）交通提醒。
-- **Obsidian 原生与多源导入**：通过 `ImportCandidatesModal` 支持直接粘贴或上传 Google Maps 链接、KML、CSV、JSON、纯文本，解决了 Obsidian 桌面端无浏览器 Extension Bridge 的数据录入痛点。
-- **预算深度联动**：地点预估人均一键生成真实支出记账条目，Day 头部实时展示该日预估开销与已记账支出汇总（按汇率表自动折算）。
-- **行程导出交付**：支持一键复制完整 Markdown 结构化行程单，方便离线查看、打印或分享至社交软件。
-- **全套验证指标**：
-  - `validate:fast`: 0 errors (ESLint warning 从 18 项进一步降低到 15 项)
-  - `validate:extension`: 105/105 tests 通过 (新增 10 个测试用例)
-  - `validate:shared`: 全部通过
-  - `validate:web`: Turbopack 生产编译通过，静态导出与 PWA 校验 100% 通过
+- **导入可靠性**：成功写入与 ACK 一一对应；单条失败不会导致其从 Capture Inbox 消失，重试保持幂等。
+- **数据边界**：Capture 与外部文件都是 Research 输入；Planner/Vault 仍是 Trip、排期和用户决策的唯一权威。
+- **冲突提示**：当前提供确定性的启发式提醒，不把缺失时长或未知交通时间伪装成事实。
+- **预算语义**：地点价格属于 estimate，AA Ledger 属于 actual；二者可比较但不自动互相转换。
+- **币种语义**：结构化 `price_currency` 优先于裸 `$ / ¥` 推断；未知汇率显式暴露。
+- **验证**：修正后 `validate:fast`、`validate:shared`、`validate:web`、`validate:obsidian`、`validate:extension` 全部通过。
