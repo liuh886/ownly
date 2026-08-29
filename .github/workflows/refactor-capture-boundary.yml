@@ -4,14 +4,12 @@ on:
   push:
     branches:
       - refactor/capture-planner-boundary-20260829
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   refactor:
-    if: github.event.head_commit.message != 'refactor: make Planner the travel state authority'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
