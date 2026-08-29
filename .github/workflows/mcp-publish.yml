@@ -87,7 +87,16 @@ jobs:
           set -euo pipefail
           PACKAGE_NAME=$(node -p "require('./packages/mcp/package.json').name")
           PACKAGE_VERSION=$(node -p "require('./packages/mcp/package.json').version")
-          npx -y "$PACKAGE_NAME@$PACKAGE_VERSION" --help
+          for attempt in 1 2 3 4 5 6; do
+            if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1 \
+              && npx -y "$PACKAGE_NAME@$PACKAGE_VERSION" --help; then
+              exit 0
+            fi
+            echo "npm registry has not propagated $PACKAGE_NAME@$PACKAGE_VERSION yet (attempt $attempt/6)"
+            sleep 10
+          done
+          echo "npm registry did not expose $PACKAGE_NAME@$PACKAGE_VERSION after retries" >&2
+          exit 1
 
       - name: Install MCP Registry publisher
         shell: bash
@@ -128,8 +137,16 @@ jobs:
           set -euo pipefail
           SERVER_NAME=$(node -p "require('./server.json').name")
           SERVER_VERSION=$(node -p "require('./server.json').version")
-          RESPONSE=$(curl --fail --silent --show-error \
-            "https://registry.modelcontextprotocol.io/v0.1/servers?search=${SERVER_NAME}")
-          printf '%s' "$RESPONSE" | jq -e \
-            --arg name "$SERVER_NAME" --arg version "$SERVER_VERSION" \
-            '.servers[]? | select(.server.name == $name and .server.version == $version)' >/dev/null
+          for attempt in 1 2 3 4 5 6; do
+            RESPONSE=$(curl --fail --silent --show-error \
+              "https://registry.modelcontextprotocol.io/v0.1/servers?search=${SERVER_NAME}")
+            if printf '%s' "$RESPONSE" | jq -e \
+              --arg name "$SERVER_NAME" --arg version "$SERVER_VERSION" \
+              '.servers[]? | select(.server.name == $name and .server.version == $version)' >/dev/null; then
+              exit 0
+            fi
+            echo "MCP Registry has not propagated ${SERVER_NAME}@${SERVER_VERSION} yet (attempt $attempt/6)"
+            sleep 10
+          done
+          echo "MCP Registry did not expose ${SERVER_NAME}@${SERVER_VERSION} after retries" >&2
+          exit 1
