@@ -438,43 +438,39 @@ export const CURRENCY_OPTIONS_CONFIG: Array<{ code: string; nameZh: string; name
 export function renderCurrencyPill() {
   const bar = el.pageCurrencyBar;
   const sel = el.currencySelector;
-  const txtDetected = el.txtDetectedCurrency;
-  const lblCaption = el.lblPageCurrency;
+  const btnRedetect = el.btnRedetectCurrency;
 
   const detected = store.pageDetectedCurrency || '';
   const isZh = store.lang === 'zh';
 
   if (bar) bar.style.display = 'flex';
-  if (lblCaption) lblCaption.textContent = isZh ? '页面货币:' : 'Page currency:';
 
-  if (txtDetected) {
-    if (store.mapCurrencyOverride) {
-      txtDetected.textContent = `${store.mapCurrencyOverride} (${isZh ? '手动指定' : 'Manual'})`;
-      txtDetected.style.background = 'var(--warn-bg)';
-      txtDetected.style.color = 'var(--warn-text)';
-      txtDetected.style.borderColor = 'var(--warn-border)';
-    } else if (detected) {
-      txtDetected.textContent = `${detected} (${isZh ? '自动检测' : 'Auto'})`;
-      txtDetected.style.background = 'var(--accent-soft)';
-      txtDetected.style.color = 'var(--accent-text)';
-      txtDetected.style.borderColor = 'var(--accent-border)';
-    } else {
-      txtDetected.textContent = isZh ? '自动检测中…' : 'Detecting…';
-      txtDetected.style.background = 'var(--surface-3)';
-      txtDetected.style.color = 'var(--text-3)';
-      txtDetected.style.borderColor = 'var(--border)';
-    }
+  if (btnRedetect) {
+    btnRedetect.title = isZh ? '恢复自动检测 / 重新检测' : 'Reset to auto-detect / Re-detect';
   }
 
   if (sel) {
     sel.innerHTML = '';
 
+    const isOverride = Boolean(store.mapCurrencyOverride);
+    if (isOverride) {
+      sel.classList.add('is-override');
+      sel.title = isZh
+        ? `当前页面手动指定货币：${store.mapCurrencyOverride}`
+        : `Manual page currency override: ${store.mapCurrencyOverride}`;
+    } else {
+      sel.classList.remove('is-override');
+      sel.title = isZh
+        ? `当前页面自动检测货币：${detected || '检测中'}`
+        : `Auto-detected page currency: ${detected || 'detecting'}`;
+    }
+
     // 1. AUTO Option with live detected indicator
     const autoOpt = document.createElement('option');
     autoOpt.value = 'AUTO';
     autoOpt.textContent = isZh
-      ? `自动检测 ${detected ? `(${detected})` : ''}`
-      : `Auto ${detected ? `(${detected})` : ''}`;
+      ? (detected ? `⚡ 自动 (${detected})` : '⚡ 自动检测')
+      : (detected ? `⚡ Auto (${detected})` : '⚡ Auto');
     sel.append(autoOpt);
 
     // 2. Full currency options list
