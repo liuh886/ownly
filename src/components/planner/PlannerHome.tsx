@@ -34,7 +34,7 @@ import {
   PLANNER_KIND_LABELS,
 } from '@/domain/planner';
 import { exportTripToICalProMarkdown, ICAL_PRO_PRIORITY_MAP } from '@/domain/ical-pro';
-import { evaluatePlannerDayFeasibility, findPlannerTimeOverlaps, getScheduledEndTime } from '@/domain/planner-schedule';
+import { buildPlannerDayExecutionTimeline, findPlannerTimeOverlaps, type PlannerExecutionTransitionItem, type PlannerTimelineStopItem } from '@/domain/planner-schedule';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';
@@ -446,10 +446,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [legs, selectedTripId],
   );
 
-  const dayFeasibility = useMemo(
+  const dayTimeline = useMemo(
     () => selectedTrip
-      ? evaluatePlannerDayFeasibility(selectedTrip, tripPlaces, tripLegs, activeDate)
-      : { date: activeDate, status: 'unknown' as const, valid: false, transitions: [] },
+      ? buildPlannerDayExecutionTimeline(selectedTrip, tripPlaces, tripLegs, activeDate)
+      : { date: activeDate, status: 'unknown' as const, valid: false, items: [] },
     [activeDate, selectedTrip, tripLegs, tripPlaces],
   );
 
@@ -1025,9 +1025,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-4 py-3">
             <div className="flex items-center gap-2">
               <div>
-                <h2 className="text-sm font-semibold text-stone-900">Day Skeleton</h2>
+                <h2 className="text-sm font-semibold text-stone-900">{zh ? '执行时间线' : 'Execution Timeline'}</h2>
                 <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
               </div>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                dayTimeline.status === 'feasible'
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                  : dayTimeline.status === 'conflict'
+                    ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
+                    : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+              }`}>
+                {dayTimeline.status === 'feasible'
+                  ? (zh ? '可执行' : 'Feasible')
+                  : dayTimeline.status === 'conflict'
+                    ? (zh ? '有冲突' : 'Conflict')
+                    : (zh ? '待补信息' : 'Unknown')}
+              </span>
               <button
                 type="button"
                 onClick={() => {
@@ -1207,8 +1220,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   const col = timeOverlap
                     ? { isCollision: true, reason: zh ? '与当天其它地点存在时间重叠' : 'Overlaps another timed stop on this day' }
                     : dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
-                  const scheduledEnd = getScheduledEndTime(place.scheduled_start, place.duration_minutes);
-                  const transition = dayFeasibility.transitions[index];
+                  const timelineStop = dayTimeline.items.find(
+                    (item): item is PlannerTimelineStopItem => item.type === 'stop' && item.place_id === place.id,
+                  );
+                  const nextPlace = scheduled[index + 1];
+                  const transitionItems = nextPlace
+                    ? dayTimeline.items.filter(
+                      (item): item is PlannerExecutionTransitionItem => item.type !== 'stop' && item.from_id === place.id && item.to_id === nextPlace.id,
+                    )
+                    : [];
                   return (
                     <li
                       key={place.id}
@@ -1225,14 +1245,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               type="button"
                               onClick={() => setTimingModalPlace(place)}
                               className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9.5px] font-semibold transition hover:scale-102 ${
-                                place.scheduled_start
+                                timelineStop?.start
                                   ? 'bg-stone-100 text-stone-700 hover:bg-stone-200 ring-1 ring-stone-300/60'
                                   : 'border border-dashed border-stone-300 bg-white text-stone-400 hover:border-stone-400 hover:text-stone-700'
                               }`}
                               title={zh ? '设置此站的开始时间与停留时长；日历投影由 Planner 权威状态生成' : 'Set start time and duration; calendar output is derived from Planner state'}
                             >
                               <span>🕒</span>
-                              <span>{place.scheduled_start ? `${place.scheduled_start}${scheduledEnd ? `-${scheduledEnd}` : ''}` : (zh ? '设时间' : 'Time')}</span>
+                              <span>{timelineStop?.start ? `${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}` : (zh ? '设时间' : 'Time')}</span>
                             </button>
                             {place.priority ? (
                               <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600" title="iCal Pro 优先级">
@@ -1279,7 +1299,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 ? 'border-amber-300 bg-amber-50 text-amber-700 font-bold'
                                 : 'border-stone-200 text-stone-400 hover:bg-stone-50 hover:text-stone-700'
                             }`}
-                            title={place.locked ? (zh ? '已固定顺位（顺路优化不会挪动此站）' : 'Pinned (TSP optimizer will not move this stop)') : (zh ? '点击固定此站顺位' : 'Click to pin stop')}
+                            title={place.locked ? (zh ? '已固定顺位（真实交通时间优化不会挪动此站）' : 'Pinned (travel-time optimization will not move this stop)') : (zh ? '点击固定此站顺位' : 'Click to pin stop')}
                           >
                             {place.locked ? '📌' : '📍'}
                           </button>
@@ -1289,37 +1309,66 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         </div>
                       </div>
 {index < scheduled.length - 1 ? (
-                        <div className="flex items-center justify-center py-0.5">
-                          <div className={`flex min-h-7 flex-wrap items-center justify-center gap-2 rounded-full border px-3 py-1 text-[10px] font-semibold ${
-                            transition?.status === 'conflict'
-                              ? 'border-red-200 bg-red-50 text-red-700'
-                              : transition?.status === 'ok'
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : 'border-stone-200 bg-stone-50 text-stone-500'
-                          }`}>
-                            <span>
-                              {transition?.leg
-                                ? `${transition.leg.mode === 'walking' ? '🚶' : transition.leg.mode === 'driving' ? '🚗' : transition.leg.mode === 'bicycling' ? '🚲' : '🚇'} ${transition.leg.duration_minutes} min${transition.leg.distance_meters !== undefined ? ` · ${transition.leg.distance_meters < 1000 ? `${transition.leg.distance_meters} m` : `${(transition.leg.distance_meters / 1000).toFixed(1)} km`}` : ''}${transition.leg.source === 'openrouteservice' ? ' · ORS · OSM' : ''}`
-                                : (zh ? '❔ 交通时间未确认' : '❔ Travel time unknown')}
-                            </span>
-                            {transition?.status === 'ok' && transition.earliest_arrival ? (
-                              <span>{zh ? `预计 ${transition.earliest_arrival} 到达 · 余量 ${transition.slack_minutes} min` : `Arrive ${transition.earliest_arrival} · ${transition.slack_minutes} min slack`}</span>
-                            ) : null}
-                            {transition?.status === 'conflict' ? (
-                              <span>{zh ? `最早 ${transition.earliest_arrival ?? '次日'} 到达 · 晚 ${transition.late_by_minutes} min` : `Earliest ${transition.earliest_arrival ?? 'next day'} · ${transition.late_by_minutes} min late`}</span>
-                            ) : null}
-                            {transition?.unknown_reason === 'schedule_time_missing' ? (
-                              <span>{zh ? '补齐两站时间后可判断衔接' : 'Set both stop times to evaluate feasibility'}</span>
-                            ) : null}
-                            <a
-                              href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(scheduled[index + 1].address || scheduled[index + 1].title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="underline underline-offset-2 hover:text-stone-900"
-                            >
-                              Google Maps ↗
-                            </a>
-                          </div>
+                        <div className="ml-4 space-y-1 border-l-2 border-stone-200 py-1 pl-3">
+                          {transitionItems.length === 0 ? (
+                            <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-[10px] font-semibold text-stone-500">
+                              ❔ {zh ? '交通时间未确认' : 'Travel time unknown'}
+                            </div>
+                          ) : transitionItems.map((item) => {
+                            if (item.type === 'travel') {
+                              const icon = item.mode === 'walking' ? '🚶' : item.mode === 'driving' ? '🚗' : item.mode === 'bicycling' ? '🚲' : '🚇';
+                              const distance = item.distance_meters === undefined
+                                ? ''
+                                : item.distance_meters < 1000 ? ` · ${item.distance_meters} m` : ` · ${(item.distance_meters / 1000).toFixed(1)} km`;
+                              return (
+                                <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-[10px] font-semibold text-sky-800">
+                                  <span>{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS · OSM' : ' · manual'}</span>
+                                  {item.start && item.end ? <span>⏱ {item.start}-{item.end}</span> : null}
+                                  <a
+                                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline underline-offset-2 hover:text-stone-950"
+                                  >
+                                    Google Maps ↗
+                                  </a>
+                                </div>
+                              );
+                            }
+                            if (item.type === 'gap') {
+                              return (
+                                <div key={item.id} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700">
+                                  ◌ {zh ? `机动 ${item.duration_minutes} min` : `${item.duration_minutes} min gap`} · {item.start}-{item.end}
+                                </div>
+                              );
+                            }
+                            if (item.type === 'conflict') {
+                              return (
+                                <div key={item.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-semibold text-red-700">
+                                  ❌ {zh
+                                    ? `衔接冲突 · 最早 ${item.earliest_arrival ?? '次日'} 到达 · 比 ${item.next_start ?? '下一站'} 晚 ${item.late_by_minutes} min`
+                                    : `Connection conflict · earliest ${item.earliest_arrival ?? 'next day'} · ${item.late_by_minutes} min late`}
+                                </div>
+                              );
+                            }
+                            return (
+                              <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] font-semibold text-amber-700">
+                                <span>❔ {item.reason === 'travel_time_missing'
+                                  ? (zh ? '交通时间未确认' : 'Travel time unknown')
+                                  : (zh ? '时间不完整，无法判断衔接' : 'Schedule timing incomplete')}</span>
+                                {item.reason === 'travel_time_missing' ? (
+                                  <a
+                                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline underline-offset-2 hover:text-stone-950"
+                                  >
+                                    Google Maps ↗
+                                  </a>
+                                ) : null}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : null}
                     </li>

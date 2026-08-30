@@ -6,7 +6,7 @@ Ownly Planner is the scheduling layer for travel research collected in Google Ma
 
 - **Google Maps**: discovery, research, ratings/reviews/price reference, spatial judgment, live navigation.
 - **Ownly Capture**: Chromium MV3 side panel that records the user's own research judgment and keeps a local pending queue.
-- **Ownly Planner**: research pool, day skeleton, manual ordering, route handoff.
+- **Ownly Planner**: research pool, execution timeline, manual ordering, route handoff.
 - **Ownly Travel**: unchanged in this release; it remains the existing travel-insights/review surface.
 
 Ownly does not build a second POI database and does not persist raw Google reviews. The durable asset is the user's own travel judgment: priority, area, duration, preferred window, signals, risks, notes, and optional manually observed rating/price.
@@ -66,7 +66,7 @@ Google Maps
   → Ownly Planner sync
   → Markdown source of truth
   → Research Pool
-  → Day Skeleton
+  → Execution Timeline
   → Google Maps Directions
 ```
 
@@ -103,3 +103,9 @@ The browser remains a consumer of canonical `Trip Legs/` facts. API keys are not
 The old straight-line-distance optimizer is removed. Ownly has one optimization path: local MCP queries an ephemeral OpenRouteService matrix for the selected walking/driving/bicycling day, minimizes total known travel minutes, preserves the first stop plus locked/anchored slots, and commits the chosen order together with only the final adjacent ORS legs. The N×N matrix is never persisted.
 
 `transit` remains manual because Ownly does not fabricate public-transport travel times. The static Web/PWA does not hold an ORS API key; it displays the canonical order and `Trip Legs/` facts after the MCP commit.
+
+## Execution Timeline
+
+Execution Timeline is a deterministic projection, not a new persistence layer. `Trip Places/` remains the authority for stop order/start/duration, and `Trip Legs/` remains the authority for travel facts. `planner-schedule.ts` combines them into ordered `stop`, `travel`, `gap`, `conflict`, and `unknown` blocks.
+
+Positive slack becomes an explicit gap; impossible handoffs become conflicts; missing travel or schedule facts remain unknown. The timeline never invents start times, transfer durations, buffers, or risk scores. Web and MCP consume the same derived projection.

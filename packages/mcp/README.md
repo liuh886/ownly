@@ -1,6 +1,6 @@
 # Ownly MCP
 
-Ownly MCP is a local-first MCP server for Ownly ownership, recurring-cost, review, and history data. It reads the canonical Markdown directly and can perform explicitly enabled, two-phase writes with a safety backup.
+Ownly MCP is a local-first MCP server for Ownly ownership, recurring-cost, review, history, and Planner data. It reads the canonical Markdown directly and can perform explicitly enabled, two-phase writes with a safety backup.
 
 ## Data location
 
@@ -39,6 +39,16 @@ Every mutation has two phases:
 
 Commit creates a full Ownly backup in the sibling `Ownly Backups/` directory before changing data. It rejects stale previews if the target file changed and is idempotent when the same operation ID is retried.
 
+## Planner routing
+
+Planner reads canonical `Trip Places/` and `Trip Legs/` facts and exposes the derived execution timeline through `ownly_planner_get_trip`. Walking, driving, and bicycling leg refresh / travel-time optimization use OpenRouteService from the local MCP process:
+
+```bash
+OPENROUTESERVICE_API_KEY=your-key npx -y @ownly-app/mcp --data-dir /path/to/vault --allow-write
+```
+
+The key is optional unless an OpenRouteService-backed Planner tool is called. It remains in the local MCP process environment and is never shipped to the static Web/PWA. Public-transit travel time remains an explicit user-verified fact.
+
 ## Tools
 
 Read tools:
@@ -46,6 +56,8 @@ Read tools:
 - `ownly_summary`, `ownly_search`, `ownly_get_object`, `ownly_object_history`
 - `ownly_recurring_costs`, `ownly_recurring_due`, `ownly_recurring_by_account`
 - `ownly_review_needed`, `ownly_doctor`
+- `ownly_planner_summary`, `ownly_planner_get_trip`, `ownly_planner_budget_estimate`
+- `ownly_planner_get_ical_markdown`
 
 Write workflow tools:
 
@@ -54,6 +66,8 @@ Write workflow tools:
 - `ownly_prepare_add_object_log`, `ownly_prepare_create_review`
 - `ownly_prepare_create_snapshot`
 - `ownly_prepare_archive_object`, `ownly_prepare_restore_object`
+- `ownly_planner_prepare_set_travel_leg`, `ownly_planner_prepare_refresh_day_travel`
+- `ownly_planner_prepare_optimize_day_travel_time`, `ownly_planner_prepare_apply_schedule_proposal`
 - `ownly_commit_operation`, `ownly_discard_operation`
 
 ## Privacy boundary

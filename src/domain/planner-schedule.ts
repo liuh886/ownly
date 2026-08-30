@@ -175,6 +175,84 @@ export interface PlannerDayFeasibility {
   transitions: PlannerTravelTransition[];
 }
 
+export interface PlannerTimelineStopItem {
+  type: 'stop';
+  id: string;
+  place_id: string;
+  title: string;
+  start?: string;
+  end?: string;
+  duration_minutes?: number;
+  crosses_midnight: boolean;
+  locked: boolean;
+  is_anchor: boolean;
+}
+
+export interface PlannerTimelineTravelItem {
+  type: 'travel';
+  id: string;
+  from_id: string;
+  to_id: string;
+  from_title: string;
+  to_title: string;
+  mode: PlannerTripLeg['mode'];
+  duration_minutes: number;
+  distance_meters?: number;
+  source: PlannerTripLeg['source'];
+  start?: string;
+  end?: string;
+}
+
+export interface PlannerTimelineGapItem {
+  type: 'gap';
+  id: string;
+  from_id: string;
+  to_id: string;
+  from_title: string;
+  to_title: string;
+  start: string;
+  end: string;
+  duration_minutes: number;
+}
+
+export interface PlannerTimelineConflictItem {
+  type: 'conflict';
+  id: string;
+  from_id: string;
+  to_id: string;
+  from_title: string;
+  to_title: string;
+  earliest_arrival?: string;
+  next_start?: string;
+  late_by_minutes: number;
+}
+
+export interface PlannerTimelineUnknownItem {
+  type: 'unknown';
+  id: string;
+  from_id: string;
+  to_id: string;
+  from_title: string;
+  to_title: string;
+  reason: 'travel_time_missing' | 'schedule_time_missing';
+}
+
+export type PlannerExecutionTimelineItem =
+  | PlannerTimelineStopItem
+  | PlannerTimelineTravelItem
+  | PlannerTimelineGapItem
+  | PlannerTimelineConflictItem
+  | PlannerTimelineUnknownItem;
+
+export type PlannerExecutionTransitionItem = Exclude<PlannerExecutionTimelineItem, PlannerTimelineStopItem>;
+
+export interface PlannerDayExecutionTimeline {
+  date: string;
+  status: PlannerDayFeasibilityStatus;
+  valid: boolean;
+  items: PlannerExecutionTimelineItem[];
+}
+
 function transitionKey(fromId: string, toId: string): string {
   return `${fromId}→${toId}`;
 }
@@ -255,6 +333,104 @@ export function evaluatePlannerDayFeasibility(
     ? 'conflict'
     : transitions.some((item) => item.status === 'unknown') ? 'unknown' : 'feasible';
   return { date, status, valid: status === 'feasible', transitions };
+}
+
+export function buildPlannerDayExecutionTimeline(
+  trip: PlannerTrip,
+  places: PlannerTripPlace[],
+  legs: PlannerTripLeg[],
+  date: string,
+): PlannerDayExecutionTimeline {
+  const dayPlaces = sortPlannerPlaces(
+    places.filter((place) => place.trip_id === trip.id && place.state === 'scheduled' && place.scheduled_date === date),
+  );
+  const feasibility = evaluatePlannerDayFeasibility(trip, places, legs, date);
+  const transitionByPair = new Map(
+    feasibility.transitions.map((transition) => [transitionKey(transition.from_id, transition.to_id), transition] as const),
+  );
+  const items: PlannerExecutionTimelineItem[] = [];
+
+  for (let index = 0; index < dayPlaces.length; index += 1) {
+    const place = dayPlaces[index];
+    const startMinutes = plannerClockToMinutes(place.scheduled_start);
+    const duration = Number.isInteger(place.duration_minutes) && place.duration_minutes && place.duration_minutes > 0
+      ? place.duration_minutes
+      : undefined;
+    const end = getScheduledEndTime(place.scheduled_start, duration) ?? undefined;
+    items.push({
+      type: 'stop',
+      id: `stop:${place.id}`,
+      place_id: place.id,
+      title: place.title,
+      start: place.scheduled_start,
+      end,
+      duration_minutes: duration,
+      crosses_midnight: startMinutes !== null && duration !== undefined && startMinutes + duration > 24 * 60,
+      locked: Boolean(place.locked),
+      is_anchor: Boolean(place.is_anchor),
+    });
+
+    const next = dayPlaces[index + 1];
+    if (!next) continue;
+    const transition = transitionByPair.get(transitionKey(place.id, next.id));
+    if (!transition) {
+      items.push({
+        type: 'unknown', id: `unknown:${place.id}:${next.id}`,
+        from_id: place.id, to_id: next.id, from_title: place.title, to_title: next.title,
+        reason: 'travel_time_missing',
+      });
+      continue;
+    }
+
+    if (transition.leg) {
+      const travelEnd = transition.earliest_arrival
+        ?? (transition.departure_time
+          ? getScheduledEndTime(transition.departure_time, transition.leg.duration_minutes) ?? undefined
+          : undefined);
+      items.push({
+        type: 'travel', id: `travel:${place.id}:${next.id}`,
+        from_id: place.id, to_id: next.id, from_title: place.title, to_title: next.title,
+        mode: transition.leg.mode,
+        duration_minutes: transition.leg.duration_minutes,
+        distance_meters: transition.leg.distance_meters,
+        source: transition.leg.source,
+        start: transition.departure_time,
+        end: travelEnd,
+      });
+    }
+
+    if (
+      transition.status === 'ok'
+      && transition.slack_minutes !== undefined
+      && transition.slack_minutes > 0
+      && transition.earliest_arrival
+      && transition.next_start
+    ) {
+      items.push({
+        type: 'gap', id: `gap:${place.id}:${next.id}`,
+        from_id: place.id, to_id: next.id, from_title: place.title, to_title: next.title,
+        start: transition.earliest_arrival,
+        end: transition.next_start,
+        duration_minutes: transition.slack_minutes,
+      });
+    } else if (transition.status === 'conflict') {
+      items.push({
+        type: 'conflict', id: `conflict:${place.id}:${next.id}`,
+        from_id: place.id, to_id: next.id, from_title: place.title, to_title: next.title,
+        earliest_arrival: transition.earliest_arrival,
+        next_start: transition.next_start,
+        late_by_minutes: transition.late_by_minutes ?? 0,
+      });
+    } else if (transition.status === 'unknown') {
+      items.push({
+        type: 'unknown', id: `unknown:${place.id}:${next.id}`,
+        from_id: place.id, to_id: next.id, from_title: place.title, to_title: next.title,
+        reason: transition.unknown_reason ?? 'schedule_time_missing',
+      });
+    }
+  }
+
+  return { date, status: feasibility.status, valid: feasibility.valid, items };
 }
 
 function isHardConstraint(place: PlannerTripPlace): boolean {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTripPlace } from './planner';
 import {
+  buildPlannerDayExecutionTimeline,
   evaluatePlannerDayFeasibility,
   evaluatePlannerScheduleProposal,
   findPlannerTimeOverlaps,
@@ -123,5 +124,59 @@ describe('Planner schedule proposal', () => {
     expect(getScheduledEndTime('23:00', 60)).toBe('00:00');
     expect(getScheduledEndTime(undefined, 60)).toBeNull();
     expect(getScheduledEndTime('09:00', undefined)).toBeNull();
+  });
+});
+
+
+describe('Planner execution timeline', () => {
+  function scheduledPlace(id: string, start: string | undefined, duration: number | undefined, sortOrder: number): PlannerTripPlace {
+    return place(id, {
+      state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: start,
+      duration_minutes: duration, sort_order: sortOrder,
+    });
+  }
+
+  function travelLeg(from: string, to: string, minutes: number): PlannerTripLeg {
+    return {
+      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, from, to), trip_id: trip.id,
+      from_place_id: from, to_place_id: to, mode: 'walking', duration_minutes: minutes,
+      distance_meters: 1200, source: 'manual', created_at: '2026-08-29T00:00:00Z',
+    };
+  }
+
+  it('projects stop, travel and positive slack as one execution timeline', () => {
+    const places = [scheduledPlace('a', '09:00', 90, 0), scheduledPlace('b', '11:00', 60, 1)];
+    const result = buildPlannerDayExecutionTimeline(trip, places, [travelLeg('a', 'b', 18)], '2026-10-05');
+    expect(result.status).toBe('feasible');
+    expect(result.items.map((item) => item.type)).toEqual(['stop', 'travel', 'gap', 'stop']);
+    expect(result.items[0]).toMatchObject({ type: 'stop', place_id: 'a', start: '09:00', end: '10:30' });
+    expect(result.items[1]).toMatchObject({ type: 'travel', from_id: 'a', to_id: 'b', start: '10:30', end: '10:48', duration_minutes: 18 });
+    expect(result.items[2]).toMatchObject({ type: 'gap', start: '10:48', end: '11:00', duration_minutes: 12 });
+  });
+
+  it('projects deterministic lateness after the known travel block', () => {
+    const places = [scheduledPlace('a', '09:00', 90, 0), scheduledPlace('b', '11:00', 60, 1)];
+    const result = buildPlannerDayExecutionTimeline(trip, places, [travelLeg('a', 'b', 42)], '2026-10-05');
+    expect(result.status).toBe('conflict');
+    expect(result.items.map((item) => item.type)).toEqual(['stop', 'travel', 'conflict', 'stop']);
+    expect(result.items[1]).toMatchObject({ type: 'travel', start: '10:30', end: '11:12', duration_minutes: 42 });
+    expect(result.items[2]).toMatchObject({ type: 'conflict', earliest_arrival: '11:12', next_start: '11:00', late_by_minutes: 12 });
+  });
+
+  it('keeps a missing travel fact explicitly unknown', () => {
+    const places = [scheduledPlace('a', '09:00', 90, 0), scheduledPlace('b', '11:00', 60, 1)];
+    const result = buildPlannerDayExecutionTimeline(trip, places, [], '2026-10-05');
+    expect(result.status).toBe('unknown');
+    expect(result.items.map((item) => item.type)).toEqual(['stop', 'unknown', 'stop']);
+    expect(result.items[1]).toMatchObject({ type: 'unknown', reason: 'travel_time_missing' });
+  });
+
+  it('keeps a known travel fact when schedule timing is incomplete', () => {
+    const places = [scheduledPlace('a', '09:00', 90, 0), scheduledPlace('b', undefined, 60, 1)];
+    const result = buildPlannerDayExecutionTimeline(trip, places, [travelLeg('a', 'b', 18)], '2026-10-05');
+    expect(result.status).toBe('unknown');
+    expect(result.items.map((item) => item.type)).toEqual(['stop', 'travel', 'unknown', 'stop']);
+    expect(result.items[1]).toMatchObject({ type: 'travel', start: '10:30', end: '10:48', duration_minutes: 18 });
+    expect(result.items[2]).toMatchObject({ type: 'unknown', reason: 'schedule_time_missing' });
   });
 });
