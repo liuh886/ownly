@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseMarkdownEntity, serializeMarkdownEntity } from '../../src/data/frontmatter';
 import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTripPlace } from '../../src/domain/planner';
+import type { PlannerTripVisit } from '../../src/domain/planner-visits';
 import type { WYQDObject } from '../../src/domain/types';
 import { OwnlyWriteService } from './ownly-write-service';
 
@@ -16,39 +17,40 @@ function fixture(): { container: string; dataRoot: string } {
   const dataRoot = join(container, 'Ownly');
   for (const relative of [
     'Objects', 'Snapshots', 'Reviews', 'Logs/Object Experiences', 'Archive/Objects',
-    'Trips', 'Trip Places', 'Trip Legs',
+    'Trips', 'Trip Places', 'Trip Visits', 'Trip Legs',
   ]) {
     mkdirSync(join(dataRoot, relative), { recursive: true });
   }
   return { container, dataRoot };
 }
 
-function seedPlannerPair(dataRoot: string): { trip: PlannerTrip; from: PlannerTripPlace; to: PlannerTripPlace } {
+function seedPlannerPair(dataRoot: string): { trip: PlannerTrip; from: PlannerTripPlace; to: PlannerTripPlace; fromVisit: PlannerTripVisit; toVisit: PlannerTripVisit } {
   const trip: PlannerTrip = {
     schema_version: '0.1', type: 'trip', id: 'trip-1', title: 'Bangkok', status: 'planning',
     start_date: '2026-10-05', end_date: '2026-10-06', destinations: ['Bangkok'], created_at: NOW.toISOString(),
   };
   const base = {
-    schema_version: '0.1' as const,
-    type: 'trip_place' as const,
-    trip_id: trip.id,
-    source_provider: 'google_maps' as const,
-    kind: 'attraction' as const,
-    tags: [], signals: [], risks: [], reservation_status: 'none' as const,
-    state: 'scheduled' as const,
-    scheduled_date: '2026-10-05',
+    schema_version: '0.1' as const, type: 'trip_place' as const, trip_id: trip.id,
+    source_provider: 'google_maps' as const, kind: 'attraction' as const,
+    tags: [], signals: [], risks: [], reservation_status: 'none' as const, state: 'candidate' as const,
     created_at: NOW.toISOString(),
   };
-  const from: PlannerTripPlace = {
-    ...base, id: 'a', title: 'A', source_url: 'https://maps.google.com/a', sort_order: 0,
+  const from: PlannerTripPlace = { ...base, id: 'a', title: 'A', source_url: 'https://maps.google.com/a' };
+  const to: PlannerTripPlace = { ...base, id: 'b', title: 'B', source_url: 'https://maps.google.com/b' };
+  const fromVisit: PlannerTripVisit = {
+    schema_version: '0.1', type: 'trip_visit', id: 'visit:a', trip_id: trip.id, place_id: from.id,
+    date: '2026-10-05', sort_order: 0, locked: false, is_anchor: false, created_at: NOW.toISOString(),
   };
-  const to: PlannerTripPlace = {
-    ...base, id: 'b', title: 'B', source_url: 'https://maps.google.com/b', sort_order: 1,
+  const toVisit: PlannerTripVisit = {
+    schema_version: '0.1', type: 'trip_visit', id: 'visit:b', trip_id: trip.id, place_id: to.id,
+    date: '2026-10-05', sort_order: 1, locked: false, is_anchor: false, created_at: NOW.toISOString(),
   };
   writeFileSync(join(dataRoot, 'Trips', 'trip--trip-1.md'), serializeMarkdownEntity(trip, ''), 'utf8');
   writeFileSync(join(dataRoot, 'Trip Places', 'place--a.md'), serializeMarkdownEntity(from, ''), 'utf8');
   writeFileSync(join(dataRoot, 'Trip Places', 'place--b.md'), serializeMarkdownEntity(to, ''), 'utf8');
-  return { trip, from, to };
+  writeFileSync(join(dataRoot, 'Trip Visits', 'visit--a.md'), serializeMarkdownEntity(fromVisit, ''), 'utf8');
+  writeFileSync(join(dataRoot, 'Trip Visits', 'visit--b.md'), serializeMarkdownEntity(toVisit, ''), 'utf8');
+  return { trip, from, to, fromVisit, toVisit };
 }
 
 afterEach(() => {
@@ -136,17 +138,16 @@ describe('OwnlyWriteService', () => {
     });
   });
 
-  it('commits an optimized order and its final adjacent legs in one confirmed operation', async () => {
+  it('commits an optimized Visit order and its final adjacent canonical legs in one confirmed operation', async () => {
     const { dataRoot } = fixture();
-    const { trip, from, to } = seedPlannerPair(dataRoot);
-    const third: PlannerTripPlace = {
-      ...to,
-      id: 'c',
-      title: 'C',
-      source_url: 'https://maps.google.com/c',
-      sort_order: 2,
+    const { trip, from, to, fromVisit, toVisit } = seedPlannerPair(dataRoot);
+    const third: PlannerTripPlace = { ...to, id: 'c', title: 'C', source_url: 'https://maps.google.com/c' };
+    const thirdVisit: PlannerTripVisit = {
+      schema_version: '0.1', type: 'trip_visit', id: 'visit:c', trip_id: trip.id, place_id: third.id,
+      date: '2026-10-05', sort_order: 2, locked: false, is_anchor: false, created_at: NOW.toISOString(),
     };
     writeFileSync(join(dataRoot, 'Trip Places', 'place--c.md'), serializeMarkdownEntity(third, ''), 'utf8');
+    writeFileSync(join(dataRoot, 'Trip Visits', 'visit--c.md'), serializeMarkdownEntity(thirdVisit, ''), 'utf8');
 
     const legs: PlannerTripLeg[] = [
       {
@@ -162,23 +163,18 @@ describe('OwnlyWriteService', () => {
     ];
     const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
     const prepared = service.prepareApplyTravelTimeOptimization(
-      trip.id,
-      '2026-10-05',
-      ['a', 'c', 'b'],
-      legs,
+      trip.id, '2026-10-05', [fromVisit.id, thirdVisit.id, toVisit.id], legs,
       { original_minutes: 60, optimized_minutes: 22, saved_minutes: 38, used_manual_pairs: [] },
     );
-
     expect(prepared).toMatchObject({ action: 'planner_optimize_day_travel_time', write_enabled: true });
     expect(readdirSync(join(dataRoot, 'Trip Legs'))).toEqual([]);
-    expect(parseMarkdownEntity<PlannerTripPlace>(readFileSync(join(dataRoot, 'Trip Places', 'place--b.md'), 'utf8')).frontmatter.sort_order).toBe(1);
 
     const committed = await service.commit(prepared.operation_id);
-    expect(committed.result).toMatchObject({ trip_id: trip.id, date: '2026-10-05', updated_places: 2, refreshed_legs: 2, saved_minutes: 38 });
-    const storedOrder = readdirSync(join(dataRoot, 'Trip Places'))
-      .map((file) => parseMarkdownEntity<PlannerTripPlace>(readFileSync(join(dataRoot, 'Trip Places', file), 'utf8')).frontmatter)
-      .sort((left, right) => (left.sort_order ?? 99) - (right.sort_order ?? 99))
-      .map((place) => place.id);
+    expect(committed.result).toMatchObject({ trip_id: trip.id, date: '2026-10-05', updated_visits: 2, refreshed_legs: 2, saved_minutes: 38 });
+    const storedOrder = readdirSync(join(dataRoot, 'Trip Visits'))
+      .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
+      .sort((left, right) => left.sort_order - right.sort_order)
+      .map((visit) => visit.place_id);
     expect(storedOrder).toEqual(['a', 'c', 'b']);
     expect(readdirSync(join(dataRoot, 'Trip Legs'))).toHaveLength(2);
   });

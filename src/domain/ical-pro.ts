@@ -2,12 +2,16 @@ import {
   buildGoogleMapsRouteUrl,
   getPlannerKindLabel,
   listTripDates,
-  sortPlannerPlaces,
   PLANNER_KIND_ICONS,
   type PlannerPlacePriority,
   type PlannerTrip,
   type PlannerTripPlace,
 } from './planner';
+import {
+  materializePlannerScheduledPlaces,
+  sortPlannerScheduledPlaces,
+  type PlannerTripVisit,
+} from './planner-visits';
 import { getScheduledEndTime } from './planner-schedule';
 
 export const ICAL_PRO_PRIORITY_MAP: Record<PlannerPlacePriority, string> = {
@@ -26,6 +30,7 @@ export interface ICalProExportOptions {
 export function exportTripToICalProMarkdown(
   trip: PlannerTrip,
   places: PlannerTripPlace[],
+  visits: PlannerTripVisit[],
   options: ICalProExportOptions = {},
 ): string {
   const {
@@ -36,6 +41,7 @@ export function exportTripToICalProMarkdown(
   } = options;
   const zh = language === 'zh';
   const tripPlaces = places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped');
+  const scheduled = materializePlannerScheduledPlaces(tripPlaces, visits.filter((visit) => visit.trip_id === trip.id));
   const dates = listTripDates(trip.start_date, trip.end_date);
   const lines: string[] = [
     '---',
@@ -58,9 +64,7 @@ export function exportTripToICalProMarkdown(
   ];
 
   dates.forEach((date, dayIndex) => {
-    const dayPlaces = sortPlannerPlaces(
-      tripPlaces.filter((place) => place.scheduled_date === date && place.state === 'scheduled'),
-    );
+    const dayPlaces = sortPlannerScheduledPlaces(scheduled.filter((place) => place.scheduled_date === date));
     lines.push(useDayPlannerHeadings ? `## Day ${dayIndex + 1} · ${date}` : `### ${date}`);
 
     if (dayPlaces.length === 0) {
@@ -76,11 +80,8 @@ export function exportTripToICalProMarkdown(
       const priorityIcon = place.priority ? ICAL_PRO_PRIORITY_MAP[place.priority] : '🔼';
       const alarmTag = includeAlarm && place.priority === 'must' ? ` ⏰ ${alarmMinutes}` : '';
       const endTime = getScheduledEndTime(place.scheduled_start, place.duration_minutes);
-      const timing = place.scheduled_start && endTime
-        ? `${date} ${place.scheduled_start}-${endTime}`
-        : date;
+      const timing = place.scheduled_start && endTime ? `${date} ${place.scheduled_start}-${endTime}` : date;
       lines.push(`- [ ] ${timing} ${icon} ${place.title} ${priorityIcon}${alarmTag}`);
-
       const kindLabel = getPlannerKindLabel(place.kind, language);
       lines.push(`    - 🏷️ ${zh ? '类别' : 'Category'}: ${kindLabel}${place.area ? ` · ${place.area}` : ''}`);
       if (place.address) lines.push(`    - 📍 ${zh ? '地址' : 'Address'}: ${place.address}`);
@@ -95,13 +96,13 @@ export function exportTripToICalProMarkdown(
     lines.push('');
   });
 
-  const candidates = tripPlaces.filter((place) => place.state === 'candidate');
-  if (candidates.length > 0) {
-    lines.push('---', '', `## 💡 ${zh ? '备选研究灵感池' : 'Candidate Pool'} (VTODO)`);
-    candidates.forEach((place) => {
+  if (tripPlaces.length > 0) {
+    lines.push('---', '', `## 💡 ${zh ? '研究地点池' : 'Research Pool'} (VTODO)`);
+    tripPlaces.forEach((place) => {
       const icon = PLANNER_KIND_ICONS[place.kind] || '📍';
       const priorityIcon = place.priority ? ICAL_PRO_PRIORITY_MAP[place.priority] : '🔼';
-      lines.push(`- [ ] ${icon} ${place.title} ${priorityIcon}`);
+      const occurrenceCount = visits.filter((visit) => visit.place_id === place.id && visit.trip_id === trip.id).length;
+      lines.push(`- [ ] ${icon} ${place.title} ${priorityIcon}${occurrenceCount ? ` · ${zh ? `已安排 ${occurrenceCount} 次` : `${occurrenceCount} visits`}` : ''}`);
       if (place.why || place.notes) lines.push(`    - ${place.why || place.notes}`);
       if (place.address) lines.push(`    - 📍 ${place.address}`);
     });

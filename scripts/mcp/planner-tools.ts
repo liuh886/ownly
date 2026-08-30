@@ -4,6 +4,7 @@ import {
   listPlannerLegs,
   listPlannerPlaces,
   listPlannerTrips,
+  listPlannerVisits,
 } from '../cli/planner-storage';
 import { OwnlyMcpError } from './ownly-tools';
 import {
@@ -16,6 +17,10 @@ import {
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
+import {
+  materializePlannerScheduledPlaces,
+  type PlannerTripVisit,
+} from '../../src/domain/planner-visits';
 import { buildPlannerDayExecutionTimeline, findPlannerTimeOverlaps } from '../../src/domain/planner-schedule';
 import { exportTripToICalProMarkdown, type ICalProExportOptions } from '../../src/domain/ical-pro';
 
@@ -28,6 +33,7 @@ function requireTrip(dataLocation: string, tripId: string) {
 export function getPlannerSummary(dataLocation: string): Record<string, unknown> {
   const trips = listPlannerTrips(dataLocation).map((item) => item.frontmatter);
   const places = listPlannerPlaces(dataLocation).map((item) => item.frontmatter);
+  const visits = listPlannerVisits(dataLocation).map((item) => item.frontmatter);
   const expenses = listPlannerExpenses(dataLocation).map((item) => item.frontmatter);
   return {
     trips: trips.map((trip) => ({
@@ -36,13 +42,12 @@ export function getPlannerSummary(dataLocation: string): Record<string, unknown>
       status: trip.status,
       dates: `${trip.start_date} → ${trip.end_date}`,
       currency: trip.currency ?? null,
-      places_total: places.filter((place) => place.trip_id === trip.id).length,
-      scheduled: places.filter((place) => place.trip_id === trip.id && place.state === 'scheduled').length,
-      candidates: places.filter((place) => place.trip_id === trip.id && place.state === 'candidate').length,
+      places_total: places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped').length,
+      visits: visits.filter((visit) => visit.trip_id === trip.id).length,
       dropped: places.filter((place) => place.trip_id === trip.id && place.state === 'dropped').length,
       expenses: expenses.filter((expense) => expense.trip_id === trip.id).length,
     })),
-    totals: { trips: trips.length, places: places.length, expenses: expenses.length },
+    totals: { trips: trips.length, places: places.length, visits: visits.length, expenses: expenses.length },
   };
 }
 
@@ -51,7 +56,11 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
   const places = listPlannerPlaces(dataLocation)
     .map((item) => item.frontmatter as unknown as PlannerTripPlace)
     .filter((place) => place.trip_id === tripId && place.state !== 'dropped')
-    .sort((left, right) => (left.sort_order ?? Number.MAX_SAFE_INTEGER) - (right.sort_order ?? Number.MAX_SAFE_INTEGER));
+    .sort((left, right) => left.title.localeCompare(right.title));
+  const visits = listPlannerVisits(dataLocation)
+    .map((item) => item.frontmatter as unknown as PlannerTripVisit)
+    .filter((visit) => visit.trip_id === tripId);
+  const scheduled = materializePlannerScheduledPlaces(places, visits);
   const legs = listPlannerLegs(dataLocation)
     .map((item) => item.frontmatter as unknown as PlannerTripLeg)
     .filter((leg) => leg.trip_id === tripId);
@@ -63,18 +72,19 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
     .filter((expense) => expense.trip_id === tripId);
 
   const fx: FxSettings = { base: (trip.currency || 'CNY').toUpperCase(), overrides: trip.fx_rates };
-  const scheduled = places.filter((place) => place.state === 'scheduled');
   const budget = estimateTripBudget(scheduled, Math.max(1, trip.members?.length ?? 1), fx);
   const conflicts = listTripDates(trip.start_date, trip.end_date)
     .map((date) => {
-      const summary = checkDayScheduleCollisions(places, date);
-      const timeOverlaps = findPlannerTimeOverlaps(places, date);
-      const collisions = places
-        .filter((place) => place.scheduled_date === date && summary.placeCollisions[place.id]?.isCollision)
-        .map((place) => ({
-          place: place.title,
+      const summary = checkDayScheduleCollisions(scheduled, date);
+      const timeOverlaps = findPlannerTimeOverlaps(scheduled, date);
+      const collisions = scheduled
+        .filter((visit) => visit.scheduled_date === date && summary.placeCollisions[visit.id]?.isCollision)
+        .map((visit) => ({
+          visit_id: visit.visit_id,
+          place_id: visit.place_id,
+          place: visit.title,
           isCollision: true,
-          reason: summary.placeCollisions[place.id]?.reason,
+          reason: summary.placeCollisions[visit.id]?.reason,
         }));
       return {
         date,
@@ -89,7 +99,7 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
     .filter((day) => day.has_collision);
 
   const executionTimeline = listTripDates(trip.start_date, trip.end_date)
-    .map((date) => buildPlannerDayExecutionTimeline(trip, places, legs, date));
+    .map((date) => buildPlannerDayExecutionTimeline(trip, scheduled, legs, date));
 
   return {
     trip,
@@ -110,13 +120,7 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
       kind: place.kind,
       state: place.state,
       priority: place.priority ?? null,
-      scheduled_date: place.scheduled_date ?? null,
-      scheduled_start: place.scheduled_start ?? null,
-      duration_minutes: place.duration_minutes ?? null,
-      sort_order: place.sort_order ?? null,
-      locked: place.locked ?? false,
-      is_anchor: place.is_anchor ?? false,
-      anchor_type: place.anchor_type ?? null,
+      default_duration_minutes: place.duration_minutes ?? null,
       preferred_window: place.preferred_window ?? null,
       open_hours: place.open_hours ?? null,
       reservation_status: place.reservation_status,
@@ -132,6 +136,17 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
       coordinates: place.coordinates ?? null,
       phone: place.phone ?? null,
       source_url: place.source_url,
+    })),
+    visits: visits.map((visit) => ({
+      id: visit.id,
+      place_id: visit.place_id,
+      date: visit.date,
+      start: visit.start ?? null,
+      duration_minutes: visit.duration_minutes ?? null,
+      sort_order: visit.sort_order,
+      locked: visit.locked,
+      is_anchor: visit.is_anchor,
+      anchor_type: visit.anchor_type ?? null,
     })),
     bookings,
     expenses: expenses.map((expense) => ({
@@ -155,5 +170,8 @@ export function getPlannerTripICalMarkdown(
   const places = listPlannerPlaces(dataLocation)
     .map((item) => item.frontmatter as unknown as PlannerTripPlace)
     .filter((place) => place.trip_id === tripId);
-  return { tripId: trip.id, title: trip.title, markdown: exportTripToICalProMarkdown(trip, places, options) };
+  const visits = listPlannerVisits(dataLocation)
+    .map((item) => item.frontmatter as unknown as PlannerTripVisit)
+    .filter((visit) => visit.trip_id === tripId);
+  return { tripId: trip.id, title: trip.title, markdown: exportTripToICalProMarkdown(trip, places, visits, options) };
 }

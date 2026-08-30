@@ -1,10 +1,11 @@
 export type PlannerTripStatus = 'planning' | 'active' | 'completed';
 export type PlannerTravelMode = 'driving' | 'walking' | 'bicycling' | 'transit';
 export type PlannerTripLegSource = 'manual' | 'openrouteservice';
-export type PlannerPlaceState = 'candidate' | 'scheduled' | 'done' | 'dropped';
+export type PlannerPlaceState = 'candidate' | 'done' | 'dropped';
 export type PlannerPlacePriority = 'must' | 'want' | 'optional';
 export type PlannerReservationStatus = 'none' | 'needed' | 'booked';
 export type PlannerPriceUnit = 'person' | 'night' | 'item' | 'level' | 'unknown';
+export type PlannerVisitAnchorType = 'flight' | 'stay_checkin' | 'stay_checkout' | 'transit' | 'reservation';
 export type PlannerPlaceKind =
   | 'attraction'
   | 'food'
@@ -75,17 +76,10 @@ export interface PlannerTripPlace {
   preferred_window?: string;
   duration_minutes?: number;
   open_hours?: string;
-  is_anchor?: boolean;
-  anchor_type?: 'flight' | 'stay_checkin' | 'stay_checkout' | 'transit' | 'reservation';
   address?: string;
   coordinates?: { lat: number; lng: number };
   reservation_status: PlannerReservationStatus;
   state: PlannerPlaceState;
-  scheduled_date?: string;
-  /** Canonical local start time for an executable itinerary item (HH:mm). */
-  scheduled_start?: string;
-  sort_order?: number;
-  locked?: boolean;
   /** Contact & structured extras captured from Google Maps. */
   phone?: string;
   plus_code?: string;
@@ -96,6 +90,29 @@ export interface PlannerTripPlace {
   types?: string[];
   created_at: string;
   updated_at?: string;
+}
+
+export interface PlannerScheduledPlace extends Omit<PlannerTripPlace, 'id' | 'state' | 'duration_minutes'> {
+  id: string;
+  visit_id: string;
+  place_id: string;
+  state: 'scheduled';
+  scheduled_date: string;
+  scheduled_start?: string;
+  duration_minutes?: number;
+  sort_order: number;
+  locked: boolean;
+  is_anchor: boolean;
+  anchor_type?: PlannerVisitAnchorType;
+}
+
+export function sortPlannerScheduledPlaces(places: PlannerScheduledPlace[]): PlannerScheduledPlace[] {
+  return [...places].sort((left, right) => {
+    if (left.sort_order !== right.sort_order) return left.sort_order - right.sort_order;
+    const start = (left.scheduled_start ?? '').localeCompare(right.scheduled_start ?? '');
+    if (start !== 0) return start;
+    return left.title.localeCompare(right.title);
+  });
 }
 
 export interface PlannerTripLeg {
@@ -161,10 +178,6 @@ export function asCaptureCandidate(place: PlannerTripPlace): PlannerTripPlace {
     ...place,
     reservation_status: place.reservation_status ?? 'none',
     state: 'candidate',
-    scheduled_date: undefined,
-    scheduled_start: undefined,
-    sort_order: undefined,
-    locked: undefined,
   };
 }
 
@@ -249,15 +262,6 @@ export function listTripDates(startDate: string, endDate: string, maxDays = 90):
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return result;
-}
-
-export function sortPlannerPlaces(places: PlannerTripPlace[]): PlannerTripPlace[] {
-  return [...places].sort((left, right) => {
-    const leftOrder = left.sort_order ?? Number.MAX_SAFE_INTEGER;
-    const rightOrder = right.sort_order ?? Number.MAX_SAFE_INTEGER;
-    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-    return left.title.localeCompare(right.title);
-  });
 }
 
 export function mergeCapturedPlaceResearch(
@@ -409,7 +413,7 @@ export function getTripAreaCounts(places: PlannerTripPlace[]): Array<{ area: str
     .sort((left, right) => right.count - left.count || left.area.localeCompare(right.area));
 }
 
-function directionsUrl(stops: PlannerTripPlace[], travelMode: PlannerTrip['transport_mode']): string {
+function directionsUrl(stops: Array<PlannerTripPlace | PlannerScheduledPlace>, travelMode: PlannerTrip['transport_mode']): string {
   if (stops.length === 0) return '';
   if (stops.length === 1) {
     const query = encodeURIComponent(stops[0].title);
@@ -428,10 +432,10 @@ function directionsUrl(stops: PlannerTripPlace[], travelMode: PlannerTrip['trans
 }
 
 export function buildGoogleMapsDirectionsSegments(
-  places: PlannerTripPlace[],
+  places: PlannerScheduledPlace[],
   travelMode: PlannerTrip['transport_mode'] = 'transit',
 ): string[] {
-  const scheduled = sortPlannerPlaces(places).filter((place) => place.state === 'scheduled');
+  const scheduled = sortPlannerScheduledPlaces(places);
   if (scheduled.length === 0) return [];
   if (scheduled.length <= 5) return [directionsUrl(scheduled, travelMode)];
 
@@ -606,10 +610,10 @@ export interface DayScheduleCollisionSummary {
 }
 
 export function checkDayScheduleCollisions(
-  places: PlannerTripPlace[],
+  places: PlannerScheduledPlace[],
   date: string,
 ): DayScheduleCollisionSummary {
-  const scheduled = sortPlannerPlaces(places).filter((p) => p.scheduled_date === date && p.state === 'scheduled');
+  const scheduled = sortPlannerScheduledPlaces(places.filter((p) => p.scheduled_date === date));
   const placeCollisions: Record<string, { isCollision: boolean; reason?: string }> = {};
   let hasCollision = false;
   let totalDurationMinutes = 0;
@@ -659,7 +663,7 @@ export function checkDayScheduleCollisions(
 }
 
 export function buildGoogleMapsRouteUrl(
-  stops: PlannerTripPlace[],
+  stops: Array<PlannerTripPlace | PlannerScheduledPlace>,
   travelMode: PlannerTrip['transport_mode'] = 'transit',
 ): string {
   if (stops.length === 0) return '';
@@ -686,7 +690,7 @@ function escapeXml(unsafe: string): string {
     .replace(/'/g, '&apos;');
 }
 
-export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: PlannerTripPlace[]): string {
+export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: Array<PlannerTripPlace | PlannerScheduledPlace>): string {
   const placemarks = places.map((place, index) => {
     const description = escapeCdata(`
         <p><b>类别:</b> ${escapeXml(place.kind)}</p>
@@ -719,7 +723,7 @@ export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: 
 </kml>`;
 }
 
-export function exportPlacesToCSV(places: PlannerTripPlace[]): string {
+export function exportPlacesToCSV(places: Array<PlannerTripPlace | PlannerScheduledPlace>): string {
   const headers = ['Order', 'Title', 'Kind', 'Rating', 'Price', 'Address', 'Why', 'Notes', 'Tags', 'Google_Maps_URL', 'Phone', 'Plus_Code', 'Menu_URL', 'Reservation_URL'];
   const cell = (value: string) => `"${csvSafeCell(value.replace(/"/g, '""'))}"`;
   const rows = places.map((p, i) => [
@@ -790,7 +794,7 @@ export const STANDARD_RESEARCH_CHIPS: Record<'zh' | 'en', ResearchChipDefinition
 };
 
 export function extractPlaceCoordinates(
-  place: Partial<PlannerTripPlace> | string | null | undefined,
+  place: Partial<PlannerTripPlace | PlannerScheduledPlace> | string | null | undefined,
 ): { lat: number; lng: number } | null {
   if (!place) return null;
   if (typeof place === 'object' && place.coordinates && Number.isFinite(place.coordinates.lat) && Number.isFinite(place.coordinates.lng)) {
@@ -861,7 +865,7 @@ export interface HotelProximityMetrics {
 
 export function calculateHotelProximity(
   hotel: PlannerTripPlace,
-  scheduledPlaces: PlannerTripPlace[],
+  scheduledPlaces: PlannerScheduledPlace[],
 ): HotelProximityMetrics {
   const hotelCoords = extractPlaceCoordinates(hotel);
   if (!hotelCoords) {
@@ -870,7 +874,7 @@ export function calculateHotelProximity(
 
   const validStops = scheduledPlaces
     .map((p) => ({ place: p, coords: extractPlaceCoordinates(p) }))
-    .filter((item): item is { place: PlannerTripPlace; coords: { lat: number; lng: number } } => item.coords !== null && item.place.kind !== 'stay');
+    .filter((item): item is { place: PlannerScheduledPlace; coords: { lat: number; lng: number } } => item.coords !== null && item.place.kind !== 'stay');
 
   if (validStops.length === 0) {
     return { hasCoordinates: true, avgDistanceKm: 0, minDistanceKm: 0, centerDistanceKm: 0 };
@@ -920,7 +924,7 @@ export interface MultiDayHotelProximityResult {
 
 export function calculateMultiDayHotelProximity(
   hotel: PlannerTripPlace,
-  placesByDate: Record<string, PlannerTripPlace[]>,
+  placesByDate: Record<string, PlannerScheduledPlace[]>,
   stayDates: string[],
 ): MultiDayHotelProximityResult {
   const hotelCoords = extractPlaceCoordinates(hotel);
@@ -946,7 +950,7 @@ export function calculateMultiDayHotelProximity(
     const validSpots = dayPlaces
       .map((p) => ({ place: p, coords: extractPlaceCoordinates(p) }))
       .filter(
-        (item): item is { place: PlannerTripPlace; coords: { lat: number; lng: number } } =>
+        (item): item is { place: PlannerScheduledPlace; coords: { lat: number; lng: number } } =>
           item.coords !== null && item.place.kind !== 'stay',
       );
 
@@ -997,46 +1001,28 @@ export function calculateMultiDayHotelProximity(
   };
 }
 
-export function generateStaySpanPlaces(
-  hotel: PlannerTripPlace,
-  stayDates: string[],
-): PlannerTripPlace[] {
-  return stayDates.map((date, index) => ({
-    ...hotel,
-    id: index === 0 ? hotel.id : `${hotel.id}__stay_${date}`,
-    state: 'scheduled' as const,
-    scheduled_date: date,
-    is_anchor: true,
-    anchor_type: 'stay_checkin' as const,
-    locked: true,
-    sort_order: 0,
-    updated_at: new Date().toISOString(),
-  }));
-}
-
 export interface DayHotelTransferInfo {
   date: string;
   dayIndex: number;
   isTransferDay: boolean;
-  checkoutHotel?: PlannerTripPlace;
-  checkinHotel?: PlannerTripPlace;
-  stayHotel?: PlannerTripPlace;
+  checkoutHotel?: PlannerScheduledPlace;
+  checkinHotel?: PlannerScheduledPlace;
+  stayHotel?: PlannerScheduledPlace;
   stayNightIndex?: number;
   totalStayNights?: number;
 }
 
 export function detectHotelTransferDays(
-  tripPlaces: PlannerTripPlace[],
+  tripPlaces: PlannerScheduledPlace[],
   tripDates: string[],
 ): Record<string, DayHotelTransferInfo> {
   const result: Record<string, DayHotelTransferInfo> = {};
   if (tripDates.length === 0) return result;
 
-  const stayByDate: Record<string, PlannerTripPlace | undefined> = {};
+  const stayByDate: Record<string, PlannerScheduledPlace | undefined> = {};
   tripDates.forEach((date) => {
     const stays = tripPlaces.filter(
       (p) =>
-        p.state === 'scheduled' &&
         p.scheduled_date === date &&
         (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin')),
     );
@@ -1619,7 +1605,7 @@ export function parseNumericPrice(raw?: string | null): number {  if (!raw) retu
 }
 
 export function estimateTripBudget(
-  scheduledPlaces: PlannerTripPlace[],
+  scheduledPlaces: Array<PlannerTripPlace | PlannerScheduledPlace>,
   travelerCount = 1,
   fx?: FxSettings,
 ): TripBudgetEstimation {
@@ -2066,7 +2052,7 @@ export interface PlaceExpenseEstimate {
 }
 
 export function parsePlaceExpenseEstimate(
-  place: PlannerTripPlace,
+  place: PlannerTripPlace | PlannerScheduledPlace,
   fallbackCurrency = 'USD',
 ): PlaceExpenseEstimate | null {
   const normalized = normalizeObservedPrice(
@@ -2113,6 +2099,7 @@ export function parsePlaceExpenseEstimate(
 export function exportTripToMarkdown(
   trip: PlannerTrip,
   places: PlannerTripPlace[],
+  scheduledPlaces: PlannerScheduledPlace[],
   expenses: TripExpenseItem[] = [],
   language: 'en' | 'zh' = 'zh',
 ): string {
@@ -2135,7 +2122,7 @@ export function exportTripToMarkdown(
   ];
 
   dates.forEach((date, dayIdx) => {
-    const dayPlaces = sortPlannerPlaces(tripPlaces.filter((p) => p.scheduled_date === date && p.state === 'scheduled'));
+    const dayPlaces = sortPlannerScheduledPlaces(scheduledPlaces.filter((p) => p.trip_id === trip.id && p.scheduled_date === date));
     lines.push(`### Day ${dayIdx + 1} (${date})`);
 
     if (dayPlaces.length === 0) {

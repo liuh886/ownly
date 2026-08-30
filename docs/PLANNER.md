@@ -19,6 +19,7 @@ The selected Ownly data directory is authoritative:
 Ownly/
   Trips/
   Trip Places/
+  Trip Visits/
   Trip Legs/
   Trip Expenses/
 ```
@@ -33,7 +34,11 @@ Trip identity, date range, destinations, currency and default transport mode.
 
 ### Trip Place
 
-Google Maps source reference plus user research and planning state. Place state is one of `candidate`, `scheduled`, `done`, `dropped`. Priority is independent: `must`, `want`, `optional`.
+Google Maps source reference plus reusable user research facts. Place state is one of `candidate`, `done`, `dropped`; scheduling never lives on the place. Priority is independent: `must`, `want`, `optional`.
+
+### Trip Visit
+
+One concrete occurrence of a place in the itinerary. `Trip Visits/` owns date, optional start, occurrence duration, order, lock and anchor state. The same `place_id` may have multiple visits on the same day or across different days. Removing a visit never deletes the reusable place.
 
 ### Trip Booking
 
@@ -53,7 +58,7 @@ The Google Maps adapter auto-fills observation hints for the current place or sa
 
 Currency detection runs in tiers: explicit symbols/codes on the page, then the place's map coordinates, then the trip's declared currency as a prior (beats VPN/TLD page-localization noise), then generic locale context. Hotel rate modules load lazily, so a missed price is retried once after ~2 seconds.
 
-Places are de-duplicated per trip with a stable identity: the Google place id when available, otherwise a normalized title/URL key (`knownPlaceIds`). Re-importing a saved list via one-click sync refreshes captured observations while preserving the user's edits and any scheduling state; bulk text/link paste only adds missing places and never overwrites existing ones.
+Places are de-duplicated per trip with a stable identity: the Google place id when available, otherwise a normalized title/URL key (`knownPlaceIds`). Re-importing a saved list via one-click sync refreshes captured observations while preserving the user's Planner-owned research edits; bulk text/link paste only adds missing places and never overwrites existing ones.
 
 The Ownly website bridge is injected only on the declared Ownly origins. Planner pulls the pending queue with `window.postMessage`; the bridge validates same-window and same-origin messages before accessing extension storage. Content scripts are injected only on Google Maps paths and the supported provider hosts (Tabelog, Xiaohongshu, Booking), never across all of google.com.
 
@@ -70,7 +75,7 @@ Google Maps
   → Google Maps Directions
 ```
 
-Planner deliberately starts manual-first. Manual placement locks the item so a later AI proposal layer can treat user edits as hard constraints instead of silently overwriting them.
+Planner deliberately starts manual-first. Manual placement creates a Visit occurrence. A Visit can be locked explicitly so a later AI proposal treats that occurrence as a hard constraint without mutating the reusable Place.
 
 ## Not in this slice
 
@@ -100,12 +105,12 @@ The browser remains a consumer of canonical `Trip Legs/` facts. API keys are not
 
 ## Travel-time optimization
 
-The old straight-line-distance optimizer is removed. Ownly has one optimization path: local MCP queries an ephemeral OpenRouteService matrix for the selected walking/driving/bicycling day, minimizes total known travel minutes, preserves the first stop plus locked/anchored slots, and commits the chosen order together with only the final adjacent ORS legs. The N×N matrix is never persisted.
+The old straight-line-distance optimizer is removed. Ownly has one optimization path: local MCP queries an ephemeral OpenRouteService matrix for the selected walking/driving/bicycling day, minimizes total known travel minutes, preserves the first Visit plus locked/anchored Visit slots, and commits the chosen Visit order together with only the final adjacent ORS legs. The N×N matrix is never persisted.
 
 `transit` remains manual because Ownly does not fabricate public-transport travel times. The static Web/PWA does not hold an ORS API key; it displays the canonical order and `Trip Legs/` facts after the MCP commit.
 
 ## Execution Timeline
 
-Execution Timeline is a deterministic projection, not a new persistence layer. `Trip Places/` remains the authority for stop order/start/duration, and `Trip Legs/` remains the authority for travel facts. `planner-schedule.ts` combines them into ordered `stop`, `travel`, `gap`, `conflict`, and `unknown` blocks.
+Execution Timeline is a deterministic projection, not a new persistence layer. `Trip Places/` owns reusable place facts, `Trip Visits/` owns occurrence order/start/duration/locks, and `Trip Legs/` owns travel facts between canonical place pairs. `planner-schedule.ts` combines them into ordered `stop`, `travel`, `gap`, `conflict`, and `unknown` blocks.
 
 Positive slack becomes an explicit gap; impossible handoffs become conflicts; missing travel or schedule facts remain unknown. The timeline never invents start times, transfer durations, buffers, or risk scores. Web and MCP consume the same derived projection.

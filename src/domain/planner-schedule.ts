@@ -1,16 +1,17 @@
 import {
   checkOpeningHoursCollision,
   listTripDates,
-  sortPlannerPlaces,
   type PlannerTrip,
   type PlannerTripLeg,
   type PlannerTripPlace,
 } from './planner';
+import { materializePlannerScheduledPlaces, sortPlannerScheduledPlaces, type PlannerScheduledPlace, type PlannerTripVisit } from './planner-visits';
 
 export interface PlannerScheduleProposalItem {
-  id: string;
-  scheduled_date: string;
-  scheduled_start?: string;
+  visit_id?: string;
+  place_id: string;
+  date: string;
+  start?: string;
   sort_order: number;
   duration_minutes?: number;
 }
@@ -19,13 +20,14 @@ export interface PlannerScheduleIssue {
   severity: 'error' | 'warning';
   code: string;
   message: string;
+  visit_id?: string;
   place_id?: string;
 }
 
 export interface PlannerScheduleEvaluation {
   valid: boolean;
   issues: PlannerScheduleIssue[];
-  places: PlannerTripPlace[];
+  visits: PlannerTripVisit[];
 }
 
 export interface PlannerTimeOverlap {
@@ -107,11 +109,11 @@ export function validatePlannerTiming(
 }
 
 export function findPlannerTimeOverlaps(
-  places: PlannerTripPlace[],
+  places: PlannerScheduledPlace[],
   date: string,
 ): PlannerTimeOverlap[] {
   const timed = places
-    .filter((place) => place.state === 'scheduled' && place.scheduled_date === date)
+    .filter((place) => place.scheduled_date === date)
     .map((place) => {
       const start = plannerClockToMinutes(place.scheduled_start);
       if (start === null || !Number.isInteger(place.duration_minutes) || !place.duration_minutes || place.duration_minutes <= 0) {
@@ -119,7 +121,7 @@ export function findPlannerTimeOverlaps(
       }
       return { place, start, end: start + place.duration_minutes };
     })
-    .filter((item): item is { place: PlannerTripPlace; start: number; end: number } => item !== null)
+    .filter((item): item is { place: PlannerScheduledPlace; start: number; end: number } => item !== null)
     .sort((left, right) => left.start - right.start || left.end - right.end);
 
   const overlaps: PlannerTimeOverlap[] = [];
@@ -178,6 +180,7 @@ export interface PlannerDayFeasibility {
 export interface PlannerTimelineStopItem {
   type: 'stop';
   id: string;
+  visit_id: string;
   place_id: string;
   title: string;
   start?: string;
@@ -264,12 +267,12 @@ function formatClockWithinDay(totalMinutes: number): string | undefined {
 
 export function evaluatePlannerDayFeasibility(
   trip: PlannerTrip,
-  places: PlannerTripPlace[],
+  places: PlannerScheduledPlace[],
   legs: PlannerTripLeg[],
   date: string,
 ): PlannerDayFeasibility {
-  const dayPlaces = sortPlannerPlaces(
-    places.filter((place) => place.trip_id === trip.id && place.state === 'scheduled' && place.scheduled_date === date),
+  const dayPlaces = sortPlannerScheduledPlaces(
+    places.filter((place) => place.trip_id === trip.id && place.scheduled_date === date),
   );
   const legByPair = new Map(
     legs
@@ -281,7 +284,7 @@ export function evaluatePlannerDayFeasibility(
   for (let index = 0; index < dayPlaces.length - 1; index += 1) {
     const from = dayPlaces[index];
     const to = dayPlaces[index + 1];
-    const leg = legByPair.get(transitionKey(from.id, to.id));
+    const leg = legByPair.get(transitionKey(from.place_id, to.place_id));
     if (!leg) {
       transitions.push({
         from_id: from.id,
@@ -337,12 +340,12 @@ export function evaluatePlannerDayFeasibility(
 
 export function buildPlannerDayExecutionTimeline(
   trip: PlannerTrip,
-  places: PlannerTripPlace[],
+  places: PlannerScheduledPlace[],
   legs: PlannerTripLeg[],
   date: string,
 ): PlannerDayExecutionTimeline {
-  const dayPlaces = sortPlannerPlaces(
-    places.filter((place) => place.trip_id === trip.id && place.state === 'scheduled' && place.scheduled_date === date),
+  const dayPlaces = sortPlannerScheduledPlaces(
+    places.filter((place) => place.trip_id === trip.id && place.scheduled_date === date),
   );
   const feasibility = evaluatePlannerDayFeasibility(trip, places, legs, date);
   const transitionByPair = new Map(
@@ -360,7 +363,8 @@ export function buildPlannerDayExecutionTimeline(
     items.push({
       type: 'stop',
       id: `stop:${place.id}`,
-      place_id: place.id,
+      visit_id: place.visit_id,
+      place_id: place.place_id,
       title: place.title,
       start: place.scheduled_start,
       end,
@@ -433,8 +437,8 @@ export function buildPlannerDayExecutionTimeline(
   return { date, status: feasibility.status, valid: feasibility.valid, items };
 }
 
-function isHardConstraint(place: PlannerTripPlace): boolean {
-  return Boolean(place.locked || place.is_anchor);
+function isHardConstraint(visit: PlannerTripVisit): boolean {
+  return Boolean(visit.locked || visit.is_anchor);
 }
 
 function sameOptional<T>(next: T | undefined, current: T | undefined): boolean {
@@ -444,99 +448,133 @@ function sameOptional<T>(next: T | undefined, current: T | undefined): boolean {
 export function evaluatePlannerScheduleProposal(
   trip: PlannerTrip,
   places: PlannerTripPlace[],
+  visits: PlannerTripVisit[],
   proposal: PlannerScheduleProposalItem[],
 ): PlannerScheduleEvaluation {
   const issues: PlannerScheduleIssue[] = [];
   const dates = new Set(listTripDates(trip.start_date, trip.end_date));
   const tripPlaces = places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped');
-  const byId = new Map(tripPlaces.map((place) => [place.id, place] as const));
+  const placeById = new Map(tripPlaces.map((place) => [place.id, place] as const));
+  const tripVisits = visits.filter((visit) => visit.trip_id === trip.id);
+  const visitById = new Map(tripVisits.map((visit) => [visit.id, visit] as const));
+  const proposed = new Map<string, PlannerTripVisit>();
   const seen = new Set<string>();
-  const proposed = new Map<string, PlannerTripPlace>();
 
   for (const item of proposal) {
-    if (seen.has(item.id)) {
-      issues.push({ severity: 'error', code: 'DUPLICATE_PLACE', place_id: item.id, message: 'A place appears more than once in the schedule proposal.' });
+    const visitId = item.visit_id?.trim();
+    if (!visitId) {
+      issues.push({ severity: 'error', code: 'VISIT_ID_REQUIRED', place_id: item.place_id, message: 'A prepared schedule proposal requires a visit_id for each occurrence.' });
       continue;
     }
-    seen.add(item.id);
+    if (seen.has(visitId)) {
+      issues.push({ severity: 'error', code: 'DUPLICATE_VISIT', visit_id: visitId, place_id: item.place_id, message: 'A visit appears more than once in the schedule proposal.' });
+      continue;
+    }
+    seen.add(visitId);
 
-    const existing = byId.get(item.id);
-    if (!existing) {
-      issues.push({ severity: 'error', code: 'PLACE_NOT_FOUND', place_id: item.id, message: 'The proposed place does not belong to this trip.' });
+    const place = placeById.get(item.place_id);
+    if (!place) {
+      issues.push({ severity: 'error', code: 'PLACE_NOT_FOUND', visit_id: visitId, place_id: item.place_id, message: 'The proposed place does not belong to this trip.' });
       continue;
     }
-    if (!dates.has(item.scheduled_date)) {
-      issues.push({ severity: 'error', code: 'DATE_OUTSIDE_TRIP', place_id: item.id, message: `${item.scheduled_date} is outside the trip date range.` });
+    const existing = visitById.get(visitId);
+    if (existing && existing.place_id !== item.place_id) {
+      issues.push({ severity: 'error', code: 'VISIT_PLACE_MISMATCH', visit_id: visitId, place_id: item.place_id, message: 'An existing visit cannot be reassigned to another place.' });
+      continue;
+    }
+    if (!dates.has(item.date)) {
+      issues.push({ severity: 'error', code: 'DATE_OUTSIDE_TRIP', visit_id: visitId, place_id: item.place_id, message: `${item.date} is outside the trip date range.` });
     }
     if (!Number.isInteger(item.sort_order) || item.sort_order < 0) {
-      issues.push({ severity: 'error', code: 'INVALID_SORT_ORDER', place_id: item.id, message: 'sort_order must be a non-negative integer.' });
+      issues.push({ severity: 'error', code: 'INVALID_SORT_ORDER', visit_id: visitId, place_id: item.place_id, message: 'sort_order must be a non-negative integer.' });
     }
 
-    const effectiveDuration = item.duration_minutes ?? existing.duration_minutes;
+    const effectiveDuration = item.duration_minutes ?? existing?.duration_minutes ?? place.duration_minutes;
     issues.push(...validatePlannerTiming(
-      item.scheduled_start,
+      item.start,
       effectiveDuration,
-      { allowCrossMidnight: isHardConstraint(existing) },
-    ).map((issue) => ({ ...issue, place_id: item.id })));
+      { allowCrossMidnight: Boolean(existing?.is_anchor) },
+    ).map((issue) => ({ ...issue, visit_id: visitId, place_id: item.place_id })));
 
-    if (isHardConstraint(existing)) {
-      const unchanged = item.scheduled_date === existing.scheduled_date
+    if (existing && isHardConstraint(existing)) {
+      const unchanged = item.date === existing.date
         && item.sort_order === existing.sort_order
-        && sameOptional(item.scheduled_start, existing.scheduled_start)
+        && sameOptional(item.start, existing.start)
         && sameOptional(item.duration_minutes, existing.duration_minutes);
       if (!unchanged) {
         issues.push({
           severity: 'error',
           code: 'HARD_CONSTRAINT_CHANGED',
-          place_id: item.id,
-          message: `${existing.title} is locked/anchored and cannot be moved by an AI schedule proposal.`,
+          visit_id: visitId,
+          place_id: item.place_id,
+          message: `${place.title} has a locked/anchored visit that cannot be moved by an AI schedule proposal.`,
         });
       }
-      proposed.set(item.id, existing);
+      proposed.set(visitId, existing);
       continue;
     }
 
-    proposed.set(item.id, {
-      ...existing,
-      state: 'scheduled',
-      scheduled_date: item.scheduled_date,
-      scheduled_start: item.scheduled_start,
-      sort_order: item.sort_order,
+    proposed.set(visitId, {
+      schema_version: '0.1',
+      type: 'trip_visit',
+      id: visitId,
+      trip_id: trip.id,
+      place_id: item.place_id,
+      date: item.date,
+      start: item.start,
       duration_minutes: effectiveDuration,
-      // AI proposals never promote their own decisions to hard constraints.
-      locked: existing.locked,
+      sort_order: item.sort_order,
+      locked: existing?.locked ?? false,
+      is_anchor: existing?.is_anchor ?? false,
+      anchor_type: existing?.anchor_type,
+      created_at: existing?.created_at ?? '',
+      updated_at: existing?.updated_at,
     });
   }
 
   if (issues.some((issue) => issue.severity === 'error')) {
-    return { valid: false, issues, places };
+    return { valid: false, issues, visits };
   }
 
-  const nextPlaces = places.map((place) => proposed.get(place.id) ?? place);
+  const nextVisits = [
+    ...visits.filter((visit) => !proposed.has(visit.id)),
+    ...proposed.values(),
+  ];
+  const scheduled = materializePlannerScheduledPlaces(places, nextVisits);
 
-  for (const place of nextPlaces) {
-    if (place.trip_id !== trip.id || place.state !== 'scheduled' || !place.scheduled_date) continue;
-    if (place.scheduled_start && !place.duration_minutes) {
+  for (const scheduledVisit of scheduled) {
+    if (scheduledVisit.trip_id !== trip.id) continue;
+    if (scheduledVisit.scheduled_start && !scheduledVisit.duration_minutes) {
       issues.push({
         severity: 'warning',
         code: 'TIMED_ITEM_MISSING_DURATION',
-        place_id: place.id,
-        message: `${place.title} has a start time but no duration; calendar projection will remain date-only until duration is known.`,
+        visit_id: scheduledVisit.visit_id,
+        place_id: scheduledVisit.place_id,
+        message: `${scheduledVisit.title} has a start time but no duration; calendar projection will remain date-only until duration is known.`,
       });
     }
-
-    const hours = checkOpeningHoursCollision(place.open_hours, place.scheduled_date, place.preferred_window);
+    const hours = checkOpeningHoursCollision(
+      scheduledVisit.open_hours,
+      scheduledVisit.scheduled_date,
+      scheduledVisit.preferred_window,
+    );
     if (hours.isCollision) {
-      issues.push({ severity: 'warning', code: 'OPENING_HOURS_WARNING', place_id: place.id, message: hours.reason ?? 'Possible opening-hours conflict.' });
+      issues.push({
+        severity: 'warning',
+        code: 'OPENING_HOURS_WARNING',
+        visit_id: scheduledVisit.visit_id,
+        place_id: scheduledVisit.place_id,
+        message: hours.reason ?? 'Possible opening-hours conflict.',
+      });
     }
   }
 
   for (const date of dates) {
-    for (const overlap of findPlannerTimeOverlaps(nextPlaces, date)) {
+    for (const overlap of findPlannerTimeOverlaps(scheduled, date)) {
       issues.push({
         severity: 'error',
         code: 'TIME_OVERLAP',
-        place_id: overlap.toId,
+        visit_id: overlap.toId,
         message: `${date}: ${overlap.warning}`,
       });
     }
@@ -545,6 +583,6 @@ export function evaluatePlannerScheduleProposal(
   return {
     valid: !issues.some((issue) => issue.severity === 'error'),
     issues,
-    places: nextPlaces,
+    visits: nextVisits,
   };
 }

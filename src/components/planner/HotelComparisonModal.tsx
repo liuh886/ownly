@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { PlannerTripPlace } from '@/domain/planner';
+import type { PlannerScheduledPlace, PlannerTripPlace } from '@/domain/planner';
 import {
   calculateHotelProximity,
   calculateMultiDayHotelProximity,
@@ -11,8 +11,8 @@ interface HotelComparisonModalProps {
   open: boolean;
   onClose: () => void;
   candidateHotels: PlannerTripPlace[];
-  scheduledPlaces: PlannerTripPlace[];
-  placesByDate?: Record<string, PlannerTripPlace[]>;
+  scheduledPlaces: PlannerScheduledPlace[];
+  placesByDate?: Record<string, PlannerScheduledPlace[]>;
   tripDates?: string[];
   activeDate: string;
   activeDayIndex: number;

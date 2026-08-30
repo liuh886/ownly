@@ -9,6 +9,11 @@ import {
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '@/domain/planner';
+import {
+  createPlannerTripVisit,
+  plannerTripVisitFileName,
+  type PlannerTripVisit,
+} from '@/domain/planner-visits';
 import { exportTripToICalProMarkdown } from '@/domain/ical-pro';
 import { validatePlannerTiming } from '@/domain/planner-schedule';
 import { obsidianService } from './ObsidianFileSystemService';
@@ -20,14 +25,15 @@ export interface PlannerFileStore {
   deleteMarkdownFile(directory: string, fileName: string): Promise<void>;
 }
 
-const PLANNER_DIRECTORIES = {
+export const PLANNER_DIRECTORIES = {
   trips: 'Trips',
   places: 'Trip Places',
+  visits: 'Trip Visits',
   legs: 'Trip Legs',
   expenses: 'Trip Expenses',
 } as const;
 
-type PlannerEntity = PlannerTrip | PlannerTripPlace | PlannerTripLeg;
+type PlannerEntity = PlannerTrip | PlannerTripPlace | PlannerTripVisit | PlannerTripLeg;
 type PlannerEntityType = PlannerEntity['type'];
 
 interface RepoExpense extends TripExpenseItem {
@@ -64,6 +70,7 @@ function safeEntityId(id: string): string {
 
 function entityFileName(entity: PlannerEntity): string {
   if (entity.type === 'trip_leg') return plannerTripLegFileName(entity.id);
+  if (entity.type === 'trip_visit') return plannerTripVisitFileName(entity.id);
   const prefix = entity.type === 'trip' ? 'trip' : 'place';
   return `${prefix}--${safeEntityId(entity.id)}.md`;
 }
@@ -85,10 +92,7 @@ export class PlannerRepository {
     return this.root ? `${this.root}/${name}` : name;
   }
 
-  private async list<T extends PlannerEntity>(
-    directory: string,
-    type: PlannerEntityType,
-  ): Promise<T[]> {
+  private async list<T extends PlannerEntity>(directory: string, type: PlannerEntityType): Promise<T[]> {
     await this.initialize();
     const files = await this.store.readMarkdownFiles(this.directory(directory));
     const result: T[] = [];
@@ -110,10 +114,11 @@ export class PlannerRepository {
 
   async listPlaces(): Promise<PlannerTripPlace[]> {
     const places = await this.list<PlannerTripPlace>(PLANNER_DIRECTORIES.places, 'trip_place');
-    return places.map((p) => ({
-      ...p,
-      tags: ensurePlaceKindTag(p.tags, p.kind),
-    }));
+    return places.map((place) => ({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) }));
+  }
+
+  async listVisits(): Promise<PlannerTripVisit[]> {
+    return this.list<PlannerTripVisit>(PLANNER_DIRECTORIES.visits, 'trip_visit');
   }
 
   async listLegs(): Promise<PlannerTripLeg[]> {
@@ -140,47 +145,33 @@ export class PlannerRepository {
     await this.initialize();
     const directory = entity.type === 'trip'
       ? PLANNER_DIRECTORIES.trips
-      : entity.type === 'trip_leg' ? PLANNER_DIRECTORIES.legs : PLANNER_DIRECTORIES.places;
-
-    await this.store.writeMarkdownFile(
-      this.directory(directory),
-      entityFileName(entity),
-      serializeMarkdownEntity(entity, ''),
-    );
+      : entity.type === 'trip_place'
+        ? PLANNER_DIRECTORIES.places
+        : entity.type === 'trip_visit'
+          ? PLANNER_DIRECTORIES.visits
+          : PLANNER_DIRECTORIES.legs;
+    await this.store.writeMarkdownFile(this.directory(directory), entityFileName(entity), serializeMarkdownEntity(entity, ''));
   }
 
-  async upsertTrip(trip: PlannerTrip): Promise<void> {
-    await this.upsert(trip);
-  }
-
+  async upsertTrip(trip: PlannerTrip): Promise<void> { await this.upsert(trip); }
   async upsertPlace(place: PlannerTripPlace): Promise<void> {
-    await this.upsert({
-      ...place,
-      tags: ensurePlaceKindTag(place.tags, place.kind),
-    });
+    await this.upsert({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) });
   }
+  async upsertVisit(visit: PlannerTripVisit): Promise<void> { await this.upsert(visit); }
+  async upsertLeg(leg: PlannerTripLeg): Promise<void> { await this.upsert(leg); }
 
-  async upsertLeg(leg: PlannerTripLeg): Promise<void> {
-    await this.upsert(leg);
-  }
-
-  /** Canonical Planner writes: no Capture merge heuristics. */
   async upsertPlaces(places: PlannerTripPlace[]): Promise<void> {
-    for (const place of places) {
-      await this.upsertPlace(place);
-    }
+    for (const place of places) await this.upsertPlace(place);
   }
 
   private async importResearchPlaces(places: PlannerTripPlace[]): Promise<string[]> {
     if (places.length === 0) return [];
     await this.initialize();
-
     const existing = await this.listPlaces();
     const byId = new Map(existing.map((place) => [place.id, place] as const));
     const byPlaceId = new Map<string, PlannerTripPlace>();
     const byUrlIdentity = new Map<string, PlannerTripPlace>();
     const byCoordinates = new Map<string, PlannerTripPlace>();
-
     const coordinateKey = (place: PlannerTripPlace): string | null => {
       if (!place.coordinates) return null;
       return `${place.trip_id}::geo:${place.coordinates.lat.toFixed(5)},${place.coordinates.lng.toFixed(5)}`;
@@ -192,7 +183,6 @@ export class PlannerRepository {
       const geo = coordinateKey(place);
       if (geo) byCoordinates.set(geo, place);
     };
-
     existing.forEach(indexPlace);
     const importedIds: string[] = [];
 
@@ -203,46 +193,26 @@ export class PlannerRepository {
         tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
         reservation_status: rawPlace.reservation_status ?? 'none',
         state: 'candidate',
-        scheduled_date: undefined,
-        sort_order: undefined,
-        locked: undefined,
       };
       const existingPlace = byId.get(incoming.id)
-        ?? (incoming.source_place_id
-          ? byPlaceId.get(`${incoming.trip_id}::${incoming.source_provider}::${incoming.source_place_id}`)
-          : undefined)
+        ?? (incoming.source_place_id ? byPlaceId.get(`${incoming.trip_id}::${incoming.source_provider}::${incoming.source_place_id}`) : undefined)
         ?? (coordinateKey(incoming) ? byCoordinates.get(coordinateKey(incoming)!) : undefined)
-        ?? (incoming.source_url
-          ? byUrlIdentity.get(`${incoming.trip_id}::${incoming.source_provider}::${normalizePlaceIdentity(incoming.source_url)}`)
-          : undefined);
-
+        ?? (incoming.source_url ? byUrlIdentity.get(`${incoming.trip_id}::${incoming.source_provider}::${normalizePlaceIdentity(incoming.source_url)}`) : undefined);
       try {
-        const persisted = existingPlace
-          ? mergeCapturedPlaceResearch(existingPlace, incoming)
-          : incoming;
+        const persisted = existingPlace ? mergeCapturedPlaceResearch(existingPlace, incoming) : incoming;
         await this.upsert(persisted);
         indexPlace(persisted);
         importedIds.push(rawPlace.id);
-      } catch (err) {
-        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, err);
+      } catch (error) {
+        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, error);
       }
     }
-
     return importedIds;
   }
 
-  /** Capture boundary: ACK only IDs that reached canonical Planner storage. */
-  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<string[]> {
-    return this.importResearchPlaces(places);
-  }
+  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<string[]> { return this.importResearchPlaces(places); }
+  async importExternalCandidates(places: PlannerTripPlace[]): Promise<string[]> { return this.importResearchPlaces(places); }
 
-  /** External files/clipboard enter as research candidates, never as scheduled decisions. */
-  async importExternalCandidates(places: PlannerTripPlace[]): Promise<string[]> {
-    return this.importResearchPlaces(places);
-  }
-
-
-  /** Explicit lifecycle transition that bypasses capture-merge semantics. */
   async dropPlace(placeId: string): Promise<boolean> {
     await this.initialize();
     const existing = (await this.listPlaces()).find((place) => place.id === placeId);
@@ -255,150 +225,132 @@ export class PlannerRepository {
     return true;
   }
 
-  /**
-   * Scheduling lifecycle transitions — like dropPlace, these bypass
-   * capture-merge so the schedule state is never silently reverted.
-   */
-
-  async schedulePlace(placeId: string, date: string, sortOrder?: number, locked?: boolean): Promise<PlannerTripPlace | null> {
-    await this.initialize();
-    const places = await this.listPlaces();
-    const existing = places.find((place) => place.id === placeId);
-    if (!existing) return null;
-    const order = sortOrder ?? (
-      existing.scheduled_date === date && existing.sort_order !== undefined
-        ? existing.sort_order
-        : places
-            .filter((p) => p.id !== placeId && p.trip_id === existing.trip_id && p.scheduled_date === date)
-            .reduce((max, p) => Math.max(max, p.sort_order ?? -1), -1) + 1
-    );
-    const next: PlannerTripPlace = {
-      ...existing,
-      state: 'scheduled',
-      scheduled_date: date,
-      sort_order: order,
-      locked: locked !== undefined ? locked : (existing.locked ?? false),
-      updated_at: new Date().toISOString(),
-    };
-    await this.upsert(next);
-    return next;
-  }
-
-  async unschedulePlace(placeId: string): Promise<PlannerTripPlace | null> {
-    await this.initialize();
-    const places = await this.listPlaces();
-    const existing = places.find((place) => place.id === placeId);
-    if (!existing) return null;
-    const next: PlannerTripPlace = {
-      ...existing,
-      state: 'candidate',
-      scheduled_date: undefined,
-      scheduled_start: undefined,
-      sort_order: undefined,
-      locked: false,
-      updated_at: new Date().toISOString(),
-    };
-    await this.upsert(next);
-    return next;
-  }
-
-  async toggleLockPlace(placeId: string): Promise<PlannerTripPlace | null> {
-    await this.initialize();
-    const places = await this.listPlaces();
-    const existing = places.find((place) => place.id === placeId);
-    if (!existing) return null;
-    const next: PlannerTripPlace = {
-      ...existing,
-      locked: !existing.locked,
-      updated_at: new Date().toISOString(),
-    };
-    await this.upsert(next);
-    return next;
-  }
-
-  async updatePlaceTiming(
+  async addVisit(
     placeId: string,
-    timing: { scheduled_start?: string | null; duration_minutes?: number | null },
-  ): Promise<PlannerTripPlace | null> {
+    date: string,
+    options: {
+      sort_order?: number;
+      start?: string;
+      duration_minutes?: number;
+      locked?: boolean;
+      is_anchor?: boolean;
+      anchor_type?: PlannerTripVisit['anchor_type'];
+    } = {},
+  ): Promise<PlannerTripVisit | null> {
     await this.initialize();
-    const places = await this.listPlaces();
-    const existing = places.find((place) => place.id === placeId);
-    if (!existing) return null;
+    const place = (await this.listPlaces()).find((item) => item.id === placeId && item.state !== 'dropped');
+    if (!place) return null;
+    const visits = await this.listVisits();
+    const order = options.sort_order ?? visits
+      .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
+      .reduce((max, visit) => Math.max(max, visit.sort_order), -1) + 1;
+    const start = options.start?.trim() || undefined;
+    const duration = options.duration_minutes ?? place.duration_minutes;
+    const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: Boolean(options.is_anchor) })
+      .filter((issue) => issue.severity === 'error');
+    if (errors.length > 0) throw new Error(errors.map((issue) => issue.message).join(' | '));
+    const visit = createPlannerTripVisit(place, date, order, {
+      start,
+      duration_minutes: duration,
+      locked: options.locked,
+      is_anchor: options.is_anchor,
+      anchor_type: options.anchor_type,
+    });
+    await this.upsertVisit(visit);
+    return visit;
+  }
 
-    const scheduledStart = timing.scheduled_start?.trim() || undefined;
-    const durationMinutes = timing.duration_minutes ?? undefined;
-    const timingErrors = validatePlannerTiming(
-      scheduledStart,
-      durationMinutes,
-      { allowCrossMidnight: Boolean(existing.is_anchor) },
-    ).filter((issue) => issue.severity === 'error');
-    if (timingErrors.length > 0) {
-      throw new Error(timingErrors.map((issue) => issue.message).join(' | '));
-    }
+  async removeVisit(visitId: string): Promise<boolean> {
+    await this.initialize();
+    const visit = (await this.listVisits()).find((item) => item.id === visitId);
+    if (!visit) return false;
+    await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.visits), plannerTripVisitFileName(visit.id));
+    return true;
+  }
 
-    const next: PlannerTripPlace = {
-      ...existing,
-      scheduled_start: scheduledStart,
-      duration_minutes: durationMinutes,
-      updated_at: new Date().toISOString(),
-    };
-    await this.upsert(next);
+  async toggleVisitLock(visitId: string): Promise<PlannerTripVisit | null> {
+    const visit = (await this.listVisits()).find((item) => item.id === visitId);
+    if (!visit) return null;
+    const next = { ...visit, locked: !visit.locked, updated_at: new Date().toISOString() };
+    await this.upsertVisit(next);
     return next;
   }
 
-  /** Rewrites sort_order 0..n-1 for an explicitly ordered subset of one day. */
-  async reorderScheduled(date: string, orderedIds: string[]): Promise<number> {
-    await this.initialize();
-    const places = await this.listPlaces();
-    const byId = new Map(places.map((p) => [p.id, p] as const));
-    const ordered = orderedIds
+  async updateVisitTiming(
+    visitId: string,
+    timing: { start?: string | null; duration_minutes?: number | null },
+  ): Promise<PlannerTripVisit | null> {
+    const visit = (await this.listVisits()).find((item) => item.id === visitId);
+    if (!visit) return null;
+    const start = timing.start?.trim() || undefined;
+    const duration = timing.duration_minutes ?? undefined;
+    const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: visit.is_anchor })
+      .filter((issue) => issue.severity === 'error');
+    if (errors.length > 0) throw new Error(errors.map((issue) => issue.message).join(' | '));
+    const next: PlannerTripVisit = { ...visit, start, duration_minutes: duration, updated_at: new Date().toISOString() };
+    await this.upsertVisit(next);
+    return next;
+  }
+
+  async reorderVisits(date: string, orderedVisitIds: string[]): Promise<number> {
+    const visits = await this.listVisits();
+    const byId = new Map(visits.map((visit) => [visit.id, visit] as const));
+    const ordered = orderedVisitIds
       .map((id) => byId.get(id))
-      .filter((p): p is PlannerTripPlace => Boolean(p) && p!.scheduled_date === date);
+      .filter((visit): visit is PlannerTripVisit => Boolean(visit) && visit!.date === date);
     let written = 0;
-    for (let i = 0; i < ordered.length; i++) {
-      const place = ordered[i];
-      if (place.sort_order === i) continue;
-      const next: PlannerTripPlace = { ...place, sort_order: i, updated_at: new Date().toISOString() };
-      await this.store.writeMarkdownFile(
-        this.directory(PLANNER_DIRECTORIES.places),
-        entityFileName(next),
-        serializeMarkdownEntity(next, ''),
-      );
+    for (let index = 0; index < ordered.length; index += 1) {
+      const visit = ordered[index];
+      if (visit.sort_order === index) continue;
+      await this.upsertVisit({ ...visit, sort_order: index, updated_at: new Date().toISOString() });
       written += 1;
     }
     return written;
   }
 
+  async setStaySpan(hotelPlaceId: string, dates: string[]): Promise<PlannerTripVisit[]> {
+    const place = (await this.listPlaces()).find((item) => item.id === hotelPlaceId && item.kind === 'stay' && item.state !== 'dropped');
+    if (!place) throw new Error(`Planner stay place was not found: ${hotelPlaceId}`);
+    const visits = await this.listVisits();
+    const tripPlaces = new Map((await this.listPlaces()).map((item) => [item.id, item] as const));
+    const dateSet = new Set(dates);
+    const stale = visits.filter((visit) => {
+      if (visit.trip_id !== place.trip_id || !dateSet.has(visit.date)) return false;
+      return tripPlaces.get(visit.place_id)?.kind === 'stay';
+    });
+    for (const visit of stale) await this.removeVisit(visit.id);
+    const created: PlannerTripVisit[] = [];
+    for (const date of dates) {
+      const visit = await this.addVisit(hotelPlaceId, date, {
+        sort_order: 0,
+        locked: true,
+        is_anchor: true,
+        anchor_type: 'stay_checkin',
+      });
+      if (visit) created.push(visit);
+    }
+    return created;
+  }
+
   async upsertExpense(expense: TripExpenseItem): Promise<void> {
     await this.initialize();
-    await this.store.writeMarkdownFile(
-      this.directory(PLANNER_DIRECTORIES.expenses),
-      expenseFileName(expense.id),
-      serializeMarkdownEntity(toRepoExpense(expense), ''),
-    );
+    await this.store.writeMarkdownFile(this.directory(PLANNER_DIRECTORIES.expenses), expenseFileName(expense.id), serializeMarkdownEntity(toRepoExpense(expense), ''));
   }
 
   async deleteExpense(expenseId: string): Promise<void> {
     await this.initialize();
-    await this.store.deleteMarkdownFile(
-      this.directory(PLANNER_DIRECTORIES.expenses),
-      expenseFileName(expenseId),
-    );
+    await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.expenses), expenseFileName(expenseId));
   }
 
-  /** Writes a one-way iCal Pro projection from freshly re-read canonical Planner/Vault state. */
   async saveTripICalMarkdown(tripId: string): Promise<string> {
     await this.initialize();
     const trip = (await this.listTrips()).find((item) => item.id === tripId);
     if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
     const places = (await this.listPlaces()).filter((place) => place.trip_id === tripId);
-    const markdown = exportTripToICalProMarkdown(trip, places);
+    const visits = (await this.listVisits()).filter((visit) => visit.trip_id === tripId);
+    const markdown = exportTripToICalProMarkdown(trip, places, visits);
     const fileName = `trip--${trip.id}.itinerary.md`;
-    await this.store.writeMarkdownFile(
-      this.directory(PLANNER_DIRECTORIES.trips),
-      fileName,
-      markdown,
-    );
+    await this.store.writeMarkdownFile(this.directory(PLANNER_DIRECTORIES.trips), fileName, markdown);
     return fileName;
   }
 }

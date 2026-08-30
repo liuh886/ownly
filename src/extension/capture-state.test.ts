@@ -43,7 +43,10 @@ describe('normalizeCaptureState', () => {
       pendingPlaces: [{ ...place('a'), state: 'scheduled', scheduled_date: '2026-10-01', locked: true }],
     });
     expect(state.activeContext).toMatchObject({ tripId: 'trip-1', currency: 'JPY' });
-    expect(state.pendingPlaces[0]).toMatchObject({ state: 'candidate', scheduled_date: undefined, locked: undefined });
+    expect(state.pendingPlaces[0]).toMatchObject({ state: 'candidate' });
+    for (const key of ['scheduled_date', 'scheduled_start', 'sort_order', 'locked', 'is_anchor', 'anchor_type']) {
+      expect(state.pendingPlaces[0]).not.toHaveProperty(key);
+    }
   });
 });
 

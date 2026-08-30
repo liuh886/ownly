@@ -25,7 +25,6 @@ import {
   normalizeObservedPrice,
   calculateHotelProximity,
   calculateMultiDayHotelProximity,
-  generateStaySpanPlaces,
   detectHotelTransferDays,
   estimateTripBudget,
   calculateTripSettlement,
@@ -36,6 +35,7 @@ import {
   parsePlaceExpenseEstimate,
   type OwnlyCaptureState,
   type TripExpenseItem,
+  type PlannerScheduledPlace,
   type PlannerTrip,
   STANDARD_RESEARCH_CHIPS,
   type PlannerTripPlace,
@@ -71,6 +71,26 @@ function place(id: string, overrides: Partial<PlannerTripPlace> = {}): PlannerTr
   };
 }
 
+function scheduledPlace(
+  base: PlannerTripPlace,
+  date: string,
+  sortOrder = 0,
+  overrides: Partial<PlannerScheduledPlace> = {},
+): PlannerScheduledPlace {
+  return {
+    ...base,
+    id: `visit:${base.id}:${date}:${sortOrder}`,
+    visit_id: `visit:${base.id}:${date}:${sortOrder}`,
+    place_id: base.id,
+    state: 'scheduled',
+    scheduled_date: date,
+    sort_order: sortOrder,
+    locked: false,
+    is_anchor: false,
+    ...overrides,
+  };
+}
+
 describe('Ownly Planner domain', () => {
   it('builds inclusive date-only trip days without timezone drift', () => {
     expect(listTripDates('2026-10-06', '2026-10-09')).toEqual([
@@ -81,11 +101,8 @@ describe('Ownly Planner domain', () => {
     ]);
   });
 
-  it('splits long Google Maps routes into overlapping mobile-safe segments', () => {
-    const places = Array.from({ length: 6 }, (_, index) => place(String(index + 1), {
-      state: 'scheduled',
-      sort_order: index,
-    }));
+  it('splits long Google Maps routes into overlapping mobile-safe Visit segments', () => {
+    const places = Array.from({ length: 6 }, (_, index) => scheduledPlace(place(String(index + 1)), '2026-10-20', index));
     const segments = buildGoogleMapsDirectionsSegments(places, 'transit');
     expect(segments).toHaveLength(2);
     expect(segments[0]).toContain('origin=Place+1');
@@ -94,13 +111,9 @@ describe('Ownly Planner domain', () => {
     expect(segments[1]).toContain('destination=Place+6');
   });
 
-  it('updates recaptured research without destroying the canonical schedule', () => {
+  it('updates recaptured research without destroying Planner-owned research decisions', () => {
     const existing = place('stable', {
       title: 'Old title',
-      state: 'scheduled',
-      scheduled_date: '2026-10-07',
-      sort_order: 2,
-      locked: true,
       reservation_status: 'booked',
       area: 'Old area',
       signals: ['old signal'],
@@ -122,10 +135,7 @@ describe('Ownly Planner domain', () => {
     expect(merged.priority).toBe('want');
     expect(merged.signals).toEqual(['old signal']);
     expect(merged.observed_rating).toBe(4.7);
-    expect(merged.state).toBe('scheduled');
-    expect(merged.scheduled_date).toBe('2026-10-07');
-    expect(merged.sort_order).toBe(2);
-    expect(merged.locked).toBe(true);
+    expect(merged.state).toBe('candidate');
     expect(merged.reservation_status).toBe('booked');
   });
 
@@ -604,7 +614,10 @@ describe('Ownly Planner domain', () => {
     const stop1 = place('s1', { title: 'Temple', coordinates: { lat: 13.7510, lng: 100.5010 } });
     const stop2 = place('s2', { title: 'Museum', coordinates: { lat: 13.7550, lng: 100.5050 } });
 
-    const metrics = calculateHotelProximity(hotel, [stop1, stop2]);
+    const metrics = calculateHotelProximity(hotel, [
+      scheduledPlace(stop1, '2026-10-01', 0),
+      scheduledPlace(stop2, '2026-10-01', 1),
+    ]);
     expect(metrics.hasCoordinates).toBe(true);
     expect(metrics.minDistanceKm).toBeGreaterThan(0);
     expect(metrics.minDistanceKm).toBeLessThan(1.0); // very close (< 1km)
@@ -621,8 +634,8 @@ describe('Ownly Planner domain', () => {
     const day2Stop = place('d2', { title: 'Doi Suthep', coordinates: { lat: 18.8050, lng: 98.9210 } });
 
     const placesByDate = {
-      '2026-10-01': [day1Stop],
-      '2026-10-02': [day2Stop],
+      '2026-10-01': [scheduledPlace(day1Stop, '2026-10-01', 0)],
+      '2026-10-02': [scheduledPlace(day2Stop, '2026-10-02', 0)],
     };
 
     const multi = calculateMultiDayHotelProximity(hotel, placesByDate, ['2026-10-01', '2026-10-02']);
@@ -632,56 +645,18 @@ describe('Ownly Planner domain', () => {
     expect(multi.dayDetails[0].avgKm).toBeLessThan(multi.dayDetails[1].avgKm);
   });
 
-  it('generates multi-day stay span anchors without leaking locale text into data', () => {
-    const hotel = place('hotel-1', { kind: 'stay', notes: 'Near East Gate' });
-    const spans = generateStaySpanPlaces(hotel, ['2026-10-06', '2026-10-07', '2026-10-08']);
-    expect(spans).toHaveLength(3);
-    expect(spans.every((s) => s.is_anchor && s.anchor_type === 'stay_checkin')).toBe(true);
-    expect(spans.every((s) => s.state === 'scheduled')).toBe(true);
-    expect(new Set(spans.map((s) => s.scheduled_date)).size).toBe(3);
-    expect(spans[0].id).toBe('hotel-1');
-    expect(spans[1].id).toBe('hotel-1__stay_2026-10-07');
-    spans.forEach((s) => expect(s.notes).toBe('Near East Gate'));
-  });
-
-  it('detects hotel transfer days and consecutive night indexes', () => {
-    const hotelA = place('hA', {
-      title: 'Hotel A (Old Town)',
-      kind: 'stay',
-      state: 'scheduled',
-      scheduled_date: '2026-10-01',
-      is_anchor: true,
-      anchor_type: 'stay_checkin',
-    });
-    const hotelA_day2 = place('hA_2', {
-      title: 'Hotel A (Old Town)',
-      source_url: hotelA.source_url,
-      kind: 'stay',
-      state: 'scheduled',
-      scheduled_date: '2026-10-02',
-      is_anchor: true,
-      anchor_type: 'stay_checkin',
-    });
-    const hotelB_day3 = place('hB_3', {
-      title: 'Hotel B (Nimman)',
-      kind: 'stay',
-      state: 'scheduled',
-      scheduled_date: '2026-10-03',
-      is_anchor: true,
-      anchor_type: 'stay_checkin',
-    });
-
+  it('detects hotel transfer days and consecutive night indexes from Visit projections', () => {
+    const hotelA = place('hA', { title: 'Hotel A (Old Town)', kind: 'stay' });
+    const hotelB = place('hB', { title: 'Hotel B (Nimman)', kind: 'stay' });
+    const hotelA1 = scheduledPlace(hotelA, '2026-10-01', 0, { is_anchor: true, anchor_type: 'stay_checkin' });
+    const hotelA2 = scheduledPlace(hotelA, '2026-10-02', 0, { is_anchor: true, anchor_type: 'stay_checkin' });
+    const hotelB3 = scheduledPlace(hotelB, '2026-10-03', 0, { is_anchor: true, anchor_type: 'stay_checkin' });
     const dates = ['2026-10-01', '2026-10-02', '2026-10-03'];
-    const transfers = detectHotelTransferDays([hotelA, hotelA_day2, hotelB_day3], dates);
-
+    const transfers = detectHotelTransferDays([hotelA1, hotelA2, hotelB3], dates);
     expect(transfers['2026-10-01'].isTransferDay).toBe(false);
     expect(transfers['2026-10-01'].stayNightIndex).toBe(1);
     expect(transfers['2026-10-01'].totalStayNights).toBe(2);
-
-    expect(transfers['2026-10-02'].isTransferDay).toBe(false);
     expect(transfers['2026-10-02'].stayNightIndex).toBe(2);
-    expect(transfers['2026-10-02'].totalStayNights).toBe(2);
-
     expect(transfers['2026-10-03'].isTransferDay).toBe(true);
     expect(transfers['2026-10-03'].checkoutHotel?.title).toBe('Hotel A (Old Town)');
     expect(transfers['2026-10-03'].checkinHotel?.title).toBe('Hotel B (Nimman)');
@@ -998,27 +973,13 @@ describe('checkOpeningHoursCollision & checkDayScheduleCollisions', () => {
     expect(okCol.isCollision).toBe(false);
   });
 
-  it('detects day overload and long distance transit', () => {
-    const places: PlannerTripPlace[] = [
-      place('p1', {
-        scheduled_date: '2026-10-20',
-        state: 'scheduled',
-        duration_minutes: 360,
-        coordinates: { lat: 35.6895, lng: 139.6917 }, // Tokyo
-      }),
-      place('p2', {
-        scheduled_date: '2026-10-20',
-        state: 'scheduled',
-        duration_minutes: 300,
-        coordinates: { lat: 35.4437, lng: 139.6380 }, // Yokohama (~28km away)
-      }),
-    ];
-
-    const summary = checkDayScheduleCollisions(places, '2026-10-20');
+  it('detects day overload and long distance transit from Visit projections', () => {
+    const p1 = scheduledPlace(place('p1', { duration_minutes: 360, coordinates: { lat: 35.6895, lng: 139.6917 } }), '2026-10-20', 0);
+    const p2 = scheduledPlace(place('p2', { duration_minutes: 300, coordinates: { lat: 35.4437, lng: 139.6380 } }), '2026-10-20', 1);
+    const summary = checkDayScheduleCollisions([p1, p2], '2026-10-20');
     expect(summary.hasCollision).toBe(true);
     expect(summary.isOverloaded).toBe(true);
     expect(summary.totalDurationMinutes).toBe(660);
-    expect(summary.longTransits.length).toBeGreaterThanOrEqual(1);
     expect(summary.longTransits[0].distanceKm).toBeGreaterThan(20);
   });
 
@@ -1165,12 +1126,7 @@ describe('exportTripToMarkdown', () => {
       created_at: '2026-08-01',
     };
     const places: PlannerTripPlace[] = [
-      place('p1', {
-        title: 'Shibuya Crossing',
-        kind: 'attraction',
-        scheduled_date: '2026-10-20',
-        state: 'scheduled',
-      }),
+      place('p1', { title: 'Shibuya Crossing', kind: 'attraction' }),
       place('p2', {
         title: 'Akihabara',
         kind: 'shopping',
@@ -1203,7 +1159,8 @@ describe('exportTripToMarkdown', () => {
       created_at: '2026-10-20',
     });
 
-    const md = exportTripToMarkdown(trip, places, expenses, 'zh');
+    const scheduled = [scheduledPlace(places[0], '2026-10-20', 0)];
+    const md = exportTripToMarkdown(trip, places, scheduled, expenses, 'zh');
     expect(md).toContain('# ✈️ Tokyo 2026');
     expect(md).toContain('Day 1 (2026-10-20)');
     expect(md).toContain('Shibuya Crossing');

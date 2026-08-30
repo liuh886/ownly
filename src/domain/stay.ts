@@ -5,7 +5,6 @@
 export {
   calculateHotelProximity,
   calculateMultiDayHotelProximity,
-  generateStaySpanPlaces,
   detectHotelTransferDays,
   type HotelProximityMetrics,
   type MultiDayHotelProximityResult,
