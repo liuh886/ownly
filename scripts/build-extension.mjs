@@ -13,6 +13,7 @@ await build({
   entryPoints: {
     background: path.join(root, 'src/extension/background.ts'),
     content: path.join(root, 'src/extension/content.ts'),
+    'fx-tooltip': path.join(root, 'src/extension/fx-tooltip.ts'),
     'ownly-bridge': path.join(root, 'src/extension/ownly-bridge.ts'),
     sidepanel: path.join(root, 'src/extension/sidepanel.ts'),
   },
