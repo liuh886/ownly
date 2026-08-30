@@ -9,6 +9,31 @@ def replace_once(path: str, old: str, new: str) -> None:
         raise SystemExit(f'missing replacement target in {path}: {old[:160]!r}')
     p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
+
+def replace_function(path: str, signature: str, replacement: str) -> None:
+    p = Path(path)
+    text = p.read_text(encoding='utf-8')
+    start = text.find(signature)
+    if start < 0:
+        raise SystemExit(f'missing function in {path}: {signature}')
+    brace = text.find('{', start + len(signature))
+    if brace < 0:
+        raise SystemExit(f'missing opening brace in {path}: {signature}')
+    depth = 0
+    end = None
+    for index in range(brace, len(text)):
+        char = text[index]
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                end = index + 1
+                break
+    if end is None:
+        raise SystemExit(f'missing closing brace in {path}: {signature}')
+    p.write_text(text[:start] + replacement.rstrip() + text[end:], encoding='utf-8')
+
 replace_once(
     'src/extension/content.ts',
     "import { detectPageCurrency } from './currency-detector';\n",
@@ -27,13 +52,29 @@ replace_once(
     """  // A saved-list carrier is not a place by itself. A visible details pane above\n  // overrides this because Maps commonly keeps the list URL while a place is open.\n  if (!isDedicatedPlacePage && extractGoogleMapsSavedListId(sourceUrl)) {\n    return null;\n  }\n""",
 )
 
-path = Path('src/extension/content.ts')
-text = path.read_text(encoding='utf-8')
-start = text.index('function extractGoogleMapsListId(): string | null {')
-end = text.index('\nfunction ', start + 20)
-new_func = '''function extractGoogleMapsListId(): string | null {\n  const fromUrl = extractGoogleMapsSavedListId(window.location.href);\n  if (fromUrl) return fromUrl;\n\n  const links = document.querySelectorAll<HTMLLinkElement | HTMLAnchorElement>(\n    'link[href*="getlist"], link[href*="entitylist"], a[href*="!1s"], a[href*="!2s"], a[href*="/placelists/list/"], a[href*="?list="]'\n  );\n  for (const link of Array.from(links)) {\n    const id = extractGoogleMapsSavedListId(link.href || '');\n    if (id) return id;\n  }\n\n  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-list-id]'))) {\n    const id = (el.getAttribute('data-list-id') || '').trim();\n    if (/^[A-Za-z0-9_-]{8,}$/.test(id)) return id;\n  }\n  return null;\n}\n'''
-text = text[:start] + new_func + text[end:]
-path.write_text(text, encoding='utf-8')
+replace_function(
+    'src/extension/content.ts',
+    'function extractGoogleMapsListId(): string | null ',
+    '''function extractGoogleMapsListId(): string | null {
+  const fromUrl = extractGoogleMapsSavedListId(window.location.href);
+  if (fromUrl) return fromUrl;
+
+  const links = document.querySelectorAll<HTMLLinkElement | HTMLAnchorElement>(
+    'link[href*="getlist"], link[href*="entitylist"], a[href*="!1s"], a[href*="!2s"], a[href*="/placelists/list/"], a[href*="?list="]'
+  );
+  for (const link of Array.from(links)) {
+    const id = extractGoogleMapsSavedListId(link.href || '');
+    if (id) return id;
+  }
+
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-list-id]'))) {
+    const id = (el.getAttribute('data-list-id') || '').trim();
+    if (/^[A-Za-z0-9_-]{8,}$/.test(id)) return id;
+  }
+  return null;
+}
+''',
+)
 
 path = Path('src/extension/content.ts')
 text = path.read_text(encoding='utf-8')
@@ -51,7 +92,27 @@ text = text.replace("    if (dataId.length < 15) continue;", "    if (!/^[A-Za-z
 path.write_text(text, encoding='utf-8')
 
 insert_marker = 'function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {\n  return scanAllGoogleMapsPlaces();\n}\n'
-insert = '''function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {\n  return scanAllGoogleMapsPlaces();\n}\n\nfunction detectVisibleGoogleMapsListName(places: CurrentResearchPlace[]): string | undefined {\n  if (places.length < 2) return undefined;\n  const placeTitles = new Set(places.map((place) => cleanExtractedText(place.title).toLocaleLowerCase()).filter(Boolean));\n  const candidates: string[] = [];\n  for (const el of Array.from(document.querySelectorAll<HTMLElement>('div[role="main"] h1, h1.fontHeadlineLarge, h1')).slice(0, 8)) {\n    candidates.push(el.textContent || el.getAttribute('aria-label') || '');\n  }\n  candidates.push(document.title.replace(/\\s*[-–—]\\s*Google Maps.*$/i, ''));\n  for (const raw of candidates) {\n    const title = cleanExtractedText(raw);\n    if (!title || title.length > 80 || isGenericNavigationTitle(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) continue;\n    if (placeTitles.has(title.toLocaleLowerCase())) continue;\n    return title;\n  }\n  return undefined;\n}\n'''
+insert = '''function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {
+  return scanAllGoogleMapsPlaces();
+}
+
+function detectVisibleGoogleMapsListName(places: CurrentResearchPlace[]): string | undefined {
+  if (places.length < 2) return undefined;
+  const placeTitles = new Set(places.map((place) => cleanExtractedText(place.title).toLocaleLowerCase()).filter(Boolean));
+  const candidates: string[] = [];
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('div[role="main"] h1, h1.fontHeadlineLarge, h1')).slice(0, 8)) {
+    candidates.push(el.textContent || el.getAttribute('aria-label') || '');
+  }
+  candidates.push(document.title.replace(/\s*[-–—]\s*Google Maps.*$/i, ''));
+  for (const raw of candidates) {
+    const title = cleanExtractedText(raw);
+    if (!title || title.length > 80 || isGenericNavigationTitle(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) continue;
+    if (placeTitles.has(title.toLocaleLowerCase())) continue;
+    return title;
+  }
+  return undefined;
+}
+'''
 replace_once('src/extension/content.ts', insert_marker, insert)
 
 replace_once(
