@@ -30,6 +30,7 @@ jobs:
           python .github/pr135-authority.py
           python .github/pr135-fix5.py
           python .github/pr135-capturefix.py
+          python .github/pr135-finalfix.py
           python .github/pr135-guardfix.py
           python .github/pr135-land.py
       - name: Install dependencies
@@ -48,6 +49,7 @@ jobs:
           test ! -e .github/pr135-finalize.py
           test ! -e .github/pr135-land.py
           test ! -e .github/pr135-capturefix.py
+          test ! -e .github/pr135-finalfix.py
           test ! -e .github/pr135-guardfix.py
           test ! -e .github/workflows/pr135-web.yml
           ! sed -n '/export interface PlannerTripPlace {/,/export interface PlannerScheduledPlace/p' src/domain/planner.ts | grep -q 'scheduled_date?: string;'
@@ -57,7 +59,7 @@ jobs:
           grep -q 'removes only the selected occurrence and keeps the place plus other visits' src/services/PlannerRepository.schedule.test.ts
           grep -q 'ownly_planner_prepare_add_visit' packages/mcp/src/index.mjs
           grep -q 'ownly_planner_prepare_remove_visit' packages/mcp/src/index.mjs
-          grep -q 'scheduled_date: undefined' src/extension/capture-state.test.ts
+          grep -q "not.toHaveProperty(key)" src/extension/capture-state.test.ts
       - name: Commit production tree
         run: |
           git checkout -- src/core/git-sha.ts
