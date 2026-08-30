@@ -646,7 +646,7 @@ export class OwnlyWriteService {
       changes: targets.map(({ next }) => ({ visit_id: next.id, place_id: next.place_id, sort_order: next.sort_order })),
     }, () => {
       for (const targetItem of targets) assertUnchanged(targetItem.entry.filePath, targetItem.expected);
-      for (const targetItem of targets) writeEntry(dirname(targetItem.entry.filePath), targetItem.entry.fileName, targetItem.next, targetItem.entry.body);
+      for (const targetItem of targets) writeFileSync(targetItem.entry.filePath, serializeMarkdownEntity(targetItem.next, targetItem.entry.body), 'utf8');
       return { date, updated: targets.length };
     });
   }
@@ -784,7 +784,7 @@ export class OwnlyWriteService {
     const expected = fingerprint(entry.filePath);
     return this.prepare('planner_drop_place', { before, after: next }, () => {
       assertUnchanged(entry.filePath, expected);
-      writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
+      writeFileSync(entry.filePath, serializeMarkdownEntity(next, entry.body), 'utf8');
       writeAgentLog(this.dataLocation, 'planner_drop_place', placeId, before, next);
       return { id: placeId, state: next.state };
     });
@@ -811,7 +811,7 @@ export class OwnlyWriteService {
     const expected = fingerprint(tripEntry.filePath);
     return this.prepare('planner_set_fx_rates', { before_rates: before.fx_rates ?? {}, rates }, () => {
       assertUnchanged(tripEntry.filePath, expected);
-      writeEntry(dirname(tripEntry.filePath), tripEntry.fileName, next, tripEntry.body);
+      writeFileSync(tripEntry.filePath, serializeMarkdownEntity(next, tripEntry.body), 'utf8');
       writeAgentLog(this.dataLocation, 'planner_set_fx_rates', tripId, before.fx_rates ?? {}, rates);
       return { trip_id: tripId, fx_rates: rates };
     });
