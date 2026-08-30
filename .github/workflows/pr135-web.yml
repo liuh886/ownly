@@ -1,0 +1,24 @@
+name: Validate PR 135 web slice
+
+on:
+  push:
+    branches: [refactor/planner-repeatable-visits]
+    paths:
+      - '.github/workflows/pr135-web.yml'
+      - '.github/pr135-web.py'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: refactor/planner-repeatable-visits
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: python .github/pr135-web.py
+      - run: npm ci
+      - run: npm run validate:fast
+      - run: npm run build:web
