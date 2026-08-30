@@ -14,6 +14,7 @@ import {
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { escapeHtml, isPlausiblePriceText } from '../utils';
+import { matchesSavedListContext } from '../saved-list-match';
 import { getExistingPlaceForUrl, store, t } from './store';
 
 const KIND_ICONS = PLANNER_KIND_ICONS;
@@ -456,14 +457,7 @@ export function renderSmartListCard() {
 
   let isMatched = false;
   if (activeTrip) {
-    const listNameNorm = store.detectedSavedList.listName.trim().toLowerCase();
-    const tripTags = (activeTrip.tags || []).map((tag) => tag.trim().toLowerCase());
-    const tripTitleNorm = activeTrip.title.trim().toLowerCase();
-    isMatched =
-      tripTags.includes(listNameNorm) ||
-      tripTags.some((tag) => tag && (listNameNorm.includes(tag) || tag.includes(listNameNorm))) ||
-      listNameNorm.includes(tripTitleNorm) ||
-      tripTitleNorm.includes(listNameNorm);
+    isMatched = matchesSavedListContext(store.detectedSavedList.listName, activeTrip);
 
     el.smartListSection.className = isMatched ? 'panel stack match-banner' : 'panel stack match-banner neutral';
     el.smartListBadge.textContent = isMatched ? dict.matchedBadge : dict.sensedBadge;

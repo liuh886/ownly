@@ -11,6 +11,7 @@ import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListCategory, fi
 import { SELECTORS, driftCheck } from './selectors';
 import { PLACE_PARSER } from './place-parser';
 import { detectPageCurrency } from './currency-detector';
+import { extractGoogleMapsSavedListId, matchesSavedListContext } from './saved-list-match';
 import { extractGoogleMapsResearchFromHtml, googleMapsDetailUrlFromSourceId, type GoogleMapsResearchFacts } from './google-maps-research';
 
 export interface CurrentResearchPlace {
@@ -658,15 +659,31 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
 function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const listPlaces = scanAllGoogleMapsPlaces();
-  const isDedicatedPlacePage = /\/maps\/place\/[^/?#]+/.test(window.location.pathname) || /data=.*!1s0x/.test(window.location.href);
+  const detailHeading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
+    ?? document.querySelector<HTMLElement>('main h1');
+  const hasVisibleDetailFacts = Boolean(
+    document.querySelector(SELECTORS.address)
+    || document.querySelector(SELECTORS.rating)
+    || document.querySelector(SELECTORS.category)
+    || document.querySelector(SELECTORS.phone)
+    || document.querySelector(SELECTORS.website),
+  );
+  // Google Maps is a SPA: a real place details pane can be open while the URL
+  // remains on /maps/@... or a saved-list route. DOM detail facts are therefore
+  // authoritative; URL shape is only another positive signal.
+  const hasVisiblePlaceDetails = Boolean(cleanExtractedText(detailHeading?.textContent || '') && hasVisibleDetailFacts);
+  const isDedicatedPlacePage = /\/maps\/place\/[^/?#]+/.test(window.location.pathname)
+    || /data=.*!1s0x/.test(window.location.href)
+    || hasVisiblePlaceDetails;
 
   // If there are multiple places in a list, don't falsely recognize the list header as a single place
   if (listPlaces.length > 1 && !isDedicatedPlacePage) {
     return null;
   }
   
-  // Exclude explicitly known list URL patterns even if places are 0
-  if (!isDedicatedPlacePage && (sourceUrl.includes('!2s') || sourceUrl.includes('/placelists/'))) {
+  // A saved-list carrier is not a place by itself. A visible details pane above
+  // overrides this because Maps commonly keeps the list URL while a place is open.
+  if (!isDedicatedPlacePage && extractGoogleMapsSavedListId(sourceUrl)) {
     return null;
   }
 
@@ -725,32 +742,21 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
 }
 
 function extractGoogleMapsListId(): string | null {
-  // Check URL pathname and search parameters for list ID pattern !2s<ID>
-  const urlMatch = /!2s([A-Za-z0-9_-]{20,})/.exec(window.location.href);
-  if (urlMatch?.[1]) return urlMatch[1];
+  const fromUrl = extractGoogleMapsSavedListId(window.location.href);
+  if (fromUrl) return fromUrl;
 
-  const placeListMatch = /\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(window.location.href);
-  if (placeListMatch?.[1]) return placeListMatch[1];
-
-  // Check preload/fetch links and all anchors in document
   const links = document.querySelectorAll<HTMLLinkElement | HTMLAnchorElement>(
-    'link[href*="getlist"], link[href*="entitylist"], a[href*="!2s"], a[href*="/placelists/list/"]'
+    'link[href*="getlist"], link[href*="entitylist"], a[href*="!1s"], a[href*="!2s"], a[href*="/placelists/list/"], a[href*="?list="]'
   );
-  for (const l of Array.from(links)) {
-    const href = l.href || '';
-    const m = /!1s([A-Za-z0-9_-]{20,})|!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(href);
-    if (m?.[1] || m?.[2] || m?.[3]) {
-      return m[1] || m[2] || m[3];
-    }
+  for (const link of Array.from(links)) {
+    const id = extractGoogleMapsSavedListId(link.href || '');
+    if (id) return id;
   }
 
-  // Check document head / scripts
-  if (document.head) {
-    const headHtml = document.head.innerHTML;
-    const m = /entitylist\/getlist[^\"]*pb=[^\"]*!1s([A-Za-z0-9_-]{20,})/.exec(headHtml);
-    if (m?.[1]) return m[1];
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-list-id]'))) {
+    const id = (el.getAttribute('data-list-id') || '').trim();
+    if (/^[A-Za-z0-9_-]{8,}$/.test(id)) return id;
   }
-
   return null;
 }
 
@@ -930,6 +936,23 @@ function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {
   return scanAllGoogleMapsPlaces();
 }
 
+function detectVisibleGoogleMapsListName(places: CurrentResearchPlace[]): string | undefined {
+  if (places.length < 2) return undefined;
+  const placeTitles = new Set(places.map((place) => cleanExtractedText(place.title).toLocaleLowerCase()).filter(Boolean));
+  const candidates: string[] = [];
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('div[role="main"] h1, h1.fontHeadlineLarge, h1')).slice(0, 8)) {
+    candidates.push(el.textContent || el.getAttribute('aria-label') || '');
+  }
+  candidates.push(document.title.replace(/\s*[-–—]\s*Google Maps.*$/i, ''));
+  for (const raw of candidates) {
+    const title = cleanExtractedText(raw);
+    if (!title || title.length > 80 || isGenericNavigationTitle(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) continue;
+    if (placeTitles.has(title.toLocaleLowerCase())) continue;
+    return title;
+  }
+  return undefined;
+}
+
 function extractTabelogPlace(): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const titleEl = document.querySelector<HTMLElement>('h2.display-name span, h1.rstinfo-table__name, h1');
@@ -1043,11 +1066,10 @@ function scanAllSavedListsOnPage(): SavedListCardSummary[] {
   // that explicitly exposes data-list-id. Generic feed containers, role=listitem
   // blocks and bare anchors are Google UI chrome ("Compare prices", "Guests",
   // "All reviews", …) — matching them produced dozens of phantom "lists".
-  const listAnchors = document.querySelectorAll<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!2s"]');
+  const listAnchors = document.querySelectorAll<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!1s"], a[href*="!2s"], a[href*="?list="]');
   for (const anchor of Array.from(listAnchors)) {
     const href = anchor.href || '';
-    const listIdMatch = href.match(/!2s([A-Za-z0-9_-]{15,})|\/placelists\/list\/([A-Za-z0-9_-]{15,})/);
-    const listId = listIdMatch?.[1] || listIdMatch?.[2];
+    const listId = extractGoogleMapsSavedListId(href);
     if (!listId) continue;
 
     const card = anchor.closest<HTMLElement>('div[role="listitem"], div.m6QErb, div.Nv2PK, li') ?? anchor;
@@ -1058,7 +1080,7 @@ function scanAllSavedListsOnPage(): SavedListCardSummary[] {
 
   for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-list-id]'))) {
     const dataId = el.getAttribute('data-list-id') || '';
-    if (dataId.length < 15) continue;
+    if (!/^[A-Za-z0-9_-]{8,}$/.test(dataId)) continue;
     const titleEl = el.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, [role="heading"], h2, h3');
     const title = titleEl?.textContent?.trim() || el.getAttribute('aria-label')?.trim() || '';
     pushList(dataId, title, countOf(el), window.location.href);
@@ -1122,10 +1144,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         // If page has multiple lists and no single list is currently open, auto-fetch the list matching the target trip tag
         if ((!savedList || savedList.places.length === 0) && targetTags.length > 0 && allLists.length > 0) {
-          const matched = allLists.find((l) => {
-            const name = l.listName.toLowerCase();
-            return targetTags.some((t) => t && (name === t || name.includes(t) || t.includes(name)));
-          });
+          const matched = allLists.find((list) => matchesSavedListContext(list.listName, { tags: targetTags }));
           if (matched?.listId) {
             savedList = await fetchGoogleMapsEntityList(matched.listId, overrideCurrency);
           }
@@ -1161,10 +1180,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       let listId = (message as { listId?: string }).listId;
       const listUrl = (message as { listUrl?: string }).listUrl;
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
-      if (!listId && listUrl) {
-        const m = /!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(listUrl);
-        listId = m?.[1] || m?.[2];
-      }
+      if (!listId && listUrl) listId = extractGoogleMapsSavedListId(listUrl);
       if (!listId) {
         sendResponse({ savedList: null });
         return;
@@ -1180,7 +1196,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await autoScrollFeed();
       const savedList = await resolveGoogleMapsList(overrideCurrency);
       const listPlaces = savedList?.places ?? detectGoogleMapsListPlaces();
-      sendResponse({ listPlaces, truncated: savedList?.truncated ?? false });
+      const listName = savedList?.listName ?? detectVisibleGoogleMapsListName(listPlaces);
+      sendResponse({ listPlaces, listName, truncated: savedList?.truncated ?? false });
     })();
     return true;
   }
