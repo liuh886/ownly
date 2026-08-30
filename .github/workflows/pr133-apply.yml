@@ -25,8 +25,7 @@ jobs:
       - run: python .github/pr133-apply.py
       - run: npm ci
       - run: npm run validate
-      - run: npm run build:capture
-      - run: npm run test:capture
+      - run: npm run validate:extension
       - run: git diff --check
       - name: Commit product fix
         shell: bash
