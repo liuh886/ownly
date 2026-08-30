@@ -25,7 +25,7 @@ jobs:
           cache: npm
 
       - name: Apply focused patch
-        run: python .github/tmp-fix-capture-authority.py
+        run: python .github/tmp-fix-capture-authority-v2.py
 
       - name: Install dependencies
         run: npm ci
@@ -37,6 +37,7 @@ jobs:
         shell: bash
         run: |
           rm .github/tmp-fix-capture-authority.py
+          rm .github/tmp-fix-capture-authority-v2.py
           rm .github/workflows/tmp-fix-capture-authority.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
