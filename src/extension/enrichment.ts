@@ -1,12 +1,8 @@
 import {
-  inferPlaceKind,
   normalizeObservedPrice,
   type PlannerTripPlace,
 } from '../domain/planner';
-import {
-  extractCleanPriceText,
-  safeDecodeUri,
-} from './utils';
+import { extractCleanPriceText } from './utils';
 import {
   extractGoogleMapsResearchFromHtml,
   googleMapsDetailUrlFromSourceId,
@@ -33,7 +29,7 @@ export async function enrichPlaceMetadata(
     !place.address ||
     !place.coordinates;
 
-  if (!isCandidateMissingData && place.kind !== 'other') {
+  if (!isCandidateMissingData) {
     return { place, enriched: false };
   }
 
@@ -79,10 +75,12 @@ export async function enrichPlaceMetadata(
       mutated = true;
     }
     if (facts.types && facts.types.length > 0) {
-      const existingTags = new Set(next.tags ?? []);
-      for (const t of facts.types) existingTags.add(t);
-      next.tags = [...existingTags];
-      mutated = true;
+      const existingTypes = next.types ?? [];
+      const mergedTypes = [...new Set([...existingTypes, ...facts.types])];
+      if (mergedTypes.length !== existingTypes.length) {
+        next.types = mergedTypes;
+        mutated = true;
+      }
     }
 
     // Coordinates fallback
@@ -112,19 +110,6 @@ export async function enrichPlaceMetadata(
       if (normalized?.currency) next.price_currency = normalized.currency;
       if (normalized?.level !== undefined) next.price_level = normalized.level;
       if (normalized?.unit) next.price_unit = normalized.unit;
-      mutated = true;
-    }
-
-    // Category & Kind re-inference with rich context
-    const combinedContext = [
-      next.title,
-      next.source_category,
-      next.address,
-      ...(facts.types ?? []),
-    ].filter(Boolean).join(' ');
-    const inferred = inferPlaceKind(safeDecodeUri(combinedContext));
-    if (inferred && (next.kind === 'other' || !next.kind || (next.kind === 'food' && inferred === 'stay') || (next.kind === 'attraction' && inferred === 'food') || (next.kind === 'attraction' && inferred === 'stay'))) {
-      next.kind = inferred;
       mutated = true;
     }
 

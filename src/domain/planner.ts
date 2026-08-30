@@ -279,19 +279,17 @@ export function mergeCapturedPlaceResearch(
     source_url: captured.source_url ?? existing.source_url,
     source_place_id: captured.source_place_id ?? existing.source_place_id,
 
-    // Planner-owned decisions intentionally stay on the canonical record with non-destructive fallback:
-    kind: (existing.kind && existing.kind !== 'other') ? existing.kind : (captured.kind || existing.kind),
-    area: hasContent(existing.area) ? existing.area : (hasContent(captured.area) ? captured.area : undefined),
-    priority: existing.priority ?? captured.priority,
-    tags: (existing.tags && existing.tags.length > 0) ? existing.tags : (captured.tags ?? []),
-    why: hasContent(existing.why) ? existing.why : (hasContent(captured.why) ? captured.why : undefined),
-    signals: (existing.signals && existing.signals.length > 0) ? existing.signals : (captured.signals ?? []),
-    risks: (existing.risks && existing.risks.length > 0) ? existing.risks : (captured.risks ?? []),
-    notes: hasContent(existing.notes) ? existing.notes : (hasContent(captured.notes) ? captured.notes : undefined),
-    preferred_window: hasContent(existing.preferred_window) ? existing.preferred_window : (hasContent(captured.preferred_window) ? captured.preferred_window : undefined),
-    duration_minutes: (typeof existing.duration_minutes === 'number' && existing.duration_minutes > 0)
-      ? existing.duration_minutes
-      : captured.duration_minutes,
+    // Planner-owned decisions stay on the canonical record. Recapture never backfills them.
+    kind: existing.kind,
+    area: existing.area,
+    priority: existing.priority,
+    tags: existing.tags,
+    why: existing.why,
+    signals: existing.signals,
+    risks: existing.risks,
+    notes: existing.notes,
+    preferred_window: existing.preferred_window,
+    duration_minutes: existing.duration_minutes,
 
     // Capture may refresh observed/source facts:
     source_category: hasContent(captured.source_category) ? captured.source_category : existing.source_category,
