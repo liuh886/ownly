@@ -7,10 +7,12 @@ import {
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
+import type { PlannerTripVisit } from '../../src/domain/planner-visits';
 
 export const PLANNER_DIRECTORIES = {
   trips: 'Trips',
   places: 'Trip Places',
+  visits: 'Trip Visits',
   legs: 'Trip Legs',
   expenses: 'Trip Expenses',
 } as const;
@@ -39,7 +41,7 @@ function readPlannerDir<T extends object>(
       if (parsed.frontmatter.type !== expectedType) continue;
       entries.push({ fileName, filePath, frontmatter: parsed.frontmatter as unknown as T, body: parsed.body });
     } catch {
-      // invalid files are surfaced by ownly_doctor-style checks, not fatal here
+      // Invalid files are surfaced by integrity checks, not fatal here.
     }
   }
   return entries.sort((a, b) => a.fileName.localeCompare(b.fileName));
@@ -50,6 +52,9 @@ export function listPlannerTrips(dataLocation: string) {
 }
 export function listPlannerPlaces(dataLocation: string) {
   return readPlannerDir<PlannerTripPlace>(dataLocation, PLANNER_DIRECTORIES.places, 'trip_place');
+}
+export function listPlannerVisits(dataLocation: string) {
+  return readPlannerDir<PlannerTripVisit>(dataLocation, PLANNER_DIRECTORIES.visits, 'trip_visit');
 }
 export function listPlannerLegs(dataLocation: string) {
   return readPlannerDir<PlannerTripLeg>(dataLocation, PLANNER_DIRECTORIES.legs, 'trip_leg');
@@ -67,13 +72,9 @@ export function plannerFingerprint(filePath: string): string {
 }
 
 export function assertPlannerUnchanged(filePath: string, expected: string): void {
-  if (!existsSync(filePath)) {
-    throw new Error(`CONFLICT:${filePath} no longer exists`);
-  }
+  if (!existsSync(filePath)) throw new Error(`CONFLICT:${filePath} no longer exists`);
   const actual = plannerFingerprint(filePath);
-  if (actual !== expected) {
-    throw new Error(`CONFLICT:${filePath} changed after preparation`);
-  }
+  if (actual !== expected) throw new Error(`CONFLICT:${filePath} changed after preparation`);
 }
 
 export function findPlannerEntry<T extends object>(
@@ -81,48 +82,4 @@ export function findPlannerEntry<T extends object>(
   id: string,
 ): PlannerEntry<T> | undefined {
   return entries.find((entry) => (entry.frontmatter as { id?: string }).id === id);
-}
-
-/** Pure transform: schedule a place on a date with an explicit order. */
-export function schedulePlaceOnDate(
-  place: PlannerTripPlace,
-  date: string,
-  sortOrder: number,
-): PlannerTripPlace {
-  return {
-    ...place,
-    state: 'scheduled',
-    scheduled_date: date,
-    sort_order: sortOrder,
-    locked: true,
-  };
-}
-
-/** Pure transform: send a place back to the research pool. */
-export function returnPlaceToPool(place: PlannerTripPlace): PlannerTripPlace {
-  return {
-    ...place,
-    state: 'candidate',
-    scheduled_date: undefined,
-    scheduled_start: undefined,
-    sort_order: undefined,
-  };
-}
-
-/**
- * Pure transform: move one scheduled place within its day by ±1 position.
- * Returns the updated places array, or null when the move is out of bounds.
- */
-export function reorderDayPlace(
-  dayPlaces: PlannerTripPlace[],
-  placeId: string,
-  delta: -1 | 1,
-): PlannerTripPlace[] | null {
-  const index = dayPlaces.findIndex((p) => p.id === placeId);
-  const target = index + delta;
-  if (index < 0 || target < 0 || target >= dayPlaces.length) return null;
-  const next = [...dayPlaces];
-  const [moved] = next.splice(index, 1);
-  next.splice(target, 0, moved);
-  return next.map((p, i) => ({ ...p, sort_order: i }));
 }
