@@ -63,7 +63,7 @@ jobs:
           grep -q "not.toHaveProperty(key)" src/extension/capture-state.test.ts
       - name: Commit production tree
         run: |
-          git checkout -- src/core/git-sha.ts
+          rm -f src/core/git-sha.ts
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
