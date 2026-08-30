@@ -9,6 +9,7 @@ on:
       - '.github/pr135-core.py'
       - '.github/pr135-finalize.py'
       - '.github/pr135-fix2.py'
+      - '.github/pr135-fix3.py'
 
 jobs:
   validate:
@@ -23,6 +24,7 @@ jobs:
           cache: npm
       - run: python .github/pr135-finalize.py
       - run: python .github/pr135-fix2.py
+      - run: python .github/pr135-fix3.py
       - run: npm ci
       - run: npm run validate:fast
       - run: npm run build:web
