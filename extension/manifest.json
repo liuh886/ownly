@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Ownly Capture",
-  "version": "0.5.1",
-  "description": "Capture personal travel research from Google Maps into Ownly Planner.",
+  "version": "0.5.2",
+  "description": "Capture travel research from Google Maps, Booking.com, Tabelog and Xiaohongshu into Ownly Planner, with selection FX conversion.",
   "permissions": [
     "sidePanel",
     "storage",
@@ -51,6 +51,16 @@
       ],
       "js": [
         "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "fx-tooltip.js"
       ],
       "run_at": "document_idle"
     },

@@ -2,6 +2,7 @@ import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { findExistingTripPlace, normalizeObservedPrice } from '../../domain/planner';
 import { el } from '../dom';
 import { saveCaptureStateViaWorker } from '../capture-state';
+import { matchesSavedListContext } from '../saved-list-match';
 import { store, t } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
 
@@ -49,7 +50,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
     allLists?: Array<{ listId?: string; listName: string; count?: number; url?: string }>;
     detectedCurrency?: string;
   };
-  type ListMessageResponse = { listPlaces?: CurrentResearchPlace[] };
+  type ListMessageResponse = { listPlaces?: CurrentResearchPlace[]; listName?: string; truncated?: boolean };
 
   const context = store.state.activeContext;
   const targetTags = (context?.tags ?? []).filter(Boolean);
@@ -88,13 +89,8 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   store.detectedAllLists = Array.isArray(placeResp?.allLists) ? placeResp.allLists : [];
 
   if ((!store.detectedSavedList || store.detectedSavedList.places.length === 0) && store.detectedAllLists.length > 0) {
-    const contextTags = (context?.tags ?? []).map((tag) => tag.trim().toLowerCase());
-    const contextTitle = (context?.title ?? '').trim().toLowerCase();
-    const targetList = store.detectedAllLists.find((list) => {
-      const name = list.listName.toLowerCase();
-      return contextTags.some((tag) => tag && (name === tag || name.includes(tag) || tag.includes(name)))
-        || Boolean(contextTitle && (name.includes(contextTitle) || contextTitle.includes(name)));
-    }) || (store.detectedAllLists.length === 1 ? store.detectedAllLists[0] : undefined);
+    const targetList = store.detectedAllLists.find((list) => matchesSavedListContext(list.listName, context))
+      || (store.detectedAllLists.length === 1 ? store.detectedAllLists[0] : undefined);
 
     if (targetList?.listId) {
       try {
@@ -109,6 +105,15 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   }
 
   const directListPlaces = Array.isArray(listResp?.listPlaces) ? listResp.listPlaces : [];
+  if ((!store.detectedSavedList || store.detectedSavedList.places.length === 0) && directListPlaces.length > 0 && listResp?.listName) {
+    store.detectedSavedList = {
+      listName: listResp.listName,
+      listUrl: tab.url || '',
+      detectedCurrency: placeResp?.detectedCurrency,
+      places: directListPlaces,
+      truncated: Boolean(listResp.truncated),
+    };
+  }
   store.detectedListPlaces = store.detectedSavedList?.places.length
     ? store.detectedSavedList.places
     : directListPlaces;

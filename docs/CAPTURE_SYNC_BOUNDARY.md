@@ -41,6 +41,21 @@ Import matching uses, in order:
 
 The old append-only `knownPlaceIds` tombstone map is removed.
 
+## Supported research providers
+
+Capture place extraction is intentionally provider-specific rather than a generic scraper. The supported automatic adapters are:
+
+- Google Maps: place details and saved lists
+- Booking.com: accommodation title, rating and address
+- Tabelog: restaurant title, rating, category, price and address
+- Xiaohongshu: note title/content/location signals and note-derived place lists
+
+Unsupported websites are not silently parsed as Google Maps. New providers should be added only when they have a concrete extraction contract.
+
+## Selection FX
+
+Selection FX is not part of place extraction. `fx-tooltip.js` is a separate lightweight content script on ordinary HTTP/S pages: selecting recognizable price text opens a local conversion card using the trip currency (CNY when no trip is active) and the background worker's cached FX table. The side-panel toggle remains the single persisted on/off setting. Capture provider permissions and extraction logic stay narrow even though the FX helper is available across normal webpages.
+
 ## Permissions
 
 The extension no longer injects on every HTTP/S page. Static content scripts are restricted to supported travel providers; the FX endpoint and short-link hosts are explicit host permissions. Manual page-currency override is scoped to the active tab/session.
