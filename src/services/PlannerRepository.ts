@@ -217,6 +217,12 @@ export class PlannerRepository {
     await this.initialize();
     const existing = (await this.listPlaces()).find((place) => place.id === placeId);
     if (!existing) return false;
+    const blockingVisits = (await this.listVisits()).filter(
+      (visit) => visit.trip_id === existing.trip_id && visit.place_id === placeId,
+    );
+    if (blockingVisits.length > 0) {
+      throw new Error(`Cannot drop ${existing.title}: remove ${blockingVisits.length} scheduled visit(s) first.`);
+    }
     await this.store.writeMarkdownFile(
       this.directory(PLANNER_DIRECTORIES.places),
       entityFileName(existing),
@@ -293,11 +299,21 @@ export class PlannerRepository {
   }
 
   async reorderVisits(date: string, orderedVisitIds: string[]): Promise<number> {
+    if (orderedVisitIds.length === 0) return 0;
     const visits = await this.listVisits();
     const byId = new Map(visits.map((visit) => [visit.id, visit] as const));
-    const ordered = orderedVisitIds
-      .map((id) => byId.get(id))
-      .filter((visit): visit is PlannerTripVisit => Boolean(visit) && visit!.date === date);
+    const resolved = orderedVisitIds.map((id) => byId.get(id));
+    if (resolved.some((visit) => !visit)) throw new Error('Planner reorder contains an unknown visit.');
+    const ordered = resolved as PlannerTripVisit[];
+    const tripId = ordered[0].trip_id;
+    if (ordered.some((visit) => visit.trip_id !== tripId || visit.date !== date)) {
+      throw new Error('Planner reorder must stay within one trip and one day.');
+    }
+    const dayVisits = visits.filter((visit) => visit.trip_id === tripId && visit.date === date);
+    const requestedIds = new Set(orderedVisitIds);
+    if (dayVisits.length !== ordered.length || dayVisits.some((visit) => !requestedIds.has(visit.id))) {
+      throw new Error('Planner reorder must contain every visit in the trip day exactly once.');
+    }
     let written = 0;
     for (let index = 0; index < ordered.length; index += 1) {
       const visit = ordered[index];
@@ -311,25 +327,54 @@ export class PlannerRepository {
   async setStaySpan(hotelPlaceId: string, dates: string[]): Promise<PlannerTripVisit[]> {
     const place = (await this.listPlaces()).find((item) => item.id === hotelPlaceId && item.kind === 'stay' && item.state !== 'dropped');
     if (!place) throw new Error(`Planner stay place was not found: ${hotelPlaceId}`);
+    const targetDates = [...new Set(dates)].sort();
+    if (targetDates.length === 0) throw new Error('Planner stay span requires at least one date.');
+    const dateSet = new Set(targetDates);
     const visits = await this.listVisits();
-    const tripPlaces = new Map((await this.listPlaces()).map((item) => [item.id, item] as const));
-    const dateSet = new Set(dates);
+    const tripPlaces = new Map(
+      (await this.listPlaces())
+        .filter((item) => item.trip_id === place.trip_id)
+        .map((item) => [item.id, item] as const),
+    );
+    const existingHotelVisits = visits
+      .filter((visit) => visit.trip_id === place.trip_id && visit.place_id === place.id)
+      .sort((left, right) => left.date.localeCompare(right.date) || left.sort_order - right.sort_order || left.id.localeCompare(right.id));
+    const keepByDate = new Map<string, PlannerTripVisit>();
+    for (const visit of existingHotelVisits) {
+      if (
+        dateSet.has(visit.date)
+        && !keepByDate.has(visit.date)
+        && visit.locked
+        && visit.is_anchor
+        && visit.anchor_type === 'stay_checkin'
+      ) {
+        keepByDate.set(visit.date, visit);
+      }
+    }
     const stale = visits.filter((visit) => {
-      if (visit.trip_id !== place.trip_id || !dateSet.has(visit.date)) return false;
-      return tripPlaces.get(visit.place_id)?.kind === 'stay';
+      if (visit.trip_id !== place.trip_id || tripPlaces.get(visit.place_id)?.kind !== 'stay') return false;
+      if (visit.place_id === place.id) {
+        return !dateSet.has(visit.date) || keepByDate.get(visit.date)?.id !== visit.id;
+      }
+      return dateSet.has(visit.date);
     });
     for (const visit of stale) await this.removeVisit(visit.id);
-    const created: PlannerTripVisit[] = [];
-    for (const date of dates) {
+    const result: PlannerTripVisit[] = [];
+    for (const date of targetDates) {
+      const existing = keepByDate.get(date);
+      if (existing) {
+        result.push(existing);
+        continue;
+      }
       const visit = await this.addVisit(hotelPlaceId, date, {
         sort_order: 0,
         locked: true,
         is_anchor: true,
         anchor_type: 'stay_checkin',
       });
-      if (visit) created.push(visit);
+      if (visit) result.push(visit);
     }
-    return created;
+    return result;
   }
 
   async upsertExpense(expense: TripExpenseItem): Promise<void> {

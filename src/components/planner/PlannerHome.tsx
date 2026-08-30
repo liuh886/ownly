@@ -453,6 +453,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [activeDate, scheduledAll],
   );
 
+  // The map is a spatial Place projection, not an occurrence timeline. Collapse
+  // repeated Visits for one Place while keeping every Visit in the day timeline.
+  const mapScheduled = useMemo(() => {
+    const seen = new Set<string>();
+    return scheduled.filter((place) => {
+      if (seen.has(place.place_id)) return false;
+      seen.add(place.place_id);
+      return true;
+    });
+  }, [scheduled]);
+  const mapScheduledPlaceIds = useMemo(
+    () => new Set(mapScheduled.map((place) => place.place_id)),
+    [mapScheduled],
+  );
+
   const tripLegs = useMemo(
     () => legs.filter((leg) => leg.trip_id === selectedTripId),
     [legs, selectedTripId],
@@ -561,9 +576,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const handleDropHotel = useCallback(async (hotelId: string) => {
     if (!hotelId || disabled) return;
-    await plannerRepository.dropPlace(hotelId);
-    await load();
-  }, [disabled, load]);
+    try {
+      await plannerRepository.dropPlace(hotelId);
+      await load();
+    } catch {
+      setNotice(zh ? '该酒店仍在行程中，请先移除对应的住宿 Visit。' : 'This hotel is still scheduled. Remove its stay Visits first.');
+      setTimeout(() => setNotice(''), 4000);
+    }
+  }, [disabled, load, zh]);
 
   const handleSavePlaceTiming = useCallback(
     async (
@@ -581,7 +601,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const areaCounts = useMemo(() => getTripAreaCounts(tripPlaces), [tripPlaces]);
   const maxAreaCount = Math.max(1, ...areaCounts.map((item) => item.count));
   const mustTotal = tripPlaces.filter((place) => place.priority === 'must').length;
-  const mustScheduled = scheduledAll.filter((place) => place.priority === 'must').length;
+  const mustScheduled = new Set(
+    scheduledAll.filter((place) => place.priority === 'must').map((place) => place.place_id),
+  ).size;
   const scheduledMinutes = scheduled.reduce((sum, place) => sum + (place.duration_minutes ?? 0), 0);
 
   // ── Departure intelligence ────────────────────────────────────────────────
@@ -1410,8 +1432,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           {rightTab === 'map' ? (
             <div className="flex-1 min-h-[380px] p-2 flex flex-col">
               <PlannerMap
-                scheduledPlaces={scheduled}
-                candidatePlaces={filteredCandidates}
+                scheduledPlaces={mapScheduled}
+                candidatePlaces={filteredCandidates.filter((place) => !mapScheduledPlaceIds.has(place.id))}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
@@ -1490,8 +1512,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             </div>
             <div className="flex-1 p-2">
               <PlannerMap
-                scheduledPlaces={scheduled}
-                candidatePlaces={sortedCandidates}
+                scheduledPlaces={mapScheduled}
+                candidatePlaces={sortedCandidates.filter((place) => !mapScheduledPlaceIds.has(place.id))}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}

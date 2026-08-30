@@ -105,9 +105,19 @@ describe('PlannerRepository visit lifecycle', () => {
     const third = await plannerRepository.addVisit('b', '2026-11-01');
     await plannerRepository.reorderVisits('2026-11-01', [third!.id, repeated!.id, first!.id]);
     const visits = (await plannerRepository.listVisits())
-      .filter((item) => item.date === '2026-11-01')
+      .filter((item) => item.trip_id === 'trip-1' && item.date === '2026-11-01')
       .sort((left, right) => left.sort_order - right.sort_order);
     expect(visits.map((item) => item.id)).toEqual([third!.id, repeated!.id, first!.id]);
+  });
+
+  it('rejects cross-trip and partial day reorder payloads', async () => {
+    await seed([place('other', { trip_id: 'trip-2' })]);
+    const first = await plannerRepository.addVisit('a', '2026-11-01');
+    const second = await plannerRepository.addVisit('b', '2026-11-01');
+    const other = await plannerRepository.addVisit('other', '2026-11-01');
+    await expect(plannerRepository.reorderVisits('2026-11-01', [first!.id, other!.id])).rejects.toThrow(/one trip/i);
+    await expect(plannerRepository.reorderVisits('2026-11-01', [first!.id])).rejects.toThrow(/every visit/i);
+    expect((await plannerRepository.listVisits()).find((item) => item.id === second!.id)?.sort_order).toBe(1);
   });
 
   it('updates timing on the visit rather than the place default', async () => {
@@ -130,11 +140,25 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(files.get('vault/Trip Legs')?.size).toBe(1);
   });
 
-  it('sets a hotel span as repeatable locked visits without cloning the hotel place', async () => {
-    const created = await plannerRepository.setStaySpan('hotel', ['2026-11-01', '2026-11-02', '2026-11-03']);
-    expect(created).toHaveLength(3);
-    expect(created.every((item) => item.place_id === 'hotel' && item.locked && item.is_anchor)).toBe(true);
+  it('replaces a hotel span without leaving stale dates and is idempotent', async () => {
+    const first = await plannerRepository.setStaySpan('hotel', ['2026-11-01', '2026-11-02', '2026-11-03']);
+    const firstByDate = new Map(first.map((visit) => [visit.date, visit.id] as const));
+    const shifted = await plannerRepository.setStaySpan('hotel', ['2026-11-02', '2026-11-03', '2026-11-04']);
+    expect(shifted.map((item) => item.date)).toEqual(['2026-11-02', '2026-11-03', '2026-11-04']);
+    expect(shifted.find((item) => item.date === '2026-11-02')?.id).toBe(firstByDate.get('2026-11-02'));
+    expect(shifted.find((item) => item.date === '2026-11-03')?.id).toBe(firstByDate.get('2026-11-03'));
+    expect((await plannerRepository.listVisits()).filter((item) => item.place_id === 'hotel').map((item) => item.date).sort())
+      .toEqual(['2026-11-02', '2026-11-03', '2026-11-04']);
+    const repeated = await plannerRepository.setStaySpan('hotel', ['2026-11-02', '2026-11-03', '2026-11-04']);
+    expect(repeated.map((item) => item.id)).toEqual(shifted.map((item) => item.id));
     expect((await plannerRepository.listPlaces()).filter((item) => item.id === 'hotel')).toHaveLength(1);
+  });
+
+  it('blocks dropping a Place while a Visit still references it', async () => {
+    const visit = await plannerRepository.addVisit('a', '2026-11-01');
+    await expect(plannerRepository.dropPlace('a')).rejects.toThrow(/remove 1 scheduled visit/i);
+    await plannerRepository.removeVisit(visit!.id);
+    expect(await plannerRepository.dropPlace('a')).toBe(true);
   });
 
   it('saveTripICalMarkdown re-reads canonical places and visits before projection', async () => {
