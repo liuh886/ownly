@@ -25,7 +25,6 @@ Ownly/
 
 The extension's `chrome.storage.local` state is only a pending handoff queue. After Planner writes pending places to Markdown it acknowledges those IDs and removes them from the queue. All writers (side panel, background quick capture, website bridge) share one serialized state module with an in-context write queue, and the side panel live-reloads when another context writes.
 
-
 Mixed-currency prices are converted for display only via built-in USD-pivot reference rates; trips may override any rate through `fx_rates` on the trip frontmatter. Raw captured price text is never rewritten.
 
 ### Trip
@@ -84,7 +83,6 @@ Planner deliberately starts manual-first. Manual placement locks the item so a l
 - AI proposal generation
 - changes to the existing `components/travel/*` surface
 
-
 ## Travel legs and day feasibility
 
 `Trip Legs/` stores one canonical travel fact for an ordered place pair. A leg records the chosen mode, duration, optional distance, source and observation time; it is never embedded into a place because reordering must not change place semantics.
@@ -97,3 +95,11 @@ MCP offers two explicit prepare/commit paths:
 - `ownly_planner_prepare_refresh_day_travel`: refresh only adjacent walking/driving/bicycling pairs through OpenRouteService using `OPENROUTESERVICE_API_KEY`; manual legs are preserved.
 
 The browser remains a consumer of canonical `Trip Legs/` facts. API keys are not shipped in the static Web/PWA bundle. OpenRouteService-derived facts are labeled `ORS · OSM` in the Planner UI. Google Maps remains the live-navigation handoff.
+
+`OPENROUTESERVICE_API_KEY` may be stored as a GitHub Repository Secret for Actions-based validation. A locally launched Ownly MCP process reads the same variable from its local process environment; repository secrets are never copied into the Web/PWA or local runtime automatically.
+
+## Travel-time optimization
+
+The old straight-line-distance optimizer is removed. Ownly has one optimization path: local MCP queries an ephemeral OpenRouteService matrix for the selected walking/driving/bicycling day, minimizes total known travel minutes, preserves the first stop plus locked/anchored slots, and commits the chosen order together with only the final adjacent ORS legs. The N×N matrix is never persisted.
+
+`transit` remains manual because Ownly does not fabricate public-transport travel times. The static Web/PWA does not hold an ORS API key; it displays the canonical order and `Trip Legs/` facts after the MCP commit.

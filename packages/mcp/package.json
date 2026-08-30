@@ -1,6 +1,6 @@
 {
   "name": "@ownly-app/mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "mcpName": "io.github.liuh886/ownly",
   "description": "Local-first MCP server for Ownly evidence and Planner schedules with opt-in, two-phase writes.",
   "license": "MIT",
