@@ -27,7 +27,19 @@ jobs:
           cache: npm
 
       - name: Apply PR 131 implementation
-        run: python .github/pr131-apply.py
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.github/pr131-apply.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              "re.subn(pattern, repl, text, count=1, flags=re.S)",
+              "re.subn(pattern, lambda _match: repl, text, count=1, flags=re.S)",
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+          python .github/pr131-apply.py
 
       - name: Install locked dependencies
         run: npm ci
