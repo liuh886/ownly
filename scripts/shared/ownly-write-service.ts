@@ -47,7 +47,6 @@ import {
 } from '../cli/storage';
 import {
   generateStaySpanPlaces,
-  optimizeStopsSequence,
   plannerTripLegFileName,
   type FxSettings,
   type PlannerTrip,
@@ -635,42 +634,88 @@ export class OwnlyWriteService {
     });
   }
 
-  prepareOptimizeDayRoute(date: string): PreparedOwnlyOperation {
-    const entries = listPlannerPlaces(this.dataLocation).filter((e) =>
-      e.frontmatter.state === 'scheduled' && e.frontmatter.scheduled_date === date,
+
+  prepareApplyTravelTimeOptimization(
+    tripId: string,
+    date: string,
+    orderedPlaceIds: string[],
+    legs: PlannerTripLeg[],
+    summary: { original_minutes: number; optimized_minutes: number; saved_minutes: number; used_manual_pairs: string[] },
+  ): PreparedOwnlyOperation {
+    const entries = listPlannerPlaces(this.dataLocation).filter((entry) =>
+      entry.frontmatter.trip_id === tripId
+      && entry.frontmatter.state === 'scheduled'
+      && entry.frontmatter.scheduled_date === date,
     );
-    const ordered = entries
-      .map((e) => e.frontmatter)
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    const result = optimizeStopsSequence(ordered, { respectLocked: true });
-    if (!result.improved) {
-      throw new OwnlyMutationError('Route is already optimal; nothing to commit.', 'INVALID_INPUT');
+    const current = entries
+      .map((entry) => entry.frontmatter)
+      .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0));
+    if (orderedPlaceIds.length !== current.length || new Set(orderedPlaceIds).size !== current.length) {
+      throw new OwnlyMutationError('Optimized order must contain every scheduled place exactly once.', 'INVALID_INPUT');
     }
-    const expectedMap = new Map(entries.map((e) => [e.filePath, fingerprint(e.filePath)] as const));
-    const byId = new Map(result.places.map((p) => [p.id, p] as const));
-    const updates = entries
-      .filter((e) => {
-        const optimized = byId.get(e.frontmatter.id);
-        return optimized && optimized.sort_order !== e.frontmatter.sort_order;
-      })
-      .map((e) => ({ entry: e, next: byId.get(e.frontmatter.id)! }));
-    return this.prepare(
-      'planner_optimize_day_route',
-      {
-        date,
-        original_km: result.originalKm,
-        optimized_km: result.optimizedKm,
-        saved_km: result.savedKm,
-        order: result.places.map((p) => ({ id: p.id, title: p.title })),
-      },
-      () => {
-        for (const { entry, next } of updates) {
-          assertUnchanged(entry.filePath, expectedMap.get(entry.filePath)!);
-          writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
-        }
-        return { date, saved_km: result.savedKm, updated: updates.length };
-      },
+    const currentIds = new Set(current.map((place) => place.id));
+    if (orderedPlaceIds.some((id) => !currentIds.has(id))) {
+      throw new OwnlyMutationError('Optimized order contains a place outside this trip/day.', 'INVALID_INPUT');
+    }
+    current.forEach((place, index) => {
+      if ((index === 0 || place.locked || place.is_anchor) && orderedPlaceIds[index] !== place.id) {
+        throw new OwnlyMutationError(`${place.title} is fixed and cannot move during travel-time optimization.`, 'INVALID_INPUT');
+      }
+    });
+
+    const timestamp = this.now().toISOString();
+    const orderById = new Map(orderedPlaceIds.map((id, index) => [id, index] as const));
+    const placeTargets = entries
+      .map((entry) => ({
+        entry,
+        next: { ...entry.frontmatter, sort_order: orderById.get(entry.frontmatter.id)!, updated_at: timestamp },
+        expected: fingerprint(entry.filePath),
+      }))
+      .filter(({ entry, next }) => entry.frontmatter.sort_order !== next.sort_order);
+
+    const tripPlaceIds = new Set(
+      listPlannerPlaces(this.dataLocation)
+        .filter((entry) => entry.frontmatter.trip_id === tripId)
+        .map((entry) => entry.frontmatter.id),
     );
+    const existingLegs = listPlannerLegs(this.dataLocation);
+    const existingById = new Map(existingLegs.map((entry) => [entry.frontmatter.id, entry.frontmatter] as const));
+    const legDirectory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.legs);
+    const normalizedLegs = legs.map((leg) => {
+      if (leg.trip_id !== tripId || !tripPlaceIds.has(leg.from_place_id) || !tripPlaceIds.has(leg.to_place_id) || leg.from_place_id === leg.to_place_id) {
+        throw new OwnlyMutationError(`Invalid travel leg endpoints: ${leg.from_place_id} → ${leg.to_place_id}`, 'INVALID_INPUT');
+      }
+      if (!Number.isInteger(leg.duration_minutes) || leg.duration_minutes <= 0 || leg.duration_minutes > 1440) {
+        throw new OwnlyMutationError('Travel duration must be an integer between 1 and 1440 minutes.', 'INVALID_INPUT');
+      }
+      const existing = existingById.get(leg.id);
+      return { ...leg, created_at: existing?.created_at ?? leg.created_at ?? timestamp, updated_at: timestamp };
+    });
+    const legTargets = normalizedLegs.map((leg) => {
+      const filePath = join(legDirectory, plannerTripLegFileName(leg.id));
+      return { leg, filePath, expected: fingerprint(filePath) };
+    });
+
+    return this.prepare('planner_optimize_day_travel_time', {
+      trip_id: tripId,
+      date,
+      ...summary,
+      order: orderedPlaceIds,
+      refreshed_legs: normalizedLegs.map((leg) => ({ from: leg.from_place_id, to: leg.to_place_id, minutes: leg.duration_minutes })),
+    }, () => {
+      for (const target of placeTargets) assertUnchanged(target.entry.filePath, target.expected);
+      for (const target of legTargets) assertUnchanged(target.filePath, target.expected);
+      for (const target of placeTargets) {
+        writeEntry(dirname(target.entry.filePath), target.entry.fileName, target.next, target.entry.body);
+      }
+      if (legTargets.length > 0) mkdirSync(legDirectory, { recursive: true });
+      for (const target of legTargets) {
+        writeFileSync(target.filePath, serializeMarkdownEntity(target.leg, ''), 'utf8');
+        writeAgentLog(this.dataLocation, 'planner_optimize_day_travel_time_leg', target.leg.id, existingById.get(target.leg.id) ?? null, target.leg);
+      }
+      writeAgentLog(this.dataLocation, 'planner_optimize_day_travel_time', `${tripId}:${date}`, current.map((place) => place.id), orderedPlaceIds);
+      return { trip_id: tripId, date, updated_places: placeTargets.length, refreshed_legs: legTargets.length, saved_minutes: summary.saved_minutes };
+    });
   }
 
   prepareSetStaySpan(hotelPlaceId: string, dates: string[]): PreparedOwnlyOperation {

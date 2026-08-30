@@ -131,7 +131,7 @@ Write tools:
 | `ownly_planner_prepare_schedule_place` | Preview scheduling a place on a date (locks it) |
 | `ownly_planner_prepare_return_to_pool` | Preview returning a place to the research pool |
 | `ownly_planner_prepare_reorder_day` | Preview moving one scheduled place ±1 within its day |
-| `ownly_planner_prepare_optimize_route` | Preview TSP day-route optimization (locked/unlocated stops pinned) |
+| `ownly_planner_prepare_optimize_day_travel_time` | Query an ephemeral ORS matrix, minimize actual travel minutes, keep the first/locked/anchored stops fixed, and preview one atomic order + final-leg commit |
 | `ownly_planner_prepare_set_stay_span` | Preview hotel stay-span anchors (retires stale stays on those dates) |
 | `ownly_planner_prepare_drop_place` | Preview marking a place dropped |
 | `ownly_planner_prepare_add_expense` | Preview appending an AA-ledger expense |

@@ -23,7 +23,6 @@ import {
   normalizeDelimitedText,
   normalizePlaceIdentity,
   normalizeObservedPrice,
-  optimizeStopsSequence,
   calculateHotelProximity,
   calculateMultiDayHotelProximity,
   generateStaySpanPlaces,
@@ -326,25 +325,6 @@ describe('Ownly Planner domain', () => {
     expect(merged.pendingPlaces.map((p) => p.id)).toEqual(['edited-local', 'bg-quick']);
   });
 
-  it('never moves stay anchors during route optimization (A3)', () => {
-    const anchor = place('hotel', {
-      kind: 'stay',
-      is_anchor: true,
-      anchor_type: 'stay_checkin',
-      state: 'scheduled',
-      coordinates: { lat: 35.6700, lng: 139.7000 },
-    });
-    const seq = [
-      anchor,
-      place('far-a', { coordinates: { lat: 35.9500, lng: 139.7500 } }),
-      place('far-b', { coordinates: { lat: 35.9600, lng: 139.7600 } }),
-      place('near', { coordinates: { lat: 35.6800, lng: 139.7100 } }),
-    ];
-    const result = optimizeStopsSequence(seq, { respectLocked: true });
-    expect(result.places[0].id).toBe('hotel');
-    expect(result.places[0].is_anchor).toBe(true);
-  });
-
   it('infers place kind from Chinese, English, Japanese, and Thai across all categories', () => {
     // 1. Food & Dining (美食 / 餐厅)
     expect(inferPlaceKind('日本料理店')).toBe('food');
@@ -613,28 +593,6 @@ describe('Ownly Planner domain', () => {
     );
     expect(dist).toBeGreaterThan(7.0);
     expect(dist).toBeLessThan(8.5);
-  });
-
-  it('optimizes out-of-order itinerary stops into the shortest route', () => {
-    // 4 stops in a linear east-west line:
-    // P1 (lat 10.0, lng 100.0)
-    // P2 (lat 10.0, lng 100.1)
-    // P3 (lat 10.0, lng 100.2)
-    // P4 (lat 10.0, lng 100.3)
-    // Out of order: P1 -> P4 -> P2 -> P3 (zigzag)
-    const p1 = place('1', { title: 'Stop 1', coordinates: { lat: 10.0, lng: 100.0 }, sort_order: 0 });
-    const p2 = place('2', { title: 'Stop 2', coordinates: { lat: 10.0, lng: 100.1 }, sort_order: 1 });
-    const p3 = place('3', { title: 'Stop 3', coordinates: { lat: 10.0, lng: 100.2 }, sort_order: 2 });
-    const p4 = place('4', { title: 'Stop 4', coordinates: { lat: 10.0, lng: 100.3 }, sort_order: 3 });
-
-    const zigzag = [p1, p4, p2, p3];
-    const result = optimizeStopsSequence(zigzag, { fixStart: true });
-
-    expect(result.improved).toBe(true);
-    expect(result.savedKm).toBeGreaterThan(0);
-    expect(result.places.map((p) => p.id)).toEqual(['1', '2', '3', '4']);
-    expect(result.places[0].sort_order).toBe(0);
-    expect(result.places[3].sort_order).toBe(3);
   });
 
   it('computes hotel proximity metrics against scheduled attractions', () => {
@@ -949,53 +907,7 @@ describe('Ownly Planner domain', () => {
   });
 });
 
-describe('Route optimization pinning & budget currency', () => {
-  const coord = (lat: number, lng: number) => `https://www.google.com/maps/place/X/@${lat},${lng},15z`;
-  function stop(id: string, lat: number | null, overrides: Partial<PlannerTripPlace> = {}): PlannerTripPlace {
-    return place(id, {
-      source_url: lat === null ? `https://www.google.com/maps/search/?api=1&query=${id}` : coord(lat, (Number(id.charCodeAt(0)) % 10) + 100),
-      ...overrides,
-    });
-  }
-
-  it('keeps locked and coordinate-less stops pinned at their slots', () => {
-    const seq = [
-      stop('a', 35.700),
-      stop('locked-mid', 35.720, { locked: true }),
-      stop('c', 35.740),
-      stop('no-coord', null),
-      stop('e', 35.680),
-    ];
-    const result = optimizeStopsSequence(seq, { respectLocked: true });
-    expect(result.places[1].id).toBe('locked-mid');
-    expect(result.places[3].id).toBe('no-coord');
-    expect(result.places.filter((p) => p.id === 'no-coord')).toHaveLength(1);
-  });
-
-  it('never moves a locked stop even when it sits mid-route with big detours available', () => {
-    const seq = [
-      stop('start', 35.670, { locked: true }),
-      stop('far-a', 35.950),
-      stop('anchor', 35.675, { locked: true }),
-      stop('far-b', 35.960),
-      stop('tail', 35.690),
-    ];
-    const result = optimizeStopsSequence(seq, { respectLocked: true });
-    expect(result.places[0].id).toBe('start');
-    expect(result.places[2].id).toBe('anchor');
-  });
-
-  it('keeps start pinned by default even when options is passed with only respectLocked', () => {
-    const seq = [
-      stop('start', 35.670),
-      stop('mid1', 35.800),
-      stop('mid2', 35.700),
-      stop('tail', 35.900),
-    ];
-    const result = optimizeStopsSequence(seq, { respectLocked: true });
-    expect(result.places[0].id).toBe('start');
-  });
-
+describe('Geographic distance', () => {
   it('haversineDistanceKm calculates accurately and does not produce NaN for identical or close coords', () => {
     const c = { lat: 35.6895, lng: 139.6917 };
     expect(haversineDistanceKm(c, c)).toBe(0);

@@ -17,7 +17,7 @@ import {
 } from '../../../scripts/mcp/ownly-tools.ts';
 import { OwnlyWriteService } from '../../../scripts/shared/ownly-write-service.ts';
 import { plannerTripLegId } from '../../../src/domain/planner.ts';
-import { buildOpenRouteServiceDayLegs } from '../../../scripts/mcp/openrouteservice.ts';
+import { buildOpenRouteServiceDayLegs, buildOpenRouteServiceDayOptimization } from '../../../scripts/mcp/openrouteservice.ts';
 import {
   getPlannerSummary,
   getPlannerTripDetail,
@@ -25,7 +25,7 @@ import {
 } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
-const SERVER_VERSION = '0.4.0';
+const SERVER_VERSION = '0.5.0';
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -399,14 +399,36 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
   );
 
   server.registerTool(
-    'ownly_planner_prepare_optimize_route',
+    'ownly_planner_prepare_optimize_day_travel_time',
     {
-      title: 'Preview Day Route Optimization',
-      description: 'Preview TSP re-ordering of one scheduled day (locked and coordinate-less stops stay pinned). Preview includes km saved.',
-      inputSchema: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
-      annotations: PREPARE_WRITE_ANNOTATIONS,
+      title: 'Preview Travel-Time Day Optimization',
+      description: 'Query an ephemeral OpenRouteService matrix, minimize known travel minutes, keep the first/locked/anchored stops fixed, and preview one atomic commit of the final order plus final adjacent ORS legs. Transit is intentionally not fabricated.',
+      inputSchema: z.object({
+        trip_id: z.string().min(1),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }),
+      annotations: PREPARE_OPEN_WORLD_ANNOTATIONS,
     },
-    safeHandler(({ date }) => writeService.prepareOptimizeDayRoute(date)),
+    safeHandler(async ({ trip_id, date }) => {
+      const optimization = await buildOpenRouteServiceDayOptimization(
+        dataLocation,
+        trip_id,
+        date,
+        String(process.env.OPENROUTESERVICE_API_KEY ?? ''),
+      );
+      return writeService.prepareApplyTravelTimeOptimization(
+        trip_id,
+        date,
+        optimization.ordered_places.map((place) => place.id),
+        optimization.legs_to_write,
+        {
+          original_minutes: optimization.original_minutes,
+          optimized_minutes: optimization.optimized_minutes,
+          saved_minutes: optimization.saved_minutes,
+          used_manual_pairs: optimization.used_manual_pairs,
+        },
+      );
+    }),
   );
 
   server.registerTool(

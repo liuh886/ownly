@@ -97,3 +97,10 @@ MCP offers two explicit prepare/commit paths:
 - `ownly_planner_prepare_refresh_day_travel`: refresh only adjacent walking/driving/bicycling pairs through OpenRouteService using `OPENROUTESERVICE_API_KEY`; manual legs are preserved.
 
 The browser remains a consumer of canonical `Trip Legs/` facts. API keys are not shipped in the static Web/PWA bundle. OpenRouteService-derived facts are labeled `ORS · OSM` in the Planner UI. Google Maps remains the live-navigation handoff.
+
+
+## Travel-time optimization
+
+The old straight-line-distance optimizer is removed. Ownly has one optimization path: local MCP queries an ephemeral OpenRouteService matrix for the selected walking/driving/bicycling day, minimizes total known travel minutes, preserves the first stop plus locked/anchored slots, and commits the chosen order together with only the final adjacent ORS legs. The N×N matrix is never persisted.
+
+`transit` remains manual because Ownly does not fabricate public-transport travel times. The static Web/PWA does not hold an ORS API key; it displays the canonical order and `Trip Legs/` facts after the MCP commit.

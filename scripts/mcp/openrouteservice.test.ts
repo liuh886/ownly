@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchOpenRouteServiceLeg, openRouteServiceProfile } from './openrouteservice';
+import { fetchOpenRouteServiceLeg, fetchOpenRouteServiceMatrix, openRouteServiceProfile } from './openrouteservice';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -20,6 +20,24 @@ describe('OpenRouteService travel-leg adapter', () => {
     expect(result).toEqual({ duration_minutes: 16, distance_meters: 1234 });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.heigit.org/openrouteservice/v2/directions/foot-walking',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('converts matrix seconds and meters without persisting the matrix', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      durations: [[0, 601], [599, 0]],
+      distances: [[0, 1234.4], [1200.2, 0]],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await fetchOpenRouteServiceMatrix('test-key', [
+      { coordinates: { lat: 13.74, lng: 100.50 } },
+      { coordinates: { lat: 13.75, lng: 100.51 } },
+    ], 'driving');
+    expect(result.durations_minutes).toEqual([[0, 11], [10, 0]]);
+    expect(result.distances_meters).toEqual([[0, 1234], [1200, 0]]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.heigit.org/openrouteservice/v2/matrix/driving-car',
       expect.objectContaining({ method: 'POST' }),
     );
   });
