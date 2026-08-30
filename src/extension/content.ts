@@ -659,22 +659,35 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const listPlaces = scanAllGoogleMapsPlaces();
   const isDedicatedPlacePage = /\/maps\/place\/[^/?#]+/.test(window.location.pathname) || /data=.*!1s0x/.test(window.location.href);
-
-  // If there are multiple places in a list, don't falsely recognize the list header as a single place
-  if (listPlaces.length > 1 && !isDedicatedPlacePage) {
-    return null;
-  }
-  
-  // Exclude explicitly known list URL patterns even if places are 0
-  if (!isDedicatedPlacePage && (sourceUrl.includes('!2s') || sourceUrl.includes('/placelists/'))) {
-    return null;
-  }
-
   const jsonLd = PLACE_PARSER.extractJsonLd(document);
   const heading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
     ?? document.querySelector<HTMLElement>('main h1')
     ?? document.querySelector<HTMLElement>('h1');
   const title = heading?.textContent?.trim() || jsonLd.title || titleFromUrl(sourceUrl);
+  const hasDetailFacts = Boolean(
+    title
+    && !isGenericNavigationTitle(title)
+    && (
+      document.querySelector(SELECTORS.address)
+      || document.querySelector(SELECTORS.rating)
+      || document.querySelector(SELECTORS.category)
+      || document.querySelector(SELECTORS.phone)
+      || document.querySelector('[data-item-id^="address:"]')
+      || document.querySelector('[data-item-id^="phone:"]')
+    )
+  );
+  const hasPlaceDetailPanel = isDedicatedPlacePage || hasDetailFacts;
+
+  // Google Maps is an SPA: opening a place from a saved list can keep the list URL
+  // while the detail pane already contains a real place. Trust strong detail-pane
+  // facts over URL shape; only suppress the list header when no detail pane exists.
+  if (listPlaces.length > 1 && !hasPlaceDetailPanel) {
+    return null;
+  }
+
+  if (!hasPlaceDetailPanel && (sourceUrl.includes('!1s') || sourceUrl.includes('!2s') || sourceUrl.includes('/placelists/'))) {
+    return null;
+  }
   if (!title && isDedicatedPlacePage) {
     driftCheck('placeHeading', null);
   }
@@ -688,6 +701,8 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const openHours = extractOpenHours();
   const openStatus = extractOpenStatus();
   const stateSignals = collectAppStateSignals();
+  const sourcePlaceId = stateSignals?.placeId || extractFeatureIdFromUrl(sourceUrl) || undefined;
+  const canonicalSourceUrl = googleMapsDetailUrlFromSourceId(sourcePlaceId, title, window.location.origin) || sourceUrl;
   const reservation = extractReservation();
   const rating = extractRating() || jsonLd.rating;
   const reviewCount = extractReviewCount() || jsonLd.reviewCount;
@@ -696,7 +711,7 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
 
   return {
     title,
-    sourceUrl,
+    sourceUrl: canonicalSourceUrl,
     sourceProvider: 'google_maps',
     kind,
     rating,
@@ -710,7 +725,8 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     openStatus,
     openHours,
     website: extractWebsite() || jsonLd.website,
-    coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
+    coordinates: extractPlaceCoordinates(canonicalSourceUrl) ?? extractPlaceCoordinates(sourceUrl) ?? undefined,
+    sourcePlaceId,
     tierNote: extractHotelTier(),
     phone: extractPhone() ?? jsonLd.phone ?? stateSignals?.intlPhone,
     plusCode: extractPlusCode() ?? stateSignals?.plusCode,
@@ -1043,11 +1059,13 @@ function scanAllSavedListsOnPage(): SavedListCardSummary[] {
   // that explicitly exposes data-list-id. Generic feed containers, role=listitem
   // blocks and bare anchors are Google UI chrome ("Compare prices", "Guests",
   // "All reviews", …) — matching them produced dozens of phantom "lists".
-  const listAnchors = document.querySelectorAll<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!2s"]');
+  const listAnchors = document.querySelectorAll<HTMLAnchorElement>(
+    'a[href*="/placelists/list/"], a[href*="!1s"], a[href*="!2s"], a[href*="entitylist"], a[href*="getlist"]',
+  );
   for (const anchor of Array.from(listAnchors)) {
     const href = anchor.href || '';
-    const listIdMatch = href.match(/!2s([A-Za-z0-9_-]{15,})|\/placelists\/list\/([A-Za-z0-9_-]{15,})/);
-    const listId = listIdMatch?.[1] || listIdMatch?.[2];
+    const listIdMatch = href.match(/!1s([A-Za-z0-9_-]{15,})|!2s([A-Za-z0-9_-]{15,})|\/placelists\/list\/([A-Za-z0-9_-]{15,})/);
+    const listId = listIdMatch?.[1] || listIdMatch?.[2] || listIdMatch?.[3];
     if (!listId) continue;
 
     const card = anchor.closest<HTMLElement>('div[role="listitem"], div.m6QErb, div.Nv2PK, li') ?? anchor;
@@ -1162,8 +1180,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const listUrl = (message as { listUrl?: string }).listUrl;
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       if (!listId && listUrl) {
-        const m = /!2s([A-Za-z0-9_-]{20,})|\/placelists\/list\/([A-Za-z0-9_-]{20,})/.exec(listUrl);
-        listId = m?.[1] || m?.[2];
+        const m = /!1s([A-Za-z0-9_-]{15,})|!2s([A-Za-z0-9_-]{15,})|\/placelists\/list\/([A-Za-z0-9_-]{15,})/.exec(listUrl);
+        listId = m?.[1] || m?.[2] || m?.[3];
       }
       if (!listId) {
         sendResponse({ savedList: null });

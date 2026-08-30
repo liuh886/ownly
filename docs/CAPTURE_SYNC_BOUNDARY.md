@@ -57,3 +57,7 @@ Capture keeps raw source evidence and normalized comparable facts together. The 
 - `types`, hours, address, coordinates and contact/source links
 
 Google Maps saved lists are intentionally treated as thin identity payloads. When a list is imported, Capture uses each stable Google feature id to fetch the canonical `?cid=` detail page with bounded concurrency, enriches from structured page metadata, then reports field coverage. It does not fabricate category from an address and it does not persist converted prices; FX conversion remains a view-time operation against the trip currency.
+
+## Google Maps SPA detection
+
+Capture treats a visible Google Maps detail pane with strong place facts (address, rating, category or phone) as the current place even when the SPA keeps a saved-list URL. Saved-list discovery accepts both `!1s` and `!2s` list-id carriers so a trip tag such as `TH26` can match the same-named Google Maps saved list and import it in bulk. URL shape alone is not the place/list authority.
