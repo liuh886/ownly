@@ -471,51 +471,54 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
     return 'experience';
   }
 
-  // 1. Cafes, Bakeries, Coffee, Dessert, Tea (Checked before general dining so coffee shops don't get swallowed into generic food)
+  // 1. Lodging & Stays (Hotels, Resorts, Villas, Hostels, Ryokans, Serviced Apartments, Brands like Oakwood/IHG/Marriott/UHG, etc.)
+  // Evaluated before generic dining so hotels with in-house restaurants/bars (tagged with 'restaurant' in Google Maps types) are not misclassified as food
   if (
-    /\b(?:cafe|café|coffee|roastery|espresso|boba|bubble\s*tea|milk\s*tea|matcha|patisserie|pâtisserie|chocolatier|gelateria|gelato|waffle|pancake|crepe|crêpe|creperie|crêperie|tea\s*house|tea\s*room|tea\s*salon|salon\s*de\s*thé|dessert|bakery|boulangerie|ice\s*cream|pastry|donut|doughnut|bagel|juice\s*bar|smoothie|acai|arabica|starbucks|blue\s*bottle|doutor|komeda|tully'?s|luckin|cotti|manner|seesaw|heytea|nayuki|chagee|gong\s*cha|koi\s*th[eé]|mixue|châteraisé|chateraise|ladur[eé]e|pierre\s*herm[eé]|harbs|after\s*you)\b|คาเฟ่|กาแฟ|ชา|ขนม|เบเกอรี่|ไอศกรีม|ร้านกาแฟ|ชานม|ร้านเค้ก|カフェ|喫茶|喫茶店|コーヒー|珈琲|スイーツ|ベーカリー|ケーキ|洋菓子|和菓子|甘味処|茶屋|パン屋|咖啡|甜品|奶茶|面包|烘焙|茶室|茶馆|茶饮|冰淇淋|冰品|蛋糕|糕点|点心局|下午茶|糖水|糖水铺|饮品|咖啡馆|咖啡厅|手冲|烘焙坊|甜品店|星巴克|瑞幸|库迪|霸王茶姬|喜茶|奈雪|一点点|蜜雪冰城|茶颜悦色|古茗|茶百道|tiệm\s*cà\s*phê|quán\s*trà/i.test(lower)
-  ) {
-    return 'cafe';
-  }
-
-  // 2. Food, Dining, Restaurants, Bars, Street Food, Cuisines
-  if (
-    /\b(?:restaurant|cuisine|dining|food|kitchen|eatery|diner|ramen|sushi|izakaya|bar|pub|bistro|steak|steakhouse|grill|bbq|barbecue|noodle|noodles|buffet|tavern|pizzeria|pizza|burger|burgers|tacos|taqueria|taquería|trattoria|osteria|brasserie|cucina|seafood|hotpot|hot\s*pot|brunch|curry|tabelog|gastropub|brewery|microbrewery|yakitori|tempura|tonkatsu|shabu|shabu-shabu|udon|soba|dim\s*sum|dumpling|dumplings|tapas|bento|skewer|skewers|poke|ceviche|rotisserie|warung|kopitiam|hawker|canteen|chophouse|fondue|cantina|churrascaria|shawarma|kebab|falafel|pho|banh\s*mi|pad\s*thai|som\s*tum|tom\s*yum|sukiyaki|yakiniku|kaiseki|kappo|omakase|teppanyaki|robatayaki|chirashi|gyoza|bao|donburi|yakisoba|unagi|kushikatsu|bodega)\b|wine\s*bar|cocktail|cantonese|sichuan|thai\s*food|street\s*food|night\s*market\s*food|fine\s*dining|casual\s*dining|ethnic\s*cuisine|local\s*cuisine|regional\s*cuisine|ร้านอาหาร|อาหาร|ก๋วยเตี๋ยว|ข้าวมันไก่|ส้มตำ|บาร์|ข้าวซอย|ต้มยำ|ผัดไทย|หมูกระทะ|ชาบู|ปิ้งย่าง|อาหารไทย|ซีฟู้ด|ร้านเหล้า|ラーメン|焼肉|寿司|うどん|そば|天ぷら|割烹|食堂|定食|居酒屋|焼き鳥|焼鸟|鍋|懐石|会席|おでん|立ち飲み|中華|洋食|和食|海鮮|とんかつ|串カツ|すき焼き|しゃぶしゃぶ|鉄板焼|うなぎ|蕎麦|餐厅|餐馆|料理|美食|小吃|拉面|米线|面馆|火锅|烧烤|烤肉|酒吧|居酒屋|酒场|快餐|大排档|早茶|熟食|排档|海鲜|日料|韩料|泰餐|西餐|粤菜|川菜|湘菜|鲁菜|淮扬菜|浙菜|闽菜|徽菜|家常菜|烤鸭|刺身|烧鸟|铁板烧|串烧|居食屋|私房菜|茶餐厅|酒馆|饭店|宵夜|夜市美食|烧腊|汤包|生煎|抄手|串串|冒菜|烤鱼|肉骨茶|砂锅|大排挡|馄饨|饺子|卤味|烧鹅|鳗鱼饭|quán\s*ăn|nhà\s*hàng|quán\s*nhậu|restaurante|ristorante/i.test(lower)
-  ) {
-    return 'food';
-  }
-
-  // 3. Lodging & Stays (Hotels, Resorts, Villas, Hostels, Ryokans, Brands like IHG/Marriott/UHG, etc.)
-  if (
-    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|ji\s*hotel|citadines|somerset|ascott|dusit|six\s*senses|belmond|outrigger|centara|centre\s*point|chatrium|sindhorn|salil|asai|the\s*quarter|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|doubletree|waldorf\s*astoria|conrad|curio|canopy|tapestry|mgallery|swissotel|adagio|oakwood|pan\s*pacific|parkroyal|fraser|mandarin\s*oriental|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|m[oö]venpick|le\s*m[eé]ridien|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|love\s*hotel|machiya|hanok|riad|agriturismo|campground|rv\s*park)\b|โรงแรม|ที่พัก|รีสอร์ท|โฮสเทล|เกสต์เฮาส์|วิลล่า|บังกะโล|ม่านรูด|ホテル|旅館|民宿|宿|ペンション|ゲストハウス|カプセルホテル|湯宿|坊|酒店|旅馆|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|星级酒店|精品酒店|宾馆|别馆|营地|庄园|驿站|招待所|万豪|希尔顿|凯悦|洲际|喜来登|香格里拉|四季酒店|丽思卡尔顿|瑞吉|文华东方|半岛酒店|悦榕庄|安纳塔拉|亚朵|全季|汉庭|如家|锦江之星|桔子酒店|khách\s*sạn|hôtel|albergue|posada|parador|pousada|albergo/i.test(lower)
+    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|ji\s*hotel|citadines|somerset|ascott|dusit|six\s*senses|belmond|outrigger|centara|centre\s*point|chatrium|sindhorn|salil|asai|the\s*quarter|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|doubletree|waldorf\s*astoria|conrad|curio|canopy|tapestry|mgallery|swissotel|adagio|oakwood|pan\s*pacific|parkroyal|fraser|mandarin\s*oriental|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|m[oö]venpick|le\s*m[eé]ridien|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|love\s*hotel|machiya|hanok|riad|agriturismo|campground|rv\s*park|\d\s*[-–—]?\s*stars?\s*hotel)\b|호텔|리조트|게스트하우스|펜션|모텔|민박|호스텔|한옥|โรงแรม|ที่พัก|รีสอร์ท|โฮสเทล|เกสต์เฮาส์|วิลล่า|บังกะโล|ม่านรูด|ホテル|旅館|民宿|宿|ペンション|ゲストハウス|カプセルホテル|湯宿|坊|酒店|旅馆|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|星级酒店|精品酒店|宾馆|别馆|营地|庄园|驿站|招待所|万豪|希尔顿|凯悦|洲际|喜来登|香格里拉|四季酒店|丽思卡尔顿|瑞吉|文华东方|半岛酒店|悦榕庄|安纳塔拉|亚朵|全季|汉庭|如家|锦江之星|桔子酒店|khách\s*sạn|hôtel|albergue|posada|parador|pousada|albergo/i.test(lower)
   ) {
     return 'stay';
   }
 
-  // 4. Shopping, Malls, Supermarkets, Markets, Boutiques
+  // 2. Transit & Transportation (Airports, Train Stations, Metro, Piers, Ferries)
+  // Evaluated before food/shopping so stations with restaurants/shops are classified as transit
   if (
-    /\b(?:store|mall|shopping\s*mall|shopping\s*center|shopping\s*centre|market|supermarket|bazaar|outlet|outlet\s*mall|plaza|boutique|grocer|grocery|vintage|thrift|department\s*store|gift\s*shop|souvenir|bookstore|book\s*shop|pharmacy|drugstore|convenience\s*store|duty\s*free|flea\s*market|night\s*market|weekend\s*market|emporium|galleria|arcade|retail|don\s*quijote|donki|matsumoto\s*kiyoshi|bic\s*camera|yodobashi|daiso|muji|uniqlo)\b|ตลาด|ห้าง|ซูเปอร์มาร์เก็ต|ตลาดนัด|ตลาดกลางคืน|ร้านค้า|ร้านขายยา|モール|ショッピング|百貨店|デパート|スーパー|市場|商店街|ドラッグストア|薬局|本屋|書店|免税店|ドン・キホーテ|マツモトキヨシ|アウトレット|ビッグカメラ|ヨドバシ|ダイソー|無印良品|ユニクロ|商场|购物中心|超市|购物|市场|百货|商店|奥特莱斯|免税店|便利店|书店|药妆|药妆店|药局|夜市|集市|市集|杂货|杂货店|商业街|专卖店|步行街|批发市场|堂吉诃德|唐吉诃德|松本清|大国药妆|无印良品|优衣库|文具店|杂物社|chợ|siêu\s*thị|tienda|mercado|centro\s*comercial|grand\s*magasin/i.test(lower)
-  ) {
-    return 'shopping';
-  }
-
-  // 5. Transit & Transportation
-  if (
-    /\b(?:station|subway|metro|train|railway|bus|bus\s*stop|bus\s*terminal|airport|terminal|ferry|transit|pier|port|tram|heliport|harbor|harbour|dock|cable\s*car|ropeway|funicular|monorail|interchange|jetty|depot)\b|สถานี|ท่าเรือ|สนามบิน|รถไฟฟ้า|สถานีรถไฟ|ป้ายรถเมล์|ขนส่ง|駅|地下鉄|空港|港|バスターミナル|乗り場|フェリー|ロープウェイ|ケーブルカー|车站|地铁|地铁站|机场|码头|火车站|公交|公交站|客运|缆车|中转|口岸|轮渡|渡轮|航站楼|站台|渡口|高铁站|轻轨|客运站|乘车点|bến\s*xe|nhà\s*ga|sân\s*bay|bến\s*tàu|gare|estación|aeroporto|stazione|flughafen/i.test(lower)
+    /\b(?:station|subway|metro|train|railway|bus|bus\s*stop|bus\s*terminal|airport|terminal|ferry|transit|pier|port|tram|heliport|harbor|harbour|dock|cable\s*car|ropeway|funicular|monorail|interchange|jetty|depot|transit_station|train_station|subway_station|bus_station)\b|공항|기차역|지하철역|정류장|터미널|선착장|สถานี|ท่าเรือ|สนามบิน|รถไฟฟ้า|สถานีรถไฟ|ป้ายรถเมล์|ขนส่ง|駅|地下鉄|空港|港|バスターミナル|乗り場|フェリー|ロープウェイ|ケーブルカー|车站|地铁|地铁站|机场|码头|火车站|公交|公交站|客运|缆车|中转|口岸|轮渡|渡轮|航站楼|站台|渡口|高铁站|轻轨|客运站|乘车点|bến\s*xe|nhà\s*ga|sân\s*bay|bến\s*tàu|gare|estación|aeroporto|stazione|flughafen/i.test(lower)
   ) {
     return 'transit';
   }
 
-  // 6. Experience, Wellness, Sports, Activities
+  // 3. Shopping, Malls, Supermarkets, Markets, Boutiques
+  // Evaluated before generic food so shopping malls/night markets with dining are classified as shopping
   if (
-    /\b(?:spa|massage|onsen|sauna|wellness|foot\s*massage|thai\s*massage|diving|scuba|snorkeling|ski|skiing|snowboard|surfing|climbing|bouldering|hiking|trekking|rafting|karting|go-kart|safari|workshop|class|cooking\s*class|pottery|tour|boat\s*tour|cruise|dinner\s*cruise|kayak|kayaking|canoeing|paragliding|zipline|skydive|skydiving|bungee|bowling|golf|gym|fitness|yoga|camp|camping|experience|activity|hot\s*spring|bathhouse|sento|jimjilbang|amusement\s*park|theme\s*park|water\s*park|escape\s*room|board\s*game|shooting\s*range|archery|horse\s*riding|atv|quad\s*bike|disney|disneyland|disneysea|universal\s*studios|usj|warner\s*bros|legoland|fuji-q|lotte\s*world|everland)\b|สปา|นวด|นวดแผนไทย|ออนเซ็น|ดำน้ำ|กิจกรรม|สวนสนุก|สวนน้ำ|温泉|銭湯|露天風呂|スパ|マッサージ|サウナ|体験|スキー|ダイビング|ツアー|遊園地|アクティビティ|教室|体验|活动|按摩|水疗|温泉|足浴|足疗|泰式按摩|盲人按摩|日归温泉|钱汤|汗蒸|潜水|冲浪|滑雪|徒步|漂流|游乐园|主题公园|水上乐园|工坊|课程|手作|烹饪课|陶艺|卡丁车|密室|密室逃脱|剧本杀|游船|跳伞|滑翔伞|热气球|射击|骑马|越野|丛林飞跃|蹦极|高尔夫|健身|瑜伽|采摘|研学|迪士尼|环球影城|乐高乐园|富士急|bains\s*thermaux|balneario/i.test(lower)
+    /\b(?:store|mall|shopping\s*mall|shopping\s*center|shopping\s*centre|market|supermarket|bazaar|outlet|outlet\s*mall|plaza|boutique|grocer|grocery|vintage|thrift|department\s*store|gift\s*shop|souvenir|bookstore|book\s*shop|pharmacy|drugstore|convenience\s*store|duty\s*free|flea\s*market|night\s*market|weekend\s*market|emporium|galleria|arcade|retail|don\s*quijote|donki|matsumoto\s*kiyoshi|bic\s*camera|yodobashi|daiso|muji|uniqlo|shopping_mall|department_store|supermarket|grocery_or_supermarket|convenience_store)\b|마트|백화점|쇼핑몰|시장|야시장|올리브영|면세점|편의점|아울렛|ตลาด|ห้าง|ซูเปอร์มาร์เก็ต|ตลาดนัด|ตลาดกลางคืน|ร้านค้า|ร้านขายยา|モール|ショッピング|百貨店|デパート|スーパー|市場|商店街|ドラッグストア|薬局|本屋|書店|免税店|ドン・キホーテ|マツモトキヨシ|アウトレット|ビッグカメラ|ヨドバシ|ダイソー|無印良品|ユニクロ|商场|购物中心|超市|购物|市场|百货|商店|奥特莱斯|免税店|便利店|书店|药妆|药妆店|药局|夜市|集市|市集|杂货|杂货店|商业街|专卖店|步行街|批发市场|堂吉诃德|唐吉诃德|松本清|大国药妆|无印良品|优衣库|文具店|杂物社|chợ|siêu\s*thị|tienda|mercado|centro\s*comercial|grand\s*magasin/i.test(lower)
+  ) {
+    return 'shopping';
+  }
+
+  // 4. Experience, Wellness, Sports, Activities (Spas, Massages, Onsen, Theme Parks, Cooking Classes, Cruises)
+  if (
+    /\b(?:spa|massage|onsen|sauna|wellness|foot\s*massage|thai\s*massage|diving|scuba|snorkeling|ski|skiing|snowboard|surfing|climbing|bouldering|hiking|trekking|rafting|karting|go-kart|safari|workshop|class|cooking\s*class|pottery|tour|boat\s*tour|cruise|dinner\s*cruise|kayak|kayaking|canoeing|paragliding|zipline|skydive|skydiving|bungee|bowling|golf|gym|fitness|yoga|camp|camping|experience|activity|hot\s*spring|bathhouse|sento|jimjilbang|amusement\s*park|theme\s*park|water\s*park|escape\s*room|board\s*game|shooting\s*range|archery|horse\s*riding|atv|quad\s*bike|disney|disneyland|disneysea|universal\s*studios|usj|warner\s*bros|legoland|fuji-q|lotte\s*world|everland)\b|스파|마사지|찜질방|온천|테마파크|스키장|원데이클래스|체험|액티비티|스쿠버|다이빙|스ปา|นวด|นวดแผนไทย|ออนเซ็น|ดำน้ำ|กิจกรรม|สวนสนุก|สวนน้ำ|温泉|銭湯|露天風呂|スパ|マッサージ|サウナ|体験|スキー|ダイビング|ツアー|遊園地|アクティビティ|教室|体验|活动|按摩|水疗|温泉|足浴|足疗|泰式按摩|盲人按摩|日归温泉|钱汤|汗蒸|潜水|冲浪|滑雪|徒步|漂流|游乐园|主题公园|水上乐园|工坊|课程|手作|烹饪课|陶艺|卡丁车|密室|密室逃脱|剧本杀|游船|跳伞|滑翔伞|热气球|射击|骑马|越野|丛林飞跃|蹦极|高尔夫|健身|瑜伽|采摘|研学|迪士尼|环球影城|乐高乐园|富士急|bains\s*thermaux|balneario/i.test(lower)
   ) {
     return 'experience';
   }
 
+  // 5. Cafes, Bakeries, Coffee, Dessert, Tea (Checked before general dining so coffee shops don't get swallowed into generic food)
+  if (
+    /\b(?:cafe|café|coffee|roastery|espresso|boba|bubble\s*tea|milk\s*tea|matcha|patisserie|pâtisserie|chocolatier|gelateria|gelato|waffle|pancake|crepe|crêpe|creperie|crêperie|tea\s*house|tea\s*room|tea\s*salon|salon\s*de\s*thé|dessert|bakery|boulangerie|ice\s*cream|pastry|donut|doughnut|bagel|juice\s*bar|smoothie|acai|arabica|starbucks|blue\s*bottle|doutor|komeda|tully'?s|luckin|cotti|manner|seesaw|heytea|nayuki|chagee|gong\s*cha|koi\s*th[eé]|mixue|châteraisé|chateraise|ladur[eé]e|pierre\s*herm[eé]|harbs|after\s*you)\b|카페|커피|디저트|베이커리|찻집|빙수|제과점|คาเฟ่|กาแฟ|ชา|ขนม|เบเกอรี่|ไอศกรีม|ร้านกาแฟ|ชานม|ร้านเค้ก|カフェ|喫茶|喫茶店|コーヒー|珈琲|スイーツ|ベーカリー|ケーキ|洋菓子|和菓子|甘味処|茶屋|パン屋|咖啡|甜品|奶茶|面包|烘焙|茶室|茶馆|茶饮|冰淇淋|冰品|蛋糕|糕点|点心局|下午茶|糖水|糖水铺|饮品|咖啡馆|咖啡厅|手冲|烘焙坊|甜品店|星巴克|瑞幸|库迪|霸王茶姬|喜茶|奈雪|一点点|蜜雪冰城|茶颜悦色|古茗|茶百道|tiệm\s*cà\s*phê|quán\s*trà/i.test(lower)
+  ) {
+    return 'cafe';
+  }
+
+  // 6. Food, Dining, Restaurants, Bars, Street Food, Cuisines
+  if (
+    /\b(?:restaurant|cuisine|dining|food|kitchen|eatery|diner|ramen|sushi|izakaya|bar|pub|bistro|steak|steakhouse|grill|bbq|barbecue|noodle|noodles|buffet|tavern|pizzeria|pizza|burger|burgers|tacos|taqueria|taquería|trattoria|osteria|brasserie|cucina|seafood|hotpot|hot\s*pot|brunch|curry|tabelog|gastropub|brewery|microbrewery|yakitori|tempura|tonkatsu|shabu|shabu-shabu|udon|soba|dim\s*sum|dumpling|dumplings|tapas|bento|skewer|skewers|poke|ceviche|rotisserie|warung|kopitiam|hawker|canteen|chophouse|fondue|cantina|churrascaria|shawarma|kebab|falafel|pho|banh\s*mi|pad\s*thai|som\s*tum|tom\s*yum|sukiyaki|yakiniku|kaiseki|kappo|omakase|teppanyaki|robatayaki|chirashi|gyoza|bao|donburi|yakisoba|unagi|kushikatsu|bodega)\b|wine\s*bar|cocktail|cantonese|sichuan|thai\s*food|street\s*food|night\s*market\s*food|fine\s*dining|casual\s*dining|ethnic\s*cuisine|local\s*cuisine|regional\s*cuisine|식당|맛집|고기집|삼겹살|갈비|치킨|포차|주점|분식|찌개|국밥|냉면|떡볶이|짜장면|곱창|해물|불고기|비빔밥|순두부|ร้านอาหาร|อาหาร|ก๋วยเตี๋ยว|ข้าวมันไก่|ส้มตำ|บาร์|ข้าวซอย|ต้มยำ|ผัดไทย|หมูกระทะ|ชาบู|ปิ้งย่าง|อาหารไทย|ซีฟู้ด|ร้านเหล้า|ラーメン|焼肉|寿司|うどん|そば|天ぷら|割烹|食堂|定食|居酒屋|焼き鳥|焼鸟|鍋|懐石|会席|おでん|立ち飲み|中華|洋食|和食|海鮮|とんかつ|串カツ|すき焼き|しゃぶしゃぶ|鉄板焼|うなぎ|蕎麦|餐厅|餐馆|料理|美食|小吃|拉面|米线|面馆|火锅|烧烤|烤肉|酒吧|居酒屋|酒场|快餐|大排档|早茶|熟食|排档|海鲜|日料|韩料|泰餐|西餐|粤菜|川菜|湘菜|鲁菜|淮扬菜|浙菜|闽菜|徽菜|家常菜|烤鸭|刺身|烧鸟|铁板烧|串烧|居食屋|私房菜|茶餐厅|酒馆|宵夜|夜市美食|烧腊|汤包|生煎|抄手|串串|冒菜|烤鱼|肉骨茶|砂锅|大排挡|馄饨|饺子|卤味|烧鹅|鳗鱼饭|quán\s*ăn|nhà\s*hàng|quán\s*nhậu|restaurante|ristorante/i.test(lower)
+  ) {
+    return 'food';
+  }
+
   // 7. Attractions, Sightseeing, Heritage, Culture, Nature
   if (
-    /\b(?:museum|temple|shrine|church|cathedral|mosque|synagogue|pagoda|monastery|wat|park|national\s*park|attraction|tourist\s*attraction|monument|landmark|castle|palace|imperial\s*palace|royal\s*palace|garden|botanical\s*garden|tower|tourist|historic|historical|heritage|unesco|ruins|gallery|art\s*gallery|beach|viewpoint|lookout|observatory|observation\s*deck|skydeck|waterfall|island|lake|mountain|peak|canyon|gorge|cave|plaza|square|scenic|statue|bridge|zoo|safari\s*park|aquarium|botanical|sanctuary|nature\s*reserve|historic\s*site|old\s*town|ancient\s*town)\b|วัด|พิพิธภัณฑ์|พระราชวัง|สวน|สวนสาธารณะ|อุทยานแห่งชาติ|หาด|ภูเขา|น้ำตก|จุดชมวิว|ปราสาท|โบราณสถาน|寺院|神社|城|庭園|公園|展望台|滝|島|湖|山|渓谷|水族館|動物園|美術館|博物館|名所|史跡|旧跡|鳥居|天守|景点|景区|寺|寺庙|庙|禅寺|神社|鸟居|教堂|大教堂|博物馆|纪念馆|展览馆|公园|国立公园|国家公园|观光|古迹|遗址|城堡|城址|天守阁|皇宫|宫殿|行宫|塔|电视塔|钟楼|鼓楼|美术馆|艺术馆|沙滩|海滩|海湾|观景台|展望台|天空之镜|瀑布|岛|海岛|湖|湖泊|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地|故居|陵园|古镇|老街|古城|名胜|chùa|đền|bảo\s*tàng|công\s*viên|bãi\s*biển|thác\s*nước|château|musée|cathédrale|plage|mirador|palazzo|duomo|monument/i.test(lower)
+    /\b(?:museum|temple|shrine|church|cathedral|mosque|synagogue|pagoda|monastery|wat|park|national\s*park|attraction|tourist\s*attraction|monument|landmark|castle|palace|imperial\s*palace|royal\s*palace|garden|botanical\s*garden|tower|tourist|historic|historical|heritage|unesco|ruins|gallery|art\s*gallery|beach|viewpoint|lookout|observatory|observation\s*deck|skydeck|waterfall|island|lake|mountain|peak|canyon|gorge|cave|plaza|square|scenic|statue|bridge|zoo|safari\s*park|aquarium|botanical|sanctuary|nature\s*reserve|historic\s*site|old\s*town|ancient\s*town)\b|박물관|미술관|궁전|경복궁|창덕궁|타워|전망대|해변|해수욕장|사찰|유적지|วัด|พิพิธภัณฑ์|พระราชวัง|สวน|สวนสาธารณะ|อุทยานแห่งชาติ|หาด|ภูเขา|น้ำตก|จุดชมวิว|ปราสาท|โบราณสถาน|寺院|神社|城|庭園|公園|展望台|滝|島|湖|山|渓谷|水族館|動物園|美術館|博物館|名所|史跡|旧跡|鳥居|天守|景点|景区|寺|寺庙|庙|禅寺|神社|鸟居|教堂|大教堂|博物馆|纪念馆|展览馆|公园|国立公园|国家公园|观光|古迹|遗址|城堡|城址|天守阁|皇宫|宫殿|行宫|塔|电视塔|钟楼|鼓楼|美术馆|艺术馆|沙滩|海滩|海湾|观景台|展望台|天空之镜|瀑布|岛|海岛|湖|湖泊|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地|故居|陵园|古镇|老街|古城|名胜|chùa|đền|bảo\s*tàng|công\s*viên|bãi\s*biển|thác\s*nước|château|musée|cathédrale|plage|mirador|palazzo|duomo|monument/i.test(lower)
   ) {
     return 'attraction';
   }

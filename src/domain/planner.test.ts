@@ -368,6 +368,10 @@ describe('Ownly Planner domain', () => {
 
     // 3. Stays & Lodgings (酒店 / 住宿 / 民宿 / 度假村)
     expect(inferPlaceKind('Luxury Hotel & Resort')).toBe('stay');
+    expect(inferPlaceKind('Oakwood Studios Sukhumvit Bangkok')).toBe('stay');
+    expect(inferPlaceKind('โรงแรมโอ๊ควูด สตูดิโอ สุขุมวิท แบงค็อก')).toBe('stay');
+    expect(inferPlaceKind('Oakwood Studios Sukhumvit Bangkok 4.4 (996)·5-star hotel lodging restaurant point_of_interest')).toBe('stay');
+    expect(inferPlaceKind('5-star hotel')).toBe('stay');
     expect(inferPlaceKind('The quarter Chao Phraya by IHG')).toBe('stay');
     expect(inferPlaceKind('The Quarter Silom by UHG')).toBe('stay');
     expect(inferPlaceKind('Kimpton Maa-Lai Bangkok, an IHG Hotel')).toBe('stay');
@@ -411,6 +415,7 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('Chao Phraya Princess Dinner Cruise')).toBe('experience');
     expect(inferPlaceKind('大江户温泉物语 (Oedo Onsen)')).toBe('experience');
     expect(inferPlaceKind('นวดแผนไทย')).toBe('experience');
+    expect(inferPlaceKind('용산 드래곤힐스파 찜질방')).toBe('experience');
 
     // 7. Attractions & Sightseeing (观光景点 / 寺庙 / 博物馆 / 自然地标)
     expect(inferPlaceKind('Historical Temple & Museum')).toBe('attraction');
@@ -422,6 +427,9 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('Eiffel Tower')).toBe('attraction');
     expect(inferPlaceKind('故宫博物院 (The Palace Museum)')).toBe('attraction');
     expect(inferPlaceKind('พระบรมมหาราชวัง')).toBe('attraction');
+    expect(inferPlaceKind('경복궁 (Gyeongbokgung Palace)')).toBe('attraction');
+    expect(inferPlaceKind('N서울타워 전망대')).toBe('attraction');
+    expect(inferPlaceKind('Cathédrale Notre-Dame de Paris')).toBe('attraction');
     expect(inferPlaceKind(undefined)).toBe('attraction');
   });
 
