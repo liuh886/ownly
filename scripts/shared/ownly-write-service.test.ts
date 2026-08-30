@@ -138,6 +138,65 @@ describe('OwnlyWriteService', () => {
     });
   });
 
+  it('keeps manual reorder scoped to the selected Visit trip', async () => {
+    const { dataRoot } = fixture();
+    const { trip, from, toVisit } = seedPlannerPair(dataRoot);
+    const otherTrip: PlannerTrip = { ...trip, id: 'trip-2', title: 'Osaka' };
+    const otherPlace: PlannerTripPlace = { ...from, id: 'other', trip_id: otherTrip.id, title: 'Other' };
+    const otherVisit: PlannerTripVisit = {
+      schema_version: '0.1', type: 'trip_visit', id: 'visit:other', trip_id: otherTrip.id, place_id: otherPlace.id,
+      date: '2026-10-05', sort_order: 0, locked: false, is_anchor: false, created_at: NOW.toISOString(),
+    };
+    writeFileSync(join(dataRoot, 'Trips', 'trip--trip-2.md'), serializeMarkdownEntity(otherTrip, ''), 'utf8');
+    writeFileSync(join(dataRoot, 'Trip Places', 'place--other.md'), serializeMarkdownEntity(otherPlace, ''), 'utf8');
+    writeFileSync(join(dataRoot, 'Trip Visits', 'visit--other.md'), serializeMarkdownEntity(otherVisit, ''), 'utf8');
+
+    const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
+    const prepared = service.prepareReorderDay('2026-10-05', toVisit.id, -1);
+    await service.commit(prepared.operation_id);
+    const storedOther = parseMarkdownEntity<PlannerTripVisit>(
+      readFileSync(join(dataRoot, 'Trip Visits', 'visit--other.md'), 'utf8'),
+    ).frontmatter;
+    expect(storedOther.sort_order).toBe(0);
+  });
+
+  it('replaces stay spans, preserves unchanged Visit ids, and becomes a no-churn repeat', async () => {
+    const { dataRoot } = fixture();
+    const { from } = seedPlannerPair(dataRoot);
+    const hotel: PlannerTripPlace = { ...from, id: 'hotel', kind: 'stay', title: 'Hotel' };
+    writeFileSync(join(dataRoot, 'Trip Places', 'place--hotel.md'), serializeMarkdownEntity(hotel, ''), 'utf8');
+    const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
+
+    await service.commit(service.prepareSetStaySpan('hotel', ['2026-10-05', '2026-10-06', '2026-10-07']).operation_id);
+    const first = readdirSync(join(dataRoot, 'Trip Visits'))
+      .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
+      .filter((visit) => visit.place_id === 'hotel');
+    const firstByDate = new Map(first.map((visit) => [visit.date, visit.id] as const));
+
+    await service.commit(service.prepareSetStaySpan('hotel', ['2026-10-06', '2026-10-07', '2026-10-08']).operation_id);
+    const shifted = readdirSync(join(dataRoot, 'Trip Visits'))
+      .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
+      .filter((visit) => visit.place_id === 'hotel')
+      .sort((left, right) => left.date.localeCompare(right.date));
+    expect(shifted.map((visit) => visit.date)).toEqual(['2026-10-06', '2026-10-07', '2026-10-08']);
+    expect(shifted[0].id).toBe(firstByDate.get('2026-10-06'));
+    expect(shifted[1].id).toBe(firstByDate.get('2026-10-07'));
+
+    const repeat = service.prepareSetStaySpan('hotel', ['2026-10-06', '2026-10-07', '2026-10-08']);
+    expect(repeat.preview).toMatchObject({ creates: [], retires_visit_ids: [] });
+    await service.commit(repeat.operation_id);
+    expect(readdirSync(join(dataRoot, 'Trip Visits'))
+      .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
+      .filter((visit) => visit.place_id === 'hotel')).toHaveLength(3);
+  });
+
+  it('refuses to drop a Planner Place while a Visit references it', () => {
+    const { dataRoot } = fixture();
+    const { from } = seedPlannerPair(dataRoot);
+    const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
+    expect(() => service.prepareDropPlannerPlace(from.id)).toThrow(/remove 1 scheduled visit/i);
+  });
+
   it('commits an optimized Visit order and its final adjacent canonical legs in one confirmed operation', async () => {
     const { dataRoot } = fixture();
     const { trip, from, to, fromVisit, toVisit } = seedPlannerPair(dataRoot);

@@ -623,8 +623,13 @@ export class OwnlyWriteService {
   }
 
   prepareReorderDay(date: string, visitId: string, delta: -1 | 1): PreparedOwnlyOperation {
+    const selectedEntry = this.plannerVisitEntry(visitId);
+    const selectedVisit = selectedEntry.frontmatter as PlannerTripVisit;
+    if (selectedVisit.date !== date) {
+      throw new OwnlyMutationError('Reorder date does not match the selected visit.', 'INVALID_INPUT');
+    }
     const entries = listPlannerVisits(this.dataLocation)
-      .filter((entry) => entry.frontmatter.date === date)
+      .filter((entry) => entry.frontmatter.trip_id === selectedVisit.trip_id && entry.frontmatter.date === date)
       .sort((left, right) => left.frontmatter.sort_order - right.frontmatter.sort_order);
     const index = entries.findIndex((entry) => entry.frontmatter.id === visitId);
     const target = index + delta;
@@ -642,6 +647,7 @@ export class OwnlyWriteService {
       }))
       .filter(({ entry, next }) => entry.frontmatter.sort_order !== next.sort_order);
     return this.prepare('planner_reorder_day', {
+      trip_id: selectedVisit.trip_id,
       date,
       changes: targets.map(({ next }) => ({ visit_id: next.id, place_id: next.place_id, sort_order: next.sort_order })),
     }, () => {
@@ -736,20 +742,49 @@ export class OwnlyWriteService {
       throw new OwnlyMutationError(`Hotel place was not found: ${hotelPlaceId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
     }
     const hotel = hotelEntry.frontmatter;
-    const dateSet = new Set(dates);
+    const targetDates = [...new Set(dates)].sort();
+    if (targetDates.length === 0) throw new OwnlyMutationError('Stay span requires at least one date.', 'INVALID_INPUT');
+    const dateSet = new Set(targetDates);
     const placeById = new Map(
       listPlannerPlaces(this.dataLocation)
         .filter((entry) => entry.frontmatter.trip_id === hotel.trip_id)
         .map((entry) => [entry.frontmatter.id, entry.frontmatter] as const),
     );
     const visitEntries = listPlannerVisits(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === hotel.trip_id);
-    const stale = visitEntries.filter((entry) => dateSet.has(entry.frontmatter.date) && placeById.get(entry.frontmatter.place_id)?.kind === 'stay');
+    const targetHotelEntries = visitEntries
+      .filter((entry) => entry.frontmatter.place_id === hotel.id)
+      .sort((left, right) => left.frontmatter.date.localeCompare(right.frontmatter.date)
+        || left.frontmatter.sort_order - right.frontmatter.sort_order
+        || left.frontmatter.id.localeCompare(right.frontmatter.id));
+    const keepByDate = new Map<string, (typeof targetHotelEntries)[number]>();
+    for (const entry of targetHotelEntries) {
+      const visit = entry.frontmatter as PlannerTripVisit;
+      if (
+        dateSet.has(visit.date)
+        && !keepByDate.has(visit.date)
+        && visit.locked
+        && visit.is_anchor
+        && visit.anchor_type === 'stay_checkin'
+      ) {
+        keepByDate.set(visit.date, entry);
+      }
+    }
+    const stale = visitEntries.filter((entry) => {
+      const visit = entry.frontmatter as PlannerTripVisit;
+      if (placeById.get(visit.place_id)?.kind !== 'stay') return false;
+      if (visit.place_id === hotel.id) {
+        return !dateSet.has(visit.date) || keepByDate.get(visit.date)?.frontmatter.id !== visit.id;
+      }
+      return dateSet.has(visit.date);
+    });
     const timestamp = this.now();
-    const created = dates.map((date) => createPlannerTripVisit(hotel, date, 0, {
-      locked: true,
-      is_anchor: true,
-      anchor_type: 'stay_checkin',
-    }, timestamp, randomUUID()));
+    const created = targetDates
+      .filter((date) => !keepByDate.has(date))
+      .map((date) => createPlannerTripVisit(hotel, date, 0, {
+        locked: true,
+        is_anchor: true,
+        anchor_type: 'stay_checkin',
+      }, timestamp, randomUUID()));
     const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.visits);
     const createTargets = created.map((visit) => {
       const fileName = plannerTripVisitFileName(visit.id);
@@ -762,17 +797,18 @@ export class OwnlyWriteService {
       'planner_set_stay_span',
       {
         hotel: hotel.title,
-        dates,
+        dates: targetDates,
         creates: created.map((visit) => ({ visit_id: visit.id, date: visit.date })),
+        keeps: [...keepByDate.values()].map((entry) => ({ visit_id: entry.frontmatter.id, date: entry.frontmatter.date })),
         retires_visit_ids: stale.map((entry) => entry.frontmatter.id),
       },
       () => {
         for (const target of staleTargets) assertUnchanged(target.entry.filePath, target.expected);
         for (const target of createTargets) assertUnchanged(target.filePath, target.expected);
         for (const target of staleTargets) unlinkSync(target.entry.filePath);
-        mkdirSync(directory, { recursive: true });
+        if (createTargets.length > 0) mkdirSync(directory, { recursive: true });
         for (const target of createTargets) writeFileSync(target.filePath, serializeMarkdownEntity(target.visit, ''), 'utf8');
-        return { hotel_id: hotelPlaceId, nights: dates.length, retired_visits: stale.length, created_visits: created.length };
+        return { hotel_id: hotelPlaceId, nights: targetDates.length, retired_visits: stale.length, created_visits: created.length };
       },
     );
   }
@@ -780,6 +816,15 @@ export class OwnlyWriteService {
   prepareDropPlannerPlace(placeId: string): PreparedOwnlyOperation {
     const entry = this.plannerPlaceEntry(placeId);
     const before = entry.frontmatter;
+    const blockingVisits = listPlannerVisits(this.dataLocation).filter(
+      (visit) => visit.frontmatter.trip_id === before.trip_id && visit.frontmatter.place_id === placeId,
+    );
+    if (blockingVisits.length > 0) {
+      throw new OwnlyMutationError(
+        `Cannot drop ${before.title}: remove ${blockingVisits.length} scheduled visit(s) first.`,
+        'INVALID_INPUT',
+      );
+    }
     const next = { ...before, state: 'dropped' as const };
     const expected = fingerprint(entry.filePath);
     return this.prepare('planner_drop_place', { before, after: next }, () => {
