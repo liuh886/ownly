@@ -706,7 +706,7 @@ export class OwnlyWriteService {
       for (const target of placeTargets) assertUnchanged(target.entry.filePath, target.expected);
       for (const target of legTargets) assertUnchanged(target.filePath, target.expected);
       for (const target of placeTargets) {
-        writeEntry(dirname(target.entry.filePath), target.entry.fileName, target.next, target.entry.body);
+        writeFileSync(target.entry.filePath, serializeMarkdownEntity(target.next, target.entry.body), 'utf8');
       }
       if (legTargets.length > 0) mkdirSync(legDirectory, { recursive: true });
       for (const target of legTargets) {
