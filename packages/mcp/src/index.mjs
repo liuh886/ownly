@@ -25,7 +25,7 @@ import {
 } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
-const SERVER_VERSION = '0.5.0';
+const SERVER_VERSION = '0.6.0';
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -272,7 +272,7 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     'ownly_planner_get_trip',
     {
       title: 'Planner Trip Detail',
-      description: 'Full trip context: trip, budget estimate in base currency with FX, day conflicts (opening hours), places, bookings and expenses.',
+      description: 'Full trip context: trip, FX-aware budget, conflicts, canonical travel legs, derived execution timelines, places, bookings and expenses.',
       inputSchema: z.object({ trip_id: z.string().min(1) }),
       annotations: READ_ONLY_ANNOTATIONS,
     },

@@ -16,7 +16,7 @@ import {
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
-import { evaluatePlannerDayFeasibility, findPlannerTimeOverlaps } from '../../src/domain/planner-schedule';
+import { buildPlannerDayExecutionTimeline, findPlannerTimeOverlaps } from '../../src/domain/planner-schedule';
 import { exportTripToICalProMarkdown, type ICalProExportOptions } from '../../src/domain/ical-pro';
 
 function requireTrip(dataLocation: string, tripId: string) {
@@ -88,8 +88,8 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
     })
     .filter((day) => day.has_collision);
 
-  const feasibility = listTripDates(trip.start_date, trip.end_date)
-    .map((date) => evaluatePlannerDayFeasibility(trip, places, legs, date));
+  const executionTimeline = listTripDates(trip.start_date, trip.end_date)
+    .map((date) => buildPlannerDayExecutionTimeline(trip, places, legs, date));
 
   return {
     trip,
@@ -103,7 +103,7 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
     },
     conflicts,
     travel_legs: legs,
-    feasibility,
+    execution_timeline: executionTimeline,
     places: places.map((place) => ({
       id: place.id,
       title: place.title,

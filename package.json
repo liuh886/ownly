@@ -29,7 +29,7 @@
     "test:e2e": "npm run smoke:web && npm run smoke:site",
     "test:e2e:data": "vitest run src/services/MarkdownEntityRepository.contract.test.ts",
     "test:cli": "vitest run scripts/cli/wyqd-cli.process.test.ts",
-    "test:mcp": "vitest run src/domain/planner-route-time.test.ts scripts/mcp/ownly-tools.test.ts scripts/mcp/openrouteservice.test.ts scripts/shared/ownly-write-service.test.ts",
+    "test:mcp": "vitest run src/domain/planner-schedule.test.ts src/domain/planner-route-time.test.ts scripts/mcp/ownly-tools.test.ts scripts/mcp/openrouteservice.test.ts scripts/shared/ownly-write-service.test.ts",
     "test:onboarding": "vitest run src/core/first-object-onboarding.test.ts",
     "test:portability": "vitest run src/core/data-portability.test.ts scripts/cli/portability.process.test.ts",
     "test:runtime-parity": "vitest run src/core/runtime-parity.test.ts",
