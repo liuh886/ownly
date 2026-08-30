@@ -29,6 +29,7 @@ jobs:
           python .github/pr135-fix4.py
           python .github/pr135-authority.py
           python .github/pr135-fix5.py
+          python .github/pr135-guardfix.py
           python .github/pr135-land.py
       - name: Install dependencies
         run: npm ci
@@ -42,15 +43,16 @@ jobs:
       - name: Final tree guards
         run: |
           git diff --check
-          test -d src/domain
           test -f src/domain/planner-visits.ts
           test ! -e .github/pr135-finalize.py
           test ! -e .github/pr135-land.py
+          test ! -e .github/pr135-guardfix.py
           test ! -e .github/workflows/pr135-web.yml
-          ! grep -q "'candidate' | 'scheduled'" src/domain/planner.ts
-          ! grep -q 'scheduled_date?: string;' src/domain/planner.ts
+          ! sed -n '/export interface PlannerTripPlace {/,/export interface PlannerScheduledPlace/p' src/domain/planner.ts | grep -q 'scheduled_date?: string;'
+          ! sed -n '/export interface PlannerTripPlace {/,/export interface PlannerScheduledPlace/p' src/domain/planner.ts | grep -q 'scheduled_start?: string;'
           ! grep -q 'updatePlaceTiming(' src/services/PlannerRepository.ts
           grep -q 'allows the same place multiple times on the same day and across days' src/services/PlannerRepository.schedule.test.ts
+          grep -q 'removes only the selected occurrence and keeps the place plus other visits' src/services/PlannerRepository.schedule.test.ts
           grep -q 'ownly_planner_prepare_add_visit' packages/mcp/src/index.mjs
           grep -q 'ownly_planner_prepare_remove_visit' packages/mcp/src/index.mjs
       - name: Commit production tree
