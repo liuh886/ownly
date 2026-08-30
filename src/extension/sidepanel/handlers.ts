@@ -39,12 +39,7 @@ export async function saveState(): Promise<void> {
     store.locallyDeletedIds.clear();
   } catch (error) {
     console.warn('[Ownly Capture] Failed to persist capture state', error);
-    setStatus(
-      store.lang === 'zh'
-        ? '⚠️ 状态保存失败：后台写入未完成，请重试。'
-        : '⚠️ Failed to save state through the background worker. Retry.',
-      'error',
-    );
+    setStatus(t().saveStateFailed, 'error');
   }
   renderState();
   renderCurrentPlace();
@@ -480,7 +475,7 @@ export function initHandlers(): void {
       if (store.currentPlace) store.currentPlace = { ...store.currentPlace, detectedCurrency: detected };
       renderCurrencyPill();
       renderCurrentPlace();
-      setStatus(store.lang === 'zh' ? `已重新检测页面货币：${detected}` : `Page currency re-detected: ${detected}`, 'success');
+      setStatus(t().reDetectedCurrency(detected), 'success');
     })().catch((error) => setStatus(String(error), 'error'));
   });
 

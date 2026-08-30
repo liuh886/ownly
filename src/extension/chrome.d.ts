@@ -84,4 +84,9 @@ declare namespace chrome {
       addListener(callback: (command: string) => void): void;
     };
   }
+
+  namespace i18n {
+    function getUILanguage(): string;
+    function getMessage(messageName: string, substitutions?: unknown): string;
+  }
 }

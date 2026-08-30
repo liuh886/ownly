@@ -1,7 +1,25 @@
 import { convertPriceRange, DEFAULT_USD_PIVOT } from '../domain/planner';
 import { detectPageCurrency } from './currency-detector';
 
-let targetCurrency = 'CNY';
+function detectDefaultTargetCurrency(): string {
+  try {
+    const raw = (chrome.i18n?.getUILanguage?.() || (typeof navigator !== 'undefined' ? navigator.language : 'en')).toLowerCase();
+    return raw.startsWith('zh') ? 'CNY' : 'USD';
+  } catch {
+    return 'USD';
+  }
+}
+
+function isChineseUi(): boolean {
+  try {
+    const raw = (chrome.i18n?.getUILanguage?.() || (typeof navigator !== 'undefined' ? navigator.language : 'en')).toLowerCase();
+    return raw.startsWith('zh');
+  } catch {
+    return false;
+  }
+}
+
+let targetCurrency = detectDefaultTargetCurrency();
 let pivotRates: Record<string, number> = DEFAULT_USD_PIVOT;
 let enabled = true;
 let overrideCurrency: string | undefined;
@@ -28,19 +46,23 @@ function ensureTooltip(): HTMLDivElement {
   `;
   document.head.appendChild(style);
 
+  const isZh = isChineseUi();
+  const headerText = isZh ? '💱 划词汇率' : '💱 Selection FX';
+  const closeLabel = isZh ? '关闭' : 'Close';
+
   node = document.createElement('div');
   node.id = 'ownly-fx-tooltip';
   node.innerHTML = `
     <div class="ownly-fx-card">
-      <div class="ownly-fx-header"><span>💱 划词汇率</span><button type="button" aria-label="关闭">✕</button></div>
+      <div class="ownly-fx-header"><span>${headerText}</span><button type="button" aria-label="${closeLabel}">✕</button></div>
       <div class="ownly-fx-value">--</div>
       <div class="ownly-fx-sub"><span class="ownly-fx-rate">--</span><span class="ownly-fx-badge">--</span></div>
     </div>`;
-  document.body.appendChild(node);
   node.querySelector('button')?.addEventListener('click', (event) => {
     event.stopPropagation();
     hideTooltip();
   });
+  document.body.appendChild(node);
   return node;
 }
 

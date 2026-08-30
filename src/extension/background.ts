@@ -5,7 +5,6 @@ import {
   inferPlaceKind,
   mergeCaptureState,
   type CaptureContext,
-  type OwnlyCaptureState,
   type PlannerTripPlace,
 } from '../domain/planner';
 import {

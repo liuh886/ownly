@@ -19,8 +19,17 @@ export interface SavedListSummary {
   url?: string;
 }
 
+function detectDefaultLanguage(): Lang {
+  try {
+    const raw = (chrome.i18n?.getUILanguage?.() || (typeof navigator !== 'undefined' ? navigator.language : 'en')).toLowerCase();
+    return raw.startsWith('zh') ? 'zh' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
 export const store = {
-  lang: 'zh' as Lang,
+  lang: detectDefaultLanguage(),
   state: { ...EMPTY_CAPTURE_STATE } as OwnlyCaptureState,
   currentPlace: null as CurrentResearchPlace | null,
   detectedSavedList: null as DetectedSavedList | null,
@@ -51,7 +60,11 @@ export async function loadState(): Promise<void> {
     chrome.tabs.query({ active: true, currentWindow: true }),
   ]);
   const langVal = langRes[LANG_STORAGE_KEY];
-  if (langVal === 'zh' || langVal === 'en') store.lang = langVal;
+  if (langVal === 'zh' || langVal === 'en') {
+    store.lang = langVal;
+  } else {
+    store.lang = detectDefaultLanguage();
+  }
   const tabId = tabs[0]?.id;
   if (typeof tabId === 'number') {
     const session = await sessionStorage.get(fxOverrideKey(tabId));

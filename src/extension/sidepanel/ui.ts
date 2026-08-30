@@ -59,6 +59,7 @@ export function setStatus(message: string, tone: 'muted' | 'success' | 'error' =
 
 export function applyI18n() {
   const dict = t();
+  document.documentElement.lang = store.lang;
   el.langToggle.textContent = store.lang === 'zh' ? 'EN' : '中文';
   el.lblFxTooltipToggle.title = dict.toggleFxTooltipDesc;
   el.txtFxTooltipToggle.textContent = dict.toggleFxTooltipLabel;
@@ -67,6 +68,8 @@ export function applyI18n() {
   setLeadingLabel(el.lblBulkText, dict.lblBulkText);
   el.bulkInputText.placeholder = dict.bulkPlaceholder;
   el.btnParseBulkImport.textContent = dict.btnParseBulkImport;
+  el.btnBackupState.textContent = dict.backupBtn;
+  el.btnRestoreState.textContent = dict.restoreBtn;
 
   el.btnToggleSelectAll.textContent = dict.btnSelectAll;
   el.btnBatchAdd.textContent = dict.btnBatchAdd;
@@ -80,8 +83,6 @@ export function applyI18n() {
     const val = opt.value as PlannerPlaceKind;
     if (dict.kinds[val]) opt.textContent = dict.kinds[val];
   }
-
-
 
   setLeadingLabel(el.lblArea, dict.areaLabel);
   el.area.placeholder = dict.areaPlaceholder;
@@ -110,6 +111,13 @@ export function applyI18n() {
 
   el.sumCandidatesDrawer.textContent = dict.drawerTitle;
   el.candidatesSearch.placeholder = dict.searchPlaceholder;
+
+  el.btnSelectAllCandidates.textContent = dict.btnSelectAllCandidates;
+  el.btnBulkDelete.textContent = dict.btnBulkDeleteCandidates;
+  el.btnBulkExit.textContent = dict.btnBulkExitInline;
+  if (el.bulkPrioritySelect.options[0]) {
+    el.bulkPrioritySelect.options[0].textContent = dict.bulkPriorityPlaceholder;
+  }
 
   renderCurrencyPill();
   renderChips();
@@ -556,7 +564,7 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   if (place.priceLevel && isPlausiblePriceText(place.priceLevel)) {
     el.price.value = place.priceLevel;
   } else if (place.detectedCurrency) {
-    el.price.placeholder = `${place.detectedCurrency} 价格预算`;
+    el.price.placeholder = t().pricePlaceholderWithCurrency(place.detectedCurrency);
   }
   el.kind.value = freshDetectedKind;
   if (place.address && !el.area.value) {
@@ -570,7 +578,6 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   if (place.userNote && !el.notes.value) {
     el.notes.value = place.userNote;
   }
-  const activeTrip = store.state.activeContext;
   const baseTags = (store.state.activeContext?.tags || []).filter(Boolean);
   el.tags.value = ensurePlaceKindTag(baseTags, freshDetectedKind, store.lang).join(', ');
 }
@@ -689,7 +696,6 @@ function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace
 export function renderCandidatesList() {
   const dict = t();
   const dictKey = store.lang;
-  const activeTrip = store.state.activeContext;
 
   let candidates = store.state.pendingPlaces.filter(
     (p) => p.trip_id === store.state.activeContext?.tripId,
@@ -955,9 +961,9 @@ function buildCandidateDetails(
     parts.push(`<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`);
   }
   const safeMenuUrl = sanitizeSafeHref(place.menu_url);
-  if (safeMenuUrl) parts.push(`<a href="${escapeHtml(safeMenuUrl)}" target="_blank" rel="noreferrer" class="badge">🍽️ 菜单</a>`);
+  if (safeMenuUrl) parts.push(`<a href="${escapeHtml(safeMenuUrl)}" target="_blank" rel="noreferrer" class="badge">${escapeHtml(dict.menuBadge)}</a>`);
   const safeResUrl = sanitizeSafeHref(place.reservation_url);
-  if (safeResUrl) parts.push(`<a href="${escapeHtml(safeResUrl)}" target="_blank" rel="noreferrer" class="badge highlight">🎟️ 预订</a>`);
+  if (safeResUrl) parts.push(`<a href="${escapeHtml(safeResUrl)}" target="_blank" rel="noreferrer" class="badge highlight">${escapeHtml(dict.reserveBadge)}</a>`);
   if (place.review_topics && place.review_topics.length > 0) {
     parts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
   }
