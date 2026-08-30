@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { checkOpeningHoursCollision, type PlannerTripPlace } from '@/domain/planner';
+import { checkOpeningHoursCollision } from '@/domain/planner';
+import type { PlannerScheduledPlace } from '@/domain/planner-visits';
 import {
   findPlannerTimeOverlaps,
   getScheduledEndTime,
@@ -8,10 +9,10 @@ import {
 
 interface PlaceTimingModalProps {
   open: boolean;
-  place: PlannerTripPlace | null;
-  dayOtherPlaces?: PlannerTripPlace[];
+  place: PlannerScheduledPlace | null;
+  dayOtherPlaces?: PlannerScheduledPlace[];
   onClose: () => void;
-  onSave: (placeId: string, timing: { scheduled_start?: string; duration_minutes?: number }) => Promise<void>;
+  onSave: (visitId: string, timing: { scheduled_start?: string; duration_minutes?: number }) => Promise<void>;
   language?: 'zh' | 'en';
 }
 
@@ -81,9 +82,8 @@ export function PlaceTimingModal({
 
   const overlapWarning = useMemo(() => {
     if (!place?.scheduled_date || !startTime || !normalizedDuration) return null;
-    const prospective: PlannerTripPlace = {
+    const prospective: PlannerScheduledPlace = {
       ...place,
-      state: 'scheduled',
       scheduled_start: startTime,
       duration_minutes: normalizedDuration,
     };
@@ -102,7 +102,7 @@ export function PlaceTimingModal({
     setSaving(true);
     setSaveError('');
     try {
-      await onSave(place.id, {
+      await onSave(place.visit_id, {
         scheduled_start: startTime.trim() || undefined,
         duration_minutes: normalizedDuration,
       });
@@ -118,7 +118,7 @@ export function PlaceTimingModal({
     setSaving(true);
     setSaveError('');
     try {
-      await onSave(place.id, { scheduled_start: undefined, duration_minutes: undefined });
+      await onSave(place.visit_id, { scheduled_start: undefined, duration_minutes: undefined });
       onClose();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
@@ -179,14 +179,13 @@ export function PlaceTimingModal({
         <div className="space-y-1.5 rounded-xl border border-stone-200 bg-stone-50/80 p-3 text-xs">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-stone-700">{zh ? '📅 日历投影预览' : '📅 Calendar Projection'}</span>
-            {startTime && computedEndTime ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">VEVENT</span> : <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">{zh ? 'date-only' : 'date-only'}</span>}
+            {startTime && computedEndTime ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">VEVENT</span> : <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">date-only</span>}
           </div>
           <p className="font-mono text-sm font-semibold text-stone-800">{startTime && computedEndTime ? `${place.scheduled_date} ${startTime} - ${computedEndTime}` : `${place.scheduled_date} (${zh ? '日期级任务' : 'date-only task'})`}</p>
           <p className="text-[11px] leading-relaxed text-stone-500">{zh ? '开始时间与时长都明确时才生成具体时间块；订阅日历将在客户端下一次刷新时更新。' : 'A timed block is projected only when both start time and duration are explicit; subscribed calendars update on their next client refresh.'}</p>
         </div>
 
         {timingErrors.length > 0 ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-900">{timingErrors.map((issue) => <p key={issue.code}>{timingIssueText(issue.code, zh)}</p>)}</div> : null}
-
         {hoursWarning ? <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900"><span className="text-base leading-none">⚠️</span><div className="flex-1"><span className="font-semibold">{zh ? '营业日 / 偏好时段提示:' : 'Opening day / preferred-window warning:'}</span><p className="mt-0.5 text-[11px] text-amber-800">{hoursWarning}</p></div></div> : null}
         {overlapWarning ? <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-900"><span className="text-base leading-none">⚠️</span><div className="flex-1"><span className="font-semibold">{zh ? '时段重叠预警:' : 'Time Overlap Warning:'}</span><p className="mt-0.5 text-[11px] text-rose-800">{overlapWarning}</p></div></div> : null}
         {saveError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[11px] text-rose-800">{saveError}</div> : null}
