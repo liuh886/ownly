@@ -39,7 +39,7 @@ jobs:
         run: npm run validate
       - name: MCP package contract
         run: |
-          npm ci --prefix packages/mcp
+          npm install --prefix packages/mcp --no-package-lock --ignore-scripts --no-audit --no-fund
           npm run build --prefix packages/mcp
           node packages/mcp/dist/index.js --help
           (cd packages/mcp && npm pack --dry-run)
