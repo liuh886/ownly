@@ -1,4 +1,4 @@
-name: Validate PR 135 core
+name: Validate PR 135 repeatable visits
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - '.github/workflows/pr135-web.yml'
       - '.github/pr135-web.py'
       - '.github/pr135-core.py'
+      - '.github/pr135-finalize.py'
 
 jobs:
   validate:
@@ -19,8 +20,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: python .github/pr135-core.py
+      - run: python .github/pr135-finalize.py
       - run: npm ci
       - run: npm run validate:fast
       - run: npm run build:web
-      - run: npm run test -- --run src/services/PlannerRepository.schedule.test.ts src/domain/ical-pro.test.ts
+      - run: npm run test -- --run src/services/PlannerRepository.schedule.test.ts src/domain/ical-pro.test.ts src/domain/planner-schedule.test.ts src/domain/planner-route-time.test.ts scripts/mcp/planner-tools.test.ts scripts/shared/ownly-write-service.test.ts
