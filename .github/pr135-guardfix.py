@@ -1,0 +1,10 @@
+from pathlib import Path
+
+p = Path('.github/pr135-land.py')
+s = p.read_text()
+old = """# Guard the final source tree against the removed Place-scheduling authority.\nlegacy_needles = {\n    'src/domain/planner.ts': [\n        \"'candidate' | 'scheduled'\",\n        'scheduled_date?: string;',\n        'scheduled_start?: string;',\n        'sort_order?: number;',\n        'locked?: boolean;',\n    ],\n    'src/services/PlannerRepository.ts': [\n        'updatePlaceTiming(',\n        'unschedulePlace(',\n    ],\n}\nfor file_name, needles in legacy_needles.items():\n    text = Path(file_name).read_text()\n    for needle in needles:\n        if needle in text:\n            raise SystemExit(f'legacy Place scheduling authority remains in {file_name}: {needle}')\n"""
+new = """# Guard the final source tree against the removed Place-scheduling authority.\nplanner_source = Path('src/domain/planner.ts').read_text()\nif \"export type PlannerPlaceState = 'candidate' | 'scheduled'\" in planner_source:\n    raise SystemExit('PlannerPlaceState still contains scheduled')\nplace_start = planner_source.index('export interface PlannerTripPlace {')\nplace_end = planner_source.index('export interface PlannerScheduledPlace', place_start)\nplace_contract = planner_source[place_start:place_end]\nfor needle in [\n    'scheduled_date?: string;',\n    'scheduled_start?: string;',\n    'sort_order?: number;',\n    'locked?: boolean;',\n    'is_anchor?: boolean;',\n    'anchor_type?:',\n]:\n    if needle in place_contract:\n        raise SystemExit(f'legacy scheduling field remains on PlannerTripPlace: {needle}')\nrepository_source = Path('src/services/PlannerRepository.ts').read_text()\nfor needle in ['updatePlaceTiming(', 'unschedulePlace(']:\n    if needle in repository_source:\n        raise SystemExit(f'legacy Place scheduling API remains in PlannerRepository: {needle}')\n"""
+if old not in s:
+    raise SystemExit('old guard block not found')
+p.write_text(s.replace(old, new))
+print('Visit authority guard scoped to PlannerTripPlace')
