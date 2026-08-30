@@ -9,7 +9,6 @@ def replace_once(path: str, old: str, new: str) -> None:
         raise SystemExit(f'missing replacement target in {path}: {old[:160]!r}')
     p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-# content.ts: one saved-list parser/matcher, SPA detail recognition, constrained visible-list fallback.
 replace_once(
     'src/extension/content.ts',
     "import { detectPageCurrency } from './currency-detector';\n",
@@ -28,7 +27,6 @@ replace_once(
     """  // A saved-list carrier is not a place by itself. A visible details pane above\n  // overrides this because Maps commonly keeps the list URL while a place is open.\n  if (!isDedicatedPlacePage && extractGoogleMapsSavedListId(sourceUrl)) {\n    return null;\n  }\n""",
 )
 
-# Replace the list-id extractor wholesale up to the next function.
 path = Path('src/extension/content.ts')
 text = path.read_text(encoding='utf-8')
 start = text.index('function extractGoogleMapsListId(): string | null {')
@@ -37,7 +35,6 @@ new_func = '''function extractGoogleMapsListId(): string | null {\n  const fromU
 text = text[:start] + new_func + text[end:]
 path.write_text(text, encoding='utf-8')
 
-# Saved-list overview carriers use the same parser and no arbitrary 15/20-char split.
 path = Path('src/extension/content.ts')
 text = path.read_text(encoding='utf-8')
 text = text.replace(
@@ -53,19 +50,16 @@ text = text.replace(old, new, 1)
 text = text.replace("    if (dataId.length < 15) continue;", "    if (!/^[A-Za-z0-9_-]{8,}$/.test(dataId)) continue;", 1)
 path.write_text(text, encoding='utf-8')
 
-# Visible list name is used only with a concrete set of real place anchors.
 insert_marker = 'function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {\n  return scanAllGoogleMapsPlaces();\n}\n'
 insert = '''function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {\n  return scanAllGoogleMapsPlaces();\n}\n\nfunction detectVisibleGoogleMapsListName(places: CurrentResearchPlace[]): string | undefined {\n  if (places.length < 2) return undefined;\n  const placeTitles = new Set(places.map((place) => cleanExtractedText(place.title).toLocaleLowerCase()).filter(Boolean));\n  const candidates: string[] = [];\n  for (const el of Array.from(document.querySelectorAll<HTMLElement>('div[role="main"] h1, h1.fontHeadlineLarge, h1')).slice(0, 8)) {\n    candidates.push(el.textContent || el.getAttribute('aria-label') || '');\n  }\n  candidates.push(document.title.replace(/\\s*[-–—]\\s*Google Maps.*$/i, ''));\n  for (const raw of candidates) {\n    const title = cleanExtractedText(raw);\n    if (!title || title.length > 80 || isGenericNavigationTitle(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) continue;\n    if (placeTitles.has(title.toLocaleLowerCase())) continue;\n    return title;\n  }\n  return undefined;\n}\n'''
 replace_once('src/extension/content.ts', insert_marker, insert)
 
-# One canonical list-name matcher in the current-place response.
 replace_once(
     'src/extension/content.ts',
     """          const matched = allLists.find((l) => {\n            const name = l.listName.toLowerCase();\n            return targetTags.some((t) => t && (name === t || name.includes(t) || t.includes(name)));\n          });\n""",
     """          const matched = allLists.find((list) => matchesSavedListContext(list.listName, { tags: targetTags }));\n""",
 )
 
-# Shared parser for explicit fetch-by-url.
 path = Path('src/extension/content.ts')
 text = path.read_text(encoding='utf-8')
 old = """      if (!listId && listUrl) {\n        const m = /!2s([A-Za-z0-9_-]{20,})|\\/placelists\\/list\\/([A-Za-z0-9_-]{20,})/.exec(listUrl);\n        listId = m?.[1] || m?.[2];\n      }\n"""
@@ -73,7 +67,6 @@ new = """      if (!listId && listUrl) listId = extractGoogleMapsSavedListId(lis
 if old not in text:
     raise SystemExit('fetch-by-url parser target missing')
 text = text.replace(old, new, 1)
-
 old = """      const listPlaces = savedList?.places ?? detectGoogleMapsListPlaces();\n      sendResponse({ listPlaces, truncated: savedList?.truncated ?? false });\n"""
 new = """      const listPlaces = savedList?.places ?? detectGoogleMapsListPlaces();\n      const listName = savedList?.listName ?? detectVisibleGoogleMapsListName(listPlaces);\n      sendResponse({ listPlaces, listName, truncated: savedList?.truncated ?? false });\n"""
 if old not in text:
@@ -81,7 +74,6 @@ if old not in text:
 text = text.replace(old, new, 1)
 path.write_text(text, encoding='utf-8')
 
-# sidepanel capture: consume the canonical matcher and promote a confidently named visible list.
 replace_once(
     'src/extension/sidepanel/capture.ts',
     "import { saveCaptureStateViaWorker } from '../capture-state';\n",
@@ -92,7 +84,6 @@ replace_once(
     "  type ListMessageResponse = { listPlaces?: CurrentResearchPlace[] };\n",
     "  type ListMessageResponse = { listPlaces?: CurrentResearchPlace[]; listName?: string; truncated?: boolean };\n",
 )
-
 path = Path('src/extension/sidepanel/capture.ts')
 text = path.read_text(encoding='utf-8')
 old = """    const contextTags = (context?.tags ?? []).map((tag) => tag.trim().toLowerCase());\n    const contextTitle = (context?.title ?? '').trim().toLowerCase();\n    const targetList = store.detectedAllLists.find((list) => {\n      const name = list.listName.toLowerCase();\n      return contextTags.some((tag) => tag && (name === tag || name.includes(tag) || tag.includes(name)))\n        || Boolean(contextTitle && (name.includes(contextTitle) || contextTitle.includes(name)));\n    }) || (store.detectedAllLists.length === 1 ? store.detectedAllLists[0] : undefined);\n"""
@@ -107,7 +98,6 @@ if old not in text:
 text = text.replace(old, new, 1)
 path.write_text(text, encoding='utf-8')
 
-# UI uses the same list/context matching semantics.
 replace_once(
     'src/extension/sidepanel/ui.ts',
     "import { escapeHtml, isPlausiblePriceText } from '../utils';\n",
@@ -115,14 +105,13 @@ replace_once(
 )
 path = Path('src/extension/sidepanel/ui.ts')
 text = path.read_text(encoding='utf-8')
-old = """    const listNameNorm = store.detectedSavedList.listName.toLowerCase();\n    const tripTags = (activeTrip.tags || []).map((tag) => tag.toLowerCase());\n    const tripTitleNorm = activeTrip.title.toLowerCase();\n    const isMatched =\n      tripTags.includes(listNameNorm) ||\n      tripTags.some((tag) => tag && (listNameNorm.includes(tag) || tag.includes(listNameNorm))) ||\n      listNameNorm.includes(tripTitleNorm) ||\n      tripTitleNorm.includes(listNameNorm);\n"""
-new = """    const isMatched = matchesSavedListContext(store.detectedSavedList.listName, activeTrip);\n"""
+old = """    const listNameNorm = store.detectedSavedList.listName.trim().toLowerCase();\n    const tripTags = (activeTrip.tags || []).map((tag) => tag.trim().toLowerCase());\n    const tripTitleNorm = activeTrip.title.trim().toLowerCase();\n    isMatched =\n      tripTags.includes(listNameNorm) ||\n      tripTags.some((tag) => tag && (listNameNorm.includes(tag) || tag.includes(listNameNorm))) ||\n      listNameNorm.includes(tripTitleNorm) ||\n      tripTitleNorm.includes(listNameNorm);\n"""
+new = """    isMatched = matchesSavedListContext(store.detectedSavedList.listName, activeTrip);\n"""
 if old not in text:
     raise SystemExit('UI list matching target missing')
 text = text.replace(old, new, 1)
 path.write_text(text, encoding='utf-8')
 
-# Put the pure regression test on the normal extension gate.
 root = Path('package.json')
 data = json.loads(root.read_text(encoding='utf-8'))
 old_script = data['scripts']['validate:extension']
