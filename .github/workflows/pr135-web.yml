@@ -1,4 +1,4 @@
-name: Validate PR 135 web slice
+name: Validate PR 135 core
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/pr135-web.yml'
       - '.github/pr135-web.py'
+      - '.github/pr135-core.py'
 
 jobs:
   validate:
@@ -18,7 +19,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: python .github/pr135-web.py
+      - run: python .github/pr135-core.py
       - run: npm ci
       - run: npm run validate:fast
       - run: npm run build:web
+      - run: npm run test -- --run src/services/PlannerRepository.schedule.test.ts src/domain/ical-pro.test.ts
