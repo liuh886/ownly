@@ -63,7 +63,7 @@ function showSelectionFx(): void {
 
   const pageCurrency = overrideCurrency || detectPageCurrency({
     url: window.location.href,
-    selectedText: text,
+    priceText: text,
     targetCurrency,
     overrideCurrency,
     doc: document,
