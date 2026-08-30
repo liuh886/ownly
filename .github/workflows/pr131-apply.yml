@@ -44,6 +44,7 @@ jobs:
           path.write_text(text, encoding='utf-8')
           PY
           python .github/pr131-apply.py
+          python .github/pr131-fix-web.py
 
       - name: Install locked dependencies
         run: npm ci
