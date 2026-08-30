@@ -192,6 +192,47 @@ export function extractFeatureIdFromUrl(url?: string | null): string | undefined
   return match?.[1];
 }
 
+const PRICE_TOKEN_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约)\s*[:：]?\s*)?(?:S\$|HK\$|US\$|NT\$|AU\$|A\$|CA\$|C\$|NZ\$|R\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR|AED|CHF)\s?)\s?\d[\d.,]*\+?(?:\s*[-–—〜~至到]\s*(?:S\$|HK\$|US\$|NT\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR)\s?)?\s?\d[\d.,]*\+?)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
+const NO_CURR_PRICE_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约)\s*)+[:：]?\s*\d[\d.,]*(?:\s*[-–—〜~至到]\s*\d[\d.,]*)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
+
+/**
+ * Extracts a normalized, clean price string from freeform text or card subtitles.
+ * e.g. "(12,567)·฿200–400" -> "฿200–400", "Noodle shop · ฿200-400" -> "฿200-400"
+ */
+export function extractCleanPriceText(raw?: string | null): string | undefined {
+  const text = cleanExtractedText(raw);
+  if (!text) return undefined;
+
+  // Standalone price levels: "$", "$$", "$$$", "$$$$", "¥¥", "฿฿"
+  if (PRICE_LEVEL_ONLY.test(text.trim())) {
+    return text.trim();
+  }
+
+  // Disqualify hotel star ratings without genuine currency markers
+  if (/\b\d\s*[-–—]?\s*(?:star|stars?)\b|星级/i.test(text) && !hasCurrencyMarker(text)) {
+    return undefined;
+  }
+
+  const match = PRICE_TOKEN_REGEX.exec(text);
+  if (match) {
+    const candidate = match[0].trim();
+    if (/\d/.test(candidate) && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Fallback for "人均 200-400" / "每晚 per night 120" (no currency symbol)
+  const matchNoCurr = NO_CURR_PRICE_REGEX.exec(text);
+  if (matchNoCurr) {
+    const candidate = matchNoCurr[0].trim();
+    if (/\d/.test(candidate) && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Validates that an extracted string is actually a price/budget observation,
  * not a hotel class ("5-star hotel"), rating, or other nearby badge text.
@@ -201,8 +242,7 @@ export function isPlausiblePriceText(raw?: string | null): boolean {
   if (!text) return false;
   if (PRICE_LEVEL_ONLY.test(text)) return true;
   if (/\b\d\s*[-–—]?\s*(?:star|stars?)\b|星级/i.test(text) && !hasCurrencyMarker(text)) return false;
-  if (hasCurrencyMarker(text)) return /\d/.test(text);
-  return /(人均|per person|每人|每晚|per night)/i.test(text) && /\d/.test(text);
+  return Boolean(extractCleanPriceText(text));
 }
 
 /**

@@ -4,10 +4,10 @@ import {
 } from '../domain/planner';
 import {
   cleanExtractedText,
+  extractCleanPriceText,
   findEntityListCategory,
   isFakePlaceLabel,
   isJunkNavigationText,
-  isPlausiblePriceText,
   normalizePhoneDisplay,
 } from './utils';
 
@@ -119,7 +119,6 @@ export function parseReviewCount(raw?: string | null): number | undefined {
 }
 
 const OPEN_STATUS_PATTERN = /^(open\b|closed\b|closes\b|opens\b|营业中|已关门|休息中|打烊|24\s*小时|24\s*hours|即将关门|即将营业)/i;
-const PRICE_TOKEN_PATTERN = /^(?:人均|per person|每人|每晚|per night|from\s+|约\s*)?(?:[¥￥฿$€£₩₫₹]|S\$|HK\$|NT\$|US\$|[A-Z]{3}\s?)\s*\d+/i;
 
 /**
  * Decomposes multi-part subtitle info strings from cards or headers in a single unified pass.
@@ -128,6 +127,12 @@ const PRICE_TOKEN_PATTERN = /^(?:人均|per person|每人|每晚|per night|from\
 export function parseSubtitleInfo(infoText?: string | null): SubtitleDecomposition {
   const result: SubtitleDecomposition = {};
   if (!infoText) return result;
+
+  // Extract clean price directly from text if present
+  const directPrice = extractCleanPriceText(infoText);
+  if (directPrice) {
+    result.priceLevel = directPrice;
+  }
 
   // Delimiters including Western middle dot, Japanese katakana middle dot (・), bullet (•), pipe (| / ｜)
   const rawSegments = infoText.split(/[·•|│\n・‧｜\u30FB\u2022\u2027]/).map((s) => cleanExtractedText(s)).filter(Boolean);
@@ -170,8 +175,13 @@ export function parseSubtitleInfo(infoText?: string | null): SubtitleDecompositi
     }
 
     // 5. Price / Budget / Tier (e.g. "$$", "￥3,000〜￥4,000", "人均 ฿150–300")
-    if (isPlausiblePriceText(seg) || PRICE_TOKEN_PATTERN.test(seg) || /^[¥￥฿$€£₩]{1,4}$/.test(seg) || /[¥￥฿$€£₩₫₹]\s*\d+/.test(seg)) {
-      if (!result.priceLevel) result.priceLevel = seg;
+    const segPrice = extractCleanPriceText(seg);
+    if (segPrice) {
+      if (!result.priceLevel) result.priceLevel = segPrice;
+      const nonPricePart = seg.replace(segPrice, '').trim();
+      if (nonPricePart && nonPricePart.length >= 2 && !isJunkNavigationText(nonPricePart) && !isFakePlaceLabel(nonPricePart)) {
+        unassigned.push(nonPricePart);
+      }
       continue;
     }
 
@@ -180,6 +190,10 @@ export function parseSubtitleInfo(infoText?: string | null): SubtitleDecompositi
       unassigned.push(seg);
     }
   }
+
+  // Fallbacks if rating/review count were not matched per-segment
+  if (!result.rating) result.rating = parseRatingNumber(infoText);
+  if (!result.reviewCount) result.reviewCount = parseReviewCount(infoText);
 
   // Assign category vs area from unassigned tokens
   for (const token of unassigned) {
@@ -301,7 +315,10 @@ export function extractEntityListResearch(item: unknown, knownTitle?: string): E
       const lower = text.toLowerCase();
       if (ENTITY_LIST_TYPES.has(lower)) types.add(lower);
 
-      if (!result.priceLevel && isPlausiblePriceText(text)) result.priceLevel = text;
+      if (!result.priceLevel) {
+        const cleanPrice = extractCleanPriceText(text);
+        if (cleanPrice) result.priceLevel = cleanPrice;
+      }
       if (!result.rating && (/[★☆]|\/\s*5|^[1-5][.,]\d$/.test(text))) {
         result.rating = parseRatingNumber(text);
       }

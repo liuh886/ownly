@@ -112,7 +112,9 @@ export function applyI18n() {
   el.sumCandidatesDrawer.textContent = dict.drawerTitle;
   el.candidatesSearch.placeholder = dict.searchPlaceholder;
 
+  el.btnEnrichCandidates.textContent = dict.btnEnrichCandidates;
   el.btnSelectAllCandidates.textContent = dict.btnSelectAllCandidates;
+  el.btnBulkEnrich.textContent = dict.btnBulkEnrichCandidates;
   el.btnBulkDelete.textContent = dict.btnBulkDeleteCandidates;
   el.btnBulkExit.textContent = dict.btnBulkExitInline;
   if (el.bulkPrioritySelect.options[0]) {

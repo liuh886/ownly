@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListCategory, findEntityListPlaceId, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import {
+  cleanExtractedText,
+  extractCleanPriceText,
+  extractFeatureIdFromUrl,
+  findEntityListCategory,
+  findEntityListPlaceId,
+  isJunkNavigationText,
+  isPlausiblePriceText,
+  normalizePhoneDisplay,
+  parseEntityListCoordinates,
+  safeDecodeUri,
+} from './utils';
 
 describe('cleanExtractedText & safeDecodeUri', () => {
   it('decodes HTML entities properly', () => {
@@ -61,6 +72,26 @@ describe('isJunkNavigationText', () => {
   });
 });
 
+describe('extractCleanPriceText', () => {
+  it('extracts clean price tokens from composite strings', () => {
+    expect(extractCleanPriceText('(12,567)·฿200–400')).toBe('฿200–400');
+    expect(extractCleanPriceText('4.2 (12,567) · ฿200–400 · Noodle shop')).toBe('฿200–400');
+    expect(extractCleanPriceText('Noodle shop · ฿200-400')).toBe('฿200-400');
+    expect(extractCleanPriceText('฿200–400')).toBe('฿200–400');
+    expect(extractCleanPriceText('人均 ฿200–400')).toBe('人均 ฿200–400');
+    expect(extractCleanPriceText('¥1,000–2,000 per person')).toBe('¥1,000–2,000 per person');
+    expect(extractCleanPriceText('$$$')).toBe('$$$');
+    expect(extractCleanPriceText('S$1,024 night')).toBe('S$1,024 night');
+  });
+
+  it('returns undefined for non-price and hotel star text', () => {
+    expect(extractCleanPriceText('5-star hotel')).toBeUndefined();
+    expect(extractCleanPriceText('4.4 (996)·5-star hotel')).toBeUndefined();
+    expect(extractCleanPriceText('4.2 (12,567)')).toBeUndefined();
+    expect(extractCleanPriceText('Noodle shop')).toBeUndefined();
+  });
+});
+
 describe('isPlausiblePriceText', () => {
   it('accepts real prices and price levels', () => {
     expect(isPlausiblePriceText('$$$')).toBe(true);
@@ -73,6 +104,7 @@ describe('isPlausiblePriceText', () => {
     expect(isPlausiblePriceText('S$1,024 night')).toBe(true);
     expect(isPlausiblePriceText('SGD 1,024')).toBe(true);
     expect(isPlausiblePriceText('THB 2,350')).toBe(true);
+    expect(isPlausiblePriceText('(12,567)·฿200–400')).toBe(true);
   });
 
   it('rejects hotel tiers and non-price text', () => {

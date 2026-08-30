@@ -10,6 +10,7 @@ export interface GoogleMapsResearchFacts {
   phone?: string;
   website?: string;
   types?: string[];
+  coordinates?: { lat: number; lng: number };
 }
 
 const PLACE_TYPE = /(restaurant|hotel|lodging|hostel|cafe|coffee|bakery|bar|food|tourist|attraction|museum|gallery|park|landmark|spa|shopping|store|market|transit|station|airport|zoo|aquarium|resort|motel|inn)/i;
@@ -129,6 +130,15 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
     if (!result.phone && typeof obj.telephone === 'string') result.phone = cleanExtractedText(obj.telephone) || undefined;
     if (!result.website && typeof obj.url === 'string' && /^https?:\/\//i.test(obj.url)) result.website = obj.url;
 
+    if (!result.coordinates && obj.geo && typeof obj.geo === 'object') {
+      const geo = obj.geo as Record<string, unknown>;
+      const lat = numeric(geo.latitude);
+      const lng = numeric(geo.longitude);
+      if (lat !== undefined && lng !== undefined && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat !== 0 || lng !== 0)) {
+        result.coordinates = { lat, lng };
+      }
+    }
+
     for (const value of Object.values(obj)) {
       if (value && typeof value === 'object') queue.push(value);
     }
@@ -150,6 +160,16 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
   if (!result.priceLevel) {
     const m = /"priceRange"\s*:\s*"([^"\\]{1,60})"/i.exec(html);
     if (m?.[1] && isPlausiblePriceText(m[1])) result.priceLevel = cleanExtractedText(m[1]);
+  }
+  if (!result.coordinates) {
+    const coordMatch = /@([-0-9.]+),([-0-9.]+)/.exec(html);
+    if (coordMatch) {
+      const lat = Number(coordMatch[1]);
+      const lng = Number(coordMatch[2]);
+      if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat !== 0 || lng !== 0)) {
+        result.coordinates = { lat, lng };
+      }
+    }
   }
 
   if (types.size > 0) result.types = [...types];

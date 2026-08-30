@@ -5,9 +5,21 @@ import {
   type PlannerPlaceKind,
   type PlannerPlaceSourceProvider,
 } from '../domain/planner';
-import { cleanExtractedText, extractFeatureIdFromUrl, findEntityListCategory, findEntityListPlaceId, isFakePlaceLabel, isJunkNavigationText, isPlausiblePriceText, normalizePhoneDisplay, parseEntityListCoordinates, safeDecodeUri } from './utils';
+import {
+  cleanExtractedText,
+  extractCleanPriceText,
+  extractFeatureIdFromUrl,
+  findEntityListCategory,
+  findEntityListPlaceId,
+  isFakePlaceLabel,
+  isJunkNavigationText,
+  isPlausiblePriceText,
+  normalizePhoneDisplay,
+  parseEntityListCoordinates,
+  safeDecodeUri,
+} from './utils';
 import { SELECTORS, driftCheck } from './selectors';
-import { PLACE_PARSER } from './place-parser';
+import { PLACE_PARSER, type SubtitleDecomposition } from './place-parser';
 import { detectPageCurrency } from './currency-detector';
 import { extractGoogleMapsSavedListId, matchesSavedListContext } from './saved-list-match';
 import { extractGoogleMapsResearchFromHtml, googleMapsDetailUrlFromSourceId, type GoogleMapsResearchFacts } from './google-maps-research';
@@ -110,15 +122,19 @@ function extractPrice(): string | undefined {
   const priceEl = document.querySelector<HTMLElement>(SELECTORS.priceBadge);
   if (priceEl) {
     const text = cleanExtractedText(priceEl.getAttribute('aria-label') || priceEl.textContent || '');
-    if (text && text.length < 50 && !/^(路线|directions|save|保存)$/i.test(text) && isPlausiblePriceText(text)) return text;
+    if (text && text.length < 60 && !/^(路线|directions|save|保存)$/i.test(text)) {
+      const cleanPrice = extractCleanPriceText(text);
+      if (cleanPrice) return cleanPrice;
+    }
   }
 
-  // 2. Scan per-person budget in header info (e.g. "人均 ฿200–400", "¥1,000–2,000 per person", "￥2,000〜￥3,000")
+  // 2. Scan per-person budget in header info (e.g. "人均 ฿200–400", "¥1,000–2,000 per person", "฿200-400", "￥2,000〜￥3,000")
   const infoSpans = document.querySelectorAll<HTMLElement>(SELECTORS.priceInfoSpans);
-  for (const span of Array.from(infoSpans).slice(0, 10)) {
-    const text = cleanExtractedText(span.textContent || '');
-    if (/(人均|per person|每人|每晚|per night|[¥฿$€£₩]\s*\d+)/i.test(text) && text.length < 60 && isPlausiblePriceText(text)) {
-      return text;
+  for (const span of Array.from(infoSpans).slice(0, 60)) {
+    const text = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
+    if (text && text.length < 80) {
+      const cleanPrice = extractCleanPriceText(text);
+      if (cleanPrice) return cleanPrice;
     }
   }
 
@@ -126,32 +142,27 @@ function extractPrice(): string | undefined {
   const levelSpans = document.querySelectorAll<HTMLElement>(SELECTORS.priceLevels);
   for (const span of Array.from(levelSpans)) {
     const label = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
-    if (label && isPlausiblePriceText(label)) return label;
+    if (label && isPlausiblePriceText(label)) return extractCleanPriceText(label) || label;
   }
 
-  // 4. Localized hotel-rate modules (e.g. "S$1,024 night", "THB 2,350", "From ¥18,000")
+  // 4. Localized hotel-rate / restaurant rate modules (e.g. "S$1,024 night", "THB 2,350", "From ¥18,000")
   const rateSpans = document.querySelectorAll<HTMLElement>(
     'div.fontBodyMedium span, div.fontHeadlineSmall span, div.W4Efsd span, div.mgr77e *, div[jsaction*="hotel"] span'
   );
-  const RATE_TEXT = /(?:from\s+|约\s*)?(S\$|HK\$|US\$|NT\$|[¥฿$€£₩₫]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR)\s?)\s?\d[\d.,]*(?:\s*[-–—〜~]\s*\d[\d.,]*)?(?:\s*[/·]?\s*(?:night|晚|person|人))?/i;
-  for (const el of Array.from(rateSpans).slice(0, 60)) {
-    const text = cleanExtractedText(el.textContent || '');
-    if (!text || text.length > 50) continue;
-    const match = RATE_TEXT.exec(text);
-    if (match) {
-      const candidate = cleanExtractedText(match[0]);
-      if (isPlausiblePriceText(candidate)) return candidate;
-    }
+  for (const el of Array.from(rateSpans).slice(0, 80)) {
+    const text = cleanExtractedText(el.getAttribute('aria-label') || el.textContent || '');
+    if (!text || text.length > 80) continue;
+    const cleanPrice = extractCleanPriceText(text);
+    if (cleanPrice) return cleanPrice;
   }
 
   // 5. Last resort: any short text with both a currency marker and a digit
   const allSpans = document.querySelectorAll<HTMLElement>('span, div.fontBodyMedium, div.fontHeadlineSmall');
   for (const el of Array.from(allSpans).slice(0, 100)) {
-    const text = cleanExtractedText(el.textContent || '');
-    if (!text || text.length > 40) continue;
-    if (/[\$¥฿€£₩]/.test(text) && /\d/.test(text) && !/[a-zA-Z]{4,}/.test(text.replace(/night|person|per|晚|人|酒店|price/i, ''))) {
-      if (isPlausiblePriceText(text)) return text;
-    }
+    const text = cleanExtractedText(el.getAttribute('aria-label') || el.textContent || '');
+    if (!text || text.length > 50) continue;
+    const cleanPrice = extractCleanPriceText(text);
+    if (cleanPrice) return cleanPrice;
   }
 
   return undefined;
@@ -556,20 +567,52 @@ function isGenericNavigationTitle(text: string): boolean {
 }
 
 function readCardFields(card: HTMLElement | null) {
-  const ratingText = card?.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim() ||
-    card?.querySelector<HTMLElement>(SELECTORS.ratingAria)?.getAttribute('aria-label');
-  const rating = PLACE_PARSER.parseRating(ratingText);
+  if (!card) return {};
+  const ratingText = card.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim() ||
+    card.querySelector<HTMLElement>(SELECTORS.ratingAria)?.getAttribute('aria-label');
+  const directRating = PLACE_PARSER.parseRating(ratingText);
 
-  const infoText = card?.querySelector<HTMLElement>(SELECTORS.cardInfo)?.textContent?.trim();
-  const subInfo = PLACE_PARSER.parseSubtitleInfo(infoText);
+  // Scan ALL info lines in the card (e.g. multiple div.W4Efsd, div.fontBodyMedium)
+  const infoElements = Array.from(card.querySelectorAll<HTMLElement>(SELECTORS.cardInfo));
+  let subInfo: SubtitleDecomposition = {};
 
-  const rawAddr = card?.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
+  if (infoElements.length === 0) {
+    subInfo = PLACE_PARSER.parseSubtitleInfo(card.textContent);
+  } else {
+    for (const el of infoElements) {
+      const text = el.textContent?.trim();
+      if (!text) continue;
+      const parsed = PLACE_PARSER.parseSubtitleInfo(text);
+      subInfo = {
+        rating: subInfo.rating ?? parsed.rating,
+        reviewCount: subInfo.reviewCount ?? parsed.reviewCount,
+        category: subInfo.category ?? parsed.category,
+        priceLevel: subInfo.priceLevel ?? parsed.priceLevel,
+        openStatus: subInfo.openStatus ?? parsed.openStatus,
+        area: subInfo.area ?? parsed.area,
+      };
+    }
+  }
+
+  // If price is still not found in subtitles, scan all card spans for currency/price patterns
+  if (!subInfo.priceLevel) {
+    for (const span of Array.from(card.querySelectorAll<HTMLElement>('span, div')).slice(0, 30)) {
+      const text = span.getAttribute('aria-label') || span.textContent || '';
+      const cleanPrice = extractCleanPriceText(text);
+      if (cleanPrice) {
+        subInfo.priceLevel = cleanPrice;
+        break;
+      }
+    }
+  }
+
+  const rawAddr = card.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
   const address = rawAddr ? cleanExtractedText(rawAddr) : (subInfo.area || undefined);
-  const rawNote = card?.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
+  const rawNote = card.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
   const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
 
   return {
-    rating: rating ?? subInfo.rating,
+    rating: directRating ?? subInfo.rating,
     reviewCount: subInfo.reviewCount,
     category: subInfo.category,
     priceLevel: subInfo.priceLevel,

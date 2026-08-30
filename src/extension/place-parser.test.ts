@@ -90,13 +90,43 @@ describe('PLACE_PARSER.parseSubtitleInfo', () => {
     expect(result.area).toBe('Bangkok');
   });
 
-  it('handles integer rating and cafe category', () => {
-    const info = '★ 5 · 咖啡厅 · 营业中 · 清迈';
+  it('decomposes Thipsamai Padthai Pratoopee multi-line and composite price formats', () => {
+    const info1 = '4.2\n(12,567)·฿200–400\nNoodle shop';
+    const result1 = parseSubtitleInfo(info1);
+    expect(result1.rating).toBe(4.2);
+    expect(result1.reviewCount).toBe(12567);
+    expect(result1.priceLevel).toBe('฿200–400');
+    expect(result1.category).toBe('Noodle shop');
+
+    const info2 = '(12,567)·฿200–400';
+    const result2 = parseSubtitleInfo(info2);
+    expect(result2.reviewCount).toBe(12567);
+    expect(result2.priceLevel).toBe('฿200–400');
+
+    const info3 = '4.2 (12,567) · ฿200–400 · Noodle shop';
+    const result3 = parseSubtitleInfo(info3);
+    expect(result3.rating).toBe(4.2);
+    expect(result3.reviewCount).toBe(12567);
+    expect(result3.priceLevel).toBe('฿200–400');
+    expect(result3.category).toBe('Noodle shop');
+  });
+
+  it('decomposes Raan Jay Fai with plus pricing and seafood category', () => {
+    const info = '4.3 (3,800) · ฿1,000+ · Seafood restaurant';
     const result = parseSubtitleInfo(info);
-    expect(result.rating).toBe(5);
-    expect(result.category).toBe('咖啡厅');
-    expect(result.openStatus).toBe('营业中');
-    expect(result.area).toBe('清迈');
+    expect(result.rating).toBe(4.3);
+    expect(result.reviewCount).toBe(3800);
+    expect(result.priceLevel).toBe('฿1,000+');
+    expect(result.category).toBe('Seafood restaurant');
+  });
+
+  it('decomposes Oakwood Studios 5-star hotel format correctly without misidentifying price', () => {
+    const info = '4.4\n(996)·5-star hotel';
+    const result = parseSubtitleInfo(info);
+    expect(result.rating).toBe(4.4);
+    expect(result.reviewCount).toBe(996);
+    expect(result.category).toBe('5-star hotel');
+    expect(result.priceLevel).toBeUndefined();
   });
 });
 

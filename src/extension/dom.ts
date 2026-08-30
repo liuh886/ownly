@@ -17,9 +17,11 @@ export type ElementMap = {
   btnRestoreState: HTMLButtonElement;
   fileRestoreState: HTMLInputElement;
   btnBulkToggle: HTMLButtonElement;
+  btnEnrichCandidates: HTMLButtonElement;
   bulkActionBar: HTMLElement;
   bulkPrioritySelect: HTMLSelectElement;
   btnSelectAllCandidates: HTMLButtonElement;
+  btnBulkEnrich: HTMLButtonElement;
   btnBulkDelete: HTMLButtonElement;
   btnBulkExit: HTMLButtonElement;
   smartListSection: HTMLElement;
@@ -108,9 +110,11 @@ export const el: ElementMap = {
   btnRestoreState: required<HTMLButtonElement>('btnRestoreState'),
   fileRestoreState: required<HTMLInputElement>('fileRestoreState'),
   btnBulkToggle: required<HTMLButtonElement>('btnBulkToggle'),
+  btnEnrichCandidates: required<HTMLButtonElement>('btnEnrichCandidates'),
   bulkActionBar: required('bulkActionBar'),
   bulkPrioritySelect: required<HTMLSelectElement>('bulkPrioritySelect'),
   btnSelectAllCandidates: required<HTMLButtonElement>('btnSelectAllCandidates'),
+  btnBulkEnrich: required<HTMLButtonElement>('btnBulkEnrich'),
   btnBulkDelete: required<HTMLButtonElement>('btnBulkDelete'),
   btnBulkExit: required<HTMLButtonElement>('btnBulkExit'),
   smartListSection: required('smartListSection'),

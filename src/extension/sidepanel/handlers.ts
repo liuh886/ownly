@@ -17,6 +17,7 @@ import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
+import { enrichCandidatePlacesBatch } from '../enrichment';
 import { getExistingPlaceForUrl, store, t } from './store';
 import {
   applyI18n,
@@ -488,6 +489,78 @@ export function initHandlers(): void {
     else checkboxes.forEach((c) => { if (c.dataset.placeId) store.bulkSelected.add(c.dataset.placeId); });
   });
 
+  // One-click Enrich All candidates in active trip
+  el.btnEnrichCandidates.addEventListener('click', () => {
+    void (async () => {
+      const dict = t();
+      const context = store.state.activeContext;
+      if (!context) {
+        setStatus(dict.tripRequiredError, 'error');
+        return;
+      }
+      const candidates = store.state.pendingPlaces.filter((p) => p.trip_id === context.tripId);
+      if (candidates.length === 0) {
+        setStatus(dict.emptyCandidates, 'muted');
+        return;
+      }
+
+      setStatus(store.lang === 'zh' ? '正在智能补全地点信息…' : 'Enriching candidate places…');
+      const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
+        candidates,
+        (processed, total, currentPlace) => {
+          setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
+          renderCandidatesList();
+        }
+      );
+
+      if (totalEnriched > 0) {
+        const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
+        store.state = {
+          ...store.state,
+          pendingPlaces: store.state.pendingPlaces.map((p) => enrichedMap.get(p.id) ?? p),
+        };
+        await saveState();
+        setStatus(dict.enrichComplete(totalEnriched), 'success');
+      } else {
+        setStatus(dict.enrichNoneNeeded, 'muted');
+      }
+      renderCandidatesList();
+    })().catch((error) => setStatus(String(error), 'error'));
+  });
+
+  // Bulk Enrich Selected candidates
+  el.btnBulkEnrich.addEventListener('click', () => {
+    void (async () => {
+      const dict = t();
+      const selectedIds = store.bulkSelected;
+      if (selectedIds.size === 0) return;
+      const targetPlaces = store.state.pendingPlaces.filter((p) => selectedIds.has(p.id));
+      if (targetPlaces.length === 0) return;
+
+      setStatus(store.lang === 'zh' ? '正在智能补全选中地点…' : 'Enriching selected places…');
+      const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
+        targetPlaces,
+        (processed, total, currentPlace) => {
+          setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
+          renderCandidatesList();
+        }
+      );
+
+      if (totalEnriched > 0) {
+        const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
+        store.state = {
+          ...store.state,
+          pendingPlaces: store.state.pendingPlaces.map((p) => enrichedMap.get(p.id) ?? p),
+        };
+        await saveState();
+        setStatus(dict.enrichComplete(totalEnriched), 'success');
+      } else {
+        setStatus(dict.enrichNoneNeeded, 'muted');
+      }
+      renderCandidatesList();
+    })().catch((error) => setStatus(String(error), 'error'));
+  });
+
   el.btnBackupState.addEventListener('click', () => {
     const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), captureState: store.state }, null, 2);
     const blob = new Blob([payload], { type: 'application/json' });
@@ -653,6 +726,7 @@ export function initHandlers(): void {
       const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
       let importedCount = 0;
       const errors: string[] = [];
+      const newlyAdded: PlannerTripPlace[] = [];
       for (const line of lines) {
         const isUrl = /^https?:\/\//i.test(line);
         if (isUrl && (line.includes('maps.app.goo.gl') || line.includes('!2s') || line.includes('placelists/list') || line.includes('goo.gl/maps'))) {
@@ -666,6 +740,7 @@ export function initHandlers(): void {
                 item.trip_id = context.tripId;
                 item.state = 'candidate';
                 mergedPending.set(item.id, item);
+                newlyAdded.push(item);
                 importedCount += 1;
               }
               continue;
@@ -702,12 +777,36 @@ export function initHandlers(): void {
           updated_at: now,
         };
         mergedPending.set(place.id, place);
+        newlyAdded.push(place);
         importedCount += 1;
       }
       store.state = { ...store.state, pendingPlaces: [...mergedPending.values()] };
       await saveState();
       el.bulkInputText.value = '';
       setStatus(errors.length > 0 ? dict.importedWithWarnings(importedCount, errors.join(', ')) : dict.importedCount(importedCount), 'success');
+
+      // Asynchronously enrich newly imported places
+      if (newlyAdded.length > 0) {
+        void (async () => {
+          const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
+            newlyAdded,
+            (processed, total, currentPlace) => {
+              setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
+              renderCandidatesList();
+            }
+          );
+          if (totalEnriched > 0) {
+            const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
+            store.state = {
+              ...store.state,
+              pendingPlaces: store.state.pendingPlaces.map((p) => enrichedMap.get(p.id) ?? p),
+            };
+            await saveState();
+            setStatus(dict.enrichComplete(totalEnriched), 'success');
+            renderCandidatesList();
+          }
+        })();
+      }
     })().catch((error) => setStatus(String(error), 'error'));
   });
 
