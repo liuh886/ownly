@@ -27,5 +27,5 @@ jobs:
       - run: python .github/pr135-fix3.py
       - run: npm ci
       - run: npm run validate:fast
-      - run: npm run build:web
+      - run: npm run build
       - run: npm run test -- --run src/services/PlannerRepository.schedule.test.ts src/domain/ical-pro.test.ts src/domain/planner-schedule.test.ts src/domain/planner-route-time.test.ts scripts/mcp/planner-tools.test.ts scripts/shared/ownly-write-service.test.ts
