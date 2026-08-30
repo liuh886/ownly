@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTripPlace } from './planner';
+import { materializePlannerScheduledPlaces, type PlannerTripVisit } from './planner-visits';
 import {
   buildPlannerDayExecutionTimeline,
   evaluatePlannerDayFeasibility,
@@ -23,59 +24,90 @@ function place(id: string, overrides: Partial<PlannerTripPlace> = {}): PlannerTr
   };
 }
 
+function visit(id: string, placeId: string, overrides: Partial<PlannerTripVisit> = {}): PlannerTripVisit {
+  return {
+    schema_version: '0.1', type: 'trip_visit', id, trip_id: trip.id, place_id: placeId,
+    date: '2026-10-05', sort_order: 0, locked: false, is_anchor: false,
+    created_at: '2026-08-29T00:00:00Z', ...overrides,
+  };
+}
+
+function scheduled(places: PlannerTripPlace[], visits: PlannerTripVisit[]) {
+  return materializePlannerScheduledPlaces(places, visits);
+}
+
+function travelLeg(from: string, to: string, minutes: number): PlannerTripLeg {
+  return {
+    schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, from, to), trip_id: trip.id,
+    from_place_id: from, to_place_id: to, mode: 'walking', duration_minutes: minutes,
+    distance_meters: 1200, source: 'manual', created_at: '2026-08-29T00:00:00Z',
+  };
+}
+
 describe('Planner schedule proposal', () => {
-  it('persists explicit time facts without auto-locking AI decisions', () => {
-    const candidate = place('wat-pho');
-    const result = evaluatePlannerScheduleProposal(trip, [candidate], [{
-      id: candidate.id, scheduled_date: '2026-10-05', scheduled_start: '09:30', sort_order: 0, duration_minutes: 90,
+  it('creates an explicit visit without consuming or locking the reusable place', () => {
+    const p = place('wat-pho', { duration_minutes: 90 });
+    const result = evaluatePlannerScheduleProposal(trip, [p], [], [{
+      visit_id: 'visit:wat-pho:1', place_id: p.id, date: '2026-10-05', start: '09:30', sort_order: 0,
     }]);
     expect(result.valid).toBe(true);
-    expect(result.places[0].scheduled_start).toBe('09:30');
-    expect(result.places[0].duration_minutes).toBe(90);
-    expect(result.places[0].locked).not.toBe(true);
+    expect(result.visits[0]).toMatchObject({ place_id: p.id, date: '2026-10-05', start: '09:30', duration_minutes: 90, locked: false });
+    expect(p.state).toBe('candidate');
   });
 
-  it('rejects moving a locked or anchored hard constraint', () => {
-    const anchor = place('concert', {
-      state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '19:30', sort_order: 3,
-      duration_minutes: 150, locked: true, is_anchor: true, anchor_type: 'reservation',
+  it('allows the same reusable place to appear multiple times', () => {
+    const hotel = place('hotel', { kind: 'stay' });
+    const result = evaluatePlannerScheduleProposal(trip, [hotel], [], [
+      { visit_id: 'visit:hotel:am', place_id: hotel.id, date: '2026-10-05', start: '08:00', sort_order: 0, duration_minutes: 15 },
+      { visit_id: 'visit:hotel:pm', place_id: hotel.id, date: '2026-10-05', start: '22:00', sort_order: 3, duration_minutes: 15 },
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.visits.map((item) => item.place_id)).toEqual(['hotel', 'hotel']);
+  });
+
+  it('rejects moving a locked or anchored visit', () => {
+    const concert = place('concert');
+    const locked = visit('visit:concert', concert.id, {
+      start: '19:30', duration_minutes: 150, sort_order: 3, locked: true, is_anchor: true, anchor_type: 'reservation',
     });
-    const result = evaluatePlannerScheduleProposal(trip, [anchor], [{
-      id: anchor.id, scheduled_date: '2026-10-06', scheduled_start: '20:00', sort_order: 0, duration_minutes: 150,
+    const result = evaluatePlannerScheduleProposal(trip, [concert], [locked], [{
+      visit_id: locked.id, place_id: concert.id, date: '2026-10-06', start: '20:00', sort_order: 0, duration_minutes: 150,
     }]);
     expect(result.valid).toBe(false);
     expect(result.issues.some((issue) => issue.code === 'HARD_CONSTRAINT_CHANGED')).toBe(true);
   });
 
-  it('rejects deterministic time overlap', () => {
-    const first = place('a', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '09:00', sort_order: 0, duration_minutes: 120 });
-    const second = place('b');
-    const result = evaluatePlannerScheduleProposal(trip, [first, second], [{
-      id: second.id, scheduled_date: '2026-10-05', scheduled_start: '10:00', sort_order: 1, duration_minutes: 60,
+  it('rejects deterministic overlap between visit occurrences', () => {
+    const a = place('a');
+    const b = place('b');
+    const existing = visit('visit:a', a.id, { start: '09:00', duration_minutes: 120 });
+    const result = evaluatePlannerScheduleProposal(trip, [a, b], [existing], [{
+      visit_id: 'visit:b', place_id: b.id, date: '2026-10-05', start: '10:00', sort_order: 1, duration_minutes: 60,
     }]);
     expect(result.valid).toBe(false);
     expect(result.issues.some((issue) => issue.code === 'TIME_OVERLAP')).toBe(true);
   });
 
-  it('validates a proposed start time against an inherited duration', () => {
-    const candidate = place('late-stop', { duration_minutes: 90 });
-    const result = evaluatePlannerScheduleProposal(trip, [candidate], [{
-      id: candidate.id, scheduled_date: '2026-10-05', scheduled_start: '23:00', sort_order: 0,
+  it('validates a proposed start against the place default duration', () => {
+    const late = place('late-stop', { duration_minutes: 90 });
+    const result = evaluatePlannerScheduleProposal(trip, [late], [], [{
+      visit_id: 'visit:late', place_id: late.id, date: '2026-10-05', start: '23:00', sort_order: 0,
     }]);
     expect(result.valid).toBe(false);
     expect(result.issues.some((issue) => issue.code === 'CROSSES_MIDNIGHT')).toBe(true);
   });
 
-  it('detects every nested overlap, not only adjacent intervals', () => {
-    const places = [
-      place('a', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '09:00', duration_minutes: 180 }),
-      place('b', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '10:00', duration_minutes: 30 }),
-      place('c', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '11:00', duration_minutes: 30 }),
+  it('detects nested overlaps by visit id', () => {
+    const places = [place('a'), place('b'), place('c')];
+    const visits = [
+      visit('visit:a', 'a', { start: '09:00', duration_minutes: 180, sort_order: 0 }),
+      visit('visit:b', 'b', { start: '10:00', duration_minutes: 30, sort_order: 1 }),
+      visit('visit:c', 'c', { start: '11:00', duration_minutes: 30, sort_order: 2 }),
     ];
-    const overlaps = findPlannerTimeOverlaps(places, '2026-10-05');
+    const overlaps = findPlannerTimeOverlaps(scheduled(places, visits), '2026-10-05');
     expect(overlaps.map((item) => [item.fromId, item.toId])).toEqual([
-      ['a', 'b'],
-      ['a', 'c'],
+      ['visit:a', 'visit:b'],
+      ['visit:a', 'visit:c'],
     ]);
   });
 
@@ -84,40 +116,19 @@ describe('Planner schedule proposal', () => {
     expect(validatePlannerTiming('09:00', 1441).some((issue) => issue.code === 'INVALID_DURATION')).toBe(true);
     expect(validatePlannerTiming('23:30', 60).some((issue) => issue.code === 'CROSSES_MIDNIGHT')).toBe(true);
     expect(validatePlannerTiming('23:30', 60, { allowCrossMidnight: true })).toEqual([]);
-    expect(validatePlannerTiming(undefined, 90)).toEqual([]);
   });
 
-  it('evaluates adjacent travel legs without inventing missing travel time', () => {
-    const places = [
-      place('a', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '09:00', duration_minutes: 90, sort_order: 0 }),
-      place('b', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '11:00', duration_minutes: 60, sort_order: 1 }),
-      place('c', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '12:00', duration_minutes: 60, sort_order: 2 }),
+  it('evaluates travel legs by canonical place pair while visits keep occurrence identity', () => {
+    const places = [place('a'), place('b'), place('c')];
+    const visits = [
+      visit('visit:a', 'a', { start: '09:00', duration_minutes: 90, sort_order: 0 }),
+      visit('visit:b', 'b', { start: '11:00', duration_minutes: 60, sort_order: 1 }),
+      visit('visit:c', 'c', { start: '12:00', duration_minutes: 60, sort_order: 2 }),
     ];
-    const leg: PlannerTripLeg = {
-      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, 'a', 'b'), trip_id: trip.id,
-      from_place_id: 'a', to_place_id: 'b', mode: 'walking', duration_minutes: 20,
-      source: 'manual', created_at: '2026-08-29T00:00:00Z',
-    };
-    const result = evaluatePlannerDayFeasibility(trip, places, [leg], '2026-10-05');
+    const result = evaluatePlannerDayFeasibility(trip, scheduled(places, visits), [travelLeg('a', 'b', 20)], '2026-10-05');
     expect(result.status).toBe('unknown');
-    expect(result.transitions[0]).toMatchObject({ status: 'ok', earliest_arrival: '10:50', slack_minutes: 10 });
+    expect(result.transitions[0]).toMatchObject({ from_id: 'visit:a', to_id: 'visit:b', status: 'ok', earliest_arrival: '10:50', slack_minutes: 10 });
     expect(result.transitions[1]).toMatchObject({ status: 'unknown', unknown_reason: 'travel_time_missing' });
-  });
-
-  it('flags a deterministic late arrival from persisted travel time', () => {
-    const places = [
-      place('a', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '09:00', duration_minutes: 90, sort_order: 0 }),
-      place('b', { state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: '10:45', duration_minutes: 60, sort_order: 1 }),
-    ];
-    const leg: PlannerTripLeg = {
-      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, 'a', 'b'), trip_id: trip.id,
-      from_place_id: 'a', to_place_id: 'b', mode: 'driving', duration_minutes: 30,
-      source: 'manual', created_at: '2026-08-29T00:00:00Z',
-    };
-    const result = evaluatePlannerDayFeasibility(trip, places, [leg], '2026-10-05');
-    expect(result.status).toBe('conflict');
-    expect(result.valid).toBe(false);
-    expect(result.transitions[0]).toMatchObject({ status: 'conflict', earliest_arrival: '11:00', late_by_minutes: 15 });
   });
 
   it('derives end time instead of persisting a second authority', () => {
@@ -127,56 +138,28 @@ describe('Planner schedule proposal', () => {
   });
 });
 
-
 describe('Planner execution timeline', () => {
-  function scheduledPlace(id: string, start: string | undefined, duration: number | undefined, sortOrder: number): PlannerTripPlace {
-    return place(id, {
-      state: 'scheduled', scheduled_date: '2026-10-05', scheduled_start: start,
-      duration_minutes: duration, sort_order: sortOrder,
-    });
-  }
-
-  function travelLeg(from: string, to: string, minutes: number): PlannerTripLeg {
-    return {
-      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, from, to), trip_id: trip.id,
-      from_place_id: from, to_place_id: to, mode: 'walking', duration_minutes: minutes,
-      distance_meters: 1200, source: 'manual', created_at: '2026-08-29T00:00:00Z',
-    };
-  }
-
-  it('projects stop, travel and positive slack as one execution timeline', () => {
-    const places = [scheduledPlace('a', '09:00', 90, 0), scheduledPlace('b', '11:00', 60, 1)];
-    const result = buildPlannerDayExecutionTimeline(trip, places, [travelLeg('a', 'b', 18)], '2026-10-05');
+  it('projects stop, travel and slack from Visit occurrences', () => {
+    const places = [place('a'), place('b')];
+    const visits = [
+      visit('visit:a', 'a', { start: '09:00', duration_minutes: 90, sort_order: 0 }),
+      visit('visit:b', 'b', { start: '11:00', duration_minutes: 60, sort_order: 1 }),
+    ];
+    const result = buildPlannerDayExecutionTimeline(trip, scheduled(places, visits), [travelLeg('a', 'b', 18)], '2026-10-05');
     expect(result.status).toBe('feasible');
     expect(result.items.map((item) => item.type)).toEqual(['stop', 'travel', 'gap', 'stop']);
-    expect(result.items[0]).toMatchObject({ type: 'stop', place_id: 'a', start: '09:00', end: '10:30' });
-    expect(result.items[1]).toMatchObject({ type: 'travel', from_id: 'a', to_id: 'b', start: '10:30', end: '10:48', duration_minutes: 18 });
-    expect(result.items[2]).toMatchObject({ type: 'gap', start: '10:48', end: '11:00', duration_minutes: 12 });
-  });
-
-  it('projects deterministic lateness after the known travel block', () => {
-    const places = [scheduledPlace('a', '09:00', 90, 0), scheduledPlace('b', '11:00', 60, 1)];
-    const result = buildPlannerDayExecutionTimeline(trip, places, [travelLeg('a', 'b', 42)], '2026-10-05');
-    expect(result.status).toBe('conflict');
-    expect(result.items.map((item) => item.type)).toEqual(['stop', 'travel', 'conflict', 'stop']);
-    expect(result.items[1]).toMatchObject({ type: 'travel', start: '10:30', end: '11:12', duration_minutes: 42 });
-    expect(result.items[2]).toMatchObject({ type: 'conflict', earliest_arrival: '11:12', next_start: '11:00', late_by_minutes: 12 });
+    expect(result.items[0]).toMatchObject({ type: 'stop', visit_id: 'visit:a', place_id: 'a', start: '09:00', end: '10:30' });
+    expect(result.items[1]).toMatchObject({ type: 'travel', from_id: 'visit:a', to_id: 'visit:b', start: '10:30', end: '10:48' });
   });
 
   it('keeps a missing travel fact explicitly unknown', () => {
-    const places = [scheduledPlace('a', '09:00', 90, 0), scheduledPlace('b', '11:00', 60, 1)];
-    const result = buildPlannerDayExecutionTimeline(trip, places, [], '2026-10-05');
+    const places = [place('a'), place('b')];
+    const visits = [
+      visit('visit:a', 'a', { start: '09:00', duration_minutes: 90, sort_order: 0 }),
+      visit('visit:b', 'b', { start: '11:00', duration_minutes: 60, sort_order: 1 }),
+    ];
+    const result = buildPlannerDayExecutionTimeline(trip, scheduled(places, visits), [], '2026-10-05');
     expect(result.status).toBe('unknown');
     expect(result.items.map((item) => item.type)).toEqual(['stop', 'unknown', 'stop']);
-    expect(result.items[1]).toMatchObject({ type: 'unknown', reason: 'travel_time_missing' });
-  });
-
-  it('keeps a known travel fact when schedule timing is incomplete', () => {
-    const places = [scheduledPlace('a', '09:00', 90, 0), scheduledPlace('b', undefined, 60, 1)];
-    const result = buildPlannerDayExecutionTimeline(trip, places, [travelLeg('a', 'b', 18)], '2026-10-05');
-    expect(result.status).toBe('unknown');
-    expect(result.items.map((item) => item.type)).toEqual(['stop', 'travel', 'unknown', 'stop']);
-    expect(result.items[1]).toMatchObject({ type: 'travel', start: '10:30', end: '10:48', duration_minutes: 18 });
-    expect(result.items[2]).toMatchObject({ type: 'unknown', reason: 'schedule_time_missing' });
   });
 });

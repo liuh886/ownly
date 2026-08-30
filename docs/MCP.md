@@ -87,8 +87,8 @@ claude mcp list
 | `ownly_recurring_by_account` | Group by payment account without mixing currencies |
 | `ownly_review_needed` | List records needing lifecycle review |
 | `ownly_doctor` | Run read-only integrity checks |
-| `ownly_planner_summary` | Trips overview with place-state and expense counts |
-| `ownly_planner_get_trip` | Full trip context: budget, conflicts, canonical travel legs, derived execution timeline, places, bookings, expenses |
+| `ownly_planner_summary` | Trips overview with reusable-place, Visit-occurrence and expense counts |
+| `ownly_planner_get_trip` | Full trip context: reusable places, repeatable visits, budget, conflicts, travel legs, execution timeline, bookings, expenses |
 | `ownly_planner_budget_estimate` | Scheduled-day budget converted into the trip base currency |
 | `ownly_planner_get_ical_markdown` | Project confirmed Planner/Vault schedule facts into obsidian-ical-plugin-pro Markdown |
 
@@ -128,15 +128,15 @@ Write tools:
 | `ownly_prepare_create_snapshot` | Preview a net-worth snapshot |
 | `ownly_prepare_archive_object` | Preview recoverable archive |
 | `ownly_prepare_restore_object` | Preview archive restoration |
-| `ownly_planner_prepare_schedule_place` | Preview scheduling a place on a date (locks it) |
-| `ownly_planner_prepare_return_to_pool` | Preview returning a place to the research pool |
-| `ownly_planner_prepare_reorder_day` | Preview moving one scheduled place ±1 within its day |
-| `ownly_planner_prepare_optimize_day_travel_time` | Query an ephemeral ORS matrix, minimize actual travel minutes, keep the first/locked/anchored stops fixed, and preview one atomic order + final-leg commit |
-| `ownly_planner_prepare_set_stay_span` | Preview hotel stay-span anchors (retires stale stays on those dates) |
+| `ownly_planner_prepare_add_visit` | Preview adding one occurrence of a reusable place to a day |
+| `ownly_planner_prepare_remove_visit` | Preview removing one occurrence while keeping the reusable place and other visits |
+| `ownly_planner_prepare_reorder_day` | Preview moving one Visit occurrence ±1 within its day |
+| `ownly_planner_prepare_optimize_day_travel_time` | Query an ephemeral ORS matrix, minimize actual travel minutes, keep the first/locked/anchored Visit occurrences fixed, and preview one atomic order + final-leg commit |
+| `ownly_planner_prepare_set_stay_span` | Preview hotel stay-span Visit anchors (replaces stale hotel visits on those dates) |
 | `ownly_planner_prepare_drop_place` | Preview marking a place dropped |
 | `ownly_planner_prepare_add_expense` | Preview appending an AA-ledger expense |
 | `ownly_planner_prepare_set_fx_rates` | Preview persisting trip FX-rate overrides |
-| `ownly_planner_prepare_apply_schedule_proposal` | Validate and preview an MCP client/LLM schedule proposal without changing locked/anchored stops |
+| `ownly_planner_prepare_apply_schedule_proposal` | Validate and preview an MCP client/LLM schedule proposal without changing locked/anchored Visit occurrences; repeated `place_id` values create separate visits |
 | `ownly_planner_prepare_save_ical_markdown` | Preview regenerating the derived iCal Pro Markdown projection from canonical Planner facts |
 | `ownly_commit_operation` | Back up and persist a confirmed preview |
 | `ownly_discard_operation` | Remove a preview without touching files |

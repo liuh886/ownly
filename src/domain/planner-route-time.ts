@@ -1,4 +1,4 @@
-import type { PlannerTripPlace } from './planner';
+import type { PlannerScheduledPlace } from './planner-visits';
 
 export type PlannerTravelTimeMatrix = Record<string, Record<string, number | null | undefined> | undefined>;
 
@@ -9,7 +9,7 @@ export interface PlannerTravelTimeOptimizationOptions {
 }
 
 export interface PlannerTravelTimeOptimizationResult {
-  places: PlannerTripPlace[];
+  places: PlannerScheduledPlace[];
   originalMinutes: number;
   optimizedMinutes: number;
   savedMinutes: number;
@@ -17,7 +17,7 @@ export interface PlannerTravelTimeOptimizationResult {
 }
 
 export function calculateRouteTravelMinutes(
-  places: PlannerTripPlace[],
+  places: PlannerScheduledPlace[],
   matrix: PlannerTravelTimeMatrix,
 ): number | null {
   let total = 0;
@@ -30,10 +30,10 @@ export function calculateRouteTravelMinutes(
 }
 
 function buildPinnedOrder(
-  base: PlannerTripPlace[],
+  base: PlannerScheduledPlace[],
   movableSlots: number[],
-  movableItems: PlannerTripPlace[],
-): PlannerTripPlace[] {
+  movableItems: PlannerScheduledPlace[],
+): PlannerScheduledPlace[] {
   const next = [...base];
   movableSlots.forEach((slot, index) => {
     next[slot] = movableItems[index];
@@ -42,7 +42,7 @@ function buildPinnedOrder(
 }
 
 export function optimizeStopsByTravelTime(
-  places: PlannerTripPlace[],
+  places: PlannerScheduledPlace[],
   matrix: PlannerTravelTimeMatrix,
   options: PlannerTravelTimeOptimizationOptions = {},
 ): PlannerTravelTimeOptimizationResult | null {
@@ -68,7 +68,7 @@ export function optimizeStopsByTravelTime(
   if (fixEnd) pinnedSlots.add(current.length - 1);
 
   const movableSlots: number[] = [];
-  const movableItems: PlannerTripPlace[] = [];
+  const movableItems: PlannerScheduledPlace[] = [];
   current.forEach((place, index) => {
     if (!pinnedSlots.has(index)) {
       movableSlots.push(index);
@@ -78,14 +78,14 @@ export function optimizeStopsByTravelTime(
 
   let bestMovable = [...movableItems];
   let bestMinutes = originalMinutes;
-  const score = (items: PlannerTripPlace[]): number => {
+  const score = (items: PlannerScheduledPlace[]): number => {
     const minutes = calculateRouteTravelMinutes(buildPinnedOrder(current, movableSlots, items), matrix);
     return minutes ?? Number.POSITIVE_INFINITY;
   };
 
   const movableCount = movableItems.length;
   if (movableCount >= 2 && movableCount <= 8) {
-    const permute = (items: PlannerTripPlace[], left: number) => {
+    const permute = (items: PlannerScheduledPlace[], left: number) => {
       if (left === items.length) {
         const minutes = score(items);
         if (minutes < bestMinutes) {

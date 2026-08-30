@@ -748,8 +748,8 @@ export function renderCandidatesList() {
   for (const place of candidates) {
     seen.add(place.id);
     const sig = candidateCardSig(place, dictKey);
-    let node = place.scheduled_date ? undefined : cardCache.get(place.id)?.node;
-    const cached = place.scheduled_date ? undefined : cardCache.get(place.id);
+    let node = cardCache.get(place.id)?.node;
+    const cached = cardCache.get(place.id);
     if (cached && cached.sig === sig) {
       el.candidatesListContainer.append(cached.node);
       continue;
@@ -938,7 +938,7 @@ function buildCandidateDetails(
 
   const details = document.createElement('div');
   details.className = 'candidate-details';
-  if (store.bulkMode && !place.is_anchor) {
+  if (store.bulkMode) {
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.className = 'bulk-check';
@@ -951,9 +951,6 @@ function buildCandidateDetails(
   if (place.area || place.address) parts.push('<span title="' + escapeHtml(place.address ?? place.area ?? '') + '">📍</span>');
   if (place.phone) parts.push(`<a href="tel:${escapeHtml(place.phone)}" class="badge">☎️ ${escapeHtml(place.phone)}</a>`);
   if (place.plus_code) parts.push(`<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`);
-  if (place.is_anchor) {
-    parts.push(`<span class="badge highlight" title="${store.lang === 'zh' ? '行程锚点（住宿占位），受保护不可批量删除' : 'Trip anchor (stay placeholder), protected from bulk delete'}">🏨</span>`);
-  }
   if (place.source_place_id) {
     parts.push(`<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`);
   }

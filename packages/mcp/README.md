@@ -41,7 +41,7 @@ Commit creates a full Ownly backup in the sibling `Ownly Backups/` directory bef
 
 ## Planner routing
 
-Planner reads canonical `Trip Places/` and `Trip Legs/` facts and exposes the derived execution timeline through `ownly_planner_get_trip`. Walking, driving, and bicycling leg refresh / travel-time optimization use OpenRouteService from the local MCP process:
+Planner reads canonical `Trip Places/`, `Trip Visits/`, and `Trip Legs/` facts and exposes the derived execution timeline through `ownly_planner_get_trip`. Walking, driving, and bicycling leg refresh / travel-time optimization use OpenRouteService from the local MCP process:
 
 ```bash
 OPENROUTESERVICE_API_KEY=your-key npx -y @ownly-app/mcp --data-dir /path/to/vault --allow-write
@@ -66,6 +66,8 @@ Write workflow tools:
 - `ownly_prepare_add_object_log`, `ownly_prepare_create_review`
 - `ownly_prepare_create_snapshot`
 - `ownly_prepare_archive_object`, `ownly_prepare_restore_object`
+- `ownly_planner_prepare_add_visit`, `ownly_planner_prepare_remove_visit`, `ownly_planner_prepare_reorder_day`
+- `ownly_planner_prepare_set_stay_span`, `ownly_planner_prepare_drop_place`
 - `ownly_planner_prepare_set_travel_leg`, `ownly_planner_prepare_refresh_day_travel`
 - `ownly_planner_prepare_optimize_day_travel_time`, `ownly_planner_prepare_apply_schedule_proposal`
 - `ownly_commit_operation`, `ownly_discard_operation`

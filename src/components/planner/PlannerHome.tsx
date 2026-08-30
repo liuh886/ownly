@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
-import type { PlannerPlaceKind, PlannerTrip, PlannerTripLeg, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
+import type { PlannerPlaceKind, PlannerScheduledPlace as PlannerScheduledPlaceDomain, PlannerTrip, PlannerTripLeg, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
+import { materializePlannerScheduledPlaces, sortPlannerScheduledPlaces, type PlannerScheduledPlace, type PlannerTripVisit } from '@/domain/planner-visits';
 import {
   computeUrgencies,
   fetchWeather,
@@ -25,11 +26,9 @@ import {
   getTripAreaCounts,
   haversineDistanceKm,
   detectHotelTransferDays,
-  generateStaySpanPlaces,
   isPlausibleCustomTag,
   listTripDates,
   parsePlaceExpenseEstimate,
-  sortPlannerPlaces,
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
 } from '@/domain/planner';
@@ -53,7 +52,7 @@ function formatDay(date: string, language: 'en' | 'zh'): string {
   return language === 'zh' ? `${Number(month)}月${Number(day)}日` : `${month}/${day}`;
 }
 
-function placeMeta(place: PlannerTripPlace, language: 'en' | 'zh' = 'zh'): string {
+function placeMeta(place: PlannerTripPlace | PlannerScheduledPlaceDomain, language: 'en' | 'zh' = 'zh'): string {
   const kindLabel = `${PLANNER_KIND_ICONS[place.kind] || '📍'} ${getPlannerKindLabel(place.kind, language)}`;
   const durationLabel = place.duration_minutes
     ? (language === 'zh' ? `${place.duration_minutes} 分钟` : `${place.duration_minutes} min`)
@@ -89,6 +88,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const zh = language === 'zh';
   const [trips, setTrips] = useState<PlannerTrip[]>([]);
   const [places, setPlaces] = useState<PlannerTripPlace[]>([]);
+  const [visits, setVisits] = useState<PlannerTripVisit[]>([]);
   const [legs, setLegs] = useState<PlannerTripLeg[]>([]);
   const [selectedTripId, setSelectedTripId] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
@@ -162,7 +162,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [timingModalPlace, setTimingModalPlace] = useState<PlannerTripPlace | null>(null);
+  const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
   const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
 
@@ -181,14 +181,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const load = useCallback(async () => {
     if (disabled) return;
     await plannerRepository.initialize();
-    const [nextTrips, nextPlaces, nextLegs] = await Promise.all([
+    const [nextTrips, nextPlaces, nextVisits, nextLegs] = await Promise.all([
       plannerRepository.listTrips(),
       plannerRepository.listPlaces(),
+      plannerRepository.listVisits(),
       plannerRepository.listLegs(),
     ]);
     nextTrips.sort((left, right) => right.start_date.localeCompare(left.start_date));
     setTrips(nextTrips);
     setPlaces(nextPlaces);
+    setVisits(nextVisits);
     setLegs(nextLegs);
     setSelectedTripId((current) => current || nextTrips[0]?.id || '');
     try {
@@ -203,9 +205,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     async function init() {
       if (disabled) return;
       await plannerRepository.initialize();
-      const [nextTrips, nextPlaces, nextLegs, state] = await Promise.all([
+      const [nextTrips, nextPlaces, nextVisits, nextLegs, state] = await Promise.all([
         plannerRepository.listTrips(),
         plannerRepository.listPlaces(),
+        plannerRepository.listVisits(),
         plannerRepository.listLegs(),
         pullCaptureState(),
       ]);
@@ -213,6 +216,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       nextTrips.sort((left, right) => right.start_date.localeCompare(left.start_date));
       setTrips(nextTrips);
       setPlaces(nextPlaces);
+      setVisits(nextVisits);
       setLegs(nextLegs);
       setSelectedTripId((current) => current || nextTrips[0]?.id || '');
       setCapturePending(state ? state.pendingPlaces.length : null);
@@ -321,7 +325,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const candidates = useMemo(
     () => [...tripPlaces]
-      .filter((place) => !place.scheduled_date && place.state === 'candidate')
+      .filter((place) => place.state === 'candidate')
       .map((place) => ({
         ...place,
         tags: ensurePlaceKindTag(place.tags, place.kind, language),
@@ -436,9 +440,17 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const [candidateSortMode, setCandidateSortMode] = useState<'default' | 'distance' | 'must' | 'rating'>('default');
 
+  const scheduledAll = useMemo(
+    () => materializePlannerScheduledPlaces(
+      tripPlaces,
+      visits.filter((visit) => visit.trip_id === selectedTripId),
+    ),
+    [selectedTripId, tripPlaces, visits],
+  );
+
   const scheduled = useMemo(
-    () => sortPlannerPlaces(tripPlaces.filter((place) => place.scheduled_date === activeDate && place.state === 'scheduled')),
-    [activeDate, tripPlaces],
+    () => sortPlannerScheduledPlaces(scheduledAll.filter((place) => place.scheduled_date === activeDate)),
+    [activeDate, scheduledAll],
   );
 
   const tripLegs = useMemo(
@@ -448,9 +460,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const dayTimeline = useMemo(
     () => selectedTrip
-      ? buildPlannerDayExecutionTimeline(selectedTrip, tripPlaces, tripLegs, activeDate)
+      ? buildPlannerDayExecutionTimeline(selectedTrip, scheduledAll, tripLegs, activeDate)
       : { date: activeDate, status: 'unknown' as const, valid: false, items: [] },
-    [activeDate, selectedTrip, tripLegs, tripPlaces],
+    [activeDate, selectedTrip, scheduledAll, tripLegs],
   );
 
   const scheduledWithCoords = useMemo(
@@ -501,18 +513,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   );
 
   const placesByDate = useMemo(() => {
-    const map: Record<string, PlannerTripPlace[]> = {};
+    const map: Record<string, PlannerScheduledPlace[]> = {};
     tripDates.forEach((date) => {
-      map[date] = sortPlannerPlaces(
-        tripPlaces.filter((p) => p.state === 'scheduled' && p.scheduled_date === date),
-      );
+      map[date] = sortPlannerScheduledPlaces(scheduledAll.filter((place) => place.scheduled_date === date));
     });
     return map;
-  }, [tripDates, tripPlaces]);
+  }, [scheduledAll, tripDates]);
 
   const transferDaysInfo = useMemo(() => {
-    return detectHotelTransferDays(tripPlaces, tripDates);
-  }, [tripPlaces, tripDates]);
+    return detectHotelTransferDays(scheduledAll, tripDates);
+  }, [scheduledAll, tripDates]);
 
   const currentDayTransferInfo = activeDate ? transferDaysInfo[activeDate] : undefined;
 
@@ -521,31 +531,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       if (disabled || stayDates.length === 0) return;
       setBusy(true);
       try {
-        const stayPlaces = generateStaySpanPlaces(hotel, stayDates);
-        const dateSet = new Set(stayDates);
-        const newIds = new Set(stayPlaces.map((sp) => sp.id));
-
-        // Retire previous stay anchors on the same dates or previous virtual spans of this hotel
-        const staleStays = tripPlaces.filter(
-          (p) =>
-            p.state === 'scheduled'
-            && !newIds.has(p.id)
-            && (
-              (p.scheduled_date && dateSet.has(p.scheduled_date) && (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin')))
-              || (p.id.startsWith(`${hotel.id}__stay_`))
-            ),
-        );
-        for (const stale of staleStays) {
-          if (stale.id.includes('__stay_')) {
-            await plannerRepository.dropPlace(stale.id);
-          } else {
-            await plannerRepository.unschedulePlace(stale.id);
-          }
-        }
-
-        for (const sp of stayPlaces) {
-          await plannerRepository.upsertPlace(sp);
-        }
+        await plannerRepository.setStaySpan(hotel.id, stayDates);
         await load();
         setNotice(
           zh
@@ -557,7 +543,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         setBusy(false);
       }
     },
-    [disabled, zh, load, tripPlaces],
+    [disabled, zh, load],
   );
 
   const handleUpdateFxRates = useCallback(
@@ -581,10 +567,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const handleSavePlaceTiming = useCallback(
     async (
-      placeId: string,
+      visitId: string,
       timing: { scheduled_start?: string; duration_minutes?: number },
     ) => {
-      await plannerRepository.updatePlaceTiming(placeId, timing);
+      await plannerRepository.updateVisitTiming(visitId, { start: timing.scheduled_start, duration_minutes: timing.duration_minutes });
       await load();
       setNotice(zh ? '已更新行程时段与停留时长！' : 'Updated schedule timing and duration!');
       setTimeout(() => setNotice(''), 3000);
@@ -595,7 +581,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const areaCounts = useMemo(() => getTripAreaCounts(tripPlaces), [tripPlaces]);
   const maxAreaCount = Math.max(1, ...areaCounts.map((item) => item.count));
   const mustTotal = tripPlaces.filter((place) => place.priority === 'must').length;
-  const mustScheduled = tripPlaces.filter((place) => place.priority === 'must' && place.scheduled_date).length;
+  const mustScheduled = scheduledAll.filter((place) => place.priority === 'must').length;
   const scheduledMinutes = scheduled.reduce((sum, place) => sum + (place.duration_minutes ?? 0), 0);
 
   // ── Departure intelligence ────────────────────────────────────────────────
@@ -660,12 +646,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   }, [selectedTrip, scheduled, activeDate, zh]);
 
   const dayCollisions = useMemo(() => {
-    return checkDayScheduleCollisions(tripPlaces, activeDate);
-  }, [tripPlaces, activeDate]);
+    return checkDayScheduleCollisions(scheduledAll, activeDate);
+  }, [scheduledAll, activeDate]);
 
   const dayTimeOverlaps = useMemo(() => {
-    return findPlannerTimeOverlaps(tripPlaces, activeDate);
-  }, [tripPlaces, activeDate]);
+    return findPlannerTimeOverlaps(scheduledAll, activeDate);
+  }, [scheduledAll, activeDate]);
 
   const dayEstimatedCost = useMemo(() => {
     if (!selectedTrip) return { total: 0, unconverted: 0 };
@@ -703,15 +689,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const copyMarkdownItinerary = useCallback(async () => {
     if (!selectedTrip) return;
-    const md = exportTripToMarkdown(selectedTrip, places, currentExpenses, language);
+    const md = exportTripToMarkdown(selectedTrip, places, scheduledAll, currentExpenses, language);
     await navigator.clipboard.writeText(md);
     setNotice(zh ? '已复制 Markdown 完整行程单至剪贴板！' : 'Copied Markdown itinerary to clipboard!');
     setTimeout(() => setNotice(''), 3000);
-  }, [selectedTrip, places, currentExpenses, language, zh]);
+  }, [selectedTrip, places, scheduledAll, currentExpenses, language, zh]);
 
   const copyICalProMarkdown = useCallback(async () => {
     if (!selectedTrip) return;
-    const md = exportTripToICalProMarkdown(selectedTrip, places, { language });
+    const md = exportTripToICalProMarkdown(selectedTrip, places, visits, { language });
     await navigator.clipboard.writeText(md);
     setNotice(
       zh
@@ -719,11 +705,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         : 'Copied the iCal Pro calendar projection; timed events only use confirmed Planner start times and durations.',
     );
     setTimeout(() => setNotice(''), 4000);
-  }, [selectedTrip, places, language, zh]);
+  }, [selectedTrip, places, visits, language, zh]);
 
   const downloadICalProMarkdown = useCallback(() => {
     if (!selectedTrip) return;
-    const md = exportTripToICalProMarkdown(selectedTrip, places, { language });
+    const md = exportTripToICalProMarkdown(selectedTrip, places, visits, { language });
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -736,7 +722,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         ? '已下载 iCal Pro 日历投影 (.md)；可放入 Obsidian Vault 由 iCal Pro 生成订阅源。'
         : 'Downloaded the iCal Pro calendar projection (.md).',
     );
-  }, [selectedTrip, places, language, zh]);
+  }, [selectedTrip, places, visits, language, zh]);
 
   const saveICalProMarkdownToVault = useCallback(async () => {
     if (!selectedTrip) return;
@@ -766,12 +752,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const schedulePlace = useCallback(async (placeId: string, date = activeDate) => {
     if (!date) return;
-    await plannerRepository.schedulePlace(placeId, date);
+    await plannerRepository.addVisit(placeId, date);
     await load();
   }, [activeDate, load]);
 
-  const returnToPool = useCallback(async (place: PlannerTripPlace) => {
-    await plannerRepository.unschedulePlace(place.id);
+  const removeVisit = useCallback(async (place: PlannerScheduledPlace) => {
+    await plannerRepository.removeVisit(place.visit_id);
     await load();
   }, [load]);
 
@@ -781,7 +767,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     const orderedIds = scheduled.map((p) => p.id);
     const [moved] = orderedIds.splice(index, 1);
     orderedIds.splice(targetIndex, 0, moved);
-    await plannerRepository.reorderScheduled(activeDate, orderedIds);
+    await plannerRepository.reorderVisits(activeDate, orderedIds);
     await load();
   }, [activeDate, load, scheduled]);
 
@@ -1291,7 +1277,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             type="button"
                             aria-label={place.locked ? (zh ? '已固定顺位（点击取消固定）' : 'Pinned (click to unpin)') : (zh ? '固定在当前顺位（点击固定）' : 'Pin stop at slot')}
                             onClick={async () => {
-                              await plannerRepository.toggleLockPlace(place.id);
+                              await plannerRepository.toggleVisitLock(place.visit_id);
                               await load();
                             }}
                             className={`h-8 w-8 rounded-md border text-xs transition ${
@@ -1305,7 +1291,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           </button>
                           <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↑</button>
                           <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↓</button>
-                          <button type="button" aria-label={zh ? '放回候选池' : 'Return to pool'} onClick={() => void returnToPool(place)} className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-500 hover:bg-stone-50">{zh ? '移出' : 'Pool'}</button>
+                          <button type="button" aria-label={zh ? '移除此访问' : 'Remove visit'} onClick={() => void removeVisit(place)} className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-500 hover:bg-stone-50">{zh ? '移除' : 'Remove'}</button>
                         </div>
                       </div>
 {index < scheduled.length - 1 ? (
@@ -1431,7 +1417,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 activeDayIndex={activeDayIndex}
                 highlightedPlaceId={highlightedPlaceId}
                 onSchedulePlace={schedulePlace}
-                onUnschedulePlace={returnToPool}
+                onUnschedulePlace={removeVisit}
                 onHoverPlace={setHighlightedPlaceId}
                 language={language}
               />
@@ -1511,7 +1497,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 activeDayIndex={activeDayIndex}
                 highlightedPlaceId={highlightedPlaceId}
                 onSchedulePlace={schedulePlace}
-                onUnschedulePlace={returnToPool}
+                onUnschedulePlace={removeVisit}
                 onHoverPlace={setHighlightedPlaceId}
                 language={language}
               />

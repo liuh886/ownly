@@ -25,7 +25,7 @@ import {
 } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
-const SERVER_VERSION = '0.6.0';
+const SERVER_VERSION = '0.7.0';
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -261,7 +261,7 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     'ownly_planner_summary',
     {
       title: 'Planner Summary',
-      description: 'Overview of all trips with place counts (scheduled/candidates/dropped) and expense counts.',
+      description: 'Overview of trips with reusable place counts, Visit occurrence counts, dropped places and expenses.',
       inputSchema: z.object({}),
       annotations: READ_ONLY_ANNOTATIONS,
     },
@@ -272,7 +272,7 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     'ownly_planner_get_trip',
     {
       title: 'Planner Trip Detail',
-      description: 'Full trip context: trip, FX-aware budget, conflicts, canonical travel legs, derived execution timelines, places, bookings and expenses.',
+      description: 'Full trip context: reusable places, repeatable Visit occurrences, FX-aware budget, conflicts, canonical travel legs, execution timelines, bookings and expenses.',
       inputSchema: z.object({ trip_id: z.string().min(1) }),
       annotations: READ_ONLY_ANNOTATIONS,
     },
@@ -358,44 +358,45 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
   );
 
   server.registerTool(
-    'ownly_planner_prepare_schedule_place',
+    'ownly_planner_prepare_add_visit',
     {
-      title: 'Preview Scheduling a Place',
-      description: 'Preview scheduling a planner place on a date (locks it as a hard constraint for later optimization).',
+      title: 'Preview Adding a Planner Visit',
+      description: 'Preview adding one occurrence of a reusable place to a day. The place remains in the research pool and can be added again on the same or another day.',
       inputSchema: z.object({
         place_id: z.string().min(1),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        sort_order: z.number().int().optional(),
+        sort_order: z.number().int().nonnegative().optional(),
+        locked: z.boolean().optional(),
       }),
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
-    safeHandler(({ place_id, date, sort_order }) => writeService.prepareSchedulePlace(place_id, date, sort_order)),
+    safeHandler(({ place_id, date, sort_order, locked }) => writeService.prepareAddVisit(place_id, date, sort_order, locked ?? false)),
   );
 
   server.registerTool(
-    'ownly_planner_prepare_return_to_pool',
+    'ownly_planner_prepare_remove_visit',
     {
-      title: 'Preview Returning a Place to Pool',
-      description: 'Preview moving a scheduled place back to the candidate pool.',
-      inputSchema: z.object({ place_id: z.string().min(1) }),
+      title: 'Preview Removing a Planner Visit',
+      description: 'Preview removing one scheduled occurrence without deleting or changing the reusable place fact.',
+      inputSchema: z.object({ visit_id: z.string().min(1) }),
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
-    safeHandler(({ place_id }) => writeService.prepareReturnPlaceToPool(place_id)),
+    safeHandler(({ visit_id }) => writeService.prepareRemoveVisit(visit_id)),
   );
 
   server.registerTool(
     'ownly_planner_prepare_reorder_day',
     {
       title: 'Preview Reordering a Day',
-      description: 'Preview moving a scheduled place one position up (-1) or down (+1) within its day.',
+      description: 'Preview moving one visit one position up (-1) or down (+1) within its day.',
       inputSchema: z.object({
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        place_id: z.string().min(1),
+        visit_id: z.string().min(1),
         delta: z.union([z.literal(-1), z.literal(1)]),
       }),
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
-    safeHandler(({ date, place_id, delta }) => writeService.prepareReorderDay(date, place_id, delta)),
+    safeHandler(({ date, visit_id, delta }) => writeService.prepareReorderDay(date, visit_id, delta)),
   );
 
   server.registerTool(
@@ -512,20 +513,21 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     'ownly_planner_prepare_apply_schedule_proposal',
     {
       title: 'Preview Schedule Proposal',
-      description: 'Validate and preview an MCP client/LLM schedule proposal. Locked or anchored stops cannot be changed; accepted AI decisions remain unlocked until the user explicitly pins them.',
+      description: 'Validate and preview an MCP client/LLM Visit proposal. Existing locked/anchored visits cannot move. Omitting visit_id creates a new occurrence, so one place may appear multiple times.',
       inputSchema: z.object({
         trip_id: z.string().min(1),
-        places: z.array(z.object({
-          id: z.string().min(1),
-          scheduled_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-          scheduled_start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional(),
+        visits: z.array(z.object({
+          visit_id: z.string().min(1).optional(),
+          place_id: z.string().min(1),
+          date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional(),
           sort_order: z.number().int().nonnegative(),
           duration_minutes: z.number().int().positive().max(1440).optional(),
         })).min(1),
       }),
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
-    safeHandler(({ trip_id, places }) => writeService.preparePlannerApplyScheduleProposal(trip_id, { places })),
+    safeHandler(({ trip_id, visits }) => writeService.preparePlannerApplyScheduleProposal(trip_id, { visits })),
   );
 
   server.registerTool(

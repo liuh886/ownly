@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.liuh886/ownly",
   "title": "Ownly",
-  "description": "Local-first Ownly evidence and Planner schedules with preview-before-commit writes.",
+  "description": "Local-first Ownly evidence and repeatable Planner visits with preview-before-commit writes.",
   "repository": {
     "url": "https://github.com/liuh886/ownly",
     "source": "github"
   },
-  "version": "0.6.0",
+  "version": "0.7.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@ownly-app/mcp",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "transport": {
         "type": "stdio"
       },

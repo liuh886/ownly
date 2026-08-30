@@ -427,12 +427,6 @@ export function initHandlers(): void {
   el.btnBulkDelete.addEventListener('click', () => {
     const dict = t();
     if (store.bulkSelected.size === 0) return;
-    const anchors = store.state.pendingPlaces.filter((p) => store.bulkSelected.has(p.id) && p.is_anchor);
-    if (anchors.length > 0) {
-      setStatus(dict.anchorProtected, 'error');
-      for (const a of anchors) store.bulkSelected.delete(a.id);
-      if (store.bulkSelected.size === 0) return;
-    }
     const ids = new Set(store.bulkSelected);
     for (const id of ids) store.locallyDeletedIds.add(id);
     store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => !ids.has(p.id)) };
@@ -676,9 +670,6 @@ export function initHandlers(): void {
                 item.id = crypto.randomUUID();
                 item.trip_id = context.tripId;
                 item.state = 'candidate';
-                item.scheduled_date = undefined;
-                item.sort_order = undefined;
-                item.locked = undefined;
                 mergedPending.set(item.id, item);
                 importedCount += 1;
               }

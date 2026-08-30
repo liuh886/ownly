@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createOwnlyBackup, serializeOwnlyBackup } from '../../src/core/data-portability';
 import { validateEntity } from '../../src/domain/schema';
@@ -31,9 +31,7 @@ import {
   listPlannerLegs,
   listPlannerPlaces,
   listPlannerTrips,
-  reorderDayPlace,
-  returnPlaceToPool,
-  schedulePlaceOnDate,
+  listPlannerVisits,
 } from '../cli/planner-storage';
 import {
   archiveEntry,
@@ -46,7 +44,6 @@ import {
   writeEntry,
 } from '../cli/storage';
 import {
-  generateStaySpanPlaces,
   plannerTripLegFileName,
   type FxSettings,
   type PlannerTrip,
@@ -55,6 +52,7 @@ import {
   type TripExpenseItem,
 } from '../../src/domain/planner';
 import { exportTripToICalProMarkdown } from '../../src/domain/ical-pro';
+import { createPlannerTripVisit, materializePlannerScheduledPlaces, plannerTripVisitFileName, sortPlannerScheduledPlaces, type PlannerTripVisit } from '../../src/domain/planner-visits';
 import { evaluatePlannerScheduleProposal, type PlannerScheduleProposalItem } from '../../src/domain/planner-schedule';
 
 export type OwnlyMutationErrorCode =
@@ -582,102 +580,118 @@ export class OwnlyWriteService {
     return { base: 'CNY', overrides: undefined };
   }
 
-  prepareSchedulePlace(placeId: string, date: string, sortOrder?: number): PreparedOwnlyOperation {
-    const entry = this.plannerPlaceEntry(placeId);
-    const before = entry.frontmatter;
-    const order = sortOrder ?? before.sort_order ?? 0;
-    const next = schedulePlaceOnDate(before, date, order);
-    const expected = fingerprint(entry.filePath);
-    return this.prepare('planner_schedule_place', { before, after: next }, () => {
-      assertUnchanged(entry.filePath, expected);
-      writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
-      writeAgentLog(this.dataLocation, 'planner_schedule_place', placeId, before, next);
-      return { id: placeId, state: next.state, scheduled_date: next.scheduled_date };
+  private plannerVisitEntry(visitId: string) {
+    const entry = findPlannerEntry(listPlannerVisits(this.dataLocation), visitId);
+    if (!entry) {
+      throw new OwnlyMutationError(`Planner visit was not found: ${visitId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
+    }
+    return entry;
+  }
+
+  prepareAddVisit(placeId: string, date: string, sortOrder?: number, locked = false): PreparedOwnlyOperation {
+    const placeEntry = this.plannerPlaceEntry(placeId);
+    const place = placeEntry.frontmatter;
+    if (place.state === 'dropped') throw new OwnlyMutationError('Dropped places cannot be scheduled.', 'INVALID_INPUT');
+    const visits = listPlannerVisits(this.dataLocation).map((entry) => entry.frontmatter as PlannerTripVisit);
+    const order = sortOrder ?? visits
+      .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
+      .reduce((max, visit) => Math.max(max, visit.sort_order), -1) + 1;
+    const visit = createPlannerTripVisit(place, date, order, { locked }, this.now(), randomUUID());
+    const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.visits);
+    const fileName = plannerTripVisitFileName(visit.id);
+    const filePath = join(directory, fileName);
+    const expected = fingerprint(filePath);
+    return this.prepare('planner_add_visit', { place: { id: place.id, title: place.title }, visit }, () => {
+      assertUnchanged(filePath, expected);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(filePath, serializeMarkdownEntity(visit, ''), 'utf8');
+      writeAgentLog(this.dataLocation, 'planner_add_visit', visit.id, null, visit);
+      return { visit_id: visit.id, place_id: place.id, date: visit.date, sort_order: visit.sort_order };
     });
   }
 
-  prepareReturnPlaceToPool(placeId: string): PreparedOwnlyOperation {
-    const entry = this.plannerPlaceEntry(placeId);
-    const before = entry.frontmatter;
-    const next = returnPlaceToPool(before);
+  prepareRemoveVisit(visitId: string): PreparedOwnlyOperation {
+    const entry = this.plannerVisitEntry(visitId);
+    const before = entry.frontmatter as PlannerTripVisit;
     const expected = fingerprint(entry.filePath);
-    return this.prepare('planner_return_to_pool', { before, after: next }, () => {
+    return this.prepare('planner_remove_visit', { before, after: null }, () => {
       assertUnchanged(entry.filePath, expected);
-      writeEntry(dirname(entry.filePath), entry.fileName, next, entry.body);
-      writeAgentLog(this.dataLocation, 'planner_return_to_pool', placeId, before, next);
-      return { id: placeId, state: next.state };
+      unlinkSync(entry.filePath);
+      writeAgentLog(this.dataLocation, 'planner_remove_visit', visitId, before, null);
+      return { visit_id: visitId, removed: true };
     });
   }
 
-  prepareReorderDay(date: string, placeId: string, delta: -1 | 1): PreparedOwnlyOperation {
-    const places = listPlannerPlaces(this.dataLocation)
-      .map((e) => e.frontmatter)
-      .filter((p) => p.state === 'scheduled' && p.scheduled_date === date)
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    const reordered = reorderDayPlace(places, placeId, delta);
-    if (!reordered) {
+  prepareReorderDay(date: string, visitId: string, delta: -1 | 1): PreparedOwnlyOperation {
+    const entries = listPlannerVisits(this.dataLocation)
+      .filter((entry) => entry.frontmatter.date === date)
+      .sort((left, right) => left.frontmatter.sort_order - right.frontmatter.sort_order);
+    const index = entries.findIndex((entry) => entry.frontmatter.id === visitId);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= entries.length) {
       throw new OwnlyMutationError('Reorder target is out of bounds for this day.', 'INVALID_INPUT');
     }
-    const touched = reordered.filter((p, i) => p !== places[i] || p.sort_order !== places[i].sort_order);
-    const expectedMap = new Map(
-      listPlannerPlaces(this.dataLocation).map((e) => [e.filePath, fingerprint(e.filePath)]),
-    );
-    const previews = touched.map((p) => ({ id: p.id, sort_order: p.sort_order }));
-    return this.prepare('planner_reorder_day', { date, changes: previews }, () => {
-      for (const place of touched) {
-        const entry = listPlannerPlaces(this.dataLocation).find((e) => e.frontmatter.id === place.id);
-        if (!entry) continue;
-        assertUnchanged(entry.filePath, expectedMap.get(entry.filePath)!);
-        writeEntry(dirname(entry.filePath), entry.fileName, place, entry.body);
-      }
-      return { date, updated: previews.length };
+    const reordered = [...entries];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved);
+    const targets = reordered
+      .map((entry, sort_order) => ({
+        entry,
+        next: { ...entry.frontmatter, sort_order, updated_at: this.now().toISOString() } as PlannerTripVisit,
+        expected: fingerprint(entry.filePath),
+      }))
+      .filter(({ entry, next }) => entry.frontmatter.sort_order !== next.sort_order);
+    return this.prepare('planner_reorder_day', {
+      date,
+      changes: targets.map(({ next }) => ({ visit_id: next.id, place_id: next.place_id, sort_order: next.sort_order })),
+    }, () => {
+      for (const targetItem of targets) assertUnchanged(targetItem.entry.filePath, targetItem.expected);
+      for (const targetItem of targets) writeEntry(dirname(targetItem.entry.filePath), targetItem.entry.fileName, targetItem.next, targetItem.entry.body);
+      return { date, updated: targets.length };
     });
   }
-
 
   prepareApplyTravelTimeOptimization(
     tripId: string,
     date: string,
-    orderedPlaceIds: string[],
+    orderedVisitIds: string[],
     legs: PlannerTripLeg[],
     summary: { original_minutes: number; optimized_minutes: number; saved_minutes: number; used_manual_pairs: string[] },
   ): PreparedOwnlyOperation {
-    const entries = listPlannerPlaces(this.dataLocation).filter((entry) =>
-      entry.frontmatter.trip_id === tripId
-      && entry.frontmatter.state === 'scheduled'
-      && entry.frontmatter.scheduled_date === date,
+    const visitEntries = listPlannerVisits(this.dataLocation).filter((entry) =>
+      entry.frontmatter.trip_id === tripId && entry.frontmatter.date === date,
     );
-    const current = entries
-      .map((entry) => entry.frontmatter)
-      .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0));
-    if (orderedPlaceIds.length !== current.length || new Set(orderedPlaceIds).size !== current.length) {
-      throw new OwnlyMutationError('Optimized order must contain every scheduled place exactly once.', 'INVALID_INPUT');
+    const current = [...visitEntries]
+      .sort((left, right) => left.frontmatter.sort_order - right.frontmatter.sort_order)
+      .map((entry) => entry.frontmatter as PlannerTripVisit);
+    if (orderedVisitIds.length !== current.length || new Set(orderedVisitIds).size !== current.length) {
+      throw new OwnlyMutationError('Optimized order must contain every visit exactly once.', 'INVALID_INPUT');
     }
-    const currentIds = new Set(current.map((place) => place.id));
-    if (orderedPlaceIds.some((id) => !currentIds.has(id))) {
-      throw new OwnlyMutationError('Optimized order contains a place outside this trip/day.', 'INVALID_INPUT');
+    const currentIds = new Set(current.map((visit) => visit.id));
+    if (orderedVisitIds.some((id) => !currentIds.has(id))) {
+      throw new OwnlyMutationError('Optimized order contains a visit outside this trip/day.', 'INVALID_INPUT');
     }
-    current.forEach((place, index) => {
-      if ((index === 0 || place.locked || place.is_anchor) && orderedPlaceIds[index] !== place.id) {
-        throw new OwnlyMutationError(`${place.title} is fixed and cannot move during travel-time optimization.`, 'INVALID_INPUT');
+    const places = listPlannerPlaces(this.dataLocation)
+      .filter((entry) => entry.frontmatter.trip_id === tripId)
+      .map((entry) => entry.frontmatter as PlannerTripPlace);
+    const projected = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(places, current));
+    projected.forEach((scheduledVisit, index) => {
+      if ((index === 0 || scheduledVisit.locked || scheduledVisit.is_anchor) && orderedVisitIds[index] !== scheduledVisit.visit_id) {
+        throw new OwnlyMutationError(`${scheduledVisit.title} is fixed and cannot move during travel-time optimization.`, 'INVALID_INPUT');
       }
     });
 
     const timestamp = this.now().toISOString();
-    const orderById = new Map(orderedPlaceIds.map((id, index) => [id, index] as const));
-    const placeTargets = entries
+    const orderById = new Map(orderedVisitIds.map((id, index) => [id, index] as const));
+    const visitTargets = visitEntries
       .map((entry) => ({
         entry,
-        next: { ...entry.frontmatter, sort_order: orderById.get(entry.frontmatter.id)!, updated_at: timestamp },
+        next: { ...entry.frontmatter, sort_order: orderById.get(entry.frontmatter.id)!, updated_at: timestamp } as PlannerTripVisit,
         expected: fingerprint(entry.filePath),
       }))
       .filter(({ entry, next }) => entry.frontmatter.sort_order !== next.sort_order);
 
-    const tripPlaceIds = new Set(
-      listPlannerPlaces(this.dataLocation)
-        .filter((entry) => entry.frontmatter.trip_id === tripId)
-        .map((entry) => entry.frontmatter.id),
-    );
+    const tripPlaceIds = new Set(places.map((place) => place.id));
     const existingLegs = listPlannerLegs(this.dataLocation);
     const existingById = new Map(existingLegs.map((entry) => [entry.frontmatter.id, entry.frontmatter] as const));
     const legDirectory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.legs);
@@ -700,66 +714,65 @@ export class OwnlyWriteService {
       trip_id: tripId,
       date,
       ...summary,
-      order: orderedPlaceIds,
+      order: orderedVisitIds,
       refreshed_legs: normalizedLegs.map((leg) => ({ from: leg.from_place_id, to: leg.to_place_id, minutes: leg.duration_minutes })),
     }, () => {
-      for (const target of placeTargets) assertUnchanged(target.entry.filePath, target.expected);
+      for (const target of visitTargets) assertUnchanged(target.entry.filePath, target.expected);
       for (const target of legTargets) assertUnchanged(target.filePath, target.expected);
-      for (const target of placeTargets) {
-        writeFileSync(target.entry.filePath, serializeMarkdownEntity(target.next, target.entry.body), 'utf8');
-      }
+      for (const target of visitTargets) writeFileSync(target.entry.filePath, serializeMarkdownEntity(target.next, target.entry.body), 'utf8');
       if (legTargets.length > 0) mkdirSync(legDirectory, { recursive: true });
       for (const target of legTargets) {
         writeFileSync(target.filePath, serializeMarkdownEntity(target.leg, ''), 'utf8');
         writeAgentLog(this.dataLocation, 'planner_optimize_day_travel_time_leg', target.leg.id, existingById.get(target.leg.id) ?? null, target.leg);
       }
-      writeAgentLog(this.dataLocation, 'planner_optimize_day_travel_time', `${tripId}:${date}`, current.map((place) => place.id), orderedPlaceIds);
-      return { trip_id: tripId, date, updated_places: placeTargets.length, refreshed_legs: legTargets.length, saved_minutes: summary.saved_minutes };
+      writeAgentLog(this.dataLocation, 'planner_optimize_day_travel_time', `${tripId}:${date}`, current.map((visit) => visit.id), orderedVisitIds);
+      return { trip_id: tripId, date, updated_visits: visitTargets.length, refreshed_legs: legTargets.length, saved_minutes: summary.saved_minutes };
     });
   }
 
   prepareSetStaySpan(hotelPlaceId: string, dates: string[]): PreparedOwnlyOperation {
     const hotelEntry = findPlannerEntry(listPlannerPlaces(this.dataLocation), hotelPlaceId);
-    if (!hotelEntry) {
+    if (!hotelEntry || hotelEntry.frontmatter.kind !== 'stay' || hotelEntry.frontmatter.state === 'dropped') {
       throw new OwnlyMutationError(`Hotel place was not found: ${hotelPlaceId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
     }
     const hotel = hotelEntry.frontmatter;
-    const spans = generateStaySpanPlaces(hotel, dates);
-    const spanIds = new Set(spans.map((s) => s.id));
     const dateSet = new Set(dates);
-    const staleIds = listPlannerPlaces(this.dataLocation)
-      .filter((e) => {
-        const p: PlannerTripPlace = e.frontmatter;
-        return (
-          p.state === 'scheduled'
-          && p.scheduled_date !== undefined
-          && dateSet.has(p.scheduled_date)
-          && !spanIds.has(p.id)
-          && (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin'))
-        );
-      })
-      .map((e) => e.frontmatter.id);
+    const placeById = new Map(
+      listPlannerPlaces(this.dataLocation)
+        .filter((entry) => entry.frontmatter.trip_id === hotel.trip_id)
+        .map((entry) => [entry.frontmatter.id, entry.frontmatter] as const),
+    );
+    const visitEntries = listPlannerVisits(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === hotel.trip_id);
+    const stale = visitEntries.filter((entry) => dateSet.has(entry.frontmatter.date) && placeById.get(entry.frontmatter.place_id)?.kind === 'stay');
+    const timestamp = this.now();
+    const created = dates.map((date) => createPlannerTripVisit(hotel, date, 0, {
+      locked: true,
+      is_anchor: true,
+      anchor_type: 'stay_checkin',
+    }, timestamp, randomUUID()));
+    const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.visits);
+    const createTargets = created.map((visit) => {
+      const fileName = plannerTripVisitFileName(visit.id);
+      const filePath = join(directory, fileName);
+      return { visit, fileName, filePath, expected: fingerprint(filePath) };
+    });
+    const staleTargets = stale.map((entry) => ({ entry, expected: fingerprint(entry.filePath) }));
 
-    const allEntries = listPlannerPlaces(this.dataLocation);
-    const expectedMap = new Map(allEntries.map((e) => [e.filePath, fingerprint(e.filePath)] as const));
     return this.prepare(
       'planner_set_stay_span',
-      { hotel: hotel.title, dates, new_anchors: spans.map((s) => ({ id: s.id, date: s.scheduled_date })), retires_stale_ids: staleIds },
+      {
+        hotel: hotel.title,
+        dates,
+        creates: created.map((visit) => ({ visit_id: visit.id, date: visit.date })),
+        retires_visit_ids: stale.map((entry) => entry.frontmatter.id),
+      },
       () => {
-        for (const staleId of staleIds) {
-          const staleEntry = allEntries.find((e) => e.frontmatter.id === staleId);
-          if (!staleEntry) continue;
-          assertUnchanged(staleEntry.filePath, expectedMap.get(staleEntry.filePath)!);
-          const dropped = { ...staleEntry.frontmatter, state: 'dropped' as const, updated_at: todayISO(this.now()) };
-          writeEntry(dirname(staleEntry.filePath), staleEntry.fileName, dropped, staleEntry.body);
-        }
-        const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.places);
+        for (const target of staleTargets) assertUnchanged(target.entry.filePath, target.expected);
+        for (const target of createTargets) assertUnchanged(target.filePath, target.expected);
+        for (const target of staleTargets) unlinkSync(target.entry.filePath);
         mkdirSync(directory, { recursive: true });
-        for (const span of spans) {
-          const fileName = `place--${span.id}.md`;
-          writeFileSync(join(directory, fileName), serializeMarkdownEntity(span, ''), 'utf8');
-        }
-        return { hotel_id: hotelPlaceId, nights: dates.length, retired: staleIds.length };
+        for (const target of createTargets) writeFileSync(target.filePath, serializeMarkdownEntity(target.visit, ''), 'utf8');
+        return { hotel_id: hotelPlaceId, nights: dates.length, retired_visits: stale.length, created_visits: created.length };
       },
     );
   }
@@ -861,70 +874,61 @@ export class OwnlyWriteService {
 
   preparePlannerApplyScheduleProposal(
     tripId: string,
-    proposal: { places: PlannerScheduleProposalItem[] },
+    proposal: { visits: PlannerScheduleProposalItem[] },
   ): PreparedOwnlyOperation {
     const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), tripId);
-    if (!tripEntry) {
-      throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
-    }
+    if (!tripEntry) throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
     const trip = tripEntry.frontmatter as unknown as PlannerTrip;
-    const allEntries = listPlannerPlaces(this.dataLocation);
-    const tripEntries = allEntries.filter((entry) => entry.frontmatter.trip_id === tripId);
-    const currentPlaces = tripEntries.map((entry) => entry.frontmatter as unknown as PlannerTripPlace);
-    const evaluation = evaluatePlannerScheduleProposal(trip, currentPlaces, proposal.places);
+    const placeEntries = listPlannerPlaces(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === tripId);
+    const places = placeEntries.map((entry) => entry.frontmatter as PlannerTripPlace);
+    const visitEntries = listPlannerVisits(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === tripId);
+    const currentVisits = visitEntries.map((entry) => entry.frontmatter as PlannerTripVisit);
+    const normalized = proposal.visits.map((item) => ({ ...item, visit_id: item.visit_id?.trim() || `visit:${randomUUID()}` }));
+    const evaluation = evaluatePlannerScheduleProposal(trip, places, currentVisits, normalized);
     const errors = evaluation.issues.filter((issue) => issue.severity === 'error');
     if (errors.length > 0) {
-      throw new OwnlyMutationError(
-        `Schedule proposal is invalid: ${errors.map((issue) => issue.message).join(' | ')}`,
-        'INVALID_INPUT' as OwnlyMutationErrorCode,
-      );
+      throw new OwnlyMutationError(`Schedule proposal is invalid: ${errors.map((issue) => issue.message).join(' | ')}`, 'INVALID_INPUT' as OwnlyMutationErrorCode);
     }
-
-    const nextById = new Map(evaluation.places.map((place) => [place.id, place] as const));
-    const proposedIds = new Set(proposal.places.map((place) => place.id));
-    const updates = tripEntries
-      .filter((entry) => proposedIds.has(entry.frontmatter.id))
-      .map((entry) => ({ entry, next: nextById.get(entry.frontmatter.id)! }))
-      .filter(({ entry, next }) => (
-        entry.frontmatter.state !== next.state
-        || entry.frontmatter.scheduled_date !== next.scheduled_date
-        || entry.frontmatter.scheduled_start !== next.scheduled_start
-        || entry.frontmatter.sort_order !== next.sort_order
-        || entry.frontmatter.duration_minutes !== next.duration_minutes
-      ));
-
-    if (updates.length === 0) {
-      throw new OwnlyMutationError('Schedule proposal does not change any Planner decision.', 'INVALID_INPUT' as OwnlyMutationErrorCode);
-    }
-    const expectedMap = new Map(updates.map(({ entry }) => [entry.filePath, fingerprint(entry.filePath)] as const));
+    const nextById = new Map(evaluation.visits.map((visit) => [visit.id, visit] as const));
+    const existingById = new Map(visitEntries.map((entry) => [entry.frontmatter.id, entry] as const));
+    const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.visits);
+    const timestamp = this.now().toISOString();
+    const targets = normalized.map((item) => {
+      const id = item.visit_id!;
+      const existing = existingById.get(id);
+      const evaluated = nextById.get(id)!;
+      const next: PlannerTripVisit = {
+        ...evaluated,
+        created_at: existing?.frontmatter.created_at ?? timestamp,
+        updated_at: timestamp,
+      };
+      const fileName = existing?.fileName ?? plannerTripVisitFileName(id);
+      const filePath = existing?.filePath ?? join(directory, fileName);
+      return { existing, next, fileName, filePath, expected: fingerprint(filePath) };
+    }).filter(({ existing, next }) => !existing || JSON.stringify(existing.frontmatter) !== JSON.stringify(next));
+    if (targets.length === 0) throw new OwnlyMutationError('Schedule proposal does not change any Planner visit.', 'INVALID_INPUT' as OwnlyMutationErrorCode);
     const warnings = evaluation.issues.filter((issue) => issue.severity === 'warning');
 
-    return this.prepare(
-      'planner_apply_schedule_proposal',
-      {
-        trip_id: tripId,
-        updated_count: updates.length,
-        warnings,
-        updates: updates.map(({ entry, next }) => ({
-          id: entry.frontmatter.id,
-          title: entry.frontmatter.title,
-          scheduled_date: next.scheduled_date,
-          scheduled_start: next.scheduled_start,
-          duration_minutes: next.duration_minutes,
-          sort_order: next.sort_order,
-          locked: next.locked ?? false,
-        })),
-      },
-      () => {
-        for (const { entry, next } of updates) {
-          assertUnchanged(entry.filePath, expectedMap.get(entry.filePath)!);
-          const persisted = { ...next, updated_at: todayISO(this.now()) };
-          writeEntry(dirname(entry.filePath), entry.fileName, persisted, entry.body);
-        }
-        writeAgentLog(this.dataLocation, 'planner_apply_schedule_proposal', tripId, null, { updated_count: updates.length, warnings });
-        return { trip_id: tripId, applied_count: updates.length, warnings };
-      },
-    );
+    return this.prepare('planner_apply_schedule_proposal', {
+      trip_id: tripId,
+      updated_count: targets.length,
+      warnings,
+      visits: targets.map(({ next }) => ({
+        visit_id: next.id,
+        place_id: next.place_id,
+        date: next.date,
+        start: next.start,
+        duration_minutes: next.duration_minutes,
+        sort_order: next.sort_order,
+        locked: next.locked,
+      })),
+    }, () => {
+      for (const target of targets) assertUnchanged(target.filePath, target.expected);
+      mkdirSync(directory, { recursive: true });
+      for (const target of targets) writeFileSync(target.filePath, serializeMarkdownEntity(target.next, target.existing?.body ?? ''), 'utf8');
+      writeAgentLog(this.dataLocation, 'planner_apply_schedule_proposal', tripId, null, { updated_count: targets.length, warnings });
+      return { trip_id: tripId, applied_count: targets.length, warnings };
+    });
   }
 
   preparePlannerSaveICalMarkdown(tripId: string): PreparedOwnlyOperation {
@@ -935,9 +939,12 @@ export class OwnlyWriteService {
     const trip = tripEntry.frontmatter as unknown as PlannerTrip;
     const placeEntries = listPlannerPlaces(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === tripId);
     const places = placeEntries.map((entry) => entry.frontmatter as unknown as PlannerTripPlace);
-    const markdown = exportTripToICalProMarkdown(trip, places);
+    const visitEntries = listPlannerVisits(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === tripId);
+    const visits = visitEntries.map((entry) => entry.frontmatter as PlannerTripVisit);
+    const markdown = exportTripToICalProMarkdown(trip, places, visits);
     const expectedTrip = fingerprint(tripEntry.filePath);
     const expectedPlaces = new Map(placeEntries.map((entry) => [entry.filePath, fingerprint(entry.filePath)] as const));
+    const expectedVisits = new Map(visitEntries.map((entry) => [entry.filePath, fingerprint(entry.filePath)] as const));
     const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.trips);
     const fileName = `trip--${trip.id}.itinerary.md`;
     const targetPath = join(directory, fileName);
@@ -948,6 +955,7 @@ export class OwnlyWriteService {
       () => {
         assertUnchanged(tripEntry.filePath, expectedTrip);
         for (const entry of placeEntries) assertUnchanged(entry.filePath, expectedPlaces.get(entry.filePath)!);
+        for (const entry of visitEntries) assertUnchanged(entry.filePath, expectedVisits.get(entry.filePath)!);
         mkdirSync(directory, { recursive: true });
         writeFileSync(targetPath, markdown, 'utf8');
         writeAgentLog(this.dataLocation, 'planner_save_ical_markdown', tripId, null, { file_name: fileName });

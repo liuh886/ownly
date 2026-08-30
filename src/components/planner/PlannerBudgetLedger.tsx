@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { PlannerTrip, PlannerTripPlace, TripExpenseCategory, TripExpenseItem } from '@/domain/planner';
+import type { PlannerScheduledPlace, PlannerTrip, TripExpenseCategory, TripExpenseItem } from '@/domain/planner';
 import {
   calculateTripSettlement,
   effectiveFxRate,
@@ -11,7 +11,7 @@ import {
 
 interface PlannerBudgetLedgerProps {
   trip: PlannerTrip;
-  scheduledPlaces: PlannerTripPlace[];
+  scheduledPlaces: PlannerScheduledPlace[];
   expenses: TripExpenseItem[];
   onAddExpense: (expense: Omit<TripExpenseItem, 'id' | 'created_at'>) => void;
   onDeleteExpense: (expenseId: string) => void;

@@ -1,6 +1,7 @@
-import type { PlannerTripPlace } from './planner';
+import type { PlannerScheduledPlace, PlannerTripPlace, PlannerVisitAnchorType } from './planner';
 
-export type PlannerVisitAnchorType = 'flight' | 'stay_checkin' | 'stay_checkout' | 'transit' | 'reservation';
+export { sortPlannerScheduledPlaces } from './planner';
+export type { PlannerScheduledPlace, PlannerVisitAnchorType } from './planner';
 
 export interface PlannerTripVisit {
   schema_version: '0.1';
@@ -23,20 +24,6 @@ export interface PlannerTripVisit {
  * Derived execution read model. Trip Places remain reusable research facts;
  * Trip Visits own every occurrence-specific scheduling decision.
  */
-export interface PlannerScheduledPlace extends Omit<PlannerTripPlace, 'id' | 'state' | 'duration_minutes'> {
-  id: string;
-  visit_id: string;
-  place_id: string;
-  state: 'scheduled';
-  scheduled_date: string;
-  scheduled_start?: string;
-  duration_minutes?: number;
-  sort_order: number;
-  locked: boolean;
-  is_anchor: boolean;
-  anchor_type?: PlannerVisitAnchorType;
-}
-
 export function materializePlannerScheduledPlaces(
   places: PlannerTripPlace[],
   visits: PlannerTripVisit[],
@@ -59,15 +46,6 @@ export function materializePlannerScheduledPlaces(
       is_anchor: visit.is_anchor,
       anchor_type: visit.anchor_type,
     }];
-  });
-}
-
-export function sortPlannerScheduledPlaces(places: PlannerScheduledPlace[]): PlannerScheduledPlace[] {
-  return [...places].sort((left, right) => {
-    if (left.sort_order !== right.sort_order) return left.sort_order - right.sort_order;
-    const start = (left.scheduled_start ?? '').localeCompare(right.scheduled_start ?? '');
-    if (start !== 0) return start;
-    return left.title.localeCompare(right.title);
   });
 }
 

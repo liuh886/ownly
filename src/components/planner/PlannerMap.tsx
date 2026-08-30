@@ -2,24 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerTripPlace } from '@/domain/planner';
+import type { PlannerScheduledPlace } from '@/domain/planner-visits';
 import { extractPlaceCoordinates, PLANNER_KIND_ICONS } from '@/domain/planner';
 import { searchCities } from '@/domain/travel';
 
 interface PlannerMapProps {
-  scheduledPlaces: PlannerTripPlace[];
+  scheduledPlaces: PlannerScheduledPlace[];
   candidatePlaces: PlannerTripPlace[];
   destinations?: string[];
   activeDate?: string;
   activeDayIndex: number;
   highlightedPlaceId?: string | null;
   onSchedulePlace: (placeId: string) => void;
-  onUnschedulePlace: (place: PlannerTripPlace) => void;
+  onUnschedulePlace: (place: PlannerScheduledPlace) => void;
   onHoverPlace?: (placeId: string | null) => void;
   language?: 'zh' | 'en';
 }
 
 interface Point {
-  place: PlannerTripPlace;
+  place: PlannerTripPlace | PlannerScheduledPlace;
   lat: number;
   lng: number;
   isScheduled: boolean;
@@ -470,9 +471,9 @@ export function PlannerMap({
       });
   }, [points, zoom, centerX, centerY, containerSize.width, containerSize.height]);
 
-  const selectedPlace = useMemo(() => {
-    return points.find((p) => p.place.id === selectedPlaceId)?.place ?? null;
-  }, [points, selectedPlaceId]);
+  const selectedPoint = useMemo(() => points.find((point) => point.place.id === selectedPlaceId) ?? null, [points, selectedPlaceId]);
+  const selectedPlace = selectedPoint?.place ?? null;
+  const selectedScheduledPlace = selectedPoint?.isScheduled ? selectedPoint.place as PlannerScheduledPlace : null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xs">
@@ -716,11 +717,11 @@ export function PlannerMap({
                 🗺️ {zh ? 'Google Maps 查看' : 'View in Google Maps'}
               </a>
 
-              {selectedPlace.scheduled_date ? (
+              {selectedScheduledPlace ? (
                 <button
                   type="button"
                   onClick={() => {
-                    onUnschedulePlace(selectedPlace);
+                    onUnschedulePlace(selectedScheduledPlace);
                     setSelectedPlaceId(null);
                   }}
                   className="rounded-md border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-50"

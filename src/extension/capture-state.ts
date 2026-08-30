@@ -36,7 +36,13 @@ function normalizePlaces(value: unknown): PlannerTripPlace[] {
       && typeof (item as PlannerTripPlace).id === 'string'
       && typeof (item as PlannerTripPlace).trip_id === 'string'
     ))
-    .map(asCaptureCandidate);
+    .map((item) => {
+      const placeFacts = { ...item } as PlannerTripPlace & Record<string, unknown>;
+      for (const key of ['scheduled_date', 'scheduled_start', 'sort_order', 'locked', 'is_anchor', 'anchor_type']) {
+        delete placeFacts[key];
+      }
+      return asCaptureCandidate(placeFacts);
+    });
 }
 
 export function normalizeCaptureState(value: unknown): OwnlyCaptureState {

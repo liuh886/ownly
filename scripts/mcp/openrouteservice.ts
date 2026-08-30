@@ -1,12 +1,12 @@
-import { listPlannerLegs, listPlannerPlaces, listPlannerTrips } from '../cli/planner-storage';
+import { listPlannerLegs, listPlannerPlaces, listPlannerTrips, listPlannerVisits } from '../cli/planner-storage';
 import {
   plannerTripLegId,
-  sortPlannerPlaces,
   type PlannerTravelMode,
   type PlannerTrip,
   type PlannerTripLeg,
   type PlannerTripPlace,
 } from '../../src/domain/planner';
+import { materializePlannerScheduledPlaces, sortPlannerScheduledPlaces, type PlannerScheduledPlace, type PlannerTripVisit } from '../../src/domain/planner-visits';
 import { OwnlyMcpError } from './ownly-tools';
 import { optimizeStopsByTravelTime, type PlannerTravelTimeMatrix } from '../../src/domain/planner-route-time';
 
@@ -76,12 +76,14 @@ export async function buildOpenRouteServiceDayLegs(
     throw new OwnlyMcpError('This trip uses transit mode. Record transit legs manually; OpenRouteService refresh supports walking, driving and bicycling only.', 'INVALID_INPUT');
   }
 
-  const places = sortPlannerPlaces(
-    listPlannerPlaces(dataLocation)
-      .map((item) => item.frontmatter as PlannerTripPlace)
-      .filter((place) => place.trip_id === tripId && place.state === 'scheduled' && place.scheduled_date === date),
-  );
-  if (places.length < 2) throw new OwnlyMcpError('At least two scheduled places are required to refresh travel legs.', 'INVALID_INPUT');
+  const placeFacts = listPlannerPlaces(dataLocation)
+    .map((item) => item.frontmatter as PlannerTripPlace)
+    .filter((place) => place.trip_id === tripId && place.state !== 'dropped');
+  const visits = listPlannerVisits(dataLocation)
+    .map((item) => item.frontmatter as PlannerTripVisit)
+    .filter((visit) => visit.trip_id === tripId && visit.date === date);
+  const places = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(placeFacts, visits));
+  if (places.length < 2) throw new OwnlyMcpError('At least two scheduled visits are required to refresh travel legs.', 'INVALID_INPUT');
 
   const existing = listPlannerLegs(dataLocation).map((item) => item.frontmatter as PlannerTripLeg);
   const existingByPair = new Map<string, PlannerTripLeg>(existing.filter((leg) => leg.trip_id === tripId).map((leg) => [`${leg.from_place_id}→${leg.to_place_id}`, leg] as const));
@@ -93,7 +95,7 @@ export async function buildOpenRouteServiceDayLegs(
   for (let index = 0; index < places.length - 1; index += 1) {
     const from = places[index];
     const to = places[index + 1];
-    const pair = `${from.id}→${to.id}`;
+    const pair = `${from.place_id}→${to.place_id}`;
     const current = existingByPair.get(pair);
     if (current?.source === 'manual') {
       skippedManual.push(pair);
@@ -107,10 +109,10 @@ export async function buildOpenRouteServiceDayLegs(
     legs.push({
       schema_version: '0.1',
       type: 'trip_leg',
-      id: plannerTripLegId(tripId, from.id, to.id),
+      id: plannerTripLegId(tripId, from.place_id, to.place_id),
       trip_id: tripId,
-      from_place_id: from.id,
-      to_place_id: to.id,
+      from_place_id: from.place_id,
+      to_place_id: to.place_id,
       mode,
       duration_minutes: route.duration_minutes,
       distance_meters: route.distance_meters,
@@ -165,7 +167,7 @@ export async function fetchOpenRouteServiceMatrix(
 export interface PlannerDayTravelOptimization {
   trip: PlannerTrip;
   date: string;
-  ordered_places: PlannerTripPlace[];
+  ordered_places: PlannerScheduledPlace[];
   legs_to_write: PlannerTripLeg[];
   original_minutes: number;
   optimized_minutes: number;
@@ -187,12 +189,14 @@ export async function buildOpenRouteServiceDayOptimization(
   if (!openRouteServiceProfile(mode)) {
     throw new OwnlyMcpError('Travel-time optimization currently supports walking, driving and bicycling. Transit legs remain user-verified facts.', 'INVALID_INPUT');
   }
-  const places = sortPlannerPlaces(
-    listPlannerPlaces(dataLocation)
-      .map((item) => item.frontmatter as PlannerTripPlace)
-      .filter((place) => place.trip_id === tripId && place.state === 'scheduled' && place.scheduled_date === date),
-  );
-  if (places.length < 3) throw new OwnlyMcpError('At least three scheduled places are required for travel-time optimization.', 'INVALID_INPUT');
+  const placeFacts = listPlannerPlaces(dataLocation)
+    .map((item) => item.frontmatter as PlannerTripPlace)
+    .filter((place) => place.trip_id === tripId && place.state !== 'dropped');
+  const visits = listPlannerVisits(dataLocation)
+    .map((item) => item.frontmatter as PlannerTripVisit)
+    .filter((visit) => visit.trip_id === tripId && visit.date === date);
+  const places = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(placeFacts, visits));
+  if (places.length < 3) throw new OwnlyMcpError('At least three scheduled visits are required for travel-time optimization.', 'INVALID_INPUT');
   const missingCoordinates = places.filter((place) => !place.coordinates).map((place) => place.title);
   if (missingCoordinates.length > 0) {
     throw new OwnlyMcpError(`Travel-time optimization requires coordinates for every scheduled stop. Missing: ${missingCoordinates.join(', ')}`, 'INVALID_INPUT');
@@ -200,7 +204,7 @@ export async function buildOpenRouteServiceDayOptimization(
 
   const matrixResult = await fetchOpenRouteServiceMatrix(
     apiKey,
-    places as Array<PlannerTripPlace & { coordinates: { lat: number; lng: number } }>,
+    places as Array<PlannerScheduledPlace & { coordinates: { lat: number; lng: number } }>,
     mode,
   );
   const matrix: PlannerTravelTimeMatrix = {};
@@ -214,11 +218,16 @@ export async function buildOpenRouteServiceDayOptimization(
   const existingLegs = listPlannerLegs(dataLocation)
     .map((item) => item.frontmatter as PlannerTripLeg)
     .filter((leg) => leg.trip_id === tripId);
-  const dayIds = new Set(places.map((place) => place.id));
   const usedManualPairs: string[] = [];
   for (const leg of existingLegs) {
-    if (leg.source !== 'manual' || !dayIds.has(leg.from_place_id) || !dayIds.has(leg.to_place_id)) continue;
-    matrix[leg.from_place_id]![leg.to_place_id] = leg.duration_minutes;
+    if (leg.source !== 'manual') continue;
+    for (const from of places) {
+      if (from.place_id !== leg.from_place_id) continue;
+      for (const to of places) {
+        if (to.place_id !== leg.to_place_id) continue;
+        matrix[from.id]![to.id] = leg.duration_minutes;
+      }
+    }
   }
 
   const result = optimizeStopsByTravelTime(places, matrix, { fixStart: true, respectLocked: true });
@@ -230,9 +239,9 @@ export async function buildOpenRouteServiceDayOptimization(
   const timestamp = now.toISOString();
   const legsToWrite: PlannerTripLeg[] = [];
   for (let index = 0; index < result.places.length - 1; index += 1) {
-    const from: PlannerTripPlace = result.places[index];
-    const to: PlannerTripPlace = result.places[index + 1];
-    const pair = `${from.id}→${to.id}`;
+    const from: PlannerScheduledPlace = result.places[index];
+    const to: PlannerScheduledPlace = result.places[index + 1];
+    const pair = `${from.place_id}→${to.place_id}`;
     const existing = existingByPair.get(pair);
     if (existing?.source === 'manual') {
       usedManualPairs.push(pair);
@@ -246,8 +255,8 @@ export async function buildOpenRouteServiceDayOptimization(
       throw new OwnlyMcpError(`OpenRouteService has no route for optimized pair ${from.title} → ${to.title}.`, 'DATA_INVALID');
     }
     legsToWrite.push({
-      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(tripId, from.id, to.id), trip_id: tripId,
-      from_place_id: from.id, to_place_id: to.id, mode, duration_minutes: duration,
+      schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(tripId, from.place_id, to.place_id), trip_id: tripId,
+      from_place_id: from.place_id, to_place_id: to.place_id, mode, duration_minutes: duration,
       distance_meters: distance ?? undefined, source: 'openrouteservice', observed_at: timestamp,
       created_at: existing?.created_at ?? timestamp, updated_at: timestamp,
     });
