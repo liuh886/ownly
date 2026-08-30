@@ -136,6 +136,53 @@ describe('OwnlyWriteService', () => {
     });
   });
 
+  it('commits an optimized order and its final adjacent legs in one confirmed operation', async () => {
+    const { dataRoot } = fixture();
+    const { trip, from, to } = seedPlannerPair(dataRoot);
+    const third: PlannerTripPlace = {
+      ...to,
+      id: 'c',
+      title: 'C',
+      source_url: 'https://maps.google.com/c',
+      sort_order: 2,
+    };
+    writeFileSync(join(dataRoot, 'Trip Places', 'place--c.md'), serializeMarkdownEntity(third, ''), 'utf8');
+
+    const legs: PlannerTripLeg[] = [
+      {
+        schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, from.id, third.id), trip_id: trip.id,
+        from_place_id: from.id, to_place_id: third.id, mode: 'driving', duration_minutes: 10,
+        distance_meters: 2500, source: 'openrouteservice', observed_at: NOW.toISOString(), created_at: NOW.toISOString(),
+      },
+      {
+        schema_version: '0.1', type: 'trip_leg', id: plannerTripLegId(trip.id, third.id, to.id), trip_id: trip.id,
+        from_place_id: third.id, to_place_id: to.id, mode: 'driving', duration_minutes: 12,
+        distance_meters: 3100, source: 'openrouteservice', observed_at: NOW.toISOString(), created_at: NOW.toISOString(),
+      },
+    ];
+    const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
+    const prepared = service.prepareApplyTravelTimeOptimization(
+      trip.id,
+      '2026-10-05',
+      ['a', 'c', 'b'],
+      legs,
+      { original_minutes: 60, optimized_minutes: 22, saved_minutes: 38, used_manual_pairs: [] },
+    );
+
+    expect(prepared).toMatchObject({ action: 'planner_optimize_day_travel_time', write_enabled: true });
+    expect(readdirSync(join(dataRoot, 'Trip Legs'))).toEqual([]);
+    expect(parseMarkdownEntity<PlannerTripPlace>(readFileSync(join(dataRoot, 'Trip Places', 'place--b.md'), 'utf8')).frontmatter.sort_order).toBe(1);
+
+    const committed = await service.commit(prepared.operation_id);
+    expect(committed.result).toMatchObject({ trip_id: trip.id, date: '2026-10-05', updated_places: 2, refreshed_legs: 2, saved_minutes: 38 });
+    const storedOrder = readdirSync(join(dataRoot, 'Trip Places'))
+      .map((file) => parseMarkdownEntity<PlannerTripPlace>(readFileSync(join(dataRoot, 'Trip Places', file), 'utf8')).frontmatter)
+      .sort((left, right) => (left.sort_order ?? 99) - (right.sort_order ?? 99))
+      .map((place) => place.id);
+    expect(storedOrder).toEqual(['a', 'c', 'b']);
+    expect(readdirSync(join(dataRoot, 'Trip Legs'))).toHaveLength(2);
+  });
+
   it('supports lifecycle, log, review, snapshot, archive, and restore operations', async () => {
     const { dataRoot } = fixture();
     let tick = 0;
