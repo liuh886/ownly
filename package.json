@@ -43,43 +43,34 @@
     "d3-geo": "^3.1.1",
     "framer-motion": "^12.41.0",
     "idb-keyval": "^6.2.5",
-    "lucide-react": "^0.544.0",
-    "next": "^16.2.12",
-    "obsidian": "^1.8.10",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-leaflet": "^5.0.0",
-    "recharts": "^3.8.0",
-    "tailwind-merge": "^3.5.0",
-    "yaml": "^2.8.2"
+    "next": "16.2.12",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "topojson-client": "^3.1.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.1",
-    "@tailwindcss/postcss": "^4.2.1",
-    "@types/chrome": "^0.1.32",
+    "@tailwindcss/postcss": "^4.3.1",
     "@types/d3-geo": "^3.1.0",
-    "@types/node": "^24.12.0",
-    "@types/react": "^19.2.14",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@typescript-eslint/eslint-plugin": "^8.55.0",
-    "@typescript-eslint/parser": "^8.55.0",
-    "@vitest/coverage-v8": "^3.2.6",
-    "@vitest/ui": "^3.2.6",
-    "esbuild": "^0.27.3",
+    "@types/topojson-client": "^3.1.5",
+    "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
-    "eslint-config-next": "^16.2.12",
-    "jsdom": "^26.1.0",
-    "tailwindcss": "^4.2.1",
-    "tsx": "^4.21.0",
+    "eslint-config-next": "16.2.12",
+    "eslint-plugin-obsidianmd": "^0.3.0",
+    "obsidian": "^1.13.1",
+    "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.3",
     "vitest": "^3.2.6"
   },
-  "optionalDependencies": {
-    "@next/swc-darwin-arm64": "^16.2.12",
-    "@next/swc-linux-x64-gnu": "^16.2.12",
-    "@next/swc-win32-x64-msvc": "^16.2.12"
-  },
   "overrides": {
-    "tar": "^7.5.8"
-  }
+    "next": {
+      "postcss": "8.5.25",
+      "sharp": "0.35.3"
+    }
+  },
+  "description": "Local-first ownership memory and decision ledger with portable Markdown data."
 }
