@@ -138,7 +138,7 @@ path.write_text(text, encoding='utf-8')
 path = Path('docs/CAPTURE_SYNC_BOUNDARY.md')
 text = path.read_text(encoding='utf-8').rstrip()
 if '## Google Maps SPA detection\n' not in text:
-    text += '''\n\n## Google Maps SPA detection\n\nCapture treats a visible Google Maps detail pane with strong place facts (address, rating, category or phone) as the current place even when the SPA keeps a saved-list URL. Saved-list discovery accepts both `!1s` and `!2s` list-id carriers so a trip tag such as `TH26` can match the same-named Google Maps saved list and import it in bulk. URL shape alone is not the place/list authority.\n'''
-path.write_text(text + '\n', encoding='utf-8')
+    text += '''\n\n## Google Maps SPA detection\n\nCapture treats a visible Google Maps detail pane with strong place facts (address, rating, category or phone) as the current place even when the SPA keeps a saved-list URL. Saved-list discovery accepts both `!1s` and `!2s` list-id carriers so a trip tag such as `TH26` can match the same-named Google Maps saved list and import it in bulk. URL shape alone is not the place/list authority.'''
+path.write_text(text.rstrip() + '\n', encoding='utf-8')
 
 print('Capture SPA/list matching fix applied')
