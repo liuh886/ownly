@@ -139,6 +139,47 @@ describe('Ownly Planner domain', () => {
     expect(merged.reservation_status).toBe('booked');
   });
 
+  it('never backfills Planner-owned decisions from recapture, even when canonical values are empty/default', () => {
+    const existing = place('authority', {
+      kind: 'other',
+      area: undefined,
+      priority: 'want',
+      tags: [],
+      why: undefined,
+      signals: [],
+      risks: [],
+      notes: undefined,
+      preferred_window: undefined,
+      duration_minutes: undefined,
+    });
+    const captured = place('authority', {
+      kind: 'stay',
+      area: 'Sukhumvit',
+      priority: 'must',
+      tags: ['hotel', 'luxury'],
+      why: 'Pool and location',
+      signals: ['high rating'],
+      risks: ['traffic'],
+      notes: 'Agent-generated note',
+      preferred_window: 'night',
+      duration_minutes: 720,
+      observed_rating: 4.8,
+    });
+
+    const merged = mergeCapturedPlaceResearch(existing, captured);
+    expect(merged.kind).toBe('other');
+    expect(merged.area).toBeUndefined();
+    expect(merged.priority).toBe('want');
+    expect(merged.tags).toEqual([]);
+    expect(merged.why).toBeUndefined();
+    expect(merged.signals).toEqual([]);
+    expect(merged.risks).toEqual([]);
+    expect(merged.notes).toBeUndefined();
+    expect(merged.preferred_window).toBeUndefined();
+    expect(merged.duration_minutes).toBeUndefined();
+    expect(merged.observed_rating).toBe(4.8);
+  });
+
 
   it('keeps structured facts when a later capture omits them (A2)', () => {
     const existing = place('rich', {

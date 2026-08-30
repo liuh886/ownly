@@ -4,6 +4,7 @@ import {
   findExistingTripPlace,
   inferPlaceKind,
   inferSourceProvider,
+  mergeCapturedPlaceResearch,
   normalizeDelimitedText,
   normalizeObservedPrice,
   reorderPendingPlaces,
@@ -68,6 +69,14 @@ function flashNewCandidate(placeId: string): void {
     card.classList.add('flash-new');
     window.setTimeout(() => card.classList.remove('flash-new'), 950);
   });
+}
+
+function mergeEnrichedPendingPlace(
+  current: PlannerTripPlace,
+  enrichedById: ReadonlyMap<string, PlannerTripPlace>,
+): PlannerTripPlace {
+  const enriched = enrichedById.get(current.id);
+  return enriched ? mergeCapturedPlaceResearch(current, enriched) : current;
 }
 
 let searchDebounce: number | undefined;
@@ -517,7 +526,7 @@ export function initHandlers(): void {
         const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
         store.state = {
           ...store.state,
-          pendingPlaces: store.state.pendingPlaces.map((p) => enrichedMap.get(p.id) ?? p),
+          pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
         };
         await saveState();
         setStatus(dict.enrichComplete(totalEnriched), 'success');
@@ -550,7 +559,7 @@ export function initHandlers(): void {
         const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
         store.state = {
           ...store.state,
-          pendingPlaces: store.state.pendingPlaces.map((p) => enrichedMap.get(p.id) ?? p),
+          pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
         };
         await saveState();
         setStatus(dict.enrichComplete(totalEnriched), 'success');
@@ -799,7 +808,7 @@ export function initHandlers(): void {
             const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
             store.state = {
               ...store.state,
-              pendingPlaces: store.state.pendingPlaces.map((p) => enrichedMap.get(p.id) ?? p),
+              pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
             };
             await saveState();
             setStatus(dict.enrichComplete(totalEnriched), 'success');
