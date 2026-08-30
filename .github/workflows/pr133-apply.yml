@@ -6,6 +6,7 @@ on:
       - fix/capture-google-maps-spa
     paths:
       - '.github/workflows/pr133-apply.yml'
+      - '.github/pr133-apply.py'
 
 permissions:
   contents: write
