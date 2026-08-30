@@ -1,37 +1,65 @@
-name: Validate PR 135 repeatable visits
+name: Land repeatable Planner visits
 
 on:
   push:
     branches: [refactor/planner-repeatable-visits]
     paths:
       - '.github/workflows/pr135-web.yml'
-      - '.github/pr135-web.py'
-      - '.github/pr135-core.py'
-      - '.github/pr135-finalize.py'
-      - '.github/pr135-fix2.py'
-      - '.github/pr135-fix3.py'
-      - '.github/pr135-fix4.py'
-      - '.github/pr135-authority.py'
-      - '.github/pr135-fix5.py'
+
+permissions:
+  contents: write
 
 jobs:
-  validate:
+  land:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           ref: refactor/planner-repeatable-visits
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: npm
-      - run: python .github/pr135-finalize.py
-      - run: python .github/pr135-fix2.py
-      - run: python .github/pr135-fix3.py
-      - run: python .github/pr135-fix4.py
-      - run: python .github/pr135-authority.py
-      - run: python .github/pr135-fix5.py
-      - run: npm ci
-      - run: npm run validate:fast
-      - run: npm run build
-      - run: npm run test -- --run src/domain/planner.test.ts src/services/PlannerRepository.schedule.test.ts src/domain/ical-pro.test.ts src/domain/planner-schedule.test.ts src/domain/planner-route-time.test.ts scripts/mcp/planner-tools.test.ts scripts/shared/ownly-write-service.test.ts
+      - name: Materialize validated Visit implementation
+        run: |
+          python .github/pr135-finalize.py
+          python .github/pr135-fix2.py
+          python .github/pr135-fix3.py
+          python .github/pr135-fix4.py
+          python .github/pr135-authority.py
+          python .github/pr135-fix5.py
+          python .github/pr135-land.py
+      - name: Install dependencies
+        run: npm ci
+      - name: Full repository validation
+        run: npm run validate
+      - name: MCP package contract
+        run: |
+          npm run build --prefix packages/mcp
+          node packages/mcp/dist/index.js --help
+          (cd packages/mcp && npm pack --dry-run)
+      - name: Final tree guards
+        run: |
+          git diff --check
+          test -d src/domain
+          test -f src/domain/planner-visits.ts
+          test ! -e .github/pr135-finalize.py
+          test ! -e .github/pr135-land.py
+          test ! -e .github/workflows/pr135-web.yml
+          ! grep -q "'candidate' | 'scheduled'" src/domain/planner.ts
+          ! grep -q 'scheduled_date?: string;' src/domain/planner.ts
+          ! grep -q 'updatePlaceTiming(' src/services/PlannerRepository.ts
+          grep -q 'allows the same place multiple times on the same day and across days' src/services/PlannerRepository.schedule.test.ts
+          grep -q 'ownly_planner_prepare_add_visit' packages/mcp/src/index.mjs
+          grep -q 'ownly_planner_prepare_remove_visit' packages/mcp/src/index.mjs
+      - name: Commit production tree
+        run: |
+          git checkout -- src/core/git-sha.ts
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git status --short
+          git diff --cached --check
+          git commit -m 'refactor(planner): make visits the scheduling authority'
+          git push origin HEAD:refactor/planner-repeatable-visits
