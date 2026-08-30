@@ -1,0 +1,43 @@
+name: Apply Planner Visit Invariant Fixes
+
+on:
+  push:
+    branches:
+      - "fix/planner-visit-invariants"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Apply patch
+        run: python .github/scripts/apply-visit-invariants.py
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate repository
+        run: npm run validate
+
+      - name: Commit validated fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/scripts/apply-visit-invariants.py .github/workflows/visit-invariants-fix.yml
+          git add src/services/PlannerRepository.ts src/services/PlannerRepository.schedule.test.ts scripts/shared/ownly-write-service.ts scripts/shared/ownly-write-service.test.ts src/components/planner/PlannerHome.tsx package.json
+          git commit -m "fix(planner): harden Visit invariants and projections"
+          git push origin HEAD:${GITHUB_REF_NAME}
