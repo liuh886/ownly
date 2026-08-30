@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/pr133-fx-apply.yml'
       - '.github/pr133-fx-apply.py'
+      - 'src/extension/fx-tooltip.ts'
 
 permissions:
   contents: write
