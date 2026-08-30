@@ -46,6 +46,11 @@ jobs:
           python .github/pr131-apply.py
           python .github/pr131-fix-web.py
           python .github/pr131-fix-contract.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/mcp/openrouteservice.ts')
+          path.write_text(path.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+          PY
 
       - name: Install locked dependencies
         run: npm ci
