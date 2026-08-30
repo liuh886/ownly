@@ -11,6 +11,7 @@ on:
       - '.github/pr135-fix2.py'
       - '.github/pr135-fix3.py'
       - '.github/pr135-fix4.py'
+      - '.github/pr135-authority.py'
 
 jobs:
   validate:
@@ -27,6 +28,7 @@ jobs:
       - run: python .github/pr135-fix2.py
       - run: python .github/pr135-fix3.py
       - run: python .github/pr135-fix4.py
+      - run: python .github/pr135-authority.py
       - run: npm ci
       - run: npm run validate:fast
       - run: npm run build
