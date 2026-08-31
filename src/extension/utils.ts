@@ -234,12 +234,23 @@ export function extractCleanPriceText(raw?: string | null): string | undefined {
 }
 
 /**
+ * Returns true if a price string is empty, zero, or a known placeholder (e.g. "SGD 0", "$0", "0.00").
+ */
+export function isZeroOrPlaceholderPrice(raw?: string | null): boolean {
+  if (!raw) return true;
+  const t = raw.trim();
+  if (t === '' || t === '0' || t === '$0' || t === '¥0' || t === '฿0' || t === '0.00') return true;
+  if (/^(?:SGD|THB|USD|HKD|NT\$|¥|฿|\$)\s*0(?:\.00)?$/i.test(t)) return true;
+  return false;
+}
+
+/**
  * Validates that an extracted string is actually a price/budget observation,
  * not a hotel class ("5-star hotel"), rating, or other nearby badge text.
  */
 export function isPlausiblePriceText(raw?: string | null): boolean {
   const text = cleanExtractedText(raw);
-  if (!text) return false;
+  if (!text || isZeroOrPlaceholderPrice(text)) return false;
   if (PRICE_LEVEL_ONLY.test(text)) return true;
   if (/\b\d\s*[-–—]?\s*(?:star|stars?)\b|星级/i.test(text) && !hasCurrencyMarker(text)) return false;
   return Boolean(extractCleanPriceText(text));

@@ -16,7 +16,7 @@ import {
 import { normalizeCaptureState, saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
-import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
+import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
 import { enrichCandidatePlacesBatch, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
 import { DEBUG_STORAGE_KEY, getExistingPlaceForUrl, store, t } from './store';
@@ -734,9 +734,11 @@ export function initHandlers(): void {
 
       // Phase 2: Run batch enrichment for any candidates still missing facts
       const needEnrichment = targetCandidates.filter((p) =>
+        !p.source_place_id ||
         !p.observed_rating ||
         !p.observed_review_count ||
         !p.observed_price ||
+        isZeroOrPlaceholderPrice(p.observed_price) ||
         !p.source_category ||
         !p.address ||
         !p.coordinates
@@ -820,9 +822,11 @@ export function initHandlers(): void {
 
       // Phase 2: Run batch enrichment on remaining items missing data
       const needEnrichment = targetCandidates.filter((p) =>
+        !p.source_place_id ||
         !p.observed_rating ||
         !p.observed_review_count ||
         !p.observed_price ||
+        isZeroOrPlaceholderPrice(p.observed_price) ||
         !p.source_category ||
         !p.address ||
         !p.coordinates

@@ -4,7 +4,7 @@ import {
   type PlannerTripPlace,
 } from '../domain/planner';
 import type { CurrentResearchPlace } from './content';
-import { extractCleanPriceText } from './utils';
+import { extractCleanPriceText, isZeroOrPlaceholderPrice } from './utils';
 import { logger } from './logger';
 import {
   extractFeatureIdFromHtml,
@@ -34,6 +34,7 @@ export async function enrichPlaceMetadata(
     !place.observed_rating ||
     !place.observed_review_count ||
     !place.observed_price ||
+    isZeroOrPlaceholderPrice(place.observed_price) ||
     !place.source_category ||
     !place.address ||
     !place.coordinates;
@@ -160,7 +161,7 @@ export async function enrichPlaceMetadata(
           const localCountryCurrency = facts.countryCode ? COUNTRY_TO_DEFAULT_CURRENCY[facts.countryCode] : undefined;
           const effectiveCurrency = facts.priceCurrency || localCountryCurrency;
 
-          if (facts.priceLevel && (!next.observed_price || next.observed_price.length < 2)) {
+          if (facts.priceLevel && (!next.observed_price || isZeroOrPlaceholderPrice(next.observed_price))) {
             next.observed_price = facts.priceLevel;
             const normalized = normalizeObservedPrice(facts.priceLevel, effectiveCurrency);
             if (normalized?.min !== undefined) next.price_min = normalized.min;
@@ -168,6 +169,14 @@ export async function enrichPlaceMetadata(
             if (normalized?.currency) next.price_currency = normalized.currency;
             if (normalized?.level !== undefined) next.price_level = normalized.level;
             if (normalized?.unit) next.price_unit = normalized.unit;
+            mutated = true;
+          } else if (isZeroOrPlaceholderPrice(next.observed_price)) {
+            next.observed_price = undefined;
+            next.price_min = undefined;
+            next.price_max = undefined;
+            next.price_currency = undefined;
+            next.price_level = undefined;
+            next.price_unit = undefined;
             mutated = true;
           }
           if (facts.open_hours && !next.open_hours) {
