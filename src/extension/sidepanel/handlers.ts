@@ -1022,11 +1022,44 @@ export function initHandlers(): void {
       await saveState();
       store.smartListDismissed = true;
       renderSmartListCard();
-      const total = savedList.places.length;
-      const withRating = savedList.places.filter((p) => p.rating !== undefined).length;
-      const withReviews = savedList.places.filter((p) => p.reviewCount !== undefined).length;
-      const withPrice = savedList.places.filter((p) => Boolean(p.priceLevel)).length;
-      const withCategory = savedList.places.filter((p) => Boolean(p.category)).length;
+      renderCandidatesList();
+
+      // Auto-enrich any imported candidates missing facts immediately in one smooth pass
+      const newlyImported = store.state.pendingPlaces;
+      const needsPass = newlyImported.filter((p) =>
+        !p.source_place_id ||
+        !p.observed_rating ||
+        !p.observed_review_count ||
+        !p.source_category ||
+        !p.address ||
+        !p.coordinates
+      );
+      if (needsPass.length > 0) {
+        setStatus(store.lang === 'zh' ? `正在自动补全 ${needsPass.length} 个地点的 Place ID、评分与分类…` : `Auto-enriching ${needsPass.length} places…`);
+        const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
+          needsPass,
+          (processed, totalBatch, currentPlace) => {
+            setStatus(dict.enrichingProgress(processed, totalBatch, currentPlace.title));
+            renderCandidatesList();
+          }
+        );
+        if (totalEnriched > 0) {
+          const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
+          store.state = {
+            ...store.state,
+            pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
+          };
+          await saveState();
+          renderCandidatesList();
+        }
+      }
+
+      const finalCandidates = store.state.pendingPlaces;
+      const total = finalCandidates.length;
+      const withRating = finalCandidates.filter((p) => p.observed_rating !== undefined).length;
+      const withReviews = finalCandidates.filter((p) => p.observed_review_count !== undefined).length;
+      const withPrice = finalCandidates.filter((p) => Boolean(p.observed_price && !isZeroOrPlaceholderPrice(p.observed_price))).length;
+      const withCategory = finalCandidates.filter((p) => Boolean(p.source_category)).length;
       const coverage = store.lang === 'zh'
         ? ` · 评分 ${withRating}/${total} · 评论量 ${withReviews}/${total} · 价格 ${withPrice}/${total} · 分类 ${withCategory}/${total}`
         : ` · rating ${withRating}/${total} · reviews ${withReviews}/${total} · price ${withPrice}/${total} · category ${withCategory}/${total}`;

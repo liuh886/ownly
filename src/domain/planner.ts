@@ -457,7 +457,7 @@ export function normalizeDelimitedText(value: string): string[] {
 
 export function inferPlaceKind(category?: string): PlannerPlaceKind {
   if (!category || !category.trim()) return 'attraction';
-  const lower = category.toLowerCase();
+  const lower = category.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 
   // 0. Special compound disambiguations:
   // e.g. "hotel restaurant", "hotel bar", "hotel cafe", "ski resort", "food court"
@@ -495,9 +495,9 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
     return 'shopping';
   }
 
-  // 4. Experience, Wellness, Sports, Activities (Spas, Massages, Onsen, Theme Parks, Cooking Classes, Cruises)
+  // 4. Experience, Wellness, Sports, Activities (Spas, Massages, Onsen, Theme Parks, Cooking Classes, Cruises, Martial Arts)
   if (
-    /\b(?:spa|massage|onsen|sauna|wellness|foot\s*massage|thai\s*massage|diving|scuba|snorkeling|ski|skiing|snowboard|surfing|climbing|bouldering|hiking|trekking|rafting|karting|go-kart|safari|workshop|class|cooking\s*class|pottery|tour|boat\s*tour|cruise|dinner\s*cruise|kayak|kayaking|canoeing|paragliding|zipline|skydive|skydiving|bungee|bowling|golf|gym|fitness|yoga|camp|camping|experience|activity|hot\s*spring|bathhouse|sento|jimjilbang|amusement\s*park|theme\s*park|water\s*park|escape\s*room|board\s*game|shooting\s*range|archery|horse\s*riding|atv|quad\s*bike|disney|disneyland|disneysea|universal\s*studios|usj|warner\s*bros|legoland|fuji-q|lotte\s*world|everland)\b|스파|마사지|찜질방|온천|테마파크|스키장|원데이클래스|체험|액티비티|스쿠버|다이빙|스ปา|นวด|นวดแผนไทย|ออนเซ็น|ดำน้ำ|กิจกรรม|สวนสนุก|สวนน้ำ|温泉|銭湯|露天風呂|スパ|マッサージ|サウナ|体験|スキー|ダイビング|ツアー|遊園地|アクティビティ|教室|体验|活动|按摩|水疗|温泉|足浴|足疗|泰式按摩|盲人按摩|日归温泉|钱汤|汗蒸|潜水|冲浪|滑雪|徒步|漂流|游乐园|主题公园|水上乐园|工坊|课程|手作|烹饪课|陶艺|卡丁车|密室|密室逃脱|剧本杀|游船|跳伞|滑翔伞|热气球|射击|骑马|越野|丛林飞跃|蹦极|高尔夫|健身|瑜伽|采摘|研学|迪士尼|环球影城|乐高乐园|富士急|bains\s*thermaux|balneario/i.test(lower)
+    /\b(?:spa|massage|onsen|sauna|wellness|foot\s*massage|thai\s*massage|diving|scuba|snorkeling|ski|skiing|snowboard|surfing|climbing|bouldering|hiking|trekking|rafting|karting|go-kart|safari|workshop|class|cooking\s*class|pottery|tour|boat\s*tour|cruise|dinner\s*cruise|kayak|kayaking|canoeing|paragliding|zipline|skydive|skydiving|bungee|bowling|golf|gym|fitness|yoga|camp|camping|experience|activity|hot\s*spring|bathhouse|sento|jimjilbang|amusement\s*park|theme\s*park|water\s*park|escape\s*room|board\s*game|shooting\s*range|archery|horse\s*riding|atv|quad\s*bike|martial\s*arts|boxing|muay\s*thai|karate|taekwondo|judo|jiu\s*jitsu|kickboxing|disney|disneyland|disneysea|universal\s*studios|usj|warner\s*bros|legoland|fuji-q|lotte\s*world|everland)\b|스파|마사지|찜质방|온천|테마파크|스키장|원데이클래스|체험|액티비티|스쿠버|다이빙|스ปา|นวด|นวดแผนไทย|ออนเซ็น|ดำน้ำ|กิจกรรม|สวนสนุก|สวนน้ำ|温泉|銭湯|露天風呂|スパ|マッサージ|サウナ|体験|スキー|ダイビング|ツアー|遊園地|アクティビティ|教室|体验|活动|按摩|水疗|温泉|足浴|足疗|泰式按摩|盲人按摩|日归温泉|钱汤|汗蒸|潜水|冲浪|滑雪|徒步|漂流|游乐园|主题公园|水上乐园|工坊|课程|手作|烹饪课|陶艺|卡丁车|密室|密室逃脱|剧本杀|游船|跳伞|滑翔伞|热气球|射击|骑马|越野|丛林飞跃|蹦极|高尔夫|健身|健身房|瑜伽|采摘|研学|武术学校|泰拳|拳击|武馆|柔术|跆拳道|迪士尼|环球影城|乐高乐园|富士急|bains\s*thermaux|balneario/i.test(lower)
   ) {
     return 'experience';
   }
@@ -516,9 +516,9 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
     return 'food';
   }
 
-  // 7. Attractions, Sightseeing, Heritage, Culture, Nature
+  // 7. Attractions, Sightseeing, Heritage, Culture, Nature (Beaches, Mountains, Islands, Temples)
   if (
-    /\b(?:museum|temple|shrine|church|cathedral|mosque|synagogue|pagoda|monastery|wat|park|national\s*park|attraction|tourist\s*attraction|monument|landmark|castle|palace|imperial\s*palace|royal\s*palace|garden|botanical\s*garden|tower|tourist|historic|historical|heritage|unesco|ruins|gallery|art\s*gallery|beach|viewpoint|lookout|observatory|observation\s*deck|skydeck|waterfall|island|lake|mountain|peak|canyon|gorge|cave|plaza|square|scenic|statue|bridge|zoo|safari\s*park|aquarium|botanical|sanctuary|nature\s*reserve|historic\s*site|old\s*town|ancient\s*town)\b|박물관|미술관|궁전|경복궁|창덕궁|타워|전망대|해변|해수욕장|사찰|유적지|วัด|พิพิธภัณฑ์|พระราชวัง|สวน|สวนสาธารณะ|อุทยานแห่งชาติ|หาด|ภูเขา|น้ำตก|จุดชมวิว|ปราสาท|โบราณสถาน|寺院|神社|城|庭園|公園|展望台|滝|島|湖|山|渓谷|水族館|動物園|美術館|博物館|名所|史跡|旧跡|鳥居|天守|景点|景区|寺|寺庙|庙|禅寺|神社|鸟居|教堂|大教堂|博物馆|纪念馆|展览馆|公园|国立公园|国家公园|观光|古迹|遗址|城堡|城址|天守阁|皇宫|宫殿|行宫|塔|电视塔|钟楼|鼓楼|美术馆|艺术馆|沙滩|海滩|海湾|观景台|展望台|天空之镜|瀑布|岛|海岛|湖|湖泊|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地|故居|陵园|古镇|老街|古城|名胜|chùa|đền|bảo\s*tàng|công\s*viên|bãi\s*biển|thác\s*nước|château|musée|cathédrale|plage|mirador|palazzo|duomo|monument/i.test(lower)
+    /\b(?:museum|temple|shrine|church|cathedral|mosque|synagogue|pagoda|monastery|wat|park|national\s*park|attraction|tourist\s*attraction|monument|landmark|castle|palace|imperial\s*palace|royal\s*palace|garden|botanical\s*garden|tower|tourist|historic|historical|heritage|unesco|ruins|gallery|art\s*gallery|beach|bay|coast|cove|shoreline|beachfront|viewpoint|lookout|observatory|observation\s*deck|skydeck|waterfall|island|lake|mountain|peak|canyon|gorge|cave|plaza|square|scenic|statue|bridge|zoo|safari\s*park|aquarium|botanical|sanctuary|nature\s*reserve|historic\s*site|old\s*town|ancient\s*town)\b|박물관|미술관|궁전|경복궁|창덕궁|타워|전망대|해변|해수욕장|사찰|유적지|วัด|พิพิธภัณฑ์|พระราชวัง|สวน|สวนสาธารณะ|อุทยานแห่งชาติ|หาด|ภูเขา|น้ำตก|จุดชมวิว|ปราสาท|โบราณสถาน|寺院|神社|城|庭園|公園|展望台|滝|島|湖|山|渓谷|水族館|動物園|美術館|博物館|名所|史跡|旧跡|鳥居|天守|景点|景区|寺|寺庙|庙|禅寺|神社|鸟居|教堂|大教堂|博物馆|纪念馆|展览馆|公园|国立公园|国家公园|观光|古迹|遗址|城堡|城址|天守阁|皇宫|宫殿|行宫|塔|电视塔|钟楼|鼓楼|美术馆|艺术馆|沙滩|海滩|滩|海湾|海岸|海滨|沙洲|观景台|展望台|天空之镜|瀑布|岛|海岛|湖|湖泊|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地|故居|陵园|古镇|老街|古城|名胜|chùa|đền|bảo\s*tàng|công\s*viên|bãi\s*biển|thác\s*nước|château|musée|cathédrale|plage|mirador|palazzo|duomo|monument/i.test(lower)
   ) {
     return 'attraction';
   }

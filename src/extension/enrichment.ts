@@ -1,4 +1,5 @@
 import {
+  inferPlaceKind,
   mergeCapturedPlaceResearch,
   normalizeObservedPrice,
   type PlannerTripPlace,
@@ -101,9 +102,16 @@ export async function enrichPlaceMetadata(
             next.observed_review_count = facts.reviewCount;
             mutated = true;
           }
-          if (facts.category && (!next.source_category || next.source_category === 'other')) {
-            next.source_category = facts.category;
-            mutated = true;
+          if (facts.category) {
+            if (!next.source_category || next.source_category === 'other' || next.source_category !== facts.category) {
+              next.source_category = facts.category;
+              mutated = true;
+            }
+            const officialKind = inferPlaceKind(facts.category);
+            if (officialKind && next.kind !== officialKind) {
+              next.kind = officialKind;
+              mutated = true;
+            }
           }
           if (facts.address && !next.address) {
             next.address = facts.address;
@@ -257,9 +265,16 @@ export async function enrichPlaceMetadata(
       next.observed_review_count = facts.reviewCount;
       mutated = true;
     }
-    if (facts.category && (!next.source_category || next.source_category === 'other')) {
-      next.source_category = facts.category;
-      mutated = true;
+    if (facts.category) {
+      if (!next.source_category || next.source_category === 'other' || next.source_category !== facts.category) {
+        next.source_category = facts.category;
+        mutated = true;
+      }
+      const officialKind = inferPlaceKind(facts.category);
+      if (officialKind && next.kind !== officialKind) {
+        next.kind = officialKind;
+        mutated = true;
+      }
     }
     if (facts.address && !next.address) {
       next.address = facts.address;
