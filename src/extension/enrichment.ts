@@ -116,15 +116,81 @@ export async function enrichPlaceMetadata(
               mutated = true;
             }
           }
+          const COUNTRY_TO_DEFAULT_CURRENCY: Record<string, string> = {
+            TH: 'THB',
+            JP: 'JPY',
+            CN: 'CNY',
+            TW: 'TWD',
+            HK: 'HKD',
+            MO: 'MOP',
+            SG: 'SGD',
+            MY: 'MYR',
+            KR: 'KRW',
+            VN: 'VND',
+            ID: 'IDR',
+            PH: 'PHP',
+            GB: 'GBP',
+            UK: 'GBP',
+            US: 'USD',
+            AU: 'AUD',
+            CA: 'CAD',
+            NZ: 'NZD',
+            FR: 'EUR',
+            DE: 'EUR',
+            IT: 'EUR',
+            ES: 'EUR',
+            NL: 'EUR',
+            AT: 'EUR',
+            BE: 'EUR',
+            GR: 'EUR',
+            PT: 'EUR',
+            FI: 'EUR',
+            IE: 'EUR',
+            CH: 'CHF',
+            AE: 'AED',
+          };
+          const localCountryCurrency = facts.countryCode ? COUNTRY_TO_DEFAULT_CURRENCY[facts.countryCode] : undefined;
+          const effectiveCurrency = facts.priceCurrency || localCountryCurrency;
+
           if (facts.priceLevel && (!next.observed_price || next.observed_price.length < 2)) {
             next.observed_price = facts.priceLevel;
-            const normalized = normalizeObservedPrice(facts.priceLevel, facts.priceCurrency);
+            const normalized = normalizeObservedPrice(facts.priceLevel, effectiveCurrency);
             if (normalized?.min !== undefined) next.price_min = normalized.min;
             if (normalized?.max !== undefined) next.price_max = normalized.max;
             if (normalized?.currency) next.price_currency = normalized.currency;
             if (normalized?.level !== undefined) next.price_level = normalized.level;
             if (normalized?.unit) next.price_unit = normalized.unit;
             mutated = true;
+          }
+          if (facts.open_hours && !next.open_hours) {
+            next.open_hours = facts.open_hours;
+            mutated = true;
+          }
+          if (facts.plus_code && !next.plus_code) {
+            next.plus_code = facts.plus_code;
+            mutated = true;
+          }
+          if (facts.menu_url && !next.menu_url) {
+            next.menu_url = facts.menu_url;
+            mutated = true;
+          }
+          if (facts.reservation_url && !next.reservation_url) {
+            next.reservation_url = facts.reservation_url;
+            mutated = true;
+          }
+          if (facts.signals && facts.signals.length > 0) {
+            const mergedSignals = [...new Set([...(next.signals ?? []), ...facts.signals])];
+            if (mergedSignals.length !== (next.signals ?? []).length) {
+              next.signals = mergedSignals;
+              mutated = true;
+            }
+          }
+          if (facts.risks && facts.risks.length > 0) {
+            const mergedRisks = [...new Set([...(next.risks ?? []), ...facts.risks])];
+            if (mergedRisks.length !== (next.risks ?? []).length) {
+              next.risks = mergedRisks;
+              mutated = true;
+            }
           }
 
           if (mutated) {

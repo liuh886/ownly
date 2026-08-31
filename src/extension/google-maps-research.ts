@@ -11,6 +11,14 @@ export interface GoogleMapsResearchFacts {
   website?: string;
   types?: string[];
   coordinates?: { lat: number; lng: number };
+  countryCode?: string;
+  open_hours?: string;
+  plus_code?: string;
+  menu_url?: string;
+  reservation_url?: string;
+  review_topics?: string[];
+  signals?: string[];
+  risks?: string[];
 }
 
 const PLACE_TYPE = /(restaurant|hotel|lodging|hostel|cafe|coffee|bakery|bar|food|tourist|attraction|museum|gallery|park|landmark|spa|shopping|store|market|transit|station|airport|zoo|aquarium|resort|motel|inn)/i;
@@ -116,6 +124,11 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
     result.website = placeNode[7][0];
   }
 
+  // Country Code from placeNode[243] (ISO 2-letter country code)
+  if (typeof placeNode[243] === 'string' && /^[A-Za-z]{2}$/.test(placeNode[243].trim())) {
+    result.countryCode = placeNode[243].trim().toUpperCase();
+  }
+
   // Direct lodging room price from placeNode[88]?.[0]
   if (Array.isArray(placeNode[88]) && typeof placeNode[88][0] === 'string') {
     const rawPrice = placeNode[88][0].replace(/\u00a0/g, ' ').trim();
@@ -124,7 +137,66 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
     }
   }
 
-  // Scan placeNode for phone and priceLevel
+  // Phone from placeNode[178]
+  if (Array.isArray(placeNode[178])) {
+    for (const item of placeNode[178]) {
+      if (Array.isArray(item) && typeof item[0] === 'string' && /^\+?[\d\s\-()]{8,25}$/.test(item[0])) {
+        result.phone = item[0].trim();
+        break;
+      }
+    }
+  }
+
+  // Opening Hours from placeNode[203] or placeNode[34]
+  const node203 = placeNode[203];
+  if (Array.isArray(node203)) {
+    if (Array.isArray(node203[1]) && Array.isArray(node203[1][4]) && typeof node203[1][4][0] === 'string') {
+      result.open_hours = cleanExtractedText(node203[1][4][0]);
+    } else if (Array.isArray(node203[0]) && Array.isArray(node203[0][0]) && Array.isArray(node203[0][0][3])) {
+      const hoursArray = node203[0][0][3];
+      if (Array.isArray(hoursArray[0]) && typeof hoursArray[0][0] === 'string') {
+        const day = typeof node203[0][0][0] === 'string' ? node203[0][0][0] : '';
+        result.open_hours = cleanExtractedText(`${day} ${hoursArray[0][0]}`);
+      }
+    }
+  }
+
+  // Plus Code from address string (e.g. "QXPP+QCQ Bangkok")
+  if (result.address) {
+    const plusMatch = /^[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,3}/i.exec(result.address);
+    if (plusMatch) {
+      result.plus_code = plusMatch[0];
+    }
+  }
+
+  // Signals and Risks from attributes in placeNode[100]
+  const node100 = placeNode[100];
+  if (Array.isArray(node100)) {
+    const signals: string[] = [];
+    const risks: string[] = [];
+    const attrQueue: unknown[] = [node100];
+    let attrScanned = 0;
+    while (attrQueue.length > 0 && attrScanned < 300) {
+      const cur = attrQueue.shift();
+      attrScanned += 1;
+      if (Array.isArray(cur)) {
+        if (typeof cur[1] === 'string' && (cur[0] === 1 || cur[0] === 0)) {
+          const text = cur[1].trim();
+          if (cur[0] === 1) {
+            if (/仅收现金/i.test(text)) risks.push(text);
+            else if (/无障碍|信用卡|支持|提供|外卖|免费|停车|素食|中文|Wifi/i.test(text)) signals.push(text);
+          }
+        }
+        for (const child of cur) {
+          if (child && typeof child === 'object') attrQueue.push(child);
+        }
+      }
+    }
+    if (signals.length > 0) result.signals = [...new Set(signals)].slice(0, 6);
+    if (risks.length > 0) result.risks = [...new Set(risks)].slice(0, 4);
+  }
+
+  // Scan placeNode for phone, priceLevel, menu_url, reservation_url
   const queue: unknown[] = [placeNode];
   let scanned = 0;
   while (queue.length > 0 && scanned < 1000) {
@@ -140,6 +212,12 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
         if (cleanPrice && cleanPrice !== '0' && !/^SGD\s*0(?:\.00)?$/i.test(cleanPrice)) {
           result.priceLevel = cleanPrice;
         }
+      }
+      if (!result.menu_url && /^https?:\/\/[^\s]+(?:menu|food|carte|order)/i.test(text)) {
+        result.menu_url = text;
+      }
+      if (!result.reservation_url && /^https?:\/\/[^\s]+(?:reserve|booking|opentable|chope|inline|tabelog|hungryhub)/i.test(text)) {
+        result.reservation_url = text;
       }
     } else if (Array.isArray(cur)) {
       for (const child of cur) {
