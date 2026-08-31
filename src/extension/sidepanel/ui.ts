@@ -688,6 +688,10 @@ const cardCache = new Map<string, { sig: string; node: HTMLDivElement }>();
 function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace, dictKey: string): string {
   return [
     place.updated_at || '',
+    place.price_currency || '',
+    store.mapCurrencyOverride || '',
+    store.pageDetectedCurrency || '',
+    store.state.activeContext?.currency || '',
     store.editingCandidateId === place.id ? 'edit' : 'view',
     store.bulkMode ? 'bulk' : 'single',
     store.bulkSelected.has(place.id) ? 'sel' : 'unsel',
@@ -972,8 +976,9 @@ function buildCandidateDetails(
   if (place.observed_rating) parts.push(`<span>★ ${place.observed_rating}</span>`);
   if (place.observed_price) {
     const activeTrip = store.state.activeContext;
+    const sourceCurrency = place.price_currency || store.mapCurrencyOverride || store.pageDetectedCurrency;
     const converted = activeTrip?.currency
-      ? convertPriceRange(place.observed_price, activeTrip.currency)
+      ? convertPriceRange(place.observed_price, activeTrip.currency, undefined, sourceCurrency)
       : null;
     if (converted && converted.sourceCurrency !== converted.targetCurrency) {
       parts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);

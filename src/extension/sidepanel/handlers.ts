@@ -532,27 +532,63 @@ export function initHandlers(): void {
   });
 
 
-  // Page-currency override is tab/session scoped. Trip currency remains Planner-owned.
+  // Page-currency override is tab/session scoped. When the user manually overrides currency (e.g. to SGD),
+  // they explicitly correct erroneous capture currency. Update active place, form, and existing pending candidates.
   el.currencySelector.addEventListener('change', () => {
     const selected = el.currencySelector.value;
     if (!selected) return;
     store.mapCurrencyOverride = selected === 'AUTO' ? undefined : selected;
     void (async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.id) return;
-      const response = await chrome.runtime.sendMessage({
-        type: 'OWNLY_SET_FX_OVERRIDE',
-        tabId: tab.id,
-        currency: store.mapCurrencyOverride,
-      }) as { ok?: boolean } | undefined;
-      if (!response?.ok) throw new Error('FX override was not persisted');
+      if (tab?.id) {
+        await chrome.runtime.sendMessage({
+          type: 'OWNLY_SET_FX_OVERRIDE',
+          tabId: tab.id,
+          currency: store.mapCurrencyOverride,
+        });
+      }
       if (store.mapCurrencyOverride) {
         store.pageDetectedCurrency = store.mapCurrencyOverride;
-        if (store.currentPlace) store.currentPlace = { ...store.currentPlace, detectedCurrency: store.mapCurrencyOverride };
-        if (store.detectedSavedList) store.detectedSavedList = { ...store.detectedSavedList, detectedCurrency: store.mapCurrencyOverride };
+        if (store.currentPlace) {
+          store.currentPlace = { ...store.currentPlace, detectedCurrency: store.mapCurrencyOverride };
+        }
+        if (store.detectedSavedList) {
+          store.detectedSavedList = { ...store.detectedSavedList, detectedCurrency: store.mapCurrencyOverride };
+        }
+
+        // Re-normalize and correct currency on pending candidates in active trip
+        const activeTripId = store.state.activeContext?.tripId;
+        if (activeTripId) {
+          let updatedAny = false;
+          store.state = {
+            ...store.state,
+            pendingPlaces: store.state.pendingPlaces.map((place) => {
+              if (place.trip_id !== activeTripId) return place;
+              const nextNorm = normalizeObservedPrice(place.observed_price, store.mapCurrencyOverride);
+              if (nextNorm && (place.price_currency !== nextNorm.currency || place.price_min !== nextNorm.min || place.price_max !== nextNorm.max)) {
+                updatedAny = true;
+                return {
+                  ...place,
+                  price_currency: nextNorm.currency || store.mapCurrencyOverride,
+                  price_min: nextNorm.min,
+                  price_max: nextNorm.max,
+                  price_unit: nextNorm.unit,
+                  price_level: nextNorm.level,
+                  updated_at: new Date().toISOString(),
+                };
+              }
+              return place;
+            }),
+          };
+          if (updatedAny) {
+            await saveState();
+          }
+        }
       }
+
       renderCurrencyPill();
       renderCurrentPlace();
+      renderCandidatesList();
       setStatus(t().currencyApplied(selected), 'success');
     })().catch((error) => setStatus(String(error), 'error'));
   });
@@ -572,6 +608,7 @@ export function initHandlers(): void {
       if (store.currentPlace) store.currentPlace = { ...store.currentPlace, detectedCurrency: detected };
       renderCurrencyPill();
       renderCurrentPlace();
+      renderCandidatesList();
       setStatus(t().reDetectedCurrency(detected), 'success');
     })().catch((error) => setStatus(String(error), 'error'));
   });
@@ -585,7 +622,7 @@ export function initHandlers(): void {
     else checkboxes.forEach((c) => { if (c.dataset.placeId) store.bulkSelected.add(c.dataset.placeId); });
   });
 
-  // One-click strengthen all Google Maps candidates in the active trip.
+  // One-click strengthen all candidates in the active trip (Maps in-tab pass + background batch enrichment)
   el.btnEnrichCandidates.addEventListener('click', () => {
     void (async () => {
       const dict = t();
@@ -600,15 +637,69 @@ export function initHandlers(): void {
         return;
       }
       setStatus(dict.strengtheningStart(candidates.length));
-      const result = await strengthenCandidatesThroughMaps(candidates);
-      if (!result) {
-        setStatus(dict.strengthenNoResolvable, 'muted');
-        return;
+
+      // Phase 1: Try fast in-tab Maps pass for items with Place ID if Maps tab is open
+      let mapsEnrichedCount = 0;
+      let targetCandidates = [...candidates];
+      try {
+        const mapsTab = await findGoogleMapsTab();
+        const withPlaceId = targetCandidates.filter((p) => p.source_provider === 'google_maps' && Boolean(p.source_place_id));
+        if (mapsTab?.id && withPlaceId.length > 0) {
+          const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
+          if (mapsResult && mapsResult.enriched > 0) {
+            mapsEnrichedCount = mapsResult.enriched;
+            const mergedMap = new Map(mapsResult.merged.map((p) => [p.id, p] as const));
+            targetCandidates = targetCandidates.map((p) => mergedMap.get(p.id) ?? p);
+          }
+        }
+      } catch (err) {
+        console.warn('[Ownly Capture] In-tab Google Maps pass skipped:', err);
       }
-      setStatus(
-        `${dict.strengthenComplete(result.enriched, result.attempted, result.failed)} · ${formatStrengthenCoverage(result.merged)}`,
-        result.failed === result.attempted && result.attempted > 0 ? 'error' : 'success',
+
+      // Phase 2: Run batch enrichment for any candidates still missing facts
+      const needEnrichment = targetCandidates.filter((p) =>
+        !p.observed_rating ||
+        !p.observed_review_count ||
+        !p.observed_price ||
+        !p.source_category ||
+        !p.address ||
+        !p.coordinates
       );
+
+      let batchEnrichedCount = 0;
+      if (needEnrichment.length > 0) {
+        const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
+          needEnrichment,
+          (processed, total, currentPlace) => {
+            setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
+            renderCandidatesList();
+          }
+        );
+        batchEnrichedCount = totalEnriched;
+        if (totalEnriched > 0) {
+          const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
+          store.state = {
+            ...store.state,
+            pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
+          };
+          await saveState();
+        }
+      }
+
+      const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
+      const latestCandidates = store.state.pendingPlaces.filter((p) => p.trip_id === context.tripId);
+      if (totalEnriched > 0) {
+        setStatus(
+          `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestCandidates)}`,
+          'success',
+        );
+      } else {
+        setStatus(
+          `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestCandidates)}`,
+          'muted',
+        );
+      }
+      renderCandidatesList();
     })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
   });
 
@@ -618,16 +709,72 @@ export function initHandlers(): void {
       if (store.bulkSelected.size === 0) return;
       const selected = new Set(store.bulkSelected);
       const candidates = store.state.pendingPlaces.filter((place) => selected.has(place.id));
+      if (candidates.length === 0) return;
+
       setStatus(dict.strengtheningStart(candidates.length));
-      const result = await strengthenCandidatesThroughMaps(candidates);
-      if (!result) {
-        setStatus(dict.strengthenNoResolvable, 'muted');
-        return;
+
+      // Phase 1: Try in-tab Maps pass for selected items with Place ID
+      let mapsEnrichedCount = 0;
+      let targetCandidates = [...candidates];
+      try {
+        const mapsTab = await findGoogleMapsTab();
+        const withPlaceId = targetCandidates.filter((p) => p.source_provider === 'google_maps' && Boolean(p.source_place_id));
+        if (mapsTab?.id && withPlaceId.length > 0) {
+          const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
+          if (mapsResult && mapsResult.enriched > 0) {
+            mapsEnrichedCount = mapsResult.enriched;
+            const mergedMap = new Map(mapsResult.merged.map((p) => [p.id, p] as const));
+            targetCandidates = targetCandidates.map((p) => mergedMap.get(p.id) ?? p);
+          }
+        }
+      } catch (err) {
+        console.warn('[Ownly Capture] In-tab Google Maps pass skipped:', err);
       }
-      setStatus(
-        `${dict.strengthenComplete(result.enriched, result.attempted, result.failed)} · ${formatStrengthenCoverage(result.merged)}`,
-        result.failed === result.attempted && result.attempted > 0 ? 'error' : 'success',
+
+      // Phase 2: Run batch enrichment on remaining items missing data
+      const needEnrichment = targetCandidates.filter((p) =>
+        !p.observed_rating ||
+        !p.observed_review_count ||
+        !p.observed_price ||
+        !p.source_category ||
+        !p.address ||
+        !p.coordinates
       );
+
+      let batchEnrichedCount = 0;
+      if (needEnrichment.length > 0) {
+        const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
+          needEnrichment,
+          (processed, total, currentPlace) => {
+            setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
+            renderCandidatesList();
+          }
+        );
+        batchEnrichedCount = totalEnriched;
+        if (totalEnriched > 0) {
+          const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
+          store.state = {
+            ...store.state,
+            pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
+          };
+          await saveState();
+        }
+      }
+
+      const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
+      const latestSelected = store.state.pendingPlaces.filter((p) => selected.has(p.id));
+      if (totalEnriched > 0) {
+        setStatus(
+          `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestSelected)}`,
+          'success',
+        );
+      } else {
+        setStatus(
+          `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestSelected)}`,
+          'muted',
+        );
+      }
+      renderCandidatesList();
     })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
   });
 
