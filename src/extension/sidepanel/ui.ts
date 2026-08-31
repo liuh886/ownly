@@ -13,6 +13,7 @@ import {
 } from '../../domain/planner';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
+import { logger } from '../logger';
 import { escapeHtml, isPlausiblePriceText } from '../utils';
 import { matchesSavedListContext } from '../saved-list-match';
 import { getExistingPlaceForUrl, store, t } from './store';
@@ -121,6 +122,11 @@ export function applyI18n() {
     el.bulkPrioritySelect.options[0].textContent = dict.bulkPriorityPlaceholder;
   }
 
+  el.sumDebugDrawer.textContent = dict.sumDebugDrawer;
+  el.btnCopyDebugLogs.textContent = dict.btnCopyDebugLogs;
+  el.btnExportDiagnostics.textContent = dict.btnExportDiagnostics;
+  el.btnClearDebugLogs.textContent = dict.btnClearDebugLogs;
+
   renderCurrencyPill();
   renderChips();
   renderFilters();
@@ -129,6 +135,15 @@ export function applyI18n() {
   renderSmartListCard();
   renderCandidatesList();
   syncQuickChipStates();
+  updateDebugLogViewer();
+}
+
+export function updateDebugLogViewer() {
+  const viewer = el.debugLogViewer;
+  if (!viewer) return;
+  const logs = logger.getAllFormattedText();
+  viewer.textContent = logs || (store.lang === 'zh' ? '[暂无调试日志]' : '[No debug logs yet]');
+  viewer.scrollTop = viewer.scrollHeight;
 }
 
 function renderChips() {

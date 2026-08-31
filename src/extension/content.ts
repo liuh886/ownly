@@ -23,6 +23,7 @@ import { PLACE_PARSER, type SubtitleDecomposition } from './place-parser';
 import { detectPageCurrency } from './currency-detector';
 import { extractGoogleMapsSavedListId, matchesSavedListContext } from './saved-list-match';
 import { extractGoogleMapsResearchFromHtml, googleMapsDetailUrlFromSourceId, type GoogleMapsResearchFacts } from './google-maps-research';
+import { logger } from './logger';
 
 export interface CurrentResearchPlace {
   title: string;
@@ -881,22 +882,42 @@ const savedListDetailCache = new Map<string, { at: number; facts: GoogleMapsRese
 
 async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<GoogleMapsResearchFacts | null> {
   const key = place.sourcePlaceId;
-  if (!key) return null;
+  if (!key) {
+    logger.warn('MapsTabDetail', `Skipping detail fetch: missing sourcePlaceId for "${place.title}"`);
+    return null;
+  }
   const cached = savedListDetailCache.get(key);
   if (cached && Date.now() - cached.at < SAVED_LIST_DETAIL_CACHE_TTL_MS) return cached.facts;
 
   const detailUrl = googleMapsDetailUrlFromSourceId(key, place.title, window.location.origin);
-  if (!detailUrl) return null;
+  if (!detailUrl) {
+    logger.warn('MapsTabDetail', `Could not generate detail URL for "${place.title}" (key: ${key})`);
+    return null;
+  }
+  logger.fetch('MapsTabDetail', `Fetching "${place.title}"`, { detailUrl, key });
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 5000);
   try {
     const res = await fetch(detailUrl, { credentials: 'include', signal: controller.signal });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logger.warn('MapsTabDetail', `HTTP ${res.status} fetching "${place.title}"`, { url: detailUrl });
+      return null;
+    }
     const html = (await res.text()).slice(0, 3_000_000);
     const facts = extractGoogleMapsResearchFromHtml(html);
+    logger.parser('MapsTabDetail', `Extracted facts for "${place.title}"`, {
+      htmlLength: html.length,
+      rating: facts.rating,
+      reviewCount: facts.reviewCount,
+      category: facts.category,
+      priceLevel: facts.priceLevel,
+      address: facts.address,
+      coordinates: facts.coordinates,
+    });
     savedListDetailCache.set(key, { at: Date.now(), facts });
     return facts;
-  } catch {
+  } catch (err) {
+    logger.error('MapsTabDetail', `Fetch failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
     return null;
   } finally {
     window.clearTimeout(timer);

@@ -83,6 +83,12 @@ export type ElementMap = {
   candidatesListContainer: HTMLElement;
   pending: HTMLElement;
   status: HTMLElement;
+  debugDrawer: HTMLDetailsElement;
+  sumDebugDrawer: HTMLElement;
+  btnCopyDebugLogs: HTMLButtonElement;
+  btnExportDiagnostics: HTMLButtonElement;
+  btnClearDebugLogs: HTMLButtonElement;
+  debugLogViewer: HTMLElement;
 };
 
 export function required<T extends HTMLElement>(id: string): T {
@@ -176,4 +182,10 @@ export const el: ElementMap = {
   candidatesListContainer: required('candidatesListContainer'),
   pending: required('pending'),
   status: required('status'),
+  debugDrawer: required<HTMLDetailsElement>('debugDrawer'),
+  sumDebugDrawer: required('sumDebugDrawer'),
+  btnCopyDebugLogs: required<HTMLButtonElement>('btnCopyDebugLogs'),
+  btnExportDiagnostics: required<HTMLButtonElement>('btnExportDiagnostics'),
+  btnClearDebugLogs: required<HTMLButtonElement>('btnClearDebugLogs'),
+  debugLogViewer: required('debugLogViewer'),
 };

@@ -173,6 +173,21 @@
       <div id="candidatesListContainer" class="candidates-list"></div>
     </details>
 
+    <!-- Debug & Diagnostic Logs Drawer -->
+    <details id="debugDrawer" class="panel stack drawer" style="margin-top: 8px; border-top: 1px solid var(--border);">
+      <summary style="font-size: 11px; color: var(--text-3); cursor: pointer; user-select: none;">
+        <span id="sumDebugDrawer">🐛 诊断与调试日志 (Debug Mode)</span>
+        <span class="row" style="gap: 4px;">
+          <button id="btnCopyDebugLogs" class="link" type="button" style="font-size: 10px;" title="复制全部日志">📋 复制日志</button>
+          <button id="btnExportDiagnostics" class="link" type="button" style="font-size: 10px;" title="导出完整诊断 JSON">📥 导出诊断包</button>
+          <button id="btnClearDebugLogs" class="link" type="button" style="font-size: 10px;" title="清空日志">🗑️</button>
+        </span>
+      </summary>
+      <div class="stack" style="margin-top: 6px;">
+        <div id="debugLogViewer" style="max-height: 200px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; background: rgba(0,0,0,0.35); padding: 8px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; border: 1px solid var(--border); color: #a1a1aa; line-height: 1.45; user-select: text;">[00:00:00] [INFO] [System] Debug Logger Initialized.</div>
+      </div>
+    </details>
+
     <p id="status" class="status visible" aria-live="polite">就绪。</p>
   </main>
   <script src="sidepanel.js"></script>

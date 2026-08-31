@@ -5,6 +5,7 @@ import {
 } from '../domain/planner';
 import type { CurrentResearchPlace } from './content';
 import { extractCleanPriceText } from './utils';
+import { logger } from './logger';
 import {
   extractGoogleMapsResearchFromHtml,
   googleMapsDetailUrlFromSourceId,
@@ -43,15 +44,21 @@ export async function enrichPlaceMetadata(
     else if (!targetUrl) targetUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.title)}`;
   }
 
+  logger.fetch('BackgroundEnrich', `Fetching metadata for ${place.title}`, { targetUrl, sourcePlaceId: place.source_place_id });
+
   try {
     const res = await fetch(targetUrl, {
       credentials: 'include',
       signal: options?.signal,
     });
-    if (!res.ok) return { place, enriched: false, error: `HTTP ${res.status}` };
+    if (!res.ok) {
+      logger.warn('BackgroundEnrich', `HTTP error for ${place.title}`, { status: res.status, url: targetUrl });
+      return { place, enriched: false, error: `HTTP ${res.status}` };
+    }
     const html = (await res.text()).slice(0, 2_500_000);
 
     const facts = extractGoogleMapsResearchFromHtml(html);
+    logger.parser('BackgroundEnrich', `Parsed HTML facts for ${place.title}`, { htmlLength: html.length, facts });
 
     let mutated = false;
     const next: PlannerTripPlace = { ...place };

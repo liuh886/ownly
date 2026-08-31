@@ -30,7 +30,9 @@ import {
   renderState,
   setStatus,
   syncQuickChipStates,
+  updateDebugLogViewer,
 } from './ui';
+import { logger } from '../logger';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 
@@ -531,6 +533,49 @@ export function initHandlers(): void {
     el.bulkPrioritySelect.value = '';
   });
 
+  el.btnCopyDebugLogs.addEventListener('click', () => {
+    const text = logger.getAllFormattedText();
+    void navigator.clipboard.writeText(text).then(() => {
+      setStatus(t().debugLogsCopied, 'success');
+    }).catch(() => {
+      setStatus('Failed to copy logs', 'error');
+    });
+  });
+
+  el.btnExportDiagnostics.addEventListener('click', () => {
+    const payload = logger.exportDiagnostics({
+      activeContext: store.state.activeContext,
+      pendingPlacesCount: store.state.pendingPlaces.length,
+      pendingPlacesSample: store.state.pendingPlaces.slice(0, 10),
+      detectedSavedList: store.detectedSavedList ? {
+        listName: store.detectedSavedList.listName,
+        placeCount: store.detectedSavedList.places.length,
+        placesSample: store.detectedSavedList.places.slice(0, 5),
+      } : null,
+      pageDetectedCurrency: store.pageDetectedCurrency,
+      mapCurrencyOverride: store.mapCurrencyOverride,
+      lang: store.lang,
+    });
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ownly-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus(t().debugDiagnosticsExported, 'success');
+  });
+
+  el.btnClearDebugLogs.addEventListener('click', () => {
+    logger.clear();
+    updateDebugLogViewer();
+    setStatus(t().debugLogsCleared, 'muted');
+  });
+
+  logger.subscribe(() => {
+    updateDebugLogViewer();
+  });
+
 
   // Page-currency override is tab/session scoped. When the user manually overrides currency (e.g. to SGD),
   // they explicitly correct erroneous capture currency. Update active place, form, and existing pending candidates.
@@ -653,6 +698,9 @@ export function initHandlers(): void {
         return;
       }
       setStatus(dict.strengtheningStart(candidates.length));
+      logger.info('EnrichCandidates', `Starting enrichment for ${candidates.length} candidates`, {
+        candidatesSample: candidates.slice(0, 5).map((p) => ({ title: p.title, source_place_id: p.source_place_id })),
+      });
 
       // Phase 1: Try fast in-tab Maps pass for items with Place ID if Maps tab is open
       let mapsEnrichedCount = 0;
@@ -660,8 +708,10 @@ export function initHandlers(): void {
       try {
         const mapsTab = await findGoogleMapsTab();
         const withPlaceId = targetCandidates.filter((p) => p.source_provider === 'google_maps' && Boolean(p.source_place_id));
+        logger.maps('EnrichCandidates', `Found Google Maps tab (id: ${mapsTab?.id}), ${withPlaceId.length} places with placeId`);
         if (mapsTab?.id && withPlaceId.length > 0) {
           const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
+          logger.maps('EnrichCandidates', 'In-tab Maps strengthen result', mapsResult);
           if (mapsResult && mapsResult.enriched > 0) {
             mapsEnrichedCount = mapsResult.enriched;
             const mergedMap = new Map(mapsResult.merged.map((p) => [p.id, p] as const));
@@ -669,6 +719,7 @@ export function initHandlers(): void {
           }
         }
       } catch (err) {
+        logger.warn('EnrichCandidates', 'In-tab Google Maps pass skipped', err instanceof Error ? err.message : String(err));
         console.warn('[Ownly Capture] In-tab Google Maps pass skipped:', err);
       }
 
@@ -681,6 +732,7 @@ export function initHandlers(): void {
         !p.address ||
         !p.coordinates
       );
+      logger.info('EnrichCandidates', `Phase 2: ${needEnrichment.length} candidates need background fetch`);
 
       let batchEnrichedCount = 0;
       if (needEnrichment.length > 0) {
@@ -866,22 +918,29 @@ export function initHandlers(): void {
         return;
       }
       if (!savedList || savedList.places.length === 0) return;
+      logger.maps('SmartSyncAll', `Starting smart sync for list "${savedList.listName}"`, {
+        totalPlaces: savedList.places.length,
+        placesSample: savedList.places.slice(0, 5).map((p) => ({ title: p.title, sourcePlaceId: p.sourcePlaceId })),
+      });
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab?.id) {
           setStatus(store.lang === 'zh' ? '正在补全评分、评论量、分类与价格…' : 'Enriching ratings, reviews, categories and prices…');
+          logger.fetch('SmartSyncAll', `Sending OWNLY_ENRICH_SAVED_LIST to tab ${tab.id}`);
           const enriched = await chrome.tabs.sendMessage(tab.id, {
             type: 'OWNLY_ENRICH_SAVED_LIST',
             savedList,
             overrideCurrency: store.mapCurrencyOverride,
             force: true,
           }) as { savedList?: DetectedSavedList | null; attempted?: number; enriched?: number; failed?: number } | undefined;
+          logger.parser('SmartSyncAll', 'Received enrichment response from tab', enriched);
           if (enriched?.savedList?.places?.length) {
             savedList = enriched.savedList;
             store.detectedSavedList = savedList;
           }
         }
       } catch (error) {
+        logger.error('SmartSyncAll', 'Saved-list detail enrichment failed', error instanceof Error ? error.message : String(error));
         console.warn('[Ownly Capture] Saved-list detail enrichment failed', error);
       }
       const now = new Date().toISOString();
