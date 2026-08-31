@@ -18,7 +18,7 @@ import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
-import { enrichCandidatePlacesBatch, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
+import { enrichCandidatePlacesBatch, isCandidateMissingData, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
 import { DEBUG_STORAGE_KEY, getExistingPlaceForUrl, store, t } from './store';
 import {
   applyI18n,
@@ -733,16 +733,7 @@ export function initHandlers(): void {
       }
 
       // Phase 2: Run batch enrichment for any candidates still missing facts
-      const needEnrichment = targetCandidates.filter((p) =>
-        !p.source_place_id ||
-        !p.observed_rating ||
-        !p.observed_review_count ||
-        !p.observed_price ||
-        isZeroOrPlaceholderPrice(p.observed_price) ||
-        !p.source_category ||
-        !p.address ||
-        !p.coordinates
-      );
+      const needEnrichment = targetCandidates.filter(isCandidateMissingData);
       logger.info('EnrichCandidates', `Phase 2: ${needEnrichment.length} candidates need background fetch`);
 
       let batchEnrichedCount = 0;
@@ -821,16 +812,7 @@ export function initHandlers(): void {
       }
 
       // Phase 2: Run batch enrichment on remaining items missing data
-      const needEnrichment = targetCandidates.filter((p) =>
-        !p.source_place_id ||
-        !p.observed_rating ||
-        !p.observed_review_count ||
-        !p.observed_price ||
-        isZeroOrPlaceholderPrice(p.observed_price) ||
-        !p.source_category ||
-        !p.address ||
-        !p.coordinates
-      );
+      const needEnrichment = targetCandidates.filter(isCandidateMissingData);
 
       let batchEnrichedCount = 0;
       if (needEnrichment.length > 0) {
@@ -958,16 +940,18 @@ export function initHandlers(): void {
       }
       const now = new Date().toISOString();
       const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
+      const syncedIds = new Set<string>();
       let importedCount = 0;
       for (const item of savedList.places) {
         const title = cleanExtractedText(item.title);
         if (!title || isJunkNavigationText(title)) continue;
         const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, item.sourceUrl, item.sourcePlaceId, item.coordinates);
         const id = existing?.id ?? crypto.randomUUID();
+        syncedIds.add(id);
         const address = item.address ? cleanExtractedText(item.address) : undefined;
         const kind = inferPlaceKind([title, item.category, address, ...(item.types || [])].filter(Boolean).join(' '));
         const rawExistingPrice = existing?.observed_price;
-        const validExistingPrice = (rawExistingPrice && rawExistingPrice !== '0' && !/^SGD\s*0$/i.test(rawExistingPrice))
+        const validExistingPrice = (rawExistingPrice && !isZeroOrPlaceholderPrice(rawExistingPrice))
           ? rawExistingPrice
           : undefined;
         const effectivePrice = item.priceLevel || validExistingPrice;
@@ -1024,16 +1008,9 @@ export function initHandlers(): void {
       renderSmartListCard();
       renderCandidatesList();
 
-      // Auto-enrich any imported candidates missing facts immediately in one smooth pass
-      const newlyImported = store.state.pendingPlaces;
-      const needsPass = newlyImported.filter((p) =>
-        !p.source_place_id ||
-        !p.observed_rating ||
-        !p.observed_review_count ||
-        !p.source_category ||
-        !p.address ||
-        !p.coordinates
-      );
+      // Auto-enrich any synced candidates missing facts immediately in one smooth pass
+      const syncedPlaces = store.state.pendingPlaces.filter((p) => syncedIds.has(p.id));
+      const needsPass = syncedPlaces.filter(isCandidateMissingData);
       if (needsPass.length > 0) {
         setStatus(store.lang === 'zh' ? `正在自动补全 ${needsPass.length} 个地点的 Place ID、评分与分类…` : `Auto-enriching ${needsPass.length} places…`);
         const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
@@ -1054,12 +1031,12 @@ export function initHandlers(): void {
         }
       }
 
-      const finalCandidates = store.state.pendingPlaces;
-      const total = finalCandidates.length;
-      const withRating = finalCandidates.filter((p) => p.observed_rating !== undefined).length;
-      const withReviews = finalCandidates.filter((p) => p.observed_review_count !== undefined).length;
-      const withPrice = finalCandidates.filter((p) => Boolean(p.observed_price && !isZeroOrPlaceholderPrice(p.observed_price))).length;
-      const withCategory = finalCandidates.filter((p) => Boolean(p.source_category)).length;
+      const finalSynced = store.state.pendingPlaces.filter((p) => syncedIds.has(p.id));
+      const total = finalSynced.length;
+      const withRating = finalSynced.filter((p) => p.observed_rating !== undefined).length;
+      const withReviews = finalSynced.filter((p) => p.observed_review_count !== undefined).length;
+      const withPrice = finalSynced.filter((p) => Boolean(p.observed_price && !isZeroOrPlaceholderPrice(p.observed_price))).length;
+      const withCategory = finalSynced.filter((p) => Boolean(p.source_category)).length;
       const coverage = store.lang === 'zh'
         ? ` · 评分 ${withRating}/${total} · 评论量 ${withReviews}/${total} · 价格 ${withPrice}/${total} · 分类 ${withCategory}/${total}`
         : ` · rating ${withRating}/${total} · reviews ${withReviews}/${total} · price ${withPrice}/${total} · category ${withCategory}/${total}`;

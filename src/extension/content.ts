@@ -999,12 +999,25 @@ async function enrichSavedListDetails(
         failed += 1;
         continue;
       }
-      const nextPrice = place.priceLevel ?? facts.priceLevel;
+      const nextRating = force ? (facts.rating ?? place.rating) : (place.rating ?? facts.rating);
+      const nextReviewCount = force ? (facts.reviewCount ?? place.reviewCount) : (place.reviewCount ?? facts.reviewCount);
+      const nextCategory = force ? (facts.category ?? place.category) : (place.category ?? facts.category);
+      const nextPrice = force ? (facts.priceLevel ?? place.priceLevel) : (place.priceLevel ?? facts.priceLevel);
+      const nextAddress = force ? (facts.address ?? place.address) : (place.address ?? facts.address);
+      const nextCoords = force ? (facts.coordinates ?? place.coordinates) : (place.coordinates ?? facts.coordinates);
+      const nextWebsite = force ? (facts.website ?? place.website) : (place.website ?? facts.website);
+      const nextPhone = force ? (facts.phone ?? place.phone) : (place.phone ?? facts.phone);
+      const nextOpenHours = force ? (facts.open_hours ?? place.openHours) : (place.openHours ?? facts.open_hours);
+      const nextPlusCode = force ? (facts.plus_code ?? place.plusCode) : (place.plusCode ?? facts.plus_code);
+      const nextMenuUrl = force ? (facts.menu_url ?? place.menuUrl) : (place.menuUrl ?? facts.menu_url);
+      const nextReservationUrl = force ? (facts.reservation_url ?? place.reservationUrl) : (place.reservationUrl ?? facts.reservation_url);
+      const nextReviewTopics = force ? (facts.review_topics ?? place.reviewTopics) : (place.reviewTopics ?? facts.review_topics);
+
       places[index] = {
         ...place,
-        rating: place.rating ?? facts.rating,
-        reviewCount: place.reviewCount ?? facts.reviewCount,
-        category: place.category ?? facts.category,
+        rating: nextRating,
+        reviewCount: nextReviewCount,
+        category: nextCategory,
         priceLevel: nextPrice,
         detectedCurrency: overrideCurrency
           || facts.priceCurrency
@@ -1014,10 +1027,15 @@ async function enrichSavedListDetails(
             place.detectedCurrency ?? list.detectedCurrency,
             undefined,
           ),
-        address: place.address ?? facts.address,
-        coordinates: place.coordinates ?? facts.coordinates,
-        website: place.website ?? facts.website,
-        phone: place.phone ?? facts.phone,
+        address: nextAddress,
+        coordinates: nextCoords,
+        website: nextWebsite,
+        phone: nextPhone,
+        openHours: nextOpenHours,
+        plusCode: nextPlusCode,
+        menuUrl: nextMenuUrl,
+        reservationUrl: nextReservationUrl,
+        reviewTopics: nextReviewTopics,
         types: facts.types?.length ? [...new Set([...(place.types ?? []), ...facts.types])] : place.types,
       };
       if (
@@ -1028,6 +1046,8 @@ async function enrichSavedListDetails(
         || facts.address
         || facts.coordinates
         || facts.phone
+        || facts.open_hours
+        || facts.plus_code
         || facts.types?.length
       ) enriched += 1;
     }

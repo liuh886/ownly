@@ -75,7 +75,8 @@ describe('enrichPlaceMetadata', () => {
       expect(result.place.price_min).toBe(200);
       expect(result.place.price_max).toBe(400);
       expect(result.place.price_currency).toBe('THB');
-      expect(result.place.kind).toBe('food');
+      expect(result.place.kind).toBe('other');
+      expect(result.place.source_category).toBe('Restaurant');
       expect(result.place.tags).toEqual([]);
       expect(result.place.types).toContain('restaurant');
       expect(result.place.phone).toBe('+66 2 226 6666');
@@ -222,7 +223,8 @@ describe('enrichCandidatePlacesBatch', () => {
       expect(totalEnriched).toBe(1);
       expect(enrichedPlaces[0].observed_rating).toBe(4.4);
       expect(enrichedPlaces[0].observed_review_count).toBe(996);
-      expect(enrichedPlaces[0].kind).toBe('stay');
+      expect(enrichedPlaces[0].kind).toBe('other');
+      expect(enrichedPlaces[0].source_category).toBe('LodgingBusiness');
       expect(enrichedPlaces[0].types).toContain('lodgingbusiness');
       expect(progressSpy).toHaveBeenCalledWith(1, 1, expect.any(Object));
     } finally {

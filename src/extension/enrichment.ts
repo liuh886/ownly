@@ -1,5 +1,4 @@
 import {
-  inferPlaceKind,
   mergeCapturedPlaceResearch,
   normalizeObservedPrice,
   type PlannerTripPlace,
@@ -26,21 +25,34 @@ export interface EnrichmentResult {
 /**
  * Enriches a single place by fetching research metadata (Google Maps JSON-LD / HTML).
  */
+/**
+ * Determines whether a candidate place is missing essential objective facts.
+ * Price is only required for lodging/stays; attractions, temples, and transit naturally lack room rates.
+ */
+export function isCandidateMissingData(place: PlannerTripPlace): boolean {
+  const isStay = place.kind === 'stay' || (place.source_category && /hotel|resort|lodging|hostel|inn|stay|酒店|旅馆|住宿|民宿/i.test(place.source_category));
+  const isMissingPrice = Boolean(isStay && (!place.observed_price || isZeroOrPlaceholderPrice(place.observed_price)));
+  return (
+    !place.source_place_id ||
+    !place.observed_rating ||
+    !place.observed_review_count ||
+    isMissingPrice ||
+    !place.source_category ||
+    !place.address ||
+    !place.coordinates
+  );
+}
+
+/**
+ * Enriches a single place by fetching research metadata (Google Maps JSON-LD / HTML).
+ * Respects state authority: ONLY writes objective facts (source_category, types, observed_*, address, coords, hours, phone, plus_code, menu_url, reservation_url).
+ * NEVER mutates Planner-owned decisions (kind, priority, signals, risks, tags, notes).
+ */
 export async function enrichPlaceMetadata(
   place: PlannerTripPlace,
   options?: { signal?: AbortSignal }
 ): Promise<EnrichmentResult> {
-  const isCandidateMissingData =
-    !place.source_place_id ||
-    !place.observed_rating ||
-    !place.observed_review_count ||
-    !place.observed_price ||
-    isZeroOrPlaceholderPrice(place.observed_price) ||
-    !place.source_category ||
-    !place.address ||
-    !place.coordinates;
-
-  if (!isCandidateMissingData) {
+  if (!isCandidateMissingData(place)) {
     return { place, enriched: false };
   }
 
@@ -94,34 +106,27 @@ export async function enrichPlaceMetadata(
             mutated = true;
           }
 
-          if (!next.observed_rating && facts.rating !== undefined) {
+          if (facts.rating !== undefined) {
             next.observed_rating = facts.rating;
             mutated = true;
           }
-          if (!next.observed_review_count && facts.reviewCount !== undefined) {
+          if (facts.reviewCount !== undefined) {
             next.observed_review_count = facts.reviewCount;
             mutated = true;
           }
           if (facts.category) {
-            if (!next.source_category || next.source_category === 'other' || next.source_category !== facts.category) {
-              next.source_category = facts.category;
-              mutated = true;
-            }
-            const officialKind = inferPlaceKind(facts.category);
-            if (officialKind && next.kind !== officialKind) {
-              next.kind = officialKind;
-              mutated = true;
-            }
+            next.source_category = facts.category;
+            mutated = true;
           }
-          if (facts.address && !next.address) {
+          if (facts.address) {
             next.address = facts.address;
             mutated = true;
           }
-          if (facts.phone && !next.phone) {
+          if (facts.phone) {
             next.phone = facts.phone;
             mutated = true;
           }
-          if (facts.coordinates && !next.coordinates) {
+          if (facts.coordinates) {
             next.coordinates = facts.coordinates;
             mutated = true;
           }
@@ -169,7 +174,7 @@ export async function enrichPlaceMetadata(
           const localCountryCurrency = facts.countryCode ? COUNTRY_TO_DEFAULT_CURRENCY[facts.countryCode] : undefined;
           const effectiveCurrency = facts.priceCurrency || localCountryCurrency;
 
-          if (facts.priceLevel && (!next.observed_price || isZeroOrPlaceholderPrice(next.observed_price))) {
+          if (facts.priceLevel && !isZeroOrPlaceholderPrice(facts.priceLevel)) {
             next.observed_price = facts.priceLevel;
             const normalized = normalizeObservedPrice(facts.priceLevel, effectiveCurrency);
             if (normalized?.min !== undefined) next.price_min = normalized.min;
@@ -187,35 +192,25 @@ export async function enrichPlaceMetadata(
             next.price_unit = undefined;
             mutated = true;
           }
-          if (facts.open_hours && !next.open_hours) {
+          if (facts.open_hours) {
             next.open_hours = facts.open_hours;
             mutated = true;
           }
-          if (facts.plus_code && !next.plus_code) {
+          if (facts.plus_code) {
             next.plus_code = facts.plus_code;
             mutated = true;
           }
-          if (facts.menu_url && !next.menu_url) {
+          if (facts.menu_url) {
             next.menu_url = facts.menu_url;
             mutated = true;
           }
-          if (facts.reservation_url && !next.reservation_url) {
+          if (facts.reservation_url) {
             next.reservation_url = facts.reservation_url;
             mutated = true;
           }
-          if (facts.signals && facts.signals.length > 0) {
-            const mergedSignals = [...new Set([...(next.signals ?? []), ...facts.signals])];
-            if (mergedSignals.length !== (next.signals ?? []).length) {
-              next.signals = mergedSignals;
-              mutated = true;
-            }
-          }
-          if (facts.risks && facts.risks.length > 0) {
-            const mergedRisks = [...new Set([...(next.risks ?? []), ...facts.risks])];
-            if (mergedRisks.length !== (next.risks ?? []).length) {
-              next.risks = mergedRisks;
-              mutated = true;
-            }
+          if (facts.review_topics && facts.review_topics.length > 0) {
+            next.review_topics = facts.review_topics;
+            mutated = true;
           }
 
           if (mutated) {
@@ -257,30 +252,23 @@ export async function enrichPlaceMetadata(
     let mutated = false;
     const next: PlannerTripPlace = { ...place };
 
-    if (!next.observed_rating && facts.rating !== undefined) {
+    if (facts.rating !== undefined) {
       next.observed_rating = facts.rating;
       mutated = true;
     }
-    if (!next.observed_review_count && facts.reviewCount !== undefined) {
+    if (facts.reviewCount !== undefined) {
       next.observed_review_count = facts.reviewCount;
       mutated = true;
     }
     if (facts.category) {
-      if (!next.source_category || next.source_category === 'other' || next.source_category !== facts.category) {
-        next.source_category = facts.category;
-        mutated = true;
-      }
-      const officialKind = inferPlaceKind(facts.category);
-      if (officialKind && next.kind !== officialKind) {
-        next.kind = officialKind;
-        mutated = true;
-      }
+      next.source_category = facts.category;
+      mutated = true;
     }
-    if (facts.address && !next.address) {
+    if (facts.address) {
       next.address = facts.address;
       mutated = true;
     }
-    if (facts.phone && !next.phone) {
+    if (facts.phone) {
       next.phone = facts.phone;
       mutated = true;
     }
