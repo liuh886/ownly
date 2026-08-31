@@ -95,6 +95,7 @@ describe('enrichPlaceMetadata', () => {
       title: 'Complete Hotel',
       source_provider: 'google_maps',
       source_url: 'https://www.google.com/maps/place/Hotel',
+      source_place_id: '0x60037a346571591f:0xef7a72d4cf39e76a',
       kind: 'stay',
       priority: 'want',
       tags: ['stay'],

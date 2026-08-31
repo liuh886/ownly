@@ -10,6 +10,7 @@ import {
   extractFeatureIdFromHtml,
   extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
+  featureIdToCid,
   googleMapsDetailUrlFromSourceId,
   googleMapsPreviewPlaceUrl,
   googleMapsSearchTbmUrl,
@@ -29,6 +30,7 @@ export async function enrichPlaceMetadata(
   options?: { signal?: AbortSignal }
 ): Promise<EnrichmentResult> {
   const isCandidateMissingData =
+    !place.source_place_id ||
     !place.observed_rating ||
     !place.observed_review_count ||
     !place.observed_price ||
@@ -40,11 +42,11 @@ export async function enrichPlaceMetadata(
     return { place, enriched: false };
   }
 
-  // 1. Resolve featureId if missing or not a 0x...:0x... ID
+  // 1. Mandatory Step 1: Guarantee Place ID resolution FIRST if missing or invalid
   let resolvedFeatureId = place.source_place_id;
   if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
     const tbmUrl = googleMapsSearchTbmUrl(place.title);
-    logger.fetch('BackgroundEnrich', `Resolving Place ID for "${place.title}"`, { tbmUrl });
+    logger.fetch('BackgroundEnrich', `Step 1: Resolving Place ID for "${place.title}"`, { tbmUrl });
     try {
       const sRes = await fetch(tbmUrl, { credentials: 'include', signal: options?.signal });
       if (sRes.ok) {
@@ -52,7 +54,7 @@ export async function enrichPlaceMetadata(
         const foundId = extractFeatureIdFromHtml(sHtml);
         if (foundId) {
           resolvedFeatureId = foundId;
-          logger.info('BackgroundEnrich', `Resolved Place ID for "${place.title}"`, { featureId: foundId });
+          logger.info('BackgroundEnrich', `Step 1 Success: Resolved Place ID for "${place.title}"`, { featureId: foundId });
         }
       }
     } catch (err) {
@@ -60,11 +62,11 @@ export async function enrichPlaceMetadata(
     }
   }
 
-  // 2. Fetch structured preview facts if we have a featureId
+  // 2. Mandatory Step 2: Now that Place ID is resolved, fetch structured preview facts
   if (resolvedFeatureId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
     const previewUrl = googleMapsPreviewPlaceUrl(resolvedFeatureId);
     if (previewUrl) {
-      logger.fetch('BackgroundEnrich', `Fetching preview for ${place.title}`, { previewUrl, sourcePlaceId: resolvedFeatureId });
+      logger.fetch('BackgroundEnrich', `Step 2: Fetching facts for ${place.title}`, { previewUrl, sourcePlaceId: resolvedFeatureId });
       try {
         const res = await fetch(previewUrl, {
           credentials: 'include',
@@ -75,12 +77,18 @@ export async function enrichPlaceMetadata(
           const clean = raw.replace(/^\)\]\}'\s*/, '');
           const data = JSON.parse(clean);
           const facts = extractGoogleMapsPreviewFacts(data);
-          logger.parser('BackgroundEnrich', `Parsed preview facts for ${place.title}`, facts);
+          logger.parser('BackgroundEnrich', `Step 2 Parsed facts for ${place.title}`, facts);
 
           let mutated = false;
           const next: PlannerTripPlace = { ...place };
-          if (!next.source_place_id) {
+          if (!next.source_place_id || next.source_place_id !== resolvedFeatureId) {
             next.source_place_id = resolvedFeatureId;
+            mutated = true;
+          }
+          // Canonicalize source_url to native CID link if it was a plain search query
+          const cid = featureIdToCid(resolvedFeatureId);
+          if (cid && (!next.source_url || next.source_url.includes('/maps/search/'))) {
+            next.source_url = `https://www.google.com/maps?cid=${cid}`;
             mutated = true;
           }
 
