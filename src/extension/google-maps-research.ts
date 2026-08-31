@@ -1,4 +1,4 @@
-import { cleanExtractedText, isPlausiblePriceText } from './utils';
+import { cleanExtractedText, extractCleanPriceText, isPlausiblePriceText } from './utils';
 
 export interface GoogleMapsResearchFacts {
   rating?: number;
@@ -142,6 +142,57 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
     for (const value of Object.values(obj)) {
       if (value && typeof value === 'object') queue.push(value);
     }
+  }
+
+  // Fallbacks for og:description, meta[itemprop], and JSON strings embedded in HTML
+  const ogDescMatch = /<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']*)["']/i.exec(html)
+    || /<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:description["']/i.exec(html);
+  if (ogDescMatch?.[1]) {
+    const descText = cleanExtractedText(ogDescMatch[1]);
+    if (result.rating === undefined) {
+      const r = /([1-5]\.\d)\s*(?:[★☆]|\/\s*5|\()/i.exec(descText);
+      if (r?.[1]) result.rating = Number(r[1]);
+    }
+    if (result.reviewCount === undefined) {
+      const rev = /\(([\d,]+)\)/.exec(descText) || /([\d,]+)\s*(?:条评价|条评论|reviews?)/i.exec(descText);
+      if (rev?.[1]) result.reviewCount = Number(rev[1].replace(/,/g, ''));
+    }
+    if (!result.priceLevel) {
+      const pr = extractCleanPriceText(descText);
+      if (pr && pr !== '0' && !/^SGD\s*0$/i.test(pr)) result.priceLevel = pr;
+    }
+  }
+
+  const ogTitleMatch = /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']*)["']/i.exec(html)
+    || /<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:title["']/i.exec(html);
+  if (ogTitleMatch?.[1] && !result.address) {
+    const parts = cleanExtractedText(ogTitleMatch[1]).split('·');
+    if (parts.length >= 2) {
+      const addrPart = parts.slice(1).join('·').trim();
+      if (addrPart.length > 5 && /\d/.test(addrPart)) result.address = addrPart;
+    }
+  }
+
+  // Meta itemprop tags
+  if (result.rating === undefined) {
+    const m = /<meta[^>]*itemprop=["']ratingValue["'][^>]*content=["']([1-5](?:\.\d+)?)["']/i.exec(html);
+    if (m?.[1]) result.rating = Number(m[1]);
+  }
+  if (result.reviewCount === undefined) {
+    const m = /<meta[^>]*itemprop=["']reviewCount["'][^>]*content=["']([\d,]+)["']/i.exec(html);
+    if (m?.[1]) result.reviewCount = Number(m[1].replace(/,/g, ''));
+  }
+  if (!result.priceLevel) {
+    const m = /<meta[^>]*itemprop=["']priceRange["'][^>]*content=["']([^"']+)["']/i.exec(html);
+    if (m?.[1] && isPlausiblePriceText(m[1])) result.priceLevel = cleanExtractedText(m[1]);
+  }
+  if (!result.address) {
+    const m = /<meta[^>]*itemprop=["']address["'][^>]*content=["']([^"']+)["']/i.exec(html);
+    if (m?.[1]) result.address = cleanExtractedText(m[1]);
+  }
+  if (!result.phone) {
+    const m = /<meta[^>]*itemprop=["']telephone["'][^>]*content=["']([^"']+)["']/i.exec(html);
+    if (m?.[1]) result.phone = cleanExtractedText(m[1]);
   }
 
   // Lightweight fallback for JSON-LD variants embedded as escaped fields.
