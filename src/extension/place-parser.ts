@@ -338,8 +338,8 @@ export function extractEntityListResearch(item: unknown, knownTitle?: string): E
       continue;
     }
     if (typeof current === 'number') {
-      // Direct numeric rating in protobuf array (e.g. 4.7, 4.2)
-      if (!result.rating && current >= 1.0 && current <= 5.0 && Number.isFinite(current)) {
+      // Direct numeric rating in protobuf array: must be a genuine float rating with decimal (e.g. 4.7, 4.2, 3.8), NEVER integer 1
+      if (!result.rating && current >= 2.0 && current <= 5.0 && Number.isFinite(current) && current % 1 !== 0) {
         result.rating = Math.round(current * 10) / 10;
       }
       continue;
@@ -349,7 +349,7 @@ export function extractEntityListResearch(item: unknown, knownTitle?: string): E
       for (let i = 0; i < current.length - 1; i++) {
         const a = current[i];
         const b = current[i + 1];
-        if (!result.rating && typeof a === 'number' && a >= 1.0 && a <= 5.0 && typeof b === 'number' && b > 10 && Number.isInteger(b)) {
+        if (!result.rating && typeof a === 'number' && a >= 2.0 && a <= 5.0 && a % 1 !== 0 && typeof b === 'number' && b >= 5 && Number.isInteger(b)) {
           result.rating = Math.round(a * 10) / 10;
           result.reviewCount = Math.round(b);
         }

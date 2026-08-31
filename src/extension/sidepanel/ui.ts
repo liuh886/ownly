@@ -973,8 +973,10 @@ function buildCandidateDetails(
   if (place.review_topics && place.review_topics.length > 0) {
     parts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
   }
-  if (place.observed_rating) parts.push(`<span>★ ${place.observed_rating}</span>`);
-  if (place.observed_price) {
+  if (place.observed_rating && place.observed_rating > 1.0 && place.observed_rating <= 5.0) {
+    parts.push(`<span>★ ${place.observed_rating}</span>`);
+  }
+  if (place.observed_price && place.observed_price !== '0' && !/^SGD\s*0$/i.test(place.observed_price) && !/^\$?0$/i.test(place.observed_price)) {
     const activeTrip = store.state.activeContext;
     const sourceCurrency = place.price_currency || store.mapCurrencyOverride || store.pageDetectedCurrency;
     const converted = activeTrip?.currency
