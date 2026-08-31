@@ -231,6 +231,46 @@ export function HotelComparisonModal({
                         </strong>
                       </div>
 
+                      {/* Hotel Metadata & Action Links */}
+                      {(hotel.address || hotel.phone || hotel.reservation_url || hotel.source_url) ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10.5px]">
+                          {hotel.address ? (
+                            <span className="truncate text-stone-500 max-w-[200px]" title={hotel.address}>
+                              📍 {hotel.address}
+                            </span>
+                          ) : null}
+                          {hotel.phone ? (
+                            <a
+                              href={`tel:${hotel.phone}`}
+                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 text-stone-700 hover:bg-stone-200"
+                              title={hotel.phone}
+                            >
+                              📞 {hotel.phone}
+                            </a>
+                          ) : null}
+                          {hotel.reservation_url ? (
+                            <a
+                              href={hotel.reservation_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-800 hover:bg-amber-100"
+                            >
+                              🎟️ {zh ? '预订' : 'Reserve'}
+                            </a>
+                          ) : null}
+                          {hotel.source_url ? (
+                            <a
+                              href={hotel.source_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 text-stone-500 hover:bg-stone-200"
+                            >
+                              🗺️ {zh ? '地图' : 'Maps'}
+                            </a>
+                          ) : null}
+                        </div>
+                      ) : null}
+
                       {/* Proximity Metrics */}
                       <div className="mt-3 space-y-1.5 rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 text-[11px] text-emerald-900">
                         <div className="font-semibold text-emerald-800 flex items-center justify-between">

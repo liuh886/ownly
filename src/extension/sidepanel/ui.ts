@@ -980,6 +980,7 @@ function buildCandidateDetails(
   }
   const parts: string[] = [];
   if (place.area || place.address) parts.push('<span title="' + escapeHtml(place.address ?? place.area ?? '') + '">📍</span>');
+  if (place.source_category) parts.push(`<span class="badge" title="${escapeHtml(place.source_category)}">🏷️ ${escapeHtml(place.source_category)}</span>`);
   if (place.plus_code) parts.push(`<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`);
   if (place.source_place_id) {
     parts.push(`<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`);

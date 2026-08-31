@@ -118,13 +118,19 @@ function formatStrengthenCoverage(places: PlannerTripPlace[]): string {
   const total = places.length;
   const rating = places.filter((place) => place.observed_rating !== undefined).length;
   const reviews = places.filter((place) => place.observed_review_count !== undefined).length;
-  const price = places.filter((place) => Boolean(place.observed_price && place.observed_price !== '0' && !/^SGD\s*0$/i.test(place.observed_price))).length;
+  const stayPlaces = places.filter((p) => p.kind === 'stay' || (p.source_category && /hotel|resort|lodging|hostel|inn|stay|酒店|旅馆|住宿|民宿/i.test(p.source_category)));
+  const stayWithPrice = stayPlaces.filter((p) => Boolean(p.observed_price && !isZeroOrPlaceholderPrice(p.observed_price))).length;
+  const price = places.filter((place) => Boolean(place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price))).length;
   const category = places.filter((place) => Boolean(place.source_category)).length;
-  const address = places.filter((place) => Boolean(place.address)).length;
   const coordinates = places.filter((place) => Boolean(place.coordinates)).length;
+
+  const priceStats = stayPlaces.length > 0
+    ? (store.lang === 'zh' ? `价格 ${price}/${total} (含住宿 ${stayWithPrice}/${stayPlaces.length})` : `price ${price}/${total} (stay ${stayWithPrice}/${stayPlaces.length})`)
+    : (store.lang === 'zh' ? `价格 ${price}/${total}` : `price ${price}/${total}`);
+
   return store.lang === 'zh'
-    ? `评分 ${rating}/${total} · 评论 ${reviews}/${total} · 价格 ${price}/${total} · 分类 ${category}/${total} · 地址 ${address}/${total} · 坐标 ${coordinates}/${total}`
-    : `rating ${rating}/${total} · reviews ${reviews}/${total} · price ${price}/${total} · category ${category}/${total} · address ${address}/${total} · coordinates ${coordinates}/${total}`;
+    ? `评分 ${rating}/${total} · 评论 ${reviews}/${total} · ${priceStats} · 分类 ${category}/${total} · 坐标 ${coordinates}/${total}`
+    : `rating ${rating}/${total} · reviews ${reviews}/${total} · ${priceStats} · category ${category}/${total} · coordinates ${coordinates}/${total}`;
 }
 
 async function strengthenCandidatesThroughMaps(

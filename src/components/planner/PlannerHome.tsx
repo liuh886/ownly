@@ -1286,6 +1286,50 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             ))}
                           </div>
                           <p className="mt-0.5 text-[11px] text-stone-400">{placeMeta(place, language)}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                            {place.phone ? (
+                              <a
+                                href={`tel:${place.phone}`}
+                                className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200"
+                                title={zh ? '拨打官方电话' : 'Call'}
+                              >
+                                📞 {place.phone}
+                              </a>
+                            ) : null}
+                            {place.menu_url ? (
+                              <a
+                                href={place.menu_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200"
+                                title={zh ? '查看官方菜单' : 'Menu'}
+                              >
+                                📖 {zh ? '菜单' : 'Menu'}
+                              </a>
+                            ) : null}
+                            {place.reservation_url ? (
+                              <a
+                                href={place.reservation_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-bold text-amber-800 hover:bg-amber-100"
+                                title={zh ? '官方预订' : 'Reserve'}
+                              >
+                                🎟️ {zh ? '预订' : 'Reserve'}
+                              </a>
+                            ) : null}
+                            {place.source_url ? (
+                              <a
+                                href={place.source_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-500 hover:bg-stone-200 hover:text-stone-900"
+                                title={zh ? '在 Google Maps 查看' : 'View on Maps'}
+                              >
+                                🗺️ {zh ? '地图' : 'Maps'}
+                              </a>
+                            ) : null}
+                          </div>
                           {col.isCollision ? (
                             <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">
                               ⚠️ {col.reason}
@@ -1721,6 +1765,51 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               ⚠️ {risk}
                             </span>
                           ))}
+                        </div>
+
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[9px]">
+                          {place.phone ? (
+                            <a
+                              href={`tel:${place.phone}`}
+                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.2 text-stone-600 hover:bg-stone-200"
+                              title={`📞 ${place.phone}`}
+                            >
+                              📞 {place.phone}
+                            </a>
+                          ) : null}
+                          {place.menu_url ? (
+                            <a
+                              href={place.menu_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.2 text-stone-600 hover:bg-stone-200"
+                              title={zh ? '查看菜单' : 'Menu'}
+                            >
+                              📖 {zh ? '菜单' : 'Menu'}
+                            </a>
+                          ) : null}
+                          {place.reservation_url ? (
+                            <a
+                              href={place.reservation_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.2 font-bold text-amber-800 hover:bg-amber-100"
+                              title={zh ? '官方预订' : 'Reserve'}
+                            >
+                              🎟️ {zh ? '预订' : 'Reserve'}
+                            </a>
+                          ) : null}
+                          {place.source_url ? (
+                            <a
+                              href={place.source_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.2 text-stone-500 hover:bg-stone-200"
+                              title={zh ? '地图' : 'Maps'}
+                            >
+                              🗺️ {zh ? '地图' : 'Maps'}
+                            </a>
+                          ) : null}
                         </div>
                       </div>
 

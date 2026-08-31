@@ -1,16 +1,23 @@
-# Planner Timing UX — PR #129
+# Capture & Planner Full-Stack UX Synergies
 
-## Completed
+## Todo
 
-- [x] Add manual `scheduled_start` + `duration_minutes` editing without creating a second time authority.
-- [x] Keep all exact timing validation and overlap detection in `src/domain/planner-schedule.ts`.
-- [x] Detect nested/all-pair overlaps, not only adjacent sorted intervals.
-- [x] Reuse the same overlap facts in Web and MCP trip diagnostics.
-- [x] Reject invalid time/duration and ordinary cross-midnight manual writes at repository boundary.
-- [x] Re-read canonical Planner/Vault state before writing `.itinerary.md`.
-- [x] Keep iCal Pro as one-way projection; calendar client refresh timing is external.
-- [x] Make the timing modal usable on small/mobile viewports.
-- [x] Keep scenario prompts as preferences; do not fabricate sunset time or missing schedule facts.
+- [x] 1. Capture Sidepanel UI: Friendly coverage stats (differentiating lodging prices vs non-pricing attractions)
+- [x] 2. Capture Sidepanel UI: Clean candidate card badges (Google category badge, currency conversion pill, menu/reserve badges)
+- [x] 3. Capture Sidepanel UI: User-selectable `kind` override in place edit modal
+- [x] 4. Planner Web UI: Place card action links (call phone, menu preview, reservation, plus code) in timeline and candidate items
+- [x] 5. Planner Web UI: Enhance Hotel Comparison Modal with live room rates, contact actions, and spatial metrics
+- [x] 6. Comprehensive verification (`validate:extension`, `validate:fast`, build tests)
+
+## Review
+
+All 6 full-stack UX improvements have been successfully completed:
+1. Capture Sidepanel: Coverage string explicitly clarifies lodging pricing (e.g., `价格 20/46 (含住宿 20/20)`), removing false ambiguity.
+2. Candidate Cards: Official Google category badges displayed; phone number kept in data object and hidden from list for clean aesthetics.
+3. User Decision Authority: Preserved user `kind` choices; enrichment remains strictly facts-only.
+4. Planner Web UI: Added native action badges (phone call, official menu, table reservation, Google Maps link) across timeline stop items and candidate pool items.
+5. Hotel Comparison Modal: Added hotel address, direct contact calling, reservation and maps links alongside multi-night proximity metrics.
+6. All fast validation checks and extension test suites passed with 100% green status.
 
 ## Authority
 
