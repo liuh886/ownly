@@ -22,7 +22,13 @@ import { SELECTORS, driftCheck } from './selectors';
 import { PLACE_PARSER, type SubtitleDecomposition } from './place-parser';
 import { detectPageCurrency } from './currency-detector';
 import { extractGoogleMapsSavedListId, matchesSavedListContext } from './saved-list-match';
-import { extractGoogleMapsResearchFromHtml, googleMapsDetailUrlFromSourceId, type GoogleMapsResearchFacts } from './google-maps-research';
+import {
+  extractGoogleMapsPreviewFacts,
+  extractGoogleMapsResearchFromHtml,
+  googleMapsDetailUrlFromSourceId,
+  googleMapsPreviewPlaceUrl,
+  type GoogleMapsResearchFacts,
+} from './google-maps-research';
 import { logger } from './logger';
 
 export interface CurrentResearchPlace {
@@ -889,12 +895,37 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
   const cached = savedListDetailCache.get(key);
   if (cached && Date.now() - cached.at < SAVED_LIST_DETAIL_CACHE_TTL_MS) return cached.facts;
 
+  // 1. Primary: Use fast structured /maps/preview/place endpoint for 0x... feature IDs
+  const previewUrl = googleMapsPreviewPlaceUrl(key, window.location.origin);
+  if (previewUrl) {
+    logger.fetch('MapsTabDetail', `Fetching preview for "${place.title}"`, { previewUrl, key });
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 6000);
+    try {
+      const res = await fetch(previewUrl, { credentials: 'include', signal: controller.signal });
+      if (res.ok) {
+        const raw = await res.text();
+        const clean = raw.replace(/^\)\]\}'\s*/, '');
+        const data = JSON.parse(clean);
+        const facts = extractGoogleMapsPreviewFacts(data);
+        logger.parser('MapsTabDetail', `Preview facts for "${place.title}"`, facts);
+        savedListDetailCache.set(key, { at: Date.now(), facts });
+        return facts;
+      }
+    } catch (err) {
+      logger.warn('MapsTabDetail', `Preview fetch failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  // 2. Fallback: Detail URL HTML scraping
   const detailUrl = googleMapsDetailUrlFromSourceId(key, place.title, window.location.origin);
   if (!detailUrl) {
     logger.warn('MapsTabDetail', `Could not generate detail URL for "${place.title}" (key: ${key})`);
     return null;
   }
-  logger.fetch('MapsTabDetail', `Fetching "${place.title}"`, { detailUrl, key });
+  logger.fetch('MapsTabDetail', `Fetching HTML for "${place.title}"`, { detailUrl, key });
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 5000);
   try {

@@ -7,8 +7,10 @@ import type { CurrentResearchPlace } from './content';
 import { extractCleanPriceText } from './utils';
 import { logger } from './logger';
 import {
+  extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
   googleMapsDetailUrlFromSourceId,
+  googleMapsPreviewPlaceUrl,
 } from './google-maps-research';
 
 export interface EnrichmentResult {
@@ -36,15 +38,90 @@ export async function enrichPlaceMetadata(
     return { place, enriched: false };
   }
 
+  // 1. Primary: Use fast structured /maps/preview/place endpoint for 0x... feature IDs
+  if (place.source_place_id && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(place.source_place_id.trim())) {
+    const previewUrl = googleMapsPreviewPlaceUrl(place.source_place_id);
+    if (previewUrl) {
+      logger.fetch('BackgroundEnrich', `Fetching preview for ${place.title}`, { previewUrl, sourcePlaceId: place.source_place_id });
+      try {
+        const res = await fetch(previewUrl, {
+          credentials: 'include',
+          signal: options?.signal,
+        });
+        if (res.ok) {
+          const raw = await res.text();
+          const clean = raw.replace(/^\)\]\}'\s*/, '');
+          const data = JSON.parse(clean);
+          const facts = extractGoogleMapsPreviewFacts(data);
+          logger.parser('BackgroundEnrich', `Parsed preview facts for ${place.title}`, facts);
+
+          let mutated = false;
+          const next: PlannerTripPlace = { ...place };
+
+          if (!next.observed_rating && facts.rating !== undefined) {
+            next.observed_rating = facts.rating;
+            mutated = true;
+          }
+          if (!next.observed_review_count && facts.reviewCount !== undefined) {
+            next.observed_review_count = facts.reviewCount;
+            mutated = true;
+          }
+          if (facts.category && (!next.source_category || next.source_category === 'other')) {
+            next.source_category = facts.category;
+            mutated = true;
+          }
+          if (facts.address && !next.address) {
+            next.address = facts.address;
+            mutated = true;
+          }
+          if (facts.phone && !next.phone) {
+            next.phone = facts.phone;
+            mutated = true;
+          }
+          if (facts.coordinates && !next.coordinates) {
+            next.coordinates = facts.coordinates;
+            mutated = true;
+          }
+          if (facts.types && facts.types.length > 0) {
+            const existingTypes = next.types ?? [];
+            const mergedTypes = [...new Set([...existingTypes, ...facts.types])];
+            if (mergedTypes.length !== existingTypes.length) {
+              next.types = mergedTypes;
+              mutated = true;
+            }
+          }
+          if (facts.priceLevel && (!next.observed_price || next.observed_price.length < 2)) {
+            next.observed_price = facts.priceLevel;
+            const normalized = normalizeObservedPrice(facts.priceLevel, facts.priceCurrency);
+            if (normalized?.min !== undefined) next.price_min = normalized.min;
+            if (normalized?.max !== undefined) next.price_max = normalized.max;
+            if (normalized?.currency) next.price_currency = normalized.currency;
+            if (normalized?.level !== undefined) next.price_level = normalized.level;
+            if (normalized?.unit) next.price_unit = normalized.unit;
+            mutated = true;
+          }
+
+          if (mutated) {
+            next.updated_at = new Date().toISOString();
+          }
+
+          return { place: next, enriched: mutated };
+        }
+      } catch (err) {
+        logger.warn('BackgroundEnrich', `Preview fetch failed for ${place.title}`, err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
+
+  // 2. Fallback: Detail URL HTML scraping
   let targetUrl = place.source_url;
-  // If it's a search query or cid or feature id, generate canonical detail URL
   if (!targetUrl || targetUrl.includes('/search/?api=1') || targetUrl.includes('/maps/search/')) {
     const detailUrl = googleMapsDetailUrlFromSourceId(place.source_place_id, place.title);
     if (detailUrl) targetUrl = detailUrl;
     else if (!targetUrl) targetUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.title)}`;
   }
 
-  logger.fetch('BackgroundEnrich', `Fetching metadata for ${place.title}`, { targetUrl, sourcePlaceId: place.source_place_id });
+  logger.fetch('BackgroundEnrich', `Fetching HTML for ${place.title}`, { targetUrl, sourcePlaceId: place.source_place_id });
 
   try {
     const res = await fetch(targetUrl, {

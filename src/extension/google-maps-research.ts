@@ -44,6 +44,96 @@ export function featureIdToCid(featureId?: string | null): string | undefined {
   }
 }
 
+export function googleMapsPreviewPlaceUrl(
+  sourcePlaceId?: string,
+  origin = 'https://www.google.com',
+): string | undefined {
+  if (!sourcePlaceId) return undefined;
+  if (/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(sourcePlaceId.trim())) {
+    return `${origin}/maps/preview/place?authuser=0&hl=zh-CN&pb=!1m4!1s${sourcePlaceId.trim()}!2e1!3m1!1e1!4b1`;
+  }
+  return undefined;
+}
+
+export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearchFacts {
+  const result: GoogleMapsResearchFacts = {};
+  if (!Array.isArray(data)) return result;
+
+  const placeNode = (data as unknown[])[6];
+  if (!Array.isArray(placeNode)) return result;
+
+  // Categories / Types from placeNode[13]
+  if (Array.isArray(placeNode[13])) {
+    const cats = placeNode[13].filter((c): c is string => typeof c === 'string');
+    if (cats.length > 0) {
+      result.category = cleanExtractedText(cats[0]);
+      result.types = cats.map(cleanExtractedText).filter(Boolean);
+    }
+  }
+
+  // Rating & Review count from placeNode[4]
+  const ratingBlock = placeNode[4];
+  if (Array.isArray(ratingBlock)) {
+    if (typeof ratingBlock[7] === 'number' && ratingBlock[7] >= 1.0 && ratingBlock[7] <= 5.0) {
+      result.rating = Math.round(ratingBlock[7] * 10) / 10;
+    }
+    if (typeof ratingBlock[8] === 'number' && ratingBlock[8] >= 0) {
+      result.reviewCount = Math.round(ratingBlock[8]);
+    } else if (Array.isArray(ratingBlock[3]) && typeof ratingBlock[3][1] === 'string') {
+      const m = /([\d,]+)/.exec(ratingBlock[3][1]);
+      if (m?.[1]) result.reviewCount = Number(m[1].replace(/,/g, ''));
+    }
+  }
+
+  // Address: placeNode[18] (formatted string) or placeNode[2] (lines array)
+  if (typeof placeNode[18] === 'string') {
+    result.address = cleanExtractedText(placeNode[18]);
+  } else if (Array.isArray(placeNode[2])) {
+    const lines = placeNode[2].filter((l): l is string => typeof l === 'string');
+    if (lines.length > 0) result.address = cleanExtractedText(lines.join(', '));
+  }
+
+  // Coordinates from placeNode[9]: [null, null, lat, lng]
+  if (Array.isArray(placeNode[9])) {
+    const lat = placeNode[9][2];
+    const lng = placeNode[9][3];
+    if (typeof lat === 'number' && typeof lng === 'number' && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat !== 0 || lng !== 0)) {
+      result.coordinates = { lat, lng };
+    }
+  }
+
+  // Website from placeNode[7]: [url, displayUrl, ...]
+  if (Array.isArray(placeNode[7]) && typeof placeNode[7][0] === 'string' && /^https?:\/\//i.test(placeNode[7][0])) {
+    result.website = placeNode[7][0];
+  }
+
+  // Scan placeNode for phone and priceLevel
+  const queue: unknown[] = [placeNode];
+  let scanned = 0;
+  while (queue.length > 0 && scanned < 500) {
+    const cur = queue.shift();
+    scanned += 1;
+    if (typeof cur === 'string') {
+      const text = cleanExtractedText(cur);
+      if (!result.phone && /^\+?[\d\s\-()]{8,20}$/.test(text) && /\d{4}/.test(text)) {
+        result.phone = text;
+      }
+      if (!result.priceLevel) {
+        const cleanPrice = extractCleanPriceText(text);
+        if (cleanPrice && cleanPrice !== '0' && !/^SGD\s*0$/i.test(cleanPrice)) {
+          result.priceLevel = cleanPrice;
+        }
+      }
+    } else if (Array.isArray(cur)) {
+      for (const child of cur.slice(0, 50)) {
+        if (child && typeof child === 'object') queue.push(child);
+      }
+    }
+  }
+
+  return result;
+}
+
 export function googleMapsDetailUrlFromSourceId(
   sourcePlaceId?: string,
   title = '',
