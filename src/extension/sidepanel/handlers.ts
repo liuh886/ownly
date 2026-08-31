@@ -244,9 +244,8 @@ function buildPlaceFromDetected(
 }
 
 /**
- * Bulk-paste list resolution that prefers the active Maps tab's content script
- * (correct authuser/cookie context for multi-account users), falling back to
- * the legacy side-panel fetch when no tab is available.
+ * Bulk-paste list resolution using the active Maps tab's content script as authority
+ * (ensuring correct authuser/cookie/locale context for multi-account users).
  */
 async function resolveListPlacesSmart(line: string, activeTrip?: CaptureContext): Promise<PlannerTripPlace[] | null> {
   const ref = await expandAndExtractListId(line);
@@ -756,17 +755,6 @@ export function initHandlers(): void {
             ...store.state,
             pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
           };
-          if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
-            const idByTitle = new Map(enrichedPlaces.filter((p) => p.source_place_id).map((p) => [cleanExtractedText(p.title).toLowerCase(), p.source_place_id!]));
-            store.detectedSavedList = {
-              ...store.detectedSavedList,
-              places: store.detectedSavedList.places.map((dp) => {
-                if (dp.sourcePlaceId) return dp;
-                const resolved = idByTitle.get(cleanExtractedText(dp.title).toLowerCase());
-                return resolved ? { ...dp, sourcePlaceId: resolved } : dp;
-              }),
-            };
-          }
           await saveState();
         }
       }
@@ -1069,17 +1057,6 @@ export function initHandlers(): void {
             ...store.state,
             pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
           };
-          if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
-            const idByTitle = new Map(enrichedPlaces.filter((p) => p.source_place_id).map((p) => [cleanExtractedText(p.title).toLowerCase(), p.source_place_id!]));
-            store.detectedSavedList = {
-              ...store.detectedSavedList,
-              places: store.detectedSavedList.places.map((dp) => {
-                if (dp.sourcePlaceId) return dp;
-                const resolved = idByTitle.get(cleanExtractedText(dp.title).toLowerCase());
-                return resolved ? { ...dp, sourcePlaceId: resolved } : dp;
-              }),
-            };
-          }
           await saveState();
           renderCandidatesList();
         }

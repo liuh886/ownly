@@ -1,6 +1,7 @@
 import { cleanExtractedText, extractCleanPriceText, isPlausiblePriceText } from './utils';
 
 export interface GoogleMapsResearchFacts {
+  sourcePlaceId?: string;
   rating?: number;
   reviewCount?: number;
   category?: string;

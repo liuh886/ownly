@@ -914,7 +914,9 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
     return null;
   }
   const cached = savedListDetailCache.get(key);
-  if (cached && Date.now() - cached.at < SAVED_LIST_DETAIL_CACHE_TTL_MS) return cached.facts;
+  if (cached && Date.now() - cached.at < SAVED_LIST_DETAIL_CACHE_TTL_MS) {
+    return { ...cached.facts, sourcePlaceId: key };
+  }
 
   // 1. Primary: Use fast structured /maps/preview/place endpoint for 0x... feature IDs
   const previewUrl = googleMapsPreviewPlaceUrl(key, window.location.origin);
@@ -929,6 +931,7 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
         const clean = raw.replace(/^\)\]\}'\s*/, '');
         const data = JSON.parse(clean);
         const facts = extractGoogleMapsPreviewFacts(data);
+        facts.sourcePlaceId = key;
         logger.parser('MapsTabDetail', `Preview facts for "${place.title}"`, facts);
         savedListDetailCache.set(key, { at: Date.now(), facts });
         return facts;
@@ -957,6 +960,7 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
     }
     const html = (await res.text()).slice(0, 3_000_000);
     const facts = extractGoogleMapsResearchFromHtml(html);
+    facts.sourcePlaceId = key;
     logger.parser('MapsTabDetail', `Extracted facts for "${place.title}"`, {
       htmlLength: html.length,
       rating: facts.rating,
@@ -991,14 +995,14 @@ async function enrichSavedListDetails(
     while (cursor < places.length) {
       const index = cursor++;
       const place = places[index];
-      if (!place.sourcePlaceId) continue;
-      if (!force && place.rating !== undefined && place.reviewCount !== undefined && place.category && place.priceLevel) continue;
+      if (!force && place.sourcePlaceId && place.rating !== undefined && place.reviewCount !== undefined && place.category && place.priceLevel) continue;
       attempted += 1;
       const facts = await fetchSavedListDetail(place);
       if (!facts) {
         failed += 1;
         continue;
       }
+      const nextPlaceId = place.sourcePlaceId || facts.sourcePlaceId;
       const nextRating = force ? (facts.rating ?? place.rating) : (place.rating ?? facts.rating);
       const nextReviewCount = force ? (facts.reviewCount ?? place.reviewCount) : (place.reviewCount ?? facts.reviewCount);
       const nextCategory = force ? (facts.category ?? place.category) : (place.category ?? facts.category);
@@ -1015,6 +1019,7 @@ async function enrichSavedListDetails(
 
       places[index] = {
         ...place,
+        sourcePlaceId: nextPlaceId,
         rating: nextRating,
         reviewCount: nextReviewCount,
         category: nextCategory,
