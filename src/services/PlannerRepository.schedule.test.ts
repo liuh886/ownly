@@ -48,15 +48,26 @@ async function seed(places: PlannerTripPlace[]): Promise<void> {
 
 beforeEach(async () => {
   files.clear();
+  await plannerRepository.upsertTrip({
+    schema_version: '0.1',
+    type: 'trip',
+    id: 'trip-1',
+    title: 'Thailand 2026',
+    status: 'planning',
+    start_date: '2026-11-01',
+    end_date: '2026-11-10',
+    destinations: ['Bangkok'],
+    created_at: '2026-08-24T00:00:00.000Z',
+  });
   await seed([place('a'), place('b'), place('pool'), place('hotel', { kind: 'stay' })]);
 });
 
 describe('PlannerRepository visit lifecycle', () => {
   it('adds a visit without consuming the reusable place', async () => {
-    const visit = await plannerRepository.addVisit('pool', '2026-11-01', { sort_order: 5 });
+    const visit = await plannerRepository.addVisit('pool', '2026-11-01', { sort_order: 0 });
     expect(visit?.place_id).toBe('pool');
     expect(visit?.date).toBe('2026-11-01');
-    expect(visit?.sort_order).toBe(5);
+    expect(visit?.sort_order).toBe(0);
     expect(visit?.locked).toBe(false);
 
     const storedPlace = (await plannerRepository.listPlaces()).find((item) => item.id === 'pool');
@@ -64,24 +75,38 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(files.get('vault/Trip Visits')?.size).toBe(1);
   });
 
-  it('rejects adding a visit or setting a stay span outside trip date range', async () => {
-    await plannerRepository.upsertTrip({
-      schema_version: '0.1',
-      type: 'trip',
-      id: 'trip-1',
-      title: 'Thailand 2026',
-      status: 'planning',
-      start_date: '2026-11-01',
-      end_date: '2026-11-05',
-      destinations: ['Bangkok'],
-      created_at: '2026-08-24T00:00:00.000Z',
-    });
+  it('shifts sort_orders on insertion and re-indexes contiguous 0..N-1 on removal', async () => {
+    const v1 = await plannerRepository.addVisit('a', '2026-11-01'); // sort_order: 0
+    await plannerRepository.addVisit('b', '2026-11-01'); // sort_order: 1
+    const v3 = await plannerRepository.addVisit('pool', '2026-11-01', { sort_order: 0 }); // inserted at 0, shifts v1->1, v2->2
 
+    expect(v3?.sort_order).toBe(0);
+    const visitsAfterInsert = (await plannerRepository.listVisits())
+      .filter((v) => v.date === '2026-11-01')
+      .sort((a, b) => a.sort_order - b.sort_order);
+    expect(visitsAfterInsert.map((v) => ({ id: v.place_id, order: v.sort_order }))).toEqual([
+      { id: 'pool', order: 0 },
+      { id: 'a', order: 1 },
+      { id: 'b', order: 2 },
+    ]);
+
+    // Now remove middle item 'a'
+    await plannerRepository.removeVisit(v1!.id);
+    const visitsAfterRemove = (await plannerRepository.listVisits())
+      .filter((v) => v.date === '2026-11-01')
+      .sort((a, b) => a.sort_order - b.sort_order);
+    expect(visitsAfterRemove.map((v) => ({ id: v.place_id, order: v.sort_order }))).toEqual([
+      { id: 'pool', order: 0 },
+      { id: 'b', order: 1 },
+    ]);
+  });
+
+  it('rejects adding a visit or setting a stay span outside trip date range or for missing trip', async () => {
     await expect(plannerRepository.addVisit('pool', '2026-12-25')).rejects.toThrow(
       /outside trip range/,
     );
 
-    await expect(plannerRepository.setStaySpan('hotel', ['2026-11-01', '2026-11-10'])).rejects.toThrow(
+    await expect(plannerRepository.setStaySpan('hotel', ['2026-11-01', '2026-11-20'])).rejects.toThrow(
       /outside trip range/,
     );
   });
@@ -133,6 +158,17 @@ describe('PlannerRepository visit lifecycle', () => {
   });
 
   it('rejects cross-trip and partial day reorder payloads', async () => {
+    await plannerRepository.upsertTrip({
+      schema_version: '0.1',
+      type: 'trip',
+      id: 'trip-2',
+      title: 'Trip 2',
+      status: 'planning',
+      start_date: '2026-11-01',
+      end_date: '2026-11-10',
+      destinations: ['Chiang Mai'],
+      created_at: '2026-08-24T00:00:00.000Z',
+    });
     await seed([place('other', { trip_id: 'trip-2' })]);
     const first = await plannerRepository.addVisit('a', '2026-11-01');
     const second = await plannerRepository.addVisit('b', '2026-11-01');

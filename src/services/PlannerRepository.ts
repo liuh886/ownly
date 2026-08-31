@@ -1,5 +1,7 @@
 import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
 import {
+  assertTripDate,
+  assertTripDates,
   ensurePlaceKindTag,
   mergeCapturedPlaceResearch,
   normalizePlaceIdentity,
@@ -159,9 +161,10 @@ export class PlannerRepository {
   }
   async upsertVisit(visit: PlannerTripVisit): Promise<void> {
     const trip = (await this.listTrips()).find((t) => t.id === visit.trip_id);
-    if (trip && (visit.date < trip.start_date || visit.date > trip.end_date)) {
-      throw new Error(`Visit date ${visit.date} is outside trip range ${trip.start_date} ~ ${trip.end_date}.`);
+    if (!trip) {
+      throw new Error(`Planner trip "${visit.trip_id}" was not found for visit.`);
     }
+    assertTripDate(trip, visit.date);
     await this.upsert(visit);
   }
   async upsertLeg(leg: PlannerTripLeg): Promise<void> { await this.upsert(leg); }
@@ -173,6 +176,7 @@ export class PlannerRepository {
   private async importResearchPlaces(places: PlannerTripPlace[]): Promise<string[]> {
     if (places.length === 0) return [];
     await this.initialize();
+    const existingTrips = new Set((await this.listTrips()).map((t) => t.id));
     const existing = await this.listPlaces();
     const byId = new Map(existing.map((place) => [place.id, place] as const));
     const byPlaceId = new Map<string, PlannerTripPlace>();
@@ -193,7 +197,7 @@ export class PlannerRepository {
     const importedIds: string[] = [];
 
     for (const rawPlace of places) {
-      if (!rawPlace.id || !rawPlace.trip_id) continue;
+      if (!rawPlace.id || !rawPlace.trip_id || !existingTrips.has(rawPlace.trip_id)) continue;
       const incoming: PlannerTripPlace = {
         ...rawPlace,
         tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
@@ -253,13 +257,27 @@ export class PlannerRepository {
     const place = (await this.listPlaces()).find((item) => item.id === placeId && item.state !== 'dropped');
     if (!place) return null;
     const trip = (await this.listTrips()).find((t) => t.id === place.trip_id);
-    if (trip && (date < trip.start_date || date > trip.end_date)) {
-      throw new Error(`Visit date ${date} is outside trip range ${trip.start_date} ~ ${trip.end_date}.`);
+    if (!trip) {
+      throw new Error(`Planner trip "${place.trip_id}" was not found for place ${place.id}.`);
     }
+    assertTripDate(trip, date);
+
     const visits = await this.listVisits();
-    const order = options.sort_order ?? visits
+    const dayVisits = visits
       .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
-      .reduce((max, visit) => Math.max(max, visit.sort_order), -1) + 1;
+      .sort((left, right) => left.sort_order - right.sort_order);
+
+    let order: number;
+    if (options.sort_order !== undefined) {
+      order = Math.max(0, Math.min(options.sort_order, dayVisits.length));
+      const toShift = dayVisits.filter((v) => v.sort_order >= order);
+      for (const v of toShift) {
+        await this.upsert({ ...v, sort_order: v.sort_order + 1, updated_at: new Date().toISOString() });
+      }
+    } else {
+      order = dayVisits.length;
+    }
+
     const start = options.start?.trim() || undefined;
     const duration = options.duration_minutes ?? place.duration_minutes;
     const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: Boolean(options.is_anchor) })
@@ -281,6 +299,15 @@ export class PlannerRepository {
     const visit = (await this.listVisits()).find((item) => item.id === visitId);
     if (!visit) return false;
     await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.visits), plannerTripVisitFileName(visit.id));
+    const remaining = (await this.listVisits())
+      .filter((item) => item.trip_id === visit.trip_id && item.date === visit.date && item.id !== visit.id)
+      .sort((left, right) => left.sort_order - right.sort_order);
+    for (let index = 0; index < remaining.length; index += 1) {
+      const item = remaining[index];
+      if (item.sort_order !== index) {
+        await this.upsert({ ...item, sort_order: index, updated_at: new Date().toISOString() });
+      }
+    }
     return true;
   }
 
@@ -340,12 +367,10 @@ export class PlannerRepository {
     const targetDates = [...new Set(dates)].sort();
     if (targetDates.length === 0) throw new Error('Planner stay span requires at least one date.');
     const trip = (await this.listTrips()).find((t) => t.id === place.trip_id);
-    if (trip) {
-      const outOfRange = targetDates.filter((d) => d < trip.start_date || d > trip.end_date);
-      if (outOfRange.length > 0) {
-        throw new Error(`Stay dates [${outOfRange.join(', ')}] are outside trip range ${trip.start_date} ~ ${trip.end_date}.`);
-      }
+    if (!trip) {
+      throw new Error(`Planner trip "${place.trip_id}" was not found for stay place.`);
     }
+    assertTripDates(trip, targetDates);
     const dateSet = new Set(targetDates);
     const visits = await this.listVisits();
     const tripPlaces = new Map(

@@ -264,6 +264,24 @@ export function listTripDates(startDate: string, endDate: string, maxDays = 90):
   return result;
 }
 
+export function assertTripDate(trip: PlannerTrip, date: string): void {
+  if (!trip) {
+    throw new Error('Planner trip is required.');
+  }
+  if (!trip.start_date || !trip.end_date) {
+    throw new Error(`Trip "${trip.title || trip.id}" is missing start_date or end_date.`);
+  }
+  if (date < trip.start_date || date > trip.end_date) {
+    throw new Error(`Visit date ${date} is outside trip range ${trip.start_date} ~ ${trip.end_date}.`);
+  }
+}
+
+export function assertTripDates(trip: PlannerTrip, dates: string[]): void {
+  for (const date of dates) {
+    assertTripDate(trip, date);
+  }
+}
+
 export function mergeCapturedPlaceResearch(
   existing: PlannerTripPlace,
   captured: PlannerTripPlace,

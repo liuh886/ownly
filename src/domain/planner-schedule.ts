@@ -699,7 +699,7 @@ export function evaluatePlannerScheduleProposal(
     }
   }
 
-  issues.push(...validatePlannerDaySortOrders(nextVisits, dates));
+  issues.push(...validatePlannerDaySortOrders(nextVisits, dates, trip.id));
 
   return {
     valid: !issues.some((issue) => issue.severity === 'error'),
@@ -708,10 +708,14 @@ export function evaluatePlannerScheduleProposal(
   };
 }
 
-export function validatePlannerDaySortOrders(visits: PlannerTripVisit[], dates: Iterable<string>): PlannerScheduleIssue[] {
+export function validatePlannerDaySortOrders(
+  visits: PlannerTripVisit[],
+  dates: Iterable<string>,
+  tripId?: string,
+): PlannerScheduleIssue[] {
   const issues: PlannerScheduleIssue[] = [];
   for (const date of dates) {
-    const dayVisits = visits.filter((v) => v.date === date);
+    const dayVisits = visits.filter((v) => (!tripId || v.trip_id === tripId) && v.date === date);
     if (dayVisits.length > 0) {
       const orders = dayVisits.map((v) => v.sort_order).sort((a, b) => a - b);
       const isContiguous = orders.every((val, idx) => val === idx);

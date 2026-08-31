@@ -27,7 +27,7 @@ function fixture(): { container: string; dataRoot: string } {
 function seedPlannerPair(dataRoot: string): { trip: PlannerTrip; from: PlannerTripPlace; to: PlannerTripPlace; fromVisit: PlannerTripVisit; toVisit: PlannerTripVisit } {
   const trip: PlannerTrip = {
     schema_version: '0.1', type: 'trip', id: 'trip-1', title: 'Bangkok', status: 'planning',
-    start_date: '2026-10-05', end_date: '2026-10-06', destinations: ['Bangkok'], created_at: NOW.toISOString(),
+    start_date: '2026-10-05', end_date: '2026-10-10', destinations: ['Bangkok'], created_at: NOW.toISOString(),
   };
   const base = {
     schema_version: '0.1' as const, type: 'trip_place' as const, trip_id: trip.id,
@@ -188,6 +188,17 @@ describe('OwnlyWriteService', () => {
     expect(readdirSync(join(dataRoot, 'Trip Visits'))
       .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
       .filter((visit) => visit.place_id === 'hotel')).toHaveLength(3);
+  });
+
+  it('rejects adding visits or setting stay spans outside trip date range', () => {
+    const { dataRoot } = fixture();
+    const { from } = seedPlannerPair(dataRoot);
+    const hotel: PlannerTripPlace = { ...from, id: 'hotel', kind: 'stay', title: 'Hotel' };
+    writeFileSync(join(dataRoot, 'Trip Places', 'place--hotel.md'), serializeMarkdownEntity(hotel, ''), 'utf8');
+    const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
+
+    expect(() => service.prepareAddVisit('a', '2026-12-31')).toThrow(/outside trip range/i);
+    expect(() => service.prepareSetStaySpan('hotel', ['2026-12-31'])).toThrow(/outside trip range/i);
   });
 
   it('refuses to drop a Planner Place while a Visit references it', () => {

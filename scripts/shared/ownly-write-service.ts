@@ -44,6 +44,8 @@ import {
   writeEntry,
 } from '../cli/storage';
 import {
+  assertTripDate,
+  assertTripDates,
   plannerTripLegFileName,
   type FxSettings,
   type PlannerTrip,
@@ -592,6 +594,15 @@ export class OwnlyWriteService {
     const placeEntry = this.plannerPlaceEntry(placeId);
     const place = placeEntry.frontmatter;
     if (place.state === 'dropped') throw new OwnlyMutationError('Dropped places cannot be scheduled.', 'INVALID_INPUT');
+    const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), place.trip_id);
+    if (!tripEntry) {
+      throw new OwnlyMutationError(`Planner trip was not found: ${place.trip_id}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
+    }
+    try {
+      assertTripDate(tripEntry.frontmatter as unknown as PlannerTrip, date);
+    } catch (error) {
+      throw new OwnlyMutationError(error instanceof Error ? error.message : String(error), 'INVALID_INPUT');
+    }
     const visits = listPlannerVisits(this.dataLocation).map((entry) => entry.frontmatter as PlannerTripVisit);
     const order = sortOrder ?? visits
       .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
@@ -742,8 +753,17 @@ export class OwnlyWriteService {
       throw new OwnlyMutationError(`Hotel place was not found: ${hotelPlaceId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
     }
     const hotel = hotelEntry.frontmatter;
+    const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), hotel.trip_id);
+    if (!tripEntry) {
+      throw new OwnlyMutationError(`Planner trip was not found: ${hotel.trip_id}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
+    }
     const targetDates = [...new Set(dates)].sort();
     if (targetDates.length === 0) throw new OwnlyMutationError('Stay span requires at least one date.', 'INVALID_INPUT');
+    try {
+      assertTripDates(tripEntry.frontmatter as unknown as PlannerTrip, targetDates);
+    } catch (error) {
+      throw new OwnlyMutationError(error instanceof Error ? error.message : String(error), 'INVALID_INPUT');
+    }
     const dateSet = new Set(targetDates);
     const placeById = new Map(
       listPlannerPlaces(this.dataLocation)

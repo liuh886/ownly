@@ -867,18 +867,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             >
               + {zh ? '创建新行程' : 'Create New Trip'}
             </button>
-            <button
-              type="button"
-              onClick={() => void syncCapture()}
-              disabled={busy}
-              className="rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 disabled:opacity-50"
-            >
-              {busy ? (zh ? '同步中…' : 'Syncing…') : (zh ? '从 Capture 同步' : 'Sync from Capture')}
-            </button>
           </div>
           {notice ? <p className="mt-3 text-xs text-stone-500">{notice}</p> : null}
         </div>
         <CreateTripModal
+          key={isCreateTripOpen ? 'open' : 'closed'}
           open={isCreateTripOpen}
           onClose={() => setIsCreateTripOpen(false)}
           onCreate={async (newTrip) => {
@@ -1928,6 +1921,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       />
 
       <CreateTripModal
+        key={isCreateTripOpen ? 'open' : 'closed'}
         open={isCreateTripOpen}
         onClose={() => setIsCreateTripOpen(false)}
         onCreate={async (newTrip) => {
