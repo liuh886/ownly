@@ -42,6 +42,7 @@ import { HotelComparisonModal } from './HotelComparisonModal';
 import { PlannerBudgetLedger } from './PlannerBudgetLedger';
 import { ImportCandidatesModal } from './ImportCandidatesModal';
 import { PlaceTimingModal } from './PlaceTimingModal';
+import { CreateTripModal } from './CreateTripModal';
 
 interface PlannerHomeProps {
   disabled: boolean;
@@ -102,6 +103,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [rightTab, setRightTab] = useState<'map' | 'context' | 'budget'>('map');
   const [expensesByTrip, setExpensesByTrip] = useState<Record<string, TripExpenseItem[]>>({});
   const [membersByTrip, setMembersByTrip] = useState<Record<string, string[]>>({});
+  const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
 
   const currentExpenses = useMemo(() => {
     if (!selectedTripId) return [];
@@ -840,21 +842,48 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   if (!selectedTrip) {
     return (
       <section className="rounded-xl border border-stone-200 bg-white p-8 shadow-sm">
-        <h2 className="text-lg font-semibold tracking-tight text-stone-950">Planner</h2>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-stone-500">
-          {zh
-            ? '先在 Google Maps 的 Ownly Capture 侧栏创建 Trip 并采集候选地点。Planner 只负责把研究完成的地点排进日程。'
-            : 'Create a trip and capture researched places in the Ownly Capture side panel on Google Maps. Planner only turns that research into a schedule.'}
-        </p>
-        <button
-          type="button"
-          onClick={() => void syncCapture()}
-          disabled={busy}
-          className="mt-5 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50"
-        >
-          {busy ? (zh ? '同步中…' : 'Syncing…') : (zh ? '从 Capture 同步' : 'Sync from Capture')}
-        </button>
-        {notice ? <p className="mt-3 text-xs text-stone-500">{notice}</p> : null}
+        <div className="max-w-xl">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">✈️</span>
+            <h2 className="text-xl font-bold tracking-tight text-stone-950">
+              {zh ? '规划你的旅行行程' : 'Plan Your Travel Itinerary'}
+            </h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-stone-500">
+            {zh
+              ? '在本地安全创建行程，设置目的地与出行日期。选定行程后，可在地图采集候选地点并由 Planner 统一排期与推演。'
+              : 'Create a local trip with destinations and dates. Your selected trip acts as the authority for place research and timeline optimization.'}
+          </p>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsCreateTripOpen(true)}
+              className="rounded-lg bg-stone-950 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-stone-800"
+            >
+              + {zh ? '创建新行程' : 'Create New Trip'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void syncCapture()}
+              disabled={busy}
+              className="rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 disabled:opacity-50"
+            >
+              {busy ? (zh ? '同步中…' : 'Syncing…') : (zh ? '从 Capture 同步' : 'Sync from Capture')}
+            </button>
+          </div>
+          {notice ? <p className="mt-3 text-xs text-stone-500">{notice}</p> : null}
+        </div>
+        <CreateTripModal
+          open={isCreateTripOpen}
+          onClose={() => setIsCreateTripOpen(false)}
+          onCreate={async (newTrip) => {
+            await plannerRepository.upsertTrip(newTrip);
+            await load();
+            setSelectedTripId(newTrip.id);
+            setNotice(zh ? `已创建行程「${newTrip.title}」` : `Created trip "${newTrip.title}"`);
+          }}
+          language={language}
+        />
       </section>
     );
   }
@@ -875,6 +904,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             >
               {trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
             </select>
+            <button
+              type="button"
+              onClick={() => setIsCreateTripOpen(true)}
+              className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 hover:text-stone-950 transition"
+              title={zh ? '创建新行程' : 'Create new trip'}
+            >
+              + {zh ? '新建行程' : 'New Trip'}
+            </button>
             <span className="text-xs text-stone-400">
               {selectedTrip.start_date} → {selectedTrip.end_date}
             </span>
@@ -1229,7 +1266,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     ? { isCollision: true, reason: zh ? '与当天其它地点存在时间重叠' : 'Overlaps another timed stop on this day' }
                     : dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
                   const timelineStop = dayTimeline.items.find(
-                    (item): item is PlannerTimelineStopItem => item.type === 'stop' && item.place_id === place.id,
+                    (item): item is PlannerTimelineStopItem => item.type === 'stop' && (item.visit_id === place.visit_id || item.id === place.id),
                   );
                   const nextPlace = scheduled[index + 1];
                   const transitionItems = nextPlace
@@ -1870,6 +1907,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         open={guideOpen}
         onClose={() => setGuideOpen(false)}
         defaultTab="extension"
+      />
+
+      <CreateTripModal
+        open={isCreateTripOpen}
+        onClose={() => setIsCreateTripOpen(false)}
+        onCreate={async (newTrip) => {
+          await plannerRepository.upsertTrip(newTrip);
+          await load();
+          setSelectedTripId(newTrip.id);
+          setNotice(zh ? `已创建行程「${newTrip.title}」` : `Created trip "${newTrip.title}"`);
+        }}
+        language={language}
       />
     </section>
   );

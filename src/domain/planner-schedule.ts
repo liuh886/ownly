@@ -580,9 +580,30 @@ export function evaluatePlannerScheduleProposal(
     }
   }
 
+  issues.push(...validatePlannerDaySortOrders(nextVisits, dates));
+
   return {
     valid: !issues.some((issue) => issue.severity === 'error'),
     issues,
     visits: nextVisits,
   };
+}
+
+export function validatePlannerDaySortOrders(visits: PlannerTripVisit[], dates: Iterable<string>): PlannerScheduleIssue[] {
+  const issues: PlannerScheduleIssue[] = [];
+  for (const date of dates) {
+    const dayVisits = visits.filter((v) => v.date === date);
+    if (dayVisits.length > 0) {
+      const orders = dayVisits.map((v) => v.sort_order).sort((a, b) => a - b);
+      const isContiguous = orders.every((val, idx) => val === idx);
+      if (!isContiguous) {
+        issues.push({
+          severity: 'error',
+          code: 'DISCONTINUOUS_SORT_ORDER',
+          message: `${date}: daily sort_order must form a contiguous sequence [0..${dayVisits.length - 1}], received [${orders.join(', ')}].`,
+        });
+      }
+    }
+  }
+  return issues;
 }

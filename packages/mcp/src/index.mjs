@@ -272,7 +272,7 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
     'ownly_planner_get_trip',
     {
       title: 'Planner Trip Detail',
-      description: 'Full trip context: reusable places, repeatable Visit occurrences, FX-aware budget, conflicts, canonical travel legs, execution timelines, bookings and expenses.',
+      description: 'Full trip context: reusable places, repeatable Visit occurrences, FX-aware budget, conflicts, canonical travel legs, execution timelines, and expenses.',
       inputSchema: z.object({ trip_id: z.string().min(1) }),
       annotations: READ_ONLY_ANNOTATIONS,
     },

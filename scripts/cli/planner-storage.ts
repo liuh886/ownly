@@ -59,9 +59,6 @@ export function listPlannerVisits(dataLocation: string) {
 export function listPlannerLegs(dataLocation: string) {
   return readPlannerDir<PlannerTripLeg>(dataLocation, PLANNER_DIRECTORIES.legs, 'trip_leg');
 }
-export function listPlannerBookings(dataLocation: string) {
-  return readPlannerDir(dataLocation, PLANNER_DIRECTORIES.expenses, 'trip_expense');
-}
 export function listPlannerExpenses(dataLocation: string) {
   return readPlannerDir<TripExpenseItem>(dataLocation, PLANNER_DIRECTORIES.expenses, 'trip_expense');
 }

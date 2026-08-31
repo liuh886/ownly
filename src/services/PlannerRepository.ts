@@ -157,7 +157,13 @@ export class PlannerRepository {
   async upsertPlace(place: PlannerTripPlace): Promise<void> {
     await this.upsert({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) });
   }
-  async upsertVisit(visit: PlannerTripVisit): Promise<void> { await this.upsert(visit); }
+  async upsertVisit(visit: PlannerTripVisit): Promise<void> {
+    const trip = (await this.listTrips()).find((t) => t.id === visit.trip_id);
+    if (trip && (visit.date < trip.start_date || visit.date > trip.end_date)) {
+      throw new Error(`Visit date ${visit.date} is outside trip range ${trip.start_date} ~ ${trip.end_date}.`);
+    }
+    await this.upsert(visit);
+  }
   async upsertLeg(leg: PlannerTripLeg): Promise<void> { await this.upsert(leg); }
 
   async upsertPlaces(places: PlannerTripPlace[]): Promise<void> {
@@ -246,6 +252,10 @@ export class PlannerRepository {
     await this.initialize();
     const place = (await this.listPlaces()).find((item) => item.id === placeId && item.state !== 'dropped');
     if (!place) return null;
+    const trip = (await this.listTrips()).find((t) => t.id === place.trip_id);
+    if (trip && (date < trip.start_date || date > trip.end_date)) {
+      throw new Error(`Visit date ${date} is outside trip range ${trip.start_date} ~ ${trip.end_date}.`);
+    }
     const visits = await this.listVisits();
     const order = options.sort_order ?? visits
       .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
@@ -329,6 +339,13 @@ export class PlannerRepository {
     if (!place) throw new Error(`Planner stay place was not found: ${hotelPlaceId}`);
     const targetDates = [...new Set(dates)].sort();
     if (targetDates.length === 0) throw new Error('Planner stay span requires at least one date.');
+    const trip = (await this.listTrips()).find((t) => t.id === place.trip_id);
+    if (trip) {
+      const outOfRange = targetDates.filter((d) => d < trip.start_date || d > trip.end_date);
+      if (outOfRange.length > 0) {
+        throw new Error(`Stay dates [${outOfRange.join(', ')}] are outside trip range ${trip.start_date} ~ ${trip.end_date}.`);
+      }
+    }
     const dateSet = new Set(targetDates);
     const visits = await this.listVisits();
     const tripPlaces = new Map(

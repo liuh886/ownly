@@ -88,7 +88,7 @@ claude mcp list
 | `ownly_review_needed` | List records needing lifecycle review |
 | `ownly_doctor` | Run read-only integrity checks |
 | `ownly_planner_summary` | Trips overview with reusable-place, Visit-occurrence and expense counts |
-| `ownly_planner_get_trip` | Full trip context: reusable places, repeatable visits, budget, conflicts, travel legs, execution timeline, bookings, expenses |
+| `ownly_planner_get_trip` | Full trip context: reusable places, repeatable visits, budget, conflicts, travel legs, execution timeline, expenses |
 | `ownly_planner_budget_estimate` | Scheduled-day budget converted into the trip base currency |
 | `ownly_planner_get_ical_markdown` | Project confirmed Planner/Vault schedule facts into obsidian-ical-plugin-pro Markdown |
 

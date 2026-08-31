@@ -8,6 +8,7 @@ import {
   findPlannerTimeOverlaps,
   getScheduledEndTime,
   validatePlannerTiming,
+  type PlannerTimelineStopItem,
 } from './planner-schedule';
 
 const trip: PlannerTrip = {
@@ -59,7 +60,7 @@ describe('Planner schedule proposal', () => {
     const hotel = place('hotel', { kind: 'stay' });
     const result = evaluatePlannerScheduleProposal(trip, [hotel], [], [
       { visit_id: 'visit:hotel:am', place_id: hotel.id, date: '2026-10-05', start: '08:00', sort_order: 0, duration_minutes: 15 },
-      { visit_id: 'visit:hotel:pm', place_id: hotel.id, date: '2026-10-05', start: '22:00', sort_order: 3, duration_minutes: 15 },
+      { visit_id: 'visit:hotel:pm', place_id: hotel.id, date: '2026-10-05', start: '22:00', sort_order: 1, duration_minutes: 15 },
     ]);
     expect(result.valid).toBe(true);
     expect(result.visits.map((item) => item.place_id)).toEqual(['hotel', 'hotel']);
@@ -95,6 +96,30 @@ describe('Planner schedule proposal', () => {
     }]);
     expect(result.valid).toBe(false);
     expect(result.issues.some((issue) => issue.code === 'CROSSES_MIDNIGHT')).toBe(true);
+  });
+
+  it('enforces contiguous 0..N-1 daily sort_order sequence', () => {
+    const a = place('a');
+    const b = place('b');
+    const resultGap = evaluatePlannerScheduleProposal(trip, [a, b], [], [
+      { visit_id: 'v:a', place_id: 'a', date: '2026-10-05', sort_order: 0 },
+      { visit_id: 'v:b', place_id: 'b', date: '2026-10-05', sort_order: 2 },
+    ]);
+    expect(resultGap.valid).toBe(false);
+    expect(resultGap.issues.some((issue) => issue.code === 'DISCONTINUOUS_SORT_ORDER')).toBe(true);
+
+    const resultDup = evaluatePlannerScheduleProposal(trip, [a, b], [], [
+      { visit_id: 'v:a', place_id: 'a', date: '2026-10-05', sort_order: 0 },
+      { visit_id: 'v:b', place_id: 'b', date: '2026-10-05', sort_order: 0 },
+    ]);
+    expect(resultDup.valid).toBe(false);
+    expect(resultDup.issues.some((issue) => issue.code === 'DISCONTINUOUS_SORT_ORDER')).toBe(true);
+
+    const resultValid = evaluatePlannerScheduleProposal(trip, [a, b], [], [
+      { visit_id: 'v:a', place_id: 'a', date: '2026-10-05', sort_order: 0 },
+      { visit_id: 'v:b', place_id: 'b', date: '2026-10-05', sort_order: 1 },
+    ]);
+    expect(resultValid.valid).toBe(true);
   });
 
   it('detects nested overlaps by visit id', () => {
@@ -161,5 +186,27 @@ describe('Planner execution timeline', () => {
     const result = buildPlannerDayExecutionTimeline(trip, scheduled(places, visits), [], '2026-10-05');
     expect(result.status).toBe('unknown');
     expect(result.items.map((item) => item.type)).toEqual(['stop', 'unknown', 'stop']);
+  });
+
+  it('correctly correlates repeated visits of the same place to distinct timeline stops', () => {
+    const cafe = place('cafe-1');
+    const visits = [
+      visit('visit:morning', 'cafe-1', { start: '08:30', duration_minutes: 30, sort_order: 0 }),
+      visit('visit:afternoon', 'cafe-1', { start: '15:00', duration_minutes: 45, sort_order: 1 }),
+    ];
+    const scheduledPlaces = scheduled([cafe], visits);
+    const timeline = buildPlannerDayExecutionTimeline(trip, scheduledPlaces, [], '2026-10-05');
+
+    const morningStop = timeline.items.find(
+      (item): item is PlannerTimelineStopItem => item.type === 'stop' && item.visit_id === scheduledPlaces[0].visit_id,
+    );
+    const afternoonStop = timeline.items.find(
+      (item): item is PlannerTimelineStopItem => item.type === 'stop' && item.visit_id === scheduledPlaces[1].visit_id,
+    );
+
+    expect(morningStop?.start).toBe('08:30');
+    expect(morningStop?.end).toBe('09:00');
+    expect(afternoonStop?.start).toBe('15:00');
+    expect(afternoonStop?.end).toBe('15:45');
   });
 });

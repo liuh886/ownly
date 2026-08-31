@@ -1,5 +1,4 @@
 import {
-  listPlannerBookings,
   listPlannerExpenses,
   listPlannerLegs,
   listPlannerPlaces,
@@ -64,9 +63,6 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
   const legs = listPlannerLegs(dataLocation)
     .map((item) => item.frontmatter as unknown as PlannerTripLeg)
     .filter((leg) => leg.trip_id === tripId);
-  const bookings = listPlannerBookings(dataLocation)
-    .map((item) => item.frontmatter as unknown as { trip_id: string; [key: string]: unknown })
-    .filter((booking) => booking.trip_id === tripId);
   const expenses = listPlannerExpenses(dataLocation)
     .map((item) => item.frontmatter as unknown as TripExpenseItem)
     .filter((expense) => expense.trip_id === tripId);
@@ -148,7 +144,6 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
       is_anchor: visit.is_anchor,
       anchor_type: visit.anchor_type ?? null,
     })),
-    bookings,
     expenses: expenses.map((expense) => ({
       id: expense.id,
       title: expense.title,

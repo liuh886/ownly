@@ -64,6 +64,28 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(files.get('vault/Trip Visits')?.size).toBe(1);
   });
 
+  it('rejects adding a visit or setting a stay span outside trip date range', async () => {
+    await plannerRepository.upsertTrip({
+      schema_version: '0.1',
+      type: 'trip',
+      id: 'trip-1',
+      title: 'Thailand 2026',
+      status: 'planning',
+      start_date: '2026-11-01',
+      end_date: '2026-11-05',
+      destinations: ['Bangkok'],
+      created_at: '2026-08-24T00:00:00.000Z',
+    });
+
+    await expect(plannerRepository.addVisit('pool', '2026-12-25')).rejects.toThrow(
+      /outside trip range/,
+    );
+
+    await expect(plannerRepository.setStaySpan('hotel', ['2026-11-01', '2026-11-10'])).rejects.toThrow(
+      /outside trip range/,
+    );
+  });
+
   it('allows the same place multiple times on the same day and across days', async () => {
     const first = await plannerRepository.addVisit('pool', '2026-11-01');
     const second = await plannerRepository.addVisit('pool', '2026-11-01');
