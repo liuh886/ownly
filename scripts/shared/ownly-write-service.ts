@@ -603,34 +603,92 @@ export class OwnlyWriteService {
     } catch (error) {
       throw new OwnlyMutationError(error instanceof Error ? error.message : String(error), 'INVALID_INPUT');
     }
-    const visits = listPlannerVisits(this.dataLocation).map((entry) => entry.frontmatter as PlannerTripVisit);
-    const order = sortOrder ?? visits
-      .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
-      .reduce((max, visit) => Math.max(max, visit.sort_order), -1) + 1;
+    const dayEntries = listPlannerVisits(this.dataLocation)
+      .filter((entry) => entry.frontmatter.trip_id === place.trip_id && entry.frontmatter.date === date)
+      .sort((left, right) => left.frontmatter.sort_order - right.frontmatter.sort_order);
+
+    let order: number;
+    const shifts: Array<{ entry: ReturnType<typeof listPlannerVisits>[number]; next: PlannerTripVisit; expected: string | null }> = [];
+    if (sortOrder !== undefined) {
+      order = Math.max(0, Math.min(sortOrder, dayEntries.length));
+      const toShift = dayEntries.filter((e) => e.frontmatter.sort_order >= order);
+      for (const e of toShift) {
+        const next: PlannerTripVisit = {
+          ...e.frontmatter,
+          sort_order: e.frontmatter.sort_order + 1,
+          updated_at: this.now().toISOString(),
+        };
+        shifts.push({ entry: e, next, expected: fingerprint(e.filePath) });
+      }
+    } else {
+      order = dayEntries.length;
+    }
+
     const visit = createPlannerTripVisit(place, date, order, { locked }, this.now(), randomUUID());
     const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.visits);
     const fileName = plannerTripVisitFileName(visit.id);
     const filePath = join(directory, fileName);
     const expected = fingerprint(filePath);
-    return this.prepare('planner_add_visit', { place: { id: place.id, title: place.title }, visit }, () => {
-      assertUnchanged(filePath, expected);
-      mkdirSync(directory, { recursive: true });
-      writeFileSync(filePath, serializeMarkdownEntity(visit, ''), 'utf8');
-      writeAgentLog(this.dataLocation, 'planner_add_visit', visit.id, null, visit);
-      return { visit_id: visit.id, place_id: place.id, date: visit.date, sort_order: visit.sort_order };
-    });
+    return this.prepare(
+      'planner_add_visit',
+      {
+        place: { id: place.id, title: place.title },
+        visit,
+        shifts: shifts.map((s) => ({ visit_id: s.next.id, from: s.entry.frontmatter.sort_order, to: s.next.sort_order })),
+      },
+      () => {
+        assertUnchanged(filePath, expected);
+        for (const shift of shifts) assertUnchanged(shift.entry.filePath, shift.expected);
+        mkdirSync(directory, { recursive: true });
+        for (const shift of shifts) {
+          writeFileSync(shift.entry.filePath, serializeMarkdownEntity(shift.next, ''), 'utf8');
+        }
+        writeFileSync(filePath, serializeMarkdownEntity(visit, ''), 'utf8');
+        writeAgentLog(this.dataLocation, 'planner_add_visit', visit.id, null, visit);
+        return { visit_id: visit.id, place_id: place.id, date: visit.date, sort_order: visit.sort_order, shifted_visits: shifts.length };
+      },
+    );
   }
 
   prepareRemoveVisit(visitId: string): PreparedOwnlyOperation {
     const entry = this.plannerVisitEntry(visitId);
     const before = entry.frontmatter as PlannerTripVisit;
     const expected = fingerprint(entry.filePath);
-    return this.prepare('planner_remove_visit', { before, after: null }, () => {
-      assertUnchanged(entry.filePath, expected);
-      unlinkSync(entry.filePath);
-      writeAgentLog(this.dataLocation, 'planner_remove_visit', visitId, before, null);
-      return { visit_id: visitId, removed: true };
-    });
+    const remainingEntries = listPlannerVisits(this.dataLocation)
+      .filter((e) => e.frontmatter.trip_id === before.trip_id && e.frontmatter.date === before.date && e.frontmatter.id !== visitId)
+      .sort((left, right) => left.frontmatter.sort_order - right.frontmatter.sort_order);
+
+    const reindexes: Array<{ entry: ReturnType<typeof listPlannerVisits>[number]; next: PlannerTripVisit; expected: string | null }> = [];
+    for (let index = 0; index < remainingEntries.length; index += 1) {
+      const item = remainingEntries[index];
+      if (item.frontmatter.sort_order !== index) {
+        const next: PlannerTripVisit = {
+          ...item.frontmatter,
+          sort_order: index,
+          updated_at: this.now().toISOString(),
+        };
+        reindexes.push({ entry: item, next, expected: fingerprint(item.filePath) });
+      }
+    }
+
+    return this.prepare(
+      'planner_remove_visit',
+      {
+        before,
+        after: null,
+        reindexes: reindexes.map((r) => ({ visit_id: r.next.id, from: r.entry.frontmatter.sort_order, to: r.next.sort_order })),
+      },
+      () => {
+        assertUnchanged(entry.filePath, expected);
+        for (const reindex of reindexes) assertUnchanged(reindex.entry.filePath, reindex.expected);
+        unlinkSync(entry.filePath);
+        for (const reindex of reindexes) {
+          writeFileSync(reindex.entry.filePath, serializeMarkdownEntity(reindex.next, ''), 'utf8');
+        }
+        writeAgentLog(this.dataLocation, 'planner_remove_visit', visitId, before, null);
+        return { visit_id: visitId, removed: true, reindexed_visits: reindexes.length };
+      },
+    );
   }
 
   prepareReorderDay(date: string, visitId: string, delta: -1 | 1): PreparedOwnlyOperation {
@@ -797,14 +855,34 @@ export class OwnlyWriteService {
       }
       return dateSet.has(visit.date);
     });
+    const newDates = targetDates.filter((date) => !keepByDate.has(date));
+    const staleSet = new Set(stale.map((s) => s.frontmatter.id));
+    const shifts: Array<{ entry: ReturnType<typeof listPlannerVisits>[number]; next: PlannerTripVisit; expected: string | null }> = [];
+
+    for (const date of newDates) {
+      const dayNonStale = visitEntries
+        .filter((e) => e.frontmatter.date === date && !staleSet.has(e.frontmatter.id))
+        .sort((left, right) => left.frontmatter.sort_order - right.frontmatter.sort_order);
+      for (let i = 0; i < dayNonStale.length; i += 1) {
+        const item = dayNonStale[i];
+        const nextOrder = i + 1;
+        if (item.frontmatter.sort_order !== nextOrder) {
+          const next: PlannerTripVisit = {
+            ...item.frontmatter,
+            sort_order: nextOrder,
+            updated_at: this.now().toISOString(),
+          };
+          shifts.push({ entry: item, next, expected: fingerprint(item.filePath) });
+        }
+      }
+    }
+
     const timestamp = this.now();
-    const created = targetDates
-      .filter((date) => !keepByDate.has(date))
-      .map((date) => createPlannerTripVisit(hotel, date, 0, {
-        locked: true,
-        is_anchor: true,
-        anchor_type: 'stay_checkin',
-      }, timestamp, randomUUID()));
+    const created = newDates.map((date) => createPlannerTripVisit(hotel, date, 0, {
+      locked: true,
+      is_anchor: true,
+      anchor_type: 'stay_checkin',
+    }, timestamp, randomUUID()));
     const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.visits);
     const createTargets = created.map((visit) => {
       const fileName = plannerTripVisitFileName(visit.id);
@@ -821,14 +899,19 @@ export class OwnlyWriteService {
         creates: created.map((visit) => ({ visit_id: visit.id, date: visit.date })),
         keeps: [...keepByDate.values()].map((entry) => ({ visit_id: entry.frontmatter.id, date: entry.frontmatter.date })),
         retires_visit_ids: stale.map((entry) => entry.frontmatter.id),
+        shifts: shifts.map((s) => ({ visit_id: s.next.id, from: s.entry.frontmatter.sort_order, to: s.next.sort_order })),
       },
       () => {
         for (const target of staleTargets) assertUnchanged(target.entry.filePath, target.expected);
         for (const target of createTargets) assertUnchanged(target.filePath, target.expected);
+        for (const shift of shifts) assertUnchanged(shift.entry.filePath, shift.expected);
         for (const target of staleTargets) unlinkSync(target.entry.filePath);
+        for (const shift of shifts) {
+          writeFileSync(shift.entry.filePath, serializeMarkdownEntity(shift.next, ''), 'utf8');
+        }
         if (createTargets.length > 0) mkdirSync(directory, { recursive: true });
         for (const target of createTargets) writeFileSync(target.filePath, serializeMarkdownEntity(target.visit, ''), 'utf8');
-        return { hotel_id: hotelPlaceId, nights: targetDates.length, retired_visits: stale.length, created_visits: created.length };
+        return { hotel_id: hotelPlaceId, nights: targetDates.length, retired_visits: stale.length, created_visits: created.length, shifted_visits: shifts.length };
       },
     );
   }

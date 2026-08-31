@@ -160,6 +160,55 @@ describe('OwnlyWriteService', () => {
     expect(storedOther.sort_order).toBe(0);
   });
 
+  it('shifts sort_orders on insert and re-indexes contiguous 0..N-1 on remove', async () => {
+    const { dataRoot } = fixture();
+    const { from, to, fromVisit, toVisit } = seedPlannerPair(dataRoot);
+    const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
+
+    // Initial state: fromVisit=0, toVisit=1 on 2026-10-05
+    // Add third place 'c' at sortOrder: 0
+    const third: PlannerTripPlace = { ...to, id: 'c', title: 'C', source_url: 'https://maps.google.com/c' };
+    writeFileSync(join(dataRoot, 'Trip Places', 'place--c.md'), serializeMarkdownEntity(third, ''), 'utf8');
+
+    const addPrep = service.prepareAddVisit('c', '2026-10-05', 0);
+    expect(addPrep.preview).toMatchObject({
+      visit: { place_id: 'c', sort_order: 0 },
+      shifts: [
+        { visit_id: fromVisit.id, from: 0, to: 1 },
+        { visit_id: toVisit.id, from: 1, to: 2 },
+      ],
+    });
+    await service.commit(addPrep.operation_id);
+
+    const visitsAfterAdd = readdirSync(join(dataRoot, 'Trip Visits'))
+      .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
+      .filter((v) => v.date === '2026-10-05')
+      .sort((a, b) => a.sort_order - b.sort_order);
+
+    expect(visitsAfterAdd.map((v) => ({ id: v.place_id, order: v.sort_order }))).toEqual([
+      { id: 'c', order: 0 },
+      { id: from.id, order: 1 },
+      { id: to.id, order: 2 },
+    ]);
+
+    // Remove middle visit 'from' (order 1)
+    const removePrep = service.prepareRemoveVisit(fromVisit.id);
+    expect(removePrep.preview).toMatchObject({
+      reindexes: [{ visit_id: toVisit.id, from: 2, to: 1 }],
+    });
+    await service.commit(removePrep.operation_id);
+
+    const visitsAfterRemove = readdirSync(join(dataRoot, 'Trip Visits'))
+      .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
+      .filter((v) => v.date === '2026-10-05')
+      .sort((a, b) => a.sort_order - b.sort_order);
+
+    expect(visitsAfterRemove.map((v) => ({ id: v.place_id, order: v.sort_order }))).toEqual([
+      { id: 'c', order: 0 },
+      { id: to.id, order: 1 },
+    ]);
+  });
+
   it('replaces stay spans, preserves unchanged Visit ids, and becomes a no-churn repeat', async () => {
     const { dataRoot } = fixture();
     const { from } = seedPlannerPair(dataRoot);
@@ -168,6 +217,16 @@ describe('OwnlyWriteService', () => {
     const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
 
     await service.commit(service.prepareSetStaySpan('hotel', ['2026-10-05', '2026-10-06', '2026-10-07']).operation_id);
+    const day5Visits = readdirSync(join(dataRoot, 'Trip Visits'))
+      .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
+      .filter((visit) => visit.date === '2026-10-05')
+      .sort((a, b) => a.sort_order - b.sort_order);
+    expect(day5Visits.map((v) => ({ id: v.place_id, order: v.sort_order }))).toEqual([
+      { id: 'hotel', order: 0 },
+      { id: 'a', order: 1 },
+      { id: 'b', order: 2 },
+    ]);
+
     const first = readdirSync(join(dataRoot, 'Trip Visits'))
       .map((file) => parseMarkdownEntity<PlannerTripVisit>(readFileSync(join(dataRoot, 'Trip Visits', file), 'utf8')).frontmatter)
       .filter((visit) => visit.place_id === 'hotel');
