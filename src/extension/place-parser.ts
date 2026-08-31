@@ -317,7 +317,9 @@ export function extractEntityListResearch(item: unknown, knownTitle?: string): E
 
       if (!result.priceLevel) {
         const cleanPrice = extractCleanPriceText(text);
-        if (cleanPrice) result.priceLevel = cleanPrice;
+        if (cleanPrice && cleanPrice !== '0' && !/^SGD\s*0$/i.test(cleanPrice)) {
+          result.priceLevel = cleanPrice;
+        }
       }
       if (!result.rating && (/[★☆]|\/\s*5|^[1-5][.,]\d$/.test(text))) {
         result.rating = parseRatingNumber(text);
@@ -329,11 +331,29 @@ export function extractEntityListResearch(item: unknown, knownTitle?: string): E
         const subtitle = parseSubtitleInfo(text);
         result.rating ??= subtitle.rating;
         result.reviewCount ??= subtitle.reviewCount;
-        result.priceLevel ??= subtitle.priceLevel;
+        if (subtitle.priceLevel && subtitle.priceLevel !== '0' && !/^SGD\s*0$/i.test(subtitle.priceLevel)) {
+          result.priceLevel ??= subtitle.priceLevel;
+        }
+      }
+      continue;
+    }
+    if (typeof current === 'number') {
+      // Direct numeric rating in protobuf array (e.g. 4.7, 4.2)
+      if (!result.rating && current >= 1.0 && current <= 5.0 && Number.isFinite(current)) {
+        result.rating = Math.round(current * 10) / 10;
       }
       continue;
     }
     if (Array.isArray(current)) {
+      // Check for adjacent rating and reviewCount pair: [..., 4.7, 128450, ...]
+      for (let i = 0; i < current.length - 1; i++) {
+        const a = current[i];
+        const b = current[i + 1];
+        if (!result.rating && typeof a === 'number' && a >= 1.0 && a <= 5.0 && typeof b === 'number' && b > 10 && Number.isInteger(b)) {
+          result.rating = Math.round(a * 10) / 10;
+          result.reviewCount = Math.round(b);
+        }
+      }
       for (const child of current.slice(0, 80)) queue.push(child);
     }
   }

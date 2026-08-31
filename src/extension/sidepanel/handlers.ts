@@ -116,7 +116,7 @@ function formatStrengthenCoverage(places: PlannerTripPlace[]): string {
   const total = places.length;
   const rating = places.filter((place) => place.observed_rating !== undefined).length;
   const reviews = places.filter((place) => place.observed_review_count !== undefined).length;
-  const price = places.filter((place) => Boolean(place.observed_price)).length;
+  const price = places.filter((place) => Boolean(place.observed_price && place.observed_price !== '0' && !/^SGD\s*0$/i.test(place.observed_price))).length;
   const category = places.filter((place) => Boolean(place.source_category)).length;
   const address = places.filter((place) => Boolean(place.address)).length;
   const coordinates = places.filter((place) => Boolean(place.coordinates)).length;
@@ -564,6 +564,22 @@ export function initHandlers(): void {
             ...store.state,
             pendingPlaces: store.state.pendingPlaces.map((place) => {
               if (place.trip_id !== activeTripId) return place;
+              if (!place.observed_price || place.observed_price === '0' || /^SGD\s*0$/i.test(place.observed_price)) {
+                if (place.observed_price || place.price_currency || place.price_min !== undefined) {
+                  updatedAny = true;
+                  return {
+                    ...place,
+                    observed_price: undefined,
+                    price_currency: undefined,
+                    price_min: undefined,
+                    price_max: undefined,
+                    price_unit: undefined,
+                    price_level: undefined,
+                    updated_at: new Date().toISOString(),
+                  };
+                }
+                return place;
+              }
               const nextNorm = normalizeObservedPrice(place.observed_price, store.mapCurrencyOverride);
               if (nextNorm && (place.price_currency !== nextNorm.currency || place.price_min !== nextNorm.min || place.price_max !== nextNorm.max)) {
                 updatedAny = true;
@@ -694,10 +710,20 @@ export function initHandlers(): void {
           'success',
         );
       } else {
-        setStatus(
-          `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestCandidates)}`,
-          'muted',
-        );
+        const stillMissing = latestCandidates.some((p) => !p.observed_rating || !p.address || !p.source_category);
+        if (stillMissing) {
+          setStatus(
+            store.lang === 'zh'
+              ? `未通过当前会话补全到新信息 · ${formatStrengthenCoverage(latestCandidates)}`
+              : `No new details could be enriched · ${formatStrengthenCoverage(latestCandidates)}`,
+            'muted',
+          );
+        } else {
+          setStatus(
+            `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestCandidates)}`,
+            'muted',
+          );
+        }
       }
       renderCandidatesList();
     })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
@@ -769,10 +795,20 @@ export function initHandlers(): void {
           'success',
         );
       } else {
-        setStatus(
-          `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestSelected)}`,
-          'muted',
-        );
+        const stillMissing = latestSelected.some((p) => !p.observed_rating || !p.address || !p.source_category);
+        if (stillMissing) {
+          setStatus(
+            store.lang === 'zh'
+              ? `未通过当前会话补全到新信息 · ${formatStrengthenCoverage(latestSelected)}`
+              : `No new details could be enriched · ${formatStrengthenCoverage(latestSelected)}`,
+            'muted',
+          );
+        } else {
+          setStatus(
+            `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestSelected)}`,
+            'muted',
+          );
+        }
       }
       renderCandidatesList();
     })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
@@ -858,7 +894,12 @@ export function initHandlers(): void {
         const id = existing?.id ?? crypto.randomUUID();
         const address = item.address ? cleanExtractedText(item.address) : undefined;
         const kind = inferPlaceKind([title, item.category, address, ...(item.types || [])].filter(Boolean).join(' '));
-        const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || savedList.detectedCurrency || store.pageDetectedCurrency);
+        const rawExistingPrice = existing?.observed_price;
+        const validExistingPrice = (rawExistingPrice && rawExistingPrice !== '0' && !/^SGD\s*0$/i.test(rawExistingPrice))
+          ? rawExistingPrice
+          : undefined;
+        const effectivePrice = item.priceLevel || validExistingPrice;
+        const normalizedPrice = normalizeObservedPrice(effectivePrice, item.detectedCurrency || savedList.detectedCurrency || store.pageDetectedCurrency);
         const captured: PlannerTripPlace = {
           schema_version: '0.1',
           type: 'trip_place',
@@ -879,12 +920,12 @@ export function initHandlers(): void {
           notes: existing?.notes ?? item.userNote,
           observed_rating: item.rating ?? existing?.observed_rating,
           observed_review_count: item.reviewCount ?? existing?.observed_review_count,
-          observed_price: item.priceLevel ?? existing?.observed_price,
-          price_currency: normalizedPrice?.currency ?? existing?.price_currency,
-          price_min: normalizedPrice?.min ?? existing?.price_min,
-          price_max: normalizedPrice?.max ?? existing?.price_max,
-          price_unit: normalizedPrice?.unit ?? existing?.price_unit,
-          price_level: normalizedPrice?.level ?? existing?.price_level,
+          observed_price: effectivePrice,
+          price_currency: normalizedPrice?.currency ?? (validExistingPrice ? existing?.price_currency : undefined),
+          price_min: normalizedPrice?.min,
+          price_max: normalizedPrice?.max,
+          price_unit: normalizedPrice?.unit,
+          price_level: normalizedPrice?.level,
           observed_at: today(),
           preferred_window: existing?.preferred_window,
           duration_minutes: existing?.duration_minutes,
