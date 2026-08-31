@@ -23,10 +23,12 @@ import { PLACE_PARSER, type SubtitleDecomposition } from './place-parser';
 import { detectPageCurrency } from './currency-detector';
 import { extractGoogleMapsSavedListId, matchesSavedListContext } from './saved-list-match';
 import {
+  extractFeatureIdFromHtml,
   extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
   googleMapsDetailUrlFromSourceId,
   googleMapsPreviewPlaceUrl,
+  googleMapsSearchTbmUrl,
   type GoogleMapsResearchFacts,
 } from './google-maps-research';
 import { logger } from './logger';
@@ -887,7 +889,26 @@ const SAVED_LIST_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const savedListDetailCache = new Map<string, { at: number; facts: GoogleMapsResearchFacts }>();
 
 async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<GoogleMapsResearchFacts | null> {
-  const key = place.sourcePlaceId;
+  let key = place.sourcePlaceId;
+  if (!key || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(key.trim())) {
+    try {
+      const tbmUrl = googleMapsSearchTbmUrl(place.title, window.location.origin);
+      logger.fetch('MapsTabDetail', `Resolving Place ID for "${place.title}"`, { tbmUrl });
+      const sRes = await fetch(tbmUrl, { credentials: 'include' });
+      if (sRes.ok) {
+        const sHtml = await sRes.text();
+        const foundId = extractFeatureIdFromHtml(sHtml);
+        if (foundId) {
+          key = foundId;
+          place.sourcePlaceId = foundId;
+          logger.info('MapsTabDetail', `Resolved Place ID for "${place.title}"`, { featureId: foundId });
+        }
+      }
+    } catch (err) {
+      logger.warn('MapsTabDetail', `Search resolve failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
+    }
+  }
+
   if (!key) {
     logger.warn('MapsTabDetail', `Skipping detail fetch: missing sourcePlaceId for "${place.title}"`);
     return null;

@@ -55,6 +55,15 @@ export function googleMapsPreviewPlaceUrl(
   return undefined;
 }
 
+export function googleMapsSearchTbmUrl(query: string, origin = 'https://www.google.com'): string {
+  return `${origin}/search?tbm=map&q=${encodeURIComponent(query)}&hl=zh-CN`;
+}
+
+export function extractFeatureIdFromHtml(html: string): string | undefined {
+  const match = /0x[0-9a-f]+:0x[0-9a-f]+/i.exec(html);
+  return match?.[0];
+}
+
 export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearchFacts {
   const result: GoogleMapsResearchFacts = {};
   if (!Array.isArray(data)) return result;
@@ -80,8 +89,8 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
     if (typeof ratingBlock[8] === 'number' && ratingBlock[8] >= 0) {
       result.reviewCount = Math.round(ratingBlock[8]);
     } else if (Array.isArray(ratingBlock[3]) && typeof ratingBlock[3][1] === 'string') {
-      const m = /([\d,]+)/.exec(ratingBlock[3][1]);
-      if (m?.[1]) result.reviewCount = Number(m[1].replace(/,/g, ''));
+      const digits = ratingBlock[3][1].replace(/\D/g, '');
+      if (digits) result.reviewCount = Number(digits);
     }
   }
 

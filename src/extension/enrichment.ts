@@ -7,10 +7,12 @@ import type { CurrentResearchPlace } from './content';
 import { extractCleanPriceText } from './utils';
 import { logger } from './logger';
 import {
+  extractFeatureIdFromHtml,
   extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
   googleMapsDetailUrlFromSourceId,
   googleMapsPreviewPlaceUrl,
+  googleMapsSearchTbmUrl,
 } from './google-maps-research';
 
 export interface EnrichmentResult {
@@ -38,11 +40,31 @@ export async function enrichPlaceMetadata(
     return { place, enriched: false };
   }
 
-  // 1. Primary: Use fast structured /maps/preview/place endpoint for 0x... feature IDs
-  if (place.source_place_id && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(place.source_place_id.trim())) {
-    const previewUrl = googleMapsPreviewPlaceUrl(place.source_place_id);
+  // 1. Resolve featureId if missing or not a 0x...:0x... ID
+  let resolvedFeatureId = place.source_place_id;
+  if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
+    const tbmUrl = googleMapsSearchTbmUrl(place.title);
+    logger.fetch('BackgroundEnrich', `Resolving Place ID for "${place.title}"`, { tbmUrl });
+    try {
+      const sRes = await fetch(tbmUrl, { credentials: 'include', signal: options?.signal });
+      if (sRes.ok) {
+        const sHtml = await sRes.text();
+        const foundId = extractFeatureIdFromHtml(sHtml);
+        if (foundId) {
+          resolvedFeatureId = foundId;
+          logger.info('BackgroundEnrich', `Resolved Place ID for "${place.title}"`, { featureId: foundId });
+        }
+      }
+    } catch (err) {
+      logger.warn('BackgroundEnrich', `Search resolve failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // 2. Fetch structured preview facts if we have a featureId
+  if (resolvedFeatureId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
+    const previewUrl = googleMapsPreviewPlaceUrl(resolvedFeatureId);
     if (previewUrl) {
-      logger.fetch('BackgroundEnrich', `Fetching preview for ${place.title}`, { previewUrl, sourcePlaceId: place.source_place_id });
+      logger.fetch('BackgroundEnrich', `Fetching preview for ${place.title}`, { previewUrl, sourcePlaceId: resolvedFeatureId });
       try {
         const res = await fetch(previewUrl, {
           credentials: 'include',
@@ -57,6 +79,10 @@ export async function enrichPlaceMetadata(
 
           let mutated = false;
           const next: PlannerTripPlace = { ...place };
+          if (!next.source_place_id) {
+            next.source_place_id = resolvedFeatureId;
+            mutated = true;
+          }
 
           if (!next.observed_rating && facts.rating !== undefined) {
             next.observed_rating = facts.rating;
