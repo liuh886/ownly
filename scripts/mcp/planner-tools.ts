@@ -8,7 +8,6 @@ import {
 import { OwnlyMcpError } from './ownly-tools';
 import {
   estimateTripBudget,
-  checkDayScheduleCollisions,
   listTripDates,
   type FxSettings,
   type PlannerTrip,
@@ -20,7 +19,7 @@ import {
   materializePlannerScheduledPlaces,
   type PlannerTripVisit,
 } from '../../src/domain/planner-visits';
-import { buildPlannerDayExecutionTimeline, findPlannerTimeOverlaps } from '../../src/domain/planner-schedule';
+import { evaluatePlannerDay } from '../../src/domain/planner-schedule';
 import { exportTripToICalProMarkdown, type ICalProExportOptions } from '../../src/domain/ical-pro';
 
 function requireTrip(dataLocation: string, tripId: string) {
@@ -69,33 +68,24 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
 
   const fx: FxSettings = { base: (trip.currency || 'CNY').toUpperCase(), overrides: trip.fx_rates };
   const budget = estimateTripBudget(scheduled, Math.max(1, trip.members?.length ?? 1), fx);
-  const conflicts = listTripDates(trip.start_date, trip.end_date)
-    .map((date) => {
-      const summary = checkDayScheduleCollisions(scheduled, date);
-      const timeOverlaps = findPlannerTimeOverlaps(scheduled, date);
-      const collisions = scheduled
-        .filter((visit) => visit.scheduled_date === date && summary.placeCollisions[visit.id]?.isCollision)
-        .map((visit) => ({
-          visit_id: visit.visit_id,
-          place_id: visit.place_id,
-          place: visit.title,
-          isCollision: true,
-          reason: summary.placeCollisions[visit.id]?.reason,
-        }));
-      return {
-        date,
-        has_collision: summary.hasCollision || timeOverlaps.length > 0,
-        collisions,
-        time_overlaps: timeOverlaps,
-        is_overloaded: summary.isOverloaded,
-        overload_reason: summary.overloadReason,
-        long_transits: summary.longTransits,
-      };
-    })
-    .filter((day) => day.has_collision);
 
-  const executionTimeline = listTripDates(trip.start_date, trip.end_date)
-    .map((date) => buildPlannerDayExecutionTimeline(trip, scheduled, legs, date));
+  const dayAssessments = listTripDates(trip.start_date, trip.end_date)
+    .map((date) => evaluatePlannerDay(trip, scheduled, legs, date));
+
+  const conflicts = dayAssessments
+    .filter((day) => day.status === 'conflict' || day.status === 'warning')
+    .map((day) => ({
+      date: day.date,
+      status: day.status,
+      has_collision: day.status === 'conflict' || day.status === 'warning',
+      time_overlaps: day.time_overlaps,
+      travel_conflicts: day.travel_conflicts,
+      opening_hours_warnings: day.opening_hours_warnings,
+      is_overloaded: day.is_overloaded,
+      overload_reason: day.overload_reason,
+    }));
+
+  const executionTimeline = dayAssessments.map((day) => day.timeline);
 
   return {
     trip,

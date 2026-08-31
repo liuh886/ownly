@@ -3,6 +3,7 @@ import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTr
 import { materializePlannerScheduledPlaces, type PlannerTripVisit } from './planner-visits';
 import {
   buildPlannerDayExecutionTimeline,
+  evaluatePlannerDay,
   evaluatePlannerDayFeasibility,
   evaluatePlannerScheduleProposal,
   findPlannerTimeOverlaps,
@@ -208,5 +209,82 @@ describe('Planner execution timeline', () => {
     expect(morningStop?.end).toBe('09:00');
     expect(afternoonStop?.start).toBe('15:00');
     expect(afternoonStop?.end).toBe('15:45');
+  });
+});
+
+describe('evaluatePlannerDay canonical assessment', () => {
+  it('returns feasible when stops, travel legs, and hours are clean', () => {
+    const places = [
+      place('wat-arun', { open_hours: '08:00 - 18:00', duration_minutes: 60 }),
+      place('wat-pho', { open_hours: '08:00 - 18:30', duration_minutes: 90 }),
+    ];
+    const visits = [
+      visit('v:arun', 'wat-arun', { start: '09:00', duration_minutes: 60, sort_order: 0 }),
+      visit('v:pho', 'wat-pho', { start: '10:30', duration_minutes: 90, sort_order: 1 }),
+    ];
+    const legs = [travelLeg('wat-arun', 'wat-pho', 15)];
+    const assessment = evaluatePlannerDay(trip, scheduled(places, visits), legs, '2026-10-05');
+
+    expect(assessment.status).toBe('feasible');
+    expect(assessment.time_overlaps).toHaveLength(0);
+    expect(assessment.travel_conflicts).toHaveLength(0);
+    expect(assessment.opening_hours_warnings).toHaveLength(0);
+    expect(assessment.missing_facts).toHaveLength(0);
+    expect(assessment.is_overloaded).toBe(false);
+    expect(assessment.total_activity_minutes).toBe(150);
+  });
+
+  it('detects time overlaps and marks day as conflict', () => {
+    const places = [place('a', { duration_minutes: 90 }), place('b', { duration_minutes: 60 })];
+    const visits = [
+      visit('v:a', 'a', { start: '09:00', duration_minutes: 90, sort_order: 0 }),
+      visit('v:b', 'b', { start: '09:30', duration_minutes: 60, sort_order: 1 }),
+    ];
+    const assessment = evaluatePlannerDay(trip, scheduled(places, visits), [], '2026-10-05');
+
+    expect(assessment.status).toBe('conflict');
+    expect(assessment.time_overlaps.length).toBeGreaterThan(0);
+  });
+
+  it('detects travel arrival late conflicts and marks day as conflict', () => {
+    const places = [place('a', { duration_minutes: 60 }), place('b', { duration_minutes: 60 })];
+    const visits = [
+      visit('v:a', 'a', { start: '09:00', duration_minutes: 60, sort_order: 0 }),
+      visit('v:b', 'b', { start: '10:10', duration_minutes: 60, sort_order: 1 }),
+    ];
+    // Leg is 30 mins, departure is 10:00, arrival is 10:30 -> late by 20 mins for 10:10
+    const legs = [travelLeg('a', 'b', 30)];
+    const assessment = evaluatePlannerDay(trip, scheduled(places, visits), legs, '2026-10-05');
+
+    expect(assessment.status).toBe('conflict');
+    expect(assessment.travel_conflicts).toHaveLength(1);
+    expect(assessment.travel_conflicts[0].late_by_minutes).toBe(20);
+  });
+
+  it('marks day as warning when opening hours have collision or day is overloaded', () => {
+    // 2026-10-05 is a Monday
+    const places = [
+      place('museum', { open_hours: 'Monday: Closed; Tue-Sun 09:00-17:00', duration_minutes: 120 }),
+    ];
+    const visits = [
+      visit('v:museum', 'museum', { start: '10:00', duration_minutes: 120, sort_order: 0 }),
+    ];
+    const assessment = evaluatePlannerDay(trip, scheduled(places, visits), [], '2026-10-05');
+
+    expect(assessment.status).toBe('warning');
+    expect(assessment.opening_hours_warnings).toHaveLength(1);
+    expect(assessment.opening_hours_warnings[0].reason).toContain('Closed');
+  });
+
+  it('marks day as unknown when transit leg is missing', () => {
+    const places = [place('a', { duration_minutes: 60 }), place('b', { duration_minutes: 60 })];
+    const visits = [
+      visit('v:a', 'a', { start: '09:00', duration_minutes: 60, sort_order: 0 }),
+      visit('v:b', 'b', { start: '11:00', duration_minutes: 60, sort_order: 1 }),
+    ];
+    const assessment = evaluatePlannerDay(trip, scheduled(places, visits), [], '2026-10-05');
+
+    expect(assessment.status).toBe('unknown');
+    expect(assessment.missing_facts.some((f) => f.reason === 'travel_time_missing')).toBe(true);
   });
 });

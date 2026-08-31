@@ -225,7 +225,7 @@ export function HotelComparisonModal({
 
                       {/* Price & Class */}
                       <div className="mt-3 flex items-center justify-between rounded-lg bg-stone-50 p-2.5 text-xs">
-                        <span className="text-stone-500">{zh ? '预估价格' : 'Price'}</span>
+                        <span className="text-stone-500">{zh ? '抓取参考价' : 'Reference Price'}</span>
                         <strong className="text-emerald-700 font-semibold">
                           {hotel.observed_price || (zh ? '暂无价格' : 'N/A')}
                         </strong>

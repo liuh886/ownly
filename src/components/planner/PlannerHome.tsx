@@ -13,8 +13,6 @@ import {
 } from '@/domain/departure';
 import {
   buildGoogleMapsRouteUrl,
-  checkOpeningHoursCollision,
-  checkDayScheduleCollisions,
   currencySymbolFor,
   effectiveFxRate,
   ensurePlaceKindTag,
@@ -33,7 +31,7 @@ import {
   PLANNER_KIND_LABELS,
 } from '@/domain/planner';
 import { exportTripToICalProMarkdown, ICAL_PRO_PRIORITY_MAP } from '@/domain/ical-pro';
-import { buildPlannerDayExecutionTimeline, findPlannerTimeOverlaps, type PlannerExecutionTransitionItem, type PlannerTimelineStopItem } from '@/domain/planner-schedule';
+import { evaluatePlannerDay, type PlannerExecutionTransitionItem, type PlannerTimelineStopItem } from '@/domain/planner-schedule';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';
@@ -475,12 +473,25 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [legs, selectedTripId],
   );
 
-  const dayTimeline = useMemo(
-    () => selectedTrip
-      ? buildPlannerDayExecutionTimeline(selectedTrip, scheduledAll, tripLegs, activeDate)
-      : { date: activeDate, status: 'unknown' as const, valid: false, items: [] },
+  const dayAssessment = useMemo(
+    () => (selectedTrip
+      ? evaluatePlannerDay(selectedTrip, scheduledAll, tripLegs, activeDate)
+      : {
+          date: activeDate,
+          status: 'unknown' as const,
+          timeline: { date: activeDate, status: 'unknown' as const, valid: false, items: [] },
+          time_overlaps: [],
+          travel_conflicts: [],
+          opening_hours_warnings: [],
+          missing_facts: [],
+          is_overloaded: false,
+          total_activity_minutes: 0,
+          scheduled_places: [],
+        }),
     [activeDate, selectedTrip, scheduledAll, tripLegs],
   );
+
+  const dayTimeline = dayAssessment.timeline;
 
   const scheduledWithCoords = useMemo(
     () => scheduled.filter((p) => extractPlaceCoordinates(p) !== null),
@@ -669,13 +680,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     setNotice(zh ? '已导出 Google Maps (CSV) 路线文件！' : 'Exported Google Maps (CSV) file!');
   }, [selectedTrip, scheduled, activeDate, zh]);
 
-  const dayCollisions = useMemo(() => {
-    return checkDayScheduleCollisions(scheduledAll, activeDate);
-  }, [scheduledAll, activeDate]);
 
-  const dayTimeOverlaps = useMemo(() => {
-    return findPlannerTimeOverlaps(scheduledAll, activeDate);
-  }, [scheduledAll, activeDate]);
 
   const dayEstimatedCost = useMemo(() => {
     if (!selectedTrip) return { total: 0, unconverted: 0 };
@@ -1074,17 +1079,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
               </div>
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                dayTimeline.status === 'feasible'
+                dayAssessment.status === 'feasible'
                   ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                  : dayTimeline.status === 'conflict'
+                  : dayAssessment.status === 'conflict'
                     ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
-                    : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                    : dayAssessment.status === 'warning'
+                      ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                      : 'bg-stone-100 text-stone-700 ring-1 ring-stone-200'
               }`}>
-                {dayTimeline.status === 'feasible'
+                {dayAssessment.status === 'feasible'
                   ? (zh ? '可执行' : 'Feasible')
-                  : dayTimeline.status === 'conflict'
+                  : dayAssessment.status === 'conflict'
                     ? (zh ? '有冲突' : 'Conflict')
-                    : (zh ? '待补信息' : 'Unknown')}
+                    : dayAssessment.status === 'warning'
+                      ? (zh ? '需注意' : 'Warning')
+                      : (zh ? '待补信息' : 'Unknown')}
               </span>
               <button
                 type="button"
@@ -1231,26 +1240,32 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               </span>
             </div>
           ) : null}
-          {dayCollisions.isOverloaded || dayCollisions.longTransits.length > 0 || dayTimeOverlaps.length > 0 ? (
+          {dayAssessment.time_overlaps.length > 0 || dayAssessment.travel_conflicts.length > 0 || dayAssessment.is_overloaded || dayAssessment.opening_hours_warnings.length > 0 ? (
             <div className="mx-4 mt-2 space-y-1">
-              {dayTimeOverlaps.map((overlap) => (
+              {dayAssessment.time_overlaps.map((overlap) => (
                 <div key={`${overlap.fromId}-${overlap.toId}`} className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900 shadow-2xs font-medium">
                   <span>⚠️</span>
                   <span>{zh ? `${overlap.fromTitle} 与 ${overlap.toTitle} 时段重叠（${overlap.fromTime} / ${overlap.toTime}）` : `${overlap.fromTitle} overlaps ${overlap.toTitle} (${overlap.fromTime} / ${overlap.toTime})`}</span>
                 </div>
               ))}
-              {dayCollisions.isOverloaded ? (
-                <div className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 shadow-2xs font-medium">
-                  <span>⚠️</span>
-                  <span>{dayCollisions.overloadReason}</span>
-                </div>
-              ) : null}
-              {dayCollisions.longTransits.map((lt, idx) => (
-                <div key={idx} className="flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] text-sky-900 shadow-2xs">
-                  <span>🚗</span>
-                  <span><b>{lt.fromTitle} ➔ {lt.toTitle}</b>: {lt.warning}</span>
+              {dayAssessment.travel_conflicts.map((conflict) => (
+                <div key={conflict.id} className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900 shadow-2xs font-medium">
+                  <span>🚨</span>
+                  <span>{zh ? `交通耗时冲突: 从「${conflict.from_title}」出发预计到达时间迟于「${conflict.to_title}」开始时间（晚 ${conflict.late_by_minutes} 分钟）` : `Travel conflict: arrival from "${conflict.from_title}" is ${conflict.late_by_minutes}m late for "${conflict.to_title}"`}</span>
                 </div>
               ))}
+              {dayAssessment.opening_hours_warnings.map((oh) => (
+                <div key={`${oh.visit_id}-${oh.place_id}`} className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 shadow-2xs font-medium">
+                  <span>⚠️</span>
+                  <span><b>{oh.title}</b>: {oh.reason}</span>
+                </div>
+              ))}
+              {dayAssessment.is_overloaded ? (
+                <div className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 shadow-2xs font-medium">
+                  <span>⚠️</span>
+                  <span>{dayAssessment.overload_reason}</span>
+                </div>
+              ) : null}
             </div>
           ) : null}
           <div className="p-3">
@@ -1261,10 +1276,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             ) : (
               <ol className="space-y-1.5">
                 {scheduled.map((place, index) => {
-                  const timeOverlap = dayTimeOverlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
+                  const timeOverlap = dayAssessment.time_overlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
+                  const openHoursIssue = dayAssessment.opening_hours_warnings.find((issue) => issue.visit_id === place.visit_id || issue.place_id === place.place_id);
                   const col = timeOverlap
                     ? { isCollision: true, reason: zh ? '与当天其它地点存在时间重叠' : 'Overlaps another timed stop on this day' }
-                    : dayCollisions.placeCollisions[place.id] || checkOpeningHoursCollision(place.open_hours, activeDate, place.preferred_window);
+                    : openHoursIssue
+                      ? { isCollision: true, reason: openHoursIssue.reason }
+                      : undefined;
                   const timelineStop = dayTimeline.items.find(
                     (item): item is PlannerTimelineStopItem => item.type === 'stop' && (item.visit_id === place.visit_id || item.id === place.id),
                   );
@@ -1367,7 +1385,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               </a>
                             ) : null}
                           </div>
-                          {col.isCollision ? (
+                          {col?.isCollision ? (
                             <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">
                               ⚠️ {col.reason}
                             </div>

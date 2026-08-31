@@ -437,6 +437,125 @@ export function buildPlannerDayExecutionTimeline(
   return { date, status: feasibility.status, valid: feasibility.valid, items };
 }
 
+export type PlannerDayOverallStatus = 'feasible' | 'warning' | 'conflict' | 'unknown';
+
+export interface PlannerOpeningHoursIssue {
+  visit_id: string;
+  place_id: string;
+  title: string;
+  reason: string;
+}
+
+export interface PlannerDayMissingFact {
+  from_id?: string;
+  to_id?: string;
+  visit_id?: string;
+  place_id?: string;
+  title: string;
+  reason: 'travel_time_missing' | 'schedule_time_missing' | 'duration_missing';
+}
+
+export interface PlannerDayAssessment {
+  date: string;
+  status: PlannerDayOverallStatus;
+  timeline: PlannerDayExecutionTimeline;
+  time_overlaps: PlannerTimeOverlap[];
+  travel_conflicts: PlannerTimelineConflictItem[];
+  opening_hours_warnings: PlannerOpeningHoursIssue[];
+  missing_facts: PlannerDayMissingFact[];
+  is_overloaded: boolean;
+  overload_reason?: string;
+  total_activity_minutes: number;
+  scheduled_places: PlannerScheduledPlace[];
+}
+
+export function evaluatePlannerDay(
+  trip: PlannerTrip,
+  places: PlannerScheduledPlace[],
+  legs: PlannerTripLeg[],
+  date: string,
+): PlannerDayAssessment {
+  const dayPlaces = sortPlannerScheduledPlaces(
+    places.filter((place) => place.trip_id === trip.id && place.scheduled_date === date),
+  );
+  const timeline = buildPlannerDayExecutionTimeline(trip, dayPlaces, legs, date);
+  const time_overlaps = findPlannerTimeOverlaps(dayPlaces, date);
+  const travel_conflicts = timeline.items.filter(
+    (item): item is PlannerTimelineConflictItem => item.type === 'conflict',
+  );
+
+  const opening_hours_warnings: PlannerOpeningHoursIssue[] = [];
+  let total_activity_minutes = 0;
+
+  for (const place of dayPlaces) {
+    const col = checkOpeningHoursCollision(place.open_hours, date, place.preferred_window);
+    if (col.isCollision) {
+      opening_hours_warnings.push({
+        visit_id: place.visit_id,
+        place_id: place.place_id,
+        title: place.title,
+        reason: col.reason || 'Possible opening-hours conflict',
+      });
+    }
+    if (place.duration_minutes && place.duration_minutes > 0) {
+      total_activity_minutes += place.duration_minutes;
+    }
+  }
+
+  const missing_facts: PlannerDayMissingFact[] = [];
+  for (const item of timeline.items) {
+    if (item.type === 'unknown') {
+      missing_facts.push({
+        from_id: item.from_id,
+        to_id: item.to_id,
+        title: `${item.from_title} → ${item.to_title}`,
+        reason: item.reason,
+      });
+    }
+  }
+
+  for (const place of dayPlaces) {
+    if (place.scheduled_start && !place.duration_minutes) {
+      missing_facts.push({
+        visit_id: place.visit_id,
+        place_id: place.place_id,
+        title: place.title,
+        reason: 'duration_missing',
+      });
+    }
+  }
+
+  const is_overloaded = total_activity_minutes > 600; // > 10 hours
+  const overload_reason = is_overloaded
+    ? `单日预估活动耗时约 ${(total_activity_minutes / 60).toFixed(1)} 小时，日程可能过紧`
+    : undefined;
+
+  let status: PlannerDayOverallStatus = 'feasible';
+  if (time_overlaps.length > 0 || travel_conflicts.length > 0) {
+    status = 'conflict';
+  } else if (timeline.status === 'unknown' || missing_facts.length > 0) {
+    status = 'unknown';
+  } else if (opening_hours_warnings.length > 0 || is_overloaded) {
+    status = 'warning';
+  } else {
+    status = 'feasible';
+  }
+
+  return {
+    date,
+    status,
+    timeline,
+    time_overlaps,
+    travel_conflicts,
+    opening_hours_warnings,
+    missing_facts,
+    is_overloaded,
+    overload_reason,
+    total_activity_minutes,
+    scheduled_places: dayPlaces,
+  };
+}
+
 function isHardConstraint(visit: PlannerTripVisit): boolean {
   return Boolean(visit.locked || visit.is_anchor);
 }
