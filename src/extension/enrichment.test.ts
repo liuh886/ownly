@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { enrichPlaceMetadata, enrichCandidatePlacesBatch } from './enrichment';
+import { enrichPlaceMetadata, enrichCandidatePlacesBatch, mergeDetectedResearchIntoPlannerPlaces } from './enrichment';
 import type { PlannerTripPlace } from '../domain/planner';
+import type { CurrentResearchPlace } from './content';
 
 describe('enrichPlaceMetadata', () => {
   it('enriches a candidate place with ratings, price, address and coordinates from Google Maps JSON-LD', async () => {
@@ -114,6 +115,60 @@ describe('enrichPlaceMetadata', () => {
 
     const result = await enrichPlaceMetadata(completePlace);
     expect(result.enriched).toBe(false);
+  });
+});
+
+
+describe('mergeDetectedResearchIntoPlannerPlaces', () => {
+  it('adds Google Maps facts without overwriting Planner-owned decisions', () => {
+    const current: PlannerTripPlace = {
+      schema_version: '0.1',
+      type: 'trip_place',
+      id: 'saved-1',
+      trip_id: 'trip-1',
+      title: 'Saved Place',
+      source_provider: 'google_maps',
+      source_url: 'https://www.google.com/maps?cid=123',
+      source_place_id: '0xabc:0x123',
+      kind: 'other',
+      priority: 'must',
+      tags: ['manual-tag'],
+      signals: [],
+      risks: [],
+      notes: 'keep this note',
+      reservation_status: 'none',
+      state: 'candidate',
+      created_at: '2026-08-31T00:00:00Z',
+    };
+    const research: CurrentResearchPlace = {
+      title: 'Saved Place',
+      sourceUrl: current.source_url,
+      sourceProvider: 'google_maps',
+      sourcePlaceId: current.source_place_id,
+      rating: 4.8,
+      reviewCount: 9876,
+      category: 'Restaurant',
+      priceLevel: '฿300–500',
+      detectedCurrency: 'THB',
+      address: 'Bangkok, Thailand',
+      coordinates: { lat: 13.75, lng: 100.5 },
+      phone: '+66 2 000 0000',
+      types: ['restaurant'],
+    };
+
+    const [merged] = mergeDetectedResearchIntoPlannerPlaces([current], [research], 'THB');
+    expect(merged.kind).toBe('other');
+    expect(merged.priority).toBe('must');
+    expect(merged.tags).toEqual(['manual-tag']);
+    expect(merged.notes).toBe('keep this note');
+    expect(merged.observed_rating).toBe(4.8);
+    expect(merged.observed_review_count).toBe(9876);
+    expect(merged.observed_price).toBe('฿300–500');
+    expect(merged.price_currency).toBe('THB');
+    expect(merged.source_category).toBe('Restaurant');
+    expect(merged.address).toBe('Bangkok, Thailand');
+    expect(merged.coordinates).toEqual({ lat: 13.75, lng: 100.5 });
+    expect(merged.types).toContain('restaurant');
   });
 });
 

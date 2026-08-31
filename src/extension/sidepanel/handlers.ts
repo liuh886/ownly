@@ -18,7 +18,7 @@ import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
-import { enrichCandidatePlacesBatch } from '../enrichment';
+import { enrichCandidatePlacesBatch, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
 import { getExistingPlaceForUrl, store, t } from './store';
 import {
   applyI18n,
@@ -77,6 +77,93 @@ function mergeEnrichedPendingPlace(
 ): PlannerTripPlace {
   const enriched = enrichedById.get(current.id);
   return enriched ? mergeCapturedPlaceResearch(current, enriched) : current;
+}
+
+function isGoogleMapsTabUrl(url = ''): boolean {
+  return /^https:\/\/(www\.google\.[a-z.]+|maps\.google\.[a-z.]+)\/maps(?:\/|$)/i.test(url);
+}
+
+async function findGoogleMapsTab(): Promise<chrome.tabs.Tab | undefined> {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  return tabs.find((tab) => tab.active && isGoogleMapsTabUrl(tab.url))
+    ?? tabs.find((tab) => isGoogleMapsTabUrl(tab.url));
+}
+
+function researchPlaceFromPlanner(place: PlannerTripPlace): CurrentResearchPlace {
+  return {
+    title: place.title,
+    sourceUrl: place.source_url,
+    sourceProvider: place.source_provider,
+    sourcePlaceId: place.source_place_id,
+    rating: place.observed_rating,
+    reviewCount: place.observed_review_count,
+    category: place.source_category,
+    priceLevel: place.observed_price,
+    detectedCurrency: place.price_currency,
+    address: place.address,
+    coordinates: place.coordinates,
+    openHours: place.open_hours,
+    phone: place.phone,
+    plusCode: place.plus_code,
+    menuUrl: place.menu_url,
+    reservationUrl: place.reservation_url,
+    reviewTopics: place.review_topics,
+    types: place.types,
+  };
+}
+
+function formatStrengthenCoverage(places: PlannerTripPlace[]): string {
+  const total = places.length;
+  const rating = places.filter((place) => place.observed_rating !== undefined).length;
+  const reviews = places.filter((place) => place.observed_review_count !== undefined).length;
+  const price = places.filter((place) => Boolean(place.observed_price)).length;
+  const category = places.filter((place) => Boolean(place.source_category)).length;
+  const address = places.filter((place) => Boolean(place.address)).length;
+  const coordinates = places.filter((place) => Boolean(place.coordinates)).length;
+  return store.lang === 'zh'
+    ? `评分 ${rating}/${total} · 评论 ${reviews}/${total} · 价格 ${price}/${total} · 分类 ${category}/${total} · 地址 ${address}/${total} · 坐标 ${coordinates}/${total}`
+    : `rating ${rating}/${total} · reviews ${reviews}/${total} · price ${price}/${total} · category ${category}/${total} · address ${address}/${total} · coordinates ${coordinates}/${total}`;
+}
+
+async function strengthenCandidatesThroughMaps(
+  candidates: PlannerTripPlace[],
+): Promise<{ attempted: number; enriched: number; failed: number; merged: PlannerTripPlace[] } | null> {
+  const eligible = candidates.filter((place) => place.source_provider === 'google_maps' && Boolean(place.source_place_id));
+  if (eligible.length === 0) return null;
+
+  const tab = await findGoogleMapsTab();
+  if (!tab?.id) throw new Error(t().strengthenNeedsGoogleMaps);
+  const response = await chrome.tabs.sendMessage(tab.id, {
+    type: 'OWNLY_ENRICH_SAVED_LIST',
+    savedList: {
+      listName: 'Ownly candidates',
+      listUrl: tab.url || '',
+      detectedCurrency: store.pageDetectedCurrency,
+      places: eligible.map(researchPlaceFromPlanner),
+    } satisfies DetectedSavedList,
+    overrideCurrency: store.mapCurrencyOverride,
+    force: true,
+  }) as { savedList?: DetectedSavedList | null; attempted?: number; enriched?: number; failed?: number } | undefined;
+
+  const targetIds = new Set(eligible.map((place) => place.id));
+  const latestTargets = store.state.pendingPlaces.filter((place) => targetIds.has(place.id));
+  const merged = mergeDetectedResearchIntoPlannerPlaces(
+    latestTargets,
+    response?.savedList?.places ?? [],
+    store.mapCurrencyOverride || store.pageDetectedCurrency,
+  );
+  const mergedById = new Map(merged.map((place) => [place.id, place] as const));
+  store.state = {
+    ...store.state,
+    pendingPlaces: store.state.pendingPlaces.map((place) => mergedById.get(place.id) ?? place),
+  };
+  await saveState();
+  return {
+    attempted: response?.attempted ?? 0,
+    enriched: response?.enriched ?? 0,
+    failed: response?.failed ?? 0,
+    merged,
+  };
 }
 
 let searchDebounce: number | undefined;
@@ -498,7 +585,7 @@ export function initHandlers(): void {
     else checkboxes.forEach((c) => { if (c.dataset.placeId) store.bulkSelected.add(c.dataset.placeId); });
   });
 
-  // One-click Enrich All candidates in active trip
+  // One-click strengthen all Google Maps candidates in the active trip.
   el.btnEnrichCandidates.addEventListener('click', () => {
     void (async () => {
       const dict = t();
@@ -507,67 +594,41 @@ export function initHandlers(): void {
         setStatus(dict.tripRequiredError, 'error');
         return;
       }
-      const candidates = store.state.pendingPlaces.filter((p) => p.trip_id === context.tripId);
+      const candidates = store.state.pendingPlaces.filter((place) => place.trip_id === context.tripId);
       if (candidates.length === 0) {
         setStatus(dict.emptyCandidates, 'muted');
         return;
       }
-
-      setStatus(store.lang === 'zh' ? '正在智能补全地点信息…' : 'Enriching candidate places…');
-      const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
-        candidates,
-        (processed, total, currentPlace) => {
-          setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
-          renderCandidatesList();
-        }
-      );
-
-      if (totalEnriched > 0) {
-        const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
-        store.state = {
-          ...store.state,
-          pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
-        };
-        await saveState();
-        setStatus(dict.enrichComplete(totalEnriched), 'success');
-      } else {
-        setStatus(dict.enrichNoneNeeded, 'muted');
+      setStatus(dict.strengtheningStart(candidates.length));
+      const result = await strengthenCandidatesThroughMaps(candidates);
+      if (!result) {
+        setStatus(dict.strengthenNoResolvable, 'muted');
+        return;
       }
-      renderCandidatesList();
-    })().catch((error) => setStatus(String(error), 'error'));
+      setStatus(
+        `${dict.strengthenComplete(result.enriched, result.attempted, result.failed)} · ${formatStrengthenCoverage(result.merged)}`,
+        result.failed === result.attempted && result.attempted > 0 ? 'error' : 'success',
+      );
+    })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
   });
 
-  // Bulk Enrich Selected candidates
   el.btnBulkEnrich.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      const selectedIds = store.bulkSelected;
-      if (selectedIds.size === 0) return;
-      const targetPlaces = store.state.pendingPlaces.filter((p) => selectedIds.has(p.id));
-      if (targetPlaces.length === 0) return;
-
-      setStatus(store.lang === 'zh' ? '正在智能补全选中地点…' : 'Enriching selected places…');
-      const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
-        targetPlaces,
-        (processed, total, currentPlace) => {
-          setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
-          renderCandidatesList();
-        }
-      );
-
-      if (totalEnriched > 0) {
-        const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
-        store.state = {
-          ...store.state,
-          pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
-        };
-        await saveState();
-        setStatus(dict.enrichComplete(totalEnriched), 'success');
-      } else {
-        setStatus(dict.enrichNoneNeeded, 'muted');
+      if (store.bulkSelected.size === 0) return;
+      const selected = new Set(store.bulkSelected);
+      const candidates = store.state.pendingPlaces.filter((place) => selected.has(place.id));
+      setStatus(dict.strengtheningStart(candidates.length));
+      const result = await strengthenCandidatesThroughMaps(candidates);
+      if (!result) {
+        setStatus(dict.strengthenNoResolvable, 'muted');
+        return;
       }
-      renderCandidatesList();
-    })().catch((error) => setStatus(String(error), 'error'));
+      setStatus(
+        `${dict.strengthenComplete(result.enriched, result.attempted, result.failed)} · ${formatStrengthenCoverage(result.merged)}`,
+        result.failed === result.attempted && result.attempted > 0 ? 'error' : 'success',
+      );
+    })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
   });
 
   el.btnBackupState.addEventListener('click', () => {
@@ -630,6 +691,7 @@ export function initHandlers(): void {
             type: 'OWNLY_ENRICH_SAVED_LIST',
             savedList,
             overrideCurrency: store.mapCurrencyOverride,
+            force: true,
           }) as { savedList?: DetectedSavedList | null; attempted?: number; enriched?: number; failed?: number } | undefined;
           if (enriched?.savedList?.places?.length) {
             savedList = enriched.savedList;
