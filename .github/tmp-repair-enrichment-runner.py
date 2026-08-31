@@ -11,8 +11,8 @@ text = text.replace(
     "enrichNoneNeeded: 'Selected candidates already have complete info and prices.',",
     "enrichNoneNeeded: 'Selected candidates already have complete details and prices.',",
 )
-text = text.replace(
-    "  });\\n\\n  el.btnBackupState.addEventListener\"\"\",",
-    "  });\\n\\n\"\"\",",
-)
+needle = '  el.btnBackupState.addEventListener""",\n)'
+if text.count(needle) != 1:
+    raise SystemExit(f'Expected one duplicated backup handler marker, found {text.count(needle)}')
+text = text.replace(needle, '""",\n)', 1)
 p.write_text(text)
