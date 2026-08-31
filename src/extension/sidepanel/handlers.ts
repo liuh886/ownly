@@ -1,4 +1,4 @@
-import { expandAndExtractListId, resolveGoogleMapsListByUrl } from '../api';
+import { expandAndExtractListId } from '../api';
 import {
   ensurePlaceKindTag,
   findExistingTripPlace,
@@ -248,31 +248,29 @@ function buildPlaceFromDetected(
  * (correct authuser/cookie context for multi-account users), falling back to
  * the legacy side-panel fetch when no tab is available.
  */
-async function resolveListPlacesSmart(
-  line: string,
-  activeTrip?: CaptureContext,
-): Promise<PlannerTripPlace[] | null> {
+async function resolveListPlacesSmart(line: string, activeTrip?: CaptureContext): Promise<PlannerTripPlace[] | null> {
   const ref = await expandAndExtractListId(line);
   if (!ref) return null;
 
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id && /^https:\/\/(www\.google\.[a-z.]+|maps\.google\.[a-z.]+)/i.test(tab.url ?? '')) {
-      const resp = await chrome.tabs.sendMessage(tab.id, {
-        type: 'OWNLY_FETCH_LIST_BY_ID',
-        listUrl: ref.finalUrl,
-        listId: ref.listId,
-      }) as { savedList?: DetectedSavedList | null } | undefined;
-      if (resp && 'savedList' in resp) {
-        const places = resp.savedList?.places ?? [];
-        const now = new Date().toISOString();
-        const tripTags = activeTrip?.tags ?? [];
-        return places.map((p) => buildPlaceFromDetected(p, activeTrip?.tripId || '', tripTags, now));
-      }
-    }
-  } catch {}
+  const tab = await findGoogleMapsTab();
+  if (!tab?.id) {
+    throw new Error(t().strengthenNeedsGoogleMaps);
+  }
 
-  return resolveGoogleMapsListByUrl(line, activeTrip);
+  const resp = await chrome.tabs.sendMessage(tab.id, {
+    type: 'OWNLY_FETCH_LIST_BY_ID',
+    listUrl: ref.finalUrl,
+    listId: ref.listId,
+  }) as { savedList?: DetectedSavedList | null } | undefined;
+
+  if (resp && 'savedList' in resp) {
+    const places = resp.savedList?.places ?? [];
+    const now = new Date().toISOString();
+    const tripTags = activeTrip?.tags ?? [];
+    return places.map((p) => buildPlaceFromDetected(p, activeTrip?.tripId || '', tripTags, now));
+  }
+
+  return [];
 }
 
 
@@ -758,6 +756,17 @@ export function initHandlers(): void {
             ...store.state,
             pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
           };
+          if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
+            const idByTitle = new Map(enrichedPlaces.filter((p) => p.source_place_id).map((p) => [cleanExtractedText(p.title).toLowerCase(), p.source_place_id!]));
+            store.detectedSavedList = {
+              ...store.detectedSavedList,
+              places: store.detectedSavedList.places.map((dp) => {
+                if (dp.sourcePlaceId) return dp;
+                const resolved = idByTitle.get(cleanExtractedText(dp.title).toLowerCase());
+                return resolved ? { ...dp, sourcePlaceId: resolved } : dp;
+              }),
+            };
+          }
           await saveState();
         }
       }
@@ -962,49 +971,77 @@ export function initHandlers(): void {
           : undefined;
         const effectivePrice = item.priceLevel || validExistingPrice;
         const normalizedPrice = normalizeObservedPrice(effectivePrice, item.detectedCurrency || savedList.detectedCurrency || store.pageDetectedCurrency);
-        const captured: PlannerTripPlace = {
-          schema_version: '0.1',
-          type: 'trip_place',
-          id,
-          trip_id: context.tripId,
-          title,
-          source_provider: item.sourceProvider || 'google_maps',
-          source_url: item.sourceUrl,
-          source_place_id: item.sourcePlaceId ?? existing?.source_place_id,
-          source_category: item.category ? cleanExtractedText(item.category) : existing?.source_category,
-          kind: existing?.kind ?? kind,
-          area: existing?.area ?? address?.split(/[,，·]/)[0]?.trim(),
-          priority: existing?.priority ?? 'want',
-          tags: ensurePlaceKindTag(Array.from(new Set([...(existing?.tags ?? []), ...(context.tags ?? []), savedList.listName])), existing?.kind ?? kind, store.lang),
-          why: existing?.why ?? item.userNote ?? item.summary,
-          signals: existing?.signals ?? [],
-          risks: existing?.risks ?? [],
-          notes: existing?.notes ?? item.userNote,
-          observed_rating: item.rating ?? existing?.observed_rating,
-          observed_review_count: item.reviewCount ?? existing?.observed_review_count,
-          observed_price: effectivePrice,
-          price_currency: normalizedPrice?.currency ?? (validExistingPrice ? existing?.price_currency : undefined),
-          price_min: normalizedPrice?.min,
-          price_max: normalizedPrice?.max,
-          price_unit: normalizedPrice?.unit,
-          price_level: normalizedPrice?.level,
-          observed_at: today(),
-          preferred_window: existing?.preferred_window,
-          duration_minutes: existing?.duration_minutes,
-          open_hours: item.openHours ?? existing?.open_hours,
-          address: address ?? existing?.address,
-          coordinates: item.coordinates ?? existing?.coordinates,
-          phone: item.phone ?? existing?.phone,
-          plus_code: item.plusCode ?? existing?.plus_code,
-          menu_url: item.menuUrl ?? existing?.menu_url,
-          reservation_url: item.reservationUrl ?? existing?.reservation_url,
-          review_topics: item.reviewTopics ?? existing?.review_topics,
-          types: Array.from(new Set([...(item.types ?? []), ...(existing?.types ?? [])])),
-          reservation_status: 'none',
-          state: 'candidate',
-          created_at: existing?.created_at ?? now,
-          updated_at: now,
-        };
+        let captured: PlannerTripPlace;
+        if (existing) {
+          captured = mergeCapturedPlaceResearch(existing, {
+            ...existing,
+            title: title || existing.title,
+            source_provider: item.sourceProvider || 'google_maps',
+            source_url: item.sourceUrl || existing.source_url,
+            source_place_id: item.sourcePlaceId ?? existing.source_place_id,
+            source_category: item.category ? cleanExtractedText(item.category) : existing.source_category,
+            address: address ?? existing.address,
+            coordinates: item.coordinates ?? existing.coordinates,
+            phone: item.phone ?? existing.phone,
+            plus_code: item.plusCode ?? existing.plus_code,
+            menu_url: item.menuUrl ?? existing.menu_url,
+            reservation_url: item.reservationUrl ?? existing.reservation_url,
+            review_topics: item.reviewTopics ?? existing.review_topics,
+            observed_rating: item.rating ?? existing.observed_rating,
+            observed_review_count: item.reviewCount ?? existing.observed_review_count,
+            observed_price: effectivePrice,
+            price_currency: normalizedPrice?.currency ?? (validExistingPrice ? existing.price_currency : undefined),
+            price_min: normalizedPrice?.min,
+            price_max: normalizedPrice?.max,
+            price_unit: normalizedPrice?.unit,
+            price_level: normalizedPrice?.level,
+            open_hours: item.openHours ?? existing.open_hours,
+            types: Array.from(new Set([...(item.types ?? []), ...(existing.types ?? [])])),
+            updated_at: now,
+          });
+        } else {
+          captured = {
+            schema_version: '0.1',
+            type: 'trip_place',
+            id,
+            trip_id: context.tripId,
+            title,
+            source_provider: item.sourceProvider || 'google_maps',
+            source_url: item.sourceUrl,
+            source_place_id: item.sourcePlaceId,
+            source_category: item.category ? cleanExtractedText(item.category) : undefined,
+            kind,
+            area: address?.split(/[,，·]/)[0]?.trim(),
+            priority: 'want',
+            tags: ensurePlaceKindTag(Array.from(new Set([...(context.tags ?? []), savedList.listName])), kind, store.lang),
+            why: item.userNote ?? item.summary,
+            signals: [],
+            risks: [],
+            notes: item.userNote,
+            observed_rating: item.rating,
+            observed_review_count: item.reviewCount,
+            observed_price: effectivePrice,
+            price_currency: normalizedPrice?.currency,
+            price_min: normalizedPrice?.min,
+            price_max: normalizedPrice?.max,
+            price_unit: normalizedPrice?.unit,
+            price_level: normalizedPrice?.level,
+            observed_at: today(),
+            open_hours: item.openHours,
+            address,
+            coordinates: item.coordinates,
+            phone: item.phone,
+            plus_code: item.plusCode,
+            menu_url: item.menuUrl,
+            reservation_url: item.reservationUrl,
+            review_topics: item.reviewTopics,
+            types: item.types ?? [],
+            reservation_status: 'none',
+            state: 'candidate',
+            created_at: now,
+            updated_at: now,
+          };
+        }
         mergedPending.set(id, captured);
         importedCount += 1;
       }
@@ -1032,6 +1069,17 @@ export function initHandlers(): void {
             ...store.state,
             pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
           };
+          if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
+            const idByTitle = new Map(enrichedPlaces.filter((p) => p.source_place_id).map((p) => [cleanExtractedText(p.title).toLowerCase(), p.source_place_id!]));
+            store.detectedSavedList = {
+              ...store.detectedSavedList,
+              places: store.detectedSavedList.places.map((dp) => {
+                if (dp.sourcePlaceId) return dp;
+                const resolved = idByTitle.get(cleanExtractedText(dp.title).toLowerCase());
+                return resolved ? { ...dp, sourcePlaceId: resolved } : dp;
+              }),
+            };
+          }
           await saveState();
           renderCandidatesList();
         }

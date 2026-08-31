@@ -34,8 +34,8 @@ export function isCandidateMissingData(place: PlannerTripPlace): boolean {
   const isMissingPrice = Boolean(isStay && (!place.observed_price || isZeroOrPlaceholderPrice(place.observed_price)));
   return (
     !place.source_place_id ||
-    !place.observed_rating ||
-    !place.observed_review_count ||
+    place.observed_rating === undefined ||
+    place.observed_review_count === undefined ||
     isMissingPrice ||
     !place.source_category ||
     !place.address ||

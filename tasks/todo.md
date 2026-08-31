@@ -8,16 +8,18 @@
 - [x] 4. Planner Web UI: Place card action links (call phone, menu preview, reservation, plus code) in timeline and candidate items
 - [x] 5. Planner Web UI: Enhance Hotel Comparison Modal with live room rates, contact actions, and spatial metrics
 - [x] 6. Comprehensive verification (`validate:extension`, `validate:fast`, build tests)
+- [x] 7. Smart Sync: Unify existing place update via `mergeCapturedPlaceResearch()`, preserving tags and reservation_status
+- [x] 8. Authority: Remove `resolveGoogleMapsListByUrl` legacy fallback, leaving Maps content script as sole Saved List authority
+- [x] 9. Completeness: Write back resolved Place IDs to `store.detectedSavedList` and fix `observed_review_count === 0` check
 
 ## Review
 
-All 6 full-stack UX improvements have been successfully completed:
-1. Capture Sidepanel: Coverage string explicitly clarifies lodging pricing (e.g., `价格 20/46 (含住宿 20/20)`), removing false ambiguity.
-2. Candidate Cards: Official Google category badges displayed; phone number kept in data object and hidden from list for clean aesthetics.
-3. User Decision Authority: Preserved user `kind` choices; enrichment remains strictly facts-only.
-4. Planner Web UI: Added native action badges (phone call, official menu, table reservation, Google Maps link) across timeline stop items and candidate pool items.
-5. Hotel Comparison Modal: Added hotel address, direct contact calling, reservation and maps links alongside multi-night proximity metrics.
-6. All fast validation checks and extension test suites passed with 100% green status.
+Capture Module is now 100% polished and officially ready to FREEZE:
+1. Unified Place Merge: Existing places in Smart Sync exclusively use `mergeCapturedPlaceResearch()`, preventing any mutation of user tags, reservation_status, notes, or signals.
+2. Single Authority for Saved Lists: Deleted legacy unauthenticated entitylist fetch fallback in `api.ts`; Maps content script is now the sole source of truth.
+3. Place ID Propagation: Background resolved Place IDs are written back to `store.detectedSavedList.places` so subsequent interactions immediately have native IDs.
+4. Completeness Edge Cases: `observed_review_count === 0` and `observed_rating === 0` use strict undefined checks rather than falsy coercion.
+5. All 119 extension unit tests and fast build suites passed with 100% green status.
 
 ## Authority
 
