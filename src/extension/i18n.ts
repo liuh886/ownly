@@ -4,6 +4,10 @@ export const I18N = {
   zh: {
     toggleFxTooltipLabel: '💱 划词汇率',
     toggleFxTooltipDesc: '开启后在网页框选价格文字时弹出换算浮窗',
+    toggleDebugLabel: '🐛 调试',
+    toggleDebugDesc: '开启后在底部展示详细诊断与实时调试日志',
+    btnSmartSyncEnrichAll: '⚡ 一键同步全部地点',
+    btnSmartSyncPick: '📋 挑选地点',
     subtitle: '多源灵感采集 → Ownly Planner',
     pendingSuffix: '待同步',
     activeTrip: '当前行程',
@@ -189,6 +193,10 @@ export const I18N = {
   en: {
     toggleFxTooltipLabel: '💱 Selection FX',
     toggleFxTooltipDesc: 'Show FX converter when selecting price text',
+    toggleDebugLabel: '🐛 Debug',
+    toggleDebugDesc: 'Show diagnostic log console at the bottom',
+    btnSmartSyncEnrichAll: '⚡ Sync & Enrich All',
+    btnSmartSyncPick: '📋 Select & Import',
     subtitle: 'Multi-source research → Ownly Planner',
     pendingSuffix: 'pending',
     activeTrip: 'Active trip',

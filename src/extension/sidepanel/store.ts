@@ -47,15 +47,19 @@ export const store = {
   isListPreviewOpen: false,
   bulkMode: false,
   bulkSelected: new Set<string>(),
+  debugModeEnabled: false,
 };
+
+export const DEBUG_STORAGE_KEY = 'ownlyDebugMode';
 
 export function t() {
   return I18N[store.lang];
 }
 
 export async function loadState(): Promise<void> {
-  const [langRes, fresh, tabs] = await Promise.all([
+  const [langRes, debugRes, fresh, tabs] = await Promise.all([
     chrome.storage.local.get(LANG_STORAGE_KEY),
+    chrome.storage.local.get(DEBUG_STORAGE_KEY),
     readCaptureState(),
     chrome.tabs.query({ active: true, currentWindow: true }),
   ]);
@@ -65,6 +69,7 @@ export async function loadState(): Promise<void> {
   } else {
     store.lang = detectDefaultLanguage();
   }
+  store.debugModeEnabled = Boolean(debugRes[DEBUG_STORAGE_KEY]);
   const tabId = tabs[0]?.id;
   if (typeof tabId === 'number') {
     const session = await sessionStorage.get(fxOverrideKey(tabId));

@@ -64,6 +64,10 @@ export function applyI18n() {
   el.langToggle.textContent = store.lang === 'zh' ? 'EN' : '中文';
   el.lblFxTooltipToggle.title = dict.toggleFxTooltipDesc;
   el.txtFxTooltipToggle.textContent = dict.toggleFxTooltipLabel;
+  el.lblDebugToggle.title = dict.toggleDebugDesc;
+  el.txtDebugToggle.textContent = dict.toggleDebugLabel;
+  el.toggleDebugMode.checked = store.debugModeEnabled;
+  el.debugDrawer.style.display = store.debugModeEnabled ? 'block' : 'none';
   el.lblActiveTrip.textContent = dict.activeTrip;
   el.sumBulkImport.textContent = dict.sumBulkImport;
   setLeadingLabel(el.lblBulkText, dict.lblBulkText);

@@ -3,6 +3,9 @@ export type ElementMap = {
   toggleFxTooltip: HTMLInputElement;
   lblFxTooltipToggle: HTMLElement;
   txtFxTooltipToggle: HTMLElement;
+  toggleDebugMode: HTMLInputElement;
+  lblDebugToggle: HTMLElement;
+  txtDebugToggle: HTMLElement;
   lblActiveTrip: HTMLElement;
   captureContextTitle: HTMLElement;
   captureContextHint: HTMLElement;
@@ -102,6 +105,9 @@ export const el: ElementMap = {
   toggleFxTooltip: required<HTMLInputElement>('toggleFxTooltip'),
   lblFxTooltipToggle: required('lblFxTooltipToggle'),
   txtFxTooltipToggle: required('txtFxTooltipToggle'),
+  toggleDebugMode: required<HTMLInputElement>('toggleDebugMode'),
+  lblDebugToggle: required('lblDebugToggle'),
+  txtDebugToggle: required('txtDebugToggle'),
   lblActiveTrip: required('lblActiveTrip'),
   captureContextTitle: required('captureContextTitle'),
   captureContextHint: required('captureContextHint'),

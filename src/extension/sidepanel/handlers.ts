@@ -19,7 +19,7 @@ import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
 import { enrichCandidatePlacesBatch, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
-import { getExistingPlaceForUrl, store, t } from './store';
+import { DEBUG_STORAGE_KEY, getExistingPlaceForUrl, store, t } from './store';
 import {
   applyI18n,
   autoFillPlaceForm,
@@ -491,6 +491,15 @@ export function initHandlers(): void {
     store.lang = store.lang === 'zh' ? 'en' : 'zh';
     void chrome.storage.local.set({ [LANG_STORAGE_KEY]: store.lang });
     applyI18n();
+  });
+
+  el.toggleDebugMode.addEventListener('change', () => {
+    store.debugModeEnabled = el.toggleDebugMode.checked;
+    void chrome.storage.local.set({ [DEBUG_STORAGE_KEY]: store.debugModeEnabled });
+    el.debugDrawer.style.display = store.debugModeEnabled ? 'block' : 'none';
+    if (store.debugModeEnabled) {
+      updateDebugLogViewer();
+    }
   });
 
   el.candidatesSearch.addEventListener('input', () => {
