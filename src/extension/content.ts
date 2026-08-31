@@ -906,6 +906,7 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
 async function enrichSavedListDetails(
   list: DetectedSavedList,
   overrideCurrency?: string,
+  force = false,
 ): Promise<{ list: DetectedSavedList; attempted: number; enriched: number; failed: number }> {
   const places = [...list.places];
   let cursor = 0;
@@ -918,7 +919,7 @@ async function enrichSavedListDetails(
       const index = cursor++;
       const place = places[index];
       if (!place.sourcePlaceId) continue;
-      if (place.rating !== undefined && place.reviewCount !== undefined && place.category && place.priceLevel) continue;
+      if (!force && place.rating !== undefined && place.reviewCount !== undefined && place.category && place.priceLevel) continue;
       attempted += 1;
       const facts = await fetchSavedListDetail(place);
       if (!facts) {
@@ -941,11 +942,21 @@ async function enrichSavedListDetails(
             undefined,
           ),
         address: place.address ?? facts.address,
+        coordinates: place.coordinates ?? facts.coordinates,
         website: place.website ?? facts.website,
         phone: place.phone ?? facts.phone,
-        types: place.types?.length ? place.types : facts.types,
+        types: facts.types?.length ? [...new Set([...(place.types ?? []), ...facts.types])] : place.types,
       };
-      if (facts.rating !== undefined || facts.reviewCount !== undefined || facts.category || facts.priceLevel) enriched += 1;
+      if (
+        facts.rating !== undefined
+        || facts.reviewCount !== undefined
+        || facts.category
+        || facts.priceLevel
+        || facts.address
+        || facts.coordinates
+        || facts.phone
+        || facts.types?.length
+      ) enriched += 1;
     }
   };
 
@@ -1205,13 +1216,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (msgType === 'OWNLY_ENRICH_SAVED_LIST') {
     void (async () => {
-      const incoming = (message as { savedList?: DetectedSavedList; overrideCurrency?: string }).savedList;
+      const incoming = (message as { savedList?: DetectedSavedList; overrideCurrency?: string; force?: boolean }).savedList;
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
+      const force = Boolean((message as { force?: boolean }).force);
       if (!incoming?.places?.length) {
         sendResponse({ savedList: incoming ?? null, attempted: 0, enriched: 0, failed: 0 });
         return;
       }
-      const result = await enrichSavedListDetails(incoming, overrideCurrency);
+      const result = await enrichSavedListDetails(incoming, overrideCurrency, force);
       sendResponse({ savedList: result.list, attempted: result.attempted, enriched: result.enriched, failed: result.failed });
     })();
     return true;

@@ -1,7 +1,9 @@
 import {
+  mergeCapturedPlaceResearch,
   normalizeObservedPrice,
   type PlannerTripPlace,
 } from '../domain/planner';
+import type { CurrentResearchPlace } from './content';
 import { extractCleanPriceText } from './utils';
 import {
   extractGoogleMapsResearchFromHtml,
@@ -121,6 +123,63 @@ export async function enrichPlaceMetadata(
   } catch (error) {
     return { place, enriched: false, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+function researchIdentity(place: CurrentResearchPlace): string {
+  return place.sourcePlaceId ? `id:${place.sourcePlaceId}` : `url:${place.sourceUrl}`;
+}
+
+function plannerIdentity(place: PlannerTripPlace): string {
+  return place.source_place_id ? `id:${place.source_place_id}` : `url:${place.source_url}`;
+}
+
+/**
+ * Merges Google Maps content-script research into the latest Planner candidates.
+ * mergeCapturedPlaceResearch keeps Planner-owned decisions authoritative.
+ */
+export function mergeDetectedResearchIntoPlannerPlaces(
+  currentPlaces: PlannerTripPlace[],
+  researchPlaces: CurrentResearchPlace[],
+  fallbackCurrency?: string,
+): PlannerTripPlace[] {
+  const researchByIdentity = new Map(researchPlaces.map((place) => [researchIdentity(place), place] as const));
+  return currentPlaces.map((existing) => {
+    const research = researchByIdentity.get(plannerIdentity(existing));
+    if (!research) return existing;
+
+    const normalizedPrice = normalizeObservedPrice(
+      research.priceLevel,
+      research.detectedCurrency || fallbackCurrency || existing.price_currency,
+    );
+    const now = new Date().toISOString();
+    return mergeCapturedPlaceResearch(existing, {
+      ...existing,
+      title: research.title || existing.title,
+      source_provider: research.sourceProvider || existing.source_provider,
+      source_url: research.sourceUrl || existing.source_url,
+      source_place_id: research.sourcePlaceId ?? existing.source_place_id,
+      source_category: research.category,
+      observed_rating: research.rating,
+      observed_review_count: research.reviewCount,
+      observed_price: research.priceLevel,
+      price_currency: normalizedPrice?.currency,
+      price_min: normalizedPrice?.min,
+      price_max: normalizedPrice?.max,
+      price_unit: normalizedPrice?.unit,
+      price_level: normalizedPrice?.level,
+      observed_at: now.slice(0, 10),
+      open_hours: research.openHours,
+      address: research.address,
+      coordinates: research.coordinates,
+      phone: research.phone,
+      plus_code: research.plusCode,
+      menu_url: research.menuUrl,
+      reservation_url: research.reservationUrl,
+      review_topics: research.reviewTopics,
+      types: research.types,
+      updated_at: now,
+    });
+  });
 }
 
 /**
