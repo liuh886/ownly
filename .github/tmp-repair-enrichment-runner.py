@@ -11,4 +11,8 @@ text = text.replace(
     "enrichNoneNeeded: 'Selected candidates already have complete info and prices.',",
     "enrichNoneNeeded: 'Selected candidates already have complete details and prices.',",
 )
+text = text.replace(
+    "  });\\n\\n  el.btnBackupState.addEventListener\"\"\",",
+    "  });\\n\\n\"\"\",",
+)
 p.write_text(text)
