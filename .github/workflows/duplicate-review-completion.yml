@@ -1,0 +1,48 @@
+name: Complete duplicate review flow
+
+on:
+  push:
+    branches:
+      - release/preflight-identity-authority
+    paths:
+      - .github/workflows/duplicate-review-completion.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: release/preflight-identity-authority
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply duplicate review completion
+        run: python .github/scripts/duplicate_review_completion.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate duplicate review completion
+        run: |
+          npm run validate:fast
+          npx vitest run src/domain/place-identity.test.ts src/domain/planner.test.ts src/services/PlannerRepository.schedule.test.ts src/services/PlannerRepository.thailand-golden-path.test.ts
+          npm run validate:extension
+
+      - name: Commit verified completion
+        shell: bash
+        run: |
+          git config user.name "ownly-agent"
+          git config user.email "actions@users.noreply.github.com"
+          rm .github/workflows/duplicate-review-completion.yml
+          rm .github/scripts/duplicate_review_completion.py
+          git add src/domain/planner.ts src/domain/planner.test.ts src/services/PlannerRepository.schedule.test.ts src/components/planner/PlannerHome.tsx docs/PLANNER_CAPTURE_RELEASE_READINESS.md .github/workflows/duplicate-review-completion.yml .github/scripts/duplicate_review_completion.py
+          git commit -m "fix(planner): persist duplicate review decisions"
+          git push origin HEAD:release/preflight-identity-authority
