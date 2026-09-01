@@ -228,10 +228,26 @@ export async function enrichPlaceMetadata(
             mutated = true;
           }
 
-          // If price has been enriched or place is complete, return successfully.
-          if (next.observed_price || !next.source_place_id) {
-            if (mutated) next.updated_at = new Date().toISOString();
-            return { place: next, enriched: mutated };
+          if (!next.observed_price) {
+            const titlePrice = extractCleanPriceText(next.title);
+            const whyPrice = extractCleanPriceText(next.why);
+            const notePrice = extractCleanPriceText(next.notes);
+            const foundPrice = titlePrice || whyPrice || notePrice;
+            if (foundPrice && !isZeroOrPlaceholderPrice(foundPrice)) {
+              next.observed_price = foundPrice;
+              const normalized = normalizeObservedPrice(foundPrice, effectiveCurrency);
+              if (normalized?.min !== undefined) next.price_min = normalized.min;
+              if (normalized?.max !== undefined) next.price_max = normalized.max;
+              if (normalized?.currency) next.price_currency = normalized.currency;
+              if (normalized?.level !== undefined) next.price_level = normalized.level;
+              if (normalized?.unit) next.price_unit = normalized.unit;
+              mutated = true;
+            }
+          }
+
+          if (mutated) {
+            next.updated_at = new Date().toISOString();
+            return { place: next, enriched: true };
           }
         }
       } catch (err) {

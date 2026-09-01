@@ -409,6 +409,43 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
     }
   }
 
+  // APP_INITIALIZATION_STATE fallback
+  const appInitMatch = /window\.APP_INITIALIZATION_STATE\s*=\s*(\[[\s\S]*?\]);/.exec(html);
+  if (appInitMatch?.[1]) {
+    try {
+      const state = JSON.parse(appInitMatch[1]);
+      if (Array.isArray(state)) {
+        const queue: unknown[] = [...state];
+        let scannedState = 0;
+        while (queue.length > 0 && scannedState < 100) {
+          const item = queue.shift();
+          scannedState += 1;
+          if (typeof item === 'string') {
+            const clean = item.replace(/^\)\]\}'\s*/, '');
+            try {
+              const parsed = JSON.parse(clean);
+              const facts = extractGoogleMapsPreviewFacts(parsed);
+              if (facts.rating !== undefined && result.rating === undefined) result.rating = facts.rating;
+              if (facts.reviewCount !== undefined && result.reviewCount === undefined) result.reviewCount = facts.reviewCount;
+              if (facts.category && !result.category) result.category = facts.category;
+              if (facts.address && !result.address) result.address = facts.address;
+              if (facts.phone && !result.phone) result.phone = facts.phone;
+              if (facts.coordinates && !result.coordinates) result.coordinates = facts.coordinates;
+              if (facts.priceLevel && !result.priceLevel) result.priceLevel = facts.priceLevel;
+              if (facts.priceCurrency && !result.priceCurrency) result.priceCurrency = facts.priceCurrency;
+              if (facts.open_hours && !result.open_hours) result.open_hours = facts.open_hours;
+              if (facts.types && facts.types.length > 0) {
+                facts.types.forEach((t) => types.add(t));
+              }
+            } catch {}
+          } else if (Array.isArray(item)) {
+            queue.push(...item.slice(0, 20));
+          }
+        }
+      }
+    } catch {}
+  }
+
   if (types.size > 0) result.types = [...types];
   return result;
 }
