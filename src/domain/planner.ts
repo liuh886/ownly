@@ -1321,7 +1321,7 @@ export interface TripSettlementResult {
 
 const SYMBOL_TO_CODE: Record<string, string> = {
   '¥': 'CNY', '￥': 'CNY', '円': 'JPY', '日元': 'JPY', '元': 'CNY', '块': 'CNY', '人民币': 'CNY',
-  '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '铢': 'THB', '泰铢': 'THB', '₩': 'KRW', '원': 'KRW', '韩元': 'KRW',
+  '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '铢': 'THB', '泰铢': 'THB', 'บาท': 'THB', '.-': 'THB', '.–': 'THB', '₩': 'KRW', '원': 'KRW', '韩元': 'KRW',
   'S$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD', 'A$': 'AUD', 'AU$': 'AUD', 'C$': 'CAD', 'CA$': 'CAD', 'NZ$': 'NZD',
   '₫': 'VND', '₹': 'INR', 'RM': 'MYR', 'CHF': 'CHF',
 };
@@ -1379,10 +1379,10 @@ export function effectiveFxRate(
 /** Extracts a normalized ISO-ish currency marker from a free-text price string. */
 export function extractPriceCurrency(raw?: string | null): string | null {
   if (!raw) return null;
-  const specificMatch = /(?:S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|\bRM\b|新台币|人民币|日元|泰铢|韩元)/i.exec(raw);
+  const specificMatch = /(?:S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|\bRM\b|新台币|人民币|日元|泰铢|韩元|บาท|\.-|\.–)/i.exec(raw);
   if (specificMatch) {
     const marker = specificMatch[0].toUpperCase();
-    return SYMBOL_TO_CODE[marker] ?? marker.replace(/\$$/, '');
+    return SYMBOL_TO_CODE[marker] ?? SYMBOL_TO_CODE[specificMatch[0]] ?? marker.replace(/\$$/, '');
   }
 
   const singleMatch = /(?:[¥￥฿$€£₩₫₹円铢元块원])/i.exec(raw);
@@ -1566,16 +1566,24 @@ export interface ConvertedPriceResult {
 
 export function parseDetailedPrice(raw?: string | null): ParsedPriceDetail | null {
   if (!raw || typeof raw !== 'string') return null;
-  const currency = extractPriceCurrency(raw);
+  const text = raw.trim();
+  if (!text) return null;
+
+  // Disallow invalid alphanumeric fragments like "2b-", "3x", "4a"
+  if (/^\d+[a-zA-Z]+-?$/i.test(text)) return null;
+  // Disallow trailing unescaped hyphens like "12-"
+  if (/(?<!\.)[-–—〜~]$/.test(text)) return null;
+
+  const currency = extractPriceCurrency(text);
   
   // Range check: e.g. "฿400–1,000", "¥1000 - 2000", "400 ~ 1000", "400 to 1000"
-  const rangeMatch = /(\d[\d,]*(?:\.\d+)?)\s*[-–—〜~至到|/]\s*(\d[\d,]*(?:\.\d+)?)/.exec(raw);
+  const rangeMatch = /(\d[\d,]*(?:\.\d+)?)\s*[-–—〜~至到|/]\s*(\d[\d,]*(?:\.\d+)?)/.exec(text);
   if (rangeMatch) {
     const min = parseFloat(rangeMatch[1].replace(/,/g, ''));
     const max = parseFloat(rangeMatch[2].replace(/,/g, ''));
     if (Number.isFinite(min) && Number.isFinite(max) && (min > 0 || max > 0)) {
       return {
-        raw,
+        raw: text,
         currency,
         minAmount: min,
         maxAmount: max,
@@ -1585,12 +1593,12 @@ export function parseDetailedPrice(raw?: string | null): ParsedPriceDetail | nul
   }
 
   // Single number check: e.g. "฿500", "JPY 2500", "$120.50"
-  const singleMatch = /(\d[\d,]*(?:\.\d+)?)/.exec(raw);
+  const singleMatch = /(\d[\d,]*(?:\.\d+)?)/.exec(text);
   if (singleMatch) {
     const val = parseFloat(singleMatch[1].replace(/,/g, ''));
     if (Number.isFinite(val) && val > 0) {
       return {
-        raw,
+        raw: text,
         currency,
         minAmount: val,
         maxAmount: val,

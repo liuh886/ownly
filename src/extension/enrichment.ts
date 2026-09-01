@@ -229,10 +229,10 @@ export async function enrichPlaceMetadata(
           }
 
           if (!next.observed_price) {
-            const titlePrice = extractCleanPriceText(next.title);
+            // Only check user-written research notes; NEVER extract prices from place titles
             const whyPrice = extractCleanPriceText(next.why);
             const notePrice = extractCleanPriceText(next.notes);
-            const foundPrice = titlePrice || whyPrice || notePrice;
+            const foundPrice = whyPrice || notePrice;
             if (foundPrice && !isZeroOrPlaceholderPrice(foundPrice)) {
               next.observed_price = foundPrice;
               const normalized = normalizeObservedPrice(foundPrice, effectiveCurrency);
@@ -330,8 +330,8 @@ export async function enrichPlaceMetadata(
       }
     }
 
-    // Price extraction & normalization
-    const extractedPrice = facts.priceLevel || extractCleanPriceText(html.slice(0, 50000));
+    // Price extraction & normalization from structured facts
+    const extractedPrice = facts.priceLevel;
     if (extractedPrice && (!next.observed_price || next.observed_price.length < 2)) {
       next.observed_price = extractedPrice;
       const normalized = normalizeObservedPrice(extractedPrice, facts.priceCurrency);
