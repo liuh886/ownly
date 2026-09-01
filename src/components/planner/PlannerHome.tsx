@@ -1188,120 +1188,143 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   }
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={selectedTripId}
-              onChange={(event) => {
-                setSelectedTripId(event.target.value);
-                setActiveFilter('all');
-              }}
-              className="max-w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-900 outline-none focus:border-stone-400"
-              aria-label={zh ? '选择行程' : 'Select trip'}
-            >
-              {trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
-            </select>
+    <section className="space-y-3.5">
+      <header className="flex flex-col gap-3 rounded-2xl border border-stone-200/90 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative">
+              <select
+                value={selectedTripId}
+                onChange={(event) => {
+                  setSelectedTripId(event.target.value);
+                  setActiveFilter('all');
+                }}
+                className="max-w-full rounded-xl border border-stone-300 bg-stone-50/80 px-3.5 py-2 text-sm font-bold text-stone-900 shadow-2xs outline-none transition focus:border-stone-900 focus:bg-white cursor-pointer"
+                aria-label={zh ? '选择行程' : 'Select trip'}
+              >
+                {trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
+              </select>
+            </div>
             <button
               type="button"
               onClick={() => setIsCreateTripOpen(true)}
-              className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 hover:text-stone-950 transition"
+              className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-950 active:scale-98"
               title={zh ? '创建新行程' : 'Create new trip'}
             >
               + {zh ? '新建行程' : 'New Trip'}
             </button>
-            <span className="text-xs text-stone-400">
-              {selectedTrip.start_date} → {selectedTrip.end_date}
-            </span>
+            <div className="inline-flex items-center gap-1.5 rounded-lg bg-stone-100/80 px-2.5 py-1 text-xs font-medium text-stone-600">
+              <span>📅</span>
+              <span>{selectedTrip.start_date} → {selectedTrip.end_date}</span>
+              <span className="text-stone-400">({tripDates.length}{zh ? '天' : 'd'})</span>
+            </div>
           </div>
-          <p className="mt-1 text-xs text-stone-400">{selectedTrip.destinations.join(' · ') || (zh ? '未填写目的地' : 'No destinations')}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+            <span className="font-medium text-stone-700">
+              📍 {selectedTrip.destinations.join(' · ') || (zh ? '未填写目的地' : 'No destinations')}
+            </span>
+            {currentMembers.length > 0 ? (
+              <span className="inline-flex items-center gap-1 text-[11px] text-stone-400">
+                👥 {currentMembers.join(', ')}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {capturePending === null ? (
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Capture Status & Sync */}
+          <div className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50/70 p-1">
+            {capturePending === null ? (
+              <button
+                type="button"
+                onClick={() => setGuideOpen(true)}
+                className="rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100"
+                title={zh ? '未检测到扩展，点击查看安装步骤' : 'Extension offline, click to view installation guide'}
+              >
+                {zh ? 'Capture 未连接' : 'Capture offline'}
+              </button>
+            ) : (
+              <span className="px-2 text-[11px] font-semibold text-stone-600">
+                {`${capturePending} ${zh ? '待同步' : 'pending'}`}
+              </span>
+            )}
             <button
               type="button"
-              onClick={() => setGuideOpen(true)}
-              className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100"
-              title={zh ? '未检测到扩展，点击查看安装步骤' : 'Extension offline, click to view installation guide'}
+              onClick={() => void syncCapture()}
+              disabled={busy}
+              className="rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-stone-800 shadow-2xs transition hover:bg-stone-100 hover:text-stone-950 disabled:opacity-50"
             >
-              {zh ? 'Capture 未连接 · 安装扩展' : 'Capture offline · Install guide'}
+              {busy ? '…' : (zh ? '🔄 同步' : '🔄 Sync')}
             </button>
-          ) : (
-            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500">
-              {`${capturePending} ${zh ? '待同步' : 'pending'}`}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => void syncCapture()}
-            disabled={busy}
-            className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50 disabled:opacity-50"
-          >
-            {busy ? '…' : (zh ? '同步 Capture' : 'Sync Capture')}
-          </button>
+          </div>
+
           <button
             type="button"
             onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
+            className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-900 active:scale-98"
             title={zh ? '从剪贴板、Google Maps 链接、KML、CSV 或 JSON 批量导入候选' : 'Import candidates from clipboard, links, KML, CSV, or JSON'}
           >
             <span>📥</span>
-            <span>{zh ? '导入候选' : 'Import'}</span>
+            <span>{zh ? '导入' : 'Import'}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => void copyMarkdownItinerary()}
-            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
-            title={zh ? '一键复制 Markdown 完整行程单至剪贴板' : 'Copy complete Markdown itinerary to clipboard'}
-          >
-            <span>📋</span>
-            <span>{zh ? '复制行程单' : 'Copy Markdown'}</span>
-          </button>
+
           <button
             type="button"
             onClick={() => setIsCalendarModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/80 px-3 py-2 text-xs font-bold text-amber-900 shadow-2xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-98"
+            className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs font-bold text-amber-900 shadow-2xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-98"
             title={zh ? '导出 .ics 日历文件或设置 Google/Apple Calendar 持续订阅源' : 'Export .ics or setup Google/Apple Calendar Feed'}
           >
             <span>📅</span>
-            <span>{zh ? '日历与订阅' : 'Calendar & Feed'}</span>
+            <span>{zh ? '日历订阅' : 'Calendar'}</span>
             {selectedTrip?.calendar_feed?.enabled ? (
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             ) : null}
           </button>
+
           <button
             type="button"
-            onClick={() => {
-              setIsPoolCollapsed(false);
-              document.getElementById('research-pool-section')?.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:border-stone-300 active:scale-98"
-            title={zh ? '跳转至下方候选池' : 'Jump to Research Pool below'}
+            onClick={() => void copyMarkdownItinerary()}
+            className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-900 active:scale-98"
+            title={zh ? '一键复制 Markdown 完整行程单至剪贴板' : 'Copy complete Markdown itinerary to clipboard'}
           >
-            <span>🗂️</span>
-            <span>{zh ? '候选池' : 'Pool'}</span>
-            <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[10px] font-bold text-stone-600">
-              {pendingCandidates.length}
-            </span>
+            <span>📋</span>
+            <span>{zh ? '行程单' : 'Copy'}</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {notice ? <div aria-live="polite" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">{notice}</div> : null}
+      {notice ? <div aria-live="polite" className="rounded-xl bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 shadow-2xs animate-in fade-in">{notice}</div> : null}
 
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {tripDates.map((date, index) => (
-          <button
-            key={date}
-            type="button"
-            onClick={() => setSelectedDate(date)}
-            className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition ${activeDate === date ? 'bg-stone-950 text-white' : 'bg-white text-stone-500 ring-1 ring-stone-200 hover:text-stone-900'}`}
-          >
-            {zh ? `第${index + 1}天 · ${formatDay(date, language)}` : `Day ${index + 1} · ${formatDay(date, language)}`}
-          </button>
-        ))}
-      </div>
+      <nav className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label={zh ? '日期导航' : 'Date navigation'}>
+        {tripDates.map((date, index) => {
+          const isSelected = activeDate === date;
+          const dayPlacesCount = placesByDate[date]?.length || 0;
+          return (
+            <button
+              key={date}
+              type="button"
+              onClick={() => setSelectedDate(date)}
+              className={`group shrink-0 flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition shadow-2xs ${
+                isSelected
+                  ? 'bg-stone-900 text-white shadow-xs'
+                  : 'border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900'
+              }`}
+            >
+              <span>{zh ? `第${index + 1}天` : `Day ${index + 1}`}</span>
+              <span className={`text-[11px] ${isSelected ? 'text-stone-300' : 'text-stone-400 group-hover:text-stone-500'}`}>
+                {formatDay(date, language)}
+              </span>
+              {dayPlacesCount > 0 ? (
+                <span className={`rounded-full px-1.5 py-0 text-[10px] font-bold ${
+                  isSelected ? 'bg-emerald-500 text-white' : 'bg-stone-100 text-stone-600'
+                }`}>
+                  {dayPlacesCount}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </nav>
 
       {/* Departure Intelligence Bar */}
       {(urgencies.length > 0 || (weatherRelevant && weather.length > 0)) && selectedTrip ? (
@@ -1692,18 +1715,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               await plannerRepository.toggleVisitLock(place.visit_id);
                               await load();
                             }}
-                            className={`h-8 w-8 rounded-md border text-xs transition ${
+                            className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs transition ${
                               place.locked
-                                ? 'border-amber-300 bg-amber-50 text-amber-700 font-bold'
+                                ? 'border-amber-300 bg-amber-50 text-amber-700 font-bold shadow-2xs'
                                 : 'border-stone-200 text-stone-400 hover:bg-stone-50 hover:text-stone-700'
                             }`}
                             title={place.locked ? (zh ? '已固定顺位（真实交通时间优化不会挪动此站）' : 'Pinned (travel-time optimization will not move this stop)') : (zh ? '点击固定此站顺位' : 'Click to pin stop')}
                           >
                             {place.locked ? '📌' : '📍'}
                           </button>
-                          <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↑</button>
-                          <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="h-8 w-8 rounded-md border border-stone-200 text-xs text-stone-500 hover:bg-stone-50 disabled:opacity-30">↓</button>
-                          <button type="button" aria-label={zh ? '移除此访问' : 'Remove visit'} onClick={() => void removeVisit(place)} className="h-8 rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-500 hover:bg-stone-50">{zh ? '移除' : 'Remove'}</button>
+                          <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-xs font-bold text-stone-500 hover:bg-stone-50 disabled:opacity-25 transition">↑</button>
+                          <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-xs font-bold text-stone-500 hover:bg-stone-50 disabled:opacity-25 transition">↓</button>
+                          <button type="button" aria-label={zh ? '从当天日程移除' : 'Remove stop'} onClick={() => void removeVisit(place)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-xs text-stone-400 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition" title={zh ? '从当天日程移除' : 'Remove stop'}>✕</button>
                         </div>
                       </div>
 {index < scheduled.length - 1 ? (
