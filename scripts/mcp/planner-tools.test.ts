@@ -8,7 +8,7 @@ import type { PlannerTripVisit } from '../../src/domain/planner-visits';
 import {
   getPlannerSummary,
   getPlannerTripDetail,
-  getPlannerTripICalMarkdown,
+  getPlannerTripCalendarIcs,
 } from './planner-tools';
 
 const temporaryRoots: string[] = [];
@@ -108,12 +108,15 @@ describe('Planner ledger via vault (smoke through repository contract)', () => {
 });
 
 describe('Planner MCP calendar projection', () => {
-  it('exports only canonical Visit timing facts to iCal Pro Markdown', () => {
+  it('exports only canonical Visit timing facts to deterministic RFC 5545 ICS', () => {
     const { root } = createFixture();
-    const result = getPlannerTripICalMarkdown(root, 'trip-1');
+    const result = getPlannerTripCalendarIcs(root, 'trip-1');
     expect(result.tripId).toBe('trip-1');
     expect(result.title).toBe('Bangkok 2026');
-    expect(result.markdown).toContain('2026-11-01 09:00-10:30');
-    expect(result.markdown).not.toContain('ownly-ai-planner');
+    expect(result.ics).toContain('BEGIN:VCALENDAR');
+    expect(result.ics).toContain('DTSTART:20261101T090000');
+    expect(result.ics).toContain('DTEND:20261101T103000');
+    expect(result.ics).toContain('Grand Palace');
+    expect(result.ics).toContain('END:VCALENDAR');
   });
 });

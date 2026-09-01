@@ -284,16 +284,25 @@ describe('Thailand 2026 Golden Path E2E Journey', () => {
     expect(budget.totalEstimated).toBeGreaterThan(0);
     expect(budget.perPersonEstimated).toBe(Math.round(budget.totalEstimated / 4));
 
-    // 9. Export iCal Pro Projection to Vault
-    const fileName = await plannerRepository.saveTripICalMarkdown(trip.id);
-    expect(fileName).toBe(`trip--${trip.id}.itinerary.md`);
-    const iCalMarkdown = files.get('vault/Trips')?.get(fileName);
-    expect(iCalMarkdown).toContain('Thailand 2026');
-    expect(iCalMarkdown).toContain('The Grand Palace');
-    expect(iCalMarkdown).toContain('Thipsamai Padthai Pratoopee');
-    expect(iCalMarkdown).toContain('09:00-11:00 🏰 The Grand Palace');
-    expect(iCalMarkdown).toContain('11:30-13:00 🏰 Wat Phra Chetuphon');
-    expect(iCalMarkdown).toContain('17:00-18:00 🍜 Thipsamai Padthai');
-    expect(files.get('vault/Trips')?.has(`trip--${trip.id}.itinerary.md`)).toBe(true);
+    // 9. Export Deterministic RFC 5545 ICS Calendar & Calendar Feed
+    const ics = await plannerRepository.exportTripIcs(trip.id);
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain(`X-WR-CALNAME:${trip.title}`);
+    expect(ics).toContain('The Grand Palace');
+    expect(ics).toContain('Wat Phra Chetuphon');
+    expect(ics).toContain('Thipsamai Padthai Pratoopee');
+    expect(ics).toContain('DTSTART:20261005T090000');
+    expect(ics).toContain('DTEND:20261005T110000');
+    expect(ics).toContain('DTSTART:20261005T113000');
+    expect(ics).toContain('DTEND:20261005T130000');
+    expect(ics).toContain('DTSTART:20261005T170000');
+    expect(ics).toContain('DTEND:20261005T180000');
+    expect(ics).toContain('END:VCALENDAR');
+
+    // Verify Calendar Feed Creation (PRO)
+    const feed = await plannerRepository.createOrUpdateCalendarFeed(trip.id);
+    expect(feed.trip_id).toBe(trip.id);
+    expect(feed.feed_token).toHaveLength(32);
+    expect(feed.enabled).toBe(true);
   });
 });

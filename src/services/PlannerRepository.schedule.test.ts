@@ -233,7 +233,7 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(placeRestored?.title).toBe(placeBefore?.title);
   });
 
-  it('saveTripICalMarkdown re-reads canonical places and visits before projection', async () => {
+  it('exportTripIcs produces deterministic RFC 5545 projection with stable UID and timing', async () => {
     const trip: PlannerTrip = {
       schema_version: '0.1', type: 'trip', id: 'trip-1', title: 'Bangkok 2026', status: 'planning',
       start_date: '2026-11-01', end_date: '2026-11-03', destinations: ['Bangkok'], created_at: '2026-08-24T00:00:00.000Z',
@@ -242,10 +242,26 @@ describe('PlannerRepository visit lifecycle', () => {
     const visit = await plannerRepository.addVisit('a', '2026-11-01');
     await plannerRepository.updateVisitTiming(visit!.id, { start: '09:00', duration_minutes: 90 });
 
-    const fileName = await plannerRepository.saveTripICalMarkdown('trip-1');
-    expect(fileName).toBe('trip--trip-1.itinerary.md');
-    const written = files.get('vault/Trips')?.get('trip--trip-1.itinerary.md');
-    expect(written).toContain('09:00-10:30');
+    const ics = await plannerRepository.exportTripIcs('trip-1');
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain(`UID:visit:${visit!.id}@ownly`);
+    expect(ics).toContain('DTSTART:20261101T090000');
+    expect(ics).toContain('DTEND:20261101T103000');
+    expect(ics).toContain('END:VCALENDAR');
+
+    // Test Calendar Feed management (PRO)
+    const feed = await plannerRepository.createOrUpdateCalendarFeed('trip-1');
+    expect(feed.trip_id).toBe('trip-1');
+    expect(feed.feed_token).toHaveLength(32);
+    expect(feed.enabled).toBe(true);
+
+    const rotated = await plannerRepository.rotateCalendarFeed('trip-1');
+    expect(rotated.feed_token).not.toBe(feed.feed_token);
+    expect(rotated.enabled).toBe(true);
+
+    await plannerRepository.disableCalendarFeed('trip-1');
+    const reloaded = (await plannerRepository.listTrips()).find((t) => t.id === 'trip-1');
+    expect(reloaded?.calendar_feed?.enabled).toBe(false);
   });
 
   it('rejects invalid and ordinary cross-midnight visit timing', async () => {

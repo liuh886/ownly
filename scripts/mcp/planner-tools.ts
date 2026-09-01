@@ -20,7 +20,7 @@ import {
   type PlannerTripVisit,
 } from '../../src/domain/planner-visits';
 import { evaluatePlannerDay } from '../../src/domain/planner-schedule';
-import { exportTripToICalProMarkdown, type ICalProExportOptions } from '../../src/domain/ical-pro';
+import { buildTripCalendarIcs, type CalendarExportOptions } from '../../src/domain/calendar-feed';
 
 function requireTrip(dataLocation: string, tripId: string) {
   const entry = listPlannerTrips(dataLocation).find((item) => item.frontmatter.id === tripId);
@@ -146,11 +146,11 @@ export function getPlannerTripDetail(dataLocation: string, tripId: string): Reco
   };
 }
 
-export function getPlannerTripICalMarkdown(
+export function getPlannerTripCalendarIcs(
   dataLocation: string,
   tripId: string,
-  options: ICalProExportOptions = {},
-): { tripId: string; title: string; markdown: string } {
+  options: CalendarExportOptions = {},
+): { tripId: string; title: string; ics: string } {
   const trip = requireTrip(dataLocation, tripId);
   const places = listPlannerPlaces(dataLocation)
     .map((item) => item.frontmatter as unknown as PlannerTripPlace)
@@ -158,5 +158,5 @@ export function getPlannerTripICalMarkdown(
   const visits = listPlannerVisits(dataLocation)
     .map((item) => item.frontmatter as unknown as PlannerTripVisit)
     .filter((visit) => visit.trip_id === tripId);
-  return { tripId: trip.id, title: trip.title, markdown: exportTripToICalProMarkdown(trip, places, visits, options) };
+  return { tripId: trip.id, title: trip.title, ics: buildTripCalendarIcs(trip, places, visits, options) };
 }

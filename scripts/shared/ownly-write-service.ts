@@ -53,7 +53,6 @@ import {
   type PlannerTripPlace,
   type TripExpenseItem,
 } from '../../src/domain/planner';
-import { exportTripToICalProMarkdown } from '../../src/domain/ical-pro';
 import { createPlannerTripVisit, materializePlannerScheduledPlaces, plannerTripVisitFileName, sortPlannerScheduledPlaces, type PlannerTripVisit } from '../../src/domain/planner-visits';
 import { evaluatePlannerScheduleProposal, type PlannerScheduleProposalItem } from '../../src/domain/planner-schedule';
 
@@ -1090,39 +1089,6 @@ export class OwnlyWriteService {
       writeAgentLog(this.dataLocation, 'planner_apply_schedule_proposal', tripId, null, { updated_count: targets.length, warnings });
       return { trip_id: tripId, applied_count: targets.length, warnings };
     });
-  }
-
-  preparePlannerSaveICalMarkdown(tripId: string): PreparedOwnlyOperation {
-    const tripEntry = findPlannerEntry(listPlannerTrips(this.dataLocation), tripId);
-    if (!tripEntry) {
-      throw new OwnlyMutationError(`Trip was not found: ${tripId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
-    }
-    const trip = tripEntry.frontmatter as unknown as PlannerTrip;
-    const placeEntries = listPlannerPlaces(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === tripId);
-    const places = placeEntries.map((entry) => entry.frontmatter as unknown as PlannerTripPlace);
-    const visitEntries = listPlannerVisits(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === tripId);
-    const visits = visitEntries.map((entry) => entry.frontmatter as PlannerTripVisit);
-    const markdown = exportTripToICalProMarkdown(trip, places, visits);
-    const expectedTrip = fingerprint(tripEntry.filePath);
-    const expectedPlaces = new Map(placeEntries.map((entry) => [entry.filePath, fingerprint(entry.filePath)] as const));
-    const expectedVisits = new Map(visitEntries.map((entry) => [entry.filePath, fingerprint(entry.filePath)] as const));
-    const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.trips);
-    const fileName = `trip--${trip.id}.itinerary.md`;
-    const targetPath = join(directory, fileName);
-
-    return this.prepare(
-      'planner_save_ical_markdown',
-      { trip_id: tripId, target_file: fileName, length: markdown.length },
-      () => {
-        assertUnchanged(tripEntry.filePath, expectedTrip);
-        for (const entry of placeEntries) assertUnchanged(entry.filePath, expectedPlaces.get(entry.filePath)!);
-        for (const entry of visitEntries) assertUnchanged(entry.filePath, expectedVisits.get(entry.filePath)!);
-        mkdirSync(directory, { recursive: true });
-        writeFileSync(targetPath, markdown, 'utf8');
-        writeAgentLog(this.dataLocation, 'planner_save_ical_markdown', tripId, null, { file_name: fileName });
-        return { trip_id: tripId, file_name: fileName, file_path: targetPath, saved: true };
-      },
-    );
   }
 
   prepareRestoreObject(id: string): PreparedOwnlyOperation {

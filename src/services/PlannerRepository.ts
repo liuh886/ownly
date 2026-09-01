@@ -16,7 +16,13 @@ import {
   plannerTripVisitFileName,
   type PlannerTripVisit,
 } from '@/domain/planner-visits';
-import { exportTripToICalProMarkdown } from '@/domain/ical-pro';
+import {
+  buildTripCalendarIcs,
+  buildDayCalendarIcs,
+  createTripCalendarFeed,
+  rotateTripCalendarFeed,
+} from '@/domain/calendar-feed';
+import type { PlannerTripCalendarFeed } from '@/domain/planner';
 import { validatePlannerTiming } from '@/domain/planner-schedule';
 import { obsidianService } from './ObsidianFileSystemService';
 
@@ -441,16 +447,73 @@ export class PlannerRepository {
     await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.expenses), expenseFileName(expenseId));
   }
 
-  async saveTripICalMarkdown(tripId: string): Promise<string> {
+  async exportTripIcs(tripId: string): Promise<string> {
     await this.initialize();
     const trip = (await this.listTrips()).find((item) => item.id === tripId);
     if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
     const places = (await this.listPlaces()).filter((place) => place.trip_id === tripId);
     const visits = (await this.listVisits()).filter((visit) => visit.trip_id === tripId);
-    const markdown = exportTripToICalProMarkdown(trip, places, visits);
-    const fileName = `trip--${trip.id}.itinerary.md`;
-    await this.store.writeMarkdownFile(this.directory(PLANNER_DIRECTORIES.trips), fileName, markdown);
-    return fileName;
+    return buildTripCalendarIcs(trip, places, visits);
+  }
+
+  async exportDayIcs(tripId: string, date: string): Promise<string> {
+    await this.initialize();
+    const trip = (await this.listTrips()).find((item) => item.id === tripId);
+    if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+    const places = (await this.listPlaces()).filter((place) => place.trip_id === tripId);
+    const visits = (await this.listVisits()).filter((visit) => visit.trip_id === tripId);
+    return buildDayCalendarIcs(trip, places, visits, date);
+  }
+
+  async createOrUpdateCalendarFeed(tripId: string): Promise<PlannerTripCalendarFeed> {
+    await this.initialize();
+    const trip = (await this.listTrips()).find((item) => item.id === tripId);
+    if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+
+    const feed: PlannerTripCalendarFeed = trip.calendar_feed
+      ? { ...trip.calendar_feed, updated_at: new Date().toISOString(), enabled: true }
+      : createTripCalendarFeed(tripId);
+
+    const updatedTrip: PlannerTrip = {
+      ...trip,
+      calendar_feed: feed,
+      updated_at: new Date().toISOString(),
+    };
+    await this.upsertTrip(updatedTrip);
+    return feed;
+  }
+
+  async rotateCalendarFeed(tripId: string): Promise<PlannerTripCalendarFeed> {
+    await this.initialize();
+    const trip = (await this.listTrips()).find((item) => item.id === tripId);
+    if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+    const currentFeed = trip.calendar_feed || createTripCalendarFeed(tripId);
+    const rotated = rotateTripCalendarFeed(currentFeed);
+    const updatedTrip: PlannerTrip = {
+      ...trip,
+      calendar_feed: rotated,
+      updated_at: new Date().toISOString(),
+    };
+    await this.upsertTrip(updatedTrip);
+    return rotated;
+  }
+
+  async disableCalendarFeed(tripId: string): Promise<boolean> {
+    await this.initialize();
+    const trip = (await this.listTrips()).find((item) => item.id === tripId);
+    if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+    if (!trip.calendar_feed) return false;
+    const disabledFeed: PlannerTripCalendarFeed = {
+      ...trip.calendar_feed,
+      enabled: false,
+      updated_at: new Date().toISOString(),
+    };
+    await this.upsertTrip({
+      ...trip,
+      calendar_feed: disabledFeed,
+      updated_at: new Date().toISOString(),
+    });
+    return true;
   }
 }
 

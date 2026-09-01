@@ -30,7 +30,7 @@ import {
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
 } from '@/domain/planner';
-import { exportTripToICalProMarkdown, ICAL_PRO_PRIORITY_MAP } from '@/domain/ical-pro';
+import { buildTripCalendarIcs, buildDayCalendarIcs } from '@/domain/calendar-feed';
 import { evaluatePlannerDay, type PlannerExecutionTransitionItem, type PlannerTimelineStopItem } from '@/domain/planner-schedule';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
@@ -41,6 +41,7 @@ import { PlannerBudgetLedger } from './PlannerBudgetLedger';
 import { ImportCandidatesModal } from './ImportCandidatesModal';
 import { PlaceTimingModal } from './PlaceTimingModal';
 import { CreateTripModal } from './CreateTripModal';
+import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
 
 interface PlannerHomeProps {
   disabled: boolean;
@@ -244,6 +245,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
   const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
@@ -795,50 +797,59 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     setTimeout(() => setNotice(''), 3000);
   }, [selectedTrip, places, scheduledAll, currentExpenses, language, zh]);
 
-  const copyICalProMarkdown = useCallback(async () => {
+  const downloadFullIcs = useCallback(() => {
     if (!selectedTrip) return;
-    const md = exportTripToICalProMarkdown(selectedTrip, places, visits, { language });
-    await navigator.clipboard.writeText(md);
-    setNotice(
-      zh
-        ? '已复制 iCal Pro 日历投影；时间只来自 Planner 已确认的开始时间与时长。'
-        : 'Copied the iCal Pro calendar projection; timed events only use confirmed Planner start times and durations.',
-    );
-    setTimeout(() => setNotice(''), 4000);
-  }, [selectedTrip, places, visits, language, zh]);
-
-  const downloadICalProMarkdown = useCallback(() => {
-    if (!selectedTrip) return;
-    const md = exportTripToICalProMarkdown(selectedTrip, places, visits, { language });
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language });
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `trip--${selectedTrip.id}.itinerary.md`;
+    a.download = `${selectedTrip.title || 'trip'}.ics`;
     a.click();
     URL.revokeObjectURL(url);
-    setNotice(
-      zh
-        ? '已下载 iCal Pro 日历投影 (.md)；可放入 Obsidian Vault 由 iCal Pro 生成订阅源。'
-        : 'Downloaded the iCal Pro calendar projection (.md).',
-    );
+    setNotice(zh ? '✓ 已下载全行程 .ics 日历文件！' : '✓ Downloaded full trip .ics file!');
+    setTimeout(() => setNotice(''), 3500);
   }, [selectedTrip, places, visits, language, zh]);
 
-  const saveICalProMarkdownToVault = useCallback(async () => {
+  const downloadDayIcs = useCallback((date: string) => {
     if (!selectedTrip) return;
-    try {
-      const fileName = await plannerRepository.saveTripICalMarkdown(selectedTrip.id);
-      setNotice(
-        zh
-          ? `已更新 Trips/${fileName} 日历投影；订阅日历将在客户端下一次刷新时更新。`
-          : `Updated Trips/${fileName}; subscribed calendars will update on their next client refresh.`,
-      );
-      setTimeout(() => setNotice(''), 4000);
-    } catch (err) {
-      setNotice(zh ? `保存至 Vault 失败: ${String(err)}` : `Failed to save to Vault: ${String(err)}`);
-      setTimeout(() => setNotice(''), 4000);
-    }
-  }, [selectedTrip, zh]);
+    const ics = buildDayCalendarIcs(selectedTrip, places, visits, date, { language });
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedTrip.title || 'trip'}-${date}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(zh ? `✓ 已下载 ${date} 当天 .ics 日历文件！` : `✓ Downloaded day .ics file for ${date}!`);
+    setTimeout(() => setNotice(''), 3500);
+  }, [selectedTrip, places, visits, language, zh]);
+
+  const copyIcsContent = useCallback(async () => {
+    if (!selectedTrip) return;
+    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language });
+    await navigator.clipboard.writeText(ics);
+    setNotice(zh ? '✓ 已复制 RFC 5545 ICS 日历文本至剪贴板！' : '✓ Copied RFC 5545 ICS calendar text to clipboard!');
+    setTimeout(() => setNotice(''), 3500);
+  }, [selectedTrip, places, visits, language, zh]);
+
+  const handleCreateOrUpdateFeed = useCallback(async () => {
+    if (!selectedTrip) return;
+    await plannerRepository.createOrUpdateCalendarFeed(selectedTrip.id);
+    await load();
+  }, [selectedTrip, load]);
+
+  const handleRotateFeed = useCallback(async () => {
+    if (!selectedTrip) return;
+    await plannerRepository.rotateCalendarFeed(selectedTrip.id);
+    await load();
+  }, [selectedTrip, load]);
+
+  const handleDisableFeed = useCallback(async () => {
+    if (!selectedTrip) return;
+    await plannerRepository.disableCalendarFeed(selectedTrip.id);
+    await load();
+  }, [selectedTrip, load]);
 
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;
@@ -1030,21 +1041,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           </button>
           <button
             type="button"
-            onClick={() => void copyICalProMarkdown()}
-            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
-            title={zh ? '一键生成并复制符合 obsidian-ical-plugin-pro 语法的 Markdown 日历单（支持 Google Calendar 同步）' : 'Copy iCal Pro Markdown for Google Calendar sync'}
+            onClick={() => setIsCalendarModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/80 px-3 py-2 text-xs font-bold text-amber-900 shadow-2xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-98"
+            title={zh ? '导出 .ics 日历文件或设置 Google/Apple Calendar 持续订阅源' : 'Export .ics or setup Google/Apple Calendar Feed'}
           >
             <span>📅</span>
-            <span>{zh ? 'iCal Pro 日历' : 'iCal Pro'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => void saveICalProMarkdownToVault()}
-            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-50"
-            title={zh ? '从当前 Planner/Vault 权威状态重新生成 iCal Pro 日历投影' : 'Regenerate the iCal Pro projection from canonical Planner/Vault state'}
-          >
-            <span>💾</span>
-            <span>{zh ? '保存日历至 Vault' : 'Save to Vault'}</span>
+            <span>{zh ? '日历与订阅' : 'Calendar & Feed'}</span>
+            {selectedTrip?.calendar_feed?.enabled ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            ) : null}
           </button>
           <button
             type="button"
@@ -1251,11 +1256,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={downloadICalProMarkdown}
+                  onClick={() => setIsCalendarModalOpen(true)}
                   className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
-                  title={zh ? '下载 iCal Pro (.md) 日历文件（支持 Google Calendar 同步）' : 'Download iCal Pro (.md) calendar file'}
+                  title={zh ? '日历导出与订阅 (.ics / Feed)' : 'Calendar (.ics / Feed)'}
                 >
-                  📅 iCal
+                  📅 {zh ? '日历' : 'Calendar'}
                 </button>
                 <button
                   type="button"
@@ -1382,8 +1387,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               <span>{timelineStop?.start ? `${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}` : (zh ? '设时间' : 'Time')}</span>
                             </button>
                             {place.priority ? (
-                              <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600" title="iCal Pro 优先级">
-                                {ICAL_PRO_PRIORITY_MAP[place.priority] || '🔼'}
+                              <span
+                                className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600"
+                                title={zh ? `优先级: ${place.priority}` : `Priority: ${place.priority}`}
+                              >
+                                {place.priority === 'must' ? '⏫' : place.priority === 'want' ? '🔼' : '🔽'}
                               </span>
                             ) : null}
                             {place.locked ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">📌 {zh ? '固定顺位' : 'pinned'}</span> : null}
@@ -2231,6 +2239,23 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         }}
         language={language}
       />
+
+      {selectedTrip ? (
+        <CalendarSubscriptionModal
+          key={`calendar-${selectedTrip.id}-${isCalendarModalOpen}-${selectedTrip.calendar_feed?.feed_token}-${selectedTrip.calendar_feed?.enabled}`}
+          open={isCalendarModalOpen}
+          onClose={() => setIsCalendarModalOpen(false)}
+          trip={selectedTrip}
+          activeDate={activeDate}
+          onDownloadFullIcs={downloadFullIcs}
+          onDownloadDayIcs={downloadDayIcs}
+          onCopyIcs={copyIcsContent}
+          onCreateOrUpdateFeed={handleCreateOrUpdateFeed}
+          onRotateFeed={handleRotateFeed}
+          onDisableFeed={handleDisableFeed}
+          language={language}
+        />
+      ) : null}
     </section>
   );
 }

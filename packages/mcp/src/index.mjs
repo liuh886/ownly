@@ -21,7 +21,7 @@ import { buildOpenRouteServiceDayLegs, buildOpenRouteServiceDayOptimization } fr
 import {
   getPlannerSummary,
   getPlannerTripDetail,
-  getPlannerTripICalMarkdown,
+  getPlannerTripCalendarIcs,
 } from '../../../scripts/mcp/planner-tools.ts';
 
 const SERVER_NAME = 'ownly';
@@ -507,17 +507,17 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
   );
 
   server.registerTool(
-    'ownly_planner_get_ical_markdown',
+    'ownly_planner_get_calendar_ics',
     {
-      title: 'Planner iCal Pro Projection',
-      description: 'Project confirmed Planner/Vault schedule facts into obsidian-ical-plugin-pro Markdown. Missing start times or durations are never invented.',
+      title: 'Planner RFC 5545 Calendar ICS Projection',
+      description: 'Project confirmed Planner/Vault schedule facts into deterministic RFC 5545 iCalendar format (.ics). Occurrence authority resides strictly in Visits.',
       inputSchema: z.object({
         trip_id: z.string().min(1),
         language: z.enum(['zh', 'en']).optional(),
       }),
       annotations: READ_ONLY_ANNOTATIONS,
     },
-    safeHandler(({ trip_id, language }) => getPlannerTripICalMarkdown(dataLocation, trip_id, { language })),
+    safeHandler(({ trip_id, language }) => getPlannerTripCalendarIcs(dataLocation, trip_id, { language })),
   );
 
   server.registerTool(
@@ -539,17 +539,6 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
     safeHandler(({ trip_id, visits }) => writeService.preparePlannerApplyScheduleProposal(trip_id, { visits })),
-  );
-
-  server.registerTool(
-    'ownly_planner_prepare_save_ical_markdown',
-    {
-      title: 'Preview Saving iCal Pro Projection',
-      description: 'Preview regenerating the derived iCal Pro Markdown file from current canonical Planner/Vault facts. Arbitrary custom Markdown is not accepted.',
-      inputSchema: z.object({ trip_id: z.string().min(1) }),
-      annotations: PREPARE_WRITE_ANNOTATIONS,
-    },
-    safeHandler(({ trip_id }) => writeService.preparePlannerSaveICalMarkdown(trip_id)),
   );
 
   server.registerTool(

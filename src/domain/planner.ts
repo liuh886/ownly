@@ -34,8 +34,18 @@ export interface PlannerTrip {
   members?: string[];
   /** User-verified conversion overrides: fx_rates[FROM] = how many trip-currency per 1 FROM. */
   fx_rates?: Record<string, number>;
+  /** Calendar subscription feed metadata for continuous read-only ICS sync (PRO). */
+  calendar_feed?: PlannerTripCalendarFeed;
   created_at: string;
   updated_at?: string;
+}
+
+export interface PlannerTripCalendarFeed {
+  feed_token: string;
+  trip_id: string;
+  created_at: string;
+  updated_at: string;
+  enabled: boolean;
 }
 
 export type PlannerPlaceSourceProvider =
