@@ -278,7 +278,7 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(await plannerRepository.removeVisit('visit:ghost')).toBe(false);
   });
 
-  it('deduplicates places by Place ID, CID, and emoji/canonical title', async () => {
+  it('does not auto-merge title-only matches without a strong identity', async () => {
     const trip: PlannerTrip = {
       schema_version: '0.1',
       type: 'trip',
@@ -316,11 +316,11 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(imported).toContain('p-thip-new');
 
     const placesAfter = (await plannerRepository.listPlaces()).filter((p) => p.trip_id === 'trip-1');
-    // Should NOT create duplicate, should merge into single authoritative place
+    // Same display title is weak evidence only; both entities survive until review or a strong ID match.
     const thipPlaces = placesAfter.filter((p) => p.title.includes('Thipsamai'));
-    expect(thipPlaces).toHaveLength(1);
-    expect(thipPlaces[0].source_place_id).toBe('0x30e2991678584ec5:0x698c069655046fbe');
-    expect(thipPlaces[0].observed_rating).toBe(4.2);
-    expect(thipPlaces[0].notes).toBe('Initial note');
+    expect(thipPlaces).toHaveLength(2);
+    expect(thipPlaces.find((p) => p.id === 'p-thip-1')?.notes).toBe('Initial note');
+    expect(thipPlaces.find((p) => p.id === 'p-thip-new')?.source_place_id).toBe('0x30e2991678584ec5:0x698c069655046fbe');
+    expect(thipPlaces.find((p) => p.id === 'p-thip-new')?.observed_rating).toBe(4.2);
   });
 });
