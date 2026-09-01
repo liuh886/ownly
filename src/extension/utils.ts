@@ -244,13 +244,16 @@ export function extractCleanPriceText(raw?: string | null): string | undefined {
 }
 
 /**
- * Returns true if a price string is empty, zero, or a known placeholder (e.g. "SGD 0", "$0", "0.00").
+ * Returns true if a price string is empty, zero, or a known placeholder (e.g. "SGD 0", "S$0", "$0", "0.00").
  */
 export function isZeroOrPlaceholderPrice(raw?: string | null): boolean {
   if (!raw) return true;
   const t = raw.trim();
-  if (t === '' || t === '0' || t === '$0' || t === '¥0' || t === '฿0' || t === '0.00') return true;
-  if (/^(?:SGD|THB|USD|HKD|NT\$|¥|฿|\$)\s*0(?:\.00)?$/i.test(t)) return true;
+  if (t === '' || t === '0' || t === '$0' || t === '¥0' || t === '฿0' || t === '0.00' || t === '0.-' || t === '0 บาท') return true;
+  if (/^(?:SGD|S\$|THB|USD|HKD|NT\$|¥|฿|\$|EUR|GBP|JPY|CNY|MYR|KRW|VND|INR)\s*0+(?:\.0+)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|day|บาท))?$/i.test(t)) return true;
+  if (/^(?:人均|per person|每人|每晚|per night|from|约)\s*[:：]?\s*(?:SGD|S\$|THB|USD|HKD|NT\$|¥|฿|\$)?\s*0+(?:\.0+)?$/i.test(t)) return true;
+  if (/^(?:[A-Z]{3}|S\$|HK\$|US\$|NT\$|AU\$|CA\$|NZ\$|\$|¥|฿|€|£|₩)\s*0+(?:\.0+)?$/i.test(t)) return true;
+  if (/^0+(?:\.0+)?\s*(?:[A-Z]{3}|S\$|HK\$|US\$|NT\$|AU\$|CA\$|NZ\$|\$|¥|฿|€|£|₩|บาท|泰铢|元|円)$/i.test(t)) return true;
   return false;
 }
 

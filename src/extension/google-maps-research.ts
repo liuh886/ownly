@@ -1,4 +1,4 @@
-import { cleanExtractedText, extractCleanPriceText, isPlausiblePriceText } from './utils';
+import { cleanExtractedText, extractCleanPriceText, isPlausiblePriceText, isZeroOrPlaceholderPrice } from './utils';
 
 export interface GoogleMapsResearchFacts {
   sourcePlaceId?: string;
@@ -133,7 +133,7 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
   // Direct lodging room price from placeNode[88]?.[0]
   if (Array.isArray(placeNode[88]) && typeof placeNode[88][0] === 'string') {
     const rawPrice = placeNode[88][0].replace(/\u00a0/g, ' ').trim();
-    if (/(?:SGD|THB|USD|HKD|NT\$|¥|฿|\$)\s*\d+/i.test(rawPrice) && !/^SGD\s*0(?:\.00)?$/i.test(rawPrice)) {
+    if (/(?:SGD|THB|USD|HKD|NT\$|¥|฿|\$)\s*\d+/i.test(rawPrice) && !isZeroOrPlaceholderPrice(rawPrice)) {
       result.priceLevel = rawPrice;
     }
   }
@@ -210,7 +210,7 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
       }
       if (!result.priceLevel) {
         const cleanPrice = extractCleanPriceText(text);
-        if (cleanPrice && cleanPrice !== '0' && !/^SGD\s*0(?:\.00)?$/i.test(cleanPrice)) {
+        if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice)) {
           result.priceLevel = cleanPrice;
         }
       }
@@ -345,7 +345,7 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
     }
     if (!result.priceLevel) {
       const pr = extractCleanPriceText(descText);
-      if (pr && pr !== '0' && !/^SGD\s*0$/i.test(pr)) result.priceLevel = pr;
+      if (pr && !isZeroOrPlaceholderPrice(pr)) result.priceLevel = pr;
     }
   }
 

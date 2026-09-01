@@ -14,7 +14,7 @@ import {
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { logger } from '../logger';
-import { escapeHtml, isPlausiblePriceText } from '../utils';
+import { escapeHtml, isPlausiblePriceText, isZeroOrPlaceholderPrice } from '../utils';
 import { matchesSavedListContext } from '../saved-list-match';
 import { getExistingPlaceForUrl, store, t } from './store';
 
@@ -1002,13 +1002,13 @@ function buildCandidateDetails(
   if (place.observed_rating && place.observed_rating > 1.0 && place.observed_rating <= 5.0) {
     parts.push(`<span>★ ${place.observed_rating}</span>`);
   }
-  if (place.observed_price && place.observed_price !== '0' && !/^SGD\s*0$/i.test(place.observed_price) && !/^\$?0$/i.test(place.observed_price)) {
+  if (place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price)) {
     const activeTrip = store.state.activeContext;
     const sourceCurrency = place.price_currency || store.mapCurrencyOverride || store.pageDetectedCurrency;
     const converted = activeTrip?.currency
       ? convertPriceRange(place.observed_price, activeTrip.currency, undefined, sourceCurrency)
       : null;
-    if (converted && converted.sourceCurrency !== converted.targetCurrency) {
+    if (converted && converted.sourceCurrency !== converted.targetCurrency && converted.convertedMin > 0) {
       parts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);
     } else {
       parts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);

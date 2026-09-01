@@ -7,6 +7,7 @@ import {
   findEntityListPlaceId,
   isJunkNavigationText,
   isPlausiblePriceText,
+  isZeroOrPlaceholderPrice,
   normalizePhoneDisplay,
   parseEntityListCoordinates,
   safeDecodeUri,
@@ -119,6 +120,42 @@ describe('isPlausiblePriceText', () => {
     expect(isPlausiblePriceText('TWD')).toBe(false);
     expect(isPlausiblePriceText('')).toBe(false);
     expect(isPlausiblePriceText(null)).toBe(false);
+  });
+});
+
+describe('isZeroOrPlaceholderPrice', () => {
+  it('correctly identifies empty, zero, and placeholder price tokens', () => {
+    expect(isZeroOrPlaceholderPrice('')).toBe(true);
+    expect(isZeroOrPlaceholderPrice(null)).toBe(true);
+    expect(isZeroOrPlaceholderPrice(undefined)).toBe(true);
+    expect(isZeroOrPlaceholderPrice('0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('$0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('¥0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('฿0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('0.00')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('0.-')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('0 บาท')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('SGD 0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('SGD0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('S$0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('S$ 0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('SGD 0.00')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('THB 0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('USD 0.00')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('人均 0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('人均 $0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('人均 ฿0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('人均 SGD 0')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('SGD 0 / 晚')).toBe(true);
+  });
+
+  it('preserves valid prices', () => {
+    expect(isZeroOrPlaceholderPrice('฿200–400')).toBe(false);
+    expect(isZeroOrPlaceholderPrice('299 บาท')).toBe(false);
+    expect(isZeroOrPlaceholderPrice('บุฟเฟ่ต์ 299.-')).toBe(false);
+    expect(isZeroOrPlaceholderPrice('S$1,024 night')).toBe(false);
+    expect(isZeroOrPlaceholderPrice('THB 2,350')).toBe(false);
+    expect(isZeroOrPlaceholderPrice('$$$')).toBe(false);
   });
 });
 
