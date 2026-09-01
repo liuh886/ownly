@@ -81,7 +81,7 @@ describe('extractCleanPriceText', () => {
     expect(extractCleanPriceText('฿200–400')).toBe('฿200–400');
     expect(extractCleanPriceText('人均 ฿200–400')).toBe('人均 ฿200–400');
     expect(extractCleanPriceText('299 บาท')).toBe('299 บาท');
-    expect(extractCleanPriceText('บุฟเฟ่ต์ 299.-')).toBe('บุฟเฟ่ต์ 299.-');
+    expect(extractCleanPriceText('บุฟเฟ่ต์ 299.-')).toBe('299.-');
     expect(extractCleanPriceText('คนละ 199 บาท')).toBe('คนละ 199 บาท');
     expect(extractCleanPriceText('人均 200-400 泰铢')).toBe('人均 200-400 泰铢');
     expect(extractCleanPriceText('¥1,000–2,000 per person')).toBe('¥1,000–2,000 per person');
@@ -89,11 +89,15 @@ describe('extractCleanPriceText', () => {
     expect(extractCleanPriceText('S$1,024 night')).toBe('S$1,024 night');
   });
 
-  it('returns undefined for non-price and hotel star text', () => {
+  it('returns undefined for non-price, hotel star text, and spurious tokens', () => {
     expect(extractCleanPriceText('5-star hotel')).toBeUndefined();
     expect(extractCleanPriceText('4.4 (996)·5-star hotel')).toBeUndefined();
     expect(extractCleanPriceText('4.2 (12,567)')).toBeUndefined();
     expect(extractCleanPriceText('Noodle shop')).toBeUndefined();
+    expect(extractCleanPriceText('2b-')).toBeUndefined();
+    expect(extractCleanPriceText('3x-')).toBeUndefined();
+    expect(extractCleanPriceText('4a')).toBeUndefined();
+    expect(extractCleanPriceText('ส้มหมูกะทะ&ซีฟู๊ด บุฟเฟ่ต์ 401 Ratchada Niwet Road')).toBeUndefined();
   });
 });
 
@@ -118,6 +122,8 @@ describe('isPlausiblePriceText', () => {
     expect(isPlausiblePriceText('五星级饭店')).toBe(false);
     expect(isPlausiblePriceText('Luxury Hotel & Resort')).toBe(false);
     expect(isPlausiblePriceText('TWD')).toBe(false);
+    expect(isPlausiblePriceText('2b-')).toBe(false);
+    expect(isPlausiblePriceText('3x-')).toBe(false);
     expect(isPlausiblePriceText('')).toBe(false);
     expect(isPlausiblePriceText(null)).toBe(false);
   });
@@ -147,6 +153,8 @@ describe('isZeroOrPlaceholderPrice', () => {
     expect(isZeroOrPlaceholderPrice('人均 ฿0')).toBe(true);
     expect(isZeroOrPlaceholderPrice('人均 SGD 0')).toBe(true);
     expect(isZeroOrPlaceholderPrice('SGD 0 / 晚')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('2b-')).toBe(true);
+    expect(isZeroOrPlaceholderPrice('3x-')).toBe(true);
   });
 
   it('preserves valid prices', () => {
