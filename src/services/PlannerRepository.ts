@@ -122,6 +122,18 @@ function extractPlaceCid(place: { source_place_id?: string | null; source_url?: 
   return null;
 }
 
+const GENERIC_TITLES = new Set([
+  '机场', '国际机场', '酒店', '饭店', '餐厅', '咖啡厅', '车站', '火车站', '夜市', '商场', '景点',
+  'airport', 'international airport', 'hotel', 'resort', 'restaurant', 'cafe', 'station', 'market', 'mall', 'attraction', 'place'
+]);
+
+function isDistinctCanonicalTitle(title?: string | null): boolean {
+  const canonical = canonicalizePlaceTitle(title);
+  if (canonical.length < 4) return false;
+  if (GENERIC_TITLES.has(canonical)) return false;
+  return true;
+}
+
 function canonicalizePlaceTitle(title?: string | null): string {
   if (!title) return '';
   return title
@@ -266,15 +278,13 @@ export class PlannerRepository {
         state: 'candidate',
       };
       const incomingCid = extractPlaceCid(incoming);
-      const incomingTitle = canonicalizePlaceTitle(incoming.title);
-      const incomingGeo = coordinateClusterKey(incoming);
+      const incomingTitle = isDistinctCanonicalTitle(incoming.title) ? canonicalizePlaceTitle(incoming.title) : '';
 
       const existingPlace = byId.get(incoming.id)
         ?? (incoming.source_place_id ? byPlaceId.get(`${incoming.trip_id}::${incoming.source_provider}::${incoming.source_place_id}`) : undefined)
         ?? (incomingCid ? byCid.get(`${incoming.trip_id}::${incomingCid}`) : undefined)
-        ?? (incomingTitle.length >= 2 ? byTitle.get(`${incoming.trip_id}::${incomingTitle}`) : undefined)
-        ?? (incoming.source_url ? byUrlIdentity.get(`${incoming.trip_id}::${incoming.source_provider}::${normalizePlaceIdentity(incoming.source_url)}`) : undefined)
-        ?? (incomingGeo ? byCoordinates.get(incomingGeo) : undefined);
+        ?? (incomingTitle ? byTitle.get(`${incoming.trip_id}::${incomingTitle}`) : undefined)
+        ?? (incoming.source_url ? byUrlIdentity.get(`${incoming.trip_id}::${incoming.source_provider}::${normalizePlaceIdentity(incoming.source_url)}`) : undefined);
 
       try {
         const persisted = existingPlace ? mergeCapturedPlaceResearch(existingPlace, incoming) : incoming;
@@ -299,7 +309,7 @@ export class PlannerRepository {
   }
 
   /**
-   * Scans all places in a trip, identifies duplicate entities (by Place ID, CID, canonical title, or GPS proximity),
+   * Scans all places in a trip, identifies duplicate entities (by Place ID, CID, distinct canonical title, or URL Identity),
    * merges their facts and visits into the primary place, and removes duplicate markdown records.
    */
   async deduplicateTripPlaces(tripId: string): Promise<{ mergedCount: number; removedCount: number }> {
@@ -320,21 +330,18 @@ export class PlannerRepository {
       assigned.add(p1.id);
 
       const cid1 = extractPlaceCid(p1);
-      const title1 = canonicalizePlaceTitle(p1.title);
-      const geo1 = coordinateClusterKey(p1);
+      const title1 = isDistinctCanonicalTitle(p1.title) ? canonicalizePlaceTitle(p1.title) : '';
 
       for (let j = i + 1; j < allPlaces.length; j++) {
         const p2 = allPlaces[j];
         if (assigned.has(p2.id)) continue;
         const cid2 = extractPlaceCid(p2);
-        const title2 = canonicalizePlaceTitle(p2.title);
-        const geo2 = coordinateClusterKey(p2);
+        const title2 = isDistinctCanonicalTitle(p2.title) ? canonicalizePlaceTitle(p2.title) : '';
 
         const isMatch = (p1.source_place_id && p1.source_place_id === p2.source_place_id)
           || (cid1 && cid2 && cid1 === cid2)
-          || (title1 && title2 && title1.length >= 3 && title1 === title2)
-          || (p1.source_url && p2.source_url && normalizePlaceIdentity(p1.source_url) === normalizePlaceIdentity(p2.source_url))
-          || (geo1 && geo2 && geo1 === geo2 && (title1.includes(title2) || title2.includes(title1)));
+          || (title1 && title2 && title1 === title2)
+          || (p1.source_url && p2.source_url && normalizePlaceIdentity(p1.source_url) === normalizePlaceIdentity(p2.source_url));
 
         if (isMatch) {
           cluster.push(p2);
