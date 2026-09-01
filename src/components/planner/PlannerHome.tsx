@@ -2180,9 +2180,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       type="button"
                       onClick={() => setIsSuspectedModalOpen(true)}
                       className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition flex items-center gap-1 shadow-2xs"
-                      title={zh ? '查看并合并疑似重复的同类地点' : 'Review and merge suspected duplicate places'}
+                      title={zh ? '逐组复核疑似重复地点' : 'Review suspected duplicate places pair by pair'}
                     >
-                      ✨ {zh ? `合并疑似同类 (${visibleSuspectedPairs.length})` : `Suspected Duplicates (${visibleSuspectedPairs.length})`}
+                      ✨ {zh ? `疑似重复复核 (${visibleSuspectedPairs.length})` : `Duplicate Review (${visibleSuspectedPairs.length})`}
                     </button>
                   ) : null}
                   <button
@@ -2205,9 +2205,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     type="button"
                     onClick={() => void handleDeduplicatePlaces()}
                     className="rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition flex items-center gap-1 shadow-2xs"
-                    title={zh ? '扫描并清理当前行程的重复地点' : 'Scan and merge duplicate places'}
+                    title={zh ? '仅按 Google Place ID / CID 等强身份自动清理重复地点' : 'Auto-clean only duplicates proven by strong Place ID / CID identity'}
                   >
-                    🧹 {zh ? '一键去重' : 'Deduplicate'}
+                    🧹 {zh ? '强身份去重' : 'Strong-ID Dedup'}
                   </button>
                 </div>
               </div>
