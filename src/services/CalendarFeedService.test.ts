@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlannerTrip, PlannerTripPlace } from '../domain/planner';
 import type { PlannerTripVisit } from '../domain/planner-visits';
 import {
   CalendarFeedService,
   MemoryCalendarFeedStore,
 } from './CalendarFeedService';
+import { SupabaseCalendarFeedStore } from './SupabaseCalendarFeedStore';
 
 const trip: PlannerTrip = {
   schema_version: '0.1',
@@ -66,8 +67,21 @@ describe('CalendarFeedService (PRO)', () => {
         places: [palace],
         visits: [visit1],
         membership: { isPro: false },
+        userId: 'user_123',
       }),
     ).rejects.toThrow(/PRO membership is required/i);
+  });
+
+  it('rejects calls when userId is empty', async () => {
+    await expect(
+      service.publishFeed({
+        trip,
+        places: [palace],
+        visits: [visit1],
+        membership: { isPro: true },
+        userId: '',
+      }),
+    ).rejects.toThrow(/User ID is required/i);
   });
 
   it('allows PRO membership to publish feed, stores hashed token, and generates immutable subscription URL', async () => {
@@ -94,37 +108,34 @@ describe('CalendarFeedService (PRO)', () => {
     expect(publicResponse.body).toBe(result.ics);
   });
 
-  it('rotates bearer token, invalidates previous URL with 404, and enables new URL', async () => {
+  it('rotates bearer token, immediately persists new ICS projection, and revokes old URL', async () => {
     const published = await service.publishFeed({
       trip,
       places: [palace],
       visits: [visit1],
       membership: { isPro: true },
+      userId: 'user_123',
     });
 
     const tripWithFeed = { ...trip, calendar_feed: published.feed };
 
     const rotated = await service.rotateFeed({
       trip: tripWithFeed,
+      places: [palace],
+      visits: [visit1],
       membership: { isPro: true },
+      userId: 'user_123',
     });
 
     expect(rotated.feed.feed_token).not.toBe(published.feed.feed_token);
     expect(rotated.feed.enabled).toBe(true);
+    expect(rotated.ics).toContain('Grand Palace');
 
     // Old token should now be revoked (404)
     const oldResponse = await service.handlePublicFeedRequest(published.feed.feed_token);
     expect(oldResponse.status).toBe(404);
 
-    // Re-publish under new token
-    await service.publishFeed({
-      trip: { ...trip, calendar_feed: rotated.feed },
-      places: [palace],
-      visits: [visit1],
-      membership: { isPro: true },
-      feedToken: rotated.feed.feed_token,
-    });
-
+    // New token immediately serves the ICS projection without extra steps
     const newResponse = await service.handlePublicFeedRequest(rotated.feed.feed_token);
     expect(newResponse.status).toBe(200);
     expect(newResponse.body).toContain('Grand Palace');
@@ -136,6 +147,7 @@ describe('CalendarFeedService (PRO)', () => {
       places: [palace],
       visits: [visit1],
       membership: { isPro: true },
+      userId: 'user_123',
     });
 
     const tripWithFeed = { ...trip, calendar_feed: published.feed };
@@ -143,6 +155,7 @@ describe('CalendarFeedService (PRO)', () => {
     const disabledFeed = await service.disableFeed({
       trip: tripWithFeed,
       membership: { isPro: true },
+      userId: 'user_123',
     });
 
     expect(disabledFeed.enabled).toBe(false);
@@ -151,3 +164,66 @@ describe('CalendarFeedService (PRO)', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
+  it('upserts feed records to Supabase PostgREST endpoint with correct headers and payload', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{ id: 'feed-1' }],
+    });
+
+    const store = new SupabaseCalendarFeedStore({
+      supabaseUrl: 'https://test.supabase.co',
+      supabasePublishableKey: 'test-anon-key',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    await store.upsertFeed({
+      user_id: 'user_abc',
+      trip_id: 'trip_123',
+      token_hash: 'hash_xyz',
+      ics_content: 'BEGIN:VCALENDAR...',
+      enabled: true,
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://test.supabase.co/rest/v1/calendar_feeds',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          apikey: 'test-anon-key',
+          Authorization: 'Bearer test-anon-key',
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        }),
+      }),
+    );
+  });
+
+  it('queries enabled feed by token hash from Supabase', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: 'feed-1',
+          user_id: 'user_abc',
+          trip_id: 'trip_123',
+          token_hash: 'hash_xyz',
+          ics_content: 'BEGIN:VCALENDAR...',
+          enabled: true,
+        },
+      ],
+    });
+
+    const store = new SupabaseCalendarFeedStore({
+      supabaseUrl: 'https://test.supabase.co',
+      supabasePublishableKey: 'test-anon-key',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    const record = await store.getFeedByTokenHash('hash_xyz');
+    expect(record?.trip_id).toBe('trip_123');
+    expect(record?.token_hash).toBe('hash_xyz');
+  });
+});
+

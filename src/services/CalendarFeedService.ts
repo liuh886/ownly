@@ -7,6 +7,7 @@ import {
   hashFeedToken,
 } from '../domain/calendar-feed';
 import { canUseWYQDProFeature, type WYQDMembershipState } from '../core/membership';
+import { SupabaseCalendarFeedStore } from './SupabaseCalendarFeedStore';
 
 export interface CalendarFeedRecord {
   id?: string;
@@ -24,22 +25,24 @@ export interface PublishCalendarFeedInput {
   places: PlannerTripPlace[];
   visits: PlannerTripVisit[];
   membership: Pick<WYQDMembershipState, 'isPro'>;
-  userId?: string;
+  userId: string;
   feedToken?: string;
   apiBaseUrl?: string;
 }
 
 export interface RotateCalendarFeedInput {
   trip: PlannerTrip;
+  places: PlannerTripPlace[];
+  visits: PlannerTripVisit[];
   membership: Pick<WYQDMembershipState, 'isPro'>;
-  userId?: string;
+  userId: string;
   apiBaseUrl?: string;
 }
 
 export interface DisableCalendarFeedInput {
   trip: PlannerTrip;
   membership: Pick<WYQDMembershipState, 'isPro'>;
-  userId?: string;
+  userId: string;
   apiBaseUrl?: string;
 }
 
@@ -55,7 +58,7 @@ export interface CalendarFeedStore {
   disableFeed(tripId: string, userId?: string): Promise<void>;
 }
 
-// In-memory feed store for testing and offline/local fallback
+// In-memory feed store for testing and offline fallback
 export class MemoryCalendarFeedStore implements CalendarFeedStore {
   private records = new Map<string, CalendarFeedRecord>(); // token_hash -> record
 
@@ -85,7 +88,7 @@ export class MemoryCalendarFeedStore implements CalendarFeedStore {
   }
 }
 
-export const defaultCalendarFeedStore = new MemoryCalendarFeedStore();
+export const defaultCalendarFeedStore = new SupabaseCalendarFeedStore();
 
 /**
  * CalendarFeedService orchestrates PRO subscription feeds:
@@ -104,8 +107,11 @@ export class CalendarFeedService {
     if (!canUseWYQDProFeature(input.membership)) {
       throw new Error('PRO membership is required to publish continuous Calendar Feeds.');
     }
+    if (!input.userId?.trim()) {
+      throw new Error('User ID is required for calendar feed operations.');
+    }
 
-    const { trip, places, visits, userId = 'local_user' } = input;
+    const { trip, places, visits, userId } = input;
     const token = input.feedToken || trip.calendar_feed?.feed_token || generateCalendarFeedToken();
     const tokenHash = await hashFeedToken(token);
     const ics = buildTripCalendarIcs(trip, places, visits);
@@ -138,14 +144,17 @@ export class CalendarFeedService {
   }
 
   /**
-   * Rotates the bearer token, invalidating previous subscription URLs.
+   * Rotates the bearer token, invalidating previous subscription URLs and rebuilding the ICS projection.
    */
   async rotateFeed(input: RotateCalendarFeedInput): Promise<CalendarFeedResponse> {
     if (!canUseWYQDProFeature(input.membership)) {
       throw new Error('PRO membership is required to manage Calendar Feeds.');
     }
+    if (!input.userId?.trim()) {
+      throw new Error('User ID is required for calendar feed operations.');
+    }
 
-    const { trip } = input;
+    const { trip, places, visits, userId } = input;
     if (trip.calendar_feed?.feed_token) {
       const oldHash = await hashFeedToken(trip.calendar_feed.feed_token);
       const oldRecord = await this.store.getFeedByTokenHash(oldHash);
@@ -155,7 +164,20 @@ export class CalendarFeedService {
     }
 
     const newToken = generateCalendarFeedToken();
+    const newTokenHash = await hashFeedToken(newToken);
+    const ics = buildTripCalendarIcs(trip, places, visits);
     const now = new Date().toISOString();
+
+    const newRecord: CalendarFeedRecord = {
+      user_id: userId,
+      trip_id: trip.id,
+      token_hash: newTokenHash,
+      ics_content: ics,
+      enabled: true,
+      updated_at: now,
+    };
+
+    await this.store.upsertFeed(newRecord);
 
     const feed: PlannerTripCalendarFeed = {
       feed_token: newToken,
@@ -168,7 +190,7 @@ export class CalendarFeedService {
     return {
       feed,
       url: getCalendarFeedUrl(newToken),
-      ics: '',
+      ics,
     };
   }
 
@@ -179,8 +201,11 @@ export class CalendarFeedService {
     if (!canUseWYQDProFeature(input.membership)) {
       throw new Error('PRO membership is required to manage Calendar Feeds.');
     }
+    if (!input.userId?.trim()) {
+      throw new Error('User ID is required for calendar feed operations.');
+    }
 
-    const { trip, userId = 'local_user' } = input;
+    const { trip, userId } = input;
     await this.store.disableFeed(trip.id, userId);
 
     return {

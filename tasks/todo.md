@@ -1,16 +1,33 @@
-# Phase 2: Calendar Feed Service (PRO)
+# Phase 2.1: Supabase Calendar Feed Backend & Hardening
 
 ## Todo
 
-- [x] 1. Security & Token Entropy: Upgrade `generateCalendarFeedToken()` to use `crypto.getRandomValues()` (CSPRNG 32 bytes) and implement `hashFeedToken(token)` SHA-256 token hashing
-- [x] 2. Database Migration: Create `supabase/migrations/20260901_calendar_feeds.sql` defining `calendar_feeds` table (`id`, `trip_id`, `user_id`, `token_hash`, `ics_content`, `enabled`, `created_at`, `updated_at`)
-- [x] 3. Service Layer & API Contract: Implement `src/services/CalendarFeedService.ts` (`publishFeed`, `rotateFeed`, `disableFeed`, `handlePublicFeedRequest`) with PRO entitlement gate `canUseWYQDProFeature`
-- [x] 4. UI Integration: Connect `CalendarSubscriptionModal.tsx` and `PlannerHome.tsx` to `CalendarFeedService`, passing `membership` and enforcing PRO gate with upgrade prompt for Free tier
-- [x] 5. Testing & Verification: Add `src/services/CalendarFeedService.test.ts`, update `src/domain/calendar-feed.test.ts`, and run all CI suites
+- [x] 1. Security: Remove plaintext hash fallback in `hashFeedToken()` (throw error if crypto unavailable)
+- [x] 2. Fix Rotate Bug: Update `rotateFeed()` to accept `places` and `visits`, build new ICS snapshot, save new record, and disable old record
+- [x] 3. Database Migration: Ensure `supabase/migrations/20260901_calendar_feeds.sql` has `user_id uuid/text`, `create unique index on calendar_feeds(token_hash)`, and `user_id` is non-nullable
+- [x] 4. Production Store: Implement `src/services/SupabaseCalendarFeedStore.ts` using Supabase REST API (with strict `userId` requirement and zero weak `local_user` fallback)
+- [x] 5. Public Edge Function: Implement `supabase/functions/calendar-feed/index.ts` for public `GET /f/:token.ics` serving
+- [x] 6. Wiring & Testing: Update `CalendarFeedService.ts` to use `SupabaseCalendarFeedStore` by default, test with mocks and memory store, and run all CI suites
 
 ---
 
-## Phase 2 Review (Calendar Feed Service & PRO Gate)
+## Phase 2.1 Review (Supabase Persistence & Edge Backend)
+
+1. **Production Supabase Store (`SupabaseCalendarFeedStore.ts`)**:
+   - Replaced memory-only fallback with direct Supabase PostgREST store (`upsertFeed`, `getFeedByTokenHash`, `disableFeed`).
+   - Uses zero-dependency native fetch with `apikey` & `Bearer` authentication.
+   - Enforces strict `userId` without silent fallback to `local_user`.
+2. **Fixed Rotate Workflow**:
+   - `rotateFeed()` now requires `places` & `visits`, immediately building and saving the new ICS projection alongside token generation.
+   - Disables the old token hash (`enabled = false`) and returns `{ feed, url, ics }` so the new URL is instantly ready.
+3. **Strict Cryptographic Security**:
+   - Removed plaintext token return fallback from `hashFeedToken()`; throws error if CSPRNG/SubtleCrypto is unavailable.
+4. **Public Edge Function (`supabase/functions/calendar-feed/index.ts`)**:
+   - Deploys serverless handler for `GET /f/:token.ics` and `GET /calendar-feed/:token.ics`.
+   - Computes SHA-256 hash, looks up enabled feed in `calendar_feeds`, and returns RFC 5545 `text/calendar; charset=utf-8` with caching headers (`Cache-Control: public, max-age=1800, stale-while-revalidate=3600`) and `ETag`.
+5. **Testing**:
+   - Comprehensive test suite in `CalendarFeedService.test.ts` covering both `MemoryCalendarFeedStore` and `SupabaseCalendarFeedStore`.
+   - All 21 calendar tests, MCP tests, and repository tests passing green.
 
 1. **CSPRNG 32-Byte Token & SHA-256 Hashing**:
    - Upgraded `generateCalendarFeedToken()` in `src/domain/calendar-feed.ts` to use `globalThis.crypto.getRandomValues()`.

@@ -254,10 +254,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   let isPro = true;
   let openLicenseModal: (() => void) | undefined;
+  let currentUserId = 'ownly_user';
   try {
     const workspace = useOwnlyWorkspace();
     isPro = workspace.membership?.isPro ?? true;
     openLicenseModal = workspace.openLicenseModal;
+    if (workspace.membership?.licenseKeyLast4) {
+      currentUserId = `user_pro_${workspace.membership.licenseKeyLast4}`;
+    }
   } catch {
     isPro = true;
   }
@@ -852,39 +856,44 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       places,
       visits,
       membership: { isPro },
+      userId: currentUserId,
     });
     await plannerRepository.upsertTrip({
       ...selectedTrip,
       calendar_feed: response.feed,
     });
     await load();
-  }, [selectedTrip, places, visits, isPro, load]);
+  }, [selectedTrip, places, visits, isPro, currentUserId, load]);
 
   const handleRotateFeed = useCallback(async () => {
     if (!selectedTrip) return;
     const response = await calendarFeedService.rotateFeed({
       trip: selectedTrip,
+      places,
+      visits,
       membership: { isPro },
+      userId: currentUserId,
     });
     await plannerRepository.upsertTrip({
       ...selectedTrip,
       calendar_feed: response.feed,
     });
     await load();
-  }, [selectedTrip, isPro, load]);
+  }, [selectedTrip, places, visits, isPro, currentUserId, load]);
 
   const handleDisableFeed = useCallback(async () => {
     if (!selectedTrip) return;
     const updatedFeed = await calendarFeedService.disableFeed({
       trip: selectedTrip,
       membership: { isPro },
+      userId: currentUserId,
     });
     await plannerRepository.upsertTrip({
       ...selectedTrip,
       calendar_feed: updatedFeed,
     });
     await load();
-  }, [selectedTrip, isPro, load]);
+  }, [selectedTrip, isPro, currentUserId, load]);
 
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;

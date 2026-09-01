@@ -308,7 +308,7 @@ export async function hashFeedToken(token: string): Promise<string> {
     const nodeCrypto = await import('node:crypto');
     return nodeCrypto.createHash('sha256').update(clean).digest('hex');
   } catch {
-    return clean;
+    throw new Error('Cryptographic environment (crypto.subtle or node:crypto) is required for secure token hashing.');
   }
 }
 
