@@ -37,7 +37,7 @@ export function cleanTitleForSearch(title: string): string {
  * Determines whether a candidate place is missing essential objective facts.
  */
 export function isCandidateMissingData(place: PlannerTripPlace): boolean {
-  const isMissingPrice = !place.observed_price || isZeroOrPlaceholderPrice(place.observed_price);
+  const isMissingPrice = place.kind === 'stay' && (!place.observed_price || isZeroOrPlaceholderPrice(place.observed_price));
   return (
     !place.source_place_id ||
     place.observed_rating === undefined ||
@@ -375,10 +375,16 @@ export function mergeDetectedResearchIntoPlannerPlaces(
     const research = researchByIdentity.get(plannerIdentity(existing));
     if (!research) return existing;
 
-    const normalizedPrice = normalizeObservedPrice(
-      research.priceLevel,
-      research.detectedCurrency || fallbackCurrency || existing.price_currency,
-    );
+    const validResearchPrice = research.priceLevel && !isZeroOrPlaceholderPrice(research.priceLevel)
+      ? research.priceLevel
+      : (!isZeroOrPlaceholderPrice(existing.observed_price) ? existing.observed_price : undefined);
+
+    const normalizedPrice = validResearchPrice
+      ? normalizeObservedPrice(
+          validResearchPrice,
+          research.detectedCurrency || fallbackCurrency || existing.price_currency,
+        )
+      : null;
     const now = new Date().toISOString();
     return mergeCapturedPlaceResearch(existing, {
       ...existing,
@@ -389,7 +395,7 @@ export function mergeDetectedResearchIntoPlannerPlaces(
       source_category: research.category,
       observed_rating: research.rating,
       observed_review_count: research.reviewCount,
-      observed_price: research.priceLevel,
+      observed_price: validResearchPrice,
       price_currency: normalizedPrice?.currency,
       price_min: normalizedPrice?.min,
       price_max: normalizedPrice?.max,

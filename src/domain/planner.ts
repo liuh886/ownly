@@ -327,10 +327,19 @@ export function mergeCapturedPlaceResearch(
     observed_review_count: (typeof captured.observed_review_count === 'number' && Number.isFinite(captured.observed_review_count))
       ? captured.observed_review_count
       : existing.observed_review_count,
-    observed_price: hasContent(captured.observed_price) ? captured.observed_price : existing.observed_price,
+    observed_price: (() => {
+      const isZero = (v?: string | null) => !v || v.trim() === '' || /^(?:SGD|S\$|THB|USD|HKD|NT\$|¥|฿|\$|EUR|GBP|JPY|CNY|MYR|KRW|VND|INR)?\s*0+(?:\.0+)?/i.test(v.trim());
+      if (hasContent(captured.observed_price) && !isZero(captured.observed_price)) return captured.observed_price;
+      if (hasContent(existing.observed_price) && !isZero(existing.observed_price)) return existing.observed_price;
+      return undefined;
+    })(),
     price_currency: hasContent(captured.price_currency) ? captured.price_currency : existing.price_currency,
-    price_min: (typeof captured.price_min === 'number' && Number.isFinite(captured.price_min)) ? captured.price_min : existing.price_min,
-    price_max: (typeof captured.price_max === 'number' && Number.isFinite(captured.price_max)) ? captured.price_max : existing.price_max,
+    price_min: (typeof captured.price_min === 'number' && Number.isFinite(captured.price_min) && captured.price_min > 0)
+      ? captured.price_min
+      : ((typeof existing.price_min === 'number' && Number.isFinite(existing.price_min) && existing.price_min > 0) ? existing.price_min : undefined),
+    price_max: (typeof captured.price_max === 'number' && Number.isFinite(captured.price_max) && captured.price_max > 0)
+      ? captured.price_max
+      : ((typeof existing.price_max === 'number' && Number.isFinite(existing.price_max) && existing.price_max > 0) ? existing.price_max : undefined),
     price_unit: captured.price_unit ?? existing.price_unit,
     price_level: (typeof captured.price_level === 'number' && Number.isFinite(captured.price_level)) ? captured.price_level : existing.price_level,
     observed_at: hasContent(captured.observed_at) ? captured.observed_at : existing.observed_at,
