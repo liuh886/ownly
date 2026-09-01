@@ -87,6 +87,54 @@ function expenseFileName(expenseId: string): string {
   return `expense--${safeEntityId(expenseId)}.md`;
 }
 
+function extractPlaceCid(place: { source_place_id?: string | null; source_url?: string | null }): string | null {
+  if (place.source_place_id) {
+    const match = /:0x([0-9a-f]+)$/i.exec(place.source_place_id.trim());
+    if (match?.[1]) {
+      try {
+        return BigInt('0x' + match[1]).toString();
+      } catch {}
+    }
+    if (/^\d{8,}$/.test(place.source_place_id.trim())) {
+      return place.source_place_id.trim();
+    }
+    if (/^ChIJ[A-Za-z0-9_-]{8,}$/.test(place.source_place_id.trim())) {
+      return place.source_place_id.trim().toLowerCase();
+    }
+  }
+  if (place.source_url) {
+    try {
+      const url = new URL(place.source_url);
+      const cid = url.searchParams.get('cid');
+      if (cid && /^\d+$/.test(cid)) return cid;
+      const qpid = url.searchParams.get('query_place_id');
+      if (qpid) return qpid.toLowerCase();
+    } catch {}
+    const fidMatch = /0x[0-9a-f]+:0x([0-9a-f]+)/i.exec(place.source_url);
+    if (fidMatch?.[1]) {
+      try {
+        return BigInt('0x' + fidMatch[1]).toString();
+      } catch {}
+    }
+  }
+  return null;
+}
+
+function canonicalizePlaceTitle(title?: string | null): string {
+  if (!title) return '';
+  return title
+    .replace(/^[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+/u, '')
+    .replace(/[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+$/u, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+function coordinateClusterKey(place: PlannerTripPlace): string | null {
+  if (!place.coordinates) return null;
+  return `${place.trip_id}::geo:${place.coordinates.lat.toFixed(4)},${place.coordinates.lng.toFixed(4)}`;
+}
+
 export class PlannerRepository {
   private root = '';
 
@@ -186,34 +234,46 @@ export class PlannerRepository {
     const existing = await this.listPlaces();
     const byId = new Map(existing.map((place) => [place.id, place] as const));
     const byPlaceId = new Map<string, PlannerTripPlace>();
+    const byCid = new Map<string, PlannerTripPlace>();
+    const byTitle = new Map<string, PlannerTripPlace>();
     const byUrlIdentity = new Map<string, PlannerTripPlace>();
     const byCoordinates = new Map<string, PlannerTripPlace>();
-    const coordinateKey = (place: PlannerTripPlace): string | null => {
-      if (!place.coordinates) return null;
-      return `${place.trip_id}::geo:${place.coordinates.lat.toFixed(5)},${place.coordinates.lng.toFixed(5)}`;
-    };
+
     const indexPlace = (place: PlannerTripPlace) => {
       byId.set(place.id, place);
       if (place.source_place_id) byPlaceId.set(`${place.trip_id}::${place.source_provider}::${place.source_place_id}`, place);
+      const cid = extractPlaceCid(place);
+      if (cid) byCid.set(`${place.trip_id}::${cid}`, place);
+      const cleanTitle = canonicalizePlaceTitle(place.title);
+      if (cleanTitle.length >= 2) byTitle.set(`${place.trip_id}::${cleanTitle}`, place);
       if (place.source_url) byUrlIdentity.set(`${place.trip_id}::${place.source_provider}::${normalizePlaceIdentity(place.source_url)}`, place);
-      const geo = coordinateKey(place);
+      const geo = coordinateClusterKey(place);
       if (geo) byCoordinates.set(geo, place);
     };
     existing.forEach(indexPlace);
     const importedIds: string[] = [];
+    const touchedTripIds = new Set<string>();
 
     for (const rawPlace of places) {
       if (!rawPlace.id || !rawPlace.trip_id || !existingTrips.has(rawPlace.trip_id)) continue;
+      touchedTripIds.add(rawPlace.trip_id);
       const incoming: PlannerTripPlace = {
         ...rawPlace,
         tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
         reservation_status: rawPlace.reservation_status ?? 'none',
         state: 'candidate',
       };
+      const incomingCid = extractPlaceCid(incoming);
+      const incomingTitle = canonicalizePlaceTitle(incoming.title);
+      const incomingGeo = coordinateClusterKey(incoming);
+
       const existingPlace = byId.get(incoming.id)
         ?? (incoming.source_place_id ? byPlaceId.get(`${incoming.trip_id}::${incoming.source_provider}::${incoming.source_place_id}`) : undefined)
-        ?? (coordinateKey(incoming) ? byCoordinates.get(coordinateKey(incoming)!) : undefined)
-        ?? (incoming.source_url ? byUrlIdentity.get(`${incoming.trip_id}::${incoming.source_provider}::${normalizePlaceIdentity(incoming.source_url)}`) : undefined);
+        ?? (incomingCid ? byCid.get(`${incoming.trip_id}::${incomingCid}`) : undefined)
+        ?? (incomingTitle.length >= 2 ? byTitle.get(`${incoming.trip_id}::${incomingTitle}`) : undefined)
+        ?? (incoming.source_url ? byUrlIdentity.get(`${incoming.trip_id}::${incoming.source_provider}::${normalizePlaceIdentity(incoming.source_url)}`) : undefined)
+        ?? (incomingGeo ? byCoordinates.get(incomingGeo) : undefined);
+
       try {
         const persisted = existingPlace ? mergeCapturedPlaceResearch(existingPlace, incoming) : incoming;
         await this.upsert(persisted);
@@ -223,7 +283,106 @@ export class PlannerRepository {
         console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, error);
       }
     }
+
+    // Auto-deduplicate touched trips to ensure zero orphan duplicate markdown files
+    for (const tripId of touchedTripIds) {
+      try {
+        await this.deduplicateTripPlaces(tripId);
+      } catch (err) {
+        console.warn(`[PlannerRepository] Auto-deduplication for trip ${tripId} encountered warning:`, err);
+      }
+    }
+
     return importedIds;
+  }
+
+  /**
+   * Scans all places in a trip, identifies duplicate entities (by Place ID, CID, canonical title, or GPS proximity),
+   * merges their facts and visits into the primary place, and removes duplicate markdown records.
+   */
+  async deduplicateTripPlaces(tripId: string): Promise<{ mergedCount: number; removedCount: number }> {
+    await this.initialize();
+    const allPlaces = (await this.listPlaces()).filter((p) => p.trip_id === tripId);
+    if (allPlaces.length <= 1) return { mergedCount: 0, removedCount: 0 };
+
+    const visits = (await this.listVisits()).filter((v) => v.trip_id === tripId);
+    const visitPlaceIds = new Set(visits.map((v) => v.place_id));
+
+    const clusters: PlannerTripPlace[][] = [];
+    const assigned = new Set<string>();
+
+    for (let i = 0; i < allPlaces.length; i++) {
+      const p1 = allPlaces[i];
+      if (assigned.has(p1.id)) continue;
+      const cluster = [p1];
+      assigned.add(p1.id);
+
+      const cid1 = extractPlaceCid(p1);
+      const title1 = canonicalizePlaceTitle(p1.title);
+      const geo1 = coordinateClusterKey(p1);
+
+      for (let j = i + 1; j < allPlaces.length; j++) {
+        const p2 = allPlaces[j];
+        if (assigned.has(p2.id)) continue;
+        const cid2 = extractPlaceCid(p2);
+        const title2 = canonicalizePlaceTitle(p2.title);
+        const geo2 = coordinateClusterKey(p2);
+
+        const isMatch = (p1.source_place_id && p1.source_place_id === p2.source_place_id)
+          || (cid1 && cid2 && cid1 === cid2)
+          || (title1 && title2 && title1.length >= 3 && title1 === title2)
+          || (p1.source_url && p2.source_url && normalizePlaceIdentity(p1.source_url) === normalizePlaceIdentity(p2.source_url))
+          || (geo1 && geo2 && geo1 === geo2 && (title1.includes(title2) || title2.includes(title1)));
+
+        if (isMatch) {
+          cluster.push(p2);
+          assigned.add(p2.id);
+        }
+      }
+      if (cluster.length > 1) {
+        clusters.push(cluster);
+      }
+    }
+
+    let mergedCount = 0;
+    let removedCount = 0;
+
+    for (const cluster of clusters) {
+      cluster.sort((a, b) => {
+        const aScheduled = visitPlaceIds.has(a.id) ? 1 : 0;
+        const bScheduled = visitPlaceIds.has(b.id) ? 1 : 0;
+        if (aScheduled !== bScheduled) return bScheduled - aScheduled;
+        return a.created_at.localeCompare(b.created_at);
+      });
+
+      const primary = cluster[0];
+      let updatedPrimary = { ...primary };
+
+      for (let k = 1; k < cluster.length; k++) {
+        const duplicate = cluster[k];
+        updatedPrimary = mergeCapturedPlaceResearch(updatedPrimary, duplicate);
+
+        const dupVisits = visits.filter((v) => v.place_id === duplicate.id);
+        for (const v of dupVisits) {
+          await this.upsert({ ...v, place_id: primary.id, updated_at: new Date().toISOString() });
+        }
+
+        try {
+          await this.store.deleteMarkdownFile(
+            this.directory(PLANNER_DIRECTORIES.places),
+            entityFileName(duplicate),
+          );
+          removedCount++;
+        } catch (err) {
+          console.warn(`[PlannerRepository] Failed to delete duplicate place file ${duplicate.id}:`, err);
+        }
+      }
+
+      await this.upsert(updatedPrimary);
+      mergedCount++;
+    }
+
+    return { mergedCount, removedCount };
   }
 
   async importCapturedPlaces(places: PlannerTripPlace[]): Promise<string[]> { return this.importResearchPlaces(places); }

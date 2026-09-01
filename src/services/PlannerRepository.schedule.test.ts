@@ -277,4 +277,50 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(await plannerRepository.toggleVisitLock('visit:ghost')).toBeNull();
     expect(await plannerRepository.removeVisit('visit:ghost')).toBe(false);
   });
+
+  it('deduplicates places by Place ID, CID, and emoji/canonical title', async () => {
+    const trip: PlannerTrip = {
+      schema_version: '0.1',
+      type: 'trip',
+      id: 'trip-1',
+      title: 'Thailand 2026',
+      start_date: '2026-11-01',
+      end_date: '2026-11-10',
+      transport_mode: 'transit',
+      destinations: ['Bangkok'],
+      status: 'planning',
+      created_at: '2026-08-24T00:00:00.000Z',
+      updated_at: '2026-08-24T00:00:00.000Z',
+    };
+    await plannerRepository.upsertTrip(trip);
+
+    // Initial place in vault with emoji and no Place ID
+    const initialPlace = place('p-thip-1', {
+      title: '🍜 Thipsamai Padthai Pratoopee',
+      source_url: 'https://www.google.com/maps/place/Thipsamai/@13.75279,100.50482',
+      source_place_id: undefined,
+      notes: 'Initial note',
+    });
+    await plannerRepository.upsertPlace(initialPlace);
+
+    // Incoming place from capture with Hex Place ID and no emoji
+    const incomingPlace = place('p-thip-new', {
+      title: 'Thipsamai Padthai Pratoopee',
+      source_url: 'https://www.google.com/maps?cid=7605461113463140286',
+      source_place_id: '0x30e2991678584ec5:0x698c069655046fbe',
+      observed_rating: 4.2,
+      observed_review_count: 12569,
+    });
+
+    const imported = await plannerRepository.importCapturedPlaces([incomingPlace]);
+    expect(imported).toContain('p-thip-new');
+
+    const placesAfter = (await plannerRepository.listPlaces()).filter((p) => p.trip_id === 'trip-1');
+    // Should NOT create duplicate, should merge into single authoritative place
+    const thipPlaces = placesAfter.filter((p) => p.title.includes('Thipsamai'));
+    expect(thipPlaces).toHaveLength(1);
+    expect(thipPlaces[0].source_place_id).toBe('0x30e2991678584ec5:0x698c069655046fbe');
+    expect(thipPlaces[0].observed_rating).toBe(4.2);
+    expect(thipPlaces[0].notes).toBe('Initial note');
+  });
 });
