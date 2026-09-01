@@ -38,6 +38,8 @@ export interface PlannerTrip {
   fx_rates?: Record<string, number>;
   /** Calendar subscription feed metadata for continuous read-only ICS sync (PRO). */
   calendar_feed?: PlannerTripCalendarFeed;
+  /** User-reviewed duplicate pairs that must stay separate. Pair ids are canonical and order-independent. */
+  ignored_duplicate_pair_ids?: string[];
   created_at: string;
   updated_at?: string;
 }
@@ -574,7 +576,7 @@ export function detectSuspectedDuplicatePlaces(
         const [primaryPlace, secondaryPlace] = p1Score >= p2Score ? [p1, p2] : [p2, p1];
 
         results.push({
-          pairId: `${primaryPlace.id}--${secondaryPlace.id}`,
+          pairId: [p1.id, p2.id].sort().join('--'),
           reason,
           score,
           distanceMeters: distMeters,

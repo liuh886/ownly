@@ -265,7 +265,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isSuspectedModalOpen, setIsSuspectedModalOpen] = useState(false);
-  const [dismissedPairIds, setDismissedPairIds] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
@@ -393,9 +392,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [tripPlaces],
   );
 
+  const ignoredDuplicatePairIds = useMemo(
+    () => new Set(selectedTrip?.ignored_duplicate_pair_ids ?? []),
+    [selectedTrip?.ignored_duplicate_pair_ids],
+  );
+
   const visibleSuspectedPairs = useMemo(
-    () => suspectedDuplicatePairs.filter((pair) => !dismissedPairIds.has(pair.pairId)),
-    [suspectedDuplicatePairs, dismissedPairIds],
+    () => suspectedDuplicatePairs.filter((pair) => !ignoredDuplicatePairIds.has(pair.pairId)),
+    [suspectedDuplicatePairs, ignoredDuplicatePairIds],
   );
 
   const tripTags = useMemo(() => {
@@ -758,6 +762,27 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       setTimeout(() => setNotice(''), 4000);
     }
   }, [disabled, load, zh]);
+
+
+  const handleIgnoreSuspectedPair = useCallback(async (pairId: string) => {
+    if (!pairId || !selectedTrip || disabled) return;
+    try {
+      const ignored = new Set(selectedTrip.ignored_duplicate_pair_ids ?? []);
+      ignored.add(pairId);
+      const nextTrip: PlannerTrip = {
+        ...selectedTrip,
+        ignored_duplicate_pair_ids: [...ignored].sort(),
+        updated_at: new Date().toISOString(),
+      };
+      await plannerRepository.upsertTrip(nextTrip);
+      setTrips((prev) => prev.map((trip) => (trip.id === nextTrip.id ? nextTrip : trip)));
+      setNotice(zh ? '已确认这两个地点应保持分开' : 'Kept these places separate');
+      setTimeout(() => setNotice(''), 2500);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+      setTimeout(() => setNotice(''), 4000);
+    }
+  }, [disabled, selectedTrip, zh]);
 
 
   const toggleSelectCandidate = useCallback((id: string) => {
@@ -2113,7 +2138,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     <button
                       key={f.id}
                       type="button"
-                      onClick={() => setActiveFilter(isSelected && f.id !== 'all' ? 'all' : f.id)}
+                      onClick={() => {
+                        const nextFilter = isSelected && f.id !== 'all' ? 'all' : f.id;
+                        setActiveFilter(nextFilter);
+                        if (nextFilter === 'dropped') {
+                          setIsMultiSelectMode(false);
+                          setSelectedCandidateIds(new Set());
+                        }
+                      }}
                       className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition ${
                         isSelected
                           ? 'bg-stone-900 text-white shadow-2xs'
@@ -2135,7 +2167,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="p-4">
               <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
                 <h3 className="text-xs font-semibold text-stone-700">
-                  {zh ? '待安排地点' : 'Pending Scheduling'}
+                  {activeFilter === 'dropped'
+                    ? (zh ? '暂不考虑' : 'Shelved')
+                    : (zh ? '待安排地点' : 'Pending Scheduling')}
                   <span className="ml-1.5 text-[11px] font-normal text-stone-400">
                     ({sortedPendingCandidates.length})
                   </span>
@@ -2153,11 +2187,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   ) : null}
                   <button
                     type="button"
+                    disabled={activeFilter === 'dropped'}
                     onClick={() => {
                       setIsMultiSelectMode((prev) => !prev);
                       setSelectedCandidateIds(new Set());
                     }}
-                    className={`rounded-md border px-2 py-1 text-[11px] font-medium transition flex items-center gap-1 shadow-2xs ${
+                    className={`rounded-md border px-2 py-1 text-[11px] font-medium transition flex items-center gap-1 shadow-2xs disabled:cursor-not-allowed disabled:opacity-35 ${
                       isMultiSelectMode
                         ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-bold'
                         : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
@@ -2177,7 +2212,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 </div>
               </div>
 
-              {isMultiSelectMode ? (
+              {isMultiSelectMode && activeFilter !== 'dropped' ? (
                 <div className="sticky top-2 z-20 mb-4 flex items-center justify-between flex-wrap gap-3 rounded-2xl border border-stone-800 bg-stone-950/95 px-4 py-2.5 text-white shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-2">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-emerald-400">
@@ -2263,7 +2298,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       key={place.id}
                       draggable={!isMultiSelectMode && place.state !== 'dropped'}
                       onClick={() => {
-                        if (isMultiSelectMode) toggleSelectCandidate(place.id);
+                        if (isMultiSelectMode && place.state !== 'dropped') toggleSelectCandidate(place.id);
                       }}
                       onDragStart={(event) => {
                         if (isMultiSelectMode || place.state === 'dropped') return;
@@ -2275,7 +2310,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
                       className={`group flex flex-col justify-between rounded-xl border p-3.5 transition-all duration-150 ${
-                        isMultiSelectMode
+                        isMultiSelectMode && place.state !== 'dropped'
                           ? selectedCandidateIds.has(place.id)
                             ? 'border-emerald-500 ring-2 ring-emerald-400 bg-emerald-50/60 shadow-xs cursor-pointer'
                             : 'border-stone-200 bg-white hover:border-stone-300 cursor-pointer shadow-2xs'
@@ -2288,7 +2323,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         {/* Card Header Row */}
                         <div className="flex items-start justify-between gap-1.5">
                           <div className="flex items-center gap-1.5 truncate">
-                            {isMultiSelectMode ? (
+                            {isMultiSelectMode && place.state !== 'dropped' ? (
                               <input
                                 type="checkbox"
                                 checked={selectedCandidateIds.has(place.id)}
@@ -2560,15 +2595,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4 bg-stone-50">
               <div>
                 <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
-                  ✨ {zh ? '合并疑似同类地点' : 'Merge Suspected Duplicates'}
+                  ✨ {zh ? '疑似重复地点复核' : 'Suspected Duplicate Review'}
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
                     {visibleSuspectedPairs.length}
                   </span>
                 </h2>
                 <p className="text-xs text-stone-500 mt-0.5">
                   {zh
-                    ? '系统检测到以下地点名称高度相近或地理位置重合，请选择保留的主地点进行合并。'
-                    : 'The following places have very close coordinates or matching titles. Choose which place to keep.'}
+                    ? '以下地点只有相似证据，系统不会自动合并。请逐组选择合并或确认保持分开。'
+                    : 'These places have similarity evidence only. Ownly will not auto-merge them; review each pair explicitly.'}
                 </p>
               </div>
               <button
@@ -2587,12 +2622,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   className="rounded-xl border border-amber-200/80 bg-amber-50/20 p-4 shadow-xs"
                 >
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-                      🔍 {pair.reason}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                        🔍 {pair.reason}
+                      </span>
+                      <span className="rounded-md border border-stone-200 bg-white px-2 py-0.5 text-[10.5px] font-medium text-stone-500">
+                        {zh ? '匹配分' : 'Match'} {Math.round(pair.score * 100)}%
+                      </span>
+                      {pair.distanceMeters !== undefined ? (
+                        <span className="rounded-md border border-stone-200 bg-white px-2 py-0.5 text-[10.5px] font-medium text-stone-500">
+                          📍 {pair.distanceMeters}m
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setDismissedPairIds((prev) => new Set([...prev, pair.pairId]))}
+                      onClick={() => void handleIgnoreSuspectedPair(pair.pairId)}
                       className="text-[11px] font-medium text-stone-400 hover:text-stone-600 transition"
                     >
                       {zh ? '不是同类 (忽略)' : 'Ignore (keep separate)'}
@@ -2672,7 +2717,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               >
                 {zh ? '暂不处理' : 'Close'}
               </button>
-</div>
+            </div>
           </div>
         </div>
       ) : null}

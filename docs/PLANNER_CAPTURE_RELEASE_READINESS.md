@@ -71,8 +71,8 @@ Release checks:
 
 - [x] No bulk “merge all suspected” path remains.
 - [x] Per-pair manual merge remains available.
-- [ ] Persist Ignore decisions if current dismissal is session-only; an ignored pair must not reappear every reload.
-- [ ] Show concise evidence on each pair: title similarity, phone match, distance, category, and available identity confidence.
+- [x] Persist Ignore decisions on the Trip; an ignored pair does not reappear after reload.
+- [x] Show concise review evidence for each pair: reason, match score, and distance when available.
 - [ ] Ensure a merge preserves the preferred primary Place, facts, all Visits, and canonical identity.
 - [ ] Add tests for one Place appearing in multiple weak pairs so review cannot create stale pair references after a merge.
 

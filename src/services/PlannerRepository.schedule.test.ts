@@ -278,6 +278,26 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(await plannerRepository.removeVisit('visit:ghost')).toBe(false);
   });
 
+  it('persists ignored suspected-duplicate pair decisions on the trip', async () => {
+    const trip: PlannerTrip = {
+      schema_version: '0.1',
+      type: 'trip',
+      id: 'trip-ignore',
+      title: 'Review decisions',
+      start_date: '2026-11-01',
+      end_date: '2026-11-02',
+      transport_mode: 'transit',
+      destinations: ['Bangkok'],
+      status: 'planning',
+      ignored_duplicate_pair_ids: ['a--b'],
+      created_at: '2026-08-24T00:00:00.000Z',
+      updated_at: '2026-08-24T00:00:00.000Z',
+    };
+    await plannerRepository.upsertTrip(trip);
+    const stored = (await plannerRepository.listTrips()).find((item) => item.id === trip.id);
+    expect(stored?.ignored_duplicate_pair_ids).toEqual(['a--b']);
+  });
+
   it('does not auto-merge title-only matches without a strong identity', async () => {
     const trip: PlannerTrip = {
       schema_version: '0.1',
