@@ -449,12 +449,23 @@ export function createOwnlyMcpServer(dataLocation, options = {}) {
   server.registerTool(
     'ownly_planner_prepare_drop_place',
     {
-      title: 'Preview Dropping a Place',
-      description: 'Preview marking a place as dropped (terminal lifecycle state, recoverable by editing Markdown).',
+      title: 'Preview Shelving/Dropping a Place',
+      description: 'Preview shelving a place (state: dropped), removing it from candidate pool and active planning while preserving all facts in Vault.',
       inputSchema: z.object({ place_id: z.string().min(1) }),
       annotations: PREPARE_WRITE_ANNOTATIONS,
     },
     safeHandler(({ place_id }) => writeService.prepareDropPlannerPlace(place_id)),
+  );
+
+  server.registerTool(
+    'ownly_planner_prepare_restore_place',
+    {
+      title: 'Preview Restoring a Shelved Place',
+      description: 'Preview restoring a shelved/dropped place back to candidate pool (state: candidate).',
+      inputSchema: z.object({ place_id: z.string().min(1) }),
+      annotations: PREPARE_WRITE_ANNOTATIONS,
+    },
+    safeHandler(({ place_id }) => writeService.prepareRestorePlannerPlace(place_id)),
   );
 
   server.registerTool(

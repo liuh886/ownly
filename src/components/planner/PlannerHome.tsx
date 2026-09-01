@@ -82,6 +82,86 @@ function formatDistanceBadge(distKm: number, zh: boolean): string {
   return zh ? `距上一站 ${distKm.toFixed(1)} km` : `${distKm.toFixed(1)}km from last stop`;
 }
 
+function filterAndSearchPlaces(
+  places: PlannerTripPlace[],
+  activeFilter: string,
+  searchQuery: string,
+): PlannerTripPlace[] {
+  let filtered = places;
+  if (activeFilter === 'must') {
+    filtered = places.filter((p) => p.priority === 'must');
+  } else if (activeFilter === 'want') {
+    filtered = places.filter((p) => p.priority === 'want');
+  } else if (activeFilter.startsWith('kind:')) {
+    const targetKind = activeFilter.slice(5) as PlannerPlaceKind;
+    const zhLabel = PLANNER_KIND_LABELS[targetKind]?.zh.toLowerCase() || '';
+    const enLabel = PLANNER_KIND_LABELS[targetKind]?.en.toLowerCase() || '';
+    filtered = places.filter(
+      (p) =>
+        p.kind === targetKind ||
+        p.tags.some((t) => {
+          const lower = t.trim().toLowerCase();
+          return lower === zhLabel || lower === enLabel;
+        }),
+    );
+  } else if (activeFilter.startsWith('tag:')) {
+    const targetTag = activeFilter.slice(4).trim().toLowerCase();
+    filtered = places.filter(
+      (p) =>
+        p.tags.some((t) => t.trim().toLowerCase() === targetTag) ||
+        p.signals?.some((s) => s.trim().toLowerCase() === targetTag) ||
+        p.risks?.some((r) => r.trim().toLowerCase() === targetTag),
+    );
+  }
+
+  const query = searchQuery.trim().toLowerCase();
+  if (!query) return filtered;
+  return filtered.filter(
+    (p) =>
+      p.title.toLowerCase().includes(query) ||
+      (p.area && p.area.toLowerCase().includes(query)) ||
+      (p.address && p.address.toLowerCase().includes(query)) ||
+      p.tags.some((t) => t.toLowerCase().includes(query)) ||
+      (p.signals && p.signals.some((s) => s.toLowerCase().includes(query))) ||
+      (p.risks && p.risks.some((r) => r.toLowerCase().includes(query))) ||
+      (p.why && p.why.toLowerCase().includes(query)) ||
+      (p.notes && p.notes.toLowerCase().includes(query)),
+  );
+}
+
+function sortPlaceList(
+  list: PlannerTripPlace[],
+  sortMode: 'default' | 'distance' | 'must' | 'rating',
+  candidateDistances: Map<string, number>,
+  lastStopCoords: { lat: number; lng: number } | null,
+): PlannerTripPlace[] {
+  const cloned = [...list];
+  if (sortMode === 'distance' && lastStopCoords) {
+    return cloned.sort((a, b) => {
+      const distA = candidateDistances.get(a.id) ?? Infinity;
+      const distB = candidateDistances.get(b.id) ?? Infinity;
+      if (distA !== distB) return distA - distB;
+      return a.title.localeCompare(b.title);
+    });
+  }
+  if (sortMode === 'rating') {
+    return cloned.sort((a, b) => (b.observed_rating ?? 0) - (a.observed_rating ?? 0));
+  }
+  if (sortMode === 'must') {
+    return cloned.sort((a, b) => {
+      const pA = a.priority === 'must' ? 0 : (a.priority === 'want' ? 1 : 2);
+      const pB = b.priority === 'must' ? 0 : (b.priority === 'want' ? 1 : 2);
+      return pA - pB;
+    });
+  }
+  return cloned.sort((left, right) => {
+    const lMust = left.priority === 'must' || left.tags.some((t) => t.includes('必去') || t.includes('must'));
+    const rMust = right.priority === 'must' || right.tags.some((t) => t.includes('必去') || t.includes('must'));
+    if (lMust !== rMust) return lMust ? -1 : 1;
+    return left.title.localeCompare(right.title);
+  });
+}
+
 export function PlannerHome({ disabled }: PlannerHomeProps) {
   const { language } = useI18n();
   const zh = language === 'zh';
@@ -102,6 +182,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [expensesByTrip, setExpensesByTrip] = useState<Record<string, TripExpenseItem[]>>({});
   const [membersByTrip, setMembersByTrip] = useState<Record<string, string[]>>({});
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
+  const [isScheduledCollapsed, setIsScheduledCollapsed] = useState(true);
+  const [isDroppedCollapsed, setIsDroppedCollapsed] = useState(true);
 
   const currentExpenses = useMemo(() => {
     if (!selectedTripId) return [];
@@ -323,38 +405,65 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     return unique;
   }, [selectedTrip, tripPlaces]);
 
-  const candidates = useMemo(
+  const tripVisits = useMemo(
+    () => visits.filter((visit) => visit.trip_id === selectedTripId),
+    [visits, selectedTripId],
+  );
+
+  const visitCountByPlaceId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const v of tripVisits) {
+      counts.set(v.place_id, (counts.get(v.place_id) || 0) + 1);
+    }
+    return counts;
+  }, [tripVisits]);
+
+  const allCandidatePlaces = useMemo(
     () => [...tripPlaces]
       .filter((place) => place.state === 'candidate')
       .map((place) => ({
         ...place,
         tags: ensurePlaceKindTag(place.tags, place.kind, language),
-      }))
-      .sort((left, right) => {
-        const lMust = left.priority === 'must' || left.tags.some((t) => t.includes('必去') || t.includes('must'));
-        const rMust = right.priority === 'must' || right.tags.some((t) => t.includes('必去') || t.includes('must'));
-        if (lMust !== rMust) return lMust ? -1 : 1;
-        return left.title.localeCompare(right.title);
-      }),
+      })),
+    [tripPlaces, language],
+  );
+
+  const pendingCandidates = useMemo(
+    () => allCandidatePlaces.filter((place) => (visitCountByPlaceId.get(place.id) || 0) === 0),
+    [allCandidatePlaces, visitCountByPlaceId],
+  );
+
+  const scheduledCandidates = useMemo(
+    () => allCandidatePlaces.filter((place) => (visitCountByPlaceId.get(place.id) || 0) > 0),
+    [allCandidatePlaces, visitCountByPlaceId],
+  );
+
+  const droppedPlaces = useMemo(
+    () => [...tripPlaces]
+      .filter((place) => place.state === 'dropped')
+      .map((place) => ({
+        ...place,
+        tags: ensurePlaceKindTag(place.tags, place.kind, language),
+      })),
     [tripPlaces, language],
   );
 
   const filterChips = useMemo(() => {
     const chips: Array<{ id: string; label: string; count: number; type: 'all' | 'priority' | 'kind' | 'tag' }> = [
-      { id: 'all', label: zh ? '全部' : 'All', count: candidates.length, type: 'all' },
+      { id: 'all', label: zh ? '全部' : 'All', count: pendingCandidates.length, type: 'all' },
     ];
 
-    const mustCount = candidates.filter((p) => p.priority === 'must').length;
+    const mustCount = pendingCandidates.filter((p) => p.priority === 'must').length;
     if (mustCount > 0) chips.push({ id: 'must', label: zh ? '必去' : 'Must', count: mustCount, type: 'priority' });
 
-    const wantCount = candidates.filter((p) => p.priority === 'want').length;
+    const wantCount = pendingCandidates.filter((p) => p.priority === 'want').length;
     if (wantCount > 0) chips.push({ id: 'want', label: zh ? '想去' : 'Want', count: wantCount, type: 'priority' });
 
     const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'other'];
     for (const kind of allKinds) {
       const kindTagZh = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
       const kindTagEn = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
-      const count = candidates.filter(
+      const count = pendingCandidates.filter(
         (p) =>
           p.kind === kind ||
           p.tags.some((t) => {
@@ -374,7 +483,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
     for (const tag of tripTags) {
       const tagLower = tag.trim().toLowerCase();
-      const count = candidates.filter(
+      const count = pendingCandidates.filter(
         (p) =>
           p.tags.some((t) => t.trim().toLowerCase() === tagLower) ||
           p.signals?.some((s) => s.trim().toLowerCase() === tagLower) ||
@@ -391,61 +500,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     }
 
     return chips;
-  }, [candidates, zh, language, tripTags]);
-
-  const filteredCandidates = useMemo(() => {
-    if (activeFilter === 'all') return candidates;
-    if (activeFilter === 'must') return candidates.filter((p) => p.priority === 'must');
-    if (activeFilter === 'want') return candidates.filter((p) => p.priority === 'want');
-    if (activeFilter.startsWith('kind:')) {
-      const targetKind = activeFilter.slice(5) as PlannerPlaceKind;
-      const zhLabel = PLANNER_KIND_LABELS[targetKind]?.zh.toLowerCase() || '';
-      const enLabel = PLANNER_KIND_LABELS[targetKind]?.en.toLowerCase() || '';
-      return candidates.filter(
-        (p) =>
-          p.kind === targetKind ||
-          p.tags.some((t) => {
-            const lower = t.trim().toLowerCase();
-            return lower === zhLabel || lower === enLabel;
-          }),
-      );
-    }
-    if (activeFilter.startsWith('tag:')) {
-      const targetTag = activeFilter.slice(4).trim().toLowerCase();
-      return candidates.filter(
-        (p) =>
-          p.tags.some((t) => t.trim().toLowerCase() === targetTag) ||
-          p.signals?.some((s) => s.trim().toLowerCase() === targetTag) ||
-          p.risks?.some((r) => r.trim().toLowerCase() === targetTag),
-      );
-    }
-    return candidates;
-  }, [candidates, activeFilter]);
-
-  const searchFilteredCandidates = useMemo(() => {
-    const query = poolSearch.trim().toLowerCase();
-    if (!query) return filteredCandidates;
-    return filteredCandidates.filter(
-      (p) =>
-        p.title.toLowerCase().includes(query) ||
-        (p.area && p.area.toLowerCase().includes(query)) ||
-        (p.address && p.address.toLowerCase().includes(query)) ||
-        p.tags.some((t) => t.toLowerCase().includes(query)) ||
-        (p.signals && p.signals.some((s) => s.toLowerCase().includes(query))) ||
-        (p.risks && p.risks.some((r) => r.toLowerCase().includes(query))) ||
-        (p.why && p.why.toLowerCase().includes(query)) ||
-        (p.notes && p.notes.toLowerCase().includes(query)),
-    );
-  }, [filteredCandidates, poolSearch]);
+  }, [pendingCandidates, zh, language, tripTags]);
 
   const [candidateSortMode, setCandidateSortMode] = useState<'default' | 'distance' | 'must' | 'rating'>('default');
 
   const scheduledAll = useMemo(
     () => materializePlannerScheduledPlaces(
       tripPlaces,
-      visits.filter((visit) => visit.trip_id === selectedTripId),
+      tripVisits,
     ),
-    [selectedTripId, tripPlaces, visits],
+    [tripPlaces, tripVisits],
   );
 
   const scheduled = useMemo(
@@ -503,41 +567,33 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const candidateDistances = useMemo(() => {
     const map = new Map<string, number>();
     if (!lastStopCoords) return map;
-    for (const p of candidates) {
+    for (const p of allCandidatePlaces) {
       const coords = extractPlaceCoordinates(p);
       if (coords) {
         map.set(p.id, haversineDistanceKm(lastStopCoords, coords));
       }
     }
     return map;
-  }, [candidates, lastStopCoords]);
+  }, [allCandidatePlaces, lastStopCoords]);
 
-  const sortedCandidates = useMemo(() => {
-    const list = [...searchFilteredCandidates];
-    if (candidateSortMode === 'distance' && lastStopCoords) {
-      return list.sort((a, b) => {
-        const distA = candidateDistances.get(a.id) ?? Infinity;
-        const distB = candidateDistances.get(b.id) ?? Infinity;
-        if (distA !== distB) return distA - distB;
-        return a.title.localeCompare(b.title);
-      });
-    }
-    if (candidateSortMode === 'rating') {
-      return list.sort((a, b) => (b.observed_rating ?? 0) - (a.observed_rating ?? 0));
-    }
-    if (candidateSortMode === 'must') {
-      return list.sort((a, b) => {
-        const pA = a.priority === 'must' ? 0 : (a.priority === 'want' ? 1 : 2);
-        const pB = b.priority === 'must' ? 0 : (b.priority === 'want' ? 1 : 2);
-        return pA - pB;
-      });
-    }
-    return list;
-  }, [searchFilteredCandidates, candidateSortMode, candidateDistances, lastStopCoords]);
+  const sortedPendingCandidates = useMemo(() => {
+    const filtered = filterAndSearchPlaces(pendingCandidates, activeFilter, poolSearch);
+    return sortPlaceList(filtered, candidateSortMode, candidateDistances, lastStopCoords);
+  }, [pendingCandidates, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords]);
+
+  const sortedScheduledCandidates = useMemo(() => {
+    const filtered = filterAndSearchPlaces(scheduledCandidates, activeFilter, poolSearch);
+    return sortPlaceList(filtered, candidateSortMode, candidateDistances, lastStopCoords);
+  }, [scheduledCandidates, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords]);
+
+  const sortedDroppedPlaces = useMemo(() => {
+    const filtered = filterAndSearchPlaces(droppedPlaces, activeFilter, poolSearch);
+    return sortPlaceList(filtered, candidateSortMode, candidateDistances, lastStopCoords);
+  }, [droppedPlaces, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords]);
 
   const candidateHotels = useMemo(
-    () => candidates.filter((p) => p.kind === 'stay'),
-    [candidates],
+    () => allCandidatePlaces.filter((p) => p.kind === 'stay'),
+    [allCandidatePlaces],
   );
 
   const placesByDate = useMemo(() => {
@@ -587,13 +643,28 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [selectedTripId, trips],
   );
 
-  const handleDropHotel = useCallback(async (hotelId: string) => {
-    if (!hotelId || disabled) return;
+  const handleDropPlace = useCallback(async (placeId: string) => {
+    if (!placeId || disabled) return;
     try {
-      await plannerRepository.dropPlace(hotelId);
+      await plannerRepository.dropPlace(placeId);
       await load();
+      setNotice(zh ? '已将地点设为暂不考虑' : 'Place shelved');
+      setTimeout(() => setNotice(''), 3000);
     } catch {
-      setNotice(zh ? '该酒店仍在行程中，请先移除对应的住宿 Visit。' : 'This hotel is still scheduled. Remove its stay Visits first.');
+      setNotice(zh ? '该地点仍在行程中，请先从日程中移除已排访问。' : 'This place is still scheduled. Remove its visits first.');
+      setTimeout(() => setNotice(''), 4000);
+    }
+  }, [disabled, load, zh]);
+
+  const handleRestorePlace = useCallback(async (placeId: string) => {
+    if (!placeId || disabled) return;
+    try {
+      await plannerRepository.restorePlace(placeId);
+      await load();
+      setNotice(zh ? '已恢复为待考虑候选' : 'Place restored to candidates');
+      setTimeout(() => setNotice(''), 3000);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
       setTimeout(() => setNotice(''), 4000);
     }
   }, [disabled, load, zh]);
@@ -987,7 +1058,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <span>🗂️</span>
             <span>{zh ? '候选池' : 'Pool'}</span>
             <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[10px] font-bold text-stone-600">
-              {candidates.length}
+              {pendingCandidates.length}
             </span>
           </button>
         </div>
@@ -1098,7 +1169,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 title={zh ? '跳转至下方候选池' : 'Jump to Research Pool below'}
               >
                 <span>🗂️ {zh ? '候选池' : 'Pool'}</span>
-                <span className="rounded-full bg-stone-200 px-1.5 py-0 text-[9.5px] font-bold text-stone-700">{candidates.length}</span>
+                <span className="rounded-full bg-stone-200 px-1.5 py-0 text-[9.5px] font-bold text-stone-700">{pendingCandidates.length}</span>
               </button>
               <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-stone-50 border border-stone-200 px-2 py-1 text-[11px] font-medium text-stone-700">
                 <span>💸</span>
@@ -1525,7 +1596,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="flex-1 min-h-[380px] p-2 flex flex-col">
               <PlannerMap
                 scheduledPlaces={mapScheduled}
-                candidatePlaces={filteredCandidates.filter((place) => !mapScheduledPlaceIds.has(place.id))}
+                candidatePlaces={sortedPendingCandidates.filter((place) => !mapScheduledPlaceIds.has(place.id))}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
@@ -1553,8 +1624,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="p-4 overflow-y-auto">
               <h2 className="text-sm font-semibold text-stone-900">Planner Context</h2>
               <div className="mt-3 divide-y divide-stone-100 text-xs">
-                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '当天已排' : 'Scheduled'}</span><strong>{scheduled.length}</strong></div>
-                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '候选未排' : 'Unscheduled'}</span><strong>{candidates.length}</strong></div>
+                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '当天已排' : 'Day Scheduled'}</span><strong>{scheduled.length}</strong></div>
+                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '待安排候选' : 'Pending'}</span><strong>{pendingCandidates.length}</strong></div>
+                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '已安排地点' : 'Scheduled'}</span><strong>{scheduledCandidates.length}</strong></div>
+                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '暂不考虑' : 'Shelved'}</span><strong>{droppedPlaces.length}</strong></div>
                 <div className="flex justify-between py-2"><span className="text-stone-400">Must</span><strong>{mustScheduled}/{mustTotal}</strong></div>
                 <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '地点时长' : 'Place time'}</span><strong>{Math.round(scheduledMinutes / 60 * 10) / 10}h</strong></div>
               </div>
@@ -1605,7 +1678,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="flex-1 p-2">
               <PlannerMap
                 scheduledPlaces={mapScheduled}
-                candidatePlaces={sortedCandidates.filter((place) => !mapScheduledPlaceIds.has(place.id))}
+                candidatePlaces={sortedPendingCandidates.filter((place) => !mapScheduledPlaceIds.has(place.id))}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
@@ -1632,11 +1705,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <span className="text-base">🗂️</span>
               <h2 className="text-sm font-semibold text-stone-900">{zh ? '行程候选池' : 'Research Pool'}</h2>
               <span className="rounded-full bg-stone-200/80 px-2 py-0.5 text-xs font-bold text-stone-700">
-                {searchFilteredCandidates.length}/{candidates.length}
+                {sortedPendingCandidates.length}/{pendingCandidates.length}
               </span>
+              {scheduledCandidates.length > 0 ? (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800" title={zh ? '已安排地点数' : 'Scheduled places count'}>
+                  ✓ {zh ? '已排' : 'Scheduled'} {scheduledCandidates.length}
+                </span>
+              ) : null}
+              {droppedPlaces.length > 0 ? (
+                <span className="rounded-full bg-stone-200/60 px-2 py-0.5 text-xs font-semibold text-stone-600" title={zh ? '暂不考虑地点数' : 'Shelved places count'}>
+                  {zh ? '暂不考虑' : 'Shelved'} {droppedPlaces.length}
+                </span>
+              ) : null}
             </div>
-            <p className="hidden md:block text-xs text-stone-400">
-              {zh ? '在 Google Maps 研究完成的候选地点，可直接排入当天或拖拽至上方日程' : 'Researched places from Google Maps. Schedule to day or drag into list above.'}
+            <p className="hidden lg:block text-xs text-stone-400">
+              {zh ? '待安排候选地点，可直接排入当天或拖拽至日程' : 'Unscheduled candidates. Schedule to day or drag into list above.'}
             </p>
           </div>
 
@@ -1705,7 +1788,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         {!isPoolCollapsed ? (
           <>
             {/* Category & Tag Filter Chips Bar */}
-            {candidates.length > 0 ? (
+            {filterChips.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5 border-b border-stone-100 bg-stone-50/50 px-4 py-2">
                 {filterChips.map((f) => {
                   const isSelected = activeFilter === f.id;
@@ -1731,16 +1814,33 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               </div>
             ) : null}
 
-            {/* Candidate Place Cards Grid (Multi-column responsive horizontal grid!) */}
+            {/* Layer 1: 待安排 Primary Candidate Cards Grid */}
             <div className="p-4">
-              {sortedCandidates.length === 0 ? (
-                <div className="py-12 text-center text-xs text-stone-400">
-                  <p className="text-2xl mb-1.5">📭</p>
-                  <p>{candidates.length === 0 ? (zh ? '当前行程暂无候选地点，浏览地图或导入收藏夹即可添加。' : 'No candidates yet.') : (zh ? '没有匹配的候选地点。' : 'No matching candidates.')}</p>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-stone-700">
+                  {zh ? '待安排地点' : 'Pending Scheduling'}
+                  <span className="ml-1.5 text-[11px] font-normal text-stone-400">
+                    ({sortedPendingCandidates.length})
+                  </span>
+                </h3>
+              </div>
+
+              {sortedPendingCandidates.length === 0 ? (
+                <div className="py-10 text-center text-xs text-stone-400">
+                  <p className="text-2xl mb-1.5">
+                    {pendingCandidates.length === 0 && scheduledCandidates.length > 0 ? '🎉' : '📭'}
+                  </p>
+                  <p>
+                    {pendingCandidates.length === 0
+                      ? scheduledCandidates.length > 0
+                        ? (zh ? '太棒了！所有候选地点均已排入日程。可在下方查看已安排或在地图中继续探索。' : 'All candidates are scheduled! View scheduled places below.')
+                        : (zh ? '当前行程暂无候选地点，浏览地图或导入收藏夹即可添加。' : 'No candidates yet.')
+                      : (zh ? '没有匹配的待安排地点。' : 'No matching pending candidates.')}
+                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {sortedCandidates.map((place) => (
+                  {sortedPendingCandidates.map((place) => (
                     <article
                       key={place.id}
                       draggable
@@ -1771,6 +1871,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               title={zh ? '直接排入当天日程' : 'Schedule to active day'}
                             >
                               + {zh ? '当天' : 'Day'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDropPlace(place.id)}
+                              className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-medium text-stone-400 hover:text-rose-600 hover:border-stone-300 transition"
+                              title={zh ? '设为暂不考虑，可随时在下方折叠区中重新考虑' : 'Shelve this place, recoverable anytime in the section below'}
+                            >
+                              {zh ? '暂不考虑' : 'Shelve'}
                             </button>
                           </div>
                         </div>
@@ -1871,6 +1979,197 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 </div>
               )}
             </div>
+
+            {/* Layer 2: 已安排地点 Collapsible Section */}
+            {scheduledCandidates.length > 0 ? (
+              <div className="border-t border-stone-200 bg-stone-50/50">
+                <button
+                  type="button"
+                  onClick={() => setIsScheduledCollapsed((prev) => !prev)}
+                  className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-semibold text-stone-700 hover:bg-stone-100 transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px]">{isScheduledCollapsed ? '▶' : '▼'}</span>
+                    <span>{zh ? '已安排地点' : 'Scheduled Places'}</span>
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10.5px] font-bold text-emerald-800">
+                      {scheduledCandidates.length}
+                    </span>
+                    <span className="hidden sm:inline text-[11px] font-normal text-stone-400">
+                      {zh ? '（已排入具体日期，仍可跨天重复安排）' : '(Assigned to dates, reusable across days)'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-stone-400">
+                    {isScheduledCollapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}
+                  </span>
+                </button>
+
+                {!isScheduledCollapsed ? (
+                  <div className="p-4 pt-1">
+                    {sortedScheduledCandidates.length === 0 ? (
+                      <p className="py-6 text-center text-xs text-stone-400">
+                        {zh ? '没有匹配的已安排地点。' : 'No matching scheduled places.'}
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                        {sortedScheduledCandidates.map((place) => {
+                          const count = visitCountByPlaceId.get(place.id) || 0;
+                          return (
+                            <article
+                              key={place.id}
+                              draggable
+                              onDragStart={(event) => {
+                                event.dataTransfer.setData('text/plain', place.id);
+                                event.dataTransfer.dropEffect = 'move';
+                                setDraggingPlaceId(place.id);
+                              }}
+                              onDragEnd={() => setDraggingPlaceId(null)}
+                              onMouseEnter={() => setHighlightedPlaceId(place.id)}
+                              onMouseLeave={() => setHighlightedPlaceId(null)}
+                              className={`flex flex-col justify-between rounded-lg border bg-white/90 p-3 transition-all duration-150 cursor-grab active:cursor-grabbing ${
+                                highlightedPlaceId === place.id
+                                  ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/40 shadow-xs'
+                                  : 'border-stone-200 hover:border-stone-300 hover:shadow-xs'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-start justify-between gap-1.5">
+                                  <h3 className="truncate text-sm font-semibold text-stone-900" title={place.title}>
+                                    {place.title}
+                                  </h3>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-800">
+                                      ✓ {zh ? `已排 ${count} 次` : `${count}x`}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => void schedulePlace(place.id)}
+                                      className="rounded-md bg-stone-900 px-2 py-1 text-[10.5px] font-semibold text-white hover:bg-stone-800 transition"
+                                      title={zh ? '再次排入当天日程' : 'Schedule again to active day'}
+                                    >
+                                      + {zh ? '当天' : 'Day'}
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
+
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {place.tags.map((tag) => (
+                                    <span key={tag} className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.2 text-[9.5px] font-medium text-emerald-800">
+                                      🏷️ {tag}
+                                    </span>
+                                  ))}
+                                  {place.observed_rating ? (
+                                    <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">
+                                      ★ {place.observed_rating}
+                                    </span>
+                                  ) : null}
+                                  {place.observed_price ? (
+                                    <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">
+                                      {place.observed_price}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+
+                              {place.why ? (
+                                <p className="mt-2 line-clamp-2 text-xs leading-4.5 text-stone-600" title={place.why}>
+                                  💡 {place.why}
+                                </p>
+                              ) : null}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Layer 3: 暂不考虑 Collapsible Section */}
+            {droppedPlaces.length > 0 ? (
+              <div className="border-t border-stone-200 bg-stone-50/50">
+                <button
+                  type="button"
+                  onClick={() => setIsDroppedCollapsed((prev) => !prev)}
+                  className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-semibold text-stone-700 hover:bg-stone-100 transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px]">{isDroppedCollapsed ? '▶' : '▼'}</span>
+                    <span>{zh ? '暂不考虑' : 'Shelved Places'}</span>
+                    <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[10.5px] font-bold text-stone-600">
+                      {droppedPlaces.length}
+                    </span>
+                    <span className="hidden sm:inline text-[11px] font-normal text-stone-400">
+                      {zh ? '（已退出规划视野，事实与研究笔记完整保留在 Vault 中）' : '(Excluded from planning, facts preserved in Vault)'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-stone-400">
+                    {isDroppedCollapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}
+                  </span>
+                </button>
+
+                {!isDroppedCollapsed ? (
+                  <div className="p-4 pt-1">
+                    {sortedDroppedPlaces.length === 0 ? (
+                      <p className="py-6 text-center text-xs text-stone-400">
+                        {zh ? '没有匹配的暂不考虑地点。' : 'No matching shelved places.'}
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                        {sortedDroppedPlaces.map((place) => (
+                          <article
+                            key={place.id}
+                            className="flex flex-col justify-between rounded-lg border border-dashed border-stone-200 bg-stone-50/40 p-3 opacity-75 hover:opacity-100 hover:border-stone-300 transition"
+                          >
+                            <div>
+                              <div className="flex items-start justify-between gap-1.5">
+                                <h3 className="truncate text-sm font-semibold text-stone-600 line-through decoration-stone-300" title={place.title}>
+                                  {place.title}
+                                </h3>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRestorePlace(place.id)}
+                                  className="rounded-md border border-emerald-600 bg-emerald-50 px-2 py-1 text-[10.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs shrink-0"
+                                  title={zh ? '重新恢复为待考虑候选' : 'Restore to active candidates'}
+                                >
+                                  ↩️ {zh ? '重新考虑' : 'Restore'}
+                                </button>
+                              </div>
+                              <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
+
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {place.tags.map((tag) => (
+                                  <span key={tag} className="rounded-full border border-stone-200 bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
+                                    🏷️ {tag}
+                                  </span>
+                                ))}
+                                {place.observed_rating ? (
+                                  <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-500">
+                                    ★ {place.observed_rating}
+                                  </span>
+                                ) : null}
+                                {place.observed_price ? (
+                                  <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-500">
+                                    {place.observed_price}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            {place.why ? (
+                              <p className="mt-2 line-clamp-2 text-xs leading-4.5 text-stone-500" title={place.why}>
+                                💡 {place.why}
+                              </p>
+                            ) : null}
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : null}
       </section>
@@ -1899,7 +2198,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         activeDate={activeDate}
         activeDayIndex={activeDayIndex}
         onSelectHotelForStaySpan={handleSelectHotelForStaySpan}
-        onDropHotel={handleDropHotel}
+        onDropHotel={handleDropPlace}
         onHoverHotel={setHighlightedPlaceId}
         language={language}
       />

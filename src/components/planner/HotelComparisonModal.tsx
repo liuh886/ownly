@@ -413,9 +413,10 @@ export function HotelComparisonModal({
                         <button
                           type="button"
                           onClick={() => onDropHotel(hotel.id)}
-                          className="text-stone-400 hover:text-rose-600"
+                          className="text-stone-400 hover:text-rose-600 transition"
+                          title={zh ? '设为暂不考虑，可随时在候选池折叠区中重新考虑' : 'Shelve this hotel, recoverable anytime in Research Pool'}
                         >
-                          {zh ? '移出比选' : 'Dismiss'}
+                          {zh ? '暂不考虑' : 'Shelve'}
                         </button>
                       </div>
                     </div>

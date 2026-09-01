@@ -219,6 +219,20 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(await plannerRepository.dropPlace('a')).toBe(true);
   });
 
+  it('supports shelving (dropPlace) and restoring (restorePlace) without deleting facts', async () => {
+    const placeBefore = (await plannerRepository.listPlaces()).find((p) => p.id === 'a');
+    expect(placeBefore?.state).toBe('candidate');
+    expect(await plannerRepository.dropPlace('a')).toBe(true);
+    const placeDropped = (await plannerRepository.listPlaces()).find((p) => p.id === 'a');
+    expect(placeDropped?.state).toBe('dropped');
+    expect(placeDropped?.title).toBe(placeBefore?.title);
+
+    expect(await plannerRepository.restorePlace('a')).toBe(true);
+    const placeRestored = (await plannerRepository.listPlaces()).find((p) => p.id === 'a');
+    expect(placeRestored?.state).toBe('candidate');
+    expect(placeRestored?.title).toBe(placeBefore?.title);
+  });
+
   it('saveTripICalMarkdown re-reads canonical places and visits before projection', async () => {
     const trip: PlannerTrip = {
       schema_version: '0.1', type: 'trip', id: 'trip-1', title: 'Bangkok 2026', status: 'planning',

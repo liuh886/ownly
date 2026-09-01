@@ -938,6 +938,19 @@ export class OwnlyWriteService {
     });
   }
 
+  prepareRestorePlannerPlace(placeId: string): PreparedOwnlyOperation {
+    const entry = this.plannerPlaceEntry(placeId);
+    const before = entry.frontmatter;
+    const next = { ...before, state: 'candidate' as const, updated_at: this.now().toISOString() };
+    const expected = fingerprint(entry.filePath);
+    return this.prepare('planner_restore_place', { before, after: next }, () => {
+      assertUnchanged(entry.filePath, expected);
+      writeFileSync(entry.filePath, serializeMarkdownEntity(next, entry.body), 'utf8');
+      writeAgentLog(this.dataLocation, 'planner_restore_place', placeId, before, next);
+      return { id: placeId, state: next.state };
+    });
+  }
+
   prepareAddExpense(input: TripExpenseItem): PreparedOwnlyOperation {
     const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.expenses);
     const fileName = `expense--${input.id}.md`;

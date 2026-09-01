@@ -1,23 +1,33 @@
-# Planner Invariant Hardening & Full Lifecycle Authority
+# Planner Research Pool Tri-Layering & Shelve/Restore (暂不考虑 / 重新考虑)
 
 ## Todo
 
-- [x] 1. Lifecycle Authority: Repository `addVisit` shifts `sort_order` on insertion, `removeVisit` re-indexes `0..N-1`, and `setStaySpan` inserts at 0 with shifting
-- [x] 2. Date Range & Existence Invariants: Extract `assertTripDate` / `assertTripDates` helper; enforce in BOTH `PlannerRepository` and MCP `OwnlyWriteService`
-- [x] 3. Sort Order Isolation: Scope `validatePlannerDaySortOrders` strictly by `trip_id` to eliminate cross-trip pollution
-- [x] 4. Planner Trip Authority: Require valid existing `trip_id` in `importCapturedPlaces` / `importResearchPlaces` and remove legacy "从 Capture 同步" button on zero-trip screen
-- [x] 5. UX & State Reset: Remount / reset state in `CreateTripModal` on close/open
-- [x] 6. Verification & Phase 3 Golden Path: Created automated `PlannerRepository.thailand-golden-path.test.ts` executing end-to-end trip creation, stay spans, routing, day assessment, and iCal projection; all validation suites 100% green.
+- [x] 1. Repository & MCP: Add `restorePlace(placeId)` in `PlannerRepository` and `prepareRestorePlannerPlace(placeId)` in `OwnlyWriteService`
+- [x] 2. MCP Registration: Register `ownly_planner_prepare_restore_place` tool in MCP server
+- [x] 3. Hotel Comparison UX: Update wording from "移出比选" to "暂不考虑" in `HotelComparisonModal.tsx`
+- [x] 4. Research Pool Tri-Layering: Implement 3 visual layers in `PlannerHome.tsx` (待安排, 已安排 N ▸, 暂不考虑 N ▸) with "暂不考虑" and "重新考虑" actions
+- [x] 5. Unit Tests: Add test cases for restore in `PlannerRepository.schedule.test.ts` and `ownly-write-service.test.ts`
+- [x] 6. Verification: Run `validate:fast`, `test:mcp`, and `validate:extension` to ensure 100% green suites
 
 ## Review
 
-### Lifecycle Authority & Invariant Hardening:
-1. **Repository Sort Order Lifecycle**: `addVisit` shifts existing visits with `sort_order >= order` by `+1` on insertion, default appends at `dayVisits.length`. `removeVisit` re-indexes remaining daily visits contiguous `0..N-1`.
-2. **Unified Trip Date Assertions**: Implemented `assertTripDate` and `assertTripDates` in `src/domain/planner.ts`. Enforced uniformly in `PlannerRepository` (`upsertVisit`, `addVisit`, `setStaySpan`) and MCP `OwnlyWriteService` (`prepareAddVisit`, `prepareSetStaySpan`).
-3. **Cross-Trip Sort Validation Isolation**: Scoped `validatePlannerDaySortOrders` with optional `tripId` parameter and filtered accordingly in `evaluatePlannerScheduleProposal`.
-4. **Authoritative Trip Requirement**: `importResearchPlaces` strictly ignores/rejects incoming places whose `trip_id` does not exist in local trips. Removed "从 Capture 同步" on zero-trip screen in `PlannerHome.tsx`.
-5. **Modal Reset**: Added `key={isCreateTripOpen ? 'open' : 'closed'}` to `CreateTripModal` to cleanly remount and reset form fields on open/close.
-6. **Thailand 2026 Golden Path Automated E2E**: Created `src/services/PlannerRepository.thailand-golden-path.test.ts` simulating the complete multi-city itinerary lifecycle (Bangkok + Chiang Mai, 8 places, 2 stay spans, transfer day detection, daily visit scheduling, routing legs, day feasibility evaluation, and iCal export).
+### Research Pool Tri-Layering & Shelve/Restore (暂不考虑 / 重新考虑):
+1. **Zero Schema Migration & State Invariants**:
+   - Persisted states remain strictly `candidate` vs `dropped`.
+   - `已安排` (Scheduled) is 100% derived from `visits.some(v => v.place_id === place.id)` without mutating the reusable `Place` fact.
+2. **Tri-Layer Research Pool Visual Hierarchy**:
+   - **Layer 1: 待安排 (Pending Scheduling)**: Active candidate cards grid (`state === 'candidate' && scheduledCount === 0`) with `+ 当天` and `暂不考虑` (Shelve) buttons.
+   - **Layer 2: 已安排地点 (Scheduled Places)**: Collapsible section (`isScheduledCollapsed`, default collapsed) showing scheduled places with `✓ 已排 N 次` badge and `+ 当天` button for multi-day scheduling.
+   - **Layer 3: 暂不考虑 (Shelved Places)**: Collapsible section (`isDroppedCollapsed`, default collapsed) preserving all facts in Vault and providing a one-click `↩️ 重新考虑` (Restore) button.
+3. **Unified Vocabulary & Hotel Comparison**:
+   - Replaced all legacy "移出比选" / "drop" user wording with "暂不考虑" (Shelve / Skip for now).
+   - In `HotelComparisonModal`, selecting a hotel creates Stay Visits without touching or auto-dropping any other hotels. Shelving a hotel removes it from comparison while preserving it in the Vault.
+4. **Authoritative Persistence & MCP Support**:
+   - Added `restorePlace(placeId)` in `PlannerRepository` and `prepareRestorePlannerPlace(placeId)` in `OwnlyWriteService`.
+   - Registered `ownly_planner_prepare_restore_place` tool in MCP server.
+5. **Testing & Verification**:
+   - Added unit test cases for shelving and restoring in `PlannerRepository.schedule.test.ts` and `ownly-write-service.test.ts`.
+   - All validation suites (`validate:fast`, `validate:shared`, `test:mcp`, `validate:extension`) passed 100% green.
 
 ## Authority
 

@@ -267,6 +267,33 @@ describe('OwnlyWriteService', () => {
     expect(() => service.prepareDropPlannerPlace(from.id)).toThrow(/remove 1 scheduled visit/i);
   });
 
+  it('supports prepareDropPlannerPlace and prepareRestorePlannerPlace lifecycle roundtrip', async () => {
+    const { dataRoot } = fixture();
+    const { trip, from } = seedPlannerPair(dataRoot);
+    const unvisited: PlannerTripPlace = {
+      ...from,
+      id: 'place-free',
+      trip_id: trip.id,
+      title: 'Free Spot',
+      state: 'candidate',
+      created_at: NOW.toISOString(),
+    };
+    writeFileSync(join(dataRoot, 'Trip Places', 'place--place-free.md'), serializeMarkdownEntity(unvisited, ''), 'utf8');
+    const service = new OwnlyWriteService(dataRoot, { allowWrite: true, now: () => NOW });
+
+    const dropOp = service.prepareDropPlannerPlace('place-free');
+    await service.commit(dropOp.operation_id);
+
+    const dropped = parseMarkdownEntity<PlannerTripPlace>(readFileSync(join(dataRoot, 'Trip Places', 'place--place-free.md'), 'utf8')).frontmatter;
+    expect(dropped.state).toBe('dropped');
+
+    const restoreOp = service.prepareRestorePlannerPlace('place-free');
+    await service.commit(restoreOp.operation_id);
+
+    const restored = parseMarkdownEntity<PlannerTripPlace>(readFileSync(join(dataRoot, 'Trip Places', 'place--place-free.md'), 'utf8')).frontmatter;
+    expect(restored.state).toBe('candidate');
+  });
+
   it('commits an optimized Visit order and its final adjacent canonical legs in one confirmed operation', async () => {
     const { dataRoot } = fixture();
     const { trip, from, to, fromVisit, toVisit } = seedPlannerPair(dataRoot);

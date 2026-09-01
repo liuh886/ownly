@@ -241,6 +241,18 @@ export class PlannerRepository {
     return true;
   }
 
+  async restorePlace(placeId: string): Promise<boolean> {
+    await this.initialize();
+    const existing = (await this.listPlaces()).find((place) => place.id === placeId);
+    if (!existing) return false;
+    await this.store.writeMarkdownFile(
+      this.directory(PLANNER_DIRECTORIES.places),
+      entityFileName(existing),
+      serializeMarkdownEntity({ ...existing, state: 'candidate', updated_at: new Date().toISOString() }, ''),
+    );
+    return true;
+  }
+
   async addVisit(
     placeId: string,
     date: string,
