@@ -24,6 +24,7 @@ import {
   getTripAreaCounts,
   haversineDistanceKm,
   detectHotelTransferDays,
+  detectSuspectedDuplicatePlaces,
   isPlausibleCustomTag,
   listTripDates,
   parsePlaceExpenseEstimate,
@@ -248,6 +249,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [isSuspectedModalOpen, setIsSuspectedModalOpen] = useState(false);
+  const [dismissedPairIds, setDismissedPairIds] = useState<Set<string>>(new Set());
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
   const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
@@ -361,6 +364,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const tripPlaces = useMemo(
     () => places.filter((place) => place.trip_id === selectedTripId && place.state !== 'dropped'),
     [places, selectedTripId],
+  );
+
+  const suspectedDuplicatePairs = useMemo(
+    () => detectSuspectedDuplicatePlaces(tripPlaces),
+    [tripPlaces],
+  );
+
+  const visibleSuspectedPairs = useMemo(
+    () => suspectedDuplicatePairs.filter((pair) => !dismissedPairIds.has(pair.pairId)),
+    [suspectedDuplicatePairs, dismissedPairIds],
   );
 
   const tripTags = useMemo(() => {
@@ -686,6 +699,67 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       setTimeout(() => setNotice(''), 4000);
     }
   }, [disabled, load, zh]);
+
+  const handleDeletePlace = useCallback(async (placeId: string, placeTitle?: string) => {
+    if (!placeId || disabled) return;
+    const confirmMsg = zh
+      ? `确定要彻底删除地点「${placeTitle || '该地点'}」吗？删除后对应文件将被移除。`
+      : `Are you sure you want to permanently delete "${placeTitle || 'this place'}"?`;
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await plannerRepository.deletePlace(placeId);
+      await load();
+      setNotice(zh ? '已彻底删除地点' : 'Place permanently deleted');
+      setTimeout(() => setNotice(''), 3000);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : (zh ? '删除失败，若已排入日程请先移除日程' : 'Delete failed'));
+      setTimeout(() => setNotice(''), 4000);
+    }
+  }, [disabled, load, zh]);
+
+  const handleDeduplicatePlaces = useCallback(async () => {
+    if (!selectedTripId || disabled) return;
+    try {
+      const res = await plannerRepository.deduplicateTripPlaces(selectedTripId);
+      await load();
+      if (res.mergedCount > 0 || res.removedCount > 0) {
+        setNotice(zh ? `去重完成：已合并 ${res.mergedCount} 处重复并清理 ${res.removedCount} 份多余文件` : `Deduplication complete: merged ${res.mergedCount} duplicate place(s)`);
+      } else {
+        setNotice(zh ? '当前行程候选池未发现重复地点' : 'No duplicate places found in current trip');
+      }
+      setTimeout(() => setNotice(''), 3500);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+      setTimeout(() => setNotice(''), 4000);
+    }
+  }, [disabled, load, selectedTripId, zh]);
+
+  const handleMergePair = useCallback(async (primaryId: string, secondaryId: string) => {
+    if (!primaryId || !secondaryId || disabled) return;
+    try {
+      await plannerRepository.mergePlaces(primaryId, secondaryId);
+      await load();
+      setNotice(zh ? '已成功合并地点并更新关联日程！' : 'Places merged successfully!');
+      setTimeout(() => setNotice(''), 3000);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+      setTimeout(() => setNotice(''), 4000);
+    }
+  }, [disabled, load, zh]);
+
+  const handleMergeAllSuspectedPairs = useCallback(async () => {
+    if (!selectedTripId || disabled) return;
+    try {
+      const res = await plannerRepository.mergeAllSuspectedDuplicates(selectedTripId);
+      await load();
+      setIsSuspectedModalOpen(false);
+      setNotice(zh ? `已成功合并 ${res.mergedCount} 组疑似同类地点！` : `Successfully merged ${res.mergedCount} duplicate place(s)!`);
+      setTimeout(() => setNotice(''), 3500);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+      setTimeout(() => setNotice(''), 4000);
+    }
+  }, [disabled, load, selectedTripId, zh]);
 
   const handleSavePlaceTiming = useCallback(
     async (
@@ -1868,13 +1942,33 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
             {/* Layer 1: 待安排 Primary Candidate Cards Grid */}
             <div className="p-4">
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
                 <h3 className="text-xs font-semibold text-stone-700">
                   {zh ? '待安排地点' : 'Pending Scheduling'}
                   <span className="ml-1.5 text-[11px] font-normal text-stone-400">
                     ({sortedPendingCandidates.length})
                   </span>
                 </h3>
+                <div className="flex items-center gap-1.5">
+                  {visibleSuspectedPairs.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsSuspectedModalOpen(true)}
+                      className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition flex items-center gap-1 shadow-2xs"
+                      title={zh ? '查看并合并疑似重复的同类地点' : 'Review and merge suspected duplicate places'}
+                    >
+                      ✨ {zh ? `合并疑似同类 (${visibleSuspectedPairs.length})` : `Suspected Duplicates (${visibleSuspectedPairs.length})`}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleDeduplicatePlaces()}
+                    className="rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition flex items-center gap-1 shadow-2xs"
+                    title={zh ? '扫描并清理当前行程的重复地点' : 'Scan and merge duplicate places'}
+                  >
+                    🧹 {zh ? '一键去重' : 'Deduplicate'}
+                  </button>
+                </div>
               </div>
 
               {sortedPendingCandidates.length === 0 ? (
@@ -1927,10 +2021,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             <button
                               type="button"
                               onClick={() => void handleDropPlace(place.id)}
-                              className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-medium text-stone-400 hover:text-rose-600 hover:border-stone-300 transition"
+                              className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-medium text-stone-500 hover:text-stone-800 hover:border-stone-300 transition"
                               title={zh ? '设为暂不考虑，可随时在下方折叠区中重新考虑' : 'Shelve this place, recoverable anytime in the section below'}
                             >
                               {zh ? '暂不考虑' : 'Shelve'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeletePlace(place.id, place.title)}
+                              className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-medium text-stone-400 hover:text-rose-600 hover:border-rose-300 transition"
+                              title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
+                            >
+                              {zh ? '删除' : 'Delete'}
                             </button>
                           </div>
                         </div>
@@ -2179,14 +2281,24 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 <h3 className="truncate text-sm font-semibold text-stone-600 line-through decoration-stone-300" title={place.title}>
                                   {place.title}
                                 </h3>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleRestorePlace(place.id)}
-                                  className="rounded-md border border-emerald-600 bg-emerald-50 px-2 py-1 text-[10.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs shrink-0"
-                                  title={zh ? '重新恢复为待考虑候选' : 'Restore to active candidates'}
-                                >
-                                  ↩️ {zh ? '重新考虑' : 'Restore'}
-                                </button>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleRestorePlace(place.id)}
+                                    className="rounded-md border border-emerald-600 bg-emerald-50 px-2 py-1 text-[10.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
+                                    title={zh ? '重新恢复为待考虑候选' : 'Restore to active candidates'}
+                                  >
+                                    ↩️ {zh ? '重新考虑' : 'Restore'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleDeletePlace(place.id, place.title)}
+                                    className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-medium text-stone-400 hover:text-rose-600 hover:border-rose-300 transition"
+                                    title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
+                                  >
+                                    {zh ? '删除' : 'Delete'}
+                                  </button>
+                                </div>
                               </div>
                               <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
 
@@ -2301,6 +2413,137 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           onUpgradePro={openLicenseModal}
           language={language}
         />
+      ) : null}
+
+      {/* Suspected Duplicates Review Modal */}
+      {isSuspectedModalOpen && visibleSuspectedPairs.length > 0 ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-xs p-4">
+          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl border border-stone-200 bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4 bg-stone-50">
+              <div>
+                <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                  ✨ {zh ? '合并疑似同类地点' : 'Merge Suspected Duplicates'}
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
+                    {visibleSuspectedPairs.length}
+                  </span>
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  {zh
+                    ? '系统检测到以下地点名称高度相近或地理位置重合，请选择保留的主地点进行合并。'
+                    : 'The following places have very close coordinates or matching titles. Choose which place to keep.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSuspectedModalOpen(false)}
+                className="rounded-full p-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {visibleSuspectedPairs.map((pair) => (
+                <div
+                  key={pair.pairId}
+                  className="rounded-xl border border-amber-200/80 bg-amber-50/20 p-4 shadow-xs"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                      🔍 {pair.reason}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDismissedPairIds((prev) => new Set([...prev, pair.pairId]))}
+                      className="text-[11px] font-medium text-stone-400 hover:text-stone-600 transition"
+                    >
+                      {zh ? '不是同类 (忽略)' : 'Ignore (keep separate)'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Left Candidate (Primary) */}
+                    <div className="flex flex-col justify-between rounded-lg border border-stone-200 bg-white p-3 shadow-2xs">
+                      <div>
+                        <div className="flex items-start justify-between gap-1">
+                          <h4 className="text-sm font-semibold text-stone-900">{pair.primaryPlace.title}</h4>
+                          {visitCountByPlaceId.get(pair.primaryPlace.id) ? (
+                            <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-800">
+                              ✓ {zh ? '已排日程' : 'Scheduled'}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-stone-400 truncate">{pair.primaryPlace.address || pair.primaryPlace.source_category || '—'}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {pair.primaryPlace.observed_rating ? (
+                            <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">★ {pair.primaryPlace.observed_rating}</span>
+                          ) : null}
+                          {pair.primaryPlace.observed_price ? (
+                            <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">{pair.primaryPlace.observed_price}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleMergePair(pair.primaryPlace.id, pair.secondaryPlace.id)}
+                        className="mt-3 w-full rounded-md bg-emerald-700 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 transition"
+                      >
+                        {zh ? '保留此地点并合并' : 'Keep this place & merge'}
+                      </button>
+                    </div>
+
+                    {/* Right Candidate (Secondary) */}
+                    <div className="flex flex-col justify-between rounded-lg border border-stone-200 bg-white p-3 shadow-2xs">
+                      <div>
+                        <div className="flex items-start justify-between gap-1">
+                          <h4 className="text-sm font-semibold text-stone-900">{pair.secondaryPlace.title}</h4>
+                          {visitCountByPlaceId.get(pair.secondaryPlace.id) ? (
+                            <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-800">
+                              ✓ {zh ? '已排日程' : 'Scheduled'}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-stone-400 truncate">{pair.secondaryPlace.address || pair.secondaryPlace.source_category || '—'}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {pair.secondaryPlace.observed_rating ? (
+                            <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">★ {pair.secondaryPlace.observed_rating}</span>
+                          ) : null}
+                          {pair.secondaryPlace.observed_price ? (
+                            <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">{pair.secondaryPlace.observed_price}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleMergePair(pair.secondaryPlace.id, pair.primaryPlace.id)}
+                        className="mt-3 w-full rounded-md bg-stone-900 py-1.5 text-xs font-semibold text-white hover:bg-stone-800 transition"
+                      >
+                        {zh ? '保留此地点并合并' : 'Keep this place & merge'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-stone-100 px-6 py-3 bg-stone-50">
+              <button
+                type="button"
+                onClick={() => setIsSuspectedModalOpen(false)}
+                className="rounded-md border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 transition"
+              >
+                {zh ? '暂不处理' : 'Close'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleMergeAllSuspectedPairs()}
+                className="rounded-md bg-emerald-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 transition shadow-xs flex items-center gap-1.5"
+              >
+                ⚡ {zh ? `一键合并全部 (${visibleSuspectedPairs.length} 组)` : `Merge All (${visibleSuspectedPairs.length} pairs)`}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   );

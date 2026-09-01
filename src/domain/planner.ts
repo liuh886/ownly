@@ -430,6 +430,140 @@ export function findExistingTripPlace(
     ?? tripPlaces.find((place) => place.source_url === sourceUrl);
 }
 
+export function cleanCanonicalTitle(title?: string | null): string {
+  if (!title) return '';
+  return title
+    .replace(/^[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+/u, '')
+    .replace(/[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+$/u, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+export function extractPlaceCid(place: { source_place_id?: string | null; source_url?: string | null }): string | null {
+  if (place.source_place_id) {
+    const match = /:0x([0-9a-f]+)$/i.exec(place.source_place_id.trim());
+    if (match?.[1]) {
+      try {
+        return BigInt('0x' + match[1]).toString();
+      } catch {}
+    }
+    if (/^\d{8,}$/.test(place.source_place_id.trim())) {
+      return place.source_place_id.trim();
+    }
+    if (/^ChIJ[A-Za-z0-9_-]{8,}$/.test(place.source_place_id.trim())) {
+      return place.source_place_id.trim().toLowerCase();
+    }
+  }
+  if (place.source_url) {
+    try {
+      const url = new URL(place.source_url);
+      const cid = url.searchParams.get('cid');
+      if (cid && /^\d+$/.test(cid)) return cid;
+      const qpid = url.searchParams.get('query_place_id');
+      if (qpid) return qpid.toLowerCase();
+    } catch {}
+    const fidMatch = /0x[0-9a-f]+:0x([0-9a-f]+)/i.exec(place.source_url);
+    if (fidMatch?.[1]) {
+      try {
+        return BigInt('0x' + fidMatch[1]).toString();
+      } catch {}
+    }
+  }
+  return null;
+}
+
+export interface SuspectedDuplicatePair {
+  pairId: string;
+  reason: string;
+  score: number;
+  distanceMeters?: number;
+  primaryPlace: PlannerTripPlace;
+  secondaryPlace: PlannerTripPlace;
+}
+
+export function detectSuspectedDuplicatePlaces(
+  places: PlannerTripPlace[],
+): SuspectedDuplicatePair[] {
+  const results: SuspectedDuplicatePair[] = [];
+  const n = places.length;
+
+  for (let i = 0; i < n; i++) {
+    const p1 = places[i];
+    const t1 = cleanCanonicalTitle(p1.title);
+    const phone1 = p1.phone?.replace(/\D+/g, '');
+    const cid1 = extractPlaceCid(p1);
+
+    for (let j = i + 1; j < n; j++) {
+      const p2 = places[j];
+      if (p1.trip_id !== p2.trip_id) continue;
+
+      const t2 = cleanCanonicalTitle(p2.title);
+      const phone2 = p2.phone?.replace(/\D+/g, '');
+      const cid2 = extractPlaceCid(p2);
+
+      let reason = '';
+      let score = 0;
+      let distMeters: number | undefined;
+
+      // 1. Same Place ID or CID
+      if ((p1.source_place_id && p1.source_place_id === p2.source_place_id) || (cid1 && cid2 && cid1 === cid2)) {
+        reason = 'Google Place ID / CID 一致';
+        score = 1.0;
+      }
+      // 2. Exact or Substring Title Match
+      else if (t1 && t2 && (t1 === t2 || (t1.length >= 4 && t2.includes(t1)) || (t2.length >= 4 && t1.includes(t2)))) {
+        reason = t1 === t2 ? '地点名称完全一致' : '地点名称高度包含相似';
+        score = 0.95;
+      }
+      // 3. Same Phone number (at least 7 digits)
+      else if (phone1 && phone2 && phone1.length >= 7 && phone1 === phone2) {
+        reason = `联系电话一致 (${p1.phone})`;
+        score = 0.9;
+      }
+      // 4. Same URL Identity
+      else if (p1.source_url && p2.source_url && normalizePlaceIdentity(p1.source_url) === normalizePlaceIdentity(p2.source_url)) {
+        reason = '来源链接归一化指向同一地点';
+        score = 0.9;
+      }
+      // 5. GPS Proximity (< 80m) + (same category or common token)
+      else if (p1.coordinates && p2.coordinates) {
+        const distKm = haversineDistanceKm(p1.coordinates, p2.coordinates);
+        distMeters = Math.round(distKm * 1000);
+        if (distKm <= 0.08) {
+          const tokens1 = t1.split(/\s+/).filter((w) => w.length >= 2);
+          const tokens2 = t2.split(/\s+/).filter((w) => w.length >= 2);
+          const hasCommonToken = tokens1.some((w) => tokens2.includes(w));
+          const sameCategory = p1.source_category && p2.source_category && p1.source_category === p2.source_category;
+          const sameKind = p1.kind === p2.kind;
+
+          if (hasCommonToken || (distKm <= 0.03 && (sameCategory || sameKind))) {
+            reason = `地理位置重合（距离仅 ${distMeters} 米）${hasCommonToken ? '且名称包含共同词汇' : ''}`;
+            score = 0.85;
+          }
+        }
+      }
+
+      if (score >= 0.8) {
+        const p1Score = (p1.observed_review_count ?? 0) + (p1.address ? 100 : 0) + (p1.open_hours ? 50 : 0);
+        const p2Score = (p2.observed_review_count ?? 0) + (p2.address ? 100 : 0) + (p2.open_hours ? 50 : 0);
+        const [primaryPlace, secondaryPlace] = p1Score >= p2Score ? [p1, p2] : [p2, p1];
+
+        results.push({
+          pairId: `${primaryPlace.id}--${secondaryPlace.id}`,
+          reason,
+          score,
+          distanceMeters: distMeters,
+          primaryPlace,
+          secondaryPlace,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
 function escapeCdata(text: string): string {
   return text.replace(/\]\]>/g, ']]]]><![CDATA[>');
 }

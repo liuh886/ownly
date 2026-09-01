@@ -6,6 +6,7 @@ import {
   checkOpeningHoursCollision,
   checkDayScheduleCollisions,
   classifyResearchChip,
+  detectSuspectedDuplicatePlaces,
   ensurePlaceKindTag,
   exportPlacesToCSV,
   exportPlacesToKML,
@@ -1219,5 +1220,38 @@ describe('exportTripToMarkdown', () => {
     expect(md).toContain('Train Pass');
     expect(md).toContain('已折算总额');
     expect(md).toContain('¥4500 JPY');
+  });
+
+  describe('detectSuspectedDuplicatePlaces', () => {
+    it('detects duplicate pairs by Title similarity, Place ID, and GPS proximity', () => {
+      const p1 = place('p1', {
+        title: '🍜 Thipsamai Padthai Pratoopee',
+        source_place_id: '0x30e2991678584ec5:0x698c069655046fbe',
+        coordinates: { lat: 13.75279, lng: 100.50482 },
+      });
+      const p2 = place('p2', {
+        title: 'Thipsamai Padthai Pratoopee',
+        source_url: 'https://www.google.com/maps?cid=7605461113463140286',
+        coordinates: { lat: 13.75280, lng: 100.50483 },
+      });
+      const p3 = place('p3', {
+        title: 'Wat Traimit Witthayaram Worawihan (Golden Buddha)',
+        coordinates: { lat: 13.7377, lng: 100.5137 },
+      });
+      const p4 = place('p4', {
+        title: '金佛寺 Wat Trai Mit',
+        coordinates: { lat: 13.73771, lng: 100.51371 },
+      });
+
+      const pairs = detectSuspectedDuplicatePlaces([p1, p2, p3, p4]);
+      expect(pairs.length).toBeGreaterThanOrEqual(2);
+
+      const thipPair = pairs.find((p) => p.primaryPlace.title.includes('Thipsamai') && p.secondaryPlace.title.includes('Thipsamai'));
+      expect(thipPair).toBeDefined();
+
+      const watPair = pairs.find((p) => p.primaryPlace.title.includes('Trai') && p.secondaryPlace.title.includes('Trai'));
+      expect(watPair).toBeDefined();
+      expect(watPair?.distanceMeters).toBeLessThan(50);
+    });
   });
 });

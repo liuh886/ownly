@@ -2,6 +2,7 @@ import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter
 import {
   assertTripDate,
   assertTripDates,
+  detectSuspectedDuplicatePlaces,
   ensurePlaceKindTag,
   mergeCapturedPlaceResearch,
   normalizePlaceIdentity,
@@ -9,6 +10,7 @@ import {
   type PlannerTrip,
   type PlannerTripLeg,
   type PlannerTripPlace,
+  type SuspectedDuplicatePair,
   type TripExpenseItem,
 } from '@/domain/planner';
 import {
@@ -416,6 +418,88 @@ export class PlannerRepository {
       serializeMarkdownEntity({ ...existing, state: 'candidate', updated_at: new Date().toISOString() }, ''),
     );
     return true;
+  }
+
+  async deletePlace(placeId: string): Promise<boolean> {
+    await this.initialize();
+    const existing = (await this.listPlaces()).find((place) => place.id === placeId);
+    if (!existing) return false;
+    const blockingVisits = (await this.listVisits()).filter(
+      (visit) => visit.trip_id === existing.trip_id && visit.place_id === placeId,
+    );
+    if (blockingVisits.length > 0) {
+      throw new Error(`Cannot delete ${existing.title}: remove ${blockingVisits.length} scheduled visit(s) first.`);
+    }
+    await this.store.deleteMarkdownFile(
+      this.directory(PLANNER_DIRECTORIES.places),
+      entityFileName(existing),
+    );
+    return true;
+  }
+
+  /**
+   * Identifies suspected duplicate pairs in a trip for manual user review.
+   */
+  async findSuspectedDuplicates(tripId: string): Promise<SuspectedDuplicatePair[]> {
+    await this.initialize();
+    const tripPlaces = (await this.listPlaces()).filter((p) => p.trip_id === tripId && p.state !== 'dropped');
+    return detectSuspectedDuplicatePlaces(tripPlaces);
+  }
+
+  /**
+   * Merges a secondary place into a primary place, reassigning visits and deleting the secondary entity.
+   */
+  async mergePlaces(primaryPlaceId: string, secondaryPlaceId: string): Promise<PlannerTripPlace> {
+    await this.initialize();
+    const places = await this.listPlaces();
+    const primary = places.find((p) => p.id === primaryPlaceId);
+    const secondary = places.find((p) => p.id === secondaryPlaceId);
+    if (!primary || !secondary) {
+      throw new Error(`Cannot merge: place not found (primary: ${primaryPlaceId}, secondary: ${secondaryPlaceId})`);
+    }
+
+    const merged = mergeCapturedPlaceResearch(primary, secondary);
+    await this.upsert(merged);
+
+    // Reassign visits of secondary to primary
+    const visits = (await this.listVisits()).filter((v) => v.place_id === secondaryPlaceId);
+    for (const v of visits) {
+      await this.upsert({ ...v, place_id: primary.id, updated_at: new Date().toISOString() });
+    }
+
+    // Delete secondary place file
+    try {
+      await this.store.deleteMarkdownFile(
+        this.directory(PLANNER_DIRECTORIES.places),
+        entityFileName(secondary),
+      );
+    } catch (err) {
+      console.warn(`[PlannerRepository] Failed to delete merged secondary place file ${secondary.id}:`, err);
+    }
+
+    return merged;
+  }
+
+  /**
+   * Batch merges all suspected duplicate pairs in a trip.
+   */
+  async mergeAllSuspectedDuplicates(tripId: string): Promise<{ mergedCount: number }> {
+    const pairs = await this.findSuspectedDuplicates(tripId);
+    let mergedCount = 0;
+    const handledIds = new Set<string>();
+
+    for (const pair of pairs) {
+      if (handledIds.has(pair.primaryPlace.id) || handledIds.has(pair.secondaryPlace.id)) continue;
+      try {
+        await this.mergePlaces(pair.primaryPlace.id, pair.secondaryPlace.id);
+        handledIds.add(pair.secondaryPlace.id);
+        mergedCount++;
+      } catch (err) {
+        console.warn(`[PlannerRepository] Failed to auto-merge pair ${pair.pairId}:`, err);
+      }
+    }
+
+    return { mergedCount };
   }
 
   async addVisit(
