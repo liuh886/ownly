@@ -86,16 +86,32 @@ function formatDistanceBadge(distKm: number, zh: boolean): string {
   return zh ? `距上一站 ${distKm.toFixed(1)} km` : `${distKm.toFixed(1)}km from last stop`;
 }
 
+/** Kind classification tags injected by ensurePlaceKindTag — used for filtering, not shown on cards. */
+const KNOWN_KIND_TAGS = new Set([
+  ...Object.values(PLANNER_KIND_LABELS).flatMap((l) => [l.zh.toLowerCase(), l.en.toLowerCase()]),
+  '观光景点', '餐厅美食', '咖啡甜品', '酒店住宿', '购物商场', '交通中转', '体验活动',
+  '景点', '美食', '咖啡', '住宿', '购物', '交通', '体验', '其它', '其他',
+  'stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'other',
+  'hotel', 'dining', 'coffee', 'sightseeing', 'mall', 'station', 'activity',
+].map((s) => s.toLowerCase()));
+
+/** Returns tags suitable for card display — excludes kind classification tags. */
+function getDisplayTags(tags: string[]): string[] {
+  return tags.filter((t) => !KNOWN_KIND_TAGS.has(t.trim().toLowerCase()));
+}
 function filterAndSearchPlaces(
   places: PlannerTripPlace[],
   activeFilter: string,
   searchQuery: string,
+  visitCountByPlaceId?: Map<string, number>,
 ): PlannerTripPlace[] {
   let filtered = places;
   if (activeFilter === 'must') {
     filtered = places.filter((p) => p.priority === 'must');
   } else if (activeFilter === 'want') {
     filtered = places.filter((p) => p.priority === 'want');
+  } else if (activeFilter === 'scheduled') {
+    filtered = places.filter((p) => (visitCountByPlaceId?.get(p.id) || 0) > 0);
   } else if (activeFilter.startsWith('kind:')) {
     const targetKind = activeFilter.slice(5) as PlannerPlaceKind;
     const zhLabel = PLANNER_KIND_LABELS[targetKind]?.zh.toLowerCase() || '';
@@ -186,7 +202,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [expensesByTrip, setExpensesByTrip] = useState<Record<string, TripExpenseItem[]>>({});
   const [membersByTrip, setMembersByTrip] = useState<Record<string, string[]>>({});
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
-  const [isScheduledCollapsed, setIsScheduledCollapsed] = useState(true);
+
   const [isDroppedCollapsed, setIsDroppedCollapsed] = useState(true);
 
   const currentExpenses = useMemo(() => {
@@ -461,15 +477,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [tripPlaces, language],
   );
 
-  const pendingCandidates = useMemo(
-    () => allCandidatePlaces.filter((place) => (visitCountByPlaceId.get(place.id) || 0) === 0),
-    [allCandidatePlaces, visitCountByPlaceId],
-  );
-
-  const scheduledCandidates = useMemo(
-    () => allCandidatePlaces.filter((place) => (visitCountByPlaceId.get(place.id) || 0) > 0),
-    [allCandidatePlaces, visitCountByPlaceId],
-  );
+  // All candidates stay in pool regardless of scheduling status.
+  // A place can be scheduled multiple times, so scheduling does NOT remove it.
+  const pendingCandidates = allCandidatePlaces;
 
   const droppedPlaces = useMemo(
     () => [...tripPlaces]
@@ -482,7 +492,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   );
 
   const filterChips = useMemo(() => {
-    const chips: Array<{ id: string; label: string; count: number; type: 'all' | 'priority' | 'kind' | 'tag' }> = [
+    const chips: Array<{ id: string; label: string; count: number; type: 'all' | 'priority' | 'kind' | 'tag' | 'status' }> = [
       { id: 'all', label: zh ? '全部' : 'All', count: pendingCandidates.length, type: 'all' },
     ];
 
@@ -491,6 +501,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
     const wantCount = pendingCandidates.filter((p) => p.priority === 'want').length;
     if (wantCount > 0) chips.push({ id: 'want', label: zh ? '想去' : 'Want', count: wantCount, type: 'priority' });
+
+    const scheduledCount = pendingCandidates.filter((p) => (visitCountByPlaceId.get(p.id) || 0) > 0).length;
+    if (scheduledCount > 0) chips.push({ id: 'scheduled', label: zh ? '📅 已排入' : '📅 Scheduled', count: scheduledCount, type: 'status' });
 
     const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'other'];
     for (const kind of allKinds) {
@@ -533,7 +546,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     }
 
     return chips;
-  }, [pendingCandidates, zh, language, tripTags]);
+  }, [pendingCandidates, zh, language, tripTags, visitCountByPlaceId]);
 
   const [candidateSortMode, setCandidateSortMode] = useState<'default' | 'distance' | 'must' | 'rating'>('default');
 
@@ -610,14 +623,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   }, [allCandidatePlaces, lastStopCoords]);
 
   const sortedPendingCandidates = useMemo(() => {
-    const filtered = filterAndSearchPlaces(pendingCandidates, activeFilter, poolSearch);
+    const filtered = filterAndSearchPlaces(pendingCandidates, activeFilter, poolSearch, visitCountByPlaceId);
     return sortPlaceList(filtered, candidateSortMode, candidateDistances, lastStopCoords);
-  }, [pendingCandidates, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords]);
-
-  const sortedScheduledCandidates = useMemo(() => {
-    const filtered = filterAndSearchPlaces(scheduledCandidates, activeFilter, poolSearch);
-    return sortPlaceList(filtered, candidateSortMode, candidateDistances, lastStopCoords);
-  }, [scheduledCandidates, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords]);
+  }, [pendingCandidates, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords, visitCountByPlaceId]);
 
   const sortedDroppedPlaces = useMemo(() => {
     const filtered = filterAndSearchPlaces(droppedPlaces, activeFilter, poolSearch);
@@ -1951,8 +1959,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <h2 className="text-sm font-semibold text-stone-900">Planner Context</h2>
               <div className="mt-3 divide-y divide-stone-100 text-xs">
                 <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '当天已排' : 'Day Scheduled'}</span><strong>{scheduled.length}</strong></div>
-                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '待安排候选' : 'Pending'}</span><strong>{pendingCandidates.length}</strong></div>
-                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '已安排地点' : 'Scheduled'}</span><strong>{scheduledCandidates.length}</strong></div>
+                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '候选池' : 'Candidates'}</span><strong>{pendingCandidates.length}</strong></div>
                 <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '暂不考虑' : 'Shelved'}</span><strong>{droppedPlaces.length}</strong></div>
                 <div className="flex justify-between py-2"><span className="text-stone-400">Must</span><strong>{mustScheduled}/{mustTotal}</strong></div>
                 <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '地点时长' : 'Place time'}</span><strong>{Math.round(scheduledMinutes / 60 * 10) / 10}h</strong></div>
@@ -2033,11 +2040,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <span className="rounded-full bg-stone-200/80 px-2 py-0.5 text-xs font-bold text-stone-700">
                 {sortedPendingCandidates.length}/{pendingCandidates.length}
               </span>
-              {scheduledCandidates.length > 0 ? (
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800" title={zh ? '已安排地点数' : 'Scheduled places count'}>
-                  ✓ {zh ? '已排' : 'Scheduled'} {scheduledCandidates.length}
-                </span>
-              ) : null}
               {droppedPlaces.length > 0 ? (
                 <span className="rounded-full bg-stone-200/60 px-2 py-0.5 text-xs font-semibold text-stone-600" title={zh ? '暂不考虑地点数' : 'Shelved places count'}>
                   {zh ? '暂不考虑' : 'Shelved'} {droppedPlaces.length}
@@ -2045,7 +2047,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               ) : null}
             </div>
             <p className="hidden lg:block text-xs text-stone-400">
-              {zh ? '待安排候选地点，可直接排入当天或拖拽至日程' : 'Unscheduled candidates. Schedule to day or drag into list above.'}
+              {zh ? '所有候选地点，可直接排入当天或拖拽至日程（排入后仍保留在池中）' : 'All candidates. Schedule to day or drag. Places stay in pool after scheduling.'}
             </p>
           </div>
 
@@ -2258,15 +2260,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
               {sortedPendingCandidates.length === 0 ? (
                 <div className="py-12 text-center text-xs text-stone-400">
-                  <p className="text-3xl mb-2">
-                    {pendingCandidates.length === 0 && scheduledCandidates.length > 0 ? '🎉' : '📭'}
-                  </p>
+                  <p className="text-3xl mb-2">📭</p>
                   <p className="font-medium text-stone-600">
                     {pendingCandidates.length === 0
-                      ? scheduledCandidates.length > 0
-                        ? (zh ? '太棒了！所有候选地点均已排入日程。可在下方查看已安排或在地图中继续探索。' : 'All candidates are scheduled! View scheduled places below.')
-                        : (zh ? '当前行程暂无候选地点，浏览地图或导入收藏夹即可添加。' : 'No candidates yet.')
-                      : (zh ? '没有匹配的待安排地点。' : 'No matching pending candidates.')}
+                      ? (zh ? '当前行程暂无候选地点，浏览地图或导入收藏夹即可添加。' : 'No candidates yet.')
+                      : (zh ? '没有匹配的候选地点。' : 'No matching candidates.')}
                   </p>
                 </div>
               ) : (
@@ -2310,7 +2308,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
                               />
                             ) : null}
-                            <h3 className="truncate text-sm font-bold text-stone-900 leading-snug" title={place.title}>
+                            <h3 className="truncate text-xs font-bold text-stone-900 leading-snug" title={place.title}>
                               {place.title}
                             </h3>
                           </div>
@@ -2355,6 +2353,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               📍 {formatDistanceBadge(candidateDistances.get(place.id)!, zh)}
                             </span>
                           ) : null}
+                          {(visitCountByPlaceId.get(place.id) || 0) > 0 ? (
+                            <span className="rounded-full bg-emerald-100 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-800">
+                              📅 {zh ? `已排 ${visitCountByPlaceId.get(place.id)}次` : `${visitCountByPlaceId.get(place.id)}x scheduled`}
+                            </span>
+                          ) : null}
                           {place.priority === 'must' ? (
                             <span className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-800">
                               🎯 {zh ? '必去' : 'Must'}
@@ -2370,7 +2373,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               {place.observed_price}
                             </span>
                           ) : null}
-                          {place.tags.map((tag) => (
+                          {place.source_category ? (
+                            <span className="rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.2 text-[9.5px] font-medium text-sky-800">
+                              {place.source_category}
+                            </span>
+                          ) : null}
+                          {getDisplayTags(place.tags).map((tag) => (
                             <span key={tag} className="rounded-full border border-stone-200 bg-stone-50 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
                               🏷️ {tag}
                             </span>
@@ -2459,174 +2467,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               )}
             </div>
 
-            {/* Layer 2: 已安排地点 Collapsible Section */}
-            {scheduledCandidates.length > 0 ? (
-              <div className="border-t border-stone-200 bg-stone-50/50">
-                <button
-                  type="button"
-                  onClick={() => setIsScheduledCollapsed((prev) => !prev)}
-                  className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-semibold text-stone-700 hover:bg-stone-100 transition"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-stone-400 text-[10px]">{isScheduledCollapsed ? '▶' : '▼'}</span>
-                    <span>{zh ? '已安排地点' : 'Scheduled Places'}</span>
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10.5px] font-bold text-emerald-800">
-                      {scheduledCandidates.length}
-                    </span>
-                    <span className="hidden sm:inline text-[11px] font-normal text-stone-400">
-                      {zh ? '（已排入具体日期，仍可跨天重复安排）' : '(Assigned to dates, reusable across days)'}
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-stone-400">
-                    {isScheduledCollapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}
-                  </span>
-                </button>
-
-                {!isScheduledCollapsed ? (
-                  <div className="p-4 pt-1">
-                    {sortedScheduledCandidates.length === 0 ? (
-                      <p className="py-6 text-center text-xs text-stone-400">
-                        {zh ? '没有匹配的已安排地点。' : 'No matching scheduled places.'}
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                        {sortedScheduledCandidates.map((place) => {
-                          const count = visitCountByPlaceId.get(place.id) || 0;
-                          return (
-                            <article
-                              key={place.id}
-                              draggable
-                              onDragStart={(event) => {
-                                event.dataTransfer.setData('text/plain', place.id);
-                                event.dataTransfer.dropEffect = 'move';
-                                setDraggingPlaceId(place.id);
-                              }}
-                              onDragEnd={() => setDraggingPlaceId(null)}
-                              onMouseEnter={() => setHighlightedPlaceId(place.id)}
-                              onMouseLeave={() => setHighlightedPlaceId(null)}
-                              className={`group flex flex-col justify-between rounded-xl border p-3.5 transition-all duration-150 cursor-grab active:cursor-grabbing ${
-                                highlightedPlaceId === place.id
-                                  ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/40 shadow-xs'
-                                  : 'border-stone-200/90 bg-white hover:border-stone-300 hover:shadow-xs'
-                              }`}
-                            >
-                              <div>
-                                <div className="flex items-start justify-between gap-1.5">
-                                  <h3 className="truncate text-sm font-bold text-stone-900 leading-snug" title={place.title}>
-                                    {place.title}
-                                  </h3>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-800">
-                                      ✓ {zh ? `已排 ${count} 次` : `${count}x`}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => void schedulePlace(place.id)}
-                                      className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-900 text-xs font-bold text-white hover:bg-stone-800 transition shadow-2xs"
-                                      title={zh ? '再次排入当天日程' : 'Schedule again to active day'}
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-                                </div>
-                                <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
-
-                                <div className="mt-2 flex flex-wrap gap-1 items-center">
-                                  {place.priority === 'must' ? (
-                                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-800">
-                                      🎯 {zh ? '必去' : 'Must'}
-                                    </span>
-                                  ) : null}
-                                  {place.observed_rating ? (
-                                    <span className="rounded-full bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-800">
-                                      ★ {place.observed_rating}
-                                    </span>
-                                  ) : null}
-                                  {place.observed_price ? (
-                                    <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
-                                      {place.observed_price}
-                                    </span>
-                                  ) : null}
-                                  {place.tags.map((tag) => (
-                                    <span key={tag} className="rounded-full border border-stone-200 bg-stone-50 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
-                                      🏷️ {tag}
-                                    </span>
-                                  ))}
-                                </div>
-
-                                {place.why ? (
-                                  <p className="mt-2 line-clamp-2 rounded-md bg-stone-50/80 px-2 py-1 text-xs text-stone-700 leading-relaxed" title={place.why}>
-                                    💡 {place.why}
-                                  </p>
-                                ) : null}
-                              </div>
-
-                              <div className="mt-2 flex items-center justify-between gap-1 border-t border-stone-100/90 pt-2">
-                                <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
-                                  {place.phone ? (
-                                    <a
-                                      href={`tel:${place.phone}`}
-                                      className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
-                                      title={`📞 ${place.phone}`}
-                                    >
-                                      📞 {place.phone}
-                                    </a>
-                                  ) : null}
-                                  {place.menu_url ? (
-                                    <a
-                                      href={place.menu_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
-                                      title={zh ? '查看菜单' : 'Menu'}
-                                    >
-                                      📖 {zh ? '菜单' : 'Menu'}
-                                    </a>
-                                  ) : null}
-                                  {place.reservation_url ? (
-                                    <a
-                                      href={place.reservation_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-bold text-amber-900 hover:bg-amber-100 transition shadow-2xs"
-                                      title={zh ? '官方预订' : 'Reserve'}
-                                    >
-                                      🎟️ {zh ? '预订' : 'Reserve'}
-                                    </a>
-                                  ) : null}
-                                  {place.source_url ? (
-                                    <a
-                                      href={place.source_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
-                                      title={zh ? '地图' : 'Maps'}
-                                    >
-                                      🗺️ {zh ? '地图' : 'Maps'}
-                                    </a>
-                                  ) : null}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleDeletePlace(place.id, place.title);
-                                  }}
-                                  className="flex h-5.5 w-5.5 items-center justify-center text-xs text-stone-300 hover:text-rose-600 hover:bg-rose-50 rounded transition shrink-0"
-                                  title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+            {/* Layer 2 (formerly scheduled collapsible) removed — scheduled places now stay in main pool with 📅 badge */}
 
             {/* Layer 3: 暂不考虑 Collapsible Section */}
             {droppedPlaces.length > 0 ? (
