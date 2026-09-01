@@ -1,0 +1,89 @@
+name: Apply planner pool integrity hotfix v2
+
+on:
+  push:
+    branches:
+      - fix/planner-pool-integrity-actions
+    paths:
+      - .github/workflows/planner-pool-integrity-hotfix-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: fix/planner-pool-integrity-actions
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply code patch and align regression test
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          workflow = Path('.github/workflows/planner-pool-integrity-hotfix.yml').read_text()
+          step = workflow.index('      - name: Apply focused code changes')
+          run_start = workflow.index('        run: |\n', step) + len('        run: |\n')
+          run_end = workflow.index('\n      - name: Install dependencies', run_start)
+          block = workflow[run_start:run_end]
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in block.splitlines())
+          subprocess.run(['bash', '-lc', script], check=True)
+
+          test_path = Path('src/services/PlannerRepository.schedule.test.ts')
+          test = test_path.read_text()
+          test = test.replace(
+              "  it('deduplicates places by Place ID, CID, and emoji/canonical title', async () => {",
+              "  it('keeps title-only matches separate until a strong identity proves they are duplicates', async () => {",
+              1,
+          )
+          old = """    const placesAfter = (await plannerRepository.listPlaces()).filter((p) => p.trip_id === 'trip-1');
+    // Should NOT create duplicate, should merge into single authoritative place
+    const thipPlaces = placesAfter.filter((p) => p.title.includes('Thipsamai'));
+    expect(thipPlaces).toHaveLength(1);
+    expect(thipPlaces[0].source_place_id).toBe('0x30e2991678584ec5:0x698c069655046fbe');
+    expect(thipPlaces[0].observed_rating).toBe(4.2);
+    expect(thipPlaces[0].notes).toBe('Initial note');
+"""
+          new = """    const placesAfter = (await plannerRepository.listPlaces()).filter((p) => p.trip_id === 'trip-1');
+    // Same/similar titles are weak evidence: keep both records until CID / Place ID / canonical URL proves identity.
+    const thipPlaces = placesAfter.filter((p) => p.title.includes('Thipsamai'));
+    expect(thipPlaces).toHaveLength(2);
+    const preservedInitial = thipPlaces.find((p) => p.id === 'p-thip-1');
+    const capturedPlace = thipPlaces.find((p) => p.id === 'p-thip-new');
+    expect(preservedInitial?.notes).toBe('Initial note');
+    expect(capturedPlace?.source_place_id).toBe('0x30e2991678584ec5:0x698c069655046fbe');
+    expect(capturedPlace?.observed_rating).toBe(4.2);
+"""
+          if old not in test:
+              raise SystemExit('missing test assertion anchor')
+          test_path.write_text(test.replace(old, new, 1))
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate TypeScript and planner regressions
+        run: |
+          npm run validate:fast
+          npx vitest run src/domain/planner.test.ts src/services/PlannerRepository.schedule.test.ts
+
+      - name: Commit verified changes and remove one-shot workflows
+        shell: bash
+        run: |
+          git config user.name "ownly-agent"
+          git config user.email "actions@users.noreply.github.com"
+          rm .github/workflows/planner-pool-integrity-hotfix.yml
+          rm .github/workflows/planner-pool-integrity-hotfix-v2.yml
+          git add src/components/planner/PlannerHome.tsx src/services/PlannerRepository.ts src/services/PlannerRepository.schedule.test.ts .github/workflows/planner-pool-integrity-hotfix.yml .github/workflows/planner-pool-integrity-hotfix-v2.yml
+          git commit -m "fix(planner): preserve shelved places and tighten pool actions"
+          git push origin HEAD:fix/planner-pool-integrity-actions
