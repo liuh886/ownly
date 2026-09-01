@@ -9,7 +9,7 @@ Refactor and elevate the visual design and UX of:
 
 ## Todo List
 
-- [ ] 1. **Candidate Pool Cards UI Refactoring (🗂️ 候选池精致化与信息分层)**
+- [x] 1. **Candidate Pool Cards UI Refactoring (🗂️ 候选池精致化与信息分层)**
   - Two-tier card layout:
     - **Header row**: Place Title (truncated with tooltip), category icon pill, rating badge (`★ 4.4`), clean price tag (`฿200–400`), and quick-action icon buttons (`+` Schedule to day, `🙈` Shelve).
     - **Meta row**: Distance badge to last stop (`📍 距上一站 1.2km`), priority tag (`must`/`want`), and primary taxonomy.
@@ -19,7 +19,7 @@ Refactor and elevate the visual design and UX of:
     - Glowing border with clear checkbox for selected cards.
     - Dark pill floating batch action toolbar with action badges (`已选 N 个`, `全选`, `清空`, `+ 排入当天`, `🙈 设为暂不考虑`, `✨ 合并`, `🗑️ 批量删除`).
 
-- [ ] 2. **Execution Timeline UI Refactoring (⏱️ 时间线流线质感重塑)**
+- [x] 2. **Execution Timeline UI Refactoring (⏱️ 时间线流线质感重塑)**
   - Stop Cards:
     - Vertical timeline layout with elegant connected track.
     - Circle index bubble (`1`, `2`, `3`...) connected to vertical line.
@@ -30,7 +30,7 @@ Refactor and elevate the visual design and UX of:
     - Sleek travel pill design (`🚗 18 min · 4.2 km`) with mode icon (`🚶`, `🚗`, `🚲`, `🚇`) and quick link `Google Maps ↗`.
     - Distinctive gap pills (`◌ 机动 45 min · 11:00-11:45`) and conflict warning pills (`❌ 冲突 · 晚 15 min`).
 
-- [ ] 3. **Verification & Testing**
+- [x] 3. **Verification & Testing**
   - Run `npm run validate:fast && npm run test:mcp && npm run validate:extension` to ensure full build and test suite passes.
   - Visual check across responsive breakpoints.
   - Sync with remote `origin/main`.
