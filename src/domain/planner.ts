@@ -1,4 +1,4 @@
-import { haveConflictingStrongPlaceIdentity, shareStrongPlaceIdentity } from './place-identity';
+import { getStrongPlaceIdentityKeys, haveConflictingStrongPlaceIdentity, shareStrongPlaceIdentity } from './place-identity';
 
 export type PlannerTripStatus = 'planning' | 'active' | 'completed';
 export type PlannerTravelMode = 'driving' | 'walking' | 'bicycling' | 'transit';
@@ -435,26 +435,18 @@ export function findExistingTripPlace(
   tripId: string,
   sourceUrl: string,
   sourcePlaceId?: string,
-  coordinates?: { lat: number; lng: number },
+  _coordinates?: { lat: number; lng: number },
 ): PlannerTripPlace | undefined {
-  const tripPlaces = places.filter((place) => place.trip_id === tripId);
+  const probeKeys = new Set(getStrongPlaceIdentityKeys({
+    source_provider: inferSourceProvider(sourceUrl),
+    source_place_id: sourcePlaceId,
+    source_url: sourceUrl,
+  }));
+  if (probeKeys.size === 0) return undefined;
 
-  if (sourcePlaceId) {
-    const byPlaceId = tripPlaces.find((place) =>
-      place.source_provider === inferSourceProvider(sourceUrl) && place.source_place_id === sourcePlaceId
-    );
-    if (byPlaceId) return byPlaceId;
-  }
-
-  const coordinateIdentity = roundedCoordinateIdentity(coordinates);
-  if (coordinateIdentity) {
-    const byCoordinates = tripPlaces.find((place) => roundedCoordinateIdentity(place.coordinates) === coordinateIdentity);
-    if (byCoordinates) return byCoordinates;
-  }
-
-  const identity = normalizePlaceIdentity(sourceUrl);
-  return tripPlaces.find((place) => normalizePlaceIdentity(place.source_url) === identity)
-    ?? tripPlaces.find((place) => place.source_url === sourceUrl);
+  return places
+    .filter((place) => place.trip_id === tripId)
+    .find((place) => getStrongPlaceIdentityKeys(place).some((key) => probeKeys.has(key)));
 }
 
 export function cleanCanonicalTitle(title?: string | null): string {

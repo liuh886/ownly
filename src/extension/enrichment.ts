@@ -6,16 +6,14 @@ import {
   type PlannerTripPlace,
 } from '../domain/planner';
 import type { CurrentResearchPlace } from './content';
-import { extractCleanPriceText, extractFeatureIdFromUrl } from './utils';
+import { extractFeatureIdFromUrl } from './utils';
 import { logger } from './logger';
 import {
-  extractFeatureIdFromHtml,
   extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
   featureIdToCid,
   googleMapsDetailUrlFromSourceId,
   googleMapsPreviewPlaceUrl,
-  googleMapsSearchTbmUrl,
 } from './google-maps-research';
 
 export interface EnrichmentResult {
@@ -40,13 +38,11 @@ export function cleanTitleForSearch(title: string): string {
  */
 export function isCandidateMissingData(place: PlannerTripPlace): boolean {
   const hasCorruptedPrice = Boolean(place.observed_price && (!isValidExtractedPriceCandidate(place.observed_price) || isZeroOrPlaceholderPrice(place.observed_price)));
-  const isMissingPrice = (place.kind === 'stay' || place.kind === 'food') && (!place.observed_price || isZeroOrPlaceholderPrice(place.observed_price));
   return (
     !place.source_place_id ||
     place.observed_rating === undefined ||
     place.observed_review_count === undefined ||
     hasCorruptedPrice ||
-    isMissingPrice ||
     !place.source_category ||
     !place.address ||
     !place.coordinates
@@ -69,7 +65,7 @@ export async function enrichPlaceMetadata(
   const next: PlannerTripPlace = { ...place };
   let mutated = false;
 
-  // 1. Mandatory Step 1: Guarantee Place ID resolution FIRST if missing or invalid
+  // 1. Resolve identity only from already captured provider evidence; never search by title
   let resolvedFeatureId = next.source_place_id;
   if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
     if (next.source_url) {
@@ -78,26 +74,7 @@ export async function enrichPlaceMetadata(
     }
   }
 
-  if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
-    const cleanSearch = cleanTitleForSearch(next.title);
-    const tbmUrl = googleMapsSearchTbmUrl(cleanSearch);
-    logger.fetch('BackgroundEnrich', `Step 1: Resolving Place ID for "${cleanSearch}"`, { tbmUrl });
-    try {
-      const sRes = await fetch(tbmUrl, { credentials: 'include', signal: options?.signal });
-      if (sRes.ok) {
-        const sHtml = await sRes.text();
-        const foundId = extractFeatureIdFromHtml(sHtml);
-        if (foundId) {
-          resolvedFeatureId = foundId;
-          logger.info('BackgroundEnrich', `Step 1 Success: Resolved Place ID for "${cleanSearch}"`, { featureId: foundId });
-        }
-      }
-    } catch (err) {
-      logger.warn('BackgroundEnrich', `Search resolve failed for "${cleanSearch}"`, err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  // 2. Mandatory Step 2: Now that Place ID is resolved, fetch structured preview facts
+  // 2. With a verified Google feature id, fetch structured preview facts
   if (resolvedFeatureId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
     const previewUrl = googleMapsPreviewPlaceUrl(resolvedFeatureId);
     if (previewUrl) {
@@ -232,23 +209,6 @@ export async function enrichPlaceMetadata(
             mutated = true;
           }
 
-          if (!next.observed_price) {
-            // Only check user-written research notes; NEVER extract prices from place titles
-            const whyPrice = extractCleanPriceText(next.why);
-            const notePrice = extractCleanPriceText(next.notes);
-            const foundPrice = whyPrice || notePrice;
-            if (foundPrice && !isZeroOrPlaceholderPrice(foundPrice)) {
-              next.observed_price = foundPrice;
-              const normalized = normalizeObservedPrice(foundPrice, effectiveCurrency);
-              if (normalized?.min !== undefined) next.price_min = normalized.min;
-              if (normalized?.max !== undefined) next.price_max = normalized.max;
-              if (normalized?.currency) next.price_currency = normalized.currency;
-              if (normalized?.level !== undefined) next.price_level = normalized.level;
-              if (normalized?.unit) next.price_unit = normalized.unit;
-              mutated = true;
-            }
-          }
-
           if (mutated) {
             next.updated_at = new Date().toISOString();
             return { place: next, enriched: true };
@@ -260,12 +220,14 @@ export async function enrichPlaceMetadata(
     }
   }
 
-  // 3. Fallback: Detail URL HTML scraping (especially useful for restaurant prices in JSON-LD)
-  let targetUrl = next.source_url;
-  if (!targetUrl || targetUrl.includes('/search/?api=1') || targetUrl.includes('/maps/search/')) {
-    const detailUrl = googleMapsDetailUrlFromSourceId(next.source_place_id || resolvedFeatureId, cleanTitleForSearch(next.title));
-    if (detailUrl) targetUrl = detailUrl;
-    else if (!targetUrl) targetUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitleForSearch(next.title))}`;
+  // 3. Fallback: detail HTML is allowed only when it can be constructed from verified identity.
+  const targetUrl = googleMapsDetailUrlFromSourceId(next.source_place_id || resolvedFeatureId, cleanTitleForSearch(next.title));
+  if (!targetUrl) {
+    if (mutated) {
+      next.updated_at = new Date().toISOString();
+      return { place: next, enriched: true };
+    }
+    return { place: next, enriched: false, error: 'Missing strong Google Maps identity' };
   }
 
   logger.fetch('BackgroundEnrich', `Fetching HTML for ${next.title}`, { targetUrl, sourcePlaceId: next.source_place_id });

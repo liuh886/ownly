@@ -25,12 +25,10 @@ import { PLACE_PARSER, type SubtitleDecomposition } from './place-parser';
 import { detectPageCurrency } from './currency-detector';
 import { extractGoogleMapsSavedListId, matchesSavedListContext } from './saved-list-match';
 import {
-  extractFeatureIdFromHtml,
   extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
   googleMapsDetailUrlFromSourceId,
   googleMapsPreviewPlaceUrl,
-  googleMapsSearchTbmUrl,
   type GoogleMapsResearchFacts,
 } from './google-maps-research';
 import { logger } from './logger';
@@ -527,7 +525,7 @@ async function autoScrollFeed(): Promise<void> {
 }
 
 const MAX_SCAVENGED_PLACES = 600;
-const scavengedListPlaces = new Map<string, CurrentResearchPlace>();
+const scannedListPlaces = new Map<string, CurrentResearchPlace>();
 let lastScannedPageUrl = '';
 
 function getCanonicalPageKey(url: string): string {
@@ -543,14 +541,14 @@ function getCanonicalPageKey(url: string): string {
 function pruneScavengedCache(pageUrl: string): void {
   const canonical = getCanonicalPageKey(pageUrl);
   if (canonical !== lastScannedPageUrl) {
-    scavengedListPlaces.clear();
+    scannedListPlaces.clear();
     lastScannedPageUrl = canonical;
     return;
   }
-  if (scavengedListPlaces.size <= MAX_SCAVENGED_PLACES) return;
+  if (scannedListPlaces.size <= MAX_SCAVENGED_PLACES) return;
   const dropCount = Math.floor(MAX_SCAVENGED_PLACES / 3);
-  for (const key of [...scavengedListPlaces.keys()].slice(0, dropCount)) {
-    scavengedListPlaces.delete(key);
+  for (const key of [...scannedListPlaces.keys()].slice(0, dropCount)) {
+    scannedListPlaces.delete(key);
   }
 }
 
@@ -619,14 +617,14 @@ function rememberScavengedPlace(rawTitle: string, sourceUrl: string, card: HTMLE
   const cleanTitle = cleanExtractedText(rawTitle);
   if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle) || isFakePlaceLabel(cleanTitle)) return;
 
-  const titleKey = cleanTitle.toLowerCase();
-  if (scavengedListPlaces.has(titleKey)) return;
+  const identityKey = extractFeatureIdFromUrl(sourceUrl) || sourceUrl || `unresolved:${cleanTitle.toLowerCase()}`;
+  if (scannedListPlaces.has(identityKey)) return;
 
   const fields = readCardFields(card);
   const url = sourceUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`;
   const kind = inferPlaceKind((fields.category || '') + ' ' + cleanTitle + ' ' + (fields.address || ''));
 
-  scavengedListPlaces.set(titleKey, {
+  scannedListPlaces.set(identityKey, {
     title: cleanTitle,
     sourceUrl: url,
     sourceProvider: 'google_maps',
@@ -687,7 +685,7 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
     rememberScavengedPlace(title, linkEl?.href || '', card);
   }
 
-  return Array.from(scavengedListPlaces.values());
+  return Array.from(scannedListPlaces.values());
 }
 
 function extractGoogleMapsPlace(): CurrentResearchPlace | null {
@@ -875,30 +873,12 @@ const SAVED_LIST_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const savedListDetailCache = new Map<string, { at: number; facts: GoogleMapsResearchFacts }>();
 
 async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<GoogleMapsResearchFacts | null> {
-  let key = place.sourcePlaceId;
+  const key = place.sourcePlaceId || extractFeatureIdFromUrl(place.sourceUrl);
   if (!key || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(key.trim())) {
-    try {
-      const tbmUrl = googleMapsSearchTbmUrl(place.title, window.location.origin);
-      logger.fetch('MapsTabDetail', `Resolving Place ID for "${place.title}"`, { tbmUrl });
-      const sRes = await fetch(tbmUrl, { credentials: 'include' });
-      if (sRes.ok) {
-        const sHtml = await sRes.text();
-        const foundId = extractFeatureIdFromHtml(sHtml);
-        if (foundId) {
-          key = foundId;
-          place.sourcePlaceId = foundId;
-          logger.info('MapsTabDetail', `Resolved Place ID for "${place.title}"`, { featureId: foundId });
-        }
-      }
-    } catch (err) {
-      logger.warn('MapsTabDetail', `Search resolve failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  if (!key) {
-    logger.warn('MapsTabDetail', `Skipping detail fetch: missing sourcePlaceId for "${place.title}"`);
+    logger.warn('MapsTabDetail', `Skipping detail fetch: missing verified feature id for "${place.title}"`);
     return null;
   }
+  if (!place.sourcePlaceId) place.sourcePlaceId = key;
   const cached = savedListDetailCache.get(key);
   if (cached && Date.now() - cached.at < SAVED_LIST_DETAIL_CACHE_TTL_MS) {
     return { ...cached.facts, sourcePlaceId: key };
@@ -981,7 +961,7 @@ async function enrichSavedListDetails(
     while (cursor < places.length) {
       const index = cursor++;
       const place = places[index];
-      if (!force && place.sourcePlaceId && place.rating !== undefined && place.reviewCount !== undefined && place.category && place.priceLevel) continue;
+      if (!force && place.sourcePlaceId && place.rating !== undefined && place.reviewCount !== undefined && place.category && place.address && place.coordinates) continue;
       attempted += 1;
       const facts = await fetchSavedListDetail(place);
       if (!facts) {
@@ -992,23 +972,18 @@ async function enrichSavedListDetails(
       const nextRating = force ? (facts.rating ?? place.rating) : (place.rating ?? facts.rating);
       const nextReviewCount = force ? (facts.reviewCount ?? place.reviewCount) : (place.reviewCount ?? facts.reviewCount);
       const nextCategory = force ? (facts.category ?? place.category) : (place.category ?? facts.category);
-      const scavenged = scavengedListPlaces.get(place.title.toLowerCase());
-      const rawPriceCandidate = (facts.priceLevel && !isZeroOrPlaceholderPrice(facts.priceLevel) && isValidExtractedPriceCandidate(facts.priceLevel))
+      const nextPrice = (facts.priceLevel && !isZeroOrPlaceholderPrice(facts.priceLevel) && isValidExtractedPriceCandidate(facts.priceLevel))
         ? facts.priceLevel
-        : (scavenged?.priceLevel && !isZeroOrPlaceholderPrice(scavenged.priceLevel) && isValidExtractedPriceCandidate(scavenged.priceLevel)
-          ? scavenged.priceLevel
-          : (place.priceLevel && !isZeroOrPlaceholderPrice(place.priceLevel) && isValidExtractedPriceCandidate(place.priceLevel) ? place.priceLevel : undefined));
-      const notePrice = extractCleanPriceText(place.userNote || place.summary);
-      const nextPrice = rawPriceCandidate ?? (notePrice && !isZeroOrPlaceholderPrice(notePrice) && isValidExtractedPriceCandidate(notePrice) ? notePrice : undefined);
-      const nextAddress = force ? (facts.address ?? scavenged?.address ?? place.address) : (place.address ?? facts.address ?? scavenged?.address);
-      const nextCoords = force ? (facts.coordinates ?? scavenged?.coordinates ?? place.coordinates) : (place.coordinates ?? facts.coordinates ?? scavenged?.coordinates);
-      const nextWebsite = force ? (facts.website ?? scavenged?.website ?? place.website) : (place.website ?? facts.website ?? scavenged?.website);
-      const nextPhone = force ? (facts.phone ?? scavenged?.phone ?? place.phone) : (place.phone ?? facts.phone ?? scavenged?.phone);
-      const nextOpenHours = force ? (facts.open_hours ?? scavenged?.openHours ?? place.openHours) : (place.openHours ?? facts.open_hours ?? scavenged?.openHours);
-      const nextPlusCode = force ? (facts.plus_code ?? scavenged?.plusCode ?? place.plusCode) : (place.plusCode ?? facts.plus_code ?? scavenged?.plusCode);
-      const nextMenuUrl = force ? (facts.menu_url ?? scavenged?.menuUrl ?? place.menuUrl) : (place.menuUrl ?? facts.menu_url ?? scavenged?.menuUrl);
-      const nextReservationUrl = force ? (facts.reservation_url ?? scavenged?.reservationUrl ?? place.reservationUrl) : (place.reservationUrl ?? facts.reservation_url ?? scavenged?.reservationUrl);
-      const nextReviewTopics = force ? (facts.review_topics ?? scavenged?.reviewTopics ?? place.reviewTopics) : (place.reviewTopics ?? facts.review_topics ?? scavenged?.reviewTopics);
+        : (place.priceLevel && !isZeroOrPlaceholderPrice(place.priceLevel) && isValidExtractedPriceCandidate(place.priceLevel) ? place.priceLevel : undefined);
+      const nextAddress = force ? (facts.address ?? place.address) : (place.address ?? facts.address);
+      const nextCoords = force ? (facts.coordinates ?? place.coordinates) : (place.coordinates ?? facts.coordinates);
+      const nextWebsite = force ? (facts.website ?? place.website) : (place.website ?? facts.website);
+      const nextPhone = force ? (facts.phone ?? place.phone) : (place.phone ?? facts.phone);
+      const nextOpenHours = force ? (facts.open_hours ?? place.openHours) : (place.openHours ?? facts.open_hours);
+      const nextPlusCode = force ? (facts.plus_code ?? place.plusCode) : (place.plusCode ?? facts.plus_code);
+      const nextMenuUrl = force ? (facts.menu_url ?? place.menuUrl) : (place.menuUrl ?? facts.menu_url);
+      const nextReservationUrl = force ? (facts.reservation_url ?? place.reservationUrl) : (place.reservationUrl ?? facts.reservation_url);
+      const nextReviewTopics = force ? (facts.review_topics ?? place.reviewTopics) : (place.reviewTopics ?? facts.review_topics);
 
       places[index] = {
         ...place,
@@ -1036,7 +1011,7 @@ async function enrichSavedListDetails(
         reviewTopics: nextReviewTopics,
         types: facts.types?.length
           ? [...new Set([...(place.types ?? []), ...facts.types])]
-          : (scavenged?.types?.length ? [...new Set([...(place.types ?? []), ...scavenged.types])] : place.types),
+          : place.types,
       };
       if (
         facts.rating !== undefined
