@@ -1603,63 +1603,142 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       (item): item is PlannerExecutionTransitionItem => item.type !== 'stop' && item.from_id === place.id && item.to_id === nextPlace.id,
                     )
                     : [];
-                  return (
+                    return (
                     <li
                       key={place.id}
-                      className="space-y-1.5"
+                      className="space-y-2"
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
                     >
-                      <div className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-stone-200 bg-white p-3 shadow-xs">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white shrink-0">{index + 1}</div>
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <h3 className="truncate text-sm font-semibold text-stone-900">{place.title}</h3>
-                            <button
-                              type="button"
-                              onClick={() => setTimingModalPlace(place)}
-                              className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9.5px] font-semibold transition hover:scale-102 ${
-                                timelineStop?.start
-                                  ? 'bg-stone-100 text-stone-700 hover:bg-stone-200 ring-1 ring-stone-300/60'
-                                  : 'border border-dashed border-stone-300 bg-white text-stone-400 hover:border-stone-400 hover:text-stone-700'
-                              }`}
-                              title={zh ? '设置此站的开始时间与停留时长；日历投影由 Planner 权威状态生成' : 'Set start time and duration; calendar output is derived from Planner state'}
-                            >
-                              <span>🕒</span>
-                              <span>{timelineStop?.start ? `${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}` : (zh ? '设时间' : 'Time')}</span>
-                            </button>
-                            {place.priority ? (
-                              <span
-                                className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600"
-                                title={zh ? `优先级: ${place.priority}` : `Priority: ${place.priority}`}
+                      <div className={`relative flex items-start gap-3 rounded-xl border p-3.5 transition-all duration-150 shadow-2xs ${
+                        highlightedPlaceId === place.id
+                          ? 'border-emerald-500 ring-2 ring-emerald-300/50 bg-emerald-50/30'
+                          : 'border-stone-200/90 bg-white hover:border-stone-300'
+                      }`}>
+                        {/* Stop Number Circle */}
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-900 text-xs font-bold text-white shrink-0 shadow-2xs">
+                          {index + 1}
+                        </div>
+
+                        {/* Stop Content Body */}
+                        <div className="min-w-0 flex-1">
+                          {/* Title & Timing Trigger Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                              <h3 className="text-sm font-bold text-stone-900 truncate leading-snug" title={place.title}>
+                                {place.title}
+                              </h3>
+                              <button
+                                type="button"
+                                onClick={() => setTimingModalPlace(place)}
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold transition hover:scale-102 ${
+                                  timelineStop?.start
+                                    ? 'bg-stone-100 text-stone-800 hover:bg-stone-200 ring-1 ring-stone-300/70 font-mono'
+                                    : 'border border-dashed border-stone-300 bg-white text-stone-400 hover:border-stone-400 hover:text-stone-700'
+                                }`}
+                                title={zh ? '设置开始时间与停留时长；日历投影由 Planner 权威状态生成' : 'Set start time and duration'}
                               >
-                                {place.priority === 'must' ? '⏫' : place.priority === 'want' ? '🔼' : '🔽'}
+                                <span>🕒</span>
+                                <span>{timelineStop?.start ? `${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}` : (zh ? '设时间' : 'Time')}</span>
+                              </button>
+                              {place.locked ? (
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[9.5px] font-bold text-amber-800 ring-1 ring-amber-200/80">
+                                  📌 {zh ? '固定顺位' : 'Pinned'}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {/* Grouped 4-Action Controls */}
+                            <div className="inline-flex items-center rounded-lg border border-stone-200 bg-stone-50/80 p-0.5 shadow-2xs shrink-0">
+                              <button
+                                type="button"
+                                aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
+                                onClick={async () => {
+                                  await plannerRepository.toggleVisitLock(place.visit_id);
+                                  await load();
+                                }}
+                                className={`flex h-6 w-6 items-center justify-center rounded text-xs transition ${
+                                  place.locked
+                                    ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
+                                    : 'text-stone-400 hover:bg-white hover:text-stone-700'
+                                }`}
+                                title={place.locked ? (zh ? '已固定顺位（交通优化不移动此站）' : 'Pinned') : (zh ? '固定在当前顺位' : 'Pin stop')}
+                              >
+                                {place.locked ? '📌' : '📍'}
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '上移' : 'Move up'}
+                                disabled={index === 0}
+                                onClick={() => void moveScheduled(index, -1)}
+                                className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                title={zh ? '上移一站' : 'Move up'}
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '下移' : 'Move down'}
+                                disabled={index === scheduled.length - 1}
+                                onClick={() => void moveScheduled(index, 1)}
+                                className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                title={zh ? '下移一站' : 'Move down'}
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '从当天日程移除' : 'Remove stop'}
+                                onClick={() => void removeVisit(place)}
+                                className="flex h-6 w-6 items-center justify-center rounded text-xs text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                title={zh ? '从当天日程移除（回到待安排候选池）' : 'Remove stop'}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Meta & Fact Tags */}
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-500">
+                            <span>{placeMeta(place, language)}</span>
+                            {place.observed_rating ? (
+                              <span className="rounded-full bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-800">
+                                ★ {place.observed_rating}
                               </span>
                             ) : null}
-                            {place.locked ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">📌 {zh ? '固定顺位' : 'pinned'}</span> : null}
-                            {place.observed_price ? <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[10px] text-stone-500">{place.observed_price}</span> : null}
+                            {place.observed_price ? (
+                              <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
+                                {place.observed_price}
+                              </span>
+                            ) : null}
+                            {place.priority === 'must' ? (
+                              <span className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-800">
+                                🎯 {zh ? '必去' : 'Must'}
+                              </span>
+                            ) : null}
                             {place.tags.map((tag) => (
-                              <span key={tag} className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9.5px] font-medium text-emerald-800">
+                              <span key={tag} className="rounded-full border border-stone-200 bg-stone-50 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
                                 🏷️ {tag}
                               </span>
                             ))}
                             {place.signals?.map((signal) => (
-                              <span key={signal} className="rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[9.5px] font-medium text-teal-800">
+                              <span key={signal} className="rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.2 text-[9.5px] font-medium text-teal-800">
                                 ✅ {signal}
                               </span>
                             ))}
                             {place.risks?.map((risk) => (
-                              <span key={risk} className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-medium text-amber-800">
+                              <span key={risk} className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.2 text-[9.5px] font-medium text-amber-800">
                                 ⚠️ {risk}
                               </span>
                             ))}
                           </div>
-                          <p className="mt-0.5 text-[11px] text-stone-400">{placeMeta(place, language)}</p>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+
+                          {/* Quick Action External Links */}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
                             {place.phone ? (
                               <a
                                 href={`tel:${place.phone}`}
-                                className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200"
+                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
                                 title={zh ? '拨打官方电话' : 'Call'}
                               >
                                 📞 {place.phone}
@@ -1670,7 +1749,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 href={place.menu_url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200"
+                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
                                 title={zh ? '查看官方菜单' : 'Menu'}
                               >
                                 📖 {zh ? '菜单' : 'Menu'}
@@ -1681,10 +1760,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 href={place.reservation_url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-bold text-amber-800 hover:bg-amber-100"
+                                className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-bold text-amber-900 hover:bg-amber-100 transition shadow-2xs"
                                 title={zh ? '官方预订' : 'Reserve'}
                               >
-                                🎟️ {zh ? '预订' : 'Reserve'}
+                                🎟️ {zh ? '官方预订' : 'Reserve'}
                               </a>
                             ) : null}
                             {place.source_url ? (
@@ -1692,48 +1771,43 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 href={place.source_url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-500 hover:bg-stone-200 hover:text-stone-900"
-                                title={zh ? '在 Google Maps 查看' : 'View on Maps'}
+                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
                               >
                                 🗺️ {zh ? '地图' : 'Maps'}
                               </a>
                             ) : null}
                           </div>
+
+                          {/* Warning / Conflict Alerts */}
                           {col?.isCollision ? (
-                            <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">
-                              ⚠️ {col.reason}
+                            <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[10.5px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                              <span>⚠️</span>
+                              <span>{col.reason}</span>
                             </div>
                           ) : null}
-                          {place.why ? <p className="mt-1 line-clamp-1 text-xs text-stone-600">💡 {place.why}</p> : null}
-                          {place.notes ? <p className="mt-0.5 line-clamp-1 text-xs text-stone-500 italic">📝 {place.notes}</p> : null}
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            aria-label={place.locked ? (zh ? '已固定顺位（点击取消固定）' : 'Pinned (click to unpin)') : (zh ? '固定在当前顺位（点击固定）' : 'Pin stop at slot')}
-                            onClick={async () => {
-                              await plannerRepository.toggleVisitLock(place.visit_id);
-                              await load();
-                            }}
-                            className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs transition ${
-                              place.locked
-                                ? 'border-amber-300 bg-amber-50 text-amber-700 font-bold shadow-2xs'
-                                : 'border-stone-200 text-stone-400 hover:bg-stone-50 hover:text-stone-700'
-                            }`}
-                            title={place.locked ? (zh ? '已固定顺位（真实交通时间优化不会挪动此站）' : 'Pinned (travel-time optimization will not move this stop)') : (zh ? '点击固定此站顺位' : 'Click to pin stop')}
-                          >
-                            {place.locked ? '📌' : '📍'}
-                          </button>
-                          <button type="button" aria-label={zh ? '上移' : 'Move up'} disabled={index === 0} onClick={() => void moveScheduled(index, -1)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-xs font-bold text-stone-500 hover:bg-stone-50 disabled:opacity-25 transition">↑</button>
-                          <button type="button" aria-label={zh ? '下移' : 'Move down'} disabled={index === scheduled.length - 1} onClick={() => void moveScheduled(index, 1)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-xs font-bold text-stone-500 hover:bg-stone-50 disabled:opacity-25 transition">↓</button>
-                          <button type="button" aria-label={zh ? '从当天日程移除' : 'Remove stop'} onClick={() => void removeVisit(place)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-xs text-stone-400 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition" title={zh ? '从当天日程移除' : 'Remove stop'}>✕</button>
+
+                          {/* Research Note / Why Insight */}
+                          {place.why ? (
+                            <p className="mt-1.5 line-clamp-2 rounded-md bg-stone-50/80 px-2 py-1 text-xs text-stone-700 leading-relaxed">
+                              💡 <strong>{zh ? '推荐理由:' : 'Why:'}</strong> {place.why}
+                            </p>
+                          ) : null}
+                          {place.notes ? (
+                            <p className="mt-1 line-clamp-2 text-xs text-stone-500 italic">
+                              📝 {place.notes}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
-{index < scheduled.length - 1 ? (
-                        <div className="ml-4 space-y-1 border-l-2 border-stone-200 py-1 pl-3">
+
+                      {/* Travel Transition Rail (Between Stops) */}
+                      {index < scheduled.length - 1 ? (
+                        <div className="relative ml-3.5 border-l-2 border-dashed border-stone-200 py-2 pl-5 space-y-1.5">
                           {transitionItems.length === 0 ? (
-                            <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-[10px] font-semibold text-stone-500">
-                              ❔ {zh ? '交通时间未确认' : 'Travel time unknown'}
+                            <div className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[10px] font-medium text-stone-500">
+                              <span>❔</span>
+                              <span>{zh ? '交通时间未确认' : 'Travel time unknown'}</span>
                             </div>
                           ) : transitionItems.map((item) => {
                             if (item.type === 'travel') {
@@ -1742,38 +1816,40 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 ? ''
                                 : item.distance_meters < 1000 ? ` · ${item.distance_meters} m` : ` · ${(item.distance_meters / 1000).toFixed(1)} km`;
                               return (
-                                <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-[10px] font-semibold text-sky-800">
-                                  <span>{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS · OSM' : ' · manual'}</span>
-                                  {item.start && item.end ? <span>⏱ {item.start}-{item.end}</span> : null}
+                                <div key={item.id} className="inline-flex flex-wrap items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-3 py-1 text-[10.5px] font-semibold text-sky-900 shadow-2xs">
+                                  <span>{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS' : ''}</span>
+                                  {item.start && item.end ? <span className="text-sky-700 font-mono">⏱ {item.start}-{item.end}</span> : null}
                                   <a
                                     href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="underline underline-offset-2 hover:text-stone-950"
+                                    className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9.5px] font-bold text-sky-800 transition"
                                   >
-                                    Google Maps ↗
+                                    Google 导航 ↗
                                   </a>
                                 </div>
                               );
                             }
                             if (item.type === 'gap') {
                               return (
-                                <div key={item.id} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700">
-                                  ◌ {zh ? `机动 ${item.duration_minutes} min` : `${item.duration_minutes} min gap`} · {item.start}-{item.end}
+                                <div key={item.id} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-0.5 text-[10px] font-semibold text-emerald-800 shadow-2xs">
+                                  <span>◌</span>
+                                  <span>{zh ? `机动空闲 ${item.duration_minutes} min` : `${item.duration_minutes} min buffer`} · {item.start}-{item.end}</span>
                                 </div>
                               );
                             }
                             if (item.type === 'conflict') {
                               return (
-                                <div key={item.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-semibold text-red-700">
-                                  ❌ {zh
-                                    ? `衔接冲突 · 最早 ${item.earliest_arrival ?? '次日'} 到达 · 比 ${item.next_start ?? '下一站'} 晚 ${item.late_by_minutes} min`
-                                    : `Connection conflict · earliest ${item.earliest_arrival ?? 'next day'} · ${item.late_by_minutes} min late`}
+                                <div key={item.id} className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-0.5 text-[10px] font-semibold text-rose-800 shadow-2xs">
+                                  <span>🚨</span>
+                                  <span>{zh
+                                    ? `衔接冲突 · 最早 ${item.earliest_arrival ?? '次日'} 到达 · 比下一站晚 ${item.late_by_minutes} min`
+                                    : `Conflict · ${item.late_by_minutes} min late`}</span>
                                 </div>
                               );
                             }
                             return (
-                              <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] font-semibold text-amber-700">
+                              <div key={item.id} className="inline-flex flex-wrap items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-0.5 text-[10px] font-semibold text-amber-800">
                                 <span>❔ {item.reason === 'travel_time_missing'
                                   ? (zh ? '交通时间未确认' : 'Travel time unknown')
                                   : (zh ? '时间不完整，无法判断衔接' : 'Schedule timing incomplete')}</span>
@@ -1782,9 +1858,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="underline underline-offset-2 hover:text-stone-950"
+                                    className="rounded-full bg-amber-100 hover:bg-amber-200 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-900 transition"
                                   >
-                                    Google Maps ↗
+                                    Google 导航 ↗
                                   </a>
                                 ) : null}
                               </div>
@@ -2111,10 +2187,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               </div>
 
               {isMultiSelectMode ? (
-                <div className="mb-3 flex items-center justify-between flex-wrap gap-2 rounded-xl border border-stone-300 bg-stone-900 px-4 py-2 text-white shadow-md">
+                <div className="sticky top-2 z-20 mb-4 flex items-center justify-between flex-wrap gap-3 rounded-2xl border border-stone-800 bg-stone-950/95 px-4 py-2.5 text-white shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-2">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-emerald-400">
-                      {zh ? `已选 ${selectedCandidateIds.size} 个地点` : `${selectedCandidateIds.size} places selected`}
+                      ✓ {zh ? `已选 ${selectedCandidateIds.size} 项` : `${selectedCandidateIds.size} selected`}
                     </span>
                     <button
                       type="button"
@@ -2131,21 +2207,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       {zh ? '清空' : 'Clear'}
                     </button>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     {selectedCandidateIds.size >= 2 ? (
                       <button
                         type="button"
                         onClick={() => void handleBatchMergeCandidates()}
-                        className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-500 transition shadow-xs"
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 transition shadow-xs"
                       >
-                        ✨ {zh ? '合并所选为1个' : 'Merge Selected'}
+                        ✨ {zh ? '合并同类' : 'Merge'}
                       </button>
                     ) : null}
                     <button
                       type="button"
                       onClick={() => void handleBatchScheduleCandidates()}
                       disabled={selectedCandidateIds.size === 0}
-                      className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-40 transition shadow-xs"
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-35 transition shadow-xs"
                     >
                       + {zh ? '排入当天' : 'Schedule'}
                     </button>
@@ -2153,28 +2229,39 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       type="button"
                       onClick={() => void handleBatchShelveCandidates()}
                       disabled={selectedCandidateIds.size === 0}
-                      className="rounded-md bg-stone-800 border border-stone-700 px-2.5 py-1 text-xs font-medium text-stone-200 hover:bg-stone-700 disabled:opacity-40 transition"
+                      className="rounded-lg bg-stone-800 border border-stone-700 px-3 py-1.5 text-xs font-medium text-stone-200 hover:bg-stone-700 disabled:opacity-35 transition"
                     >
-                      🙈 {zh ? '设为暂不考虑' : 'Shelve'}
+                      🙈 {zh ? '暂不考虑' : 'Shelve'}
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleBatchDeleteCandidates()}
                       disabled={selectedCandidateIds.size === 0}
-                      className="rounded-md bg-rose-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-rose-500 disabled:opacity-40 transition shadow-xs"
+                      className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-500 disabled:opacity-35 transition shadow-xs"
                     >
                       🗑️ {zh ? '批量删除' : 'Delete'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMultiSelectMode(false);
+                        setSelectedCandidateIds(new Set());
+                      }}
+                      className="rounded-lg border border-stone-700 bg-stone-900 px-2 py-1.5 text-xs text-stone-400 hover:text-white transition"
+                      title={zh ? '退出多选' : 'Exit Select'}
+                    >
+                      ✕
                     </button>
                   </div>
                 </div>
               ) : null}
 
               {sortedPendingCandidates.length === 0 ? (
-                <div className="py-10 text-center text-xs text-stone-400">
-                  <p className="text-2xl mb-1.5">
+                <div className="py-12 text-center text-xs text-stone-400">
+                  <p className="text-3xl mb-2">
                     {pendingCandidates.length === 0 && scheduledCandidates.length > 0 ? '🎉' : '📭'}
                   </p>
-                  <p>
+                  <p className="font-medium text-stone-600">
                     {pendingCandidates.length === 0
                       ? scheduledCandidates.length > 0
                         ? (zh ? '太棒了！所有候选地点均已排入日程。可在下方查看已安排或在地图中继续探索。' : 'All candidates are scheduled! View scheduled places below.')
@@ -2200,17 +2287,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       onDragEnd={() => setDraggingPlaceId(null)}
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
-                      className={`flex flex-col justify-between rounded-lg border p-3 transition-all duration-150 ${
+                      className={`group flex flex-col justify-between rounded-xl border p-3.5 transition-all duration-150 ${
                         isMultiSelectMode
                           ? selectedCandidateIds.has(place.id)
                             ? 'border-emerald-500 ring-2 ring-emerald-400 bg-emerald-50/60 shadow-xs cursor-pointer'
-                            : 'border-stone-200 bg-white hover:border-stone-300 cursor-pointer'
+                            : 'border-stone-200 bg-white hover:border-stone-300 cursor-pointer shadow-2xs'
                           : highlightedPlaceId === place.id
-                          ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/40 shadow-xs cursor-grab active:cursor-grabbing'
-                          : 'border-stone-200 bg-stone-50/70 hover:border-stone-300 hover:bg-white hover:shadow-xs cursor-grab active:cursor-grabbing'
+                          ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/30 shadow-xs cursor-grab active:cursor-grabbing'
+                          : 'border-stone-200/90 bg-white hover:border-stone-300 hover:shadow-xs cursor-grab active:cursor-grabbing'
                       }`}
                     >
                       <div>
+                        {/* Card Header Row */}
                         <div className="flex items-start justify-between gap-1.5">
                           <div className="flex items-center gap-1.5 truncate">
                             {isMultiSelectMode ? (
@@ -2219,10 +2307,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 checked={selectedCandidateIds.has(place.id)}
                                 onChange={() => toggleSelectCandidate(place.id)}
                                 onClick={(e) => e.stopPropagation()}
-                                className="h-3.5 w-3.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
+                                className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
                               />
                             ) : null}
-                            <h3 className="truncate text-sm font-semibold text-stone-900" title={place.title}>
+                            <h3 className="truncate text-sm font-bold text-stone-900 leading-snug" title={place.title}>
                               {place.title}
                             </h3>
                           </div>
@@ -2234,7 +2322,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                   e.stopPropagation();
                                   void schedulePlace(place.id);
                                 }}
-                                className="flex h-5.5 w-5.5 items-center justify-center rounded bg-stone-950 text-xs font-bold text-white hover:bg-stone-800 transition shadow-2xs"
+                                className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-900 text-xs font-bold text-white hover:bg-stone-800 transition shadow-2xs"
                                 title={zh ? '直接排入当天日程' : 'Schedule to active day'}
                               >
                                 +
@@ -2245,40 +2333,45 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                   e.stopPropagation();
                                   void handleDropPlace(place.id);
                                 }}
-                                className="flex h-5.5 w-5.5 items-center justify-center rounded border border-stone-200 bg-white text-[11px] text-stone-400 hover:text-stone-700 hover:border-stone-300 transition shadow-2xs"
-                                title={zh ? '设为暂不考虑，可随时在下方折叠区中重新考虑' : 'Shelve this place, recoverable anytime in the section below'}
+                                className="flex h-6 w-6 items-center justify-center rounded-md border border-stone-200 bg-stone-50 text-xs text-stone-400 hover:text-stone-700 hover:border-stone-300 transition shadow-2xs"
+                                title={zh ? '设为暂不考虑，可随时在下方折叠区中重新考虑' : 'Shelve this place, recoverable anytime below'}
                               >
                                 🙈
                               </button>
                             </div>
                           ) : null}
                         </div>
+
+                        {/* Meta Line */}
                         <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
 
-                        <div className="mt-2 flex flex-wrap gap-1">
+                        {/* Badges and Tags Cluster */}
+                        <div className="mt-2 flex flex-wrap gap-1 items-center">
                           {candidateDistances.has(place.id) ? (
                             <span
-                              className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-semibold text-emerald-800"
+                              className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-800"
                               title={zh ? `距当天最后一站「${lastScheduledStop?.title}」的直线距离` : `Distance to ${lastScheduledStop?.title}`}
                             >
                               📍 {formatDistanceBadge(candidateDistances.get(place.id)!, zh)}
                             </span>
                           ) : null}
-                          <span className={`rounded-full px-1.5 py-0.2 text-[9.5px] font-semibold ${place.priority === 'must' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
-                            {place.priority}
-                          </span>
+                          {place.priority === 'must' ? (
+                            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-800">
+                              🎯 {zh ? '必去' : 'Must'}
+                            </span>
+                          ) : null}
                           {place.observed_rating ? (
-                            <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">
+                            <span className="rounded-full bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-800">
                               ★ {place.observed_rating}
                             </span>
                           ) : null}
                           {place.observed_price ? (
-                            <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">
+                            <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
                               {place.observed_price}
                             </span>
                           ) : null}
                           {place.tags.map((tag) => (
-                            <span key={tag} className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.2 text-[9.5px] font-medium text-emerald-800">
+                            <span key={tag} className="rounded-full border border-stone-200 bg-stone-50 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
                               🏷️ {tag}
                             </span>
                           ))}
@@ -2294,70 +2387,72 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           ))}
                         </div>
 
-                        <div className="mt-2 flex items-center justify-between gap-1 border-t border-stone-100/80 pt-1.5">
-                          <div className="flex flex-wrap items-center gap-1 text-[9px]">
-                            {place.phone ? (
-                              <a
-                                href={`tel:${place.phone}`}
-                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.2 text-stone-600 hover:bg-stone-200"
-                                title={`📞 ${place.phone}`}
-                              >
-                                📞 {place.phone}
-                              </a>
-                            ) : null}
-                            {place.menu_url ? (
-                              <a
-                                href={place.menu_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.2 text-stone-600 hover:bg-stone-200"
-                                title={zh ? '查看菜单' : 'Menu'}
-                              >
-                                📖 {zh ? '菜单' : 'Menu'}
-                              </a>
-                            ) : null}
-                            {place.reservation_url ? (
-                              <a
-                                href={place.reservation_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.2 font-bold text-amber-800 hover:bg-amber-100"
-                                title={zh ? '官方预订' : 'Reserve'}
-                              >
-                                🎟️ {zh ? '预订' : 'Reserve'}
-                              </a>
-                            ) : null}
-                            {place.source_url ? (
-                              <a
-                                href={place.source_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.2 text-stone-500 hover:bg-stone-200"
-                                title={zh ? '地图' : 'Maps'}
-                              >
-                                🗺️ {zh ? '地图' : 'Maps'}
-                              </a>
-                            ) : null}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleDeletePlace(place.id, place.title);
-                            }}
-                            className="flex h-5 w-5 items-center justify-center text-xs text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition shrink-0"
-                            title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                        {/* Research Note / Why Quote */}
+                        {place.why ? (
+                          <p className="mt-2 line-clamp-2 rounded-md bg-stone-50/80 px-2 py-1 text-xs text-stone-700 leading-relaxed" title={place.why}>
+                            💡 {place.why}
+                          </p>
+                        ) : null}
                       </div>
 
-                      {place.why ? (
-                        <p className="mt-1.5 line-clamp-2 text-xs leading-4.5 text-stone-600" title={place.why}>
-                          💡 {place.why}
-                        </p>
-                      ) : null}
+                      {/* Card Footer Toolbar */}
+                      <div className="mt-2 flex items-center justify-between gap-1 border-t border-stone-100/90 pt-2">
+                        <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
+                          {place.phone ? (
+                            <a
+                              href={`tel:${place.phone}`}
+                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
+                              title={`📞 ${place.phone}`}
+                            >
+                              📞 {place.phone}
+                            </a>
+                          ) : null}
+                          {place.menu_url ? (
+                            <a
+                              href={place.menu_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
+                              title={zh ? '查看菜单' : 'Menu'}
+                            >
+                              📖 {zh ? '菜单' : 'Menu'}
+                            </a>
+                          ) : null}
+                          {place.reservation_url ? (
+                            <a
+                              href={place.reservation_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-bold text-amber-900 hover:bg-amber-100 transition shadow-2xs"
+                              title={zh ? '官方预订' : 'Reserve'}
+                            >
+                              🎟️ {zh ? '预订' : 'Reserve'}
+                            </a>
+                          ) : null}
+                          {place.source_url ? (
+                            <a
+                              href={place.source_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                              title={zh ? '地图' : 'Maps'}
+                            >
+                              🗺️ {zh ? '地图' : 'Maps'}
+                            </a>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleDeletePlace(place.id, place.title);
+                          }}
+                          className="flex h-5.5 w-5.5 items-center justify-center text-xs text-stone-300 hover:text-rose-600 hover:bg-rose-50 rounded transition shrink-0"
+                          title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </article>
                   ))}
                 </div>
@@ -2409,15 +2504,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               onDragEnd={() => setDraggingPlaceId(null)}
                               onMouseEnter={() => setHighlightedPlaceId(place.id)}
                               onMouseLeave={() => setHighlightedPlaceId(null)}
-                              className={`flex flex-col justify-between rounded-lg border bg-white/90 p-3 transition-all duration-150 cursor-grab active:cursor-grabbing ${
+                              className={`group flex flex-col justify-between rounded-xl border p-3.5 transition-all duration-150 cursor-grab active:cursor-grabbing ${
                                 highlightedPlaceId === place.id
                                   ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/40 shadow-xs'
-                                  : 'border-stone-200 hover:border-stone-300 hover:shadow-xs'
+                                  : 'border-stone-200/90 bg-white hover:border-stone-300 hover:shadow-xs'
                               }`}
                             >
                               <div>
                                 <div className="flex items-start justify-between gap-1.5">
-                                  <h3 className="truncate text-sm font-semibold text-stone-900" title={place.title}>
+                                  <h3 className="truncate text-sm font-bold text-stone-900 leading-snug" title={place.title}>
                                     {place.title}
                                   </h3>
                                   <div className="flex items-center gap-1 shrink-0">
@@ -2427,39 +2522,102 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     <button
                                       type="button"
                                       onClick={() => void schedulePlace(place.id)}
-                                      className="rounded-md bg-stone-900 px-2 py-1 text-[10.5px] font-semibold text-white hover:bg-stone-800 transition"
+                                      className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-900 text-xs font-bold text-white hover:bg-stone-800 transition shadow-2xs"
                                       title={zh ? '再次排入当天日程' : 'Schedule again to active day'}
                                     >
-                                      + {zh ? '当天' : 'Day'}
+                                      +
                                     </button>
                                   </div>
                                 </div>
                                 <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
 
-                                <div className="mt-2 flex flex-wrap gap-1">
-                                  {place.tags.map((tag) => (
-                                    <span key={tag} className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.2 text-[9.5px] font-medium text-emerald-800">
-                                      🏷️ {tag}
+                                <div className="mt-2 flex flex-wrap gap-1 items-center">
+                                  {place.priority === 'must' ? (
+                                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-800">
+                                      🎯 {zh ? '必去' : 'Must'}
                                     </span>
-                                  ))}
+                                  ) : null}
                                   {place.observed_rating ? (
-                                    <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">
+                                    <span className="rounded-full bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-800">
                                       ★ {place.observed_rating}
                                     </span>
                                   ) : null}
                                   {place.observed_price ? (
-                                    <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">
+                                    <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
                                       {place.observed_price}
                                     </span>
                                   ) : null}
+                                  {place.tags.map((tag) => (
+                                    <span key={tag} className="rounded-full border border-stone-200 bg-stone-50 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
+                                      🏷️ {tag}
+                                    </span>
+                                  ))}
                                 </div>
+
+                                {place.why ? (
+                                  <p className="mt-2 line-clamp-2 rounded-md bg-stone-50/80 px-2 py-1 text-xs text-stone-700 leading-relaxed" title={place.why}>
+                                    💡 {place.why}
+                                  </p>
+                                ) : null}
                               </div>
 
-                              {place.why ? (
-                                <p className="mt-2 line-clamp-2 text-xs leading-4.5 text-stone-600" title={place.why}>
-                                  💡 {place.why}
-                                </p>
-                              ) : null}
+                              <div className="mt-2 flex items-center justify-between gap-1 border-t border-stone-100/90 pt-2">
+                                <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
+                                  {place.phone ? (
+                                    <a
+                                      href={`tel:${place.phone}`}
+                                      className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
+                                      title={`📞 ${place.phone}`}
+                                    >
+                                      📞 {place.phone}
+                                    </a>
+                                  ) : null}
+                                  {place.menu_url ? (
+                                    <a
+                                      href={place.menu_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
+                                      title={zh ? '查看菜单' : 'Menu'}
+                                    >
+                                      📖 {zh ? '菜单' : 'Menu'}
+                                    </a>
+                                  ) : null}
+                                  {place.reservation_url ? (
+                                    <a
+                                      href={place.reservation_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-bold text-amber-900 hover:bg-amber-100 transition shadow-2xs"
+                                      title={zh ? '官方预订' : 'Reserve'}
+                                    >
+                                      🎟️ {zh ? '预订' : 'Reserve'}
+                                    </a>
+                                  ) : null}
+                                  {place.source_url ? (
+                                    <a
+                                      href={place.source_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                      title={zh ? '地图' : 'Maps'}
+                                    >
+                                      🗺️ {zh ? '地图' : 'Maps'}
+                                    </a>
+                                  ) : null}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleDeletePlace(place.id, place.title);
+                                  }}
+                                  className="flex h-5.5 w-5.5 items-center justify-center text-xs text-stone-300 hover:text-rose-600 hover:bg-rose-50 rounded transition shrink-0"
+                                  title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
+                                >
+                                  🗑️
+                                </button>
+                              </div>
                             </article>
                           );
                         })}
@@ -2504,17 +2662,17 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         {sortedDroppedPlaces.map((place) => (
                           <article
                             key={place.id}
-                            className="flex flex-col justify-between rounded-lg border border-dashed border-stone-200 bg-stone-50/40 p-3 opacity-75 hover:opacity-100 hover:border-stone-300 transition"
+                            className="flex flex-col justify-between rounded-xl border border-dashed border-stone-300/80 bg-stone-50/50 p-3.5 opacity-80 hover:opacity-100 hover:border-stone-400 transition shadow-2xs"
                           >
                             <div>
                               <div className="flex items-start justify-between gap-1.5">
-                                <h3 className="truncate text-sm font-semibold text-stone-600 line-through decoration-stone-300" title={place.title}>
+                                <h3 className="truncate text-sm font-bold text-stone-600 line-through decoration-stone-300 leading-snug" title={place.title}>
                                   {place.title}
                                 </h3>
                                 <button
                                   type="button"
                                   onClick={() => void handleRestorePlace(place.id)}
-                                  className="flex h-5.5 w-5.5 items-center justify-center rounded border border-emerald-600 bg-emerald-50 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs shrink-0"
+                                  className="flex h-6 w-6 items-center justify-center rounded-md border border-emerald-600 bg-emerald-50 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs shrink-0"
                                   title={zh ? '重新恢复为待考虑候选' : 'Restore to active candidates'}
                                 >
                                   ↩️
@@ -2522,7 +2680,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               </div>
                               <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
 
-                              <div className="mt-2 flex flex-wrap gap-1">
+                              <div className="mt-2 flex flex-wrap gap-1 items-center">
                                 {place.tags.map((tag) => (
                                   <span key={tag} className="rounded-full border border-stone-200 bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
                                     🏷️ {tag}
@@ -2540,23 +2698,23 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 ) : null}
                               </div>
 
-                              <div className="mt-2 flex items-center justify-end border-t border-stone-100/80 pt-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => void handleDeletePlace(place.id, place.title)}
-                                  className="flex h-5 w-5 items-center justify-center text-xs text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition shrink-0"
-                                  title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
-                                >
-                                  🗑️
-                                </button>
-                              </div>
+                              {place.why ? (
+                                <p className="mt-2 line-clamp-2 rounded-md bg-stone-100/70 px-2 py-1 text-xs text-stone-600 leading-relaxed" title={place.why}>
+                                  💡 {place.why}
+                                </p>
+                              ) : null}
                             </div>
 
-                            {place.why ? (
-                              <p className="mt-1.5 line-clamp-2 text-xs leading-4.5 text-stone-500" title={place.why}>
-                                💡 {place.why}
-                              </p>
-                            ) : null}
+                            <div className="mt-2 flex items-center justify-end border-t border-stone-200/60 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleDeletePlace(place.id, place.title)}
+                                className="flex h-5.5 w-5.5 items-center justify-center text-xs text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition shrink-0"
+                                title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </article>
                         ))}
                       </div>

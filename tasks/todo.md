@@ -1,13 +1,39 @@
-# Phase 2.1: Supabase Calendar Feed Backend & Hardening
+# Planner & Capture UI Optimization (Part 1 & Part 2)
 
-## Todo
+## Goals
+Refactor and elevate the visual design and UX of:
+1. **Candidate Pool Cards & Batch Toolbar (🗂️ 候选池卡片与操作区)**
+2. **Execution Timeline & Travel Transitions (⏱️ 每日执行时间线)**
 
-- [x] 1. Security: Remove plaintext hash fallback in `hashFeedToken()` (throw error if crypto unavailable)
-- [x] 2. Fix Rotate Bug: Update `rotateFeed()` to accept `places` and `visits`, build new ICS snapshot, save new record, and disable old record
-- [x] 3. Database Migration: Ensure `supabase/migrations/20260901_calendar_feeds.sql` has `user_id uuid/text`, `create unique index on calendar_feeds(token_hash)`, and `user_id` is non-nullable
-- [x] 4. Production Store: Implement `src/services/SupabaseCalendarFeedStore.ts` using Supabase REST API (with strict `userId` requirement and zero weak `local_user` fallback)
-- [x] 5. Public Edge Function: Implement `supabase/functions/calendar-feed/index.ts` for public `GET /f/:token.ics` serving
-- [x] 6. Wiring & Testing: Update `CalendarFeedService.ts` to use `SupabaseCalendarFeedStore` by default, test with mocks and memory store, and run all CI suites
+---
+
+## Todo List
+
+- [ ] 1. **Candidate Pool Cards UI Refactoring (🗂️ 候选池精致化与信息分层)**
+  - Two-tier card layout:
+    - **Header row**: Place Title (truncated with tooltip), category icon pill, rating badge (`★ 4.4`), clean price tag (`฿200–400`), and quick-action icon buttons (`+` Schedule to day, `🙈` Shelve).
+    - **Meta row**: Distance badge to last stop (`📍 距上一站 1.2km`), priority tag (`must`/`want`), and primary taxonomy.
+    - **Tags & Signals container**: Subtle, neatly wrapped chips for signals (`✅`), risks (`⚠️`), custom tags (`🏷️`).
+    - **Footer toolbar**: Compact action icons for external links (`📞 电话`, `📖 菜单`, `🎟️ 预订`, `🗺️ 地图`) and `🗑️ 删除` button on the far right.
+  - Multi-select mode visual enhancement:
+    - Glowing border with clear checkbox for selected cards.
+    - Dark pill floating batch action toolbar with action badges (`已选 N 个`, `全选`, `清空`, `+ 排入当天`, `🙈 设为暂不考虑`, `✨ 合并`, `🗑️ 批量删除`).
+
+- [ ] 2. **Execution Timeline UI Refactoring (⏱️ 时间线流线质感重塑)**
+  - Stop Cards:
+    - Vertical timeline layout with elegant connected track.
+    - Circle index bubble (`1`, `2`, `3`...) connected to vertical line.
+    - Prominent Title and Time slot button (`🕒 09:30-11:00 · 90m` with clear hover and active timing modal trigger).
+    - Compact 4-icon action cluster on right: `📌` (Pin/Unpin toggle), `↑` (Move up), `↓` (Move down), `✕` (Remove from day).
+    - Micro metadata: address snippet, official links (`📞`, `📖`, `🎟️`, `🗺️`), note/why quotes in subtle container.
+  - Travel Transitions (Between Stops):
+    - Sleek travel pill design (`🚗 18 min · 4.2 km`) with mode icon (`🚶`, `🚗`, `🚲`, `🚇`) and quick link `Google Maps ↗`.
+    - Distinctive gap pills (`◌ 机动 45 min · 11:00-11:45`) and conflict warning pills (`❌ 冲突 · 晚 15 min`).
+
+- [ ] 3. **Verification & Testing**
+  - Run `npm run validate:fast && npm run test:mcp && npm run validate:extension` to ensure full build and test suite passes.
+  - Visual check across responsive breakpoints.
+  - Sync with remote `origin/main`.
 
 ---
 
