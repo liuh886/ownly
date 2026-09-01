@@ -1,3 +1,5 @@
+import { haveConflictingStrongPlaceIdentity, shareStrongPlaceIdentity } from './place-identity';
+
 export type PlannerTripStatus = 'planning' | 'active' | 'completed';
 export type PlannerTravelMode = 'driving' | 'walking' | 'bicycling' | 'transit';
 export type PlannerTripLegSource = 'manual' | 'openrouteservice';
@@ -36,6 +38,8 @@ export interface PlannerTrip {
   fx_rates?: Record<string, number>;
   /** Calendar subscription feed metadata for continuous read-only ICS sync (PRO). */
   calendar_feed?: PlannerTripCalendarFeed;
+  /** User-reviewed duplicate pairs that must stay separate. Pair ids are canonical and order-independent. */
+  ignored_duplicate_pair_ids?: string[];
   created_at: string;
   updated_at?: string;
 }
@@ -515,7 +519,6 @@ export function detectSuspectedDuplicatePlaces(
     const p1 = places[i];
     const t1 = cleanCanonicalTitle(p1.title);
     const phone1 = p1.phone?.replace(/\D+/g, '');
-    const cid1 = extractPlaceCid(p1);
 
     for (let j = i + 1; j < n; j++) {
       const p2 = places[j];
@@ -523,14 +526,14 @@ export function detectSuspectedDuplicatePlaces(
 
       const t2 = cleanCanonicalTitle(p2.title);
       const phone2 = p2.phone?.replace(/\D+/g, '');
-      const cid2 = extractPlaceCid(p2);
+      if (haveConflictingStrongPlaceIdentity(p1, p2)) continue;
 
       let reason = '';
       let score = 0;
       let distMeters: number | undefined;
 
       // 1. Same Place ID or CID
-      if ((p1.source_place_id && p1.source_place_id === p2.source_place_id) || (cid1 && cid2 && cid1 === cid2)) {
+      if (shareStrongPlaceIdentity(p1, p2)) {
         reason = 'Google Place ID / CID 一致';
         score = 1.0;
       }
@@ -573,7 +576,7 @@ export function detectSuspectedDuplicatePlaces(
         const [primaryPlace, secondaryPlace] = p1Score >= p2Score ? [p1, p2] : [p2, p1];
 
         results.push({
-          pairId: `${primaryPlace.id}--${secondaryPlace.id}`,
+          pairId: [p1.id, p2.id].sort().join('--'),
           reason,
           score,
           distanceMeters: distMeters,

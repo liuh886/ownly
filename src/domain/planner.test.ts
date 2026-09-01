@@ -596,6 +596,19 @@ describe('Ownly Planner domain', () => {
     expect(extractPlaceCoordinates('https://example.com/not-maps')).toBeNull();
   });
 
+  it('uses order-independent suspected duplicate pair ids', () => {
+    const left = place('z-place', { title: 'Same Cafe', observed_review_count: 1 });
+    const right = place('a-place', { title: 'Same Cafe', observed_review_count: 999 });
+    const [pair] = detectSuspectedDuplicatePlaces([left, right]);
+    expect(pair?.pairId).toBe('a-place--z-place');
+  });
+
+  it('suppresses weak title matches when comparable strong Google identities conflict', () => {
+    const left = place('left', { title: 'Airport', source_place_id: 'ChIJA11111111111' });
+    const right = place('right', { title: 'Airport', source_place_id: 'ChIJB22222222222' });
+    expect(detectSuspectedDuplicatePlaces([left, right])).toEqual([]);
+  });
+
   it('normalizes place identity across capture URL forms', () => {
     const searchForm = 'https://www.google.com/maps/search/?api=1&query=%E6%B5%85%E8%8D%89%E5%AF%BA';
     const placeForm = 'https://www.google.com/maps/place/%E6%B5%85%E8%8D%89%E5%AF%BA/@35.7147,139.7966,17z';

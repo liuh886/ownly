@@ -203,7 +203,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [membersByTrip, setMembersByTrip] = useState<Record<string, string[]>>({});
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
 
-  const [isDroppedCollapsed, setIsDroppedCollapsed] = useState(true);
 
   const currentExpenses = useMemo(() => {
     if (!selectedTripId) return [];
@@ -266,7 +265,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isSuspectedModalOpen, setIsSuspectedModalOpen] = useState(false);
-  const [dismissedPairIds, setDismissedPairIds] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
@@ -379,9 +377,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     return Math.max(0, tripDates.indexOf(activeDate));
   }, [activeDate, tripDates]);
 
-  const tripPlaces = useMemo(
-    () => places.filter((place) => place.trip_id === selectedTripId && place.state !== 'dropped'),
+  // Preserve the complete trip set so shelving changes planning state without making data disappear.
+  const tripAllPlaces = useMemo(
+    () => places.filter((place) => place.trip_id === selectedTripId),
     [places, selectedTripId],
+  );
+  const tripPlaces = useMemo(
+    () => tripAllPlaces.filter((place) => place.state !== 'dropped'),
+    [tripAllPlaces],
   );
 
   const suspectedDuplicatePairs = useMemo(
@@ -389,9 +392,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [tripPlaces],
   );
 
+  const ignoredDuplicatePairIds = useMemo(
+    () => new Set(selectedTrip?.ignored_duplicate_pair_ids ?? []),
+    [selectedTrip?.ignored_duplicate_pair_ids],
+  );
+
   const visibleSuspectedPairs = useMemo(
-    () => suspectedDuplicatePairs.filter((pair) => !dismissedPairIds.has(pair.pairId)),
-    [suspectedDuplicatePairs, dismissedPairIds],
+    () => suspectedDuplicatePairs.filter((pair) => !ignoredDuplicatePairIds.has(pair.pairId)),
+    [suspectedDuplicatePairs, ignoredDuplicatePairIds],
   );
 
   const tripTags = useMemo(() => {
@@ -482,13 +490,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const pendingCandidates = allCandidatePlaces;
 
   const droppedPlaces = useMemo(
-    () => [...tripPlaces]
+    () => [...tripAllPlaces]
       .filter((place) => place.state === 'dropped')
       .map((place) => ({
         ...place,
         tags: ensurePlaceKindTag(place.tags, place.kind, language),
       })),
-    [tripPlaces, language],
+    [tripAllPlaces, language],
   );
 
   const filterChips = useMemo(() => {
@@ -501,6 +509,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
     const wantCount = pendingCandidates.filter((p) => p.priority === 'want').length;
     if (wantCount > 0) chips.push({ id: 'want', label: zh ? '想去' : 'Want', count: wantCount, type: 'priority' });
+
+    if (droppedPlaces.length > 0) chips.push({ id: 'dropped', label: zh ? '🙈 暂不考虑' : '🙈 Shelved', count: droppedPlaces.length, type: 'status' });
 
     const scheduledCount = pendingCandidates.filter((p) => (visitCountByPlaceId.get(p.id) || 0) > 0).length;
     if (scheduledCount > 0) chips.push({ id: 'scheduled', label: zh ? '📅 已排入' : '📅 Scheduled', count: scheduledCount, type: 'status' });
@@ -546,7 +556,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     }
 
     return chips;
-  }, [pendingCandidates, zh, language, tripTags, visitCountByPlaceId]);
+  }, [pendingCandidates, droppedPlaces, zh, language, tripTags, visitCountByPlaceId]);
 
   const [candidateSortMode, setCandidateSortMode] = useState<'default' | 'distance' | 'must' | 'rating'>('default');
 
@@ -623,14 +633,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   }, [allCandidatePlaces, lastStopCoords]);
 
   const sortedPendingCandidates = useMemo(() => {
-    const filtered = filterAndSearchPlaces(pendingCandidates, activeFilter, poolSearch, visitCountByPlaceId);
+    const poolSource = activeFilter === 'dropped' ? droppedPlaces : pendingCandidates;
+    const filtered = filterAndSearchPlaces(poolSource, activeFilter, poolSearch, visitCountByPlaceId);
     return sortPlaceList(filtered, candidateSortMode, candidateDistances, lastStopCoords);
-  }, [pendingCandidates, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords, visitCountByPlaceId]);
-
-  const sortedDroppedPlaces = useMemo(() => {
-    const filtered = filterAndSearchPlaces(droppedPlaces, activeFilter, poolSearch);
-    return sortPlaceList(filtered, candidateSortMode, candidateDistances, lastStopCoords);
-  }, [droppedPlaces, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords]);
+  }, [pendingCandidates, droppedPlaces, activeFilter, poolSearch, candidateSortMode, candidateDistances, lastStopCoords, visitCountByPlaceId]);
 
   const candidateHotels = useMemo(
     () => allCandidatePlaces.filter((p) => p.kind === 'stay'),
@@ -757,19 +763,27 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     }
   }, [disabled, load, zh]);
 
-  const handleMergeAllSuspectedPairs = useCallback(async () => {
-    if (!selectedTripId || disabled) return;
+
+  const handleIgnoreSuspectedPair = useCallback(async (pairId: string) => {
+    if (!pairId || !selectedTrip || disabled) return;
     try {
-      const res = await plannerRepository.mergeAllSuspectedDuplicates(selectedTripId);
-      await load();
-      setIsSuspectedModalOpen(false);
-      setNotice(zh ? `已成功合并 ${res.mergedCount} 组疑似同类地点！` : `Successfully merged ${res.mergedCount} duplicate place(s)!`);
-      setTimeout(() => setNotice(''), 3500);
+      const ignored = new Set(selectedTrip.ignored_duplicate_pair_ids ?? []);
+      ignored.add(pairId);
+      const nextTrip: PlannerTrip = {
+        ...selectedTrip,
+        ignored_duplicate_pair_ids: [...ignored].sort(),
+        updated_at: new Date().toISOString(),
+      };
+      await plannerRepository.upsertTrip(nextTrip);
+      setTrips((prev) => prev.map((trip) => (trip.id === nextTrip.id ? nextTrip : trip)));
+      setNotice(zh ? '已确认这两个地点应保持分开' : 'Kept these places separate');
+      setTimeout(() => setNotice(''), 2500);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
       setTimeout(() => setNotice(''), 4000);
     }
-  }, [disabled, load, selectedTripId, zh]);
+  }, [disabled, selectedTrip, zh]);
+
 
   const toggleSelectCandidate = useCallback((id: string) => {
     setSelectedCandidateIds((prev) => {
@@ -1749,7 +1763,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
                                 title={zh ? '拨打官方电话' : 'Call'}
                               >
-                                📞 {place.phone}
+                                📞
                               </a>
                             ) : null}
                             {place.menu_url ? (
@@ -2038,7 +2052,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <span className="text-base">🗂️</span>
               <h2 className="text-sm font-semibold text-stone-900">{zh ? '行程候选池' : 'Research Pool'}</h2>
               <span className="rounded-full bg-stone-200/80 px-2 py-0.5 text-xs font-bold text-stone-700">
-                {sortedPendingCandidates.length}/{pendingCandidates.length}
+                {sortedPendingCandidates.length}/{activeFilter === 'dropped' ? droppedPlaces.length : pendingCandidates.length}
               </span>
               {droppedPlaces.length > 0 ? (
                 <span className="rounded-full bg-stone-200/60 px-2 py-0.5 text-xs font-semibold text-stone-600" title={zh ? '暂不考虑地点数' : 'Shelved places count'}>
@@ -2124,7 +2138,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     <button
                       key={f.id}
                       type="button"
-                      onClick={() => setActiveFilter(isSelected && f.id !== 'all' ? 'all' : f.id)}
+                      onClick={() => {
+                        const nextFilter = isSelected && f.id !== 'all' ? 'all' : f.id;
+                        setActiveFilter(nextFilter);
+                        if (nextFilter === 'dropped') {
+                          setIsMultiSelectMode(false);
+                          setSelectedCandidateIds(new Set());
+                        }
+                      }}
                       className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition ${
                         isSelected
                           ? 'bg-stone-900 text-white shadow-2xs'
@@ -2146,7 +2167,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="p-4">
               <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
                 <h3 className="text-xs font-semibold text-stone-700">
-                  {zh ? '待安排地点' : 'Pending Scheduling'}
+                  {activeFilter === 'dropped'
+                    ? (zh ? '暂不考虑' : 'Shelved')
+                    : (zh ? '待安排地点' : 'Pending Scheduling')}
                   <span className="ml-1.5 text-[11px] font-normal text-stone-400">
                     ({sortedPendingCandidates.length})
                   </span>
@@ -2164,11 +2187,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   ) : null}
                   <button
                     type="button"
+                    disabled={activeFilter === 'dropped'}
                     onClick={() => {
                       setIsMultiSelectMode((prev) => !prev);
                       setSelectedCandidateIds(new Set());
                     }}
-                    className={`rounded-md border px-2 py-1 text-[11px] font-medium transition flex items-center gap-1 shadow-2xs ${
+                    className={`rounded-md border px-2 py-1 text-[11px] font-medium transition flex items-center gap-1 shadow-2xs disabled:cursor-not-allowed disabled:opacity-35 ${
                       isMultiSelectMode
                         ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-bold'
                         : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
@@ -2188,7 +2212,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 </div>
               </div>
 
-              {isMultiSelectMode ? (
+              {isMultiSelectMode && activeFilter !== 'dropped' ? (
                 <div className="sticky top-2 z-20 mb-4 flex items-center justify-between flex-wrap gap-3 rounded-2xl border border-stone-800 bg-stone-950/95 px-4 py-2.5 text-white shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-2">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-emerald-400">
@@ -2272,12 +2296,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   {sortedPendingCandidates.map((place) => (
                     <article
                       key={place.id}
-                      draggable={!isMultiSelectMode}
+                      draggable={!isMultiSelectMode && place.state !== 'dropped'}
                       onClick={() => {
-                        if (isMultiSelectMode) toggleSelectCandidate(place.id);
+                        if (isMultiSelectMode && place.state !== 'dropped') toggleSelectCandidate(place.id);
                       }}
                       onDragStart={(event) => {
-                        if (isMultiSelectMode) return;
+                        if (isMultiSelectMode || place.state === 'dropped') return;
                         event.dataTransfer.setData('text/plain', place.id);
                         event.dataTransfer.dropEffect = 'move';
                         setDraggingPlaceId(place.id);
@@ -2286,7 +2310,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
                       className={`group flex flex-col justify-between rounded-xl border p-3.5 transition-all duration-150 ${
-                        isMultiSelectMode
+                        isMultiSelectMode && place.state !== 'dropped'
                           ? selectedCandidateIds.has(place.id)
                             ? 'border-emerald-500 ring-2 ring-emerald-400 bg-emerald-50/60 shadow-xs cursor-pointer'
                             : 'border-stone-200 bg-white hover:border-stone-300 cursor-pointer shadow-2xs'
@@ -2299,7 +2323,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         {/* Card Header Row */}
                         <div className="flex items-start justify-between gap-1.5">
                           <div className="flex items-center gap-1.5 truncate">
-                            {isMultiSelectMode ? (
+                            {isMultiSelectMode && place.state !== 'dropped' ? (
                               <input
                                 type="checkbox"
                                 checked={selectedCandidateIds.has(place.id)}
@@ -2312,32 +2336,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               {place.title}
                             </h3>
                           </div>
-                          {!isMultiSelectMode ? (
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void schedulePlace(place.id);
-                                }}
-                                className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-900 text-xs font-bold text-white hover:bg-stone-800 transition shadow-2xs"
-                                title={zh ? '直接排入当天日程' : 'Schedule to active day'}
-                              >
-                                +
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleDropPlace(place.id);
-                                }}
-                                className="flex h-6 w-6 items-center justify-center rounded-md border border-stone-200 bg-stone-50 text-xs text-stone-400 hover:text-stone-700 hover:border-stone-300 transition shadow-2xs"
-                                title={zh ? '设为暂不考虑，可随时在下方折叠区中重新考虑' : 'Shelve this place, recoverable anytime below'}
-                              >
-                                🙈
-                              </button>
-                            </div>
-                          ) : null}
                         </div>
 
                         {/* Meta Line */}
@@ -2412,7 +2410,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
                               title={`📞 ${place.phone}`}
                             >
-                              📞 {place.phone}
+                              📞
                             </a>
                           ) : null}
                           {place.menu_url ? (
@@ -2449,17 +2447,57 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             </a>
                           ) : null}
                         </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleDeletePlace(place.id, place.title);
-                          }}
-                          className="flex h-5.5 w-5.5 items-center justify-center text-xs text-stone-300 hover:text-rose-600 hover:bg-rose-50 rounded transition shrink-0"
-                          title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
-                        >
-                          🗑️
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {place.state === 'dropped' ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleRestorePlace(place.id);
+                              }}
+                              className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100 transition"
+                              title={zh ? '取回到候选池' : 'Restore to candidate pool'}
+                            >
+                              ↩️ {zh ? '取回' : 'Restore'}
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void schedulePlace(place.id);
+                                }}
+                                className="flex h-6 w-6 items-center justify-center rounded-md bg-stone-900 text-xs font-bold text-white hover:bg-stone-800 transition shadow-2xs"
+                                title={zh ? '直接排入当天日程' : 'Schedule to active day'}
+                              >
+                                +
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleDropPlace(place.id);
+                                }}
+                                className="flex h-6 w-6 items-center justify-center rounded-md border border-stone-200 bg-stone-50 text-xs text-stone-400 hover:text-stone-700 hover:border-stone-300 transition shadow-2xs"
+                                title={zh ? '暂不考虑' : 'Shelve'}
+                              >
+                                🙈
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDeletePlace(place.id, place.title);
+                            }}
+                            className="flex h-6 w-6 items-center justify-center text-xs text-stone-300 hover:text-rose-600 hover:bg-rose-50 rounded transition"
+                            title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
                     </article>
                   ))}
@@ -2469,101 +2507,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
             {/* Layer 2 (formerly scheduled collapsible) removed — scheduled places now stay in main pool with 📅 badge */}
 
-            {/* Layer 3: 暂不考虑 Collapsible Section */}
-            {droppedPlaces.length > 0 ? (
-              <div className="border-t border-stone-200 bg-stone-50/50">
-                <button
-                  type="button"
-                  onClick={() => setIsDroppedCollapsed((prev) => !prev)}
-                  className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-semibold text-stone-700 hover:bg-stone-100 transition"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-stone-400 text-[10px]">{isDroppedCollapsed ? '▶' : '▼'}</span>
-                    <span>{zh ? '暂不考虑' : 'Shelved Places'}</span>
-                    <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[10.5px] font-bold text-stone-600">
-                      {droppedPlaces.length}
-                    </span>
-                    <span className="hidden sm:inline text-[11px] font-normal text-stone-400">
-                      {zh ? '（已退出规划视野，事实与研究笔记完整保留在 Vault 中）' : '(Excluded from planning, facts preserved in Vault)'}
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-stone-400">
-                    {isDroppedCollapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}
-                  </span>
-                </button>
-
-                {!isDroppedCollapsed ? (
-                  <div className="p-4 pt-1">
-                    {sortedDroppedPlaces.length === 0 ? (
-                      <p className="py-6 text-center text-xs text-stone-400">
-                        {zh ? '没有匹配的暂不考虑地点。' : 'No matching shelved places.'}
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                        {sortedDroppedPlaces.map((place) => (
-                          <article
-                            key={place.id}
-                            className="flex flex-col justify-between rounded-xl border border-dashed border-stone-300/80 bg-stone-50/50 p-3.5 opacity-80 hover:opacity-100 hover:border-stone-400 transition shadow-2xs"
-                          >
-                            <div>
-                              <div className="flex items-start justify-between gap-1.5">
-                                <h3 className="truncate text-sm font-bold text-stone-600 line-through decoration-stone-300 leading-snug" title={place.title}>
-                                  {place.title}
-                                </h3>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleRestorePlace(place.id)}
-                                  className="flex h-6 w-6 items-center justify-center rounded-md border border-emerald-600 bg-emerald-50 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs shrink-0"
-                                  title={zh ? '重新恢复为待考虑候选' : 'Restore to active candidates'}
-                                >
-                                  ↩️
-                                </button>
-                              </div>
-                              <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
-
-                              <div className="mt-2 flex flex-wrap gap-1 items-center">
-                                {place.tags.map((tag) => (
-                                  <span key={tag} className="rounded-full border border-stone-200 bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
-                                    🏷️ {tag}
-                                  </span>
-                                ))}
-                                {place.observed_rating ? (
-                                  <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-500">
-                                    ★ {place.observed_rating}
-                                  </span>
-                                ) : null}
-                                {place.observed_price ? (
-                                  <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-500">
-                                    {place.observed_price}
-                                  </span>
-                                ) : null}
-                              </div>
-
-                              {place.why ? (
-                                <p className="mt-2 line-clamp-2 rounded-md bg-stone-100/70 px-2 py-1 text-xs text-stone-600 leading-relaxed" title={place.why}>
-                                  💡 {place.why}
-                                </p>
-                              ) : null}
-                            </div>
-
-                            <div className="mt-2 flex items-center justify-end border-t border-stone-200/60 pt-2">
-                              <button
-                                type="button"
-                                onClick={() => void handleDeletePlace(place.id, place.title)}
-                                className="flex h-5.5 w-5.5 items-center justify-center text-xs text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition shrink-0"
-                                title={zh ? '彻底从行程中删除此地点' : 'Delete place permanently'}
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
           </>
         ) : null}
       </section>
@@ -2652,15 +2595,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4 bg-stone-50">
               <div>
                 <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
-                  ✨ {zh ? '合并疑似同类地点' : 'Merge Suspected Duplicates'}
+                  ✨ {zh ? '疑似重复地点复核' : 'Suspected Duplicate Review'}
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
                     {visibleSuspectedPairs.length}
                   </span>
                 </h2>
                 <p className="text-xs text-stone-500 mt-0.5">
                   {zh
-                    ? '系统检测到以下地点名称高度相近或地理位置重合，请选择保留的主地点进行合并。'
-                    : 'The following places have very close coordinates or matching titles. Choose which place to keep.'}
+                    ? '以下地点只有相似证据，系统不会自动合并。请逐组选择合并或确认保持分开。'
+                    : 'These places have similarity evidence only. Ownly will not auto-merge them; review each pair explicitly.'}
                 </p>
               </div>
               <button
@@ -2679,12 +2622,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   className="rounded-xl border border-amber-200/80 bg-amber-50/20 p-4 shadow-xs"
                 >
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-                      🔍 {pair.reason}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                        🔍 {pair.reason}
+                      </span>
+                      <span className="rounded-md border border-stone-200 bg-white px-2 py-0.5 text-[10.5px] font-medium text-stone-500">
+                        {zh ? '匹配分' : 'Match'} {Math.round(pair.score * 100)}%
+                      </span>
+                      {pair.distanceMeters !== undefined ? (
+                        <span className="rounded-md border border-stone-200 bg-white px-2 py-0.5 text-[10.5px] font-medium text-stone-500">
+                          📍 {pair.distanceMeters}m
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setDismissedPairIds((prev) => new Set([...prev, pair.pairId]))}
+                      onClick={() => void handleIgnoreSuspectedPair(pair.pairId)}
                       className="text-[11px] font-medium text-stone-400 hover:text-stone-600 transition"
                     >
                       {zh ? '不是同类 (忽略)' : 'Ignore (keep separate)'}
@@ -2763,13 +2716,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 className="rounded-md border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 transition"
               >
                 {zh ? '暂不处理' : 'Close'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleMergeAllSuspectedPairs()}
-                className="rounded-md bg-emerald-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 transition shadow-xs flex items-center gap-1.5"
-              >
-                ⚡ {zh ? `一键合并全部 (${visibleSuspectedPairs.length} 组)` : `Merge All (${visibleSuspectedPairs.length} pairs)`}
               </button>
             </div>
           </div>
