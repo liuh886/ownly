@@ -1,4 +1,4 @@
-import { cleanExtractedText, extractCleanPriceText, isPlausiblePriceText, isZeroOrPlaceholderPrice } from './utils';
+import { cleanExtractedText, extractCleanPriceText, isPlausiblePriceText, isValidExtractedPriceCandidate, isZeroOrPlaceholderPrice } from './utils';
 
 export interface GoogleMapsResearchFacts {
   sourcePlaceId?: string;
@@ -133,7 +133,7 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
   // Direct lodging room price from placeNode[88]?.[0]
   if (Array.isArray(placeNode[88]) && typeof placeNode[88][0] === 'string') {
     const rawPrice = placeNode[88][0].replace(/\u00a0/g, ' ').trim();
-    if (/(?:SGD|THB|USD|HKD|NT\$|¥|฿|\$)\s*\d+/i.test(rawPrice) && !isZeroOrPlaceholderPrice(rawPrice)) {
+    if (/(?:SGD|THB|USD|HKD|NT\$|¥|฿|\$)\s*\d+/i.test(rawPrice) && !isZeroOrPlaceholderPrice(rawPrice) && isValidExtractedPriceCandidate(rawPrice)) {
       result.priceLevel = rawPrice;
     }
   }

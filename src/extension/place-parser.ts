@@ -8,6 +8,8 @@ import {
   findEntityListCategory,
   isFakePlaceLabel,
   isJunkNavigationText,
+  isValidExtractedPriceCandidate,
+  isZeroOrPlaceholderPrice,
   normalizePhoneDisplay,
 } from './utils';
 
@@ -311,7 +313,7 @@ export function extractEntityListResearch(item: unknown, knownTitle?: string): E
 
       if (!result.priceLevel) {
         const cleanPrice = extractCleanPriceText(text);
-        if (cleanPrice && cleanPrice !== '0' && !/^SGD\s*0$/i.test(cleanPrice)) {
+        if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice) && isValidExtractedPriceCandidate(cleanPrice)) {
           result.priceLevel = cleanPrice;
         }
       }
@@ -325,7 +327,7 @@ export function extractEntityListResearch(item: unknown, knownTitle?: string): E
         const subtitle = parseSubtitleInfo(text);
         result.rating ??= subtitle.rating;
         result.reviewCount ??= subtitle.reviewCount;
-        if (subtitle.priceLevel && subtitle.priceLevel !== '0' && !/^SGD\s*0$/i.test(subtitle.priceLevel)) {
+        if (subtitle.priceLevel && !isZeroOrPlaceholderPrice(subtitle.priceLevel) && isValidExtractedPriceCandidate(subtitle.priceLevel)) {
           result.priceLevel ??= subtitle.priceLevel;
         }
       }

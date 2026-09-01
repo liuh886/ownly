@@ -196,7 +196,7 @@ const PRICE_TOKEN_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|
 const SUFFIX_PRICE_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?\d[\d.,]*(?:\s*[-–—〜~至到]\s*\d[\d.,]*)?\s*(?:บาท|泰铢|元|円|THB|SGD|HKD|USD|TWD|JPY|CNY|\.-|\.–)(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
 const NO_CURR_PRICE_REGEX = /(?:(?:人均|per person|每人|每晚|per night|ราคา|คนละ|ท่านละ)\s*)+[:：]?\s*\d[\d.,]*(?:\s*[-–—〜~至到]\s*\d[\d.,]*)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
 
-function isValidExtractedPriceCandidate(candidate: string): boolean {
+export function isValidExtractedPriceCandidate(candidate: string): boolean {
   if (!candidate || candidate.length < 1) return false;
   if (PRICE_LEVEL_ONLY.test(candidate)) return true;
   // Disallow strings ending with stray hyphen/dash without dot (e.g. "2b-", "abc-", "12-")

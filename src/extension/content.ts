@@ -14,6 +14,7 @@ import {
   isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
+  isValidExtractedPriceCandidate,
   isZeroOrPlaceholderPrice,
   normalizePhoneDisplay,
   parseEntityListCoordinates,
@@ -991,16 +992,23 @@ async function enrichSavedListDetails(
       const nextRating = force ? (facts.rating ?? place.rating) : (place.rating ?? facts.rating);
       const nextReviewCount = force ? (facts.reviewCount ?? place.reviewCount) : (place.reviewCount ?? facts.reviewCount);
       const nextCategory = force ? (facts.category ?? place.category) : (place.category ?? facts.category);
-      const nextPrice = force ? (facts.priceLevel ?? place.priceLevel) : (place.priceLevel ?? facts.priceLevel);
-      const nextAddress = force ? (facts.address ?? place.address) : (place.address ?? facts.address);
-      const nextCoords = force ? (facts.coordinates ?? place.coordinates) : (place.coordinates ?? facts.coordinates);
-      const nextWebsite = force ? (facts.website ?? place.website) : (place.website ?? facts.website);
-      const nextPhone = force ? (facts.phone ?? place.phone) : (place.phone ?? facts.phone);
-      const nextOpenHours = force ? (facts.open_hours ?? place.openHours) : (place.openHours ?? facts.open_hours);
-      const nextPlusCode = force ? (facts.plus_code ?? place.plusCode) : (place.plusCode ?? facts.plus_code);
-      const nextMenuUrl = force ? (facts.menu_url ?? place.menuUrl) : (place.menuUrl ?? facts.menu_url);
-      const nextReservationUrl = force ? (facts.reservation_url ?? place.reservationUrl) : (place.reservationUrl ?? facts.reservation_url);
-      const nextReviewTopics = force ? (facts.review_topics ?? place.reviewTopics) : (place.reviewTopics ?? facts.review_topics);
+      const scavenged = scavengedListPlaces.get(place.title.toLowerCase());
+      const rawPriceCandidate = (facts.priceLevel && !isZeroOrPlaceholderPrice(facts.priceLevel) && isValidExtractedPriceCandidate(facts.priceLevel))
+        ? facts.priceLevel
+        : (scavenged?.priceLevel && !isZeroOrPlaceholderPrice(scavenged.priceLevel) && isValidExtractedPriceCandidate(scavenged.priceLevel)
+          ? scavenged.priceLevel
+          : (place.priceLevel && !isZeroOrPlaceholderPrice(place.priceLevel) && isValidExtractedPriceCandidate(place.priceLevel) ? place.priceLevel : undefined));
+      const notePrice = extractCleanPriceText(place.userNote || place.summary);
+      const nextPrice = rawPriceCandidate ?? (notePrice && !isZeroOrPlaceholderPrice(notePrice) && isValidExtractedPriceCandidate(notePrice) ? notePrice : undefined);
+      const nextAddress = force ? (facts.address ?? scavenged?.address ?? place.address) : (place.address ?? facts.address ?? scavenged?.address);
+      const nextCoords = force ? (facts.coordinates ?? scavenged?.coordinates ?? place.coordinates) : (place.coordinates ?? facts.coordinates ?? scavenged?.coordinates);
+      const nextWebsite = force ? (facts.website ?? scavenged?.website ?? place.website) : (place.website ?? facts.website ?? scavenged?.website);
+      const nextPhone = force ? (facts.phone ?? scavenged?.phone ?? place.phone) : (place.phone ?? facts.phone ?? scavenged?.phone);
+      const nextOpenHours = force ? (facts.open_hours ?? scavenged?.openHours ?? place.openHours) : (place.openHours ?? facts.open_hours ?? scavenged?.openHours);
+      const nextPlusCode = force ? (facts.plus_code ?? scavenged?.plusCode ?? place.plusCode) : (place.plusCode ?? facts.plus_code ?? scavenged?.plusCode);
+      const nextMenuUrl = force ? (facts.menu_url ?? scavenged?.menuUrl ?? place.menuUrl) : (place.menuUrl ?? facts.menu_url ?? scavenged?.menuUrl);
+      const nextReservationUrl = force ? (facts.reservation_url ?? scavenged?.reservationUrl ?? place.reservationUrl) : (place.reservationUrl ?? facts.reservation_url ?? scavenged?.reservationUrl);
+      const nextReviewTopics = force ? (facts.review_topics ?? scavenged?.reviewTopics ?? place.reviewTopics) : (place.reviewTopics ?? facts.review_topics ?? scavenged?.reviewTopics);
 
       places[index] = {
         ...place,
@@ -1026,7 +1034,9 @@ async function enrichSavedListDetails(
         menuUrl: nextMenuUrl,
         reservationUrl: nextReservationUrl,
         reviewTopics: nextReviewTopics,
-        types: facts.types?.length ? [...new Set([...(place.types ?? []), ...facts.types])] : place.types,
+        types: facts.types?.length
+          ? [...new Set([...(place.types ?? []), ...facts.types])]
+          : (scavenged?.types?.length ? [...new Set([...(place.types ?? []), ...scavenged.types])] : place.types),
       };
       if (
         facts.rating !== undefined

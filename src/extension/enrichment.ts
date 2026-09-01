@@ -1,10 +1,12 @@
 import {
+  isZeroOrPlaceholderPrice,
+  isValidExtractedPriceCandidate,
   mergeCapturedPlaceResearch,
   normalizeObservedPrice,
   type PlannerTripPlace,
 } from '../domain/planner';
 import type { CurrentResearchPlace } from './content';
-import { extractCleanPriceText, extractFeatureIdFromUrl, isZeroOrPlaceholderPrice } from './utils';
+import { extractCleanPriceText, extractFeatureIdFromUrl } from './utils';
 import { logger } from './logger';
 import {
   extractFeatureIdFromHtml,
@@ -37,11 +39,13 @@ export function cleanTitleForSearch(title: string): string {
  * Determines whether a candidate place is missing essential objective facts.
  */
 export function isCandidateMissingData(place: PlannerTripPlace): boolean {
-  const isMissingPrice = place.kind === 'stay' && (!place.observed_price || isZeroOrPlaceholderPrice(place.observed_price));
+  const hasCorruptedPrice = Boolean(place.observed_price && (!isValidExtractedPriceCandidate(place.observed_price) || isZeroOrPlaceholderPrice(place.observed_price)));
+  const isMissingPrice = (place.kind === 'stay' || place.kind === 'food') && (!place.observed_price || isZeroOrPlaceholderPrice(place.observed_price));
   return (
     !place.source_place_id ||
     place.observed_rating === undefined ||
     place.observed_review_count === undefined ||
+    hasCorruptedPrice ||
     isMissingPrice ||
     !place.source_category ||
     !place.address ||
@@ -375,9 +379,9 @@ export function mergeDetectedResearchIntoPlannerPlaces(
     const research = researchByIdentity.get(plannerIdentity(existing));
     if (!research) return existing;
 
-    const validResearchPrice = research.priceLevel && !isZeroOrPlaceholderPrice(research.priceLevel)
+    const validResearchPrice = (research.priceLevel && !isZeroOrPlaceholderPrice(research.priceLevel) && isValidExtractedPriceCandidate(research.priceLevel))
       ? research.priceLevel
-      : (!isZeroOrPlaceholderPrice(existing.observed_price) ? existing.observed_price : undefined);
+      : (existing.observed_price && !isZeroOrPlaceholderPrice(existing.observed_price) && isValidExtractedPriceCandidate(existing.observed_price) ? existing.observed_price : undefined);
 
     const normalizedPrice = validResearchPrice
       ? normalizeObservedPrice(

@@ -292,12 +292,40 @@ export function assertTripDates(trip: PlannerTrip, dates: string[]): void {
   }
 }
 
+export function isZeroOrPlaceholderPrice(raw?: string | null): boolean {
+  if (!raw || typeof raw !== 'string') return true;
+  const t = raw.trim();
+  if (t === '' || t === '0' || t === '$0' || t === '¥0' || t === '฿0' || t === '0.00' || t === '0.-' || t === '0 บาท') return true;
+  if (/^(?:SGD|S\$|THB|USD|HKD|NT\$|¥|฿|\$|EUR|GBP|JPY|CNY|MYR|KRW|VND|INR)\s*0+(?:\.0+)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|day|บาท))?$/i.test(t)) return true;
+  if (/^(?:人均|per person|每人|每晚|per night|from|约)\s*[:：]?\s*(?:SGD|S\$|THB|USD|HKD|NT\$|¥|฿|\$)?\s*0+(?:\.0+)?$/i.test(t)) return true;
+  if (/^(?:[A-Z]{3}|S\$|HK\$|US\$|NT\$|AU\$|CA\$|NZ\$|\$|¥|฿|€|£|₩)\s*0+(?:\.0+)?$/i.test(t)) return true;
+  if (/^0+(?:\.0+)?\s*(?:[A-Z]{3}|S\$|HK\$|US\$|NT\$|AU\$|CA\$|NZ\$|\$|¥|฿|€|£|₩|บาท|泰铢|元|円)$/i.test(t)) return true;
+  if (/^\d+[a-zA-Z]+-?$/i.test(t)) return true;
+  if (/(?<!\.)[-–—〜~]$/.test(t)) return true;
+  return false;
+}
+
+export function isValidExtractedPriceCandidate(candidate?: string | null): boolean {
+  if (!candidate || typeof candidate !== 'string' || candidate.trim().length === 0) return false;
+  const t = candidate.trim();
+  if (/^([$€£¥￥฿₩])\1{0,3}$/.test(t)) return true;
+  if (/(?<!\.)[-–—〜~]$/.test(t)) return false;
+  if (/^\d+[a-zA-Z]+-?$/i.test(t)) return false;
+  if (!/\d/.test(t)) return false;
+  if (/^(?:directions|save|share|nearby|路线|保存|分享|附近)$/i.test(t)) return false;
+  return !isZeroOrPlaceholderPrice(t);
+}
+
 export function mergeCapturedPlaceResearch(
   existing: PlannerTripPlace,
   captured: PlannerTripPlace,
 ): PlannerTripPlace {
   const mergedTypes = new Set<string>([...(captured.types ?? []), ...(existing.types ?? [])]);
   const hasContent = (val?: string | null): boolean => typeof val === 'string' && val.trim().length > 0;
+
+  const validCapturedPrice = isValidExtractedPriceCandidate(captured.observed_price) ? captured.observed_price : undefined;
+  const validExistingPrice = isValidExtractedPriceCandidate(existing.observed_price) ? existing.observed_price : undefined;
+  const effectiveObservedPrice = validCapturedPrice ?? validExistingPrice;
 
   return {
     ...existing,
@@ -327,21 +355,16 @@ export function mergeCapturedPlaceResearch(
     observed_review_count: (typeof captured.observed_review_count === 'number' && Number.isFinite(captured.observed_review_count))
       ? captured.observed_review_count
       : existing.observed_review_count,
-    observed_price: (() => {
-      const isZero = (v?: string | null) => !v || v.trim() === '' || /^(?:SGD|S\$|THB|USD|HKD|NT\$|¥|฿|\$|EUR|GBP|JPY|CNY|MYR|KRW|VND|INR)?\s*0+(?:\.0+)?/i.test(v.trim());
-      if (hasContent(captured.observed_price) && !isZero(captured.observed_price)) return captured.observed_price;
-      if (hasContent(existing.observed_price) && !isZero(existing.observed_price)) return existing.observed_price;
-      return undefined;
-    })(),
-    price_currency: hasContent(captured.price_currency) ? captured.price_currency : existing.price_currency,
-    price_min: (typeof captured.price_min === 'number' && Number.isFinite(captured.price_min) && captured.price_min > 0)
-      ? captured.price_min
-      : ((typeof existing.price_min === 'number' && Number.isFinite(existing.price_min) && existing.price_min > 0) ? existing.price_min : undefined),
-    price_max: (typeof captured.price_max === 'number' && Number.isFinite(captured.price_max) && captured.price_max > 0)
-      ? captured.price_max
-      : ((typeof existing.price_max === 'number' && Number.isFinite(existing.price_max) && existing.price_max > 0) ? existing.price_max : undefined),
-    price_unit: captured.price_unit ?? existing.price_unit,
-    price_level: (typeof captured.price_level === 'number' && Number.isFinite(captured.price_level)) ? captured.price_level : existing.price_level,
+    observed_price: effectiveObservedPrice,
+    price_currency: validCapturedPrice ? captured.price_currency : (validExistingPrice ? existing.price_currency : undefined),
+    price_min: validCapturedPrice
+      ? (typeof captured.price_min === 'number' && Number.isFinite(captured.price_min) && captured.price_min > 0 ? captured.price_min : undefined)
+      : (validExistingPrice && typeof existing.price_min === 'number' && Number.isFinite(existing.price_min) && existing.price_min > 0 ? existing.price_min : undefined),
+    price_max: validCapturedPrice
+      ? (typeof captured.price_max === 'number' && Number.isFinite(captured.price_max) && captured.price_max > 0 ? captured.price_max : undefined)
+      : (validExistingPrice && typeof existing.price_max === 'number' && Number.isFinite(existing.price_max) && existing.price_max > 0 ? existing.price_max : undefined),
+    price_unit: validCapturedPrice ? captured.price_unit : (validExistingPrice ? existing.price_unit : undefined),
+    price_level: validCapturedPrice ? captured.price_level : (validExistingPrice ? existing.price_level : undefined),
     observed_at: hasContent(captured.observed_at) ? captured.observed_at : existing.observed_at,
     address: hasContent(captured.address) ? captured.address : existing.address,
     coordinates: captured.coordinates ?? existing.coordinates,
