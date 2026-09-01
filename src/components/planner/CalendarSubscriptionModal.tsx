@@ -13,6 +13,8 @@ interface CalendarSubscriptionModalProps {
   onCreateOrUpdateFeed: () => Promise<void>;
   onRotateFeed: () => Promise<void>;
   onDisableFeed: () => Promise<void>;
+  isPro?: boolean;
+  onUpgradePro?: () => void;
   language?: 'zh' | 'en';
 }
 
@@ -27,6 +29,8 @@ export function CalendarSubscriptionModal({
   onCreateOrUpdateFeed,
   onRotateFeed,
   onDisableFeed,
+  isPro = true,
+  onUpgradePro,
   language = 'zh',
 }: CalendarSubscriptionModalProps) {
   const zh = language === 'zh';
@@ -165,7 +169,25 @@ export function CalendarSubscriptionModal({
                 : 'Subscribe once in Google Calendar, Apple Calendar, or Outlook. Changes in Planner automatically sync to your calendar.'}
             </p>
 
-            {isFeedActive ? (
+            {!isPro ? (
+              <div className="mt-3.5 space-y-3 rounded-lg border border-amber-300 bg-amber-50/70 p-3.5">
+                <p className="text-xs font-medium text-amber-900 leading-5">
+                  {zh
+                    ? '✨ 持续日历订阅是 PRO 专属功能。升级 PRO 后即可生成专属固定订阅链接，日历自动同步行程更新。'
+                    : '✨ Live Calendar Feed is a PRO exclusive feature. Upgrade to PRO to get a permanent subscription URL that auto-syncs your itinerary.'}
+                </p>
+                {onUpgradePro ? (
+                  <button
+                    type="button"
+                    onClick={onUpgradePro}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-stone-800 transition"
+                  >
+                    <span>👑</span>
+                    <span>{zh ? '解锁 PRO 会员' : 'Unlock PRO'}</span>
+                  </button>
+                ) : null}
+              </div>
+            ) : isFeedActive ? (
               <div className="mt-3.5 space-y-3">
                 <div className="flex items-center gap-2">
                   <input

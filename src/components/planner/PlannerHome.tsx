@@ -33,6 +33,8 @@ import {
 import { buildTripCalendarIcs, buildDayCalendarIcs } from '@/domain/calendar-feed';
 import { evaluatePlannerDay, type PlannerExecutionTransitionItem, type PlannerTimelineStopItem } from '@/domain/planner-schedule';
 import { plannerRepository } from '@/services/PlannerRepository';
+import { calendarFeedService } from '@/services/CalendarFeedService';
+import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';
 import { PlannerMap } from './PlannerMap';
@@ -249,6 +251,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
   const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
+
+  let isPro = true;
+  let openLicenseModal: (() => void) | undefined;
+  try {
+    const workspace = useOwnlyWorkspace();
+    isPro = workspace.membership?.isPro ?? true;
+    openLicenseModal = workspace.openLicenseModal;
+  } catch {
+    isPro = true;
+  }
 
   const hydrateLedgerFromVault = useCallback(async (nextTrips: PlannerTrip[]) => {
     const stored = await plannerRepository.listExpenses();
@@ -835,21 +847,44 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const handleCreateOrUpdateFeed = useCallback(async () => {
     if (!selectedTrip) return;
-    await plannerRepository.createOrUpdateCalendarFeed(selectedTrip.id);
+    const response = await calendarFeedService.publishFeed({
+      trip: selectedTrip,
+      places,
+      visits,
+      membership: { isPro },
+    });
+    await plannerRepository.upsertTrip({
+      ...selectedTrip,
+      calendar_feed: response.feed,
+    });
     await load();
-  }, [selectedTrip, load]);
+  }, [selectedTrip, places, visits, isPro, load]);
 
   const handleRotateFeed = useCallback(async () => {
     if (!selectedTrip) return;
-    await plannerRepository.rotateCalendarFeed(selectedTrip.id);
+    const response = await calendarFeedService.rotateFeed({
+      trip: selectedTrip,
+      membership: { isPro },
+    });
+    await plannerRepository.upsertTrip({
+      ...selectedTrip,
+      calendar_feed: response.feed,
+    });
     await load();
-  }, [selectedTrip, load]);
+  }, [selectedTrip, isPro, load]);
 
   const handleDisableFeed = useCallback(async () => {
     if (!selectedTrip) return;
-    await plannerRepository.disableCalendarFeed(selectedTrip.id);
+    const updatedFeed = await calendarFeedService.disableFeed({
+      trip: selectedTrip,
+      membership: { isPro },
+    });
+    await plannerRepository.upsertTrip({
+      ...selectedTrip,
+      calendar_feed: updatedFeed,
+    });
     await load();
-  }, [selectedTrip, load]);
+  }, [selectedTrip, isPro, load]);
 
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;
@@ -2253,6 +2288,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           onCreateOrUpdateFeed={handleCreateOrUpdateFeed}
           onRotateFeed={handleRotateFeed}
           onDisableFeed={handleDisableFeed}
+          isPro={isPro}
+          onUpgradePro={openLicenseModal}
           language={language}
         />
       ) : null}

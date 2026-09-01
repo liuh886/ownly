@@ -271,15 +271,45 @@ export function buildDayCalendarIcs(
 // ---------------------------------------------------------------------------
 
 /**
- * Generates a high-entropy 32-character bearer token for the feed URL.
+ * Generates a cryptographically secure 32-character bearer token (CSPRNG).
  */
 export function generateCalendarFeedToken(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const length = 32;
+  if (typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(length);
+    globalThis.crypto.getRandomValues(bytes);
+    let token = '';
+    for (let i = 0; i < length; i++) {
+      token += chars[bytes[i] % chars.length];
+    }
+    return token;
+  }
   let token = '';
-  for (let i = 0; i < 32; i++) {
+  for (let i = 0; i < length; i++) {
     token += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return token;
+}
+
+/**
+ * Computes SHA-256 hash of the bearer token for secure database storage & lookup (token_hash).
+ */
+export async function hashFeedToken(token: string): Promise<string> {
+  const clean = token.trim();
+  if (typeof globalThis !== 'undefined' && globalThis.crypto?.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(clean);
+    const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  try {
+    const nodeCrypto = await import('node:crypto');
+    return nodeCrypto.createHash('sha256').update(clean).digest('hex');
+  } catch {
+    return clean;
+  }
 }
 
 /**

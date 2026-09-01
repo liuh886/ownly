@@ -10,6 +10,7 @@ import {
   getCalendarFeedUrl,
   createTripCalendarFeed,
   rotateTripCalendarFeed,
+  hashFeedToken,
 } from './calendar-feed';
 
 const trip: PlannerTrip = {
@@ -205,6 +206,17 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
       expect(rotated.feed_token).toHaveLength(32);
       expect(rotated.feed_token).not.toBe(feed.feed_token);
       expect(rotated.enabled).toBe(true);
+    });
+
+    it('computes deterministic SHA-256 token hash for database storage', async () => {
+      const token = 'sample_token_1234567890abcdef';
+      const hash1 = await hashFeedToken(token);
+      const hash2 = await hashFeedToken(token);
+      const hashDiff = await hashFeedToken('sample_token_diff');
+
+      expect(hash1).toHaveLength(64);
+      expect(hash1).toBe(hash2);
+      expect(hash1).not.toBe(hashDiff);
     });
   });
 });
