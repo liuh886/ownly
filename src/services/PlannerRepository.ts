@@ -122,32 +122,6 @@ function extractPlaceCid(place: { source_place_id?: string | null; source_url?: 
   return null;
 }
 
-const GENERIC_TITLES = new Set([
-  '机场', '国际机场', '酒店', '饭店', '餐厅', '咖啡厅', '车站', '火车站', '夜市', '商场', '景点',
-  'airport', 'international airport', 'hotel', 'resort', 'restaurant', 'cafe', 'station', 'market', 'mall', 'attraction', 'place'
-]);
-
-function isDistinctCanonicalTitle(title?: string | null): boolean {
-  const canonical = canonicalizePlaceTitle(title);
-  if (canonical.length < 4) return false;
-  if (GENERIC_TITLES.has(canonical)) return false;
-  return true;
-}
-
-function canonicalizePlaceTitle(title?: string | null): string {
-  if (!title) return '';
-  return title
-    .replace(/^[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+/u, '')
-    .replace(/[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+$/u, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-}
-
-function coordinateClusterKey(place: PlannerTripPlace): string | null {
-  if (!place.coordinates) return null;
-  return `${place.trip_id}::geo:${place.coordinates.lat.toFixed(4)},${place.coordinates.lng.toFixed(4)}`;
-}
 
 export class PlannerRepository {
   private root = '';
@@ -249,20 +223,14 @@ export class PlannerRepository {
     const byId = new Map(existing.map((place) => [place.id, place] as const));
     const byPlaceId = new Map<string, PlannerTripPlace>();
     const byCid = new Map<string, PlannerTripPlace>();
-    const byTitle = new Map<string, PlannerTripPlace>();
     const byUrlIdentity = new Map<string, PlannerTripPlace>();
-    const byCoordinates = new Map<string, PlannerTripPlace>();
 
     const indexPlace = (place: PlannerTripPlace) => {
       byId.set(place.id, place);
       if (place.source_place_id) byPlaceId.set(`${place.trip_id}::${place.source_provider}::${place.source_place_id}`, place);
       const cid = extractPlaceCid(place);
       if (cid) byCid.set(`${place.trip_id}::${cid}`, place);
-      const cleanTitle = canonicalizePlaceTitle(place.title);
-      if (cleanTitle.length >= 2) byTitle.set(`${place.trip_id}::${cleanTitle}`, place);
       if (place.source_url) byUrlIdentity.set(`${place.trip_id}::${place.source_provider}::${normalizePlaceIdentity(place.source_url)}`, place);
-      const geo = coordinateClusterKey(place);
-      if (geo) byCoordinates.set(geo, place);
     };
     existing.forEach(indexPlace);
     const importedIds: string[] = [];
@@ -278,12 +246,10 @@ export class PlannerRepository {
         state: 'candidate',
       };
       const incomingCid = extractPlaceCid(incoming);
-      const incomingTitle = isDistinctCanonicalTitle(incoming.title) ? canonicalizePlaceTitle(incoming.title) : '';
 
       const existingPlace = byId.get(incoming.id)
         ?? (incoming.source_place_id ? byPlaceId.get(`${incoming.trip_id}::${incoming.source_provider}::${incoming.source_place_id}`) : undefined)
         ?? (incomingCid ? byCid.get(`${incoming.trip_id}::${incomingCid}`) : undefined)
-        ?? (incomingTitle ? byTitle.get(`${incoming.trip_id}::${incomingTitle}`) : undefined)
         ?? (incoming.source_url ? byUrlIdentity.get(`${incoming.trip_id}::${incoming.source_provider}::${normalizePlaceIdentity(incoming.source_url)}`) : undefined);
 
       try {
@@ -309,7 +275,7 @@ export class PlannerRepository {
   }
 
   /**
-   * Scans all places in a trip, identifies duplicate entities (by Place ID, CID, distinct canonical title, or URL Identity),
+   * Scans all places in a trip and auto-merges only strong duplicate identities (Place ID, CID, or canonical source URL).
    * merges their facts and visits into the primary place, and removes duplicate markdown records.
    */
   async deduplicateTripPlaces(tripId: string): Promise<{ mergedCount: number; removedCount: number }> {
@@ -330,17 +296,12 @@ export class PlannerRepository {
       assigned.add(p1.id);
 
       const cid1 = extractPlaceCid(p1);
-      const title1 = isDistinctCanonicalTitle(p1.title) ? canonicalizePlaceTitle(p1.title) : '';
-
       for (let j = i + 1; j < allPlaces.length; j++) {
         const p2 = allPlaces[j];
         if (assigned.has(p2.id)) continue;
         const cid2 = extractPlaceCid(p2);
-        const title2 = isDistinctCanonicalTitle(p2.title) ? canonicalizePlaceTitle(p2.title) : '';
-
         const isMatch = (p1.source_place_id && p1.source_place_id === p2.source_place_id)
           || (cid1 && cid2 && cid1 === cid2)
-          || (title1 && title2 && title1 === title2)
           || (p1.source_url && p2.source_url && normalizePlaceIdentity(p1.source_url) === normalizePlaceIdentity(p2.source_url));
 
         if (isMatch) {
