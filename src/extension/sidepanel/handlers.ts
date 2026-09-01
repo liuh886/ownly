@@ -789,9 +789,15 @@ export function initHandlers(): void {
   el.btnBulkEnrich.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      if (store.bulkSelected.size === 0) return;
+      const context = store.state.activeContext;
+      if (!context?.tripId) {
+        setStatus(dict.tripRequiredError, 'error');
+        return;
+      }
       const selected = new Set(store.bulkSelected);
-      const candidates = store.state.pendingPlaces.filter((place) => selected.has(place.id));
+      const candidates = selected.size > 0
+        ? store.state.pendingPlaces.filter((place) => selected.has(place.id))
+        : store.state.pendingPlaces.filter((place) => place.trip_id === context.tripId);
       if (candidates.length === 0) return;
 
       setStatus(dict.strengtheningStart(candidates.length));
@@ -836,24 +842,26 @@ export function initHandlers(): void {
       }
 
       const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
-      const latestSelected = store.state.pendingPlaces.filter((p) => selected.has(p.id));
+      const latestCandidates = selected.size > 0
+        ? store.state.pendingPlaces.filter((p) => selected.has(p.id))
+        : store.state.pendingPlaces.filter((p) => p.trip_id === context.tripId);
       if (totalEnriched > 0) {
         setStatus(
-          `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestSelected)}`,
+          `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestCandidates)}`,
           'success',
         );
       } else {
-        const stillMissing = latestSelected.some((p) => !p.observed_rating || !p.address || !p.source_category);
+        const stillMissing = latestCandidates.some((p) => !p.observed_rating || !p.address || !p.source_category);
         if (stillMissing) {
           setStatus(
             store.lang === 'zh'
-              ? `未通过当前会话补全到新信息 · ${formatStrengthenCoverage(latestSelected)}`
-              : `No new details could be enriched · ${formatStrengthenCoverage(latestSelected)}`,
+              ? `未通过当前会话补全到新信息 · ${formatStrengthenCoverage(latestCandidates)}`
+              : `No new details could be enriched · ${formatStrengthenCoverage(latestCandidates)}`,
             'muted',
           );
         } else {
           setStatus(
-            `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestSelected)}`,
+            `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestCandidates)}`,
             'muted',
           );
         }

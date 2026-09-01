@@ -727,6 +727,13 @@ export function renderCandidatesList() {
   );
   el.candidatesCountBadge.textContent = String(candidates.length);
 
+  el.btnEnrichCandidates.style.display = store.bulkMode ? 'none' : 'inline-block';
+  if (store.bulkMode) {
+    el.btnBulkEnrich.textContent = store.bulkSelected.size > 0
+      ? (store.lang === 'zh' ? `⚡ 一键补强 (${store.bulkSelected.size})` : `⚡ Strengthen (${store.bulkSelected.size})`)
+      : dict.btnBulkEnrichCandidates;
+  }
+
   const kindMatches = (p: PlannerTripPlace, kind: PlannerPlaceKind): boolean => {
     const zhLabel = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
     const enLabel = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
