@@ -197,30 +197,16 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
     if (risks.length > 0) result.risks = [...new Set(risks)].slice(0, 4);
   }
 
-function isAddressOrDescription(text: string): boolean {
-  if (!text || text.length > 60) return true;
-  if (/\b(?:road|rd|street|st|avenue|ave|alley|soi|district|subdistrict|moo|tambon|amphoe|province|building|floor|postal|zip)\b|泰国|曼谷|清迈|芭提雅|街道|门牌|路|巷|府|郡|县|区|大厦|楼/i.test(text)) {
-    return true;
-  }
-  return false;
-}
-
-  // Scan placeNode for phone, priceLevel, menu_url, reservation_url
+  // Scan placeNode for structured attributes (phone, menu_url, reservation_url)
   const queue: unknown[] = [placeNode];
   let scanned = 0;
-  while (queue.length > 0 && scanned < 1000) {
+  while (queue.length > 0 && scanned < 200) {
     const cur = queue.shift();
     scanned += 1;
     if (typeof cur === 'string') {
       const text = cleanExtractedText(cur);
       if (!result.phone && /^\+?[\d\s\-()]{8,20}$/.test(text) && /\d{4}/.test(text)) {
         result.phone = text;
-      }
-      if (!result.priceLevel && text.length <= 40 && !isAddressOrDescription(text)) {
-        const cleanPrice = extractCleanPriceText(text);
-        if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice)) {
-          result.priceLevel = cleanPrice;
-        }
       }
       if (!result.menu_url && /^https?:\/\/[^\s]+(?:menu|food|carte|order)/i.test(text)) {
         result.menu_url = text;

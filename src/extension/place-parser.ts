@@ -128,12 +128,6 @@ export function parseSubtitleInfo(infoText?: string | null): SubtitleDecompositi
   const result: SubtitleDecomposition = {};
   if (!infoText) return result;
 
-  // Extract clean price directly from text if present
-  const directPrice = extractCleanPriceText(infoText);
-  if (directPrice) {
-    result.priceLevel = directPrice;
-  }
-
   // Delimiters including Western middle dot, Japanese katakana middle dot (・), bullet (•), pipe (| / ｜)
   const rawSegments = infoText.split(/[·•|│\n・‧｜\u30FB\u2022\u2027]/).map((s) => cleanExtractedText(s)).filter(Boolean);
   const unassigned: string[] = [];

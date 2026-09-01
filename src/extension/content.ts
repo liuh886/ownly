@@ -14,6 +14,7 @@ import {
   isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
+  isZeroOrPlaceholderPrice,
   normalizePhoneDisplay,
   parseEntityListCoordinates,
   safeDecodeUri,
@@ -127,51 +128,33 @@ function extractCategory(): string | undefined {
 }
 
 function extractPrice(): string | undefined {
-  // 1. Direct price attributes or dedicated badges
+  // 1. Direct dedicated price badge in Google Maps place header
   const priceEl = document.querySelector<HTMLElement>(SELECTORS.priceBadge);
   if (priceEl) {
     const text = cleanExtractedText(priceEl.getAttribute('aria-label') || priceEl.textContent || '');
-    if (text && text.length < 60 && !/^(路线|directions|save|保存)$/i.test(text)) {
+    if (text && text.length < 40 && !/^(路线|directions|save|保存|share|分享|nearby|附近)$/i.test(text)) {
       const cleanPrice = extractCleanPriceText(text);
-      if (cleanPrice) return cleanPrice;
+      if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice)) return cleanPrice;
     }
   }
 
-  // 2. Scan per-person budget in header info (e.g. "人均 ฿200–400", "¥1,000–2,000 per person", "฿200-400", "￥2,000〜￥3,000")
-  const infoSpans = document.querySelectorAll<HTMLElement>(SELECTORS.priceInfoSpans);
-  for (const span of Array.from(infoSpans).slice(0, 60)) {
-    const text = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
-    if (text && text.length < 80) {
-      const cleanPrice = extractCleanPriceText(text);
-      if (cleanPrice) return cleanPrice;
-    }
-  }
-
-  // 3. Check for standalone price level ($$, $$$, ¥¥) in header pills
+  // 2. Structured price level pills ($$, $$$, ¥¥) in header
   const levelSpans = document.querySelectorAll<HTMLElement>(SELECTORS.priceLevels);
   for (const span of Array.from(levelSpans)) {
     const label = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
-    if (label && isPlausiblePriceText(label)) return extractCleanPriceText(label) || label;
+    if (label && isPlausiblePriceText(label) && !isZeroOrPlaceholderPrice(label)) {
+      return extractCleanPriceText(label) || label;
+    }
   }
 
-  // 4. Localized hotel-rate / restaurant rate modules (e.g. "S$1,024 night", "THB 2,350", "From ¥18,000")
-  const rateSpans = document.querySelectorAll<HTMLElement>(
-    'div.fontBodyMedium span, div.fontHeadlineSmall span, div.W4Efsd span, div.mgr77e *, div[jsaction*="hotel"] span'
-  );
-  for (const el of Array.from(rateSpans).slice(0, 80)) {
-    const text = cleanExtractedText(el.getAttribute('aria-label') || el.textContent || '');
-    if (!text || text.length > 80) continue;
-    const cleanPrice = extractCleanPriceText(text);
-    if (cleanPrice) return cleanPrice;
-  }
-
-  // 5. Last resort: any short text with both a currency marker and a digit
-  const allSpans = document.querySelectorAll<HTMLElement>('span, div.fontBodyMedium, div.fontHeadlineSmall');
-  for (const el of Array.from(allSpans).slice(0, 100)) {
-    const text = cleanExtractedText(el.getAttribute('aria-label') || el.textContent || '');
-    if (!text || text.length > 50) continue;
-    const cleanPrice = extractCleanPriceText(text);
-    if (cleanPrice) return cleanPrice;
+  // 3. Structured header price container (span.mgr77e, div.mgr77e)
+  const infoSpans = document.querySelectorAll<HTMLElement>('span.mgr77e, div.mgr77e span');
+  for (const span of Array.from(infoSpans)) {
+    const text = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
+    if (text && text.length < 40) {
+      const cleanPrice = extractCleanPriceText(text);
+      if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice)) return cleanPrice;
+    }
   }
 
   return undefined;
@@ -603,14 +586,14 @@ function readCardFields(card: HTMLElement | null) {
     }
   }
 
-  // If price is still not found in subtitles, scan all card spans for currency/price patterns
+  // Check dedicated hotel rate badge on card (e.g. span.fontHeadlineSmall) if present
   if (!subInfo.priceLevel) {
-    for (const span of Array.from(card.querySelectorAll<HTMLElement>('span, div')).slice(0, 30)) {
-      const text = span.getAttribute('aria-label') || span.textContent || '';
-      const cleanPrice = extractCleanPriceText(text);
-      if (cleanPrice) {
+    const hotelBadge = card.querySelector<HTMLElement>('span.fontHeadlineSmall, div.fontHeadlineSmall');
+    if (hotelBadge) {
+      const badgeText = cleanExtractedText(hotelBadge.textContent || '');
+      const cleanPrice = extractCleanPriceText(badgeText);
+      if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice)) {
         subInfo.priceLevel = cleanPrice;
-        break;
       }
     }
   }
