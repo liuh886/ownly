@@ -1,82 +1,73 @@
-# Ownly Release Readiness — Final Functional Completion Plan
+# Ownly Release Readiness
 
-## Release principle
+This document tracks the gap between the current local-first MVP+ and a mature Obsidian-native product that is safe to share publicly, publish on GitHub, submit to the Obsidian community plugin directory, and rely on for real personal data.
 
-This release is a completion pass, not a feature expansion. Scope is limited to making the existing Capture → Planner → Timeline → Maps/exports loop trustworthy, understandable, responsive, and testable. AI planning expansion, collaboration, booking, additional providers, and new product surfaces are deferred until after release.
+## Current Release Stage
 
-## P0 — Data integrity and identity authority
+Status: 1.0.0 Stable Release (Obsidian plugin first, Web compatible).
 
-- [x] Establish one strong Place Identity Authority.
-- [x] Remove title-based automatic import merge and title-based automatic deduplication.
-- [x] Keep title/phone/proximity similarity as review evidence only.
-- [x] Suppress weak duplicate suggestions when explicit comparable Place IDs conflict.
-- [x] Remove bulk auto-merge of suspected duplicates; keep per-pair Merge / Ignore review.
-- [x] Keep shelved places visible and recoverable instead of silently disappearing.
-- [ ] Add sync reconciliation: captured records, created places, updated places, strong-ID merges, rejected records.
-- [ ] Show a visible warning when Capture acknowledgement differs from Planner reconciliation.
-- [ ] Add golden fixtures for airport, hotel branch, restaurant branch, same-title/different-ID, same-CID/different-title.
+Ownly v1.0.0 is the first stable public release of the Obsidian plugin. It has a working information architecture, Markdown data model, Web UI, Obsidian plugin shell, Agent CLI, PM2/static deployment path, object list sorting and pagination, demo data auto-seeding, and documented product intent.
 
-## P0 — Capture reliability
+## GitHub Public Sharing Checklist
 
-- [ ] Verify single-place capture and saved-list capture produce the same canonical fields.
-- [ ] Keep identity provenance in diagnostics, never normal cards.
-- [ ] Confirm enrichment never promotes title, free-form notes, or arbitrary payload strings into objective price/identity facts.
-- [ ] Treat optional Google facts as optional, not perpetual incomplete state.
-- [ ] Exercise retry/offline/session-expiry behavior without losing pending captures.
-- [ ] Run extension fixtures across Bangkok/Chiang Mai hotels, food, cafes, attractions, transit/airports.
+- [x] Product README exists.
+- [x] App name is no longer `temp-app`.
+- [x] Build does not depend on Google Fonts network access.
+- [x] Agent CLI protocol is documented in `AGENTS.md`.
+- [x] Privacy policy exists.
+- [ ] Add screenshots or a short demo GIF (user to provide).
+- [x] Add LICENSE after the owner decides the license model (MIT).
+- [x] Add CHANGELOG before the first tagged release.
+- [x] Add CONTRIBUTING if external contributions are expected.
+- [x] Add a sample Vault fixture for repeatable demo and QA (`samples/wyqd-vault`).
+- [ ] Create a GitHub release containing Obsidian release artifacts (ready — push `v1.0.0` tag).
+- [ ] Submit to the Obsidian community plugin directory after plugin QA.
 
-## P0 — Planner state model and core interactions
+## Mature Product Readiness Checklist
 
-- [x] Candidate pool retains scheduled places and marks visit count.
-- [x] Shelved places sit beside Must/Want as a first-class filter and support Restore.
-- [x] Schedule / Shelve / Delete share one compact card footer; phone is icon-only with tooltip.
-- [ ] Verify Candidate → Scheduled → Shelved restrictions and error messages for every state transition.
-- [ ] Verify repeated visits on same day and across days never duplicate or consume the Place entity.
-- [ ] Verify delete/drop cannot orphan visits, legs, hotel spans, or exports.
-- [ ] Audit all empty states, counts, filter counts, search results, and notices against repository state.
+- [x] Add product icons and app manifest foundation.
+- [x] Add visible privacy and local-data documentation.
+- [ ] Add E2E tests for Web core flows and Obsidian plugin smoke flows.
+- [x] Add recoverable archive behavior for delete actions.
+- [x] Add restore flow for archived data.
+- [x] Add sample Vault fixture for repeatable demos and QA (`samples/wyqd-vault`).
+- [ ] Add screenshots or a short demo GIF for GitHub sharing (user to provide).
+- [x] Add release notes and versioning policy (`docs/VERSIONING.md`).
+- [ ] Validate accessibility and responsive layout on real devices.
+- [x] Document known browser limitations for File System Access API.
 
-## P1 — Planner UI completion and mobile interaction
+## Security And Reliability Notes
 
-- [ ] Test 360/390/430 px widths: no clipped titles, action overflow, horizontal scroll, or unreachable controls.
-- [ ] Ensure card tap, drag, buttons, links, and multi-select do not conflict on touch devices.
-- [ ] Normalize tooltips/accessibility labels for phone, map, menu, reserve, schedule, shelve, restore, delete.
-- [ ] Keep source category, user tags, signals, risks, rating, and price distinct and non-redundant.
-- [ ] Verify map highlight ↔ card highlight ↔ timeline selection after filters and state changes.
-- [ ] Verify modal focus/close behavior for Import, Timing, Hotel Compare, Calendar, Create Trip, Duplicate Review.
+- `npm audit --omit=dev` currently reports moderate issues through Next's internal PostCSS dependency.
+- The suggested `npm audit fix --force` is not acceptable because it would install an old, breaking Next version.
+- Track this through Next upgrades instead of force-fixing blindly.
 
-## P1 — Timeline, routing, hotel and schedule correctness
+## New User Experience
 
-- [ ] Verify visit ordering, insert/remove/reorder, locked visits, timing edits, repeated occurrences.
-- [ ] Verify opening-hours warnings and travel conflicts do not block valid schedules with missing optional facts.
-- [ ] Verify hotel stay spans, transfer days, and hotel replacement leave no stale visits.
-- [ ] Verify map projection deduplicates repeated visits while timeline keeps every occurrence.
-- [ ] Verify route links/segmentation for walking, transit, and driving.
+As of v0.2.6, the web runtime auto-seeds demo data into an empty Vault on first connect. New users see 11 sample objects (physical items, subscriptions, travel experiences), 2 net worth snapshots, and 5 reviews immediately. The seeded data persists as real Markdown files in the Vault and can be freely edited or deleted. A `localStorage` flag (`ownly_demo_seeded`) prevents re-seeding users who intentionally clear their data.
 
-## P1 — Export, local-first persistence and parity
+## Release Decision
 
-- [ ] Round-trip Trip / Place / Visit / Leg / Expense Markdown without field loss.
-- [ ] Verify CSV, KML, Markdown, ICS exports with multilingual text and formula-safe CSV cells.
-- [ ] Verify web local storage, Obsidian, extension, CLI/MCP share canonical data semantics.
-- [ ] Verify backup/restore and reload preserve trips, shelved state, visits, expenses, and pending capture queue.
+v1.0.0 is ready for GitHub release and Obsidian community plugin submission once screenshots are added. Push the `v1.0.0` tag to trigger the CI release workflow.
 
-## Release gates
+Remaining items for future releases: E2E tests, responsive layout validation on real devices.
 
-Release only when all are green:
+## 2026-05-31 Release Closure Check
 
-1. `npm run validate:fast`
-2. `npm run validate:shared`
-3. `npm run validate:web`
-4. `npm run validate:obsidian`
-5. `npm run validate:extension`
-6. Thailand golden path plus Place Identity regression fixtures
-7. Manual desktop + mobile golden path: Capture mixed POIs → reconcile sync → filter/shelve/restore → repeated schedule → route/map → export → reload
-8. No silent record loss, no title-based auto-merge, no unresolved P0 issue
+Status: `1.0.0` release closure passed.
 
-## Explicitly deferred until after release
+Verified:
 
-- AI proposal/planner expansion
-- Collaboration/shared editing
-- Booking/payment integrations
-- Additional map/review providers
-- New recommendation/discovery surfaces
-- Major Planner information-architecture redesign
+- `npm run validate` passed for TypeScript, ESLint, Web static build, Obsidian plugin type check, plugin package generation, and release file validation.
+- `npm run wyqd -- --help` works as the documented Agent CLI entry.
+- `samples/wyqd-vault` can be read by the Ownly CLI for object and snapshot demo data.
+- `dist/obsidian/ownly` is generated with `manifest.json`, `versions.json`, `main.js`, and `styles.css`.
+- Manual Obsidian installation QA completed in a real Vault.
+- Object list sorting (date, price, title) and pagination (show more/less) verified.
+- Version consistency across `package.json`, `manifest.json`, and `runtime.ts` at `1.0.0`.
+
+Remaining items:
+
+- Add screenshots to README.
+- Push `v1.0.0` tag to create GitHub release.
+- Submit to Obsidian community plugin directory.
