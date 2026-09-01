@@ -627,7 +627,7 @@ describe('Ownly Planner domain', () => {
       place('c', { source_url: 'https://www.google.com/maps/search/?api=1&query=Other' }),
     ];
 
-    expect(findExistingTripPlace(places, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=Sensoji%20')?.id).toBe('a');
+    expect(findExistingTripPlace(places, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=Sensoji%20')).toBeUndefined();
     expect(findExistingTripPlace(places, 'trip-1', 'https://maps.google.com/other-path', 'pid-1')?.id).toBe('b');
 
     const poisoned = [

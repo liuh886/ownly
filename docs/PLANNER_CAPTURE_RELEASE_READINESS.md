@@ -28,11 +28,11 @@ Explicitly out of scope until after release: AI planner expansion, collaboration
 
 - [ ] Verify single-place Capture and saved-list Capture emit the same canonical Planner fields.
 - [ ] Keep Place ID/CID provenance in diagnostics only; do not expose internal identity in normal cards.
-- [ ] Verify enrichment never promotes titles, free-form notes, or arbitrary Google payload strings into objective identity/price facts.
-- [ ] Treat price, phone, opening hours, menu, and other optional Google facts as optional facts rather than perpetual incomplete-state requirements.
+- [x] Enrichment never resolves identity from titles or promotes free-form notes into objective identity/price facts.
+- [x] Price and other source extras remain optional; missing price no longer keeps food/stay in perpetual incomplete state.
 - [ ] Verify retry, offline, Google session expiry, and extension restart do not lose pending captures.
 - [ ] Add real Google Maps regression fixtures for Bangkok/Chiang Mai hotel, food, cafe, attraction, transit, and airport entities.
-- [ ] Verify saved-list enrichment never attaches facts across same-name branches.
+- [x] Saved-list enrichment attaches returned facts only to verified feature IDs; title-keyed fact scavenging is removed.
 
 ## P0 — Planner state model and core interactions
 

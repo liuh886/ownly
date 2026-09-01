@@ -55,6 +55,7 @@ describe('enrichPlaceMetadata', () => {
         title: 'Thipsamai Padthai Pratoopee',
         source_provider: 'google_maps',
         source_url: 'https://www.google.com/maps/place/Thipsamai',
+        source_place_id: '0x30e2991678584ec5:0x698c069655046fbe',
         kind: 'other',
         priority: 'want',
         tags: [],
@@ -117,6 +118,62 @@ describe('enrichPlaceMetadata', () => {
 
     const result = await enrichPlaceMetadata(completePlace);
     expect(result.enriched).toBe(false);
+  });
+
+  it('does not resolve Place ID or fetch facts from a title-only Google search URL', async () => {
+    const originalFetch = global.fetch;
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy as unknown as typeof fetch;
+    try {
+      const place: PlannerTripPlace = {
+        schema_version: '0.1', type: 'trip_place', id: 'unresolved', trip_id: 'trip-1',
+        title: 'Same Name Airport', source_provider: 'google_maps',
+        source_url: 'https://www.google.com/maps/search/?api=1&query=Same+Name+Airport',
+        kind: 'transit', priority: 'want', tags: [], signals: [], risks: [],
+        reservation_status: 'none', state: 'candidate', created_at: '2026-08-30T00:00:00Z',
+      };
+      const result = await enrichPlaceMetadata(place);
+      expect(result.enriched).toBe(false);
+      expect(result.place.source_place_id).toBeUndefined();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('does not treat missing optional price as incomplete enrichment', async () => {
+    const { isCandidateMissingData } = await import('./enrichment');
+    const place: PlannerTripPlace = {
+      schema_version: '0.1', type: 'trip_place', id: 'no-price', trip_id: 'trip-1',
+      title: 'No Published Price Restaurant', source_provider: 'google_maps',
+      source_url: 'https://www.google.com/maps?cid=123456789',
+      source_place_id: '0x30e2991678584ec5:0x698c069655046fbe',
+      kind: 'food', priority: 'want', tags: [], signals: [], risks: [],
+      observed_rating: 4.5, observed_review_count: 100, source_category: 'Restaurant',
+      address: 'Bangkok', coordinates: { lat: 13.75, lng: 100.5 },
+      reservation_status: 'none', state: 'candidate', created_at: '2026-08-30T00:00:00Z',
+    };
+    expect(isCandidateMissingData(place)).toBe(false);
+  });
+
+  it('does not promote user why/notes text into observed_price', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, text: async () => '' } as unknown as Response)
+      .mockResolvedValueOnce({ ok: true, url: 'https://www.google.com/maps/place/Test', text: async () => '<html></html>' } as unknown as Response);
+    try {
+      const place: PlannerTripPlace = {
+        schema_version: '0.1', type: 'trip_place', id: 'note-price', trip_id: 'trip-1',
+        title: 'Test', source_provider: 'google_maps', source_url: 'https://www.google.com/maps/place/Test',
+        source_place_id: '0x30e2991678584ec5:0x698c069655046fbe', kind: 'food', priority: 'want',
+        tags: [], signals: [], risks: [], why: 'Someone mentioned ฿299 but not verified', notes: 'Maybe ฿399',
+        reservation_status: 'none', state: 'candidate', created_at: '2026-08-30T00:00:00Z',
+      };
+      const result = await enrichPlaceMetadata(place, { force: true });
+      expect(result.place.observed_price).toBeUndefined();
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it('strips decorative emojis with cleanTitleForSearch and enriches emoji restaurant', async () => {
@@ -212,6 +269,7 @@ describe('enrichCandidatePlacesBatch', () => {
           title: 'Oakwood Studios Sukhumvit Bangkok',
           source_provider: 'google_maps',
           source_url: 'https://www.google.com/maps/place/Oakwood',
+          source_place_id: '0x30e29f0000000001:0x698c000000000001',
           kind: 'other',
           priority: 'want',
           tags: [],
