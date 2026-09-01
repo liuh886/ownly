@@ -708,9 +708,9 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
 
 function extractGoogleMapsPlace(): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
-  const listPlaces = scanAllGoogleMapsPlaces();
   const detailHeading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
-    ?? document.querySelector<HTMLElement>('main h1');
+    ?? document.querySelector<HTMLElement>('main h1')
+    ?? document.querySelector<HTMLElement>('h1');
   const hasVisibleDetailFacts = Boolean(
     document.querySelector(SELECTORS.address)
     || document.querySelector(SELECTORS.rating)
@@ -719,33 +719,34 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     || document.querySelector(SELECTORS.website),
   );
   // Google Maps is a SPA: a real place details pane can be open while the URL
-  // remains on /maps/@... or a saved-list route. DOM detail facts are therefore
+  // remains on /maps/@... or a search route. DOM detail facts are therefore
   // authoritative; URL shape is only another positive signal.
   const hasVisiblePlaceDetails = Boolean(cleanExtractedText(detailHeading?.textContent || '') && hasVisibleDetailFacts);
-  const isDedicatedPlacePage = /\/maps\/place\/[^/?#]+/.test(window.location.pathname)
-    || /data=.*!1s0x/.test(window.location.href)
+  const isDedicatedPlacePage = /\/maps\/place\/[^/?#]+/i.test(window.location.pathname)
+    || /data=.*!1s0x/i.test(window.location.href)
+    || /cid=\d+/i.test(window.location.search)
     || hasVisiblePlaceDetails;
 
-  // If there are multiple places in a list, don't falsely recognize the list header as a single place
-  if (listPlaces.length > 1 && !isDedicatedPlacePage) {
-    return null;
+  // If there are multiple places in a list and no place details pane is open, don't falsely recognize list header
+  if (!isDedicatedPlacePage && !hasVisiblePlaceDetails) {
+    const listPlaces = scanAllGoogleMapsPlaces();
+    if (listPlaces.length > 1) {
+      return null;
+    }
   }
   
-  // A saved-list carrier is not a place by itself. A visible details pane above
-  // overrides this because Maps commonly keeps the list URL while a place is open.
+  // A saved-list carrier is not a place by itself. A visible details pane above overrides this.
   if (!isDedicatedPlacePage && extractGoogleMapsSavedListId(sourceUrl)) {
     return null;
   }
 
   const jsonLd = PLACE_PARSER.extractJsonLd(document);
-  const heading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
-    ?? document.querySelector<HTMLElement>('main h1')
-    ?? document.querySelector<HTMLElement>('h1');
+  const heading = detailHeading;
   const title = heading?.textContent?.trim() || jsonLd.title || titleFromUrl(sourceUrl);
   if (!title && isDedicatedPlacePage) {
     driftCheck('placeHeading', null);
   }
-  if (!title || (!/\/maps\/(place|search|dir|saved|@)\//.test(window.location.pathname) && !window.location.pathname.includes('/maps/'))) return null;
+  if (!title || (!/\/maps/i.test(window.location.pathname) && !window.location.hostname.includes('maps.google') && !window.location.href.includes('/maps'))) return null;
 
   const priceLevel = extractPrice() || jsonLd.priceLevel;
   const address = extractAddress() || jsonLd.address;

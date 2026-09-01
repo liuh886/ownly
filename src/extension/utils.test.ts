@@ -79,6 +79,10 @@ describe('extractCleanPriceText', () => {
     expect(extractCleanPriceText('Noodle shop · ฿200-400')).toBe('฿200-400');
     expect(extractCleanPriceText('฿200–400')).toBe('฿200–400');
     expect(extractCleanPriceText('人均 ฿200–400')).toBe('人均 ฿200–400');
+    expect(extractCleanPriceText('299 บาท')).toBe('299 บาท');
+    expect(extractCleanPriceText('บุฟเฟ่ต์ 299.-')).toBe('บุฟเฟ่ต์ 299.-');
+    expect(extractCleanPriceText('คนละ 199 บาท')).toBe('คนละ 199 บาท');
+    expect(extractCleanPriceText('人均 200-400 泰铢')).toBe('人均 200-400 泰铢');
     expect(extractCleanPriceText('¥1,000–2,000 per person')).toBe('¥1,000–2,000 per person');
     expect(extractCleanPriceText('$$$')).toBe('$$$');
     expect(extractCleanPriceText('S$1,024 night')).toBe('S$1,024 night');

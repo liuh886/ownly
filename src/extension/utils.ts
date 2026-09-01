@@ -169,7 +169,7 @@ const CURRENCY_CODE = /(?<![A-Za-z])(SGD|HKD|TWD|NTD|JPY|CNY|RMB|THB|KRW|MYR|VND
 const PRICE_LEVEL_ONLY = /^[¥฿$€£₩]{1,4}$/;
 
 function hasCurrencyMarker(text: string): boolean {
-  return /[¥￥฿$€£₩₫₹]/.test(text) || /R\$/.test(text) || CURRENCY_CODE.test(text);
+  return /[¥￥฿$€£₩₫₹]/.test(text) || /R\$/.test(text) || CURRENCY_CODE.test(text) || /บาท|泰铢|元|円|.-/.test(text);
 }
 
 /** Compacts a phone string without inventing country codes. */
@@ -192,8 +192,9 @@ export function extractFeatureIdFromUrl(url?: string | null): string | undefined
   return match?.[1];
 }
 
-const PRICE_TOKEN_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约)\s*[:：]?\s*)?(?:S\$|HK\$|US\$|NT\$|AU\$|A\$|CA\$|C\$|NZ\$|R\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR|AED|CHF)\s?)\s?\d[\d.,]*\+?(?:\s*[-–—〜~至到]\s*(?:S\$|HK\$|US\$|NT\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR)\s?)?\s?\d[\d.,]*\+?)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
-const NO_CURR_PRICE_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约)\s*)+[:：]?\s*\d[\d.,]*(?:\s*[-–—〜~至到]\s*\d[\d.,]*)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
+const PRICE_TOKEN_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约|บุฟเฟต์|บุฟเฟ่ต์|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?(?:S\$|HK\$|US\$|NT\$|AU\$|A\$|CA\$|C\$|NZ\$|R\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR|AED|CHF)\s?)\s?\d[\d.,]*\+?(?:\s*[-–—〜~至到]\s*(?:S\$|HK\$|US\$|NT\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR)\s?)?\s?\d[\d.,]*\+?)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day|บาท|泰铢|元|円))?/i;
+const SUFFIX_PRICE_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约|บุฟเฟต์|บุฟเฟ่ต์|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?\d[\d.,]*(?:\s*[-–—〜~至到]\s*\d[\d.,]*)?\s*(?:บาท|泰铢|元|円|THB|SGD|HKD|USD|TWD|JPY|CNY|.-|.–)(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
+const NO_CURR_PRICE_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约|บุฟเฟต์|บุฟเฟ่ต์|คนละ|ท่านละ|ราคา)\s*)+[:：]?\s*\d[\d.,]*(?:\s*[-–—〜~至到]\s*\d[\d.,]*)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
 
 /**
  * Extracts a normalized, clean price string from freeform text or card subtitles.
@@ -216,6 +217,15 @@ export function extractCleanPriceText(raw?: string | null): string | undefined {
   const match = PRICE_TOKEN_REGEX.exec(text);
   if (match) {
     const candidate = match[0].trim();
+    if (/\d/.test(candidate) && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Check suffix patterns like "299 บาท" or "บุฟเฟ่ต์ 299.-" or "200-400 泰铢"
+  const matchSuffix = SUFFIX_PRICE_REGEX.exec(text);
+  if (matchSuffix) {
+    const candidate = matchSuffix[0].trim();
     if (/\d/.test(candidate) && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(candidate)) {
       return candidate;
     }

@@ -118,6 +118,14 @@ describe('enrichPlaceMetadata', () => {
     const result = await enrichPlaceMetadata(completePlace);
     expect(result.enriched).toBe(false);
   });
+
+  it('strips decorative emojis with cleanTitleForSearch and enriches emoji restaurant', async () => {
+    const { cleanTitleForSearch } = await import('./enrichment');
+    expect(cleanTitleForSearch('🍜 合成發')).toBe('合成發');
+    expect(cleanTitleForSearch('🍜 Thipsamai Padthai Pratoopee')).toBe('Thipsamai Padthai Pratoopee');
+    expect(cleanTitleForSearch('🏨 Oakwood Suites')).toBe('Oakwood Suites');
+    expect(cleanTitleForSearch('ส้มหมูกะทะ&ซีฟู๊ด บุฟเฟ่ต์')).toBe('ส้มหมูกะทะ&ซีฟู๊ด บุฟเฟ่ต์');
+  });
 });
 
 

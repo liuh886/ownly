@@ -814,13 +814,11 @@ export function initHandlers(): void {
         console.warn('[Ownly Capture] In-tab Google Maps pass skipped:', err);
       }
 
-      // Phase 2: Run batch enrichment on remaining items missing data
-      const needEnrichment = targetCandidates.filter(isCandidateMissingData);
-
+      // Phase 2: Run batch enrichment on selected candidates
       let batchEnrichedCount = 0;
-      if (needEnrichment.length > 0) {
+      if (targetCandidates.length > 0) {
         const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
-          needEnrichment,
+          targetCandidates,
           (processed, total, currentPlace) => {
             setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
             renderCandidatesList();

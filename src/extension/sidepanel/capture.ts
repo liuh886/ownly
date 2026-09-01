@@ -70,12 +70,36 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
         overrideCurrency: store.mapCurrencyOverride,
       }) as Promise<ListMessageResponse>,
     ]);
-  } catch (error) {
-    clearPageState();
-    if (!options?.soft) {
-      setStatus(store.lang === 'zh' ? '当前页面不支持 Capture。' : 'Capture is not available on this page.', 'error');
+  } catch {
+    // If receiving end does not exist, try to inject content script and retry once
+    try {
+      const scriptingApi = (chrome as unknown as { scripting?: { executeScript: (options: unknown) => Promise<unknown> } }).scripting;
+      if (scriptingApi && tab.id) {
+        await scriptingApi.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+        await new Promise((r) => setTimeout(r, 150));
+        [placeResp, listResp] = await Promise.all([
+          chrome.tabs.sendMessage(tab.id, {
+            type: 'OWNLY_GET_CURRENT_PLACE',
+            targetTags,
+            targetCurrency: context?.currency,
+            overrideCurrency: store.mapCurrencyOverride,
+          }) as Promise<PlaceMessageResponse>,
+          chrome.tabs.sendMessage(tab.id, {
+            type: 'OWNLY_GET_VISIBLE_LIST_PLACES',
+            overrideCurrency: store.mapCurrencyOverride,
+          }) as Promise<ListMessageResponse>,
+        ]);
+      }
+    } catch (innerErr) {
+      clearPageState();
+      if (!options?.soft) {
+        setStatus(store.lang === 'zh' ? '当前页面不支持 Capture 或未完全加载。' : 'Capture is not available or page is not loaded.', 'error');
+      }
+      console.warn('[Ownly Capture] Could not read current provider page', innerErr);
     }
-    console.warn('[Ownly Capture] Could not read current provider page', error);
   }
 
   if (placeResp?.place && placeResp.place.sourceUrl !== store.userDismissedPlaceUrl) {

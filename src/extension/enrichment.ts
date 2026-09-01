@@ -4,7 +4,7 @@ import {
   type PlannerTripPlace,
 } from '../domain/planner';
 import type { CurrentResearchPlace } from './content';
-import { extractCleanPriceText, isZeroOrPlaceholderPrice } from './utils';
+import { extractCleanPriceText, extractFeatureIdFromUrl, isZeroOrPlaceholderPrice } from './utils';
 import { logger } from './logger';
 import {
   extractFeatureIdFromHtml,
@@ -23,15 +23,21 @@ export interface EnrichmentResult {
 }
 
 /**
- * Enriches a single place by fetching research metadata (Google Maps JSON-LD / HTML).
+ * Strips leading/trailing decorative emojis and symbols for search resolution.
+ * e.g. "🍜 合成發" -> "合成發", "🍜 Thipsamai Padthai Pratoopee" -> "Thipsamai Padthai Pratoopee"
  */
+export function cleanTitleForSearch(title: string): string {
+  return title
+    .replace(/^[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+/u, '')
+    .replace(/[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+$/u, '')
+    .trim() || title.trim();
+}
+
 /**
  * Determines whether a candidate place is missing essential objective facts.
- * Price is only required for lodging/stays; attractions, temples, and transit naturally lack room rates.
  */
 export function isCandidateMissingData(place: PlannerTripPlace): boolean {
-  const isStay = place.kind === 'stay' || (place.source_category && /hotel|resort|lodging|hostel|inn|stay|酒店|旅馆|住宿|民宿/i.test(place.source_category));
-  const isMissingPrice = Boolean(isStay && (!place.observed_price || isZeroOrPlaceholderPrice(place.observed_price)));
+  const isMissingPrice = !place.observed_price || isZeroOrPlaceholderPrice(place.observed_price);
   return (
     !place.source_place_id ||
     place.observed_rating === undefined ||
@@ -50,17 +56,28 @@ export function isCandidateMissingData(place: PlannerTripPlace): boolean {
  */
 export async function enrichPlaceMetadata(
   place: PlannerTripPlace,
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal; force?: boolean }
 ): Promise<EnrichmentResult> {
-  if (!isCandidateMissingData(place)) {
+  if (!options?.force && !isCandidateMissingData(place)) {
     return { place, enriched: false };
   }
 
+  const next: PlannerTripPlace = { ...place };
+  let mutated = false;
+
   // 1. Mandatory Step 1: Guarantee Place ID resolution FIRST if missing or invalid
-  let resolvedFeatureId = place.source_place_id;
+  let resolvedFeatureId = next.source_place_id;
   if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
-    const tbmUrl = googleMapsSearchTbmUrl(place.title);
-    logger.fetch('BackgroundEnrich', `Step 1: Resolving Place ID for "${place.title}"`, { tbmUrl });
+    if (next.source_url) {
+      const fromUrl = extractFeatureIdFromUrl(next.source_url);
+      if (fromUrl) resolvedFeatureId = fromUrl;
+    }
+  }
+
+  if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
+    const cleanSearch = cleanTitleForSearch(next.title);
+    const tbmUrl = googleMapsSearchTbmUrl(cleanSearch);
+    logger.fetch('BackgroundEnrich', `Step 1: Resolving Place ID for "${cleanSearch}"`, { tbmUrl });
     try {
       const sRes = await fetch(tbmUrl, { credentials: 'include', signal: options?.signal });
       if (sRes.ok) {
@@ -68,11 +85,11 @@ export async function enrichPlaceMetadata(
         const foundId = extractFeatureIdFromHtml(sHtml);
         if (foundId) {
           resolvedFeatureId = foundId;
-          logger.info('BackgroundEnrich', `Step 1 Success: Resolved Place ID for "${place.title}"`, { featureId: foundId });
+          logger.info('BackgroundEnrich', `Step 1 Success: Resolved Place ID for "${cleanSearch}"`, { featureId: foundId });
         }
       }
     } catch (err) {
-      logger.warn('BackgroundEnrich', `Search resolve failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
+      logger.warn('BackgroundEnrich', `Search resolve failed for "${cleanSearch}"`, err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -80,7 +97,7 @@ export async function enrichPlaceMetadata(
   if (resolvedFeatureId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
     const previewUrl = googleMapsPreviewPlaceUrl(resolvedFeatureId);
     if (previewUrl) {
-      logger.fetch('BackgroundEnrich', `Step 2: Fetching facts for ${place.title}`, { previewUrl, sourcePlaceId: resolvedFeatureId });
+      logger.fetch('BackgroundEnrich', `Step 2: Fetching facts for ${next.title}`, { previewUrl, sourcePlaceId: resolvedFeatureId });
       try {
         const res = await fetch(previewUrl, {
           credentials: 'include',
@@ -91,10 +108,8 @@ export async function enrichPlaceMetadata(
           const clean = raw.replace(/^\)\]\}'\s*/, '');
           const data = JSON.parse(clean);
           const facts = extractGoogleMapsPreviewFacts(data);
-          logger.parser('BackgroundEnrich', `Step 2 Parsed facts for ${place.title}`, facts);
+          logger.parser('BackgroundEnrich', `Step 2 Parsed facts for ${next.title}`, facts);
 
-          let mutated = false;
-          const next: PlannerTripPlace = { ...place };
           if (!next.source_place_id || next.source_place_id !== resolvedFeatureId) {
             next.source_place_id = resolvedFeatureId;
             mutated = true;
@@ -213,27 +228,27 @@ export async function enrichPlaceMetadata(
             mutated = true;
           }
 
-          if (mutated) {
-            next.updated_at = new Date().toISOString();
+          // If price has been enriched or place is complete, return successfully.
+          if (next.observed_price || !next.source_place_id) {
+            if (mutated) next.updated_at = new Date().toISOString();
+            return { place: next, enriched: mutated };
           }
-
-          return { place: next, enriched: mutated };
         }
       } catch (err) {
-        logger.warn('BackgroundEnrich', `Preview fetch failed for ${place.title}`, err instanceof Error ? err.message : String(err));
+        logger.warn('BackgroundEnrich', `Preview fetch failed for ${next.title}`, err instanceof Error ? err.message : String(err));
       }
     }
   }
 
-  // 2. Fallback: Detail URL HTML scraping
-  let targetUrl = place.source_url;
+  // 3. Fallback: Detail URL HTML scraping (especially useful for restaurant prices in JSON-LD)
+  let targetUrl = next.source_url;
   if (!targetUrl || targetUrl.includes('/search/?api=1') || targetUrl.includes('/maps/search/')) {
-    const detailUrl = googleMapsDetailUrlFromSourceId(place.source_place_id, place.title);
+    const detailUrl = googleMapsDetailUrlFromSourceId(next.source_place_id || resolvedFeatureId, cleanTitleForSearch(next.title));
     if (detailUrl) targetUrl = detailUrl;
-    else if (!targetUrl) targetUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.title)}`;
+    else if (!targetUrl) targetUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitleForSearch(next.title))}`;
   }
 
-  logger.fetch('BackgroundEnrich', `Fetching HTML for ${place.title}`, { targetUrl, sourcePlaceId: place.source_place_id });
+  logger.fetch('BackgroundEnrich', `Fetching HTML for ${next.title}`, { targetUrl, sourcePlaceId: next.source_place_id });
 
   try {
     const res = await fetch(targetUrl, {
@@ -241,16 +256,17 @@ export async function enrichPlaceMetadata(
       signal: options?.signal,
     });
     if (!res.ok) {
-      logger.warn('BackgroundEnrich', `HTTP error for ${place.title}`, { status: res.status, url: targetUrl });
-      return { place, enriched: false, error: `HTTP ${res.status}` };
+      logger.warn('BackgroundEnrich', `HTTP error for ${next.title}`, { status: res.status, url: targetUrl });
+      if (mutated) {
+        next.updated_at = new Date().toISOString();
+        return { place: next, enriched: true };
+      }
+      return { place: next, enriched: false, error: `HTTP ${res.status}` };
     }
     const html = (await res.text()).slice(0, 2_500_000);
 
     const facts = extractGoogleMapsResearchFromHtml(html);
-    logger.parser('BackgroundEnrich', `Parsed HTML facts for ${place.title}`, { htmlLength: html.length, facts });
-
-    let mutated = false;
-    const next: PlannerTripPlace = { ...place };
+    logger.parser('BackgroundEnrich', `Parsed HTML facts for ${next.title}`, { htmlLength: html.length, facts });
 
     if (facts.rating !== undefined) {
       next.observed_rating = facts.rating;
@@ -395,7 +411,7 @@ export async function enrichCandidatePlacesBatch(
     if (options?.signal?.aborted) break;
     const batch = results.slice(i, i + concurrency);
     const batchPromises = batch.map(async (p, idx) => {
-      const res = await enrichPlaceMetadata(p, { signal: options?.signal });
+      const res = await enrichPlaceMetadata(p, { signal: options?.signal, force: true });
       if (res.enriched) {
         results[i + idx] = res.place;
         totalEnriched += 1;
