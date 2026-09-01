@@ -766,6 +766,7 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
     title,
     sourceUrl,
     sourceProvider: 'google_maps',
+    sourcePlaceId: extractFeatureIdFromUrl(sourceUrl) ?? stateSignals?.placeId,
     kind,
     rating,
     reviewCount,
