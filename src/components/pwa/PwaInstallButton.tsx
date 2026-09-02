@@ -18,7 +18,7 @@ const basePath = process.env.NEXT_PUBLIC_OWNLY_BASE_PATH ?? '';
 const appScope = `${basePath}/app/`;
 const INSTALL_NUDGE_DISMISSED_KEY = 'ownly_pwa_install_nudge_dismissed';
 
-export function PwaInstallButton() {
+export function PwaInstallButton({ variant = 'default' }: { variant?: 'default' | 'segmented' }) {
   const { language } = useI18n();
   const zh = language === 'zh';
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -84,7 +84,9 @@ export function PwaInstallButton() {
       <button
         type="button"
         onClick={() => setShowModal(true)}
-        className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-900"
+        className={variant === 'segmented'
+          ? 'px-2.5 py-1 text-[11px] font-semibold transition hover:bg-emerald-100 hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-600'
+          : 'rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-900'}
         title={title}
       >
         {label}

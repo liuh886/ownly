@@ -34,6 +34,16 @@ export function AppHeader({
   const runtimeCapabilities = getWYQDRuntimeCapabilities(runtimeTarget);
   const usesBrowserLocalData = runtimeCapabilities.dataRuntime === 'browser';
   const localDataCopy = getOwnlyLocalDataCopy(language);
+  const connectionLabel = isLoading
+    ? language === 'zh' ? '正在连接…' : 'Connecting…'
+    : isConnected
+      ? usesBrowserLocalData ? localDataCopy.connected : t('vaultConnected')
+      : usesBrowserLocalData ? localDataCopy.createOrOpen : t('demoMode');
+  const connectionTitle = isConnected && !isLoading
+    ? language === 'zh'
+      ? '已连接。点击可更换数据目录。'
+      : 'Connected. Click to change the data folder.'
+    : undefined;
   const heading = activeTab === 'planner'
     ? {
         title: 'Planner',
@@ -79,23 +89,39 @@ export function AppHeader({
           <p className="mt-0.5 text-xs text-stone-400">{heading.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-              isConnected
-                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'
-            }`}
-          >
+          {runtimeCapabilities.canPromptForLocalData ? (
+            <button
+              type="button"
+              onClick={onConnectVault}
+              disabled={isLoading}
+              title={connectionTitle}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-wait ${
+                isConnected && !isLoading
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 hover:text-emerald-900'
+                  : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200 hover:bg-stone-200 hover:text-stone-900 disabled:hover:bg-stone-100 disabled:hover:text-stone-500'
+              }`}
+            >
+              {isConnected && !isLoading ? (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+              ) : null}
+              {connectionLabel}
+              {isConnected && !isLoading ? <span aria-hidden="true">▾</span> : null}
+            </button>
+          ) : (
             <span
-              className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-stone-400'}`}
-              aria-hidden="true"
-            />
-            {isConnected
-              ? usesBrowserLocalData ? localDataCopy.connected : t('vaultConnected')
-              : isLoading
-                ? usesBrowserLocalData ? localDataCopy.connecting : t('connecting')
-                : t('demoMode')}
-          </span>
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                isConnected
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                  : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-stone-400'}`}
+                aria-hidden="true"
+              />
+              {connectionLabel}
+            </span>
+          )}
           <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-500 ring-1 ring-stone-200">
             {objectCount} {t('objects')}
           </span>
@@ -104,14 +130,32 @@ export function AppHeader({
           </span>
           <span className="mx-0.5 h-3 w-px bg-stone-200" aria-hidden="true" />
           <div className="ownly-account-slot" data-account-slot aria-label={t('membership')} />
-          <button
-            type="button"
-            onClick={onOpenAgentGuide}
-            title="Agent / MCP"
-            className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-900"
-          >
-            Agent
-          </button>
+          {runtimeCapabilities.canPromptForLocalData && runtimeCapabilities.canInstallPwa ? (
+            <div
+              role="group"
+              aria-label={language === 'zh' ? 'Ownly 外部能力' : 'Ownly external tools'}
+              className="inline-flex overflow-hidden rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+            >
+              <button
+                type="button"
+                onClick={onOpenAgentGuide}
+                title="Agent / MCP"
+                className="border-r border-emerald-200 px-2.5 py-1 text-[11px] font-semibold transition hover:bg-emerald-100 hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-600"
+              >
+                Agent
+              </button>
+              <PwaInstallButton variant="segmented" />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenAgentGuide}
+              title="Agent / MCP"
+              className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-900"
+            >
+              Agent
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
@@ -130,21 +174,6 @@ export function AppHeader({
               </option>
             ))}
           </select>
-          {runtimeCapabilities.canPromptForLocalData ? (
-            <>
-              {runtimeCapabilities.canInstallPwa ? <PwaInstallButton /> : null}
-              <button
-                type="button"
-                onClick={onConnectVault}
-                disabled={isLoading}
-                className="rounded-full bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
-              >
-                {isLoading
-                  ? localDataCopy.connecting
-                  : isConnected ? localDataCopy.changeFolder : localDataCopy.createOrOpen}
-              </button>
-            </>
-          ) : null}
         </div>
       </div>
     </header>
