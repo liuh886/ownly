@@ -7,6 +7,7 @@ import {
   mergeCapturedPlaceResearch,
   plannerTripLegFileName,
   type ImportReport,
+  type ImportFailure,
   type PlannerTrip,
   type PlannerTripLeg,
   type PlannerTripPlace,
@@ -201,13 +202,16 @@ export class PlannerRepository {
     const touchedTripIds = new Set<string>();
 
     for (const rawPlace of places) {
-      const title = rawPlace.title?.trim() || '(untitled place)';
-      if (!rawPlace.id || !rawPlace.trip_id) {
-        report.failed.push({ id: rawPlace.id || 'unknown', title, reason: 'invalid_payload' });
+      if (!rawPlace.id) {
+        report.failed.push({ id: '', title: rawPlace.title || '(unknown)', reason: 'missing_id' });
+        continue;
+      }
+      if (!rawPlace.trip_id) {
+        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'missing_trip_id' });
         continue;
       }
       if (!existingTrips.has(rawPlace.trip_id)) {
-        report.failed.push({ id: rawPlace.id, title, reason: 'unknown_trip' });
+        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'unknown_trip', detail: rawPlace.trip_id });
         continue;
       }
       touchedTripIds.add(rawPlace.trip_id);
@@ -238,9 +242,9 @@ export class PlannerRepository {
         indexPlace(persisted);
         report.imported.push(rawPlace.id);
       } catch (error) {
-        const reason = error instanceof Error && error.message ? `write_failed:${error.message}` : 'write_failed';
-        report.failed.push({ id: rawPlace.id, title, reason });
-        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${title}):`, error);
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, error);
+        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'write_error', detail: msg });
       }
     }
 
@@ -250,6 +254,10 @@ export class PlannerRepository {
       } catch (err) {
         console.warn(`[PlannerRepository] Auto-deduplication for trip ${tripId} encountered warning:`, err);
       }
+    }
+
+    if (report.failed.length > 0) {
+      console.warn(`[PlannerRepository] Import report: ${report.imported.length}/${report.received} imported, ${report.failed.length} failed`, report.failed);
     }
 
     return report;

@@ -6,7 +6,6 @@ import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
 import { PlannerHome } from '@/components/planner/PlannerHome';
-import { TripBundleManager } from '@/components/planner/TripBundleManager';
 import { extractTripSharePayload } from '@/domain/trip-share-link';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
@@ -195,12 +194,6 @@ export function TabRenderer({
   if (activeTab === 'planner') {
     return (
       <div className="space-y-2">
-        <div className="flex justify-end">
-          <TripBundleManager
-            disabled={!isConnected}
-            onImported={() => setPlannerRevision((revision) => revision + 1)}
-          />
-        </div>
         <PlannerHome key={plannerRevision} disabled={!isConnected} />
       </div>
     );

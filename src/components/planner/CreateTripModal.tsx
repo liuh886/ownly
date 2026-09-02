@@ -1,11 +1,21 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
+import {
+  parseTripBundle,
+  instantiateTripBundle,
+  type OwnlyTripBundle,
+} from '../../domain/trip-bundle';
+import { plannerRepository } from '../../services/PlannerRepository';
+
+type TabMode = 'create' | 'import';
 
 interface CreateTripModalProps {
   open: boolean;
   onClose: () => void;
   onCreate: (trip: PlannerTrip) => Promise<void>;
+  onImported?: (tripId: string) => void;
   language?: 'zh' | 'en';
+  disabled?: boolean;
 }
 
 const COMMON_CURRENCIES = ['THB', 'JPY', 'CNY', 'USD', 'EUR', 'GBP', 'SGD', 'MYR', 'KRW', 'TWD', 'HKD', 'AUD'];
@@ -14,9 +24,12 @@ export function CreateTripModal({
   open,
   onClose,
   onCreate,
+  onImported,
   language = 'zh',
+  disabled = false,
 }: CreateTripModalProps) {
   const zh = language === 'zh';
+  const [tab, setTab] = useState<TabMode>('create');
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -27,7 +40,44 @@ export function CreateTripModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Import state
+  const [rawImport, setRawImport] = useState('');
+  const [importNotice, setImportNotice] = useState('');
+
+  const importPreview = useMemo(() => {
+    if (!rawImport.trim()) return { bundle: null as OwnlyTripBundle | null, error: '' };
+    try {
+      return { bundle: parseTripBundle(rawImport), error: '' };
+    } catch (err) {
+      return { bundle: null, error: err instanceof Error ? err.message : String(err) };
+    }
+  }, [rawImport]);
+
+  const importSummary = useMemo(() => ({
+    places: importPreview.bundle?.places.length ?? 0,
+    visits: importPreview.bundle?.visits.length ?? 0,
+    legs: importPreview.bundle?.legs.length ?? 0,
+  }), [importPreview.bundle]);
+
   if (!open) return null;
+
+  const resetForm = () => {
+    setTitle('');
+    setStartDate('');
+    setEndDate('');
+    setDestinations('');
+    setCurrency('THB');
+    setTransportMode('transit');
+    setTags('');
+    setError(null);
+    setRawImport('');
+    setImportNotice('');
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +119,36 @@ export function CreateTripModal({
     setError(null);
     try {
       await onCreate(newTrip);
-      onClose();
+      handleClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleImport = async () => {
+    setImportNotice('');
+    setError(null);
+    if (!importPreview.bundle) {
+      setError(importPreview.error || (zh ? '请先粘贴有效的 Trip Bundle。' : 'Paste a valid Trip Bundle first.'));
+      return;
+    }
+    if (disabled) {
+      setError(zh ? '请先连接 Ownly 数据目录。' : 'Connect Ownly data folder first.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const bundle = importPreview.bundle;
+      const copy = instantiateTripBundle(bundle);
+      await plannerRepository.upsertTrip(copy.trip);
+      await plannerRepository.upsertPlaces(copy.places);
+      for (const visit of copy.visits) await plannerRepository.upsertVisit(visit);
+      for (const leg of copy.legs) await plannerRepository.upsertLeg(leg);
+      onImported?.(copy.trip.id);
+      setImportNotice(zh ? `✓ 已导入「${copy.trip.title}」；费用账本为空。` : `✓ Imported "${copy.trip.title}"; ledger is empty.`);
+      setRawImport('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -89,146 +168,238 @@ export function CreateTripModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        {/* Tab Navigation */}
+        <div className="grid grid-cols-2 border-b border-stone-100 bg-stone-50/70 p-1.5 mt-4 rounded-lg">
+          <button
+            type="button"
+            onClick={() => { setTab('create'); setError(null); setImportNotice(''); }}
+            className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+              tab === 'create' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            ✨ {zh ? '新建行程' : 'Create Trip'}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTab('import'); setError(null); setImportNotice(''); }}
+            className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+              tab === 'import' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            📥 {zh ? '导入行程' : 'Import Trip'}
+          </button>
+        </div>
+
+        <div className="mt-4">
           {error ? (
-            <div className="rounded-lg bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200">
+            <div className="mb-3 rounded-lg bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200">
               ⚠️ {error}
             </div>
           ) : null}
 
-          {/* Title */}
-          <div>
-            <label className="block text-xs font-bold text-stone-700">
-              {zh ? '行程名称 *' : 'Trip Title *'}
-            </label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={zh ? '例如：Thailand 2026 曼谷普吉' : 'e.g. Thailand 2026'}
-              className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
-            />
-          </div>
+          {importNotice ? (
+            <div className="mb-3 rounded-lg bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 border border-emerald-200">
+              {importNotice}
+            </div>
+          ) : null}
 
-          {/* Dates */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-stone-700">
-                {zh ? '出发日期 *' : 'Start Date *'}
-              </label>
-              <input
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  if (!endDate || endDate < e.target.value) setEndDate(e.target.value);
-                }}
-                className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+          {tab === 'create' ? (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700">
+                  {zh ? '行程名称 *' : 'Trip Title *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={zh ? '例如：Thailand 2026 曼谷普吉' : 'e.g. Thailand 2026'}
+                  className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700">
+                    {zh ? '出发日期 *' : 'Start Date *'}
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      if (!endDate || endDate < e.target.value) setEndDate(e.target.value);
+                    }}
+                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700">
+                    {zh ? '结束日期 *' : 'End Date *'}
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    min={startDate}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Destinations */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700">
+                  {zh ? '目的地城市 (逗号分隔)' : 'Destinations (comma-separated)'}
+                </label>
+                <input
+                  type="text"
+                  value={destinations}
+                  onChange={(e) => setDestinations(e.target.value)}
+                  placeholder={zh ? '例如：Bangkok, Chiang Mai, Pattaya' : 'e.g. Tokyo, Kyoto, Osaka'}
+                  className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Currency & Transport Mode */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700">
+                    {zh ? '行程本币 (Currency)' : 'Base Currency'}
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                  >
+                    {COMMON_CURRENCIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700">
+                    {zh ? '主要出行方式' : 'Transport Mode'}
+                  </label>
+                  <select
+                    value={transportMode}
+                    onChange={(e) => setTransportMode(e.target.value as PlannerTravelMode)}
+                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                  >
+                    <option value="transit">{zh ? '🚇 公共交通 / 打车' : '🚇 Transit'}</option>
+                    <option value="driving">{zh ? '🚗 自驾租车' : '🚗 Driving'}</option>
+                    <option value="walking">{zh ? '🚶 步行慢游' : '🚶 Walking'}</option>
+                    <option value="bicycling">{zh ? '🚲 骑行' : '🚲 Bicycling'}</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700">
+                  {zh ? '标签 (可选，逗号分隔)' : 'Tags (optional)'}
+                </label>
+                <input
+                  type="text"
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  placeholder={zh ? '例如：度假, 美食打卡' : 'e.g. vacation, food'}
+                  className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
+                >
+                  {zh ? '取消' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="rounded-lg bg-stone-950 px-5 py-2 text-xs font-bold text-white hover:bg-stone-800 disabled:opacity-50 transition"
+                >
+                  {busy ? (zh ? '创建中…' : 'Creating…') : (zh ? '确认创建行程' : 'Create Trip')}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              {/* Import Info */}
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-[11px] text-emerald-900">
+                {zh
+                  ? '粘贴 Trip Bundle JSON 数据导入现有行程。导入后会生成独立 ID，费用账本从空白开始。'
+                  : 'Paste Trip Bundle JSON to import an existing trip. All IDs are regenerated with an empty ledger.'}
+              </div>
+
+              {/* Textarea */}
+              <textarea
+                value={rawImport}
+                onChange={(e) => setRawImport(e.target.value)}
+                placeholder={'{\n  "kind": "ownly.trip.bundle", ...\n}'}
+                rows={8}
+                className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 p-3 font-mono text-[10px] leading-4 text-stone-700 focus:border-stone-950 focus:outline-hidden"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-stone-700">
-                {zh ? '结束日期 *' : 'End Date *'}
-              </label>
-              <input
-                type="date"
-                required
-                min={startDate}
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
-              />
-            </div>
-          </div>
 
-          {/* Destinations */}
-          <div>
-            <label className="block text-xs font-bold text-stone-700">
-              {zh ? '目的地城市 (逗号分隔)' : 'Destinations (comma-separated)'}
-            </label>
-            <input
-              type="text"
-              value={destinations}
-              onChange={(e) => setDestinations(e.target.value)}
-              placeholder={zh ? '例如：Bangkok, Chiang Mai, Pattaya' : 'e.g. Tokyo, Kyoto, Osaka'}
-              className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
-            />
-          </div>
+              {/* Preview */}
+              {rawImport ? (
+                importPreview.bundle ? (
+                  <div className="rounded-xl border border-stone-200 bg-white p-3">
+                    <div className="text-sm font-bold text-stone-900">{importPreview.bundle.trip.title}</div>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                      <span className="rounded-full bg-stone-100 px-2 py-1">📍 {importSummary.places}</span>
+                      <span className="rounded-full bg-stone-100 px-2 py-1">📅 {importSummary.visits}</span>
+                      <span className="rounded-full bg-stone-100 px-2 py-1">🛣️ {importSummary.legs}</span>
+                      <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">💸 0</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+                    ⚠️ {importPreview.error}
+                  </div>
+                )
+              ) : null}
 
-          {/* Currency & Transport Mode */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-stone-700">
-                {zh ? '行程本币 (Currency)' : 'Base Currency'}
-              </label>
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
-              >
-                {COMMON_CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
+                >
+                  {zh ? '取消' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !importPreview.bundle || disabled}
+                  onClick={() => void handleImport()}
+                  className="rounded-lg bg-emerald-700 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50 transition"
+                >
+                  {busy
+                    ? (zh ? '导入中…' : 'Importing…')
+                    : disabled
+                      ? (zh ? '请先连接数据目录' : 'Connect data folder')
+                      : (zh ? '✓ 导入为我的行程' : '✓ Import as my trip')}
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-stone-700">
-                {zh ? '主要出行方式' : 'Transport Mode'}
-              </label>
-              <select
-                value={transportMode}
-                onChange={(e) => setTransportMode(e.target.value as PlannerTravelMode)}
-                className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
-              >
-                <option value="transit">{zh ? '🚇 公共交通 / 打车' : '🚇 Transit'}</option>
-                <option value="driving">{zh ? '🚗 自驾租车' : '🚗 Driving'}</option>
-                <option value="walking">{zh ? '🚶 步行慢游' : '🚶 Walking'}</option>
-                <option value="bicycling">{zh ? '🚲 骑行' : '🚲 Bicycling'}</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label className="block text-xs font-bold text-stone-700">
-              {zh ? '标签 (可选，逗号分隔)' : 'Tags (optional)'}
-            </label>
-            <input
-              type="text"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder={zh ? '例如：度假, 美食打卡' : 'e.g. vacation, food'}
-              className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
-            />
-          </div>
-
-          {/* Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
-            >
-              {zh ? '取消' : 'Cancel'}
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-lg bg-stone-950 px-5 py-2 text-xs font-bold text-white hover:bg-stone-800 disabled:opacity-50 transition"
-            >
-              {busy ? (zh ? '创建中…' : 'Creating…') : (zh ? '确认创建行程' : 'Create Trip')}
-            </button>
-          </div>
-        </form>
+          )}
+        </div>
       </div>
     </div>
   );

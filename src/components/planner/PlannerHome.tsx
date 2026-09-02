@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import type { PlannerPlaceKind, PlannerScheduledPlace as PlannerScheduledPlaceDomain, PlannerTrip, PlannerTripLeg, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
 import { materializePlannerScheduledPlaces, sortPlannerScheduledPlaces, type PlannerScheduledPlace, type PlannerTripVisit } from '@/domain/planner-visits';
@@ -37,7 +37,7 @@ import { plannerRepository } from '@/services/PlannerRepository';
 import { calendarFeedService } from '@/services/CalendarFeedService';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
-import { applyCaptureImportReport, pullCaptureState, setCaptureContext } from './capture-bridge';
+import { applyCaptureImportReport, pullCaptureState, setCaptureContext, setCaptureDebugLogs, getCaptureDebugLogs } from './capture-bridge';
 import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
 import { PlannerBudgetLedger } from './PlannerBudgetLedger';
@@ -270,6 +270,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
   const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
+  const dateNavRef = useRef<HTMLDivElement>(null);
 
   let isPro = true;
   let openLicenseModal: (() => void) | undefined;
@@ -376,6 +377,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const activeDayIndex = useMemo(() => {
     return Math.max(0, tripDates.indexOf(activeDate));
   }, [activeDate, tripDates]);
+
+  // Auto-scroll date navigation to active date
+  useEffect(() => {
+    if (!dateNavRef.current || !activeDate) return;
+    const activeButton = dateNavRef.current.querySelector(`[data-date="${activeDate}"]`);
+    if (activeButton) {
+      activeButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [activeDate]);
 
   // Preserve the complete trip set so shelving changes planning state without making data disappear.
   const tripAllPlaces = useMemo(
@@ -1126,6 +1136,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const syncCapture = useCallback(async () => {
     setBusy(true);
     setNotice('');
+    setCaptureDebugLogs(true);
     try {
       const state = await pullCaptureState();
       if (!state) {
@@ -1149,9 +1160,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       }
       await load();
       setSelectedTripId((current) => current || state.activeContext?.tripId || '');
-    } catch {
+    } catch (err) {
+      const logs = getCaptureDebugLogs();
+      const logSummary = logs.map((l) => `[${l.timestamp}] ${l.type}: ${l.messageType} ${l.detail || ''}`).join('\n');
+      console.error('[Planner] syncCapture error:', err, '\nDebug logs:\n', logSummary);
       setCapturePending(null);
-      setNotice(zh ? '同步失败：无法写入数据目录或扩展未响应。' : 'Sync failed: could not write data folder or extension unreachable.');
+      const detail = err instanceof Error ? err.message : String(err);
+      setNotice(zh ? `同步失败：${detail}` : `Sync failed: ${detail}`);
     } finally {
       setBusy(false);
     }
@@ -1201,7 +1216,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             setSelectedTripId(newTrip.id);
             setNotice(zh ? `已创建行程「${newTrip.title}」` : `Created trip "${newTrip.title}"`);
           }}
+          onImported={(tripId) => {
+            void load();
+            setSelectedTripId(tripId);
+          }}
           language={language}
+          disabled={disabled}
         />
       </section>
     );
@@ -1315,7 +1335,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
       {notice ? <div aria-live="polite" className="rounded-xl bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 shadow-2xs animate-in fade-in">{notice}</div> : null}
 
-      <nav className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label={zh ? '日期导航' : 'Date navigation'}>
+      <nav ref={dateNavRef} className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label={zh ? '日期导航' : 'Date navigation'}>
         {tripDates.map((date, index) => {
           const isSelected = activeDate === date;
           const dayPlacesCount = placesByDate[date]?.length || 0;
@@ -1323,6 +1343,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <button
               key={date}
               type="button"
+              data-date={date}
               onClick={() => setSelectedDate(date)}
               className={`group shrink-0 flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition shadow-2xs ${
                 isSelected
@@ -2564,7 +2585,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           setSelectedTripId(newTrip.id);
           setNotice(zh ? `已创建行程「${newTrip.title}」` : `Created trip "${newTrip.title}"`);
         }}
+        onImported={(tripId) => {
+          void load();
+          setSelectedTripId(tripId);
+        }}
         language={language}
+        disabled={disabled}
       />
 
       {selectedTrip ? (

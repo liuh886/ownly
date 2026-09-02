@@ -11,6 +11,37 @@ interface BridgeResponse<T> {
   error?: string;
 }
 
+type DebugLogEntry = {
+  timestamp: string;
+  type: 'send' | 'receive' | 'timeout' | 'error';
+  requestId: string;
+  messageType: string;
+  detail?: string;
+};
+
+let debugLogsEnabled = false;
+let debugLogBuffer: DebugLogEntry[] = [];
+const MAX_DEBUG_LOGS = 50;
+
+export function setCaptureDebugLogs(enabled: boolean): void {
+  debugLogsEnabled = enabled;
+  if (enabled) {
+    debugLogBuffer = [];
+  }
+}
+
+export function getCaptureDebugLogs(): DebugLogEntry[] {
+  return [...debugLogBuffer];
+}
+
+function addDebugLog(entry: Omit<DebugLogEntry, 'timestamp'>): void {
+  if (!debugLogsEnabled) return;
+  debugLogBuffer.push({ ...entry, timestamp: new Date().toISOString() });
+  if (debugLogBuffer.length > MAX_DEBUG_LOGS) {
+    debugLogBuffer = debugLogBuffer.slice(-MAX_DEBUG_LOGS);
+  }
+}
+
 function getTargetOrigin(): string {
   if (typeof window === 'undefined') return '*';
   return (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
@@ -33,10 +64,20 @@ function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 2500): Pr
       if (event.source !== window || !isSameOrigin) return;
       const message = event.data;
       if (!message || message.source !== RESPONSE_SOURCE || message.requestId !== requestId) return;
+      addDebugLog({
+        type: 'receive',
+        requestId,
+        messageType: message.type,
+        detail: message.error ? `error: ${message.error}` : 'ok',
+      });
       finish(message.error ? null : message.payload ?? null);
     };
-    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    const timer = window.setTimeout(() => {
+      addDebugLog({ type: 'timeout', requestId, messageType: type, detail: `timeout after ${timeoutMs}ms` });
+      finish(null);
+    }, timeoutMs);
     window.addEventListener('message', onMessage);
+    addDebugLog({ type: 'send', requestId, messageType: type });
     window.postMessage({ source: REQUEST_SOURCE, requestId, type, payload }, getTargetOrigin());
   });
 }

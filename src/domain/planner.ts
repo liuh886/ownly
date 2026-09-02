@@ -176,6 +176,7 @@ export interface ImportFailure {
   id: string;
   title: string;
   reason: string;
+  detail?: string;
 }
 
 export interface ImportReport {
