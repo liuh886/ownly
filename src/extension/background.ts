@@ -224,7 +224,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (type === 'CAPTURE_APPLY_IMPORT_REPORT') {
     const report = (message as { report?: ImportReport }).report;
-    if (!report || typeof report.received !== 'number' || !Array.isArray(report.imported) || !Array.isArray(report.failed)) {
+    if (!report || typeof report.received !== 'number' || !Array.isArray(report.created) || !Array.isArray(report.failed)) {
       sendResponse({ ok: false, error: 'invalid import report' });
       return;
     }

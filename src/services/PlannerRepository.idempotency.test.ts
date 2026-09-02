@@ -116,7 +116,7 @@ describe('Capture Re-import Idempotency', () => {
     // First import (simulates initial Capture sync)
     const report1 = await plannerRepository.importCapturedPlaces(CAPTURED_PLACES);
     expect(report1.received).toBe(3);
-    expect(report1.imported).toHaveLength(3);
+    expect(report1.created.length + report1.updated.length).toBe(3);
     expect(report1.failed).toEqual([]);
 
     const placesAfterFirst = await plannerRepository.listPlaces();
@@ -125,7 +125,7 @@ describe('Capture Re-import Idempotency', () => {
     // Second import (simulates re-sync after ACK failure)
     const report2 = await plannerRepository.importCapturedPlaces(CAPTURED_PLACES);
     expect(report2.received).toBe(3);
-    expect(report2.imported).toHaveLength(3); // still 3 imported (merged, not new)
+    expect(report2.created.length + report2.updated.length).toBe(3); // still 3 total (merged, not new)
     expect(report2.failed).toEqual([]);
 
     const placesAfterSecond = await plannerRepository.listPlaces();
@@ -170,7 +170,7 @@ describe('Capture Re-import Idempotency', () => {
 
     const report = await plannerRepository.importCapturedPlaces(mixedImport);
     expect(report.received).toBe(3);
-    expect(report.imported).toHaveLength(3);
+    expect(report.created.length + report.updated.length).toBe(3);
     expect(report.failed).toEqual([]);
 
     const places = await plannerRepository.listPlaces();

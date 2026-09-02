@@ -55,7 +55,7 @@ describe('Golden Dataset Regression — Thailand 2026', () => {
     // ── Step 2: Import Places ──
     const importReport = await plannerRepository.importCapturedPlaces(PLACES);
     expect(importReport.received).toBe(5);
-    expect(importReport.imported).toHaveLength(5);
+    expect(importReport.created).toHaveLength(5);
     expect(importReport.failed).toEqual([]);
 
     const storedPlaces = await plannerRepository.listPlaces();

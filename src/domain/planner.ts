@@ -181,7 +181,8 @@ export interface ImportFailure {
 
 export interface ImportReport {
   received: number;
-  imported: string[];
+  created: string[];
+  updated: string[];
   failed: ImportFailure[];
 }
 
@@ -209,7 +210,7 @@ export function applyCaptureImportReport(
   report: ImportReport,
   attemptedAt: string,
 ): OwnlyCaptureState {
-  const imported = new Set(report.imported);
+  const imported = new Set([...report.created, ...report.updated]);
   const failedById = new Map(report.failed.map((item) => [item.id, item] as const));
   return {
     ...state,

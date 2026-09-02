@@ -1158,11 +1158,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         }
 
         setCapturePending(report.failed.length);
+        const importedCount = report.created.length + report.updated.length;
         const parts: string[] = [];
-        if (report.imported.length > 0) {
+        if (importedCount > 0) {
           parts.push(zh
-            ? `✅ 已导入 ${report.imported.length}/${report.received} 个候选`
-            : `✅ Imported ${report.imported.length}/${report.received} candidates`);
+            ? `✅ 已导入 ${importedCount}/${report.received} 个候选`
+            : `✅ Imported ${importedCount}/${report.received} candidates`);
         }
         if (report.failed.length > 0) {
           const failSummary = report.failed

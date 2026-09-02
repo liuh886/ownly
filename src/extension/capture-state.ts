@@ -49,12 +49,12 @@ function normalizePlaces(value: unknown): OwnlyCaptureState['pendingPlaces'] {
 function normalizeImportReport(value: unknown): ImportReport | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const report = value as Partial<ImportReport>;
-  if (typeof report.received !== 'number' || !Array.isArray(report.imported) || !Array.isArray(report.failed)) return undefined;
-  const imported = report.imported.filter((id): id is string => typeof id === 'string' && id.length > 0);
+  if (typeof report.received !== 'number' || !Array.isArray(report.created) || !Array.isArray(report.failed)) return undefined;
+  const imported = [...(report.created || []), ...(report.updated || [])].filter((id): id is string => typeof id === 'string' && id.length > 0);
   const failed = report.failed.filter((item): item is ImportReport['failed'][number] => Boolean(
     item && typeof item === 'object' && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.reason === 'string'
   ));
-  return { received: report.received, imported, failed };
+  return { received: report.received, created: imported, updated: [], failed };
 }
 
 export function normalizeCaptureState(value: unknown): OwnlyCaptureState {

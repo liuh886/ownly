@@ -16,7 +16,8 @@ describe('Capture import report application', () => {
     };
     const next = applyCaptureImportReport(state, {
       received: 2,
-      imported: ['ok'],
+      created: ['ok'],
+      updated: [],
       failed: [{ id: 'bkk', title: 'Suvarnabhumi Airport', reason: 'missing_place_identity' }],
     }, '2026-09-02');
 
@@ -24,6 +25,6 @@ describe('Capture import report application', () => {
     expect(next.pendingPlaces[0]).toMatchObject({
       id: 'bkk', status: 'failed', reason: 'missing_place_identity', lastAttempt: '2026-09-02',
     });
-    expect(next.lastImportReport).toMatchObject({ received: 2, imported: ['ok'] });
+    expect(next.lastImportReport).toMatchObject({ received: 2, created: ['ok'] });
   });
 });

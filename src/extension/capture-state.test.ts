@@ -58,7 +58,8 @@ describe('mutateCaptureStateInWorker', () => {
         pendingPlaces: [{ ...asCaptureCandidate(place('failed')), status: 'failed', reason: 'missing_place_identity', lastAttempt: '2026-09-02' }],
         lastImportReport: {
           received: 1,
-          imported: [],
+          created: [],
+          updated: [],
           failed: [{ id: 'failed', title: 'Place failed', reason: 'missing_place_identity' }],
         },
       },
@@ -69,7 +70,8 @@ describe('mutateCaptureStateInWorker', () => {
     expect(restored.pendingPlaces[0]).toMatchObject({ id: 'failed', status: 'failed', reason: 'missing_place_identity', lastAttempt: '2026-09-02' });
     expect(restored.lastImportReport).toEqual({
       received: 1,
-      imported: [],
+      created: [],
+      updated: [],
       failed: [{ id: 'failed', title: 'Place failed', reason: 'missing_place_identity' }],
     });
   });

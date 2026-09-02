@@ -645,7 +645,8 @@ describe('Ownly Planner domain', () => {
     };
     const next = applyCaptureImportReport(state, {
       received: 1,
-      imported: ['drop'],
+      created: ['drop'],
+      updated: [],
       failed: [],
     }, '2026-09-02');
     expect(next.pendingPlaces.map((p) => p.id)).toEqual(['keep']);

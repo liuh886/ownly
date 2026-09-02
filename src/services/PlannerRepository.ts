@@ -189,7 +189,7 @@ export class PlannerRepository {
   }
 
   private async importResearchPlaces(places: PlannerTripPlace[]): Promise<ImportReport> {
-    const report: ImportReport = { received: places.length, imported: [], failed: [] };
+    const report: ImportReport = { received: places.length, created: [], updated: [], failed: [] };
     if (places.length === 0) return report;
     await this.initialize();
     const existingTrips = new Set((await this.listTrips()).map((t) => t.id));
@@ -242,10 +242,16 @@ export class PlannerRepository {
       }
 
       try {
-        const persisted = existingPlace ? mergeCapturedPlaceResearch(existingPlace, incoming) : incoming;
-        await this.upsert(persisted);
-        indexPlace(persisted);
-        report.imported.push(rawPlace.id);
+        if (existingPlace) {
+          const persisted = mergeCapturedPlaceResearch(existingPlace, incoming);
+          await this.upsert(persisted);
+          indexPlace(persisted);
+          report.updated.push(rawPlace.id);
+        } else {
+          await this.upsert(incoming);
+          indexPlace(incoming);
+          report.created.push(rawPlace.id);
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, error);
@@ -262,7 +268,7 @@ export class PlannerRepository {
     }
 
     if (report.failed.length > 0) {
-      console.warn(`[PlannerRepository] Import report: ${report.imported.length}/${report.received} imported, ${report.failed.length} failed`, report.failed);
+      console.warn(`[PlannerRepository] Import report: ${report.created.length + report.updated.length}/${report.received} imported (${report.created.length} created, ${report.updated.length} updated), ${report.failed.length} failed`, report.failed);
     }
 
     return report;
@@ -333,7 +339,7 @@ export class PlannerRepository {
 
   async importBundle(bundle: { trip: PlannerTrip; places: PlannerTripPlace[]; visits: PlannerTripVisit[]; legs: PlannerTripLeg[] }): Promise<ImportReport> {
     await this.initialize();
-    const report: ImportReport = { received: bundle.places.length, imported: [], failed: [] };
+    const report: ImportReport = { received: bundle.places.length, created: [], updated: [], failed: [] };
 
     try {
       await this.upsertTrip(bundle.trip);
@@ -346,7 +352,7 @@ export class PlannerRepository {
     for (const place of bundle.places) {
       try {
         await this.upsertPlace(place);
-        report.imported.push(place.id);
+        report.created.push(place.id);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         report.failed.push({ id: place.id, title: place.title || '(unknown)', reason: 'write_error', detail: msg });
@@ -372,7 +378,7 @@ export class PlannerRepository {
     }
 
     if (report.failed.length > 0) {
-      console.warn(`[PlannerRepository] Bundle import: ${report.imported.length}/${report.received} imported, ${report.failed.length} failed`, report.failed);
+      console.warn(`[PlannerRepository] Bundle import: ${report.created.length}/${report.received} created, ${report.failed.length} failed`, report.failed);
     }
 
     return report;

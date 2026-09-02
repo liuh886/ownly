@@ -151,7 +151,7 @@ export function updateDebugLogViewer() {
     ? [
         'Capture Import Debug',
         `Received: ${report.received}`,
-        `Imported: ${report.imported.length}`,
+        `Imported: ${report.created.length + report.updated.length} (${report.created.length} new, ${report.updated.length} updated)`,
         `Failed: ${report.failed.length}`,
         ...(report.failed.length > 0
           ? ['Failed Items:', ...report.failed.flatMap((item) => [`• ${item.title}`, `  Reason: ${item.reason}`]), 'Retry available']

@@ -177,7 +177,7 @@ describe('Thailand 2026 Golden Path E2E Journey', () => {
 
     const imported = await plannerRepository.importCapturedPlaces(places);
     expect(imported.received).toBe(5);
-    expect(imported.imported).toHaveLength(5);
+    expect(imported.created).toHaveLength(5);
     expect(imported.failed).toEqual([]);
     expect(await plannerRepository.listPlaces()).toHaveLength(5);
 

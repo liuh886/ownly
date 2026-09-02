@@ -71,15 +71,16 @@ export function ImportCandidatesModal({
     try {
       await plannerRepository.initialize();
       const report = await plannerRepository.importExternalCandidates(parsedPlaces);
-      onImportSuccess(report.imported.length);
+      const importedCount = report.created.length + report.updated.length;
+      onImportSuccess(importedCount);
       if (report.failed.length > 0) {
-        const imported = new Set(report.imported);
-        const remaining = parsedPlaces.filter((place) => !imported.has(place.id));
+        const importedIds = new Set([...report.created, ...report.updated]);
+        const remaining = parsedPlaces.filter((place) => !importedIds.has(place.id));
         setParsedPlaces(remaining);
         const reasons = report.failed.map((item) => `${item.title}: ${item.reason}`).join(zh ? '；' : '; ');
         setErrorMsg(zh
-          ? `已写入 ${report.imported.length} 个，拒绝 ${report.failed.length} 个：${reasons}`
-          : `Imported ${report.imported.length}; rejected ${report.failed.length}: ${reasons}`);
+          ? `已写入 ${importedCount} 个，拒绝 ${report.failed.length} 个：${reasons}`
+          : `Imported ${importedCount}; rejected ${report.failed.length}: ${reasons}`);
         return;
       }
       setInputText('');

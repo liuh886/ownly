@@ -86,12 +86,9 @@ describe('Capture import release regression', () => {
 
   it('imports all 48 saved places with zero loss', async () => {
     const report = await repo.importCapturedPlaces(releaseFixture());
-    expect(report).toEqual({
-      received: 48,
-      imported: expect.any(Array),
-      failed: [],
-    });
-    expect(report.imported).toHaveLength(48);
+    expect(report.received).toBe(48);
+    expect(report.created.length + report.updated.length).toBe(48);
+    expect(report.failed).toEqual([]);
     expect(await repo.listPlaces()).toHaveLength(48);
   });
 
@@ -105,14 +102,14 @@ describe('Capture import release regression', () => {
     const report = await repo.importCapturedPlaces(places);
 
     expect(report.received).toBe(48);
-    expect(report.imported).toHaveLength(45);
+    expect(report.created.length + report.updated.length).toBe(45);
     expect(report.failed).toHaveLength(3);
     expect(report.failed).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'invalid-payload', title: 'Invalid payload', reason: 'invalid_payload' }),
+      expect.objectContaining({ id: 'invalid-payload', title: 'Invalid payload', reason: 'missing_trip_id' }),
       expect.objectContaining({ id: 'wrong-trip', title: 'Same-name location', reason: 'unknown_trip' }),
-      expect.objectContaining({ id: 'fail-write', title: 'Write failure cafe', reason: expect.stringContaining('write_failed') }),
+      expect.objectContaining({ id: 'fail-write', title: 'Write failure cafe', reason: 'write_error' }),
     ]));
-    expect(report.imported.length + report.failed.length).toBe(report.received);
+    expect(report.created.length + report.updated.length + report.failed.length).toBe(report.received);
     expect(await repo.listPlaces()).toHaveLength(45);
   });
 });
