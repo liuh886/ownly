@@ -1,0 +1,147 @@
+from pathlib import Path
+
+# The first patch script intentionally generates TypeScript source. Normalize escaped
+# newlines here so the generated debug viewer uses string escapes, not literal line breaks.
+p = Path('src/extension/sidepanel/ui.ts')
+text = p.read_text()
+text = text.replace("].join('\n')", "].join('\\n')")
+text = text.replace(".join('\n\n')", ".join('\\n\\n')")
+p.write_text(text)
+
+# Capture metadata is inbox-only and must never leak into Planner Markdown.
+p = Path('src/services/PlannerRepository.ts')
+text = p.read_text()
+old = """      const { status: _status, reason: _reason, lastAttempt: _lastAttempt, ...plannerFields } = rawPlace;
+      const incoming: PlannerTripPlace = {
+        ...plannerFields,"""
+new = """      const plannerFields: PlannerTripPlace = { ...rawPlace };
+      delete (plannerFields as unknown as Record<string, unknown>).status;
+      delete (plannerFields as unknown as Record<string, unknown>).reason;
+      delete (plannerFields as unknown as Record<string, unknown>).lastAttempt;
+      const incoming: PlannerTripPlace = {
+        ...plannerFields,"""
+if old not in text:
+    raise SystemExit('PlannerRepository capture metadata pattern not found')
+p.write_text(text.replace(old, new, 1))
+
+# Release fixture covers both the lossless 48 -> 48 path and an injected 48 -> 45
+# failure path that must return three explicit rejection reasons.
+Path('src/services/PlannerRepository.capture-import-report.test.ts').write_text(r'''import { beforeEach, describe, expect, it } from 'vitest';
+import type { PlannerPlaceKind, PlannerTrip, PlannerTripPlace } from '@/domain/planner';
+import { PlannerRepository, type PlannerFileStore } from './PlannerRepository';
+
+class MemoryStore implements PlannerFileStore {
+  private files = new Map<string, string>();
+  failId: string | null = null;
+
+  async getDataFolder() { return 'Ownly'; }
+  async readMarkdownFiles(directory: string) {
+    const prefix = `${directory}/`;
+    return [...this.files.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, content]) => ({ fileName: key.slice(prefix.length), content }));
+  }
+  async writeMarkdownFile(directory: string, fileName: string, content: string) {
+    if (this.failId && content.includes(`id: ${this.failId}`)) throw new Error('simulated_disk_error');
+    this.files.set(`${directory}/${fileName}`, content);
+  }
+  async deleteMarkdownFile(directory: string, fileName: string) { this.files.delete(`${directory}/${fileName}`); }
+}
+
+function candidate(id: string, title: string, kind: PlannerPlaceKind, tripId = 'trip-release'): PlannerTripPlace {
+  return {
+    schema_version: '0.1',
+    type: 'trip_place',
+    id,
+    trip_id: tripId,
+    title,
+    source_provider: 'google_maps',
+    source_url: `https://www.google.com/maps/place/?q=place_id:${id}`,
+    source_place_id: id,
+    kind,
+    tags: [],
+    signals: [],
+    risks: [],
+    reservation_status: 'none',
+    state: 'candidate',
+    created_at: '2026-09-02T00:00:00.000Z',
+  };
+}
+
+function releaseFixture(): PlannerTripPlace[] {
+  const places: PlannerTripPlace[] = [
+    candidate('bkk-airport', 'Suvarnabhumi Airport', 'transit'),
+    candidate('dmk-airport', 'Don Mueang International Airport', 'transit'),
+    candidate('hotel-1', 'Eastin Grand Hotel Phayathai', 'stay'),
+    candidate('hotel-2', 'U Nimman Chiang Mai', 'stay'),
+    candidate('restaurant-1', 'Thipsamai', 'food'),
+    candidate('restaurant-2', 'Khao Soi Mae Sai', 'food'),
+    candidate('cafe-1', 'Factory Coffee', 'cafe'),
+    candidate('cafe-2', 'Graph Cafe', 'cafe'),
+    candidate('attraction-1', 'Wat Arun', 'attraction'),
+    candidate('attraction-2', 'Wat Phra Singh', 'attraction'),
+    candidate('same-name-1', 'Central', 'shopping'),
+    candidate('same-name-2', 'Central', 'shopping'),
+  ];
+  while (places.length < 48) {
+    const n = places.length + 1;
+    const kinds: PlannerPlaceKind[] = ['food', 'cafe', 'stay', 'attraction', 'shopping', 'experience'];
+    places.push(candidate(`fixture-${n}`, `Saved Place ${n}`, kinds[n % kinds.length]));
+  }
+  return places;
+}
+
+describe('Capture import release regression', () => {
+  let store: MemoryStore;
+  let repo: PlannerRepository;
+
+  beforeEach(async () => {
+    store = new MemoryStore();
+    repo = new PlannerRepository(store);
+    const trip: PlannerTrip = {
+      schema_version: '0.1',
+      type: 'trip',
+      id: 'trip-release',
+      title: 'Thailand release fixture',
+      status: 'planning',
+      start_date: '2026-10-05',
+      end_date: '2026-10-13',
+      destinations: ['Bangkok', 'Chiang Mai'],
+      created_at: '2026-09-02T00:00:00.000Z',
+    };
+    await repo.upsertTrip(trip);
+  });
+
+  it('imports all 48 saved places with zero loss', async () => {
+    const report = await repo.importCapturedPlaces(releaseFixture());
+    expect(report).toEqual({
+      received: 48,
+      imported: expect.any(Array),
+      failed: [],
+    });
+    expect(report.imported).toHaveLength(48);
+    expect(await repo.listPlaces()).toHaveLength(48);
+  });
+
+  it('turns any 48 -> 45 outcome into an explicit 3-item rejection report', async () => {
+    const places = releaseFixture();
+    places[45] = { ...candidate('invalid-payload', 'Invalid payload', 'other'), trip_id: '' };
+    places[46] = candidate('wrong-trip', 'Same-name location', 'attraction', 'missing-trip');
+    places[47] = candidate('fail-write', 'Write failure cafe', 'cafe');
+    store.failId = 'fail-write';
+
+    const report = await repo.importCapturedPlaces(places);
+
+    expect(report.received).toBe(48);
+    expect(report.imported).toHaveLength(45);
+    expect(report.failed).toHaveLength(3);
+    expect(report.failed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'invalid-payload', title: 'Invalid payload', reason: 'invalid_payload' }),
+      expect.objectContaining({ id: 'wrong-trip', title: 'Same-name location', reason: 'unknown_trip' }),
+      expect.objectContaining({ id: 'fail-write', title: 'Write failure cafe', reason: expect.stringContaining('write_failed') }),
+    ]));
+    expect(report.imported.length + report.failed.length).toBe(report.received);
+    expect(await repo.listPlaces()).toHaveLength(45);
+  });
+});
+''')
