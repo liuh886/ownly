@@ -1,0 +1,318 @@
+name: One-shot Capture import report refactor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-capture-import-report.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Apply refactor
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'pattern not found in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Domain: explicit capture import lifecycle and report.
+          replace('src/domain/planner.ts',
+          "export interface CaptureContext {\n  tripId: string;\n  title: string;\n  currency?: string;\n  tags?: string[];\n}\n\nexport interface OwnlyCaptureState {\n  version: 2;\n  activeContext: CaptureContext | null;\n  pendingPlaces: PlannerTripPlace[];\n}\n\nexport const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {\n  version: 2,\n  activeContext: null,\n  pendingPlaces: [],\n};\n\nexport function acknowledgeCapturedPlaces(state: OwnlyCaptureState, placeIds: string[]): OwnlyCaptureState {\n  const ids = new Set(placeIds);\n  return { ...state, pendingPlaces: state.pendingPlaces.filter((place) => !ids.has(place.id)) };\n}\n\nexport function asCaptureCandidate(place: PlannerTripPlace): PlannerTripPlace {\n  return {\n    ...place,\n    reservation_status: place.reservation_status ?? 'none',\n    state: 'candidate',\n  };\n}\n",
+          "export interface CaptureContext {\n  tripId: string;\n  title: string;\n  currency?: string;\n  tags?: string[];\n}\n\nexport type ImportStatus = 'pending' | 'imported' | 'failed';\n\nexport interface ImportFailure {\n  id: string;\n  title: string;\n  reason: string;\n}\n\nexport interface ImportReport {\n  received: number;\n  imported: string[];\n  failed: ImportFailure[];\n}\n\nexport type CaptureCandidate = PlannerTripPlace & {\n  status: ImportStatus;\n  reason?: string;\n  lastAttempt?: string;\n};\n\nexport interface OwnlyCaptureState {\n  version: 2;\n  activeContext: CaptureContext | null;\n  pendingPlaces: CaptureCandidate[];\n  lastImportReport?: ImportReport;\n}\n\nexport const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {\n  version: 2,\n  activeContext: null,\n  pendingPlaces: [],\n};\n\nexport function applyCaptureImportReport(\n  state: OwnlyCaptureState,\n  report: ImportReport,\n  attemptedAt: string,\n): OwnlyCaptureState {\n  const imported = new Set(report.imported);\n  const failedById = new Map(report.failed.map((item) => [item.id, item] as const));\n  return {\n    ...state,\n    pendingPlaces: state.pendingPlaces\n      .filter((place) => !imported.has(place.id))\n      .map((place) => {\n        const failed = failedById.get(place.id);\n        if (!failed) return place;\n        return { ...place, status: 'failed', reason: failed.reason, lastAttempt: attemptedAt };\n      }),\n    lastImportReport: report,\n  };\n}\n\nexport function asCaptureCandidate(place: PlannerTripPlace | CaptureCandidate): CaptureCandidate {\n  const status = place.status === 'failed' || place.status === 'imported' ? place.status : 'pending';\n  return {\n    ...place,\n    status,\n    reason: status === 'failed' ? place.reason : undefined,\n    lastAttempt: status === 'failed' ? place.lastAttempt : undefined,\n    reservation_status: place.reservation_status ?? 'none',\n    state: 'candidate',\n  };\n}\n")
+
+          replace('src/domain/planner.ts',
+          "  return {\n    version: 2,\n    activeContext: fresh.activeContext,\n    pendingPlaces: [...localPlaces, ...backgroundOnly],\n  };\n}",
+          "  return {\n    version: 2,\n    activeContext: fresh.activeContext,\n    pendingPlaces: [...localPlaces, ...backgroundOnly],\n    lastImportReport: local.lastImportReport ?? fresh.lastImportReport,\n  };\n}")
+
+          # Capture state: persist full report and failed statuses.
+          replace('src/extension/capture-state.ts',
+          "  type CaptureContext,\n  type OwnlyCaptureState,\n  type PlannerTripPlace,\n} from '../domain/planner';",
+          "  type CaptureContext,\n  type ImportReport,\n  type OwnlyCaptureState,\n  type PlannerTripPlace,\n} from '../domain/planner';")
+
+          replace('src/extension/capture-state.ts',
+          "function normalizePlaces(value: unknown): PlannerTripPlace[] {",
+          "function normalizePlaces(value: unknown): OwnlyCaptureState['pendingPlaces'] {")
+
+          replace('src/extension/capture-state.ts',
+          "export function normalizeCaptureState(value: unknown): OwnlyCaptureState {\n  if (!value || typeof value !== 'object') return { ...EMPTY_CAPTURE_STATE };\n  const state = value as Partial<OwnlyCaptureState> & { version?: unknown };\n  if (state.version !== 2) return { ...EMPTY_CAPTURE_STATE };\n  return {\n    version: 2,\n    activeContext: normalizeContext(state.activeContext),\n    pendingPlaces: normalizePlaces(state.pendingPlaces),\n  };\n}",
+          "function normalizeImportReport(value: unknown): ImportReport | undefined {\n  if (!value || typeof value !== 'object') return undefined;\n  const report = value as Partial<ImportReport>;\n  if (typeof report.received !== 'number' || !Array.isArray(report.imported) || !Array.isArray(report.failed)) return undefined;\n  const imported = report.imported.filter((id): id is string => typeof id === 'string' && id.length > 0);\n  const failed = report.failed.filter((item): item is ImportReport['failed'][number] => Boolean(\n    item && typeof item === 'object' && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.reason === 'string'\n  ));\n  return { received: report.received, imported, failed };\n}\n\nexport function normalizeCaptureState(value: unknown): OwnlyCaptureState {\n  if (!value || typeof value !== 'object') return { ...EMPTY_CAPTURE_STATE };\n  const state = value as Partial<OwnlyCaptureState> & { version?: unknown };\n  if (state.version !== 2) return { ...EMPTY_CAPTURE_STATE };\n  return {\n    version: 2,\n    activeContext: normalizeContext(state.activeContext),\n    pendingPlaces: normalizePlaces(state.pendingPlaces),\n    lastImportReport: normalizeImportReport(state.lastImportReport),\n  };\n}")
+
+          replace('src/extension/capture-state.ts',
+          "export async function ackPlacesViaWorker(placeIds: string[]): Promise<{ ok: true }> {\n  await sendWorker<void>({ type: 'CAPTURE_ACK_PLACES', placeIds });\n  return { ok: true };\n}",
+          "export async function applyImportReportViaWorker(report: ImportReport): Promise<{ ok: true }> {\n  await sendWorker<void>({ type: 'CAPTURE_APPLY_IMPORT_REPORT', report });\n  return { ok: true };\n}")
+
+          # Background worker is the single writer for applying import results.
+          replace('src/extension/background.ts',
+          "  ensurePlaceKindTag,\n  findExistingTripPlace,\n  inferPlaceKind,\n  mergeCaptureState,\n  type CaptureContext,\n  type PlannerTripPlace,\n} from '../domain/planner';",
+          "  applyCaptureImportReport,\n  asCaptureCandidate,\n  ensurePlaceKindTag,\n  findExistingTripPlace,\n  inferPlaceKind,\n  mergeCaptureState,\n  type CaptureContext,\n  type ImportReport,\n  type PlannerTripPlace,\n} from '../domain/planner';")
+
+          replace('src/extension/background.ts',
+          "      const candidate: PlannerTripPlace = {",
+          "      const candidate = asCaptureCandidate({")
+          replace('src/extension/background.ts',
+          "        updated_at: now,\n      };\n\n      return {\n        state: {",
+          "        updated_at: now,\n      } satisfies PlannerTripPlace);\n\n      return {\n        state: {")
+
+          replace('src/extension/background.ts',
+          "      state: { version: 2, activeContext: current.activeContext, pendingPlaces: incoming.pendingPlaces },",
+          "      state: { version: 2, activeContext: current.activeContext, pendingPlaces: incoming.pendingPlaces, lastImportReport: incoming.lastImportReport },")
+
+          replace('src/extension/background.ts',
+          "  if (type === 'CAPTURE_ACK_PLACES') {\n    const placeIds = (message as { placeIds?: unknown }).placeIds;\n    const ids = Array.isArray(placeIds) ? new Set(placeIds.filter((id): id is string => typeof id === 'string')) : new Set<string>();\n    void mutateCaptureStateInWorker((current) => ({\n      state: { ...current, pendingPlaces: current.pendingPlaces.filter((place) => !ids.has(place.id)) },\n      result: undefined,\n    }))\n      .then(() => sendResponse({ ok: true }))\n      .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));\n    return true;\n  }",
+          "  if (type === 'CAPTURE_APPLY_IMPORT_REPORT') {\n    const report = (message as { report?: ImportReport }).report;\n    if (!report || typeof report.received !== 'number' || !Array.isArray(report.imported) || !Array.isArray(report.failed)) {\n      sendResponse({ ok: false, error: 'invalid import report' });\n      return;\n    }\n    const attemptedAt = new Date().toISOString().slice(0, 10);\n    void mutateCaptureStateInWorker((current) => ({\n      state: applyCaptureImportReport(current, report, attemptedAt),\n      result: undefined,\n    }))\n      .then(() => sendResponse({ ok: true }))\n      .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));\n    return true;\n  }")
+
+          # Extension page bridge sends the full report, never a success-id-only ACK.
+          replace('src/extension/ownly-bridge.ts',
+          "import type { CaptureContext } from '../domain/planner';\nimport { ackPlacesViaWorker, readCaptureState, setCaptureContextViaWorker } from './capture-state';",
+          "import type { CaptureContext, ImportReport } from '../domain/planner';\nimport { applyImportReportViaWorker, readCaptureState, setCaptureContextViaWorker } from './capture-state';")
+          replace('src/extension/ownly-bridge.ts',
+          "      if (message.type === 'ACK_CAPTURED_PLACES') {\n        const payload = message.payload as { placeIds?: string[] } | undefined;\n        const ids = Array.isArray(payload?.placeIds) ? payload.placeIds : [];\n        await ackPlacesViaWorker(ids);\n        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'ACK_CAPTURED_PLACES_RESULT', payload: { ok: true } }, getTargetOrigin());\n        return;\n      }",
+          "      if (message.type === 'APPLY_CAPTURE_IMPORT_REPORT') {\n        const payload = message.payload as { report?: ImportReport } | undefined;\n        if (!payload?.report) throw new Error('Capture import report is missing');\n        await applyImportReportViaWorker(payload.report);\n        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'APPLY_CAPTURE_IMPORT_REPORT_RESULT', payload: { ok: true } }, getTargetOrigin());\n        return;\n      }")
+
+          # Planner-side bridge exposes only the report operation.
+          replace('src/components/planner/capture-bridge.ts',
+          "import type { CaptureContext, OwnlyCaptureState } from '@/domain/planner';",
+          "import type { CaptureContext, ImportReport, OwnlyCaptureState } from '@/domain/planner';")
+          replace('src/components/planner/capture-bridge.ts',
+          "export async function ackCapturedPlaces(placeIds: string[]): Promise<boolean> {\n  const result = await requestBridge<{ ok: true }>('ACK_CAPTURED_PLACES', { placeIds });\n  return result?.ok === true;\n}",
+          "export async function applyCaptureImportReport(report: ImportReport): Promise<boolean> {\n  const result = await requestBridge<{ ok: true }>('APPLY_CAPTURE_IMPORT_REPORT', { report });\n  return result?.ok === true;\n}")
+
+          # Repository returns complete, reasoned import report and strips Capture-only metadata.
+          replace('src/services/PlannerRepository.ts',
+          "  plannerTripLegFileName,\n  type PlannerTrip,",
+          "  plannerTripLegFileName,\n  type ImportReport,\n  type PlannerTrip,")
+
+          start = Path('src/services/PlannerRepository.ts').read_text()
+          old_start = "  private async importResearchPlaces(places: PlannerTripPlace[]): Promise<string[]> {"
+          old_end = "\n  /**\n   * Scans all places in a trip and auto-merges only proven strong identities."
+          i = start.index(old_start)
+          j = start.index(old_end, i)
+          new_method = '''  private async importResearchPlaces(places: PlannerTripPlace[]): Promise<ImportReport> {
+    const report: ImportReport = { received: places.length, imported: [], failed: [] };
+    if (places.length === 0) return report;
+    await this.initialize();
+    const existingTrips = new Set((await this.listTrips()).map((t) => t.id));
+    const existing = await this.listPlaces();
+    const byId = new Map(existing.map((place) => [place.id, place] as const));
+    const byStrongIdentity = new Map<string, PlannerTripPlace>();
+
+    const indexPlace = (place: PlannerTripPlace) => {
+      byId.set(place.id, place);
+      for (const key of getStrongPlaceIdentityKeys(place)) {
+        byStrongIdentity.set(`${place.trip_id}::${key}`, place);
+      }
+    };
+    existing.forEach(indexPlace);
+    const touchedTripIds = new Set<string>();
+
+    for (const rawPlace of places) {
+      const title = rawPlace.title?.trim() || '(untitled place)';
+      if (!rawPlace.id || !rawPlace.trip_id) {
+        report.failed.push({ id: rawPlace.id || 'unknown', title, reason: 'invalid_payload' });
+        continue;
+      }
+      if (!existingTrips.has(rawPlace.trip_id)) {
+        report.failed.push({ id: rawPlace.id, title, reason: 'unknown_trip' });
+        continue;
+      }
+      touchedTripIds.add(rawPlace.trip_id);
+      const { status: _status, reason: _reason, lastAttempt: _lastAttempt, ...plannerFields } = rawPlace;
+      const incoming: PlannerTripPlace = {
+        ...plannerFields,
+        tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
+        reservation_status: rawPlace.reservation_status ?? 'none',
+        state: 'candidate',
+      };
+      let existingPlace = byId.get(incoming.id);
+      if (!existingPlace) {
+        for (const key of getStrongPlaceIdentityKeys(incoming)) {
+          const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
+          if (match) {
+            existingPlace = match;
+            break;
+          }
+        }
+      }
+
+      try {
+        const persisted = existingPlace ? mergeCapturedPlaceResearch(existingPlace, incoming) : incoming;
+        await this.upsert(persisted);
+        indexPlace(persisted);
+        report.imported.push(rawPlace.id);
+      } catch (error) {
+        const reason = error instanceof Error && error.message ? `write_failed:${error.message}` : 'write_failed';
+        report.failed.push({ id: rawPlace.id, title, reason });
+        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${title}):`, error);
+      }
+    }
+
+    for (const tripId of touchedTripIds) {
+      try {
+        await this.deduplicateTripPlaces(tripId);
+      } catch (err) {
+        console.warn(`[PlannerRepository] Auto-deduplication for trip ${tripId} encountered warning:`, err);
+      }
+    }
+
+    return report;
+  }
+'''
+          Path('src/services/PlannerRepository.ts').write_text(start[:i] + new_method + start[j:])
+          replace('src/services/PlannerRepository.ts',
+          "  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<string[]> { return this.importResearchPlaces(places); }\n  async importExternalCandidates(places: PlannerTripPlace[]): Promise<string[]> { return this.importResearchPlaces(places); }",
+          "  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }\n  async importExternalCandidates(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }")
+
+          # Planner sync consumes the report and applies it atomically to Capture.
+          replace('src/components/planner/PlannerHome.tsx',
+          "import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';",
+          "import { applyCaptureImportReport, pullCaptureState, setCaptureContext } from './capture-bridge';")
+          replace('src/components/planner/PlannerHome.tsx',
+          "        const importedIds = await plannerRepository.importCapturedPlaces(state.pendingPlaces);\n        if (importedIds.length > 0) {\n          const acknowledged = await ackCapturedPlaces(importedIds);\n          if (!acknowledged) throw new Error('Capture ACK failed');\n        }\n        setCapturePending(state.pendingPlaces.length - importedIds.length);\n        setNotice(zh\n          ? `已同步 ${importedIds.length} 个研究候选。`\n          : `Synced ${importedIds.length} research candidates.`);",
+          "        const report = await plannerRepository.importCapturedPlaces(state.pendingPlaces);\n        const applied = await applyCaptureImportReport(report);\n        if (!applied) throw new Error('Capture import report apply failed');\n        setCapturePending(report.failed.length);\n        setNotice(zh\n          ? `收到 ${report.received} 个候选；已导入 ${report.imported.length}；失败 ${report.failed.length}${report.failed.length ? `。Rejected: ${report.failed.length} · ${report.failed.map((item) => `${item.title}: ${item.reason}`).join('；')}` : ''}`\n          : `Received ${report.received}; imported ${report.imported.length}; failed ${report.failed.length}${report.failed.length ? `. Rejected: ${report.failed.length} · ${report.failed.map((item) => `${item.title}: ${item.reason}`).join('; ')}` : ''}`);")
+
+          # Capture diagnostics prepend a durable Import Debug report.
+          replace('src/extension/sidepanel/ui.ts',
+          "  const logs = logger.getAllFormattedText();\n  viewer.textContent = logs || (store.lang === 'zh' ? '[暂无调试日志]' : '[No debug logs yet]');",
+          "  const logs = logger.getAllFormattedText();\n  const report = store.state.lastImportReport;\n  const importDebug = report\n    ? [\n        'Capture Import Debug',\n        `Received: ${report.received}`,\n        `Imported: ${report.imported.length}`,\n        `Failed: ${report.failed.length}`,\n        ...(report.failed.length > 0\n          ? ['Failed Items:', ...report.failed.flatMap((item) => [`• ${item.title}`, `  Reason: ${item.reason}`]), 'Retry available']\n          : []),\n      ].join('\\n')\n    : '';\n  viewer.textContent = [importDebug, logs].filter(Boolean).join('\\n\\n') || (store.lang === 'zh' ? '[暂无调试日志]' : '[No debug logs yet]');")
+
+          # Existing tests now assert the report contract.
+          for file in ['src/services/PlannerRepository.schedule.test.ts', 'src/services/PlannerRepository.thailand-golden-path.test.ts']:
+              p = Path(file)
+              text = p.read_text()
+              text = text.replace("expect(imported).toContain('p-thip-new');", "expect(imported.imported).toContain('p-thip-new');\n    expect(imported.failed).toEqual([]);")
+              text = text.replace("expect(imported).toHaveLength(5);", "expect(imported.received).toBe(5);\n    expect(imported.imported).toHaveLength(5);\n    expect(imported.failed).toEqual([]);")
+              p.write_text(text)
+
+          # Release regression: 48 received must never become a silent 45.
+          Path('src/services/PlannerRepository.capture-import-report.test.ts').write_text(r'''import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlannerTrip, PlannerTripPlace } from '@/domain/planner';
+import { PlannerRepository, type PlannerFileStore } from './PlannerRepository';
+
+class MemoryStore implements PlannerFileStore {
+  private files = new Map<string, string>();
+  async getDataFolder() { return 'Ownly'; }
+  async readMarkdownFiles(directory: string) {
+    const prefix = `${directory}/`;
+    return [...this.files.entries()].filter(([key]) => key.startsWith(prefix)).map(([key, content]) => ({ fileName: key.slice(prefix.length), content }));
+  }
+  async writeMarkdownFile(directory: string, fileName: string, content: string) {
+    if (fileName.includes('fail-write')) throw new Error('simulated_disk_error');
+    this.files.set(`${directory}/${fileName}`, content);
+  }
+  async deleteMarkdownFile(directory: string, fileName: string) { this.files.delete(`${directory}/${fileName}`); }
+}
+
+function candidate(id: string, title: string, tripId = 'trip-release'): PlannerTripPlace {
+  return {
+    schema_version: '0.1', type: 'trip_place', id, trip_id: tripId, title,
+    source_provider: 'google_maps', source_url: `https://www.google.com/maps/place/?q=place_id:${id}`,
+    source_place_id: id, kind: title.includes('Airport') ? 'transit' : 'attraction',
+    tags: [], signals: [], risks: [], reservation_status: 'none', state: 'candidate', created_at: '2026-09-02T00:00:00.000Z',
+  };
+}
+
+describe('Capture import release regression', () => {
+  let repo: PlannerRepository;
+  beforeEach(async () => {
+    repo = new PlannerRepository(new MemoryStore());
+    const trip: PlannerTrip = {
+      schema_version: '0.1', type: 'trip', id: 'trip-release', title: 'Thailand release fixture', status: 'planning',
+      start_date: '2026-10-05', end_date: '2026-10-13', destinations: ['Bangkok', 'Chiang Mai'], created_at: '2026-09-02T00:00:00.000Z',
+    };
+    await repo.upsertTrip(trip);
+  });
+
+  it('reports every rejected candidate instead of silently dropping 48 -> 45', async () => {
+    const places = Array.from({ length: 48 }, (_, i) => candidate(`place-${i + 1}`, `Place ${i + 1}`));
+    places[0] = candidate('bkk-airport', 'Suvarnabhumi Airport');
+    places[1] = candidate('dmk-airport', 'Don Mueang Airport');
+    places[45] = { ...candidate('invalid-payload', 'Invalid payload'), trip_id: '' };
+    places[46] = candidate('wrong-trip', 'Same-name location', 'missing-trip');
+    places[47] = candidate('fail-write', 'Write failure cafe');
+
+    const report = await repo.importCapturedPlaces(places);
+
+    expect(report.received).toBe(48);
+    expect(report.imported).toHaveLength(45);
+    expect(report.failed).toHaveLength(3);
+    expect(report.failed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'invalid-payload', reason: 'invalid_payload' }),
+      expect.objectContaining({ id: 'wrong-trip', reason: 'unknown_trip' }),
+      expect.objectContaining({ id: 'fail-write', reason: expect.stringContaining('write_failed') }),
+    ]));
+    expect(report.imported.length + report.failed.length).toBe(report.received);
+    expect(await repo.listPlaces()).toHaveLength(45);
+  });
+});
+''')
+
+          # Capture state regression: imported removed, failed retained with diagnostics.
+          Path('src/extension/capture-import-report.test.ts').write_text(r'''import { describe, expect, it } from 'vitest';
+import { applyCaptureImportReport, asCaptureCandidate, type OwnlyCaptureState, type PlannerTripPlace } from '../domain/planner';
+
+const place = (id: string, title = id): PlannerTripPlace => ({
+  schema_version: '0.1', type: 'trip_place', id, trip_id: 'trip-1', title,
+  source_provider: 'google_maps', source_url: `https://maps.google.com/?cid=${id}`, kind: 'transit',
+  tags: [], signals: [], risks: [], reservation_status: 'none', state: 'candidate', created_at: '2026-09-02T00:00:00.000Z',
+});
+
+describe('Capture import report application', () => {
+  it('keeps failed candidates retryable and removes only imported candidates', () => {
+    const state: OwnlyCaptureState = {
+      version: 2,
+      activeContext: { tripId: 'trip-1', title: 'Thailand' },
+      pendingPlaces: [asCaptureCandidate(place('ok')), asCaptureCandidate(place('bkk', 'Suvarnabhumi Airport'))],
+    };
+    const next = applyCaptureImportReport(state, {
+      received: 2,
+      imported: ['ok'],
+      failed: [{ id: 'bkk', title: 'Suvarnabhumi Airport', reason: 'missing_place_identity' }],
+    }, '2026-09-02');
+
+    expect(next.pendingPlaces).toHaveLength(1);
+    expect(next.pendingPlaces[0]).toMatchObject({
+      id: 'bkk', status: 'failed', reason: 'missing_place_identity', lastAttempt: '2026-09-02',
+    });
+    expect(next.lastImportReport).toMatchObject({ received: 2, imported: ['ok'] });
+  });
+});
+''')
+
+          # Sync boundary docs reflect the single authoritative report path.
+          replace('docs/CAPTURE_SYNC_BOUNDARY.md',
+          "5. Planner ACKs imported candidate IDs. ACK failure is an error; pending candidates remain retryable.\n\nThere is no bidirectional database synchronization and no fallback writer.",
+          "5. Planner returns one `ImportReport` (`received`, `imported`, `failed`) to Capture.\n6. Capture removes only `imported` IDs; failed candidates remain in the inbox with `status=failed`, `reason`, and `lastAttempt`, and the same report is shown in diagnostics.\n\nThere is no success-ID-only ACK, silent rejection, bidirectional database synchronization, or fallback writer.")
+          PY
+      - name: Validate focused regression
+        run: |
+          npx tsc --noEmit
+          npx vitest run src/domain/planner.test.ts src/extension/capture-state.test.ts src/extension/capture-import-report.test.ts src/services/PlannerRepository.schedule.test.ts src/services/PlannerRepository.thailand-golden-path.test.ts src/services/PlannerRepository.capture-import-report.test.ts
+          npm run build:extension
+      - name: Commit product changes and remove one-shot workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/one-shot-capture-import-report.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src docs
+          git commit -m 'fix(capture): preserve failed imports with full report'
+          git push origin HEAD:main
