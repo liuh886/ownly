@@ -10,6 +10,12 @@ import {
   tripBundleFileName,
   type OwnlyTripBundle,
 } from '@/domain/trip-bundle';
+import {
+  buildTripShareUrl,
+  clearTripShareHash,
+  extractTripSharePayload,
+  parseTripShareHash,
+} from '@/domain/trip-share-link';
 import { plannerRepository } from '@/services/PlannerRepository';
 
 interface TripBundleManagerProps {
@@ -47,7 +53,7 @@ async function copyText(content: string): Promise<void> {
   if (!copied) throw new Error('Clipboard unavailable');
 }
 
-function bundleSummary(bundle: OwnlyTripBundle | null): { places: number; visits: number; legs: number } {
+function bundleSummary(bundle: OwnlyTripBundle | null) {
   return {
     places: bundle?.places.length ?? 0,
     visits: bundle?.visits.length ?? 0,
@@ -66,6 +72,32 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [shareUrl, setShareUrl] = useState('');
+  const [incomingBundle, setIncomingBundle] = useState<OwnlyTripBundle | null>(null);
+  const [incomingError, setIncomingError] = useState('');
+
+  useEffect(() => {
+    const syncIncomingShare = () => {
+      const payload = extractTripSharePayload(window.location.hash);
+      if (!payload) {
+        setIncomingBundle(null);
+        setIncomingError('');
+        return;
+      }
+      void parseTripShareHash(window.location.hash)
+        .then((bundle) => {
+          setIncomingBundle(bundle);
+          setIncomingError('');
+        })
+        .catch((err) => {
+          setIncomingBundle(null);
+          setIncomingError(err instanceof Error ? err.message : String(err));
+        });
+    };
+    syncIncomingShare();
+    window.addEventListener('hashchange', syncIncomingShare);
+    return () => window.removeEventListener('hashchange', syncIncomingShare);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -99,6 +131,21 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
     }
   }, [rawImport]);
 
+  const incomingScheduledTitles = useMemo(() => {
+    if (!incomingBundle) return [];
+    const placeById = new Map(incomingBundle.places.map((place) => [place.id, place] as const));
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const visit of [...incomingBundle.visits].sort((a, b) => `${a.date}:${a.sort_order}`.localeCompare(`${b.date}:${b.sort_order}`))) {
+      const place = placeById.get(visit.place_id);
+      if (!place || seen.has(place.id)) continue;
+      seen.add(place.id);
+      result.push(place.title);
+      if (result.length >= 6) break;
+    }
+    return result;
+  }, [incomingBundle]);
+
   const resetMessages = () => {
     setNotice('');
     setError('');
@@ -114,14 +161,37 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
     return createShareableTripBundle(selectedTrip, places, visits, legs);
   };
 
-  const handleCopyBundle = async () => {
+  const persistBundleCopy = async (bundle: OwnlyTripBundle) => {
+    if (disabled) throw new Error(zh ? '请先连接 Ownly 数据目录，再复制这个 Trip。' : 'Connect Ownly before copying this Trip.');
+    const copy = instantiateTripBundle(bundle);
+    await plannerRepository.upsertTrip(copy.trip);
+    await plannerRepository.upsertPlaces(copy.places);
+    for (const visit of copy.visits) await plannerRepository.upsertVisit(visit);
+    for (const leg of copy.legs) await plannerRepository.upsertLeg(leg);
+    onImported?.(copy.trip.id);
+    return copy;
+  };
+
+  const handleGenerateShareLink = async (nativeShare: boolean) => {
     resetMessages();
     setBusy(true);
     try {
       const bundle = await buildSelectedBundle();
-      await copyText(JSON.stringify(bundle, null, 2));
-      setNotice(zh ? '✓ 已复制可导入 Trip Bundle；费用、付款和成员信息均未包含。' : '✓ Importable Trip Bundle copied. Ledger and member data are excluded.');
+      const url = await buildTripShareUrl(bundle, window.location.href);
+      setShareUrl(url);
+      if (nativeShare && navigator.share) {
+        await navigator.share({
+          title: bundle.trip.title,
+          text: zh ? `我把「${bundle.trip.title}」的可编辑行程分享给你，点开可直接复制到 Ownly。` : `Editable Ownly trip: ${bundle.trip.title}`,
+          url,
+        });
+        setNotice(zh ? '✓ 已打开系统分享。' : '✓ System share opened.');
+      } else {
+        await copyText(url);
+        setNotice(zh ? '✓ Trip 分享链接已复制。' : '✓ Trip share link copied.');
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
@@ -134,7 +204,7 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
     try {
       const bundle = await buildSelectedBundle();
       downloadTextFile(JSON.stringify(bundle, null, 2), tripBundleFileName(bundle.trip.title));
-      setNotice(zh ? '✓ 已下载 .ownly-trip.json，可直接发给其他 Ownly 用户。' : '✓ .ownly-trip.json downloaded and ready to share.');
+      setNotice(zh ? '✓ 已下载 .ownly-trip.json。' : '✓ Bundle downloaded.');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -142,41 +212,17 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
     }
   };
 
-  const handleNativeShare = async () => {
+  const handleCopyBundle = async () => {
     resetMessages();
     setBusy(true);
     try {
       const bundle = await buildSelectedBundle();
-      const json = JSON.stringify(bundle, null, 2);
-      const file = new File([json], tripBundleFileName(bundle.trip.title), { type: 'application/json' });
-      const shareData: ShareData = {
-        title: bundle.trip.title,
-        text: zh ? 'Ownly 可编辑旅行行程' : 'Editable Ownly Trip',
-        files: [file],
-      };
-      if (!navigator.share || (navigator.canShare && !navigator.canShare(shareData))) {
-        downloadTextFile(json, file.name);
-        setNotice(zh ? '当前浏览器不支持系统分享，已改为下载 Trip Bundle。' : 'System share is unavailable; downloaded the Trip Bundle instead.');
-        return;
-      }
-      await navigator.share(shareData);
-      setNotice(zh ? '✓ 已打开系统分享。' : '✓ System share opened.');
+      await copyText(JSON.stringify(bundle, null, 2));
+      setNotice(zh ? '✓ Trip Bundle JSON 已复制。' : '✓ Trip Bundle JSON copied.');
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
-    }
-  };
-
-  const handleImportFile = async (file: File | null) => {
-    resetMessages();
-    if (!file) return;
-    try {
-      const text = await file.text();
-      setRawImport(text);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -188,23 +234,9 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
     }
     setBusy(true);
     try {
-      const copy = instantiateTripBundle(importPreview.bundle);
-      await plannerRepository.upsertTrip(copy.trip);
-      await plannerRepository.upsertPlaces(copy.places);
-      for (const visit of copy.visits) await plannerRepository.upsertVisit(visit);
-      for (const leg of copy.legs) await plannerRepository.upsertLeg(leg);
-
-      setNotice(
-        zh
-          ? `✓ 已导入「${copy.trip.title}」：${copy.places.length} 个地点、${copy.visits.length} 个日程访问；费用账本为空。`
-          : `✓ Imported “${copy.trip.title}” with ${copy.places.length} places and ${copy.visits.length} visits. Ledger is empty.`,
-      );
+      const copy = await persistBundleCopy(importPreview.bundle);
+      setNotice(zh ? `✓ 已导入「${copy.trip.title}」；费用账本为空。` : `✓ Imported “${copy.trip.title}”; ledger is empty.`);
       setRawImport('');
-      const nextTrips = await plannerRepository.listTrips();
-      nextTrips.sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
-      setTrips(nextTrips);
-      setSelectedTripId(copy.trip.id);
-      onImported?.(copy.trip.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -212,7 +244,30 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
     }
   };
 
+  const handleCloneIncoming = async () => {
+    if (!incomingBundle) return;
+    setIncomingError('');
+    setBusy(true);
+    try {
+      await persistBundleCopy(incomingBundle);
+      clearTripShareHash();
+      setIncomingBundle(null);
+    } catch (err) {
+      setIncomingError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const closeIncoming = () => {
+    clearTripShareHash();
+    setIncomingBundle(null);
+    setIncomingError('');
+  };
+
   const summary = bundleSummary(importPreview.bundle);
+  const incomingSummary = bundleSummary(incomingBundle);
+  const destinations = incomingBundle?.trip.destinations?.filter(Boolean).join(' · ') || '';
 
   return (
     <>
@@ -222,142 +277,66 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
         onClick={() => { resetMessages(); setOpen(true); }}
         className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <span>🔗</span>
-        <span>{zh ? '分享 / 导入 Trip' : 'Share / Import Trip'}</span>
+        🔗 {zh ? '分享 / 导入 Trip' : 'Share / Import Trip'}
       </button>
+
+      {(incomingBundle || incomingError) ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-stone-950/55 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl">
+            <div className="border-b border-stone-100 bg-linear-to-br from-emerald-50 to-sky-50 px-5 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-emerald-700">Ownly Shared Trip</div>
+                  <h2 className="mt-1 text-xl font-extrabold text-stone-950">{incomingBundle?.trip.title || (zh ? 'Trip 分享链接' : 'Shared Trip')}</h2>
+                  {incomingBundle ? <p className="mt-1 text-xs text-stone-600">{incomingBundle.trip.start_date} → {incomingBundle.trip.end_date}{destinations ? ` · ${destinations}` : ''}</p> : null}
+                </div>
+                <button type="button" onClick={closeIncoming} className="rounded-full bg-white/80 p-2 text-stone-500 shadow-xs hover:bg-white">✕</button>
+              </div>
+            </div>
+            <div className="max-h-[72vh] overflow-y-auto p-5">
+              {incomingError ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">⚠️ {incomingError}</div>
+              ) : incomingBundle ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-4 gap-2">
+                    {[['📍', incomingSummary.places, zh ? '地点' : 'Places'], ['📅', incomingSummary.visits, zh ? '日程' : 'Visits'], ['🛣️', incomingSummary.legs, zh ? '路线' : 'Routes'], ['💸', 0, zh ? '费用' : 'Expenses']].map(([icon, value, label]) => (
+                      <div key={String(label)} className="rounded-xl bg-stone-50 p-2.5 text-center"><div className="text-lg font-black text-stone-900">{icon} {value}</div><div className="text-[9px] text-stone-500">{label}</div></div>
+                    ))}
+                  </div>
+                  {incomingScheduledTitles.length > 0 ? <div><div className="text-[11px] font-bold text-stone-700">{zh ? '已经安排的部分地点' : 'Some scheduled stops'}</div><div className="mt-2 flex flex-wrap gap-1.5">{incomingScheduledTitles.map((title) => <span key={title} className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-medium text-stone-700">📍 {title}</span>)}</div></div> : null}
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-[11px] leading-5 text-emerald-900"><strong>{zh ? '这是一份可编辑副本，不是实时协作。' : 'This creates an editable copy, not live collaboration.'}</strong>{' '}{zh ? '复制后所有 ID 都会重新生成；费用、付款、同行成员和日历 token 均未包含。' : 'All IDs are regenerated. Expenses, payments, member names and calendar tokens are excluded.'}</div>
+                  <button type="button" disabled={busy || disabled} onClick={() => void handleCloneIncoming()} className="w-full rounded-2xl bg-emerald-700 px-4 py-3.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-stone-300">{busy ? (zh ? '复制中…' : 'Copying…') : disabled ? (zh ? '先连接 Ownly 数据目录' : 'Connect Ownly first') : (zh ? '✦ 复制到我的 Ownly' : '✦ Copy to my Ownly')}</button>
+                  <p className="text-center text-[9.5px] text-stone-400">{zh ? '打开链接只会预览；点击上方按钮后才写入你的 Ownly。' : 'Opening the link is read-only; nothing is written until you copy it.'}</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-xs">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4">
-              <div>
-                <h2 className="text-base font-bold text-stone-900">{zh ? '🔗 Ownly Trip 分享与复制' : '🔗 Ownly Trip Sharing'}</h2>
-                <p className="mt-0.5 text-[11px] text-stone-500">
-                  {zh ? '把完整旅行规划复制给另一位用户，并保持可编辑。' : 'Clone a complete editable trip into another Ownly workspace.'}
-                </p>
-              </div>
-              <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700">✕</button>
-            </div>
-
-            <div className="grid grid-cols-2 border-b border-stone-100 bg-stone-50/70 p-1.5">
-              <button
-                type="button"
-                onClick={() => { resetMessages(); setMode('share'); }}
-                className={`rounded-lg px-3 py-2 text-xs font-bold transition ${mode === 'share' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-800'}`}
-              >
-                {zh ? '📤 分享我的 Trip' : '📤 Share Trip'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { resetMessages(); setMode('import'); }}
-                className={`rounded-lg px-3 py-2 text-xs font-bold transition ${mode === 'import' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-800'}`}
-              >
-                {zh ? '📥 导入别人 Trip' : '📥 Import Trip'}
-              </button>
-            </div>
-
+            <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4"><div><h2 className="text-base font-bold text-stone-900">🔗 {zh ? 'Ownly Trip 分享与复制' : 'Ownly Trip Sharing'}</h2><p className="mt-0.5 text-[11px] text-stone-500">{zh ? '分享链接优先；Bundle 文件作为离线兜底。' : 'Share by link first; Bundle files are the offline fallback.'}</p></div><button type="button" onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100">✕</button></div>
+            <div className="grid grid-cols-2 border-b border-stone-100 bg-stone-50/70 p-1.5"><button type="button" onClick={() => { resetMessages(); setMode('share'); }} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === 'share' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500'}`}>{zh ? '📤 分享我的 Trip' : '📤 Share Trip'}</button><button type="button" onClick={() => { resetMessages(); setMode('import'); }} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === 'import' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500'}`}>{zh ? '📥 导入 Trip' : '📥 Import Trip'}</button></div>
             <div className="max-h-[72vh] overflow-y-auto p-5">
               {notice ? <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">{notice}</div> : null}
               {error ? <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">⚠️ {error}</div> : null}
-
               {mode === 'share' ? (
                 <div className="space-y-4">
-                  <div>
-                    <label className="text-xs font-bold text-stone-700">{zh ? '选择要分享的行程' : 'Choose a trip to share'}</label>
-                    <select
-                      value={selectedTripId}
-                      onChange={(event) => setSelectedTripId(event.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-semibold text-stone-900 outline-hidden focus:border-stone-900"
-                    >
-                      {trips.length === 0 ? <option value="">{zh ? '暂无行程' : 'No trips'}</option> : null}
-                      {trips.map((trip) => (
-                        <option key={trip.id} value={trip.id}>{trip.title} · {trip.start_date} → {trip.end_date}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3">
-                    <div className="text-xs font-bold text-sky-900">🛡️ {zh ? '分享时自动清理' : 'Automatically removed before sharing'}</div>
-                    <div className="mt-1.5 grid gap-1 text-[11px] text-sky-800 sm:grid-cols-2">
-                      <span>✓ {zh ? '全部费用 / 垫付 / 付款流水' : 'All expense and payment records'}</span>
-                      <span>✓ {zh ? '同行成员名单' : 'Companion/member names'}</span>
-                      <span>✓ {zh ? 'AA 清算结果' : 'AA settlement state'}</span>
-                      <span>✓ {zh ? '日历订阅 token' : 'Calendar subscription token'}</span>
-                    </div>
-                    <p className="mt-2 text-[10px] leading-4 text-sky-700/80">
-                      {zh ? '地点、候选池、日程、路线、标签和备注会保留。请注意：地点备注属于 Trip 内容，如果其中写了私人信息，请分享前自行检查。' : 'Places, research pool, schedule, routes, tags and notes are preserved. Review free-text notes for private information before sharing.'}
-                    </p>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <button type="button" disabled={busy || !selectedTrip} onClick={() => void handleNativeShare()} className="rounded-xl bg-stone-950 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-stone-800 disabled:opacity-40">
-                      {busy ? '…' : (zh ? '📲 系统分享' : '📲 Share')}
-                    </button>
-                    <button type="button" disabled={busy || !selectedTrip} onClick={() => void handleDownloadBundle()} className="rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-xs font-bold text-stone-700 transition hover:bg-stone-50 disabled:opacity-40">
-                      {zh ? '⬇️ 下载 Bundle' : '⬇️ Download'}
-                    </button>
-                    <button type="button" disabled={busy || !selectedTrip} onClick={() => void handleCopyBundle()} className="rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-xs font-bold text-stone-700 transition hover:bg-stone-50 disabled:opacity-40">
-                      {zh ? '📋 复制 JSON' : '📋 Copy JSON'}
-                    </button>
-                  </div>
+                  <div><label className="text-xs font-bold text-stone-700">{zh ? '选择要分享的行程' : 'Choose a trip'}</label><select value={selectedTripId} onChange={(event) => { setSelectedTripId(event.target.value); setShareUrl(''); }} className="mt-1.5 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-semibold text-stone-900">{trips.length === 0 ? <option value="">{zh ? '暂无行程' : 'No trips'}</option> : null}{trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title} · {trip.start_date} → {trip.end_date}</option>)}</select></div>
+                  <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3"><div className="text-xs font-bold text-sky-900">🛡️ {zh ? '自动排除私人账本信息' : 'Private ledger data is excluded'}</div><p className="mt-1.5 text-[10px] leading-4 text-sky-700">{zh ? '费用、付款、AA、同行成员和日历 token 不会进入分享内容；地点、日程、路线、标签和备注会保留。链接数据位于 URL fragment。' : 'Expenses, payments, member names and calendar tokens are excluded. Places, schedule, routes, tags and notes remain in the URL fragment.'}</p></div>
+                  <div className="grid gap-2 sm:grid-cols-2"><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleGenerateShareLink(false)} className="rounded-xl bg-stone-950 px-3 py-3 text-xs font-bold text-white disabled:opacity-40">{busy ? '…' : (zh ? '🔗 生成并复制分享链接' : '🔗 Generate & copy link')}</button><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleGenerateShareLink(true)} className="rounded-xl border border-stone-300 bg-white px-3 py-3 text-xs font-bold text-stone-700 disabled:opacity-40">{zh ? '📲 系统分享链接' : '📲 Share link'}</button></div>
+                  {shareUrl ? <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3"><div className="flex items-center justify-between"><span className="text-[10px] font-bold text-emerald-800">✓ {zh ? '链接已生成' : 'Link ready'}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${shareUrl.length > 18000 ? 'bg-amber-100 text-amber-800' : 'bg-white text-stone-500'}`}>{Math.ceil(shareUrl.length / 1024)} KB</span></div><div className="mt-2 flex gap-2"><input readOnly value={shareUrl} className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 font-mono text-[9px] text-stone-500"/><button type="button" onClick={() => void copyText(shareUrl)} className="shrink-0 rounded-lg bg-emerald-700 px-3 py-1.5 text-[10px] font-bold text-white">{zh ? '复制' : 'Copy'}</button></div>{shareUrl.length > 18000 ? <p className="mt-2 text-[9.5px] text-amber-700">{zh ? '链接较长，部分聊天应用可能截断；遇到这种情况请使用 Bundle 文件。' : 'Some chat apps may truncate this long URL; use the Bundle file fallback.'}</p> : null}</div> : null}
+                  <details className="rounded-xl border border-stone-200 bg-stone-50/60 p-3"><summary className="cursor-pointer text-[11px] font-bold text-stone-600">{zh ? '更多方式 / 离线兜底' : 'More / offline fallback'}</summary><div className="mt-3 grid gap-2 sm:grid-cols-2"><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleDownloadBundle()} className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-700">{zh ? '⬇️ 下载 Bundle' : '⬇️ Download Bundle'}</button><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleCopyBundle()} className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-700">{zh ? '📋 复制 JSON' : '📋 Copy JSON'}</button></div></details>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-[11px] leading-5 text-emerald-900">
-                    <strong>{zh ? '导入后会创建一份独立副本。' : 'Import creates an independent copy.'}</strong>{' '}
-                    {zh ? '所有 Trip / Place / Visit / Leg ID 都会重新生成，因此你可以在自己的 Ownly 中任意编辑，不会和分享者的数据发生关联。费用账本从空白开始。' : 'All entity IDs are regenerated, so the imported trip can be edited independently. The expense ledger starts empty.'}
-                  </div>
-
-                  <label className="block cursor-pointer rounded-xl border-2 border-dashed border-stone-200 bg-stone-50 px-4 py-5 text-center transition hover:border-emerald-300 hover:bg-emerald-50/30">
-                    <span className="block text-xl">📁</span>
-                    <span className="mt-1 block text-xs font-bold text-stone-700">{zh ? '选择 .ownly-trip.json 文件' : 'Choose .ownly-trip.json file'}</span>
-                    <input type="file" accept=".json,.ownly-trip.json,application/json" className="hidden" onChange={(event) => void handleImportFile(event.target.files?.[0] ?? null)} />
-                  </label>
-
-                  <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <label className="text-xs font-bold text-stone-700">{zh ? '或粘贴 Trip Bundle JSON' : 'Or paste Trip Bundle JSON'}</label>
-                      {rawImport ? <button type="button" onClick={() => setRawImport('')} className="text-[10px] font-semibold text-stone-400 hover:text-stone-700">{zh ? '清空' : 'Clear'}</button> : null}
-                    </div>
-                    <textarea
-                      value={rawImport}
-                      onChange={(event) => setRawImport(event.target.value)}
-                      placeholder={'{\n  "kind": "ownly.trip.bundle",\n  "version": 1, ...\n}'}
-                      rows={7}
-                      className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 p-3 font-mono text-[10px] leading-4 text-stone-700 outline-hidden focus:border-stone-900"
-                    />
-                  </div>
-
-                  {rawImport ? (
-                    importPreview.bundle ? (
-                      <div className="rounded-xl border border-stone-200 bg-white p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-bold text-stone-900">{importPreview.bundle.trip.title}</div>
-                            <div className="mt-0.5 text-[10px] text-stone-500">{importPreview.bundle.trip.start_date} → {importPreview.bundle.trip.end_date}</div>
-                          </div>
-                          <span className="rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-bold text-emerald-800">✓ {zh ? 'Bundle 有效' : 'Valid bundle'}</span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-stone-600">
-                          <span className="rounded-full bg-stone-100 px-2 py-1">📍 {summary.places} {zh ? '地点' : 'places'}</span>
-                          <span className="rounded-full bg-stone-100 px-2 py-1">📅 {summary.visits} {zh ? '日程访问' : 'visits'}</span>
-                          <span className="rounded-full bg-stone-100 px-2 py-1">🛣️ {summary.legs} {zh ? '路线段' : 'legs'}</span>
-                          <span className="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-800">💸 0 {zh ? '费用' : 'expenses'}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700">⚠️ {importPreview.error}</div>
-                    )
-                  ) : null}
-
-                  <button
-                    type="button"
-                    disabled={busy || !importPreview.bundle}
-                    onClick={() => void handleImportBundle()}
-                    className="w-full rounded-xl bg-emerald-700 px-4 py-3 text-xs font-bold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-stone-300"
-                  >
-                    {busy ? (zh ? '导入中…' : 'Importing…') : (zh ? '✓ 导入为我的可编辑 Trip' : '✓ Import as editable Trip')}
-                  </button>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-[11px] text-emerald-900">{zh ? '链接是主入口；这里保留 Bundle 文件/JSON 导入。导入后会生成独立 ID，费用账本从空白开始。' : 'Links are the primary flow. Bundle file/JSON import remains available and creates independent IDs with an empty ledger.'}</div>
+                  <label className="block cursor-pointer rounded-xl border-2 border-dashed border-stone-200 bg-stone-50 px-4 py-5 text-center"><span className="block text-xl">📁</span><span className="mt-1 block text-xs font-bold text-stone-700">{zh ? '选择 .ownly-trip.json 文件' : 'Choose .ownly-trip.json file'}</span><input type="file" accept=".json,.ownly-trip.json,application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void file.text().then(setRawImport).catch((err) => setError(String(err))); }} /></label>
+                  <textarea value={rawImport} onChange={(event) => setRawImport(event.target.value)} placeholder={'{\n  "kind": "ownly.trip.bundle", ...\n}'} rows={7} className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 p-3 font-mono text-[10px] leading-4 text-stone-700" />
+                  {rawImport ? importPreview.bundle ? <div className="rounded-xl border border-stone-200 bg-white p-3"><div className="text-sm font-bold text-stone-900">{importPreview.bundle.trip.title}</div><div className="mt-2 flex flex-wrap gap-1.5 text-[10px]"><span className="rounded-full bg-stone-100 px-2 py-1">📍 {summary.places}</span><span className="rounded-full bg-stone-100 px-2 py-1">📅 {summary.visits}</span><span className="rounded-full bg-stone-100 px-2 py-1">🛣️ {summary.legs}</span><span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">💸 0</span></div></div> : <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">⚠️ {importPreview.error}</div> : null}
+                  <button type="button" disabled={busy || !importPreview.bundle || disabled} onClick={() => void handleImportBundle()} className="w-full rounded-xl bg-emerald-700 px-4 py-3 text-xs font-bold text-white disabled:bg-stone-300">{busy ? (zh ? '导入中…' : 'Importing…') : disabled ? (zh ? '先连接 Ownly 数据目录' : 'Connect Ownly first') : (zh ? '✓ 导入为我的可编辑 Trip' : '✓ Import as editable Trip')}</button>
                 </div>
               )}
             </div>

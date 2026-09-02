@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { HomeDashboard } from '@/components/home/HomeDashboard';
 import { ObjectList, type ObjectListFocus } from '@/components/objects/ObjectList';
 import { ObjectComposer } from '@/components/objects/ObjectComposer';
@@ -7,6 +7,7 @@ import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
 import { PlannerHome } from '@/components/planner/PlannerHome';
 import { TripBundleManager } from '@/components/planner/TripBundleManager';
+import { extractTripSharePayload } from '@/domain/trip-share-link';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import type { FirstObjectChoice } from '@/core/first-object-copy';
@@ -73,6 +74,15 @@ export function TabRenderer({
 
   const [composerFocusTarget, setComposerFocusTarget] = useState<'quickLine' | 'title' | undefined>(undefined);
   const [plannerRevision, setPlannerRevision] = useState(0);
+
+  useEffect(() => {
+    const routeSharedTrip = () => {
+      if (extractTripSharePayload(window.location.hash)) setActiveTab('planner');
+    };
+    routeSharedTrip();
+    window.addEventListener('hashchange', routeSharedTrip);
+    return () => window.removeEventListener('hashchange', routeSharedTrip);
+  }, [setActiveTab]);
 
   const quickLineTemplates = useMemo(
     () => getQuickLineTemplates(t, language),
