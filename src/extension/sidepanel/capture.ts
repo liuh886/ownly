@@ -3,6 +3,7 @@ import { findExistingTripPlace, normalizeObservedPrice } from '../../domain/plan
 import { el } from '../dom';
 import { saveCaptureStateViaWorker } from '../capture-state';
 import { matchesSavedListContext } from '../saved-list-match';
+import { logger } from '../logger';
 import { store, t } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
 
@@ -98,7 +99,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
       if (!options?.soft) {
         setStatus(store.lang === 'zh' ? '当前页面不支持 Capture 或未完全加载。' : 'Capture is not available or page is not loaded.', 'error');
       }
-      console.warn('[Ownly Capture] Could not read current provider page', innerErr);
+      logger.warn('capture', 'Could not read current provider page after content-script retry', String(innerErr));
     }
   }
 
@@ -124,7 +125,9 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
           overrideCurrency: store.mapCurrencyOverride,
         }) as { savedList?: DetectedSavedList | null };
         if (fetched.savedList?.places.length) store.detectedSavedList = fetched.savedList;
-      } catch {}
+      } catch (error) {
+        logger.warn('capture', `Saved-list fetch failed for ${targetList.listName}`, String(error));
+      }
     }
   }
 
@@ -190,7 +193,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
         setStatus(`${store.lang === 'zh' ? '💰 已自动抓取价格：' : '💰 Price captured: '}${match.title} → ${price}`, 'success');
       } catch (error) {
         setStatus(store.lang === 'zh' ? '价格已读取，但 Inbox 保存失败。' : 'Price was read, but the Inbox write failed.', 'error');
-        console.warn('[Ownly Capture] Failed to persist auto-captured price', error);
+        logger.warn('capture', 'Failed to persist auto-captured price', String(error));
       }
     }
   }
