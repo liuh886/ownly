@@ -1,32 +1,4 @@
-from pathlib import Path
-
-# The first patch script intentionally generates TypeScript source. Normalize escaped
-# newlines here so the generated debug viewer uses string escapes, not literal line breaks.
-p = Path('src/extension/sidepanel/ui.ts')
-text = p.read_text()
-text = text.replace("].join('\n')", "].join('\\n')")
-text = text.replace(".join('\n\n')", ".join('\\n\\n')")
-p.write_text(text)
-
-# Capture metadata is inbox-only and must never leak into Planner Markdown.
-p = Path('src/services/PlannerRepository.ts')
-text = p.read_text()
-old = """      const { status: _status, reason: _reason, lastAttempt: _lastAttempt, ...plannerFields } = rawPlace;
-      const incoming: PlannerTripPlace = {
-        ...plannerFields,"""
-new = """      const plannerFields: PlannerTripPlace = { ...rawPlace };
-      delete (plannerFields as unknown as Record<string, unknown>).status;
-      delete (plannerFields as unknown as Record<string, unknown>).reason;
-      delete (plannerFields as unknown as Record<string, unknown>).lastAttempt;
-      const incoming: PlannerTripPlace = {
-        ...plannerFields,"""
-if old not in text:
-    raise SystemExit('PlannerRepository capture metadata pattern not found')
-p.write_text(text.replace(old, new, 1))
-
-# Release fixture covers both the lossless 48 -> 48 path and an injected 48 -> 45
-# failure path that must return three explicit rejection reasons.
-Path('src/services/PlannerRepository.capture-import-report.test.ts').write_text(r'''import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { PlannerPlaceKind, PlannerTrip, PlannerTripPlace } from '@/domain/planner';
 import { PlannerRepository, type PlannerFileStore } from './PlannerRepository';
 
@@ -144,4 +116,3 @@ describe('Capture import release regression', () => {
     expect(await repo.listPlaces()).toHaveLength(45);
   });
 });
-''')

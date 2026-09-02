@@ -6,6 +6,7 @@ import {
   ensurePlaceKindTag,
   mergeCapturedPlaceResearch,
   plannerTripLegFileName,
+  type ImportReport,
   type PlannerTrip,
   type PlannerTripLeg,
   type PlannerTripPlace,
@@ -181,8 +182,9 @@ export class PlannerRepository {
     for (const place of places) await this.upsertPlace(place);
   }
 
-  private async importResearchPlaces(places: PlannerTripPlace[]): Promise<string[]> {
-    if (places.length === 0) return [];
+  private async importResearchPlaces(places: PlannerTripPlace[]): Promise<ImportReport> {
+    const report: ImportReport = { received: places.length, imported: [], failed: [] };
+    if (places.length === 0) return report;
     await this.initialize();
     const existingTrips = new Set((await this.listTrips()).map((t) => t.id));
     const existing = await this.listPlaces();
@@ -196,14 +198,25 @@ export class PlannerRepository {
       }
     };
     existing.forEach(indexPlace);
-    const importedIds: string[] = [];
     const touchedTripIds = new Set<string>();
 
     for (const rawPlace of places) {
-      if (!rawPlace.id || !rawPlace.trip_id || !existingTrips.has(rawPlace.trip_id)) continue;
+      const title = rawPlace.title?.trim() || '(untitled place)';
+      if (!rawPlace.id || !rawPlace.trip_id) {
+        report.failed.push({ id: rawPlace.id || 'unknown', title, reason: 'invalid_payload' });
+        continue;
+      }
+      if (!existingTrips.has(rawPlace.trip_id)) {
+        report.failed.push({ id: rawPlace.id, title, reason: 'unknown_trip' });
+        continue;
+      }
       touchedTripIds.add(rawPlace.trip_id);
+      const plannerFields: PlannerTripPlace = { ...rawPlace };
+      delete (plannerFields as unknown as Record<string, unknown>).status;
+      delete (plannerFields as unknown as Record<string, unknown>).reason;
+      delete (plannerFields as unknown as Record<string, unknown>).lastAttempt;
       const incoming: PlannerTripPlace = {
-        ...rawPlace,
+        ...plannerFields,
         tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
         reservation_status: rawPlace.reservation_status ?? 'none',
         state: 'candidate',
@@ -223,13 +236,14 @@ export class PlannerRepository {
         const persisted = existingPlace ? mergeCapturedPlaceResearch(existingPlace, incoming) : incoming;
         await this.upsert(persisted);
         indexPlace(persisted);
-        importedIds.push(rawPlace.id);
+        report.imported.push(rawPlace.id);
       } catch (error) {
-        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, error);
+        const reason = error instanceof Error && error.message ? `write_failed:${error.message}` : 'write_failed';
+        report.failed.push({ id: rawPlace.id, title, reason });
+        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${title}):`, error);
       }
     }
 
-    // Auto-deduplicate touched trips to ensure zero orphan duplicate markdown files
     for (const tripId of touchedTripIds) {
       try {
         await this.deduplicateTripPlaces(tripId);
@@ -238,7 +252,7 @@ export class PlannerRepository {
       }
     }
 
-    return importedIds;
+    return report;
   }
 
   /**
@@ -318,8 +332,8 @@ export class PlannerRepository {
     return { mergedCount, removedCount };
   }
 
-  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<string[]> { return this.importResearchPlaces(places); }
-  async importExternalCandidates(places: PlannerTripPlace[]): Promise<string[]> { return this.importResearchPlaces(places); }
+  async importCapturedPlaces(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }
+  async importExternalCandidates(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }
 
   async dropPlace(placeId: string): Promise<boolean> {
     await this.initialize();

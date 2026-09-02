@@ -37,7 +37,7 @@ import { plannerRepository } from '@/services/PlannerRepository';
 import { calendarFeedService } from '@/services/CalendarFeedService';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
-import { ackCapturedPlaces, pullCaptureState, setCaptureContext } from './capture-bridge';
+import { applyCaptureImportReport, pullCaptureState, setCaptureContext } from './capture-bridge';
 import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
 import { PlannerBudgetLedger } from './PlannerBudgetLedger';
@@ -1136,15 +1136,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
       await plannerRepository.initialize();
       if (state.pendingPlaces.length > 0) {
-        const importedIds = await plannerRepository.importCapturedPlaces(state.pendingPlaces);
-        if (importedIds.length > 0) {
-          const acknowledged = await ackCapturedPlaces(importedIds);
-          if (!acknowledged) throw new Error('Capture ACK failed');
-        }
-        setCapturePending(state.pendingPlaces.length - importedIds.length);
+        const report = await plannerRepository.importCapturedPlaces(state.pendingPlaces);
+        const applied = await applyCaptureImportReport(report);
+        if (!applied) throw new Error('Capture import report apply failed');
+        setCapturePending(report.failed.length);
         setNotice(zh
-          ? `已同步 ${importedIds.length} 个研究候选。`
-          : `Synced ${importedIds.length} research candidates.`);
+          ? `收到 ${report.received} 个候选；已导入 ${report.imported.length}；失败 ${report.failed.length}${report.failed.length ? `。Rejected: ${report.failed.length} · ${report.failed.map((item) => `${item.title}: ${item.reason}`).join('；')}` : ''}`
+          : `Received ${report.received}; imported ${report.imported.length}; failed ${report.failed.length}${report.failed.length ? `. Rejected: ${report.failed.length} · ${report.failed.map((item) => `${item.title}: ${item.reason}`).join('; ')}` : ''}`);
       } else {
         setCapturePending(0);
         setNotice(zh ? '没有待同步的研究候选。' : 'No pending research candidates to sync.');

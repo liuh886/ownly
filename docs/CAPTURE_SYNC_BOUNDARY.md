@@ -17,9 +17,10 @@ Capture does **not** store Trip objects, schedule state, lifecycle state, route 
 2. Capture extracts source facts and the user's pre-import research notes into `pendingPlaces`.
 3. Planner pulls candidates and calls `PlannerRepository.importCapturedPlaces()`.
 4. Existing canonical places keep Planner-owned decisions; Capture refreshes only source/observed facts.
-5. Planner ACKs imported candidate IDs. ACK failure is an error; pending candidates remain retryable.
+5. Planner returns one `ImportReport` (`received`, `imported`, `failed`) to Capture.
+6. Capture removes only `imported` IDs; failed candidates remain in the inbox with `status=failed`, `reason`, and `lastAttempt`, and the same report is shown in diagnostics.
 
-There is no bidirectional database synchronization and no fallback writer.
+There is no success-ID-only ACK, silent rejection, bidirectional database synchronization, or fallback writer.
 
 ## Single writer
 

@@ -1,5 +1,5 @@
-import type { CaptureContext } from '../domain/planner';
-import { ackPlacesViaWorker, readCaptureState, setCaptureContextViaWorker } from './capture-state';
+import type { CaptureContext, ImportReport } from '../domain/planner';
+import { applyImportReportViaWorker, readCaptureState, setCaptureContextViaWorker } from './capture-state';
 
 const REQUEST_SOURCE = 'ownly-planner-web';
 const RESPONSE_SOURCE = 'ownly-capture-extension';
@@ -22,11 +22,11 @@ window.addEventListener('message', (event) => {
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'CAPTURE_STATE', payload: state }, getTargetOrigin());
         return;
       }
-      if (message.type === 'ACK_CAPTURED_PLACES') {
-        const payload = message.payload as { placeIds?: string[] } | undefined;
-        const ids = Array.isArray(payload?.placeIds) ? payload.placeIds : [];
-        await ackPlacesViaWorker(ids);
-        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'ACK_CAPTURED_PLACES_RESULT', payload: { ok: true } }, getTargetOrigin());
+      if (message.type === 'APPLY_CAPTURE_IMPORT_REPORT') {
+        const payload = message.payload as { report?: ImportReport } | undefined;
+        if (!payload?.report) throw new Error('Capture import report is missing');
+        await applyImportReportViaWorker(payload.report);
+        window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'APPLY_CAPTURE_IMPORT_REPORT_RESULT', payload: { ok: true } }, getTargetOrigin());
         return;
       }
       if (message.type === 'SET_CAPTURE_CONTEXT') {

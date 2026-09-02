@@ -2,6 +2,7 @@ import {
   asCaptureCandidate,
   mergeCaptureState,
   type CaptureContext,
+  type ImportReport,
   type OwnlyCaptureState,
   type PlannerTripPlace,
 } from '../domain/planner';
@@ -27,7 +28,7 @@ function normalizeContext(value: unknown): CaptureContext | null {
   };
 }
 
-function normalizePlaces(value: unknown): PlannerTripPlace[] {
+function normalizePlaces(value: unknown): OwnlyCaptureState['pendingPlaces'] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((item): item is PlannerTripPlace => Boolean(
@@ -45,6 +46,17 @@ function normalizePlaces(value: unknown): PlannerTripPlace[] {
     });
 }
 
+function normalizeImportReport(value: unknown): ImportReport | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const report = value as Partial<ImportReport>;
+  if (typeof report.received !== 'number' || !Array.isArray(report.imported) || !Array.isArray(report.failed)) return undefined;
+  const imported = report.imported.filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const failed = report.failed.filter((item): item is ImportReport['failed'][number] => Boolean(
+    item && typeof item === 'object' && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.reason === 'string'
+  ));
+  return { received: report.received, imported, failed };
+}
+
 export function normalizeCaptureState(value: unknown): OwnlyCaptureState {
   if (!value || typeof value !== 'object') return { ...EMPTY_CAPTURE_STATE };
   const state = value as Partial<OwnlyCaptureState> & { version?: unknown };
@@ -53,6 +65,7 @@ export function normalizeCaptureState(value: unknown): OwnlyCaptureState {
     version: 2,
     activeContext: normalizeContext(state.activeContext),
     pendingPlaces: normalizePlaces(state.pendingPlaces),
+    lastImportReport: normalizeImportReport(state.lastImportReport),
   };
 }
 
@@ -94,8 +107,8 @@ export async function writeCaptureState(next: OwnlyCaptureState): Promise<void> 
   await sendWorker<void>({ type: 'CAPTURE_REPLACE_STATE', state: next });
 }
 
-export async function ackPlacesViaWorker(placeIds: string[]): Promise<{ ok: true }> {
-  await sendWorker<void>({ type: 'CAPTURE_ACK_PLACES', placeIds });
+export async function applyImportReportViaWorker(report: ImportReport): Promise<{ ok: true }> {
+  await sendWorker<void>({ type: 'CAPTURE_APPLY_IMPORT_REPORT', report });
   return { ok: true };
 }
 

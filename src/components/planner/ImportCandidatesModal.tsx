@@ -70,15 +70,16 @@ export function ImportCandidatesModal({
     setErrorMsg('');
     try {
       await plannerRepository.initialize();
-      const importedIds = await plannerRepository.importExternalCandidates(parsedPlaces);
-      onImportSuccess(importedIds.length);
-      if (importedIds.length < parsedPlaces.length) {
-        const imported = new Set(importedIds);
+      const report = await plannerRepository.importExternalCandidates(parsedPlaces);
+      onImportSuccess(report.imported.length);
+      if (report.failed.length > 0) {
+        const imported = new Set(report.imported);
         const remaining = parsedPlaces.filter((place) => !imported.has(place.id));
         setParsedPlaces(remaining);
+        const reasons = report.failed.map((item) => `${item.title}: ${item.reason}`).join(zh ? '；' : '; ');
         setErrorMsg(zh
-          ? `已写入 ${importedIds.length} 个，仍有 ${remaining.length} 个未写入；请检查数据目录后重试。`
-          : `Imported ${importedIds.length}; ${remaining.length} place(s) remain. Check the data directory and retry.`);
+          ? `已写入 ${report.imported.length} 个，拒绝 ${report.failed.length} 个：${reasons}`
+          : `Imported ${report.imported.length}; rejected ${report.failed.length}: ${reasons}`);
         return;
       }
       setInputText('');

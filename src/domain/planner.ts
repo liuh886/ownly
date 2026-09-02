@@ -170,10 +170,31 @@ export interface CaptureContext {
   tags?: string[];
 }
 
+export type ImportStatus = 'pending' | 'imported' | 'failed';
+
+export interface ImportFailure {
+  id: string;
+  title: string;
+  reason: string;
+}
+
+export interface ImportReport {
+  received: number;
+  imported: string[];
+  failed: ImportFailure[];
+}
+
+export type CaptureCandidate = PlannerTripPlace & {
+  status?: ImportStatus;
+  reason?: string;
+  lastAttempt?: string;
+};
+
 export interface OwnlyCaptureState {
   version: 2;
   activeContext: CaptureContext | null;
-  pendingPlaces: PlannerTripPlace[];
+  pendingPlaces: CaptureCandidate[];
+  lastImportReport?: ImportReport;
 }
 
 export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
@@ -182,14 +203,34 @@ export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
   pendingPlaces: [],
 };
 
-export function acknowledgeCapturedPlaces(state: OwnlyCaptureState, placeIds: string[]): OwnlyCaptureState {
-  const ids = new Set(placeIds);
-  return { ...state, pendingPlaces: state.pendingPlaces.filter((place) => !ids.has(place.id)) };
+export function applyCaptureImportReport(
+  state: OwnlyCaptureState,
+  report: ImportReport,
+  attemptedAt: string,
+): OwnlyCaptureState {
+  const imported = new Set(report.imported);
+  const failedById = new Map(report.failed.map((item) => [item.id, item] as const));
+  return {
+    ...state,
+    pendingPlaces: state.pendingPlaces
+      .filter((place) => !imported.has(place.id))
+      .map((place) => {
+        const failed = failedById.get(place.id);
+        if (!failed) return place;
+        return { ...place, status: 'failed', reason: failed.reason, lastAttempt: attemptedAt };
+      }),
+    lastImportReport: report,
+  };
 }
 
-export function asCaptureCandidate(place: PlannerTripPlace): PlannerTripPlace {
+export function asCaptureCandidate(place: PlannerTripPlace | CaptureCandidate): CaptureCandidate {
+  const capture = place as CaptureCandidate;
+  const status = capture.status === 'failed' || capture.status === 'imported' ? capture.status : 'pending';
   return {
     ...place,
+    status,
+    reason: status === 'failed' ? capture.reason : undefined,
+    lastAttempt: status === 'failed' ? capture.lastAttempt : undefined,
     reservation_status: place.reservation_status ?? 'none',
     state: 'candidate',
   };
@@ -217,6 +258,7 @@ export function mergeCaptureState(
     version: 2,
     activeContext: fresh.activeContext,
     pendingPlaces: [...localPlaces, ...backgroundOnly],
+    lastImportReport: local.lastImportReport ?? fresh.lastImportReport,
   };
 }
 

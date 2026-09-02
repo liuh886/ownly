@@ -1,4 +1,4 @@
-import type { CaptureContext, OwnlyCaptureState } from '@/domain/planner';
+import type { CaptureContext, ImportReport, OwnlyCaptureState } from '@/domain/planner';
 
 const REQUEST_SOURCE = 'ownly-planner-web';
 const RESPONSE_SOURCE = 'ownly-capture-extension';
@@ -45,8 +45,8 @@ export function pullCaptureState(): Promise<OwnlyCaptureState | null> {
   return requestBridge<OwnlyCaptureState>('PULL_CAPTURE_STATE');
 }
 
-export async function ackCapturedPlaces(placeIds: string[]): Promise<boolean> {
-  const result = await requestBridge<{ ok: true }>('ACK_CAPTURED_PLACES', { placeIds });
+export async function applyCaptureImportReport(report: ImportReport): Promise<boolean> {
+  const result = await requestBridge<{ ok: true }>('APPLY_CAPTURE_IMPORT_REPORT', { report });
   return result?.ok === true;
 }
 

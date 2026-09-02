@@ -176,7 +176,9 @@ describe('Thailand 2026 Golden Path E2E Journey', () => {
     ];
 
     const imported = await plannerRepository.importCapturedPlaces(places);
-    expect(imported).toHaveLength(5);
+    expect(imported.received).toBe(5);
+    expect(imported.imported).toHaveLength(5);
+    expect(imported.failed).toEqual([]);
     expect(await plannerRepository.listPlaces()).toHaveLength(5);
 
     // 3. Hotel Stay Spans (Bangkok: 10/05..10/07, Chiang Mai: 10/08..10/11)

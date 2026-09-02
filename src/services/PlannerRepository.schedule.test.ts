@@ -333,7 +333,8 @@ describe('PlannerRepository visit lifecycle', () => {
     });
 
     const imported = await plannerRepository.importCapturedPlaces([incomingPlace]);
-    expect(imported).toContain('p-thip-new');
+    expect(imported.imported).toContain('p-thip-new');
+    expect(imported.failed).toEqual([]);
 
     const placesAfter = (await plannerRepository.listPlaces()).filter((p) => p.trip_id === 'trip-1');
     // Same display title is weak evidence only; both entities survive until review or a strong ID match.

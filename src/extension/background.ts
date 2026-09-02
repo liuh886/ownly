@@ -1,10 +1,13 @@
 import {
   DEFAULT_USD_PIVOT,
+  applyCaptureImportReport,
+  asCaptureCandidate,
   ensurePlaceKindTag,
   findExistingTripPlace,
   inferPlaceKind,
   mergeCaptureState,
   type CaptureContext,
+  type ImportReport,
   type PlannerTripPlace,
 } from '../domain/planner';
 import {
@@ -84,7 +87,7 @@ async function quickCaptureCurrentPlace() {
       const effectiveKind = existing && !isGeneric ? existing.kind : (hasSpecific ? freshKind : (existing?.kind ?? freshKind));
       const stableId = existing?.id ?? crypto.randomUUID();
 
-      const candidate: PlannerTripPlace = {
+      const candidate = asCaptureCandidate({
         schema_version: '0.1',
         type: 'trip_place',
         id: stableId,
@@ -119,7 +122,7 @@ async function quickCaptureCurrentPlace() {
         state: 'candidate',
         created_at: existing?.created_at ?? now,
         updated_at: now,
-      };
+      } satisfies PlannerTripPlace);
 
       return {
         state: {
@@ -200,7 +203,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (type === 'CAPTURE_REPLACE_STATE') {
     const incoming = normalizeCaptureState((message as { state?: unknown }).state);
     void mutateCaptureStateInWorker((current) => ({
-      state: { version: 2, activeContext: current.activeContext, pendingPlaces: incoming.pendingPlaces },
+      state: { version: 2, activeContext: current.activeContext, pendingPlaces: incoming.pendingPlaces, lastImportReport: incoming.lastImportReport },
       result: undefined,
     }))
       .then(() => sendResponse({ ok: true }))
@@ -219,11 +222,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (type === 'CAPTURE_ACK_PLACES') {
-    const placeIds = (message as { placeIds?: unknown }).placeIds;
-    const ids = Array.isArray(placeIds) ? new Set(placeIds.filter((id): id is string => typeof id === 'string')) : new Set<string>();
+  if (type === 'CAPTURE_APPLY_IMPORT_REPORT') {
+    const report = (message as { report?: ImportReport }).report;
+    if (!report || typeof report.received !== 'number' || !Array.isArray(report.imported) || !Array.isArray(report.failed)) {
+      sendResponse({ ok: false, error: 'invalid import report' });
+      return;
+    }
+    const attemptedAt = new Date().toISOString().slice(0, 10);
     void mutateCaptureStateInWorker((current) => ({
-      state: { ...current, pendingPlaces: current.pendingPlaces.filter((place) => !ids.has(place.id)) },
+      state: applyCaptureImportReport(current, report, attemptedAt),
       result: undefined,
     }))
       .then(() => sendResponse({ ok: true }))

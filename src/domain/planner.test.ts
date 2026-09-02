@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  acknowledgeCapturedPlaces,
+  applyCaptureImportReport,
   buildGoogleMapsDirectionsSegments,
   buildGoogleMapsRouteUrl,
   checkOpeningHoursCollision,
@@ -637,13 +637,17 @@ describe('Ownly Planner domain', () => {
     expect(findExistingTripPlace(poisoned, 'trip-1', 'https://www.google.com/maps/search/?api=1&query=a', 'same')?.id).toBe('x');
   });
 
-  it('acknowledges captured places without touching other queue entries', () => {
+  it('applies import reports without touching unrelated queue entries', () => {
     const state = {
       version: 2 as const,
       activeContext: { tripId: 'trip-1', title: 'Tokyo' },
       pendingPlaces: [place('keep'), place('drop')],
     };
-    const next = acknowledgeCapturedPlaces(state, ['drop']);
+    const next = applyCaptureImportReport(state, {
+      received: 1,
+      imported: ['drop'],
+      failed: [],
+    }, '2026-09-02');
     expect(next.pendingPlaces.map((p) => p.id)).toEqual(['keep']);
     expect(state.pendingPlaces).toHaveLength(2);
   });

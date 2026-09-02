@@ -146,7 +146,19 @@ export function updateDebugLogViewer() {
   const viewer = el.debugLogViewer;
   if (!viewer) return;
   const logs = logger.getAllFormattedText();
-  viewer.textContent = logs || (store.lang === 'zh' ? '[暂无调试日志]' : '[No debug logs yet]');
+  const report = store.state.lastImportReport;
+  const importDebug = report
+    ? [
+        'Capture Import Debug',
+        `Received: ${report.received}`,
+        `Imported: ${report.imported.length}`,
+        `Failed: ${report.failed.length}`,
+        ...(report.failed.length > 0
+          ? ['Failed Items:', ...report.failed.flatMap((item) => [`• ${item.title}`, `  Reason: ${item.reason}`]), 'Retry available']
+          : []),
+      ].join('\n')
+    : '';
+  viewer.textContent = [importDebug, logs].filter(Boolean).join('\n\n') || (store.lang === 'zh' ? '[暂无调试日志]' : '[No debug logs yet]');
   viewer.scrollTop = viewer.scrollHeight;
 }
 
