@@ -3,11 +3,15 @@
 import { useMemo, useState } from 'react';
 import type { PlannerScheduledPlace, PlannerTrip, TripExpenseCategory, TripExpenseItem } from '@/domain/planner';
 import {
-  calculateTripSettlement,
   effectiveFxRate,
   estimateTripBudget,
   type FxSettings,
 } from '@/domain/planner';
+import {
+  calculateTripSettlementWithPayments,
+  resolveExpensePayments,
+  type TripExpenseWithPayments,
+} from '@/domain/expense-payments';
 
 interface PlannerBudgetLedgerProps {
   trip: PlannerTrip;
@@ -31,7 +35,10 @@ const CATEGORY_MAP: Record<TripExpenseCategory, { icon: string; zh: string; en: 
 };
 
 const COMMON_CURRENCIES = ['CNY', 'THB', 'JPY', 'USD', 'EUR', 'GBP', 'SGD', 'HKD', 'TWD'];
-const SETTLED_CONFIRMATION = 'settled';
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 export function PlannerBudgetLedger({
   trip,
@@ -50,19 +57,15 @@ export function PlannerBudgetLedger({
     return Array.from(new Set([baseCurrency, ...COMMON_CURRENCIES]));
   }, [baseCurrency]);
 
-  // New expense form state
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [title, setTitle] = useState('');
   const [amountStr, setAmountStr] = useState('');
   const [currencyOverride, setCurrencyOverride] = useState<string | null>(null);
   const currency = currencyOverride ?? baseCurrency;
   const [category, setCategory] = useState<TripExpenseCategory>('food');
-  const [isSettled, setIsSettled] = useState(false);
-  // Payer / split selections are user overrides layered on top of the
-  // asynchronously-hydrated member list. No effect needed: when members change,
-  // a stale override simply stops matching and falls back to derived defaults (C1).
   const [paidByOverride, setPaidByOverride] = useState<string | null>(null);
   const [splitOverride, setSplitOverride] = useState<string[] | null>(null);
+  const [paymentDraft, setPaymentDraft] = useState<Record<string, string> | null>(null);
   const paidBy = paidByOverride && members.includes(paidByOverride)
     ? paidByOverride
     : members[0] || (zh ? '我' : 'Me');
@@ -76,19 +79,15 @@ export function PlannerBudgetLedger({
   const [showFxEditor, setShowFxEditor] = useState(false);
   const [fxDraft, setFxDraft] = useState<Record<string, string>>({});
   const [memberNotice, setMemberNotice] = useState('');
-
-  // Member management state
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
 
-  // FX settings derived from the trip; stable identity keeps downstream memos intact
   const fx = useMemo<FxSettings>(
     () => ({ base: (trip.currency || 'CNY').trim().toUpperCase(), overrides: trip.fx_rates }),
     [trip.currency, trip.fx_rates],
   );
 
-  // Auto Budget Estimation
   const budgetEstimation = useMemo(() => {
     return estimateTripBudget(scheduledPlaces, members.length || 1, fx);
   }, [scheduledPlaces, members.length, fx]);
@@ -100,28 +99,40 @@ export function PlannerBudgetLedger({
     return [...codes].sort();
   }, [budgetEstimation.currencies, trip.fx_rates, baseCurrency]);
 
-  const pendingExpenses = useMemo(
-    () => expenses.filter((expense) => expense.confirmation !== SETTLED_CONFIRMATION),
-    [expenses],
-  );
-  const settledExpenses = useMemo(
-    () => expenses.filter((expense) => expense.confirmation === SETTLED_CONFIRMATION),
-    [expenses],
-  );
-
-  // Only unsettled expenses participate in future AA transfers. Settled expenses
-  // remain part of the spending ledger, but do not create another debt.
+  const expensesWithPayments = expenses as TripExpenseWithPayments[];
   const settlement = useMemo(() => {
-    return calculateTripSettlement(pendingExpenses, members, fx);
-  }, [pendingExpenses, members, fx]);
+    return calculateTripSettlementWithPayments(expensesWithPayments, members, fx);
+  }, [expensesWithPayments, members, fx]);
 
   const recordedTotal = useMemo(() => {
     const total = expenses.reduce((sum, expense) => {
       const rate = effectiveFxRate(expense.currency, fx);
       return sum + (rate === null ? expense.amount : expense.amount * rate);
     }, 0);
-    return Math.round(total * 100) / 100;
+    return roundMoney(total);
   }, [expenses, fx]);
+
+  const parsedExpenseAmount = useMemo(() => {
+    const parsed = parseFloat(amountStr.replace(/,/g, ''));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }, [amountStr]);
+
+  const explicitPayments = useMemo(() => {
+    if (paymentDraft === null) {
+      return parsedExpenseAmount > 0 ? [{ member: paidBy, amount: parsedExpenseAmount }] : [];
+    }
+    return members
+      .map((member) => ({ member, amount: parseFloat((paymentDraft[member] ?? '').replace(/,/g, '')) }))
+      .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0)
+      .map((payment) => ({ ...payment, amount: roundMoney(payment.amount) }));
+  }, [members, paidBy, parsedExpenseAmount, paymentDraft]);
+
+  const paymentTotal = useMemo(
+    () => roundMoney(explicitPayments.reduce((sum, payment) => sum + payment.amount, 0)),
+    [explicitPayments],
+  );
+  const paymentDifference = roundMoney(parsedExpenseAmount - paymentTotal);
+  const paymentDraftValid = paymentDraft === null || (parsedExpenseAmount > 0 && Math.abs(paymentDifference) <= 0.01);
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,6 +146,7 @@ export function PlannerBudgetLedger({
     const next = [...members, trimmed];
     onUpdateMembers(next);
     setSelectedSplits(next);
+    if (paymentDraft) setPaymentDraft({ ...paymentDraft, [trimmed]: '' });
     setNewMemberName('');
     setMemberNotice('');
     setIsAddingMember(false);
@@ -145,31 +157,59 @@ export function PlannerBudgetLedger({
     const next = members.filter((m) => m !== name);
     onUpdateMembers(next);
     setSelectedSplits((prev) => prev.filter((m) => m !== name));
+    if (paymentDraft) {
+      const nextPayments = { ...paymentDraft };
+      delete nextPayments[name];
+      setPaymentDraft(nextPayments);
+    }
+  };
+
+  const startMultiPayment = () => {
+    const next: Record<string, string> = {};
+    members.forEach((member) => { next[member] = ''; });
+    if (paidBy) next[paidBy] = parsedExpenseAmount > 0 ? String(parsedExpenseAmount) : '';
+    setPaymentDraft(next);
+  };
+
+  const fillEqualPayments = () => {
+    if (parsedExpenseAmount <= 0 || selectedSplits.length === 0) return;
+    const next: Record<string, string> = {};
+    members.forEach((member) => { next[member] = ''; });
+    const baseShare = Math.floor((parsedExpenseAmount / selectedSplits.length) * 100) / 100;
+    let assigned = 0;
+    selectedSplits.forEach((member, index) => {
+      const amount = index === selectedSplits.length - 1
+        ? roundMoney(parsedExpenseAmount - assigned)
+        : baseShare;
+      assigned = roundMoney(assigned + amount);
+      next[member] = String(amount);
+    });
+    setPaymentDraft(next);
   };
 
   const handleSubmitExpense = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedAmount = parseFloat(amountStr.replace(/,/g, ''));
-    if (!title.trim() || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
+    if (!title.trim() || parsedExpenseAmount <= 0 || !paymentDraftValid) return;
 
-    onAddExpense({
+    const item: Omit<TripExpenseWithPayments, 'id' | 'created_at'> = {
       trip_id: trip.id,
       title: title.trim(),
       category,
-      amount: parsedAmount,
+      amount: parsedExpenseAmount,
       currency,
       paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
       split_members: selectedSplits.length > 0 ? selectedSplits : members,
       notes: notes.trim() || undefined,
-      confirmation: isSettled ? SETTLED_CONFIRMATION : undefined,
-    });
+      payments: explicitPayments,
+    };
+    onAddExpense(item);
 
     setTitle('');
     setAmountStr('');
     setNotes('');
     setPaidByOverride(null);
     setSplitOverride(null);
-    setIsSettled(false);
+    setPaymentDraft(null);
     setIsAddingExpense(false);
   };
 
@@ -213,36 +253,33 @@ export function PlannerBudgetLedger({
     }
   };
 
-  const renderExpenseItem = (item: TripExpenseItem, settled: boolean) => {
+  const renderExpenseItem = (item: TripExpenseWithPayments) => {
     const cat = CATEGORY_MAP[item.category] || CATEGORY_MAP.other;
+    const payments = resolveExpensePayments(item);
     return (
       <div
         key={item.id}
-        className={`flex items-center justify-between rounded-lg border p-2 text-xs transition ${
-          settled
-            ? 'border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50'
-            : 'border-stone-100 bg-stone-50/70 hover:bg-stone-100/60'
-        }`}
+        className="flex items-center justify-between rounded-lg border border-stone-100 bg-stone-50/70 p-2 text-xs transition hover:bg-stone-100/60"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm shrink-0">{cat.icon}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-sm">{cat.icon}</span>
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <div className="font-semibold text-stone-900 truncate">{item.title}</div>
-              {settled ? (
-                <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">
-                  ✓ {zh ? '已分摊' : 'Settled'}
+            <div className="truncate font-semibold text-stone-900">{item.title}</div>
+            <div className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 text-[10px] text-stone-500">
+              <span>{item.split_members.length}{zh ? '人分摊' : ' split'}</span>
+              <span>·</span>
+              <span>{zh ? '已支付' : 'Paid'}:</span>
+              {payments.map((payment) => (
+                <span key={payment.member} className="font-medium text-stone-700">
+                  {payment.member} {item.currency} {payment.amount.toLocaleString()}
                 </span>
-              ) : null}
-            </div>
-            <div className={`text-[10px] ${settled ? 'text-emerald-700/70' : 'text-stone-400'}`}>
-              {item.paid_by} {zh ? '垫付' : 'paid'} · {item.split_members.length}{zh ? '人平摊' : ' split'}
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <strong className="text-stone-900 font-bold">
+        <div className="flex shrink-0 items-center gap-2">
+          <strong className="font-bold text-stone-900">
             {item.currency} {item.amount.toLocaleString()}
           </strong>
           <button
@@ -259,7 +296,6 @@ export function PlannerBudgetLedger({
 
   return (
     <div className="flex flex-col gap-4 overflow-y-auto p-3 text-stone-900">
-      {/* 1. Travel Companion Member Bar */}
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-2xs">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
@@ -279,20 +315,20 @@ export function PlannerBudgetLedger({
           <form onSubmit={handleAddMember} className="mt-2 flex flex-col gap-1">
             {memberNotice ? <p className="text-[10px] text-amber-600">{memberNotice}</p> : null}
             <div className="flex gap-1.5">
-            <input
-              type="text"
-              value={newMemberName}
-              onChange={(e) => setNewMemberName(e.target.value)}
-              placeholder={zh ? '输入同伴昵称...' : 'Member name...'}
-              className="flex-1 rounded-lg border border-stone-300 px-2 py-1 text-xs outline-hidden focus:border-emerald-500"
-              autoFocus
-            />
-            <button
-              type="submit"
-              className="rounded-lg bg-stone-900 px-3 py-1 text-xs font-semibold text-white hover:bg-stone-800"
-            >
-              {zh ? '确定' : 'Add'}
-            </button>
+              <input
+                type="text"
+                value={newMemberName}
+                onChange={(e) => setNewMemberName(e.target.value)}
+                placeholder={zh ? '输入同伴昵称...' : 'Member name...'}
+                className="flex-1 rounded-lg border border-stone-300 px-2 py-1 text-xs outline-hidden focus:border-emerald-500"
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="rounded-lg bg-stone-900 px-3 py-1 text-xs font-semibold text-white hover:bg-stone-800"
+              >
+                {zh ? '确定' : 'Add'}
+              </button>
             </div>
           </form>
         ) : null}
@@ -308,7 +344,7 @@ export function PlannerBudgetLedger({
                 <button
                   type="button"
                   onClick={() => handleRemoveMember(m)}
-                  className="text-stone-400 hover:text-rose-600 text-[10px]"
+                  className="text-[10px] text-stone-400 hover:text-rose-600"
                 >
                   ✕
                 </button>
@@ -318,7 +354,6 @@ export function PlannerBudgetLedger({
         </div>
       </div>
 
-      {/* 2. Budget Estimation vs Actual Spending Cards */}
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-2xs">
           <span className="text-[11px] font-medium text-emerald-800">
@@ -374,7 +409,6 @@ export function PlannerBudgetLedger({
         </div>
       </div>
 
-      {/* 2b. FX Rates Editor */}
       {fxRowCodes.length > 0 ? (
         <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3 shadow-2xs">
           <div className="flex items-center justify-between">
@@ -395,8 +429,7 @@ export function PlannerBudgetLedger({
 
           {!showFxEditor ? (
             <p className="mt-1 text-[10px] text-sky-800/80">
-              {fxRowCodes.map((code) => `${code}: ×${effectiveFxRate(code, fx) ?? '?'}`).join(' · ')}
-              {' '}
+              {fxRowCodes.map((code) => `${code}: ×${effectiveFxRate(code, fx) ?? '?'}`).join(' · ')}{' '}
               {zh ? '(内置近似汇率，可调整)' : '(built-in reference rates, editable)'}
             </p>
           ) : (
@@ -452,16 +485,15 @@ export function PlannerBudgetLedger({
         </div>
       ) : null}
 
-      {/* 3. Fast Expense Entry Drawer / Button */}
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-2xs">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-stone-800">
-            {zh ? '📝 记账与垫付流水' : 'Expense Ledger'}
+            {zh ? '📝 记账与付款流水' : 'Expense Ledger'}
           </span>
           <button
             type="button"
             onClick={() => setIsAddingExpense(!isAddingExpense)}
-            className="rounded-lg bg-stone-950 px-2.5 py-1 text-xs font-semibold text-white hover:bg-stone-800 transition"
+            className="rounded-lg bg-stone-950 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-stone-800"
           >
             {isAddingExpense ? (zh ? '✕ 收起' : '✕ Close') : (zh ? '+ 记一笔' : '+ Add Expense')}
           </button>
@@ -469,7 +501,6 @@ export function PlannerBudgetLedger({
 
         {isAddingExpense ? (
           <form onSubmit={handleSubmitExpense} className="mt-3 space-y-3 border-t border-stone-100 pt-3">
-            {/* Category Chips */}
             <div>
               <label className="block text-[11px] font-semibold text-stone-500">
                 {zh ? '消费类别' : 'Category'}
@@ -484,9 +515,7 @@ export function PlannerBudgetLedger({
                       type="button"
                       onClick={() => setCategory(cat)}
                       className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                        isSelected
-                          ? 'bg-stone-900 text-white shadow-2xs'
-                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        isSelected ? 'bg-stone-900 text-white shadow-2xs' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                       }`}
                     >
                       {meta.icon} {zh ? meta.zh : meta.en}
@@ -496,7 +525,6 @@ export function PlannerBudgetLedger({
               </div>
             </div>
 
-            {/* Title & Amount */}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[11px] font-semibold text-stone-500">
@@ -522,9 +550,7 @@ export function PlannerBudgetLedger({
                     onChange={(e) => setCurrencyOverride(e.target.value)}
                     className="w-16 rounded-lg border border-stone-300 bg-stone-50 px-1 text-xs"
                   >
-                    {availableCurrencies.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
+                    {availableCurrencies.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <input
                     type="number"
@@ -540,20 +566,17 @@ export function PlannerBudgetLedger({
               </div>
             </div>
 
-            {/* Payer & Split Members */}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[11px] font-semibold text-stone-500">
-                  {zh ? '谁垫付的' : 'Paid By'}
+                  {zh ? '主要垫付人' : 'Primary Payer'}
                 </label>
                 <select
                   value={paidBy}
                   onChange={(e) => setPaidByOverride(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-stone-300 p-1.5 text-xs font-medium"
                 >
-                  {members.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
+                  {members.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
 
@@ -569,10 +592,10 @@ export function PlannerBudgetLedger({
                         key={m}
                         type="button"
                         onClick={() => toggleSplitMember(m)}
-                        className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-medium transition ${
+                        className={`rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium transition ${
                           isChecked
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                            : 'bg-stone-100 text-stone-400 border border-stone-200'
+                            ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                            : 'border-stone-200 bg-stone-100 text-stone-400'
                         }`}
                       >
                         {isChecked ? '✓ ' : ''}{m}
@@ -583,103 +606,108 @@ export function PlannerBudgetLedger({
               </div>
             </div>
 
-            {/* Settlement status */}
-            <div>
-              <label className="block text-[11px] font-semibold text-stone-500">
-                {zh ? '分摊状态' : 'Settlement Status'}
-              </label>
-              <div className="mt-1 grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setIsSettled(false)}
-                  className={`rounded-lg border px-2 py-1.5 text-left text-[10.5px] transition ${
-                    !isSettled
-                      ? 'border-amber-300 bg-amber-50 font-bold text-amber-900'
-                      : 'border-stone-200 bg-white text-stone-500 hover:bg-stone-50'
-                  }`}
-                >
-                  <span className="block">⏳ {zh ? '待分摊' : 'Pending'}</span>
-                  <span className="mt-0.5 block text-[9.5px] font-normal opacity-75">
-                    {zh ? '稍后进入 AA 清账' : 'Include in later AA settlement'}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsSettled(true)}
-                  className={`rounded-lg border px-2 py-1.5 text-left text-[10.5px] transition ${
-                    isSettled
-                      ? 'border-emerald-300 bg-emerald-50 font-bold text-emerald-900'
-                      : 'border-stone-200 bg-white text-stone-500 hover:bg-stone-50'
-                  }`}
-                >
-                  <span className="block">✓ {zh ? '已分摊' : 'Already settled'}</span>
-                  <span className="mt-0.5 block text-[9.5px] font-normal opacity-75">
-                    {zh ? '当场已还，不再计入待清账' : 'Paid back now; exclude from future debt'}
-                  </span>
-                </button>
+            <div className="rounded-lg border border-stone-200 bg-stone-50/70 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[11px] font-semibold text-stone-700">
+                    {zh ? '实际已经支付了多少' : 'Actual payment contributions'}
+                  </div>
+                  <div className="mt-0.5 text-[9.5px] text-stone-400">
+                    {zh ? '默认主要垫付人支付全额；若有人当场付回或多人一起付款，可按人记录金额。' : 'Defaults to one payer; record per-person amounts for reimbursements or shared payment.'}
+                  </div>
+                </div>
+                {paymentDraft === null ? (
+                  <button
+                    type="button"
+                    onClick={startMultiPayment}
+                    className="shrink-0 rounded-md border border-stone-300 bg-white px-2 py-1 text-[10px] font-semibold text-stone-700 hover:bg-stone-100"
+                  >
+                    + {zh ? '多人支付' : 'Multiple payers'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentDraft(null)}
+                    className="shrink-0 rounded-md border border-stone-300 bg-white px-2 py-1 text-[10px] font-semibold text-stone-600 hover:bg-stone-100"
+                  >
+                    {zh ? '恢复一人垫付' : 'One payer'}
+                  </button>
+                )}
               </div>
+
+              {paymentDraft === null ? (
+                <div className="mt-2 inline-flex rounded-full bg-white px-2.5 py-1 text-[10.5px] font-semibold text-stone-700 ring-1 ring-stone-200">
+                  {paidBy} · {currency} {parsedExpenseAmount.toLocaleString()}
+                </div>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                    {members.map((member) => (
+                      <label key={member} className="rounded-md border border-stone-200 bg-white p-1.5">
+                        <span className="block truncate text-[10px] font-semibold text-stone-600">{member}</span>
+                        <div className="mt-1 flex items-center gap-1">
+                          <span className="text-[9px] text-stone-400">{currency}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            value={paymentDraft[member] ?? ''}
+                            onChange={(e) => setPaymentDraft((prev) => ({ ...(prev ?? {}), [member]: e.target.value }))}
+                            placeholder="0"
+                            className="min-w-0 flex-1 rounded border border-stone-200 px-1 py-0.5 text-right text-[10.5px] font-semibold outline-hidden focus:border-emerald-500"
+                          />
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <button
+                      type="button"
+                      onClick={fillEqualPayments}
+                      className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                    >
+                      {zh ? '按分摊成员均分已付' : 'Fill equal contributions'}
+                    </button>
+                    <span className={`text-[10px] font-semibold ${paymentDraftValid ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {zh ? '已录入' : 'Recorded'} {currency} {paymentTotal.toLocaleString()} / {parsedExpenseAmount.toLocaleString()}
+                      {!paymentDraftValid ? ` · ${paymentDifference > 0 ? (zh ? '还差' : 'missing') : (zh ? '超出' : 'over')} ${Math.abs(paymentDifference).toLocaleString()}` : ' ✓'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-emerald-700 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-600 transition"
+              disabled={!paymentDraftValid}
+              className="w-full rounded-lg bg-emerald-700 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-stone-300"
             >
               ✓ {zh ? '保存该笔花费' : 'Save Expense'}
             </button>
           </form>
         ) : null}
 
-        {/* Expense List */}
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 space-y-1.5">
           {expenses.length === 0 ? (
-            <p className="py-4 text-center text-xs text-stone-400 italic">
+            <p className="py-4 text-center text-xs italic text-stone-400">
               {zh ? '暂无账目，点击上方“+ 记一笔”快速录入' : 'No expenses recorded yet'}
             </p>
-          ) : (
-            <>
-              {pendingExpenses.length > 0 ? (
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold text-amber-800">
-                    <span>⏳ {zh ? '待分摊 / 待清账' : 'Pending settlement'}</span>
-                    <span>{pendingExpenses.length}</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {pendingExpenses.map((item) => renderExpenseItem(item, false))}
-                  </div>
-                </div>
-              ) : null}
-
-              {settledExpenses.length > 0 ? (
-                <div className={pendingExpenses.length > 0 ? 'border-t border-stone-100 pt-2.5' : ''}>
-                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold text-emerald-800">
-                    <span>✓ {zh ? '已分摊 / 已结清' : 'Already settled'}</span>
-                    <span>{settledExpenses.length}</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {settledExpenses.map((item) => renderExpenseItem(item, true))}
-                  </div>
-                </div>
-              ) : null}
-            </>
-          )}
+          ) : expensesWithPayments.map(renderExpenseItem)}
         </div>
       </div>
 
-      {/* 4. Minimum Cash Flow AA Settlement Panel */}
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-2xs">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-stone-800">
             <span>⚖️</span>
-            <span>{zh ? 'AA 待分摊与最简清账' : 'Pending AA Settlement'}</span>
-            <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 ring-1 ring-amber-200">
-              {pendingExpenses.length}
-            </span>
+            <span>{zh ? 'AA 拆账与最简清账' : 'AA Debt Settlement'}</span>
           </div>
           {settlement.transfers.length > 0 ? (
             <button
               type="button"
               onClick={() => void copySettlementText()}
-              className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 shadow-2xs"
+              className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-[11px] font-semibold text-stone-700 shadow-2xs hover:bg-stone-100"
             >
               📋 {zh ? '一键复制发群' : 'Copy Text'}
             </button>
@@ -692,21 +720,20 @@ export function PlannerBudgetLedger({
           </div>
         ) : null}
 
-        {pendingExpenses.length === 0 ? (
-          <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/60 p-3 text-xs font-medium text-emerald-800">
-            🎉 {zh ? '当前没有待分摊账目；已分摊流水只保留为支出记录，不会再次生成转账。' : 'No pending expenses. Settled entries remain in spending history and will not generate another transfer.'}
+        {expenses.length === 0 ? (
+          <div className="mt-3 rounded-lg border border-stone-100 bg-stone-50 p-3 text-xs text-stone-500">
+            {zh ? '暂无账目。录入消费后，这里会根据“应分摊金额”和“每人实际已支付金额”自动算出剩余转账。' : 'No expenses yet. Settlement is calculated from each member’s share versus actual payments.'}
           </div>
         ) : (
           <>
-            {/* Member Balances */}
-            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {settlement.memberBalances.map((mb) => {
                 const isCreditor = mb.netBalance > 0.01;
                 const isDebtor = mb.netBalance < -0.01;
                 return (
                   <div
                     key={mb.member}
-                    className={`rounded-lg p-2 text-xs border ${
+                    className={`rounded-lg border p-2 text-xs ${
                       isCreditor
                         ? 'border-emerald-200 bg-emerald-50/50'
                         : isDebtor
@@ -714,53 +741,44 @@ export function PlannerBudgetLedger({
                         : 'border-stone-200 bg-stone-50'
                     }`}
                   >
-                    <div className="font-semibold text-stone-900 truncate">{mb.member}</div>
+                    <div className="truncate font-semibold text-stone-900">{mb.member}</div>
                     <div className="mt-0.5 text-[10.5px] text-stone-500">
-                      {zh ? '付' : 'Paid'}: {baseCurrency}{mb.paidTotal} | {zh ? '摊' : 'Share'}: {baseCurrency}{mb.shareTotal}
+                      {zh ? '已付' : 'Paid'}: {baseCurrency}{mb.paidTotal} | {zh ? '应摊' : 'Share'}: {baseCurrency}{mb.shareTotal}
                     </div>
-                    <div
-                      className={`mt-1 font-bold text-xs ${
-                        isCreditor
-                          ? 'text-emerald-700'
-                          : isDebtor
-                          ? 'text-rose-700'
-                          : 'text-stone-500'
-                      }`}
-                    >
-                      {isCreditor ? `+ ${baseCurrency}${mb.netBalance} (待收款)` : isDebtor ? `- ${baseCurrency}${Math.abs(mb.netBalance)} (待支付)` : (zh ? '已结清' : 'Settled')}
+                    <div className={`mt-1 text-xs font-bold ${isCreditor ? 'text-emerald-700' : isDebtor ? 'text-rose-700' : 'text-stone-500'}`}>
+                      {isCreditor
+                        ? `+ ${baseCurrency}${mb.netBalance} (${zh ? '待收款' : 'to receive'})`
+                        : isDebtor
+                        ? `- ${baseCurrency}${Math.abs(mb.netBalance)} (${zh ? '待支付' : 'to pay'})`
+                        : (zh ? '已结清' : 'Settled')}
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Transfer Path Directives */}
             <div className="mt-3 rounded-lg border border-stone-100 bg-stone-50 p-2.5">
-              <div className="text-[11px] font-semibold text-stone-600 mb-1.5">
-                🎯 {zh ? `最简转账路径 (仅需 ${settlement.transfers.length} 笔转账即可全部结清):` : `Optimal Transfers (${settlement.transfers.length} payments):`}
+              <div className="mb-1.5 text-[11px] font-semibold text-stone-600">
+                🎯 {zh ? `剩余最简转账路径 (${settlement.transfers.length} 笔):` : `Remaining optimal transfers (${settlement.transfers.length}):`}
               </div>
 
               {settlement.transfers.length === 0 ? (
-                <p className="text-xs text-emerald-700 font-medium italic">
-                  🎉 {zh ? '当前待分摊账目已完全结清，无需任何转账！' : 'All pending accounts are settled!'}
+                <p className="text-xs font-medium italic text-emerald-700">
+                  🎉 {zh ? '按当前已支付金额，全员账目已经持平，无需再转账。' : 'Current payment contributions already settle all balances.'}
                 </p>
               ) : (
                 <div className="space-y-1 text-xs">
                   {settlement.transfers.map((t, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between rounded-md bg-white px-2.5 py-1.5 font-medium text-stone-800 shadow-2xs border border-stone-200/60"
+                      className="flex items-center justify-between rounded-md border border-stone-200/60 bg-white px-2.5 py-1.5 font-medium text-stone-800 shadow-2xs"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span className="rounded-full bg-rose-100 text-rose-800 px-1.5 py-0.5 text-[10px] font-bold">
-                          {t.from}
-                        </span>
+                        <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-800">{t.from}</span>
                         <span className="text-stone-400">{zh ? '👉 转账给' : '👉 Transfer to'}</span>
-                        <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[10px] font-bold">
-                          {t.to}
-                        </span>
+                        <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">{t.to}</span>
                       </div>
-                      <strong className="text-emerald-800 font-bold">
+                      <strong className="font-bold text-emerald-800">
                         {baseCurrency} {t.amount.toLocaleString()}
                       </strong>
                     </div>
