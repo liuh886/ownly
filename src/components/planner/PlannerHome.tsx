@@ -1148,12 +1148,36 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       await plannerRepository.initialize();
       if (state.pendingPlaces.length > 0) {
         const report = await plannerRepository.importCapturedPlaces(state.pendingPlaces);
-        const applied = await applyCaptureImportReport(report);
-        if (!applied) throw new Error('Capture import report apply failed');
+
+        let ackFailed = false;
+        try {
+          const applied = await applyCaptureImportReport(report);
+          if (!applied) ackFailed = true;
+        } catch {
+          ackFailed = true;
+        }
+
         setCapturePending(report.failed.length);
-        setNotice(zh
-          ? `收到 ${report.received} 个候选；已导入 ${report.imported.length}；失败 ${report.failed.length}${report.failed.length ? `。Rejected: ${report.failed.length} · ${report.failed.map((item) => `${item.title}: ${item.reason}`).join('；')}` : ''}`
-          : `Received ${report.received}; imported ${report.imported.length}; failed ${report.failed.length}${report.failed.length ? `. Rejected: ${report.failed.length} · ${report.failed.map((item) => `${item.title}: ${item.reason}`).join('; ')}` : ''}`);
+        const parts: string[] = [];
+        if (report.imported.length > 0) {
+          parts.push(zh
+            ? `✅ 已导入 ${report.imported.length}/${report.received} 个候选`
+            : `✅ Imported ${report.imported.length}/${report.received} candidates`);
+        }
+        if (report.failed.length > 0) {
+          const failSummary = report.failed
+            .map((f) => `${f.title} (${f.reason}${f.detail ? `: ${f.detail}` : ''})`)
+            .join('; ');
+          parts.push(zh
+            ? `⚠️ ${report.failed.length} 个失败：${failSummary}`
+            : `⚠️ ${report.failed.length} failed: ${failSummary}`);
+        }
+        if (ackFailed) {
+          parts.push(zh
+            ? '⚠️ 扩展确认失败，下次同步可能重复导入'
+            : '⚠️ Extension ACK failed; may re-import next sync');
+        }
+        setNotice(parts.join(' · ') || (zh ? '同步完成。' : 'Sync complete.'));
       } else {
         setCapturePending(0);
         setNotice(zh ? '没有待同步的研究候选。' : 'No pending research candidates to sync.');
