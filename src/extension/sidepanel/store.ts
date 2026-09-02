@@ -42,6 +42,7 @@ function buildV2Facade(v3: OwnlyCaptureStateV3) {
       source_category: p.source.category,
       types: p.source.types,
       kind: p.inferred_kind || 'other',
+      area: p.address?.split(/[,，·]/)[0]?.trim() || undefined,
       priority: p.user?.priority,
       tags: p.user?.tags || [],
       why: p.user?.why,
@@ -71,7 +72,7 @@ function buildV2Facade(v3: OwnlyCaptureStateV3) {
       created_at: p.captured_at,
       updated_at: p.updated_at,
     })),
-    lastImportReport: undefined,
+    lastImportReport: undefined as import('../../domain/planner').ImportReport | undefined,
   };
 }
 

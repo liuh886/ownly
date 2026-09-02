@@ -9,7 +9,6 @@ import {
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
   type PlannerPlaceKind,
-  type PlannerTripPlace,
 } from '../../domain/planner';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
@@ -167,7 +166,7 @@ function renderChips() {
   el.quickChips.innerHTML = '';
 
   const activeTrip = store.state.activeContext;
-  const customTags = activeTrip?.tags || [];
+  const customTags: string[] = [];
 
   // Render custom trip sub-tags first (e.g. 曼谷, 清迈, 普吉)
   for (const tag of customTags) {
@@ -307,7 +306,6 @@ function renderFilters() {
 
   const allTags = Array.from(
     new Set([
-      ...(activeTrip?.tags || []),
       ...tripPlaces.flatMap((p) => [...(p.tags || []), ...(p.signals || []), ...(p.risks || [])]),
     ]),
   )
@@ -321,9 +319,9 @@ function renderFilters() {
     const tagLower = tag.trim().toLowerCase();
     const count = tripPlaces.filter(
       (p) =>
-        p.tags.some((t) => t.trim().toLowerCase() === tagLower) ||
-        p.signals?.some((s) => s.trim().toLowerCase() === tagLower) ||
-        p.risks?.some((r) => r.trim().toLowerCase() === tagLower),
+        (p.tags || []).some((t: string) => t.trim().toLowerCase() === tagLower) ||
+        (p.signals || []).some((s: string) => s.trim().toLowerCase() === tagLower) ||
+        (p.risks || []).some((r: string) => r.trim().toLowerCase() === tagLower),
     ).length;
     if (count > 0) {
       filters.push({ id: `tag:${tag}`, label: `🏷️ ${tag}`, count });
@@ -558,23 +556,23 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
 
   const existing = getExistingPlaceForUrl(place.sourceUrl, place.sourcePlaceId);
   if (existing) {
-    const isGeneric = existing.kind === 'attraction' || existing.kind === 'other';
+    const isGeneric = existing.inferred_kind === 'attraction' || existing.inferred_kind === 'other' || !existing.inferred_kind;
     const hasSpecificDetection = freshDetectedKind !== 'attraction' && freshDetectedKind !== 'other';
-    const effectiveKind = (isGeneric && hasSpecificDetection) ? freshDetectedKind : existing.kind;
+    const effectiveKind = (isGeneric && hasSpecificDetection) ? freshDetectedKind : (existing.inferred_kind || freshDetectedKind);
 
     el.kind.value = effectiveKind;
-    el.area.value = existing.area || (place.address?.split(/[,，·]/)[0]?.trim() || '');
-    const rawTags = existing.tags || [];
+    el.area.value = existing.address?.split(/[,，·]/)[0]?.trim() || (place.address?.split(/[,，·]/)[0]?.trim() || '');
+    const rawTags = existing.user?.tags || [];
     el.tags.value = ensurePlaceKindTag(rawTags, effectiveKind, store.lang).join(', ');
-    el.duration.value = existing.duration_minutes ? String(existing.duration_minutes) : '';
-    el.window.value = existing.preferred_window || '';
-    el.rating.value = existing.observed_rating ? String(existing.observed_rating) : (place.rating ? String(place.rating) : '');
-    const storedPrice = isPlausiblePriceText(existing.observed_price) ? existing.observed_price : undefined;
+    el.duration.value = existing.user?.duration_minutes ? String(existing.user.duration_minutes) : '';
+    el.window.value = existing.user?.preferred_window || '';
+    el.rating.value = existing.rating ? String(existing.rating) : (place.rating ? String(place.rating) : '');
+    const storedPrice = isPlausiblePriceText(existing.price?.raw) ? existing.price?.raw : undefined;
     el.price.value = storedPrice || (isPlausiblePriceText(place.priceLevel) ? place.priceLevel! : '');
-    el.why.value = existing.why || place.summary || '';
-    el.signals.value = existing.signals?.join(', ') || '';
-    el.risks.value = existing.risks?.join(', ') || '';
-    el.notes.value = existing.notes || '';
+    el.why.value = existing.user?.why || place.summary || '';
+    el.signals.value = '';
+    el.risks.value = '';
+    el.notes.value = existing.user?.notes || '';
     applyTierNote(place);
     return;
   }
@@ -611,7 +609,7 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
   if (place.userNote && !el.notes.value) {
     el.notes.value = place.userNote;
   }
-  const baseTags = (store.state.activeContext?.tags || []).filter(Boolean);
+  const baseTags: string[] = [];
   el.tags.value = ensurePlaceKindTag(baseTags, freshDetectedKind, store.lang).join(', ');
 }
 
@@ -716,13 +714,13 @@ function sanitizeSafeHref(url: string | undefined): string | null {
 
 const cardCache = new Map<string, { sig: string; node: HTMLDivElement }>();
 
-function candidateCardSig(place: import('../../domain/planner').PlannerTripPlace, dictKey: string): string {
+function candidateCardSig(place: { id: string; updated_at?: string; price_currency?: string }, dictKey: string): string {
   return [
     place.updated_at || '',
     place.price_currency || '',
     store.mapCurrencyOverride || '',
     store.pageDetectedCurrency || '',
-    store.state.activeContext?.currency || '',
+    store.getActiveCollection()?.currency || '',
     store.editingCandidateId === place.id ? 'edit' : 'view',
     store.bulkMode ? 'bulk' : 'single',
     store.bulkSelected.has(place.id) ? 'sel' : 'unsel',
@@ -746,12 +744,12 @@ export function renderCandidatesList() {
       : dict.btnBulkEnrichCandidates;
   }
 
-  const kindMatches = (p: PlannerTripPlace, kind: PlannerPlaceKind): boolean => {
+  const kindMatches = (p: { kind?: string; tags?: string[] }, kind: PlannerPlaceKind): boolean => {
     const zhLabel = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
     const enLabel = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
     return (
       p.kind === kind ||
-      p.tags.some((t) => {
+      (p.tags || []).some((t) => {
         const lower = t.trim().toLowerCase();
         return lower === zhLabel || lower === enLabel;
       })
@@ -814,8 +812,49 @@ export function renderCandidatesList() {
   }
 }
 
+type V2FacadePlace = {
+  id: string;
+  trip_id: string;
+  title: string;
+  source_provider: string;
+  source_url: string;
+  source_place_id?: string;
+  source_category?: string;
+  types?: string[];
+  kind: string;
+  area?: string;
+  priority?: string;
+  tags: string[];
+  why?: string;
+  notes?: string;
+  observed_rating?: number;
+  observed_review_count?: number;
+  observed_price?: string;
+  price_currency?: string;
+  price_min?: number;
+  price_max?: number;
+  price_unit?: string;
+  price_level?: number;
+  open_hours?: string;
+  address?: string;
+  coordinates?: { lat: number; lng: number };
+  phone?: string;
+  plus_code?: string;
+  preferred_window?: string;
+  duration_minutes?: number;
+  menu_url?: string;
+  reservation_url?: string;
+  review_topics?: string[];
+  signals: string[];
+  risks: string[];
+  reservation_status: string;
+  state: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
 function buildCandidateCard(
-  place: PlannerTripPlace,
+  place: V2FacadePlace,
   dict: ReturnType<typeof t>,
 ): HTMLDivElement {
   const card = document.createElement('div');
@@ -833,7 +872,7 @@ function buildCandidateCard(
 
     const titleEl = document.createElement('div');
     titleEl.className = 'candidate-title';
-    titleEl.textContent = `${KIND_ICONS[place.kind] || '📍'} ${place.title}`;
+    titleEl.textContent = `${KIND_ICONS[place.kind as PlannerPlaceKind] || '📍'} ${place.title}`;
 
     header.append(grip, titleEl);
 
@@ -847,7 +886,7 @@ function buildCandidateCard(
 
 
 function buildInlineEditor(
-  place: PlannerTripPlace,
+  place: V2FacadePlace,
   dict: ReturnType<typeof t>,
 ): HTMLFormElement {
   const form = document.createElement('form');
@@ -982,7 +1021,7 @@ function buildInlineEditor(
 }
 
 function buildCandidateDetails(
-  place: PlannerTripPlace,
+  place: V2FacadePlace,
   dict: ReturnType<typeof t>,
 ): HTMLDivElement {
   const wrapper = document.createElement('div');

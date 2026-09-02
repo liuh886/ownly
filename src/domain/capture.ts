@@ -412,3 +412,89 @@ export function parseCaptureCollectionExport(data: unknown): OwnlyCollectionExpo
   if (!d.collection || typeof d.collection !== 'object') return null;
   return d;
 }
+
+// ─── V3 Place lookup helpers ─────────────────────────────────────────────────
+
+/** Find an existing place by URL, Place ID, or coordinates. */
+export function findExistingPlace(
+  places: CapturePlace[],
+  sourceUrl: string,
+  sourcePlaceId?: string,
+  coordinates?: { lat: number; lng: number },
+): CapturePlace | undefined {
+  return places.find(
+    (p) =>
+      p.source.url === sourceUrl ||
+      (sourcePlaceId && p.source.place_id === sourcePlaceId) ||
+      (coordinates && p.coordinates &&
+        p.coordinates.lat === coordinates.lat &&
+        p.coordinates.lng === coordinates.lng),
+  );
+}
+
+/** Reorder places within a collection based on a visible ID order. Hidden/filtered places keep their absolute position. */
+export function reorderPlaces(
+  allPlaces: CapturePlace[],
+  visibleIds: string[],
+): CapturePlace[] {
+  const idToNewIndex = new Map(visibleIds.map((id, idx) => [id, idx] as const));
+  const collectionId = allPlaces[0]?.collection_id;
+  if (!collectionId) return allPlaces;
+
+  // Get places NOT in the visible set (hidden/filtered) — keep them at the end
+  const hidden = allPlaces.filter((p) => !idToNewIndex.has(p.id));
+  // Get visible places in the new order
+  const visible = visibleIds
+    .map((id) => allPlaces.find((p) => p.id === id))
+    .filter((p): p is CapturePlace => p !== undefined);
+
+  return [...visible, ...hidden];
+}
+
+/** Merge research enrichment data into an existing CapturePlace. */
+export function mergePlaceResearch(
+  existing: CapturePlace,
+  incoming: Partial<CapturePlace>,
+): CapturePlace {
+  return {
+    ...existing,
+    title: incoming.title || existing.title,
+    source: {
+      ...existing.source,
+      ...(incoming.source || {}),
+      types: incoming.source?.types
+        ? Array.from(new Set([...(incoming.source.types ?? []), ...(existing.source.types ?? [])]))
+        : existing.source.types,
+    },
+    address: incoming.address ?? existing.address,
+    coordinates: incoming.coordinates ?? existing.coordinates,
+    rating: incoming.rating ?? existing.rating,
+    review_count: incoming.review_count ?? existing.review_count,
+    phone: incoming.phone ?? existing.phone,
+    plus_code: incoming.plus_code ?? existing.plus_code,
+    open_hours: incoming.open_hours ?? existing.open_hours,
+    menu_url: incoming.menu_url ?? existing.menu_url,
+    reservation_url: incoming.reservation_url ?? existing.reservation_url,
+    review_topics: incoming.review_topics ?? existing.review_topics,
+    // Merge price if incoming has data
+    price: incoming.price?.raw ? {
+      raw: incoming.price.raw,
+      currency: incoming.price.currency ?? existing.price?.currency,
+      min: incoming.price.min ?? existing.price?.min,
+      max: incoming.price.max ?? existing.price?.max,
+      unit: incoming.price.unit ?? existing.price?.unit,
+      level: incoming.price.level ?? existing.price?.level,
+    } : existing.price,
+    user: {
+      ...existing.user,
+      ...incoming.user,
+      tags: incoming.user?.tags
+        ? Array.from(new Set([...(incoming.user.tags ?? []), ...(existing.user?.tags ?? [])]))
+        : existing.user?.tags,
+    },
+    inferred_kind: incoming.inferred_kind && incoming.inferred_kind !== 'other'
+      ? incoming.inferred_kind
+      : existing.inferred_kind,
+    updated_at: new Date().toISOString(),
+  };
+}

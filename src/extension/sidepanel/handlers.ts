@@ -1,25 +1,25 @@
 import { expandAndExtractListId } from '../api';
 import {
   ensurePlaceKindTag,
-  findExistingTripPlace,
   inferPlaceKind,
   inferSourceProvider,
-  mergeCapturedPlaceResearch,
   normalizeDelimitedText,
   normalizeObservedPrice,
-  reorderPendingPlaces,
   type PlannerPlaceKind,
-  type PlannerPlacePriority,
-  type CaptureContext,
-  type PlannerTripPlace,
 } from '../../domain/planner';
-import { normalizeCaptureState, saveCaptureStateViaWorker, writeCaptureState } from '../capture-state';
+import {
+  findExistingPlace,
+  reorderPlaces,
+  mergePlaceResearch,
+  type CapturePlace,
+} from '../../domain/capture';
+import type { PlannerTripPlace } from '../../domain/planner';
+import { saveState, writeState, getActiveCollection, getActivePlaces, store, t, DEBUG_STORAGE_KEY, getExistingPlaceForUrl } from './store';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
 import { enrichCandidatePlacesBatch, isCandidateMissingData, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
-import { DEBUG_STORAGE_KEY, getExistingPlaceForUrl, store, t } from './store';
 import {
   applyI18n,
   autoFillPlaceForm,
@@ -35,21 +35,6 @@ import {
 import { logger } from '../logger';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
-
-export async function saveState(): Promise<void> {
-  try {
-    const viaWorker = await saveCaptureStateViaWorker(store.state, store.locallyDeletedIds);
-    store.state = viaWorker.state;
-    store.locallyDeletedIds.clear();
-  } catch (error) {
-    console.warn('[Ownly Capture] Failed to persist capture state', error);
-    setStatus(t().saveStateFailed, 'error');
-  }
-  renderState();
-  renderCurrentPlace();
-  renderSmartListCard();
-  renderCandidatesList();
-}
 
 function scrollCardIntoView(placeId: string, focusEditor = false): void {
   requestAnimationFrame(() => {
@@ -73,14 +58,6 @@ function flashNewCandidate(placeId: string): void {
   });
 }
 
-function mergeEnrichedPendingPlace(
-  current: PlannerTripPlace,
-  enrichedById: ReadonlyMap<string, PlannerTripPlace>,
-): PlannerTripPlace {
-  const enriched = enrichedById.get(current.id);
-  return enriched ? mergeCapturedPlaceResearch(current, enriched) : current;
-}
-
 function isGoogleMapsTabUrl(url = ''): boolean {
   return /^https:\/\/(www\.google\.[a-z.]+|maps\.google\.[a-z.]+)\/maps(?:\/|$)/i.test(url);
 }
@@ -91,17 +68,17 @@ async function findGoogleMapsTab(): Promise<chrome.tabs.Tab | undefined> {
     ?? tabs.find((tab) => isGoogleMapsTabUrl(tab.url));
 }
 
-function researchPlaceFromPlanner(place: PlannerTripPlace): CurrentResearchPlace {
+function researchPlaceFromCapturePlace(place: CapturePlace): CurrentResearchPlace {
   return {
     title: place.title,
-    sourceUrl: place.source_url,
-    sourceProvider: place.source_provider,
-    sourcePlaceId: place.source_place_id,
-    rating: place.observed_rating,
-    reviewCount: place.observed_review_count,
-    category: place.source_category,
-    priceLevel: place.observed_price,
-    detectedCurrency: place.price_currency,
+    sourceUrl: place.source.url,
+    sourceProvider: place.source.provider,
+    sourcePlaceId: place.source.place_id,
+    rating: place.rating,
+    reviewCount: place.review_count,
+    category: place.source.category,
+    priceLevel: place.price?.raw,
+    detectedCurrency: place.price?.currency,
     address: place.address,
     coordinates: place.coordinates,
     openHours: place.open_hours,
@@ -110,18 +87,18 @@ function researchPlaceFromPlanner(place: PlannerTripPlace): CurrentResearchPlace
     menuUrl: place.menu_url,
     reservationUrl: place.reservation_url,
     reviewTopics: place.review_topics,
-    types: place.types,
+    types: place.source.types,
   };
 }
 
-function formatStrengthenCoverage(places: PlannerTripPlace[]): string {
+function formatStrengthenCoverage(places: CapturePlace[]): string {
   const total = places.length;
-  const rating = places.filter((place) => place.observed_rating !== undefined).length;
-  const reviews = places.filter((place) => place.observed_review_count !== undefined).length;
-  const stayPlaces = places.filter((p) => p.kind === 'stay' || (p.source_category && /hotel|resort|lodging|hostel|inn|stay|酒店|旅馆|住宿|民宿/i.test(p.source_category)));
-  const stayWithPrice = stayPlaces.filter((p) => Boolean(p.observed_price && !isZeroOrPlaceholderPrice(p.observed_price))).length;
-  const price = places.filter((place) => Boolean(place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price))).length;
-  const category = places.filter((place) => Boolean(place.source_category)).length;
+  const rating = places.filter((place) => place.rating !== undefined).length;
+  const reviews = places.filter((place) => place.review_count !== undefined).length;
+  const stayPlaces = places.filter((p) => p.inferred_kind === 'stay' || (p.source.category && /hotel|resort|lodging|hostel|inn|stay|酒店|旅馆|住宿|民宿/i.test(p.source.category)));
+  const stayWithPrice = stayPlaces.filter((p) => Boolean(p.price?.raw && !isZeroOrPlaceholderPrice(p.price.raw))).length;
+  const price = places.filter((place) => Boolean(place.price?.raw && !isZeroOrPlaceholderPrice(place.price.raw))).length;
+  const category = places.filter((place) => Boolean(place.source.category)).length;
   const coordinates = places.filter((place) => Boolean(place.coordinates)).length;
 
   const priceStats = stayPlaces.length > 0
@@ -134,9 +111,9 @@ function formatStrengthenCoverage(places: PlannerTripPlace[]): string {
 }
 
 async function strengthenCandidatesThroughMaps(
-  candidates: PlannerTripPlace[],
-): Promise<{ attempted: number; enriched: number; failed: number; merged: PlannerTripPlace[] } | null> {
-  const eligible = candidates.filter((place) => place.source_provider === 'google_maps' && Boolean(place.source_place_id));
+  candidates: CapturePlace[],
+): Promise<{ attempted: number; enriched: number; failed: number; merged: CapturePlace[] } | null> {
+  const eligible = candidates.filter((place) => place.source.provider === 'google_maps' && Boolean(place.source.place_id));
   if (eligible.length === 0) return null;
 
   const tab = await findGoogleMapsTab();
@@ -147,44 +124,65 @@ async function strengthenCandidatesThroughMaps(
       listName: 'Ownly candidates',
       listUrl: tab.url || '',
       detectedCurrency: store.pageDetectedCurrency,
-      places: eligible.map(researchPlaceFromPlanner),
+      places: eligible.map(researchPlaceFromCapturePlace),
     } satisfies DetectedSavedList,
     overrideCurrency: store.mapCurrencyOverride,
     force: true,
   }) as { savedList?: DetectedSavedList | null; attempted?: number; enriched?: number; failed?: number } | undefined;
 
   const targetIds = new Set(eligible.map((place) => place.id));
-  const latestTargets = store.state.pendingPlaces.filter((place) => targetIds.has(place.id));
+  const facadePlaces = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
   const merged = mergeDetectedResearchIntoPlannerPlaces(
-    latestTargets,
+    facadePlaces,
     response?.savedList?.places ?? [],
     store.mapCurrencyOverride || store.pageDetectedCurrency,
   );
   const mergedById = new Map(merged.map((place) => [place.id, place] as const));
-  store.state = {
-    ...store.state,
-    pendingPlaces: store.state.pendingPlaces.map((place) => mergedById.get(place.id) ?? place),
-  };
-  await saveState();
+  const collection = getActiveCollection();
+  if (collection) {
+    const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+    const latestTargets = store.stateV3.places.filter((place) => targetIds.has(place.id));
+    const updatedActivePlaces = latestTargets.map((p) => {
+      const enrichedVp = mergedById.get(p.id);
+      if (!enrichedVp) return p;
+      return mergePlaceResearch(p, {
+        title: enrichedVp.title,
+        source: { ...p.source, category: enrichedVp.source_category, types: enrichedVp.types },
+        address: enrichedVp.address,
+        coordinates: enrichedVp.coordinates,
+        rating: enrichedVp.observed_rating,
+        review_count: enrichedVp.observed_review_count,
+        price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : undefined,
+        phone: enrichedVp.phone,
+        plus_code: enrichedVp.plus_code,
+        open_hours: enrichedVp.open_hours,
+        menu_url: enrichedVp.menu_url,
+        reservation_url: enrichedVp.reservation_url,
+        review_topics: enrichedVp.review_topics,
+      });
+    });
+    store.setState({ ...store.stateV3, places: [...otherPlaces, ...updatedActivePlaces] });
+    await saveState();
+  }
   return {
     attempted: response?.attempted ?? 0,
     enriched: response?.enriched ?? 0,
     failed: response?.failed ?? 0,
-    merged,
+    merged: store.stateV3.places.filter((place) => targetIds.has(place.id)),
   };
 }
 
 let searchDebounce: number | undefined;
 
-
-function applyBulk(mutate: (place: PlannerTripPlace, value?: string) => PlannerTripPlace, value?: string): void {
+function applyBulk(mutate: (place: CapturePlace, value?: string) => CapturePlace, value?: string): void {
   const dict = t();
   if (store.bulkSelected.size === 0) return;
   const ids = new Set(store.bulkSelected);
-  store.state = {
-    ...store.state,
-    pendingPlaces: store.state.pendingPlaces.map((p) => (ids.has(p.id) ? mutate(p, value) : p)),
-  };
+  const collection = getActiveCollection();
+  if (!collection) return;
+  const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+  const activePlaces = getActivePlaces().map((p) => (ids.has(p.id) ? mutate(p, value) : p));
+  store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
   const count = ids.size;
   store.bulkSelected.clear();
   void saveState().then(() => setStatus(dict.bulkApplied(count), 'success'));
@@ -192,54 +190,49 @@ function applyBulk(mutate: (place: PlannerTripPlace, value?: string) => PlannerT
 
 function buildPlaceFromDetected(
   item: CurrentResearchPlace,
-  tripId: string,
-  tripTags: string[],
+  collectionId: string,
   now: string,
-): PlannerTripPlace {
+): CapturePlace {
   const cleanTitle = cleanExtractedText(item.title);
   const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
   const inferredKind = inferPlaceKind([cleanTitle, item.category, cleanAddress, ...(item.types || [])].filter(Boolean).join(' '));
   const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || store.pageDetectedCurrency);
   return {
-    schema_version: '0.1',
-    type: 'trip_place',
     id: crypto.randomUUID(),
-    trip_id: tripId,
+    collection_id: collectionId,
     title: cleanTitle,
-    source_provider: item.sourceProvider || 'google_maps',
-    source_url: item.sourceUrl,
-    source_place_id: item.sourcePlaceId,
-    source_category: item.category ? cleanExtractedText(item.category) : undefined,
-    kind: inferredKind,
-    area: cleanAddress?.split(/[,，·]/)[0]?.trim() || undefined,
-    priority: 'want',
-    tags: ensurePlaceKindTag(tripTags, inferredKind, store.lang),
-    why: item.userNote || item.summary || undefined,
-    signals: [],
-    risks: [],
-    notes: item.userNote || undefined,
-    open_hours: item.openHours ? cleanExtractedText(item.openHours) : undefined,
+    source: {
+      provider: item.sourceProvider || 'google_maps',
+      url: item.sourceUrl,
+      place_id: item.sourcePlaceId,
+      category: item.category ? cleanExtractedText(item.category) : undefined,
+      types: item.types,
+    },
+    inferred_kind: inferredKind as CapturePlace['inferred_kind'],
     address: cleanAddress,
-    observed_rating: item.rating,
-    observed_review_count: item.reviewCount,
-    observed_price: item.priceLevel,
-    price_currency: normalizedPrice?.currency,
-    price_min: normalizedPrice?.min,
-    price_max: normalizedPrice?.max,
-    price_unit: normalizedPrice?.unit,
-    price_level: normalizedPrice?.level,
-    observed_at: today(),
-    coordinates: item.coordinates,
+    rating: item.rating,
+    review_count: item.reviewCount,
+    price: normalizedPrice ? {
+      raw: item.priceLevel,
+      currency: normalizedPrice.currency,
+      min: normalizedPrice.min,
+      max: normalizedPrice.max,
+      unit: normalizedPrice.unit,
+      level: normalizedPrice.level,
+    } : (item.priceLevel ? { raw: item.priceLevel } : undefined),
+    open_hours: item.openHours ? cleanExtractedText(item.openHours) : undefined,
     phone: item.phone,
     plus_code: item.plusCode,
     menu_url: item.menuUrl,
     reservation_url: item.reservationUrl,
     review_topics: item.reviewTopics,
-    types: item.types,
-    reservation_status: 'none',
-    state: 'candidate',
-    created_at: now,
-    updated_at: now,
+    user: {
+      priority: 'want',
+      tags: ensurePlaceKindTag([], inferredKind, store.lang),
+      why: item.userNote || item.summary || undefined,
+      notes: item.userNote || undefined,
+    },
+    captured_at: now,
   };
 }
 
@@ -247,7 +240,7 @@ function buildPlaceFromDetected(
  * Bulk-paste list resolution using the active Maps tab's content script as authority
  * (ensuring correct authuser/cookie/locale context for multi-account users).
  */
-async function resolveListPlacesSmart(line: string, activeTrip?: CaptureContext): Promise<PlannerTripPlace[] | null> {
+async function resolveListPlacesSmart(line: string, collectionId?: string): Promise<CapturePlace[] | null> {
   const ref = await expandAndExtractListId(line);
   if (!ref) return null;
 
@@ -265,14 +258,11 @@ async function resolveListPlacesSmart(line: string, activeTrip?: CaptureContext)
   if (resp && 'savedList' in resp) {
     const places = resp.savedList?.places ?? [];
     const now = new Date().toISOString();
-    const tripTags = activeTrip?.tags ?? [];
-    return places.map((p) => buildPlaceFromDetected(p, activeTrip?.tripId || '', tripTags, now));
+    return places.map((p) => buildPlaceFromDetected(p, collectionId || '', now));
   }
 
   return [];
 }
-
-
 
 async function revealPlaceInMaps(sourceUrl: string): Promise<void> {
   try {
@@ -343,8 +333,13 @@ function initCandidateDragReorder(): void {
     if (fromIdx < 0 || toIdx < 0) return;
 
     visibleIds.splice(toIdx, 0, visibleIds.splice(fromIdx, 1)[0]);
-    store.state = { ...store.state, pendingPlaces: reorderPendingPlaces(store.state.pendingPlaces, visibleIds) };
-    void saveState();
+    const collection = getActiveCollection();
+    if (collection) {
+      const newPlaces = reorderPlaces(getActivePlaces(), visibleIds);
+      const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+      store.setState({ ...store.stateV3, places: [...otherPlaces, ...newPlaces] });
+      void saveState();
+    }
   });
 }
 
@@ -382,39 +377,39 @@ function initCandidateDelegation() {
       renderCandidatesList();
       if (store.editingCandidateId === placeId) {
         scrollCardIntoView(placeId, true);
-        const editing = store.state.pendingPlaces.find((p) => p.id === placeId);
+        const editing = getActivePlaces().find((p) => p.id === placeId);
         if (editing) {
           store.currentPlace = {
             title: editing.title,
-            sourceUrl: editing.source_url,
-            sourceProvider: editing.source_provider,
-            sourcePlaceId: editing.source_place_id,
-            category: editing.source_category ?? editing.kind,
+            sourceUrl: editing.source.url,
+            sourceProvider: editing.source.provider,
+            sourcePlaceId: editing.source.place_id,
+            category: editing.source.category ?? editing.inferred_kind,
             address: editing.address,
             coordinates: editing.coordinates,
-            rating: editing.observed_rating,
-            reviewCount: editing.observed_review_count,
-            priceLevel: editing.observed_price,
-            detectedCurrency: editing.price_currency,
-            summary: editing.why,
-            userNote: editing.notes,
+            rating: editing.rating,
+            reviewCount: editing.review_count,
+            priceLevel: editing.price?.raw,
+            detectedCurrency: editing.price?.currency,
+            summary: editing.user?.why,
+            userNote: editing.user?.notes,
             openHours: editing.open_hours,
             phone: editing.phone,
             plusCode: editing.plus_code,
             menuUrl: editing.menu_url,
             reservationUrl: editing.reservation_url,
             reviewTopics: editing.review_topics,
-            types: editing.types,
+            types: editing.source.types,
           };
           renderCurrentPlace();
           autoFillPlaceForm(store.currentPlace);
           syncQuickChipStates();
-          if (editing.source_url) void revealPlaceInMaps(editing.source_url);
+          if (editing.source.url) void revealPlaceInMaps(editing.source.url);
         }
       }
     } else if (action === 'delete') {
       store.locallyDeletedIds.add(placeId);
-      store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => p.id !== placeId) };
+      store.removePlace(placeId);
       if (store.editingCandidateId === placeId) store.editingCandidateId = null;
       void saveState().then(() => {
         renderCurrentPlace();
@@ -436,8 +431,8 @@ function initCandidateDelegation() {
       const tagsInput = form.querySelector<HTMLInputElement>('input[name="tags"]');
       const notesTextarea = form.querySelector<HTMLTextAreaElement>('textarea[name="notes"]');
 
-      const newKind = (kindSelect?.value || 'attraction') as PlannerPlaceKind;
-      const newPriority = (prioritySelect?.value || 'want') as PlannerPlacePriority;
+      const newKind = (kindSelect?.value || 'attraction') as CapturePlace['inferred_kind'];
+      const newPriority = (prioritySelect?.value || 'want') as CapturePlace['user'] extends { priority?: infer P } ? P : never;
       const newPrice = priceInput ? cleanExtractedText(priceInput.value) || undefined : undefined;
       const numRating = ratingInput ? parseFloat(ratingInput.value) : NaN;
       const numDuration = durationInput ? parseInt(durationInput.value, 10) : NaN;
@@ -445,30 +440,31 @@ function initCandidateDelegation() {
       const newTags = ensurePlaceKindTag(rawTags, newKind, store.lang);
       const newNotes = notesTextarea ? cleanExtractedText(notesTextarea.value) || undefined : undefined;
 
-      store.state = {
-        ...store.state,
-        pendingPlaces: store.state.pendingPlaces.map((p) => {
-          if (p.id !== placeId) return p;
-          const normalizedPrice = normalizeObservedPrice(newPrice, p.price_currency || store.pageDetectedCurrency);
-          return {
-            ...p,
-            kind: newKind,
+      store.updatePlace(placeId, (p) => {
+        const normalizedPrice = normalizeObservedPrice(newPrice, p.price?.currency || store.pageDetectedCurrency);
+        return {
+          ...p,
+          inferred_kind: newKind,
+          user: {
+            ...p.user,
             priority: newPriority,
-            observed_price: newPrice,
-            price_currency: normalizedPrice?.currency,
-            price_min: normalizedPrice?.min,
-            price_max: normalizedPrice?.max,
-            price_unit: normalizedPrice?.unit,
-            price_level: normalizedPrice?.level,
-            observed_rating: Number.isFinite(numRating) && numRating >= 1 && numRating <= 5 ? numRating : undefined,
-            duration_minutes: Number.isFinite(numDuration) && numDuration > 0 ? Math.min(1440, numDuration) : undefined,
             tags: newTags,
             notes: newNotes,
-            why: newNotes || p.why,
-            updated_at: new Date().toISOString(),
-          };
-        }),
-      };
+            why: newNotes || p.user?.why,
+            duration_minutes: Number.isFinite(numDuration) && numDuration > 0 ? Math.min(1440, numDuration) : undefined,
+          },
+          price: normalizedPrice ? {
+            raw: newPrice,
+            currency: normalizedPrice.currency,
+            min: normalizedPrice.min,
+            max: normalizedPrice.max,
+            unit: normalizedPrice.unit,
+            level: normalizedPrice.level,
+          } : (newPrice ? { raw: newPrice } : p.price),
+          rating: Number.isFinite(numRating) && numRating >= 1 && numRating <= 5 ? numRating : undefined,
+          updated_at: new Date().toISOString(),
+        };
+      });
 
       void saveState().then(() => {
         store.editingCandidateId = null;
@@ -535,13 +531,21 @@ export function initHandlers(): void {
     if (store.bulkSelected.size === 0) return;
     const ids = new Set(store.bulkSelected);
     for (const id of ids) store.locallyDeletedIds.add(id);
-    store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => !ids.has(p.id)) };
+    const collection = getActiveCollection();
+    if (collection) {
+      const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+      const activePlaces = getActivePlaces().filter((p) => !ids.has(p.id));
+      store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
+    }
     store.bulkSelected.clear();
     void saveState().then(() => setStatus(dict.candidateRemoved, 'success'));
   });
 
   el.bulkPrioritySelect.addEventListener('change', () => {
-    applyBulk((place, value) => ({ ...place, priority: value as PlannerPlacePriority }));
+    applyBulk((place, value) => ({
+      ...place,
+      user: { ...place.user, priority: value as CapturePlace['user'] extends { priority?: infer P } ? P : never },
+    }));
     el.bulkPrioritySelect.value = '';
   });
 
@@ -555,10 +559,12 @@ export function initHandlers(): void {
   });
 
   el.btnExportDiagnostics.addEventListener('click', () => {
+    const collection = getActiveCollection();
+    const places = getActivePlaces();
     const payload = logger.exportDiagnostics({
-      activeContext: store.state.activeContext,
-      pendingPlacesCount: store.state.pendingPlaces.length,
-      pendingPlacesSample: store.state.pendingPlaces.slice(0, 10),
+      activeContext: collection ? { tripId: collection.id, title: collection.title, currency: collection.currency } : null,
+      pendingPlacesCount: places.length,
+      pendingPlacesSample: places.slice(0, 10),
       detectedSavedList: store.detectedSavedList ? {
         listName: store.detectedSavedList.listName,
         placeCount: store.detectedSavedList.places.length,
@@ -588,7 +594,6 @@ export function initHandlers(): void {
     updateDebugLogViewer();
   });
 
-
   // Page-currency override is tab/session scoped. When the user manually overrides currency (e.g. to SGD),
   // they explicitly correct erroneous capture currency. Update active place, form, and existing pending candidates.
   el.currencySelector.addEventListener('change', () => {
@@ -613,47 +618,40 @@ export function initHandlers(): void {
           store.detectedSavedList = { ...store.detectedSavedList, detectedCurrency: store.mapCurrencyOverride };
         }
 
-        // Re-normalize and correct currency on pending candidates in active trip
-        const activeTripId = store.state.activeContext?.tripId;
-        if (activeTripId) {
+        // Re-normalize and correct currency on pending candidates in active collection
+        const collection = getActiveCollection();
+        if (collection) {
           let updatedAny = false;
-          store.state = {
-            ...store.state,
-            pendingPlaces: store.state.pendingPlaces.map((place) => {
-              if (place.trip_id !== activeTripId) return place;
-              if (!place.observed_price || place.observed_price === '0' || /^SGD\s*0$/i.test(place.observed_price)) {
-                if (place.observed_price || place.price_currency || place.price_min !== undefined) {
-                  updatedAny = true;
-                  return {
-                    ...place,
-                    observed_price: undefined,
-                    price_currency: undefined,
-                    price_min: undefined,
-                    price_max: undefined,
-                    price_unit: undefined,
-                    price_level: undefined,
-                    updated_at: new Date().toISOString(),
-                  };
-                }
-                return place;
-              }
-              const nextNorm = normalizeObservedPrice(place.observed_price, store.mapCurrencyOverride);
-              if (nextNorm && (place.price_currency !== nextNorm.currency || place.price_min !== nextNorm.min || place.price_max !== nextNorm.max)) {
+          const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+          const activePlaces = getActivePlaces().map((place) => {
+            const priceRaw = place.price?.raw;
+            if (!priceRaw || priceRaw === '0' || /^SGD\s*0$/i.test(priceRaw)) {
+              if (priceRaw || place.price?.currency || place.price?.min !== undefined) {
                 updatedAny = true;
-                return {
-                  ...place,
-                  price_currency: nextNorm.currency || store.mapCurrencyOverride,
-                  price_min: nextNorm.min,
-                  price_max: nextNorm.max,
-                  price_unit: nextNorm.unit,
-                  price_level: nextNorm.level,
-                  updated_at: new Date().toISOString(),
-                };
+                return { ...place, price: undefined, updated_at: new Date().toISOString() };
               }
               return place;
-            }),
-          };
+            }
+            const nextNorm = normalizeObservedPrice(priceRaw, store.mapCurrencyOverride);
+            if (nextNorm && (place.price?.currency !== nextNorm.currency || place.price?.min !== nextNorm.min || place.price?.max !== nextNorm.max)) {
+              updatedAny = true;
+              return {
+                ...place,
+                price: {
+                  raw: priceRaw,
+                  currency: nextNorm.currency || store.mapCurrencyOverride,
+                  min: nextNorm.min,
+                  max: nextNorm.max,
+                  unit: nextNorm.unit,
+                  level: nextNorm.level,
+                },
+                updated_at: new Date().toISOString(),
+              };
+            }
+            return place;
+          });
           if (updatedAny) {
+            store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
             await saveState();
           }
         }
@@ -672,9 +670,10 @@ export function initHandlers(): void {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) return;
       await chrome.runtime.sendMessage({ type: 'OWNLY_SET_FX_OVERRIDE', tabId: tab.id, currency: null });
+      const collection = getActiveCollection();
       const response = await chrome.tabs.sendMessage(tab.id, {
         type: 'OWNLY_REDETECT_PAGE_CURRENCY',
-        targetCurrency: store.state.activeContext?.currency,
+        targetCurrency: collection?.currency,
       }) as { detectedCurrency?: string } | undefined;
       const detected = response?.detectedCurrency || 'USD';
       store.pageDetectedCurrency = detected;
@@ -695,23 +694,23 @@ export function initHandlers(): void {
     else checkboxes.forEach((c) => { if (c.dataset.placeId) store.bulkSelected.add(c.dataset.placeId); });
   });
 
-  // One-click strengthen all candidates in the active trip (Maps in-tab pass + background batch enrichment)
+  // One-click strengthen all candidates in the active collection (Maps in-tab pass + background batch enrichment)
   el.btnEnrichCandidates.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      const context = store.state.activeContext;
-      if (!context) {
+      const collection = getActiveCollection();
+      if (!collection) {
         setStatus(dict.tripRequiredError, 'error');
         return;
       }
-      const candidates = store.state.pendingPlaces.filter((place) => place.trip_id === context.tripId);
+      const candidates = getActivePlaces();
       if (candidates.length === 0) {
         setStatus(dict.emptyCandidates, 'muted');
         return;
       }
       setStatus(dict.strengtheningStart(candidates.length));
       logger.info('EnrichCandidates', `Starting enrichment for ${candidates.length} candidates`, {
-        candidatesSample: candidates.slice(0, 5).map((p) => ({ title: p.title, source_place_id: p.source_place_id })),
+        candidatesSample: candidates.slice(0, 5).map((p) => ({ title: p.title, source_place_id: p.source.place_id })),
       });
 
       // Phase 1: Try fast in-tab Maps pass for items with Place ID if Maps tab is open
@@ -719,15 +718,14 @@ export function initHandlers(): void {
       let targetCandidates = [...candidates];
       try {
         const mapsTab = await findGoogleMapsTab();
-        const withPlaceId = targetCandidates.filter((p) => p.source_provider === 'google_maps' && Boolean(p.source_place_id));
+        const withPlaceId = targetCandidates.filter((p) => p.source.provider === 'google_maps' && Boolean(p.source.place_id));
         logger.maps('EnrichCandidates', `Found Google Maps tab (id: ${mapsTab?.id}), ${withPlaceId.length} places with placeId`);
         if (mapsTab?.id && withPlaceId.length > 0) {
           const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
           logger.maps('EnrichCandidates', 'In-tab Maps strengthen result', mapsResult);
           if (mapsResult && mapsResult.enriched > 0) {
             mapsEnrichedCount = mapsResult.enriched;
-            const mergedMap = new Map(mapsResult.merged.map((p) => [p.id, p] as const));
-            targetCandidates = targetCandidates.map((p) => mergedMap.get(p.id) ?? p);
+            targetCandidates = getActivePlaces();
           }
         }
       } catch (err) {
@@ -736,7 +734,9 @@ export function initHandlers(): void {
       }
 
       // Phase 2: Run batch enrichment for any candidates still missing facts
-      const needEnrichment = targetCandidates.filter(isCandidateMissingData);
+      const targetIds = new Set(targetCandidates.map((c) => c.id));
+      const facadeForEnrich = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
+      const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
       logger.info('EnrichCandidates', `Phase 2: ${needEnrichment.length} candidates need background fetch`);
 
       let batchEnrichedCount = 0;
@@ -751,23 +751,40 @@ export function initHandlers(): void {
         batchEnrichedCount = totalEnriched;
         if (totalEnriched > 0) {
           const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
-          store.state = {
-            ...store.state,
-            pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
-          };
+          const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+          const activePlaces = getActivePlaces().map((cp) => {
+            const enrichedVp = enrichedMap.get(cp.id);
+            if (!enrichedVp) return cp;
+            return mergePlaceResearch(cp, {
+              title: enrichedVp.title,
+              source: { ...cp.source, category: enrichedVp.source_category, types: enrichedVp.types },
+              address: enrichedVp.address,
+              coordinates: enrichedVp.coordinates,
+              rating: enrichedVp.observed_rating,
+              review_count: enrichedVp.observed_review_count,
+              price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : undefined,
+              phone: enrichedVp.phone,
+              plus_code: enrichedVp.plus_code,
+              open_hours: enrichedVp.open_hours,
+              menu_url: enrichedVp.menu_url,
+              reservation_url: enrichedVp.reservation_url,
+              review_topics: enrichedVp.review_topics,
+            });
+          });
+          store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
           await saveState();
         }
       }
 
       const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
-      const latestCandidates = store.state.pendingPlaces.filter((p) => p.trip_id === context.tripId);
+      const latestCandidates = getActivePlaces();
       if (totalEnriched > 0) {
         setStatus(
           `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestCandidates)}`,
           'success',
         );
       } else {
-        const stillMissing = latestCandidates.some((p) => !p.observed_rating || !p.address || !p.source_category);
+        const stillMissing = latestCandidates.some((p) => !p.rating || !p.address || !p.source.category);
         if (stillMissing) {
           setStatus(
             store.lang === 'zh'
@@ -789,15 +806,15 @@ export function initHandlers(): void {
   el.btnBulkEnrich.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      const context = store.state.activeContext;
-      if (!context?.tripId) {
+      const collection = getActiveCollection();
+      if (!collection) {
         setStatus(dict.tripRequiredError, 'error');
         return;
       }
       const selected = new Set(store.bulkSelected);
       const candidates = selected.size > 0
-        ? store.state.pendingPlaces.filter((place) => selected.has(place.id))
-        : store.state.pendingPlaces.filter((place) => place.trip_id === context.tripId);
+        ? getActivePlaces().filter((place) => selected.has(place.id))
+        : getActivePlaces();
       if (candidates.length === 0) return;
 
       setStatus(dict.strengtheningStart(candidates.length));
@@ -807,13 +824,12 @@ export function initHandlers(): void {
       let targetCandidates = [...candidates];
       try {
         const mapsTab = await findGoogleMapsTab();
-        const withPlaceId = targetCandidates.filter((p) => p.source_provider === 'google_maps' && Boolean(p.source_place_id));
+        const withPlaceId = targetCandidates.filter((p) => p.source.provider === 'google_maps' && Boolean(p.source.place_id));
         if (mapsTab?.id && withPlaceId.length > 0) {
           const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
           if (mapsResult && mapsResult.enriched > 0) {
             mapsEnrichedCount = mapsResult.enriched;
-            const mergedMap = new Map(mapsResult.merged.map((p) => [p.id, p] as const));
-            targetCandidates = targetCandidates.map((p) => mergedMap.get(p.id) ?? p);
+            targetCandidates = getActivePlaces();
           }
         }
       } catch (err) {
@@ -823,8 +839,11 @@ export function initHandlers(): void {
       // Phase 2: Run batch enrichment on selected candidates
       let batchEnrichedCount = 0;
       if (targetCandidates.length > 0) {
+        const targetIds = new Set(targetCandidates.map((c) => c.id));
+        const facadeForEnrich = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
+        const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
         const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
-          targetCandidates,
+          needEnrichment,
           (processed, total, currentPlace) => {
             setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
             renderCandidatesList();
@@ -833,25 +852,42 @@ export function initHandlers(): void {
         batchEnrichedCount = totalEnriched;
         if (totalEnriched > 0) {
           const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
-          store.state = {
-            ...store.state,
-            pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
-          };
+          const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+          const activePlaces = getActivePlaces().map((cp) => {
+            const enrichedVp = enrichedMap.get(cp.id);
+            if (!enrichedVp) return cp;
+            return mergePlaceResearch(cp, {
+              title: enrichedVp.title,
+              source: { ...cp.source, category: enrichedVp.source_category, types: enrichedVp.types },
+              address: enrichedVp.address,
+              coordinates: enrichedVp.coordinates,
+              rating: enrichedVp.observed_rating,
+              review_count: enrichedVp.observed_review_count,
+              price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : undefined,
+              phone: enrichedVp.phone,
+              plus_code: enrichedVp.plus_code,
+              open_hours: enrichedVp.open_hours,
+              menu_url: enrichedVp.menu_url,
+              reservation_url: enrichedVp.reservation_url,
+              review_topics: enrichedVp.review_topics,
+            });
+          });
+          store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
           await saveState();
         }
       }
 
       const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
       const latestCandidates = selected.size > 0
-        ? store.state.pendingPlaces.filter((p) => selected.has(p.id))
-        : store.state.pendingPlaces.filter((p) => p.trip_id === context.tripId);
+        ? getActivePlaces().filter((p) => selected.has(p.id))
+        : getActivePlaces();
       if (totalEnriched > 0) {
         setStatus(
           `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestCandidates)}`,
           'success',
         );
       } else {
-        const stillMissing = latestCandidates.some((p) => !p.observed_rating || !p.address || !p.source_category);
+        const stillMissing = latestCandidates.some((p) => !p.rating || !p.address || !p.source.category);
         if (stillMissing) {
           setStatus(
             store.lang === 'zh'
@@ -871,7 +907,7 @@ export function initHandlers(): void {
   });
 
   el.btnBackupState.addEventListener('click', () => {
-    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), captureState: store.state }, null, 2);
+    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), captureState: store.stateV3 }, null, 2);
     const blob = new Blob([payload], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -891,14 +927,20 @@ export function initHandlers(): void {
       try {
         const parsed = JSON.parse(await file.text()) as { captureState?: unknown };
         if (!window.confirm(t().confirmRestore)) return;
-        const next = normalizeCaptureState(parsed.captureState ?? parsed);
-        await writeCaptureState(next);
-        store.state = next;
+        const raw = parsed.captureState ?? parsed;
+        let next;
+        if (raw && typeof raw === 'object' && 'version' in raw && (raw as { version: number }).version === 3) {
+          next = raw as import('../../domain/capture').OwnlyCaptureStateV3;
+        } else {
+          next = (await import('../../domain/capture')).migrateV2ToV3(raw as import('../../domain/capture').OwnlyCaptureStateV2);
+        }
+        await writeState(next);
         renderState();
-            renderCurrentPlace();
+        renderCurrentPlace();
         renderSmartListCard();
         renderCandidatesList();
-        setStatus(t().restoredCount(next.pendingPlaces.length), 'success');
+        const places = getActivePlaces();
+        setStatus(t().restoredCount(places.length), 'success');
       } catch {
         setStatus(store.lang === 'zh' ? '备份文件无效。' : 'Invalid backup file.', 'error');
       }
@@ -911,13 +953,13 @@ export function initHandlers(): void {
     renderSmartListCard();
   });
 
-  // Smart-list import only fills the Capture inbox for the Planner-selected context.
+  // Smart-list import only fills the Capture inbox for the active collection.
   el.btnSmartSyncAll.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      const context = store.state.activeContext;
+      const collection = getActiveCollection();
       let savedList = store.detectedSavedList;
-      if (!context) {
+      if (!collection) {
         setStatus(dict.tripRequiredError, 'error');
         return;
       }
@@ -948,32 +990,36 @@ export function initHandlers(): void {
         console.warn('[Ownly Capture] Saved-list detail enrichment failed', error);
       }
       const now = new Date().toISOString();
-      const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
+      const activePlaces = getActivePlaces();
       const syncedIds = new Set<string>();
       let importedCount = 0;
+      const newPlaces: CapturePlace[] = [];
       for (const item of savedList.places) {
         const title = cleanExtractedText(item.title);
         if (!title || isJunkNavigationText(title)) continue;
-        const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, item.sourceUrl, item.sourcePlaceId, item.coordinates);
+        const existing = findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
         const id = existing?.id ?? crypto.randomUUID();
         syncedIds.add(id);
         const address = item.address ? cleanExtractedText(item.address) : undefined;
         const kind = inferPlaceKind([title, item.category, address, ...(item.types || [])].filter(Boolean).join(' '));
-        const rawExistingPrice = existing?.observed_price;
+        const rawExistingPrice = existing?.price?.raw;
         const validExistingPrice = (rawExistingPrice && !isZeroOrPlaceholderPrice(rawExistingPrice))
           ? rawExistingPrice
           : undefined;
         const effectivePrice = item.priceLevel || validExistingPrice;
         const normalizedPrice = normalizeObservedPrice(effectivePrice, item.detectedCurrency || savedList.detectedCurrency || store.pageDetectedCurrency);
-        let captured: PlannerTripPlace;
+        let captured: CapturePlace;
         if (existing) {
-          captured = mergeCapturedPlaceResearch(existing, {
-            ...existing,
+          captured = mergePlaceResearch(existing, {
             title: title || existing.title,
-            source_provider: item.sourceProvider || 'google_maps',
-            source_url: item.sourceUrl || existing.source_url,
-            source_place_id: item.sourcePlaceId ?? existing.source_place_id,
-            source_category: item.category ? cleanExtractedText(item.category) : existing.source_category,
+            source: {
+              ...existing.source,
+              provider: item.sourceProvider || 'google_maps',
+              url: item.sourceUrl || existing.source.url,
+              place_id: item.sourcePlaceId ?? existing.source.place_id,
+              category: item.category ? cleanExtractedText(item.category) : existing.source.category,
+              types: Array.from(new Set([...(item.types ?? []), ...(existing.source.types ?? [])])),
+            },
             address: address ?? existing.address,
             coordinates: item.coordinates ?? existing.coordinates,
             phone: item.phone ?? existing.phone,
@@ -981,77 +1027,78 @@ export function initHandlers(): void {
             menu_url: item.menuUrl ?? existing.menu_url,
             reservation_url: item.reservationUrl ?? existing.reservation_url,
             review_topics: item.reviewTopics ?? existing.review_topics,
-            observed_rating: item.rating ?? existing.observed_rating,
-            observed_review_count: item.reviewCount ?? existing.observed_review_count,
-            observed_price: effectivePrice,
-            price_currency: normalizedPrice?.currency ?? (validExistingPrice ? existing.price_currency : undefined),
-            price_min: normalizedPrice?.min,
-            price_max: normalizedPrice?.max,
-            price_unit: normalizedPrice?.unit,
-            price_level: normalizedPrice?.level,
+            rating: item.rating ?? existing.rating,
+            review_count: item.reviewCount ?? existing.review_count,
+            price: effectivePrice ? {
+              raw: effectivePrice,
+              currency: normalizedPrice?.currency ?? (validExistingPrice ? existing.price?.currency : undefined),
+              min: normalizedPrice?.min,
+              max: normalizedPrice?.max,
+              unit: normalizedPrice?.unit,
+              level: normalizedPrice?.level,
+            } : existing.price,
             open_hours: item.openHours ?? existing.open_hours,
-            types: Array.from(new Set([...(item.types ?? []), ...(existing.types ?? [])])),
             updated_at: now,
           });
         } else {
           captured = {
-            schema_version: '0.1',
-            type: 'trip_place',
             id,
-            trip_id: context.tripId,
+            collection_id: collection.id,
             title,
-            source_provider: item.sourceProvider || 'google_maps',
-            source_url: item.sourceUrl,
-            source_place_id: item.sourcePlaceId,
-            source_category: item.category ? cleanExtractedText(item.category) : undefined,
-            kind,
-            area: address?.split(/[,，·]/)[0]?.trim(),
-            priority: 'want',
-            tags: ensurePlaceKindTag(Array.from(new Set([...(context.tags ?? []), savedList.listName])), kind, store.lang),
-            why: item.userNote ?? item.summary,
-            signals: [],
-            risks: [],
-            notes: item.userNote,
-            observed_rating: item.rating,
-            observed_review_count: item.reviewCount,
-            observed_price: effectivePrice,
-            price_currency: normalizedPrice?.currency,
-            price_min: normalizedPrice?.min,
-            price_max: normalizedPrice?.max,
-            price_unit: normalizedPrice?.unit,
-            price_level: normalizedPrice?.level,
-            observed_at: today(),
-            open_hours: item.openHours,
+            source: {
+              provider: item.sourceProvider || 'google_maps',
+              url: item.sourceUrl,
+              place_id: item.sourcePlaceId,
+              category: item.category ? cleanExtractedText(item.category) : undefined,
+              types: item.types ?? [],
+            },
+            inferred_kind: kind as CapturePlace['inferred_kind'],
             address,
-            coordinates: item.coordinates,
+            rating: item.rating,
+            review_count: item.reviewCount,
+            price: effectivePrice ? {
+              raw: effectivePrice,
+              currency: normalizedPrice?.currency,
+              min: normalizedPrice?.min,
+              max: normalizedPrice?.max,
+              unit: normalizedPrice?.unit,
+              level: normalizedPrice?.level,
+            } : undefined,
+            open_hours: item.openHours,
             phone: item.phone,
             plus_code: item.plusCode,
             menu_url: item.menuUrl,
             reservation_url: item.reservationUrl,
             review_topics: item.reviewTopics,
-            types: item.types ?? [],
-            reservation_status: 'none',
-            state: 'candidate',
-            created_at: now,
-            updated_at: now,
+            user: {
+              priority: 'want',
+              tags: ensurePlaceKindTag(savedList.listName ? [savedList.listName] : [], kind, store.lang),
+              why: item.userNote ?? item.summary,
+              notes: item.userNote,
+            },
+            captured_at: now,
           };
         }
-        mergedPending.set(id, captured);
+        newPlaces.push(captured);
         importedCount += 1;
       }
-      store.state = { ...store.state, pendingPlaces: [...mergedPending.values()] };
+      const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+      const existingActive = activePlaces.filter((p) => !syncedIds.has(p.id));
+      store.setState({ ...store.stateV3, places: [...otherPlaces, ...existingActive, ...newPlaces] });
       await saveState();
       store.smartListDismissed = true;
       renderSmartListCard();
       renderCandidatesList();
 
       // Auto-enrich any synced candidates missing facts immediately in one smooth pass
-      const syncedPlaces = store.state.pendingPlaces.filter((p) => syncedIds.has(p.id));
-      const needsPass = syncedPlaces.filter(isCandidateMissingData);
-      if (needsPass.length > 0) {
-        setStatus(store.lang === 'zh' ? `正在自动补全 ${needsPass.length} 个地点的 Place ID、评分与分类…` : `Auto-enriching ${needsPass.length} places…`);
+      const syncedPlaces = getActivePlaces().filter((p) => syncedIds.has(p.id));
+      const syncedIdsForEnrich = new Set(syncedPlaces.map((p) => p.id));
+      const needsPass = store.state.pendingPlaces.filter((p) => syncedIdsForEnrich.has(p.id)) as unknown as PlannerTripPlace[];
+      const needsPassMissing = needsPass.filter(isCandidateMissingData);
+      if (needsPassMissing.length > 0) {
+        setStatus(store.lang === 'zh' ? `正在自动补全 ${needsPassMissing.length} 个地点的 Place ID、评分与分类…` : `Auto-enriching ${needsPassMissing.length} places…`);
         const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
-          needsPass,
+          needsPassMissing,
           (processed, totalBatch, currentPlace) => {
             setStatus(dict.enrichingProgress(processed, totalBatch, currentPlace.title));
             renderCandidatesList();
@@ -1059,21 +1106,38 @@ export function initHandlers(): void {
         );
         if (totalEnriched > 0) {
           const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
-          store.state = {
-            ...store.state,
-            pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
-          };
+          const otherPlaces2 = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+          const activePlaces2 = getActivePlaces().map((cp) => {
+            const enrichedVp = enrichedMap.get(cp.id);
+            if (!enrichedVp) return cp;
+            return mergePlaceResearch(cp, {
+              title: enrichedVp.title,
+              source: { ...cp.source, category: enrichedVp.source_category, types: enrichedVp.types },
+              address: enrichedVp.address,
+              coordinates: enrichedVp.coordinates,
+              rating: enrichedVp.observed_rating,
+              review_count: enrichedVp.observed_review_count,
+              price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : undefined,
+              phone: enrichedVp.phone,
+              plus_code: enrichedVp.plus_code,
+              open_hours: enrichedVp.open_hours,
+              menu_url: enrichedVp.menu_url,
+              reservation_url: enrichedVp.reservation_url,
+              review_topics: enrichedVp.review_topics,
+            });
+          });
+          store.setState({ ...store.stateV3, places: [...otherPlaces2, ...activePlaces2] });
           await saveState();
           renderCandidatesList();
         }
       }
 
-      const finalSynced = store.state.pendingPlaces.filter((p) => syncedIds.has(p.id));
+      const finalSynced = getActivePlaces().filter((p) => syncedIds.has(p.id));
       const total = finalSynced.length;
-      const withRating = finalSynced.filter((p) => p.observed_rating !== undefined).length;
-      const withReviews = finalSynced.filter((p) => p.observed_review_count !== undefined).length;
-      const withPrice = finalSynced.filter((p) => Boolean(p.observed_price && !isZeroOrPlaceholderPrice(p.observed_price))).length;
-      const withCategory = finalSynced.filter((p) => Boolean(p.source_category)).length;
+      const withRating = finalSynced.filter((p) => p.rating !== undefined).length;
+      const withReviews = finalSynced.filter((p) => p.review_count !== undefined).length;
+      const withPrice = finalSynced.filter((p) => Boolean(p.price?.raw && !isZeroOrPlaceholderPrice(p.price.raw))).length;
+      const withCategory = finalSynced.filter((p) => Boolean(p.source.category)).length;
       const coverage = store.lang === 'zh'
         ? ` · 评分 ${withRating}/${total} · 评论量 ${withReviews}/${total} · 价格 ${withPrice}/${total} · 分类 ${withCategory}/${total}`
         : ` · rating ${withRating}/${total} · reviews ${withReviews}/${total} · price ${withPrice}/${total} · category ${withCategory}/${total}`;
@@ -1086,12 +1150,12 @@ export function initHandlers(): void {
     renderSmartListCard();
   });
 
-  // Bulk text/list import targets the active Planner context only.
+  // Bulk text/list import targets the active collection only.
   el.btnParseBulkImport.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      const context = store.state.activeContext;
-      if (!context) {
+      const collection = getActiveCollection();
+      if (!collection) {
         setStatus(dict.tripRequiredError, 'error');
         return;
       }
@@ -1101,24 +1165,25 @@ export function initHandlers(): void {
         return;
       }
       const lines = text.split(/[\r\n;]+/).map((line) => line.trim()).filter(Boolean);
-      const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
+      const activePlaces = getActivePlaces();
       let importedCount = 0;
       const errors: string[] = [];
-      const newlyAdded: PlannerTripPlace[] = [];
+      const newlyAdded: CapturePlace[] = [];
+      const now = new Date().toISOString();
+      const newPlacesMap = new Map<string, CapturePlace>();
       for (const line of lines) {
         const isUrl = /^https?:\/\//i.test(line);
         if (isUrl && (line.includes('maps.app.goo.gl') || line.includes('!2s') || line.includes('placelists/list') || line.includes('goo.gl/maps'))) {
           try {
-            const listItems = await resolveListPlacesSmart(line, context);
+            const listItems = await resolveListPlacesSmart(line, collection.id);
             if (listItems && listItems.length > 0) {
               for (const item of listItems) {
-                const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, item.source_url, item.source_place_id, item.coordinates);
+                const existing = findExistingPlace(activePlaces, item.source.url, item.source.place_id, item.coordinates);
                 if (existing) continue;
-                item.id = crypto.randomUUID();
-                item.trip_id = context.tripId;
-                item.state = 'candidate';
-                mergedPending.set(item.id, item);
-                newlyAdded.push(item);
+                const newId = crypto.randomUUID();
+                const newPlace: CapturePlace = { ...item, id: newId, collection_id: collection.id, captured_at: now };
+                newPlacesMap.set(newId, newPlace);
+                newlyAdded.push(newPlace);
                 importedCount += 1;
               }
               continue;
@@ -1131,34 +1196,31 @@ export function initHandlers(): void {
 
         const sourceUrl = isUrl ? line : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(line)}`;
         const title = isUrl ? (line.match(/\/maps\/place\/([^/?#]+)/)?.[1]?.replace(/\+/g, ' ') || line) : line;
-        const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, sourceUrl);
+        const existing = findExistingPlace(activePlaces, sourceUrl);
         if (existing) continue;
         const kind = inferPlaceKind(safeDecodeUri(title));
-        const now = new Date().toISOString();
-        const place: PlannerTripPlace = {
-          schema_version: '0.1',
-          type: 'trip_place',
-          id: crypto.randomUUID(),
-          trip_id: context.tripId,
+        const newId = crypto.randomUUID();
+        const place: CapturePlace = {
+          id: newId,
+          collection_id: collection.id,
           title: safeDecodeUri(title),
-          source_provider: inferSourceProvider(sourceUrl),
-          source_url: sourceUrl,
-          kind,
-          priority: 'want',
-          tags: ensurePlaceKindTag(context.tags ?? [], kind, store.lang),
-          signals: [],
-          risks: [],
-          observed_at: today(),
-          reservation_status: 'none',
-          state: 'candidate',
-          created_at: now,
-          updated_at: now,
+          source: {
+            provider: inferSourceProvider(sourceUrl),
+            url: sourceUrl,
+          },
+          inferred_kind: kind as CapturePlace['inferred_kind'],
+          user: {
+            priority: 'want',
+            tags: ensurePlaceKindTag([], kind, store.lang),
+          },
+          captured_at: now,
         };
-        mergedPending.set(place.id, place);
+        newPlacesMap.set(newId, place);
         newlyAdded.push(place);
         importedCount += 1;
       }
-      store.state = { ...store.state, pendingPlaces: [...mergedPending.values()] };
+      const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+      store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces, ...newlyAdded] });
       await saveState();
       el.bulkInputText.value = '';
       setStatus(errors.length > 0 ? dict.importedWithWarnings(importedCount, errors.join(', ')) : dict.importedCount(importedCount), 'success');
@@ -1166,8 +1228,11 @@ export function initHandlers(): void {
       // Asynchronously enrich newly imported places
       if (newlyAdded.length > 0) {
         void (async () => {
+          const newlyAddedIds = new Set(newlyAdded.map((p) => p.id));
+          const facadeForEnrich = store.state.pendingPlaces.filter((p) => newlyAddedIds.has(p.id)) as unknown as PlannerTripPlace[];
+          const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
           const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
-            newlyAdded,
+            needEnrichment,
             (processed, total, currentPlace) => {
               setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
               renderCandidatesList();
@@ -1175,10 +1240,27 @@ export function initHandlers(): void {
           );
           if (totalEnriched > 0) {
             const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
-            store.state = {
-              ...store.state,
-              pendingPlaces: store.state.pendingPlaces.map((p) => mergeEnrichedPendingPlace(p, enrichedMap)),
-            };
+            const otherPlaces2 = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+            const activePlaces2 = getActivePlaces().map((cp) => {
+              const enrichedVp = enrichedMap.get(cp.id);
+              if (!enrichedVp) return cp;
+              return mergePlaceResearch(cp, {
+                title: enrichedVp.title,
+                source: { ...cp.source, category: enrichedVp.source_category, types: enrichedVp.types },
+                address: enrichedVp.address,
+                coordinates: enrichedVp.coordinates,
+                rating: enrichedVp.observed_rating,
+                review_count: enrichedVp.observed_review_count,
+                price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : undefined,
+                phone: enrichedVp.phone,
+                plus_code: enrichedVp.plus_code,
+                open_hours: enrichedVp.open_hours,
+                menu_url: enrichedVp.menu_url,
+                reservation_url: enrichedVp.reservation_url,
+                review_topics: enrichedVp.review_topics,
+              });
+            });
+            store.setState({ ...store.stateV3, places: [...otherPlaces2, ...activePlaces2] });
             await saveState();
             setStatus(dict.enrichComplete(totalEnriched), 'success');
             renderCandidatesList();
@@ -1196,35 +1278,58 @@ export function initHandlers(): void {
 
   el.btnBatchAdd.addEventListener('click', () => {
     void (async () => {
-      const context = store.state.activeContext;
-      if (!context) {
+      const collection = getActiveCollection();
+      if (!collection) {
         setStatus(t().tripRequiredError, 'error');
         return;
       }
       const selectedUrls = new Set(Array.from(el.batchListContainer.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked'))
         .map((checkbox) => checkbox.dataset.url).filter(Boolean));
       const source = store.detectedSavedList?.places?.length ? store.detectedSavedList.places : store.detectedListPlaces;
-      const mergedPending = new Map(store.state.pendingPlaces.map((place) => [place.id, place] as const));
+      const activePlaces = getActivePlaces();
       let added = 0;
       const now = new Date().toISOString();
+      const newPlaces: CapturePlace[] = [];
       for (const item of source.filter((place) => selectedUrls.has(place.sourceUrl))) {
-        const existing = findExistingTripPlace(store.state.pendingPlaces, context.tripId, item.sourceUrl, item.sourcePlaceId, item.coordinates);
+        const existing = findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
         if (existing) continue;
         const kind = inferPlaceKind([item.title, item.category, item.address, ...(item.types || [])].filter(Boolean).join(' '));
-        const place: PlannerTripPlace = {
-          schema_version: '0.1', type: 'trip_place', id: crypto.randomUUID(), trip_id: context.tripId,
-          title: item.title, source_provider: item.sourceProvider || 'google_maps', source_url: item.sourceUrl,
-          source_place_id: item.sourcePlaceId, kind, priority: 'want', tags: ensurePlaceKindTag(context.tags ?? [], kind, store.lang),
-          why: item.userNote || item.summary, signals: [], risks: [], notes: item.userNote,
-          open_hours: item.openHours, address: item.address, observed_rating: item.rating, observed_price: item.priceLevel,
-          observed_at: today(), coordinates: item.coordinates, phone: item.phone, plus_code: item.plusCode,
-          menu_url: item.menuUrl, reservation_url: item.reservationUrl, review_topics: item.reviewTopics, types: item.types,
-          reservation_status: 'none', state: 'candidate', created_at: now, updated_at: now,
+        const place: CapturePlace = {
+          id: crypto.randomUUID(),
+          collection_id: collection.id,
+          title: item.title,
+          source: {
+            provider: item.sourceProvider || 'google_maps',
+            url: item.sourceUrl,
+            place_id: item.sourcePlaceId,
+            category: item.category ? cleanExtractedText(item.category) : undefined,
+            types: item.types,
+          },
+          inferred_kind: kind as CapturePlace['inferred_kind'],
+          user: {
+            priority: 'want',
+            tags: ensurePlaceKindTag([], kind, store.lang),
+            why: item.userNote || item.summary,
+            notes: item.userNote,
+          },
+          open_hours: item.openHours,
+          address: item.address,
+          rating: item.rating,
+          review_count: item.reviewCount,
+          price: item.priceLevel ? { raw: item.priceLevel } : undefined,
+          coordinates: item.coordinates,
+          phone: item.phone,
+          plus_code: item.plusCode,
+          menu_url: item.menuUrl,
+          reservation_url: item.reservationUrl,
+          review_topics: item.reviewTopics,
+          captured_at: now,
         };
-        mergedPending.set(place.id, place);
+        newPlaces.push(place);
         added += 1;
       }
-      store.state = { ...store.state, pendingPlaces: [...mergedPending.values()] };
+      const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+      store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces, ...newPlaces] });
       await saveState();
       setStatus(t().batchAddedSuccess(added), 'success');
     })().catch((error) => setStatus(String(error), 'error'));
@@ -1239,12 +1344,14 @@ export function initHandlers(): void {
 
   el.btnRemoveCandidate.addEventListener('click', () => {
     const dict = t();
-    if (!store.currentPlace || !store.state.activeContext?.tripId) return;
+    if (!store.currentPlace) return;
+    const collection = getActiveCollection();
+    if (!collection) return;
     const existing = getExistingPlaceForUrl(store.currentPlace.sourceUrl, store.currentPlace.sourcePlaceId);
     if (!existing) return;
 
     store.locallyDeletedIds.add(existing.id);
-    store.state = { ...store.state, pendingPlaces: store.state.pendingPlaces.filter((p) => p.id !== existing.id) };
+    store.removePlace(existing.id);
     void saveState().then(() => {
       el.captureForm.reset();
       el.kind.value = 'attraction';
@@ -1256,8 +1363,8 @@ export function initHandlers(): void {
   el.captureForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const dict = t();
-    const context = store.state.activeContext;
-    if (!context) {
+    const collection = getActiveCollection();
+    if (!collection) {
       setStatus(dict.tripRequiredError, 'error');
       return;
     }
@@ -1268,62 +1375,58 @@ export function initHandlers(): void {
     const duration = Number(el.duration.value);
     const rating = Number(el.rating.value);
     const now = new Date().toISOString();
-    const existing = findExistingTripPlace(
-      store.state.pendingPlaces,
-      context.tripId,
+    const activePlaces = getActivePlaces();
+    const existing = findExistingPlace(
+      activePlaces,
       store.currentPlace.sourceUrl,
       store.currentPlace.sourcePlaceId,
       store.currentPlace.coordinates,
     );
-    const kind = (el.kind.value as PlannerPlaceKind) || 'other';
+    const kind = (el.kind.value as CapturePlace['inferred_kind']) || 'other';
     const tags = ensurePlaceKindTag(normalizeDelimitedText(el.tags.value), kind, store.lang);
     const rawPrice = el.price.value.trim() || undefined;
-    const normalizedPrice = normalizeObservedPrice(rawPrice, store.currentPlace.detectedCurrency || existing?.price_currency || store.pageDetectedCurrency);
+    const normalizedPrice = normalizeObservedPrice(rawPrice, store.currentPlace.detectedCurrency || existing?.price?.currency || store.pageDetectedCurrency);
     const id = existing?.id ?? crypto.randomUUID();
-    const place: PlannerTripPlace = {
-      schema_version: '0.1',
-      type: 'trip_place',
+    const place: CapturePlace = {
       id,
-      trip_id: context.tripId,
+      collection_id: collection.id,
       title: cleanExtractedText(store.currentPlace.title),
-      source_provider: store.currentPlace.sourceProvider || 'google_maps',
-      source_url: store.currentPlace.sourceUrl,
-      source_place_id: store.currentPlace.sourcePlaceId ?? existing?.source_place_id,
-      source_category: store.currentPlace.category ? cleanExtractedText(store.currentPlace.category) : existing?.source_category,
-      kind,
-      area: cleanExtractedText(el.area.value.trim()) || undefined,
-      priority: existing?.priority ?? 'want',
-      tags,
-      why: cleanExtractedText(el.why.value.trim()) || undefined,
-      signals: normalizeDelimitedText(el.signals.value).map(cleanExtractedText).filter(Boolean),
-      risks: normalizeDelimitedText(el.risks.value).map(cleanExtractedText).filter(Boolean),
-      notes: cleanExtractedText(el.notes.value.trim()) || undefined,
-      observed_rating: Number.isFinite(rating) && rating >= 1 && rating <= 5 ? rating : undefined,
-      observed_review_count: store.currentPlace.reviewCount ?? existing?.observed_review_count,
-      observed_price: rawPrice,
-      price_currency: normalizedPrice?.currency,
-      price_min: normalizedPrice?.min,
-      price_max: normalizedPrice?.max,
-      price_unit: normalizedPrice?.unit,
-      price_level: normalizedPrice?.level,
-      observed_at: today(),
-      preferred_window: el.window.value.trim() || undefined,
-      duration_minutes: Number.isFinite(duration) && duration > 0 ? Math.min(1440, Math.round(duration)) : undefined,
+      source: {
+        provider: store.currentPlace.sourceProvider || 'google_maps',
+        url: store.currentPlace.sourceUrl,
+        place_id: store.currentPlace.sourcePlaceId ?? existing?.source.place_id,
+        category: store.currentPlace.category ? cleanExtractedText(store.currentPlace.category) : existing?.source.category,
+        types: Array.from(new Set([...(store.currentPlace.types ?? []), ...(existing?.source.types ?? [])])),
+      },
+      inferred_kind: kind,
+      address: cleanExtractedText(el.area.value.trim()) || cleanExtractedText(store.currentPlace.address ?? existing?.address) || undefined,
+      rating: Number.isFinite(rating) && rating >= 1 && rating <= 5 ? rating : undefined,
+      review_count: store.currentPlace.reviewCount ?? existing?.review_count,
+      price: normalizedPrice ? {
+        raw: rawPrice,
+        currency: normalizedPrice.currency,
+        min: normalizedPrice.min,
+        max: normalizedPrice.max,
+        unit: normalizedPrice.unit,
+        level: normalizedPrice.level,
+      } : (rawPrice ? { raw: rawPrice } : undefined),
       open_hours: cleanExtractedText(store.currentPlace.openHours ?? existing?.open_hours) || undefined,
-      address: cleanExtractedText(store.currentPlace.address ?? existing?.address) || undefined,
-      coordinates: store.currentPlace.coordinates ?? existing?.coordinates,
       phone: store.currentPlace.phone ?? existing?.phone,
       plus_code: store.currentPlace.plusCode ?? existing?.plus_code,
       menu_url: store.currentPlace.menuUrl ?? existing?.menu_url,
       reservation_url: store.currentPlace.reservationUrl ?? existing?.reservation_url,
       review_topics: store.currentPlace.reviewTopics ?? existing?.review_topics,
-      types: Array.from(new Set([...(store.currentPlace.types ?? []), ...(existing?.types ?? [])])),
-      reservation_status: 'none',
-      state: 'candidate',
-      created_at: existing?.created_at ?? now,
-      updated_at: now,
+      user: {
+        priority: existing?.user?.priority ?? 'want',
+        tags,
+        why: cleanExtractedText(el.why.value.trim()) || undefined,
+        notes: cleanExtractedText(el.notes.value.trim()) || undefined,
+        preferred_window: el.window.value.trim() || undefined,
+        duration_minutes: Number.isFinite(duration) && duration > 0 ? Math.min(1440, Math.round(duration)) : undefined,
+      },
+      captured_at: existing?.captured_at ?? now,
     };
-    store.state = { ...store.state, pendingPlaces: [...store.state.pendingPlaces.filter((item) => item.id !== id), place] };
+    store.setState({ ...store.stateV3, places: [...store.stateV3.places.filter((item) => item.id !== id), place] });
     void saveState().then(() => {
       syncQuickChipStates();
       setStatus(existing ? dict.candidateUpdated : dict.candidateAdded, 'success');
@@ -1339,7 +1442,7 @@ export function initHandlers(): void {
   });
 
   el.kind.addEventListener('change', () => {
-    const newKind = (el.kind.value as PlannerPlaceKind) || 'other';
+    const newKind = (el.kind.value as CapturePlace['inferred_kind']) || 'other';
     el.price.placeholder = newKind === 'stay'
       ? t().pricePlaceholderStay
       : t().pricePlaceholder;
@@ -1359,5 +1462,3 @@ export function initHandlers(): void {
   initCandidateDelegation();
   initCandidateDragReorder();
 }
-
-
