@@ -525,7 +525,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     const scheduledCount = pendingCandidates.filter((p) => (visitCountByPlaceId.get(p.id) || 0) > 0).length;
     if (scheduledCount > 0) chips.push({ id: 'scheduled', label: zh ? '📅 已排入' : '📅 Scheduled', count: scheduledCount, type: 'status' });
 
-    const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'other'];
+    const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'service', 'other'];
     for (const kind of allKinds) {
       const kindTagZh = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
       const kindTagEn = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
@@ -1159,11 +1159,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
         setCapturePending(report.failed.length);
         const importedCount = report.created.length + report.updated.length;
+        const survivingCount = importedCount - report.deduped.length;
         const parts: string[] = [];
         if (importedCount > 0) {
+          const detailParts: string[] = [];
+          if (report.created.length > 0) detailParts.push(zh ? `${report.created.length} 新增` : `${report.created.length} new`);
+          if (report.updated.length > 0) detailParts.push(zh ? `${report.updated.length} 更新` : `${report.updated.length} updated`);
+          if (report.deduped.length > 0) detailParts.push(zh ? `${report.deduped.length} 去重` : `${report.deduped.length} deduped`);
           parts.push(zh
-            ? `✅ 已导入 ${importedCount}/${report.received} 个候选`
-            : `✅ Imported ${importedCount}/${report.received} candidates`);
+            ? `✅ 已导入 ${importedCount}/${report.received} 个候选（${detailParts.join('，')}）`
+            : `✅ Imported ${importedCount}/${report.received} candidates (${detailParts.join(', ')})`);
         }
         if (report.failed.length > 0) {
           const failSummary = report.failed

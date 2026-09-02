@@ -18,6 +18,7 @@ describe('Capture import report application', () => {
       received: 2,
       created: ['ok'],
       updated: [],
+      deduped: [],
       failed: [{ id: 'bkk', title: 'Suvarnabhumi Airport', reason: 'missing_place_identity' }],
     }, '2026-09-02');
 

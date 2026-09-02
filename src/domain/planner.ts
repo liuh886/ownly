@@ -16,6 +16,7 @@ export type PlannerPlaceKind =
   | 'shopping'
   | 'transit'
   | 'experience'
+  | 'service'
   | 'other';
 
 export interface PlannerTrip {
@@ -183,6 +184,7 @@ export interface ImportReport {
   received: number;
   created: string[];
   updated: string[];
+  deduped: string[];
   failed: ImportFailure[];
 }
 
@@ -210,7 +212,7 @@ export function applyCaptureImportReport(
   report: ImportReport,
   attemptedAt: string,
 ): OwnlyCaptureState {
-  const imported = new Set([...report.created, ...report.updated]);
+  const imported = new Set([...report.created, ...report.updated, ...report.deduped]);
   const failedById = new Map(report.failed.map((item) => [item.id, item] as const));
   return {
     ...state,
@@ -689,7 +691,7 @@ export function normalizeDelimitedText(value: string): string[] {
 }
 
 export function inferPlaceKind(category?: string): PlannerPlaceKind {
-  if (!category || !category.trim()) return 'attraction';
+  if (!category || !category.trim()) return 'other';
   const lower = category.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 
   // 0. Special compound disambiguations:
@@ -751,13 +753,20 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
 
   // 7. Attractions, Sightseeing, Heritage, Culture, Nature (Beaches, Mountains, Islands, Temples)
   if (
-    /\b(?:museum|temple|shrine|church|cathedral|mosque|synagogue|pagoda|monastery|wat|park|national\s*park|attraction|tourist\s*attraction|monument|landmark|castle|palace|imperial\s*palace|royal\s*palace|garden|botanical\s*garden|tower|tourist|historic|historical|heritage|unesco|ruins|gallery|art\s*gallery|beach|bay|coast|cove|shoreline|beachfront|viewpoint|lookout|observatory|observation\s*deck|skydeck|waterfall|island|lake|mountain|peak|canyon|gorge|cave|plaza|square|scenic|statue|bridge|zoo|safari\s*park|aquarium|botanical|sanctuary|nature\s*reserve|historic\s*site|old\s*town|ancient\s*town)\b|박물관|미술관|궁전|경복궁|창덕궁|타워|전망대|해변|해수욕장|사찰|유적지|วัด|พิพิธภัณฑ์|พระราชวัง|สวน|สวนสาธารณะ|อุทยานแห่งชาติ|หาด|ภูเขา|น้ำตก|จุดชมวิว|ปราสาท|โบราณสถาน|寺院|神社|城|庭園|公園|展望台|滝|島|湖|山|渓谷|水族館|動物園|美術館|博物館|名所|史跡|旧跡|鳥居|天守|景点|景区|寺|寺庙|庙|禅寺|神社|鸟居|教堂|大教堂|博物馆|纪念馆|展览馆|公园|国立公园|国家公园|观光|古迹|遗址|城堡|城址|天守阁|皇宫|宫殿|行宫|塔|电视塔|钟楼|鼓楼|美术馆|艺术馆|沙滩|海滩|滩|海湾|海岸|海滨|沙洲|观景台|展望台|天空之镜|瀑布|岛|海岛|湖|湖泊|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地|故居|陵园|古镇|老街|古城|名胜|chùa|đền|bảo\s*tàng|công\s*viên|bãi\s*biển|thác\s*nước|château|musée|cathédrale|plage|mirador|palazzo|duomo|monument/i.test(lower)
+    /\b(?:museum|temple|shrine|taisha|church|cathedral|mosque|synagogue|pagoda|monastery|wat|park|national\s*park|attraction|tourist\s*attraction|monument|landmark|castle|palace|imperial\s*palace|royal\s*palace|garden|botanical\s*garden|tower|tourist|historic|historical|heritage|unesco|ruins|gallery|art\s*gallery|beach|bay|coast|cove|shoreline|beachfront|viewpoint|lookout|observatory|observation\s*deck|skydeck|waterfall|island|lake|mountain|peak|canyon|gorge|cave|plaza|square|scenic|statue|bridge|zoo|safari\s*park|aquarium|botanical|sanctuary|nature\s*reserve|historic\s*site|old\s*town|ancient\s*town)\b|박물관|미술관|궁전|경복궁|창덕궁|타워|전망대|해변|해수욕장|사찰|유적지|วัด|พิพิธภัณฑ์|พระราชวัง|พระบรมมหาราชวัง|สวน|สวนสาธารณะ|อุทยานแห่งชาติ|หาด|ภูเขา|น้ำตก|จุดชมวิว|ปราสาท|โบราณสถาน|寺院|神社|城|庭園|公園|展望台|滝|島|湖|山|渓谷|水族館|動物園|美術館|博物館|名所|史跡|旧跡|鳥居|天守|大社|景点|景区|寺|寺庙|庙|禅寺|神社|鸟居|教堂|大教堂|博物馆|纪念馆|展览馆|公园|国立公园|国家公园|观光|古迹|遗址|城堡|城址|天守阁|皇宫|宫殿|行宫|塔|电视塔|钟楼|鼓楼|美术馆|艺术馆|沙滩|海滩|滩|海湾|海岸|海滨|沙洲|观景台|展望台|天空之镜|瀑布|岛|海岛|湖|湖泊|山|峡谷|地标|广场|风景区|动物园|水族馆|植物园|大桥|胜地|故居|陵园|古镇|老街|古城|名胜|chùa|đền|bảo\s*tàng|công\s*viên|bãi\s*biển|thác\s*nước|château|musée|cathédrale|plage|mirador|palazzo|duomo|monument/i.test(lower)
   ) {
     return 'attraction';
   }
 
-  // Default to attraction for unclassified POIs
-  return 'attraction';
+  // 8. Services (ATMs, pharmacies, clinics, laundromats, convenience stores, post offices, repair shops)
+  if (
+    /\b(?:atm|bank|pharmacy|chemist|drugstore|clinic|hospital|medical|health|doctor|dentist|laundromat|laundry|dry\s*clean|convenience\s*store| cvs|7-?eleven|family\s*mart|lawson|mini\s*stop|post\s*office|邮局|repair|fix|key\s*cutting|notary|embassy|consulate|visa|coworking|coworking\s*space|internet\s*cafe| printing|copy\s*shop|car\s*wash|gas\s*station|petrol|parking|charger|charging\s*station|ev\s*charger)\b|银行|atm|药房|药店|诊所|医院|卫生所|体检|洗衣|干洗|便利店|超市|杂货|邮局|修车|汽车维修|手机维修|快递|打印|复印|加油站|充电桩|停车|保安|物业|旅行社|签证|大使馆|领事馆|共办公|共享办公|网吧|网吧|虾皮|药局|西药房|中药房|医疗|康复|牙科|眼科|皮肤科| Reformas|farmacia|clinic|lavandería|correos|gasolinera|estación\s*de\s*servicio/i.test(lower)
+  ) {
+    return 'service';
+  }
+
+  // Default to other for truly unclassified POIs
+  return 'other';
 }
 
 export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
@@ -1508,6 +1517,7 @@ export const PLANNER_KIND_ICONS: Record<PlannerPlaceKind, string> = {
   shopping: '🛍️',
   transit: '🚇',
   experience: '🧗',
+  service: '🔧',
   other: '📍',
 };
 
@@ -1519,6 +1529,7 @@ export const PLANNER_KIND_LABELS: Record<PlannerPlaceKind, { zh: string; en: str
   experience: { zh: '体验', en: 'Experience' },
   shopping: { zh: '购物', en: 'Shopping' },
   transit: { zh: '交通', en: 'Transit' },
+  service: { zh: '服务', en: 'Service' },
   other: { zh: '其它', en: 'Other' },
 };
 

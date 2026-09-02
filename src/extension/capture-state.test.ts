@@ -60,6 +60,7 @@ describe('mutateCaptureStateInWorker', () => {
           received: 1,
           created: [],
           updated: [],
+          deduped: [],
           failed: [{ id: 'failed', title: 'Place failed', reason: 'missing_place_identity' }],
         },
       },
@@ -72,6 +73,7 @@ describe('mutateCaptureStateInWorker', () => {
       received: 1,
       created: [],
       updated: [],
+      deduped: [],
       failed: [{ id: 'failed', title: 'Place failed', reason: 'missing_place_identity' }],
     });
   });

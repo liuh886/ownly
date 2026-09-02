@@ -249,7 +249,7 @@ function renderFilters() {
   const wantCount = tripPlaces.filter((p) => p.priority === 'want').length;
   if (wantCount > 0) filters.push({ id: 'want', label: dict.wantFilter, count: wantCount });
 
-  const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'other'];
+  const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'service', 'other'];
   for (const kind of allKinds) {
     const kindTagZh = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
     const kindTagEn = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
@@ -767,6 +767,7 @@ export function renderCandidatesList() {
   if (store.activeFilter === 'experience') candidates = candidates.filter((p) => kindMatches(p, 'experience'));
   if (store.activeFilter === 'shopping') candidates = candidates.filter((p) => kindMatches(p, 'shopping'));
   if (store.activeFilter === 'transit') candidates = candidates.filter((p) => kindMatches(p, 'transit'));
+  if (store.activeFilter === 'service') candidates = candidates.filter((p) => kindMatches(p, 'service'));
   if (store.activeFilter === 'other') candidates = candidates.filter((p) => kindMatches(p, 'other'));
   if (store.activeFilter.startsWith('tag:')) {
     const filterTag = store.activeFilter.slice(4).trim().toLowerCase();

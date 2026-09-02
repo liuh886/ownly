@@ -176,6 +176,7 @@ export const I18N = {
       shopping: '购物商场 (Shopping)',
       transit: '交通中转 (Transit)',
       experience: '体验活动 (Experience)',
+      service: '生活服务 (Service)',
       other: '其它 (Other)',
     },
     priorities: {
@@ -365,6 +366,7 @@ export const I18N = {
       shopping: 'Shopping',
       transit: 'Transit / Station',
       experience: 'Experience',
+      service: 'Service',
       other: 'Other',
     },
     priorities: {

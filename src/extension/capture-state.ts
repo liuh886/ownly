@@ -54,7 +54,7 @@ function normalizeImportReport(value: unknown): ImportReport | undefined {
   const failed = report.failed.filter((item): item is ImportReport['failed'][number] => Boolean(
     item && typeof item === 'object' && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.reason === 'string'
   ));
-  return { received: report.received, created: imported, updated: [], failed };
+  return { received: report.received, created: imported, updated: [], deduped: [], failed };
 }
 
 export function normalizeCaptureState(value: unknown): OwnlyCaptureState {

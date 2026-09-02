@@ -189,7 +189,7 @@ export class PlannerRepository {
   }
 
   private async importResearchPlaces(places: PlannerTripPlace[]): Promise<ImportReport> {
-    const report: ImportReport = { received: places.length, created: [], updated: [], failed: [] };
+    const report: ImportReport = { received: places.length, created: [], updated: [], deduped: [], failed: [] };
     if (places.length === 0) return report;
     await this.initialize();
     const existingTrips = new Set((await this.listTrips()).map((t) => t.id));
@@ -261,14 +261,23 @@ export class PlannerRepository {
 
     for (const tripId of touchedTripIds) {
       try {
-        await this.deduplicateTripPlaces(tripId);
+        const dedupResult = await this.deduplicateTripPlaces(tripId);
+        if (dedupResult.removedCount > 0) {
+          const allPlacesAfter = await this.listPlaces();
+          const survivingIds = new Set(allPlacesAfter.map((p) => p.id));
+          for (const id of [...report.created, ...report.updated]) {
+            if (!survivingIds.has(id)) {
+              report.deduped.push(id);
+            }
+          }
+        }
       } catch (err) {
         console.warn(`[PlannerRepository] Auto-deduplication for trip ${tripId} encountered warning:`, err);
       }
     }
 
-    if (report.failed.length > 0) {
-      console.warn(`[PlannerRepository] Import report: ${report.created.length + report.updated.length}/${report.received} imported (${report.created.length} created, ${report.updated.length} updated), ${report.failed.length} failed`, report.failed);
+    if (report.failed.length > 0 || report.deduped.length > 0) {
+      console.warn(`[PlannerRepository] Import report: ${report.created.length} created, ${report.updated.length} updated, ${report.deduped.length} deduped, ${report.failed.length} failed`, report.failed);
     }
 
     return report;
@@ -339,7 +348,7 @@ export class PlannerRepository {
 
   async importBundle(bundle: { trip: PlannerTrip; places: PlannerTripPlace[]; visits: PlannerTripVisit[]; legs: PlannerTripLeg[] }): Promise<ImportReport> {
     await this.initialize();
-    const report: ImportReport = { received: bundle.places.length, created: [], updated: [], failed: [] };
+    const report: ImportReport = { received: bundle.places.length, created: [], updated: [], deduped: [], failed: [] };
 
     try {
       await this.upsertTrip(bundle.trip);

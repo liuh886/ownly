@@ -472,7 +472,7 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('경복궁 (Gyeongbokgung Palace)')).toBe('attraction');
     expect(inferPlaceKind('N서울타워 전망대')).toBe('attraction');
     expect(inferPlaceKind('Cathédrale Notre-Dame de Paris')).toBe('attraction');
-    expect(inferPlaceKind(undefined)).toBe('attraction');
+    expect(inferPlaceKind(undefined)).toBe('other');
   });
 
   it('normalizes tags and delimited values cleanly', () => {
@@ -647,6 +647,7 @@ describe('Ownly Planner domain', () => {
       received: 1,
       created: ['drop'],
       updated: [],
+      deduped: [],
       failed: [],
     }, '2026-09-02');
     expect(next.pendingPlaces.map((p) => p.id)).toEqual(['keep']);
