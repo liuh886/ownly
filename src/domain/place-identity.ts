@@ -13,6 +13,26 @@ export interface StrongPlaceIdentityEvidence {
   key: string;
 }
 
+export type PlaceIdentityAction = 'create' | 'merge' | 'split' | 'evidence_add' | 'evidence_remove' | 'confidence_change';
+
+export interface PlaceIdentityEvent {
+  timestamp: string;
+  action: PlaceIdentityAction;
+  source: string;
+  confidence: number;
+  before: {
+    id: string;
+    title: string;
+    identity_keys: string[];
+  } | null;
+  after: {
+    id: string;
+    title: string;
+    identity_keys: string[];
+  } | null;
+  metadata?: Record<string, unknown>;
+}
+
 function inferProvider(place: PlaceIdentityLike): string {
   const explicit = place.source_provider?.trim().toLowerCase();
   if (explicit) return explicit;

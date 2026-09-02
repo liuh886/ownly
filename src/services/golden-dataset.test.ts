@@ -14,7 +14,7 @@ import { materializePlannerScheduledPlaces } from '@/domain/planner-visits';
 import { evaluatePlannerDay } from '@/domain/planner-schedule';
 import { createShareableTripBundle, parseTripBundle, instantiateTripBundle } from '@/domain/trip-bundle';
 
-const fixtureDir = resolve(import.meta.dirname, '../../test-fixtures/thailand-2026');
+const fixtureDir = resolve(import.meta.dirname, '../../examples/thailand-2026');
 const TRIP = JSON.parse(readFileSync(resolve(fixtureDir, 'trip.json'), 'utf-8')) as PlannerTrip;
 const PLACES = JSON.parse(readFileSync(resolve(fixtureDir, 'places.json'), 'utf-8')) as PlannerTripPlace[];
 const EXPENSES = JSON.parse(readFileSync(resolve(fixtureDir, 'expenses.json'), 'utf-8')) as TripExpenseItem[];
