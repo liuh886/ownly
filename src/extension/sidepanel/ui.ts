@@ -72,6 +72,7 @@ export function applyI18n() {
   setLeadingLabel(el.lblBulkText, dict.lblBulkText);
   el.bulkInputText.placeholder = dict.bulkPlaceholder;
   el.btnParseBulkImport.textContent = dict.btnParseBulkImport;
+  el.btnExportCollection.textContent = dict.exportBtn;
   el.btnBackupState.textContent = dict.backupBtn;
   el.btnRestoreState.textContent = dict.restoreBtn;
 

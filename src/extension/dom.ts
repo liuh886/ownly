@@ -16,6 +16,7 @@ export type ElementMap = {
   lblBulkText: HTMLElement;
   bulkInputText: HTMLTextAreaElement;
   btnParseBulkImport: HTMLButtonElement;
+  btnExportCollection: HTMLButtonElement;
   btnBackupState: HTMLButtonElement;
   btnRestoreState: HTMLButtonElement;
   fileRestoreState: HTMLInputElement;
@@ -118,6 +119,7 @@ export const el: ElementMap = {
   lblBulkText: required('lblBulkText'),
   bulkInputText: required<HTMLTextAreaElement>('bulkInputText'),
   btnParseBulkImport: required<HTMLButtonElement>('btnParseBulkImport'),
+  btnExportCollection: required<HTMLButtonElement>('btnExportCollection'),
   btnBackupState: required<HTMLButtonElement>('btnBackupState'),
   btnRestoreState: required<HTMLButtonElement>('btnRestoreState'),
   fileRestoreState: required<HTMLInputElement>('fileRestoreState'),

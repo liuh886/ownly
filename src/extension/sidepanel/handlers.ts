@@ -20,6 +20,7 @@ import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, safeDecodeUri, today } from '../utils';
 import { readCurrentPlace } from './capture';
 import { enrichCandidatePlacesBatch, isCandidateMissingData, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
+import { downloadCollectionJson } from '../export';
 import {
   applyI18n,
   autoFillPlaceForm,
@@ -904,6 +905,17 @@ export function initHandlers(): void {
       }
       renderCandidatesList();
     })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
+  });
+
+  el.btnExportCollection.addEventListener('click', () => {
+    const collection = getActiveCollection();
+    const places = getActivePlaces();
+    if (!collection || places.length === 0) {
+      setStatus(store.lang === 'zh' ? '没有可导出的地点。' : 'No places to export.', 'error');
+      return;
+    }
+    downloadCollectionJson(collection, places);
+    setStatus(t().exportSaved || (store.lang === 'zh' ? '合集已导出。' : 'Collection exported.'), 'success');
   });
 
   el.btnBackupState.addEventListener('click', () => {
