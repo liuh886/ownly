@@ -1292,42 +1292,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {/* Capture Status & Sync */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50/70 p-1">
-            {capturePending === null ? (
-              <button
-                type="button"
-                onClick={() => setGuideOpen(true)}
-                className="rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100"
-                title={zh ? '未检测到扩展，点击查看安装步骤' : 'Extension offline, click to view installation guide'}
-              >
-                {zh ? 'Capture 未连接' : 'Capture offline'}
-              </button>
-            ) : (
-              <span className="px-2 text-[11px] font-semibold text-stone-600">
-                {`${capturePending} ${zh ? '待同步' : 'pending'}`}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => void syncCapture()}
-              disabled={busy}
-              className="rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-stone-800 shadow-2xs transition hover:bg-stone-100 hover:text-stone-950 disabled:opacity-50"
-            >
-              {busy ? '…' : (zh ? '🔄 同步' : '🔄 Sync')}
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-900 active:scale-98"
-            title={zh ? '从剪贴板、Google Maps 链接、KML、CSV 或 JSON 批量导入候选' : 'Import candidates from clipboard, links, KML, CSV, or JSON'}
-          >
-            <span>📥</span>
-            <span>{zh ? '导入' : 'Import'}</span>
-          </button>
-
           <button
             type="button"
             onClick={() => setIsCalendarModalOpen(true)}
@@ -1335,7 +1299,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             title={zh ? '导出 .ics 日历文件或设置 Google/Apple Calendar 持续订阅源' : 'Export .ics or setup Google/Apple Calendar Feed'}
           >
             <span>📅</span>
-            <span>{zh ? '日历订阅' : 'Calendar'}</span>
+            <span>{zh ? '日历' : 'Calendar'}</span>
             {selectedTrip?.calendar_feed?.enabled ? (
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             ) : null}
@@ -2141,6 +2105,33 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <option value="must">{zh ? '🎯 优先必去 (Must)' : '🎯 Priority (Must)'}</option>
               <option value="rating">{zh ? '⭐ 评分最高 (Rating)' : '⭐ Highest Rating'}</option>
             </select>
+
+            {/* Capture Sync */}
+            <div className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white p-0.5 shadow-2xs">
+              {capturePending !== null && capturePending > 0 ? (
+                <span className="px-1.5 text-[10px] font-bold text-amber-700">{capturePending}</span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => capturePending === null ? setGuideOpen(true) : void syncCapture()}
+                disabled={busy}
+                className="rounded-md px-2 py-1 text-[11px] font-bold text-stone-700 hover:bg-stone-100 transition disabled:opacity-50"
+                title={capturePending === null ? (zh ? '未检测到扩展' : 'Extension offline') : (zh ? '同步 Capture 候选' : 'Sync Capture candidates')}
+              >
+                {capturePending === null ? (zh ? '🔌 扩展' : '🔌 Ext') : (zh ? '🔄 同步' : '🔄 Sync')}
+              </button>
+            </div>
+
+            {/* Import */}
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-900"
+              title={zh ? '从剪贴板、链接、KML、CSV 或 JSON 导入候选' : 'Import candidates from clipboard, links, KML, CSV, or JSON'}
+            >
+              <span>📥</span>
+              <span>{zh ? '导入' : 'Import'}</span>
+            </button>
 
             {/* Multi-dimensional Hotel Compare */}
             {candidateHotels.length > 0 ? (
