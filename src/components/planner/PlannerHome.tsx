@@ -1283,16 +1283,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <span className="text-stone-400">({tripDates.length}{zh ? '天' : 'd'})</span>
             </div>
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-stone-500">
-            <span className="font-medium text-stone-700">
-              📍 {selectedTrip.destinations.join(' · ') || (zh ? '未填写目的地' : 'No destinations')}
-            </span>
-            {currentMembers.length > 0 ? (
-              <span className="inline-flex items-center gap-1 text-[11px] text-stone-400">
-                👥 {currentMembers.join(', ')}
-              </span>
-            ) : null}
-          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
