@@ -494,6 +494,77 @@ export class PlannerRepository {
     return { ...report, trace };
   }
 
+  /**
+   * Reconstructs missing places for orphan visits.
+   * For each visit that references a non-existent place, creates a placeholder place
+   * with the visit's title and basic info, and updates the visit to reference it.
+   * 
+   * Returns a report of reconstructed places and updated visits.
+   */
+  async reconstructOrphanPlaces(tripId?: string): Promise<{
+    reconstructed: { placeId: string; visitId: string; title: string }[];
+    failed: { visitId: string; reason: string }[];
+  }> {
+    await this.initialize();
+    const allVisits = await this.listVisits();
+    const allPlaces = await this.listPlaces();
+    const placeIds = new Set(allPlaces.map((p) => p.id));
+
+    // Filter orphan visits
+    let orphanVisits = allVisits.filter((v) => v.place_id && !placeIds.has(v.place_id));
+    if (tripId) {
+      orphanVisits = orphanVisits.filter((v) => v.trip_id === tripId);
+    }
+
+    const reconstructed: { placeId: string; visitId: string; title: string }[] = [];
+    const failed: { visitId: string; reason: string }[] = [];
+
+    for (const visit of orphanVisits) {
+      try {
+        // Create a placeholder place based on the visit
+        const placeId = `reconstructed-${visit.id}`;
+        const now = new Date().toISOString();
+        
+        const placeholderPlace: PlannerTripPlace = {
+          schema_version: '0.1',
+          type: 'trip_place',
+          id: placeId,
+          trip_id: visit.trip_id,
+          title: `Orphan Place (${visit.date})`,
+          source_provider: 'other',
+          source_url: '',
+          kind: 'other',
+          priority: 'want',
+          tags: ['reconstructed'],
+          state: 'candidate',
+          reservation_status: 'none',
+          signals: [],
+          risks: [],
+          created_at: now,
+          updated_at: now,
+        };
+
+        await this.upsertPlace(placeholderPlace);
+
+        // Update the visit to reference the new place
+        const updatedVisit = {
+          ...visit,
+          place_id: placeId,
+          updated_at: now,
+        };
+        await this.upsert(updatedVisit);
+
+        reconstructed.push({ placeId, visitId: visit.id, title: placeholderPlace.title });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        failed.push({ visitId: visit.id, reason: msg });
+        console.warn(`[PlannerRepository] Failed to reconstruct place for visit ${visit.id}:`, error);
+      }
+    }
+
+    return { reconstructed, failed };
+  }
+
   async importBundle(bundle: { trip: PlannerTrip; places: PlannerTripPlace[]; visits: PlannerTripVisit[]; legs: PlannerTripLeg[] }): Promise<ImportReport> {
     await this.initialize();
     const report: ImportReport = { received: bundle.places.length, created: [], updated: [], deduped: [], failed: [] };
