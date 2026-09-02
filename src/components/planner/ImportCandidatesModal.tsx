@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import type { PlannerTripPlace } from '@/domain/planner';
 import { getPlannerKindLabel, parseImportPayload, PLANNER_KIND_ICONS } from '@/domain/planner';
+import { capturePlaceToPlannerPlace, isCollectionExport, parseCaptureCollectionExport } from '@/domain/capture';
 import { plannerRepository } from '@/services/PlannerRepository';
 
 interface ImportCandidatesModalProps {
@@ -54,6 +55,20 @@ export function ImportCandidatesModal({
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = String(e.target?.result || '');
+        try {
+          const parsed = JSON.parse(content);
+          if (isCollectionExport(parsed)) {
+            const exportData = parseCaptureCollectionExport(parsed);
+            if (exportData) {
+              const converted = exportData.places.map((p) => capturePlaceToPlannerPlace(p, tripId)) as PlannerTripPlace[];
+              setParsedPlaces(converted);
+              setErrorMsg('');
+              return;
+            }
+          }
+        } catch {
+          // Not JSON or invalid Capture Collection — fall through to text parsing
+        }
         handleTextChange(content);
       };
       reader.onerror = () => {
@@ -61,7 +76,7 @@ export function ImportCandidatesModal({
       };
       reader.readAsText(file);
     },
-    [handleTextChange, zh],
+    [handleTextChange, tripId, zh],
   );
 
   const handleConfirmImport = useCallback(async () => {
