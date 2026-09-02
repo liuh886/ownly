@@ -7,6 +7,7 @@ on:
       - 'scripts/one-shot-release-closeout.py'
       - 'scripts/one-shot-release-closeout-fix.py'
       - 'scripts/one-shot-release-closeout-fix2.py'
+      - 'scripts/one-shot-release-closeout-fix3.py'
       - '.github/workflows/one-shot-release-closeout.yml'
 
 permissions:
@@ -30,6 +31,7 @@ jobs:
           python scripts/one-shot-release-closeout.py
           python scripts/one-shot-release-closeout-fix.py
           python scripts/one-shot-release-closeout-fix2.py
+          python scripts/one-shot-release-closeout-fix3.py
       - name: Release-specific regressions
         run: |
           node scripts/gen-git-sha.mjs
@@ -41,7 +43,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - name: Commit validated closeout
         run: |
-          git rm .github/workflows/one-shot-release-closeout.yml scripts/one-shot-release-closeout.py scripts/one-shot-release-closeout-fix.py scripts/one-shot-release-closeout-fix2.py
+          git rm .github/workflows/one-shot-release-closeout.yml scripts/one-shot-release-closeout.py scripts/one-shot-release-closeout-fix.py scripts/one-shot-release-closeout-fix2.py scripts/one-shot-release-closeout-fix3.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src docs
