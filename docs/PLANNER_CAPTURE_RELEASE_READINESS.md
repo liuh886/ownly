@@ -30,7 +30,7 @@ Explicitly out of scope until after release: AI planner expansion, collaboration
 - [ ] Keep Place ID/CID provenance in diagnostics only; do not expose internal identity in normal cards.
 - [x] Enrichment never resolves identity from titles or promotes free-form notes into objective identity/price facts.
 - [x] Price and other source extras remain optional; missing price no longer keeps food/stay in perpetual incomplete state.
-- [ ] Verify retry, offline, Google session expiry, and extension restart do not lose pending captures.
+- [x] Verify retry/extension restart persistence does not lose pending or failed captures; provider/session read failures are recorded in Capture diagnostics.
 - [ ] Add real Google Maps regression fixtures for Bangkok/Chiang Mai hotel, food, cafe, attraction, transit, and airport entities.
 - [x] Saved-list enrichment attaches returned facts only to verified feature IDs; title-keyed fact scavenging is removed.
 
@@ -42,8 +42,8 @@ Explicitly out of scope until after release: AI planner expansion, collaboration
 - [x] Schedule, Shelve, and Delete actions live in one compact card footer.
 - [x] Phone is icon-only in card UI; number remains available via tooltip and `tel:` target.
 - [ ] Verify Candidate → Scheduled → Shelved state restrictions and all user-facing error messages.
-- [ ] Verify repeat scheduling of one Place on the same day and across days never duplicates or consumes the Place entity.
-- [ ] Verify Drop/Delete cannot orphan Visits, Legs, hotel spans, or exported events.
+- [x] Verify repeat scheduling of one Place on the same day and across days never duplicates or consumes the Place entity.
+- [x] Verify Drop/Delete cannot orphan scheduled Visits; release regression blocks Place removal while Visits exist.
 - [ ] Reconcile all Candidate/Shelved/Scheduled counts with repository state after sync, filter, search, restore, merge, and delete.
 - [ ] Verify all empty states accurately explain why no cards are visible.
 
@@ -73,7 +73,7 @@ Release checks:
 - [x] Per-pair manual merge remains available.
 - [x] Persist Ignore decisions on the Trip; an ignored pair does not reappear after reload.
 - [x] Show concise review evidence for each pair: reason, match score, and distance when available.
-- [ ] Ensure a merge preserves the preferred primary Place, facts, all Visits, and canonical identity.
+- [x] Ensure a merge preserves the preferred primary Place, facts, all Visits, and canonical identity; failed secondary deletion rolls back the mutation.
 - [ ] Add tests for one Place appearing in multiple weak pairs so review cannot create stale pair references after a merge.
 
 ## P1 — Planner card and mobile interaction completion

@@ -5,7 +5,7 @@ import {
   normalizeCaptureState,
   readCaptureState,
 } from './capture-state';
-import type { PlannerTripPlace } from '../domain/planner';
+import { asCaptureCandidate, type PlannerTripPlace } from '../domain/planner';
 
 const storage = new Map<string, unknown>();
 
@@ -51,6 +51,29 @@ describe('normalizeCaptureState', () => {
 });
 
 describe('mutateCaptureStateInWorker', () => {
+  it('persists failed candidates and their import report across a fresh read', async () => {
+    await mutateCaptureStateInWorker((current) => ({
+      state: {
+        ...current,
+        pendingPlaces: [{ ...asCaptureCandidate(place('failed')), status: 'failed', reason: 'missing_place_identity', lastAttempt: '2026-09-02' }],
+        lastImportReport: {
+          received: 1,
+          imported: [],
+          failed: [{ id: 'failed', title: 'Place failed', reason: 'missing_place_identity' }],
+        },
+      },
+      result: undefined,
+    }));
+
+    const restored = await readCaptureState();
+    expect(restored.pendingPlaces[0]).toMatchObject({ id: 'failed', status: 'failed', reason: 'missing_place_identity', lastAttempt: '2026-09-02' });
+    expect(restored.lastImportReport).toEqual({
+      received: 1,
+      imported: [],
+      failed: [{ id: 'failed', title: 'Place failed', reason: 'missing_place_identity' }],
+    });
+  });
+
   it('serializes concurrent background mutations', async () => {
     await Promise.all([
       mutateCaptureStateInWorker((current) => ({ state: { ...current, pendingPlaces: [...current.pendingPlaces, place('a')] }, result: 'a' })),

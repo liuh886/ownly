@@ -303,30 +303,13 @@ export class PlannerRepository {
       });
 
       const primary = cluster[0];
-      let updatedPrimary = { ...primary };
-
+      let clusterMerged = false;
       for (let k = 1; k < cluster.length; k++) {
-        const duplicate = cluster[k];
-        updatedPrimary = mergeCapturedPlaceResearch(updatedPrimary, duplicate);
-
-        const dupVisits = visits.filter((v) => v.place_id === duplicate.id);
-        for (const v of dupVisits) {
-          await this.upsert({ ...v, place_id: primary.id, updated_at: new Date().toISOString() });
-        }
-
-        try {
-          await this.store.deleteMarkdownFile(
-            this.directory(PLANNER_DIRECTORIES.places),
-            entityFileName(duplicate),
-          );
-          removedCount++;
-        } catch (err) {
-          console.warn(`[PlannerRepository] Failed to delete duplicate place file ${duplicate.id}:`, err);
-        }
+        await this.mergePlaces(primary.id, cluster[k].id);
+        removedCount += 1;
+        clusterMerged = true;
       }
-
-      await this.upsert(updatedPrimary);
-      mergedCount++;
+      if (clusterMerged) mergedCount += 1;
     }
 
     return { mergedCount, removedCount };
@@ -396,6 +379,7 @@ export class PlannerRepository {
    */
   async mergePlaces(primaryPlaceId: string, secondaryPlaceId: string): Promise<PlannerTripPlace> {
     await this.initialize();
+    if (primaryPlaceId === secondaryPlaceId) throw new Error('Cannot merge a place into itself.');
     const places = await this.listPlaces();
     const primary = places.find((p) => p.id === primaryPlaceId);
     const secondary = places.find((p) => p.id === secondaryPlaceId);
@@ -407,25 +391,44 @@ export class PlannerRepository {
     }
 
     const merged = mergeCapturedPlaceResearch(primary, secondary);
-    await this.upsert(merged);
+    const secondaryVisits = (await this.listVisits()).filter((visit) => visit.place_id === secondaryPlaceId);
+    const reassignedVisits: PlannerTripVisit[] = [];
+    let primaryWritten = false;
 
-    // Reassign visits of secondary to primary
-    const visits = (await this.listVisits()).filter((v) => v.place_id === secondaryPlaceId);
-    for (const v of visits) {
-      await this.upsert({ ...v, place_id: primary.id, updated_at: new Date().toISOString() });
-    }
-
-    // Delete secondary place file
     try {
+      await this.upsert(merged);
+      primaryWritten = true;
+      for (const visit of secondaryVisits) {
+        await this.upsert({ ...visit, place_id: primary.id, updated_at: new Date().toISOString() });
+        reassignedVisits.push(visit);
+      }
       await this.store.deleteMarkdownFile(
         this.directory(PLANNER_DIRECTORIES.places),
         entityFileName(secondary),
       );
-    } catch (err) {
-      console.warn(`[PlannerRepository] Failed to delete merged secondary place file ${secondary.id}:`, err);
+      return merged;
+    } catch (error) {
+      const rollbackErrors: string[] = [];
+      for (const visit of reassignedVisits.reverse()) {
+        try {
+          await this.upsert(visit);
+        } catch (rollbackError) {
+          rollbackErrors.push(`visit ${visit.id}: ${String(rollbackError)}`);
+        }
+      }
+      if (primaryWritten) {
+        try {
+          await this.upsert(primary);
+        } catch (rollbackError) {
+          rollbackErrors.push(`primary ${primary.id}: ${String(rollbackError)}`);
+        }
+      }
+      const cause = error instanceof Error ? error.message : String(error);
+      if (rollbackErrors.length > 0) {
+        throw new Error(`Merge failed (${cause}) and rollback was incomplete: ${rollbackErrors.join(' | ')}`);
+      }
+      throw new Error(`Merge failed and was rolled back: ${cause}`);
     }
-
-    return merged;
   }
 
   async addVisit(
