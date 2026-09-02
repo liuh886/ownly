@@ -1,4 +1,4 @@
-import { CAPTURE_STORAGE_KEY, normalizeCaptureState } from './capture-state';
+import { CAPTURE_STORAGE_KEY, normalizeCaptureStateV3 } from './capture-state';
 import { el } from './dom';
 import { loadState, store } from './sidepanel/store';
 import { readCurrentPlace } from './sidepanel/capture';
@@ -15,9 +15,9 @@ import {
 // writes state externally.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[CAPTURE_STORAGE_KEY]) return;
-  const incoming = normalizeCaptureState(changes[CAPTURE_STORAGE_KEY].newValue);
-  if (JSON.stringify(incoming) === JSON.stringify(store.state)) return;
-  store.state = incoming;
+  const incoming = normalizeCaptureStateV3(changes[CAPTURE_STORAGE_KEY].newValue);
+  if (JSON.stringify(incoming) === JSON.stringify(store.stateV3)) return;
+  store.stateV3 = incoming;
   renderState();
   renderCurrentPlace();
   renderSmartListCard();

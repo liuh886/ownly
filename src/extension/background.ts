@@ -1,19 +1,19 @@
 import {
   DEFAULT_USD_PIVOT,
-  applyCaptureImportReport,
-  asCaptureCandidate,
   ensurePlaceKindTag,
-  findExistingTripPlace,
   inferPlaceKind,
-  mergeCaptureState,
-  type CaptureContext,
-  type ImportReport,
   type PlannerTripPlace,
 } from '../domain/planner';
 import {
-  mutateCaptureStateInWorker,
-  normalizeCaptureState,
-  readCaptureState,
+  EMPTY_CAPTURE_STATE_V3,
+  type CaptureCollection,
+  type CapturePlace,
+  type OwnlyCaptureStateV3,
+} from '../domain/capture';
+import {
+  mutateCaptureStateV3InWorker,
+  normalizeCaptureStateV3,
+  readCaptureStateV3,
 } from './capture-state';
 import type { CurrentResearchPlace } from './content';
 import { sessionStorage } from './session-storage';
@@ -34,16 +34,18 @@ async function flashBadge(tabId: number, text: string, color: string) {
   } catch {}
 }
 
-function normalizeContext(value: unknown): CaptureContext | null {
-  if (!value || typeof value !== 'object') return null;
-  const context = value as Partial<CaptureContext>;
-  if (typeof context.tripId !== 'string' || !context.tripId.trim()) return null;
-  if (typeof context.title !== 'string' || !context.title.trim()) return null;
+function getDefaultCollection(state: OwnlyCaptureStateV3): CaptureCollection {
+  if (state.collections.length > 0) {
+    const active = state.collections.find((c) => c.id === state.active_collection_id);
+    if (active) return active;
+    return state.collections[0];
+  }
+  // No collection exists → create default
+  const now = new Date().toISOString();
   return {
-    tripId: context.tripId,
-    title: context.title,
-    currency: typeof context.currency === 'string' && context.currency.trim() ? context.currency.trim().toUpperCase() : undefined,
-    tags: Array.isArray(context.tags) ? context.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0) : undefined,
+    id: `default-${Date.now()}`,
+    title: '我的收藏',
+    created_at: now,
   };
 }
 
@@ -53,16 +55,8 @@ async function quickCaptureCurrentPlace() {
   const tabId = tab.id;
 
   try {
-    const snapshot = await readCaptureState();
-    const context = snapshot.activeContext;
-    if (!context) {
-      void flashBadge(tabId, '!', '#b91c1c');
-      return;
-    }
-
     const response = await chrome.tabs.sendMessage(tabId, {
       type: 'OWNLY_GET_CURRENT_PLACE',
-      targetCurrency: context.currency,
     }) as { place?: CurrentResearchPlace | null };
     const place = response?.place;
     if (!place?.title || !place.sourceUrl) {
@@ -70,64 +64,67 @@ async function quickCaptureCurrentPlace() {
       return;
     }
 
-    const capturedId = await mutateCaptureStateInWorker((state) => {
-      const active = state.activeContext;
-      if (!active) return { state, result: null as string | null };
-      const existing = findExistingTripPlace(
-        state.pendingPlaces,
-        active.tripId,
-        place.sourceUrl,
-        place.sourcePlaceId,
-        place.coordinates,
+    const capturedId = await mutateCaptureStateV3InWorker((state) => {
+      const collection = getDefaultCollection(state);
+      const existing = state.places.find(
+        (p) => p.collection_id === collection.id &&
+          (p.source.url === place.sourceUrl || (p.source.place_id && p.source.place_id === place.sourcePlaceId)),
       );
+
       const now = new Date().toISOString();
       const freshKind = inferPlaceKind([place.title, place.category, place.address, ...(place.types || [])].filter(Boolean).join(' '));
-      const isGeneric = existing?.kind === 'attraction' || existing?.kind === 'other';
+      const isGeneric = existing?.inferred_kind === 'attraction' || existing?.inferred_kind === 'other' || !existing?.inferred_kind;
       const hasSpecific = freshKind !== 'attraction' && freshKind !== 'other';
-      const effectiveKind = existing && !isGeneric ? existing.kind : (hasSpecific ? freshKind : (existing?.kind ?? freshKind));
+      const effectiveKind = existing && !isGeneric ? existing.inferred_kind : (hasSpecific ? freshKind : (existing?.inferred_kind ?? freshKind));
       const stableId = existing?.id ?? crypto.randomUUID();
 
-      const candidate = asCaptureCandidate({
-        schema_version: '0.1',
-        type: 'trip_place',
+      const newCollectionIds = new Set(state.collections.map((c) => c.id));
+      if (!newCollectionIds.has(collection.id)) {
+        state = { ...state, collections: [...state.collections, collection] };
+      }
+
+      const capturePlace: CapturePlace = {
         id: stableId,
-        trip_id: active.tripId,
+        collection_id: collection.id,
         title: place.title,
-        source_provider: place.sourceProvider || 'google_maps',
-        source_url: place.sourceUrl,
-        source_place_id: place.sourcePlaceId ?? existing?.source_place_id,
-        kind: effectiveKind,
-        area: (existing?.area ?? place.address?.split(/[,，·]/)[0]?.trim()) || undefined,
-        priority: existing?.priority ?? 'want',
-        tags: ensurePlaceKindTag(Array.from(new Set([...(active.tags ?? []), ...(existing?.tags ?? [])])), effectiveKind),
-        why: existing?.why ?? place.summary,
-        signals: existing?.signals ?? [],
-        risks: existing?.risks ?? [],
-        notes: existing?.notes ?? place.userNote,
-        observed_rating: place.rating ?? existing?.observed_rating,
-        observed_price: place.priceLevel ?? existing?.observed_price,
-        observed_at: now.slice(0, 10),
-        preferred_window: existing?.preferred_window,
-        duration_minutes: existing?.duration_minutes,
-        open_hours: place.openHours ?? existing?.open_hours,
+        source: {
+          provider: (place.sourceProvider as CapturePlace['source']['provider']) || 'google_maps',
+          url: place.sourceUrl,
+          place_id: place.sourcePlaceId ?? existing?.source.place_id,
+          category: place.category ?? existing?.source.category,
+          types: Array.from(new Set([...(place.types ?? []), ...(existing?.source.types ?? [])])),
+        },
         address: place.address ?? existing?.address,
         coordinates: place.coordinates ?? existing?.coordinates,
+        rating: place.rating ?? existing?.rating,
+        review_count: place.reviewCount ?? existing?.review_count,
+        price: place.priceLevel ? { raw: place.priceLevel } : existing?.price,
+        open_hours: place.openHours ?? existing?.open_hours,
         phone: place.phone ?? existing?.phone,
         plus_code: place.plusCode ?? existing?.plus_code,
         menu_url: place.menuUrl ?? existing?.menu_url,
         reservation_url: place.reservationUrl ?? existing?.reservation_url,
         review_topics: place.reviewTopics ?? existing?.review_topics,
-        types: Array.from(new Set([...(place.types ?? []), ...(existing?.types ?? [])])),
-        reservation_status: 'none',
-        state: 'candidate',
-        created_at: existing?.created_at ?? now,
+        inferred_kind: effectiveKind,
+        user: existing?.user ? {
+          ...existing.user,
+          why: existing.user.why ?? place.summary,
+          notes: existing.user.notes ?? place.userNote,
+        } : {
+          priority: 'want',
+          tags: ensurePlaceKindTag([], effectiveKind),
+          why: place.summary,
+          notes: place.userNote,
+        },
+        captured_at: existing?.captured_at ?? now,
         updated_at: now,
-      } satisfies PlannerTripPlace);
+      };
 
       return {
         state: {
           ...state,
-          pendingPlaces: [...state.pendingPlaces.filter((item) => item.id !== stableId), candidate],
+          active_collection_id: collection.id,
+          places: [...state.places.filter((p) => p.id !== stableId), capturePlace],
         },
         result: stableId,
       };
@@ -185,14 +182,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
-  if (type === 'CAPTURE_SAVE_STATE') {
-    const incoming = normalizeCaptureState((message as { state?: unknown }).state);
+  // ─── V3 Handlers ───────────────────────────────────────────────────────────
+
+  if (type === 'CAPTURE_SAVE_STATE_V3') {
+    const incoming = normalizeCaptureStateV3((message as { state?: unknown }).state);
     const rawDeleted = (message as { locallyDeletedIds?: unknown }).locallyDeletedIds;
     const deletedIds = Array.isArray(rawDeleted)
       ? new Set(rawDeleted.filter((id): id is string => typeof id === 'string'))
       : undefined;
-    void mutateCaptureStateInWorker((current) => {
-      const merged = mergeCaptureState(current, incoming, deletedIds);
+    void mutateCaptureStateV3InWorker((current) => {
+      // Merge: keep local places not in deletedIds, add incoming places, deduplicate by id
+      const localPlaces = deletedIds
+        ? current.places.filter((p) => !deletedIds.has(p.id))
+        : current.places;
+      const localPlaceIds = new Set(localPlaces.map((p) => p.id));
+      const incomingOnly = incoming.places.filter((p) => !localPlaceIds.has(p.id));
+      const merged: OwnlyCaptureStateV3 = {
+        version: 3,
+        active_collection_id: incoming.active_collection_id || current.active_collection_id,
+        collections: [...current.collections],
+        places: [...localPlaces, ...incomingOnly],
+        planner_target: incoming.planner_target || current.planner_target,
+      };
       return { state: merged, result: merged };
     })
       .then((state) => sendResponse({ ok: true, state }))
@@ -200,10 +211,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (type === 'CAPTURE_REPLACE_STATE') {
-    const incoming = normalizeCaptureState((message as { state?: unknown }).state);
-    void mutateCaptureStateInWorker((current) => ({
-      state: { version: 2, activeContext: current.activeContext, pendingPlaces: incoming.pendingPlaces, lastImportReport: incoming.lastImportReport },
+  if (type === 'CAPTURE_REPLACE_STATE_V3') {
+    const incoming = normalizeCaptureStateV3((message as { state?: unknown }).state);
+    void mutateCaptureStateV3InWorker((current) => ({
+      state: { ...incoming, planner_target: current.planner_target },
       result: undefined,
     }))
       .then(() => sendResponse({ ok: true }))
@@ -211,32 +222,103 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (type === 'CAPTURE_SET_CONTEXT') {
-    const context = normalizeContext((message as { context?: unknown }).context);
-    void mutateCaptureStateInWorker((current) => ({
-      state: { ...current, activeContext: context },
-      result: undefined,
-    }))
-      .then(() => sendResponse({ ok: true }))
-      .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
-    return true;
-  }
-
-  if (type === 'CAPTURE_APPLY_IMPORT_REPORT') {
-    const report = (message as { report?: ImportReport }).report;
-    if (!report || typeof report.received !== 'number' || !Array.isArray(report.created) || !Array.isArray(report.failed)) {
-      sendResponse({ ok: false, error: 'invalid import report' });
+  if (type === 'CAPTURE_SET_COLLECTION') {
+    const collection = (message as { collection?: unknown }).collection as CaptureCollection | undefined;
+    if (!collection || typeof collection.id !== 'string') {
+      sendResponse({ ok: false, error: 'invalid collection' });
       return;
     }
-    const attemptedAt = new Date().toISOString().slice(0, 10);
-    void mutateCaptureStateInWorker((current) => ({
-      state: applyCaptureImportReport(current, report, attemptedAt),
+    void mutateCaptureStateV3InWorker((current) => {
+      const exists = current.collections.find((c) => c.id === collection.id);
+      const collections = exists
+        ? current.collections.map((c) => c.id === collection.id ? collection : c)
+        : [...current.collections, collection];
+      return {
+        state: { ...current, collections },
+        result: undefined,
+      };
+    })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
+    return true;
+  }
+
+  if (type === 'CAPTURE_SET_ACTIVE_COLLECTION') {
+    const collectionId = (message as { collectionId?: unknown }).collectionId;
+    if (typeof collectionId !== 'string') {
+      sendResponse({ ok: false, error: 'invalid collectionId' });
+      return;
+    }
+    void mutateCaptureStateV3InWorker((current) => ({
+      state: { ...current, active_collection_id: collectionId },
       result: undefined,
     }))
       .then(() => sendResponse({ ok: true }))
       .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
     return true;
   }
+
+  if (type === 'CAPTURE_SET_PLANNER_TARGET') {
+    const target = (message as { target?: unknown }).target as { trip_id: string; title: string } | null;
+    void mutateCaptureStateV3InWorker((current) => ({
+      state: { ...current, planner_target: target && typeof target.trip_id === 'string' ? target : undefined },
+      result: undefined,
+    }))
+      .then(() => sendResponse({ ok: true }))
+      .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
+    return true;
+  }
+
+  // ─── Legacy V2 Handlers (kept during transition) ───────────────────────────
+
+  if (type === 'CAPTURE_SAVE_STATE' || type === 'CAPTURE_REPLACE_STATE' || type === 'CAPTURE_SET_CONTEXT' || type === 'CAPTURE_APPLY_IMPORT_REPORT') {
+    // Forward V2 messages to V3 by migrating on the fly
+    if (type === 'CAPTURE_SET_CONTEXT') {
+      const context = (message as { context?: unknown }) as { context?: { tripId?: string; title?: string; currency?: string } };
+      if (context.context?.tripId && context.context?.title) {
+        void mutateCaptureStateV3InWorker((current) => {
+          const target = { trip_id: context.context!.tripId!, title: context.context!.title! };
+          if (context.context?.currency) {
+            // Update active collection currency if it matches
+            const activeCol = current.collections.find((c) => c.id === current.active_collection_id);
+            if (activeCol) {
+              return {
+                state: {
+                  ...current,
+                  planner_target: target,
+                  collections: current.collections.map((c) =>
+                    c.id === activeCol.id ? { ...c, currency: context.context!.currency!.toUpperCase() } : c
+                  ),
+                },
+                result: undefined,
+              };
+            }
+          }
+          return {
+            state: { ...current, planner_target: target },
+            result: undefined,
+          };
+        })
+          .then(() => sendResponse({ ok: true }))
+          .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
+      } else {
+        // Clear planner target
+        void mutateCaptureStateV3InWorker((current) => ({
+          state: { ...current, planner_target: undefined },
+          result: undefined,
+        }))
+          .then(() => sendResponse({ ok: true }))
+          .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
+      }
+      return true;
+    }
+
+    // For SAVE/REPLACE/APPLY_REPORT, read V2 and forward
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  // ─── FX Handlers ───────────────────────────────────────────────────────────
 
   if (type === 'OWNLY_SET_FX_OVERRIDE') {
     const tabId = (message as { tabId?: unknown }).tabId;
@@ -263,7 +345,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const [rates, stored, state] = await Promise.all([
         getCachedFxRates(),
         chrome.storage.local.get(FX_TOOLTIP_ENABLED_KEY),
-        readCaptureState(),
+        readCaptureStateV3(),
       ]);
       const tabId = sender.tab?.id;
       let overrideCurrency: string | undefined;
@@ -272,9 +354,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const raw = session[fxOverrideKey(tabId)];
         if (typeof raw === 'string' && raw.trim()) overrideCurrency = raw.trim().toUpperCase();
       }
+      // Get currency from active collection or planner target
+      const activeCollection = state.collections.find((c) => c.id === state.active_collection_id);
+      const targetCurrency = activeCollection?.currency || state.planner_target?.title ? undefined : 'CNY';
       sendResponse({
         ok: true,
-        targetCurrency: state.activeContext?.currency || 'CNY',
+        targetCurrency: targetCurrency || activeCollection?.currency || 'CNY',
         rates,
         enabled: stored[FX_TOOLTIP_ENABLED_KEY] !== false,
         overrideCurrency,

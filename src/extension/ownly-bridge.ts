@@ -1,5 +1,4 @@
-import type { CaptureContext, ImportReport } from '../domain/planner';
-import { applyImportReportViaWorker, readCaptureState, setCaptureContextViaWorker } from './capture-state';
+import { readCaptureStateV3 } from './capture-state';
 
 const REQUEST_SOURCE = 'ownly-planner-web';
 const RESPONSE_SOURCE = 'ownly-capture-extension';
@@ -18,20 +17,24 @@ window.addEventListener('message', (event) => {
   void (async () => {
     try {
       if (message.type === 'PULL_CAPTURE_STATE') {
-        const state = await readCaptureState();
+        const state = await readCaptureStateV3();
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'CAPTURE_STATE', payload: state }, getTargetOrigin());
         return;
       }
       if (message.type === 'APPLY_CAPTURE_IMPORT_REPORT') {
-        const payload = message.payload as { report?: ImportReport } | undefined;
-        if (!payload?.report) throw new Error('Capture import report is missing');
-        await applyImportReportViaWorker(payload.report);
+        // V3: import report is now handled by the Planner, no need to update Capture state
+        // The Capture state is updated when the user sends places to Planner
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'APPLY_CAPTURE_IMPORT_REPORT_RESULT', payload: { ok: true } }, getTargetOrigin());
         return;
       }
       if (message.type === 'SET_CAPTURE_CONTEXT') {
-        const payload = message.payload as { context?: CaptureContext | null } | undefined;
-        await setCaptureContextViaWorker(payload?.context ?? null);
+        // V3: Convert context to planner_target
+        const payload = message.payload as { context?: { tripId?: string; title?: string; currency?: string } | null } | undefined;
+        const { setPlannerTargetViaWorker } = await import('./capture-state');
+        const target = payload?.context?.tripId && payload?.context?.title
+          ? { trip_id: payload.context.tripId, title: payload.context.title }
+          : null;
+        await setPlannerTargetViaWorker(target);
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'SET_CAPTURE_CONTEXT_RESULT', payload: { ok: true } }, getTargetOrigin());
       }
     } catch (error) {

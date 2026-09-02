@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  CAPTURE_STORAGE_KEY,
+  CAPTURE_STORAGE_KEY_V2,
   mutateCaptureStateInWorker,
   normalizeCaptureState,
   readCaptureState,
@@ -85,6 +85,6 @@ describe('mutateCaptureStateInWorker', () => {
     ]);
     const final = await readCaptureState();
     expect(final.pendingPlaces.map((p) => p.id).sort()).toEqual(['a', 'b']);
-    expect(storage.get(CAPTURE_STORAGE_KEY)).toMatchObject({ version: 2 });
+    expect(storage.get(CAPTURE_STORAGE_KEY_V2)).toMatchObject({ version: 2 });
   });
 });
