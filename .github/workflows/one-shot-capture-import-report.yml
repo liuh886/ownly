@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/one-shot-capture-import-report.py'
+      - 'scripts/one-shot-capture-import-report-fix.py'
       - '.github/workflows/one-shot-capture-import-report.yml'
 
 permissions:
@@ -23,7 +24,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply refactor
-        run: python scripts/one-shot-capture-import-report.py
+        run: |
+          python scripts/one-shot-capture-import-report.py
+          python scripts/one-shot-capture-import-report-fix.py
       - name: Validate focused regression
         run: |
           npx tsc --noEmit
@@ -31,7 +34,7 @@ jobs:
           npm run build:extension
       - name: Commit product changes and remove one-shot helpers
         run: |
-          git rm .github/workflows/one-shot-capture-import-report.yml scripts/one-shot-capture-import-report.py
+          git rm .github/workflows/one-shot-capture-import-report.yml scripts/one-shot-capture-import-report.py scripts/one-shot-capture-import-report-fix.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src docs
