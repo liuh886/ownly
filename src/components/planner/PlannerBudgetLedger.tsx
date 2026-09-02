@@ -31,6 +31,7 @@ const CATEGORY_MAP: Record<TripExpenseCategory, { icon: string; zh: string; en: 
 };
 
 const COMMON_CURRENCIES = ['CNY', 'THB', 'JPY', 'USD', 'EUR', 'GBP', 'SGD', 'HKD', 'TWD'];
+const SETTLED_CONFIRMATION = 'settled';
 
 export function PlannerBudgetLedger({
   trip,
@@ -56,6 +57,7 @@ export function PlannerBudgetLedger({
   const [currencyOverride, setCurrencyOverride] = useState<string | null>(null);
   const currency = currencyOverride ?? baseCurrency;
   const [category, setCategory] = useState<TripExpenseCategory>('food');
+  const [isSettled, setIsSettled] = useState(false);
   // Payer / split selections are user overrides layered on top of the
   // asynchronously-hydrated member list. No effect needed: when members change,
   // a stale override simply stops matching and falls back to derived defaults (C1).
@@ -98,10 +100,28 @@ export function PlannerBudgetLedger({
     return [...codes].sort();
   }, [budgetEstimation.currencies, trip.fx_rates, baseCurrency]);
 
-  // AA Settlement calculation
+  const pendingExpenses = useMemo(
+    () => expenses.filter((expense) => expense.confirmation !== SETTLED_CONFIRMATION),
+    [expenses],
+  );
+  const settledExpenses = useMemo(
+    () => expenses.filter((expense) => expense.confirmation === SETTLED_CONFIRMATION),
+    [expenses],
+  );
+
+  // Only unsettled expenses participate in future AA transfers. Settled expenses
+  // remain part of the spending ledger, but do not create another debt.
   const settlement = useMemo(() => {
-    return calculateTripSettlement(expenses, members, fx);
-  }, [expenses, members, fx]);
+    return calculateTripSettlement(pendingExpenses, members, fx);
+  }, [pendingExpenses, members, fx]);
+
+  const recordedTotal = useMemo(() => {
+    const total = expenses.reduce((sum, expense) => {
+      const rate = effectiveFxRate(expense.currency, fx);
+      return sum + (rate === null ? expense.amount : expense.amount * rate);
+    }, 0);
+    return Math.round(total * 100) / 100;
+  }, [expenses, fx]);
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,6 +161,7 @@ export function PlannerBudgetLedger({
       paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
       split_members: selectedSplits.length > 0 ? selectedSplits : members,
       notes: notes.trim() || undefined,
+      confirmation: isSettled ? SETTLED_CONFIRMATION : undefined,
     });
 
     setTitle('');
@@ -148,6 +169,7 @@ export function PlannerBudgetLedger({
     setNotes('');
     setPaidByOverride(null);
     setSplitOverride(null);
+    setIsSettled(false);
     setIsAddingExpense(false);
   };
 
@@ -189,6 +211,50 @@ export function PlannerBudgetLedger({
     } else {
       setSelectedSplits([...selectedSplits, m]);
     }
+  };
+
+  const renderExpenseItem = (item: TripExpenseItem, settled: boolean) => {
+    const cat = CATEGORY_MAP[item.category] || CATEGORY_MAP.other;
+    return (
+      <div
+        key={item.id}
+        className={`flex items-center justify-between rounded-lg border p-2 text-xs transition ${
+          settled
+            ? 'border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50'
+            : 'border-stone-100 bg-stone-50/70 hover:bg-stone-100/60'
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm shrink-0">{cat.icon}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="font-semibold text-stone-900 truncate">{item.title}</div>
+              {settled ? (
+                <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">
+                  ✓ {zh ? '已分摊' : 'Settled'}
+                </span>
+              ) : null}
+            </div>
+            <div className={`text-[10px] ${settled ? 'text-emerald-700/70' : 'text-stone-400'}`}>
+              {item.paid_by} {zh ? '垫付' : 'paid'} · {item.split_members.length}{zh ? '人平摊' : ' split'}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <strong className="text-stone-900 font-bold">
+            {item.currency} {item.amount.toLocaleString()}
+          </strong>
+          <button
+            type="button"
+            onClick={() => onDeleteExpense(item.id)}
+            className="rounded p-1 text-stone-400 hover:bg-stone-200 hover:text-rose-600"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -298,12 +364,12 @@ export function PlannerBudgetLedger({
             {zh ? '💸 已记录支出' : 'Total Spent'}
           </span>
           <div className="mt-1 text-base font-extrabold text-stone-900">
-            {baseCurrency} {settlement.totalExpense.toLocaleString()}
+            {baseCurrency} {recordedTotal.toLocaleString()}
           </div>
           <p className="mt-0.5 text-[10px] text-stone-500">
             {zh
-              ? `人均已支出 ${baseCurrency} ${members.length > 0 ? Math.round(settlement.totalExpense / members.length).toLocaleString() : 0}`
-              : `Per person ${baseCurrency} ${members.length > 0 ? Math.round(settlement.totalExpense / members.length).toLocaleString() : 0}`}
+              ? `人均已支出 ${baseCurrency} ${members.length > 0 ? Math.round(recordedTotal / members.length).toLocaleString() : 0}`
+              : `Per person ${baseCurrency} ${members.length > 0 ? Math.round(recordedTotal / members.length).toLocaleString() : 0}`}
           </p>
         </div>
       </div>
@@ -517,6 +583,43 @@ export function PlannerBudgetLedger({
               </div>
             </div>
 
+            {/* Settlement status */}
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500">
+                {zh ? '分摊状态' : 'Settlement Status'}
+              </label>
+              <div className="mt-1 grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsSettled(false)}
+                  className={`rounded-lg border px-2 py-1.5 text-left text-[10.5px] transition ${
+                    !isSettled
+                      ? 'border-amber-300 bg-amber-50 font-bold text-amber-900'
+                      : 'border-stone-200 bg-white text-stone-500 hover:bg-stone-50'
+                  }`}
+                >
+                  <span className="block">⏳ {zh ? '待分摊' : 'Pending'}</span>
+                  <span className="mt-0.5 block text-[9.5px] font-normal opacity-75">
+                    {zh ? '稍后进入 AA 清账' : 'Include in later AA settlement'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSettled(true)}
+                  className={`rounded-lg border px-2 py-1.5 text-left text-[10.5px] transition ${
+                    isSettled
+                      ? 'border-emerald-300 bg-emerald-50 font-bold text-emerald-900'
+                      : 'border-stone-200 bg-white text-stone-500 hover:bg-stone-50'
+                  }`}
+                >
+                  <span className="block">✓ {zh ? '已分摊' : 'Already settled'}</span>
+                  <span className="mt-0.5 block text-[9.5px] font-normal opacity-75">
+                    {zh ? '当场已还，不再计入待清账' : 'Paid back now; exclude from future debt'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
             <button
               type="submit"
               className="w-full rounded-lg bg-emerald-700 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-600 transition"
@@ -527,54 +630,50 @@ export function PlannerBudgetLedger({
         ) : null}
 
         {/* Expense List */}
-        <div className="mt-3 space-y-1.5">
+        <div className="mt-3 space-y-3">
           {expenses.length === 0 ? (
             <p className="py-4 text-center text-xs text-stone-400 italic">
               {zh ? '暂无账目，点击上方“+ 记一笔”快速录入' : 'No expenses recorded yet'}
             </p>
           ) : (
-            expenses.map((item) => {
-              const cat = CATEGORY_MAP[item.category] || CATEGORY_MAP.other;
-              return (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between rounded-lg border border-stone-100 bg-stone-50/70 p-2 text-xs hover:bg-stone-100/60 transition"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm shrink-0">{cat.icon}</span>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-stone-900 truncate">{item.title}</div>
-                      <div className="text-[10px] text-stone-400">
-                        {item.paid_by} {zh ? '垫付' : 'paid'} · {item.split_members.length}{zh ? '人平摊' : ' split'}
-                      </div>
-                    </div>
+            <>
+              {pendingExpenses.length > 0 ? (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold text-amber-800">
+                    <span>⏳ {zh ? '待分摊 / 待清账' : 'Pending settlement'}</span>
+                    <span>{pendingExpenses.length}</span>
                   </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <strong className="text-stone-900 font-bold">
-                      {item.currency} {item.amount.toLocaleString()}
-                    </strong>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteExpense(item.id)}
-                      className="rounded p-1 text-stone-400 hover:bg-stone-200 hover:text-rose-600"
-                    >
-                      ✕
-                    </button>
+                  <div className="space-y-1.5">
+                    {pendingExpenses.map((item) => renderExpenseItem(item, false))}
                   </div>
                 </div>
-              );
-            })
+              ) : null}
+
+              {settledExpenses.length > 0 ? (
+                <div className={pendingExpenses.length > 0 ? 'border-t border-stone-100 pt-2.5' : ''}>
+                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold text-emerald-800">
+                    <span>✓ {zh ? '已分摊 / 已结清' : 'Already settled'}</span>
+                    <span>{settledExpenses.length}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {settledExpenses.map((item) => renderExpenseItem(item, true))}
+                  </div>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>
 
       {/* 4. Minimum Cash Flow AA Settlement Panel */}
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-2xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-stone-800">
             <span>⚖️</span>
-            <span>{zh ? 'AA 拆账与最简清账' : 'AA Debt Settlement'}</span>
+            <span>{zh ? 'AA 待分摊与最简清账' : 'Pending AA Settlement'}</span>
+            <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 ring-1 ring-amber-200">
+              {pendingExpenses.length}
+            </span>
           </div>
           {settlement.transfers.length > 0 ? (
             <button
@@ -593,76 +692,84 @@ export function PlannerBudgetLedger({
           </div>
         ) : null}
 
-        {/* Member Balances */}
-        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {settlement.memberBalances.map((mb) => {
-            const isCreditor = mb.netBalance > 0.01;
-            const isDebtor = mb.netBalance < -0.01;
-            return (
-              <div
-                key={mb.member}
-                className={`rounded-lg p-2 text-xs border ${
-                  isCreditor
-                    ? 'border-emerald-200 bg-emerald-50/50'
-                    : isDebtor
-                    ? 'border-rose-200 bg-rose-50/50'
-                    : 'border-stone-200 bg-stone-50'
-                }`}
-              >
-                <div className="font-semibold text-stone-900 truncate">{mb.member}</div>
-                <div className="mt-0.5 text-[10.5px] text-stone-500">
-                  {zh ? '付' : 'Paid'}: {baseCurrency}{mb.paidTotal} | {zh ? '摊' : 'Share'}: {baseCurrency}{mb.shareTotal}
-                </div>
-                <div
-                  className={`mt-1 font-bold text-xs ${
-                    isCreditor
-                      ? 'text-emerald-700'
-                      : isDebtor
-                      ? 'text-rose-700'
-                      : 'text-stone-500'
-                  }`}
-                >
-                  {isCreditor ? `+ ${baseCurrency}${mb.netBalance} (待收款)` : isDebtor ? `- ${baseCurrency}${Math.abs(mb.netBalance)} (待支付)` : (zh ? '已结清' : 'Settled')}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Transfer Path Directives */}
-        <div className="mt-3 rounded-lg border border-stone-100 bg-stone-50 p-2.5">
-          <div className="text-[11px] font-semibold text-stone-600 mb-1.5">
-            🎯 {zh ? `最简转账路径 (仅需 ${settlement.transfers.length} 笔转账即可全部结清):` : `Optimal Transfers (${settlement.transfers.length} payments):`}
+        {pendingExpenses.length === 0 ? (
+          <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/60 p-3 text-xs font-medium text-emerald-800">
+            🎉 {zh ? '当前没有待分摊账目；已分摊流水只保留为支出记录，不会再次生成转账。' : 'No pending expenses. Settled entries remain in spending history and will not generate another transfer.'}
           </div>
-
-          {settlement.transfers.length === 0 ? (
-            <p className="text-xs text-emerald-700 font-medium italic">
-              🎉 {zh ? '当前全员账目已完全结清，无需任何转账！' : 'All accounts are settled!'}
-            </p>
-          ) : (
-            <div className="space-y-1 text-xs">
-              {settlement.transfers.map((t, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between rounded-md bg-white px-2.5 py-1.5 font-medium text-stone-800 shadow-2xs border border-stone-200/60"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span className="rounded-full bg-rose-100 text-rose-800 px-1.5 py-0.5 text-[10px] font-bold">
-                      {t.from}
-                    </span>
-                    <span className="text-stone-400">{zh ? '👉 转账给' : '👉 Transfer to'}</span>
-                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[10px] font-bold">
-                      {t.to}
-                    </span>
+        ) : (
+          <>
+            {/* Member Balances */}
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {settlement.memberBalances.map((mb) => {
+                const isCreditor = mb.netBalance > 0.01;
+                const isDebtor = mb.netBalance < -0.01;
+                return (
+                  <div
+                    key={mb.member}
+                    className={`rounded-lg p-2 text-xs border ${
+                      isCreditor
+                        ? 'border-emerald-200 bg-emerald-50/50'
+                        : isDebtor
+                        ? 'border-rose-200 bg-rose-50/50'
+                        : 'border-stone-200 bg-stone-50'
+                    }`}
+                  >
+                    <div className="font-semibold text-stone-900 truncate">{mb.member}</div>
+                    <div className="mt-0.5 text-[10.5px] text-stone-500">
+                      {zh ? '付' : 'Paid'}: {baseCurrency}{mb.paidTotal} | {zh ? '摊' : 'Share'}: {baseCurrency}{mb.shareTotal}
+                    </div>
+                    <div
+                      className={`mt-1 font-bold text-xs ${
+                        isCreditor
+                          ? 'text-emerald-700'
+                          : isDebtor
+                          ? 'text-rose-700'
+                          : 'text-stone-500'
+                      }`}
+                    >
+                      {isCreditor ? `+ ${baseCurrency}${mb.netBalance} (待收款)` : isDebtor ? `- ${baseCurrency}${Math.abs(mb.netBalance)} (待支付)` : (zh ? '已结清' : 'Settled')}
+                    </div>
                   </div>
-                  <strong className="text-emerald-800 font-bold">
-                    {baseCurrency} {t.amount.toLocaleString()}
-                  </strong>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          )}
-        </div>
+
+            {/* Transfer Path Directives */}
+            <div className="mt-3 rounded-lg border border-stone-100 bg-stone-50 p-2.5">
+              <div className="text-[11px] font-semibold text-stone-600 mb-1.5">
+                🎯 {zh ? `最简转账路径 (仅需 ${settlement.transfers.length} 笔转账即可全部结清):` : `Optimal Transfers (${settlement.transfers.length} payments):`}
+              </div>
+
+              {settlement.transfers.length === 0 ? (
+                <p className="text-xs text-emerald-700 font-medium italic">
+                  🎉 {zh ? '当前待分摊账目已完全结清，无需任何转账！' : 'All pending accounts are settled!'}
+                </p>
+              ) : (
+                <div className="space-y-1 text-xs">
+                  {settlement.transfers.map((t, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between rounded-md bg-white px-2.5 py-1.5 font-medium text-stone-800 shadow-2xs border border-stone-200/60"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="rounded-full bg-rose-100 text-rose-800 px-1.5 py-0.5 text-[10px] font-bold">
+                          {t.from}
+                        </span>
+                        <span className="text-stone-400">{zh ? '👉 转账给' : '👉 Transfer to'}</span>
+                        <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[10px] font-bold">
+                          {t.to}
+                        </span>
+                      </div>
+                      <strong className="text-emerald-800 font-bold">
+                        {baseCurrency} {t.amount.toLocaleString()}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

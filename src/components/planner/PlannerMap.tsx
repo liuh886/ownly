@@ -140,7 +140,6 @@ export function PlannerMap({
   scheduledPlaces,
   candidatePlaces,
   destinations,
-  activeDate,
   activeDayIndex,
   highlightedPlaceId,
   onSchedulePlace,
@@ -477,55 +476,45 @@ export function PlannerMap({
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xs">
-      {/* Top Header Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 bg-stone-50/80 px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-stone-800">🗺️ {zh ? '空间建议地图' : 'Spatial Map'}</span>
-          {activeDate ? <span className="text-[10px] text-stone-400 hidden sm:inline">({activeDate})</span> : null}
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-            {points.length} {zh ? '个定位点' : 'mapped'}
-          </span>
+      {/* Map Controls */}
+      <div className="flex flex-wrap items-center justify-end gap-1.5 border-b border-stone-100 bg-stone-50/80 px-3 py-2">
+        {/* Basemap Style Selector */}
+        <div className="relative inline-flex items-center">
+          <select
+            value={basemapStyle}
+            onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
+            className="rounded-full border border-stone-200 bg-white py-0.5 pl-2 pr-6 text-[10px] font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 focus:border-stone-400 focus:outline-hidden cursor-pointer"
+            title={zh ? '切换免费底图样式' : 'Switch Basemap Style'}
+          >
+            {BASEMAP_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.icon} {opt.label[language]}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Basemap Style Selector */}
-          <div className="relative inline-flex items-center">
-            <select
-              value={basemapStyle}
-              onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
-              className="rounded-full border border-stone-200 bg-white py-0.5 pl-2 pr-6 text-[10px] font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 focus:border-stone-400 focus:outline-hidden cursor-pointer"
-              title={zh ? '切换免费底图样式' : 'Switch Basemap Style'}
-            >
-              {BASEMAP_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.icon} {opt.label[language]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setFilterMode('all')}
-            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all' ? 'bg-stone-900 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100'}`}
-          >
-            {zh ? '全部' : 'All'} ({points.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode('scheduled')}
-            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'scheduled' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
-          >
-            🟢 {zh ? `第${activeDayIndex + 1}天路线` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode('candidates')}
-            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'candidates' ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
-          >
-            🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setFilterMode('all')}
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all' ? 'bg-stone-900 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100'}`}
+        >
+          {zh ? '全部' : 'All'} ({points.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterMode('scheduled')}
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'scheduled' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
+        >
+          🟢 {zh ? `第${activeDayIndex + 1}天路线` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterMode('candidates')}
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'candidates' ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
+        >
+          🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
+        </button>
       </div>
 
       {/* Map Viewport Area */}
