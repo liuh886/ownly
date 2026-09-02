@@ -6,6 +6,7 @@ import {
 } from '../domain/planner';
 import {
   EMPTY_CAPTURE_STATE_V3,
+  findExistingPlaceByIdentity,
   type CaptureCollection,
   type CapturePlace,
   type OwnlyCaptureStateV3,
@@ -66,9 +67,13 @@ async function quickCaptureCurrentPlace() {
 
     const capturedId = await mutateCaptureStateV3InWorker((state) => {
       const collection = getDefaultCollection(state);
-      const existing = state.places.find(
-        (p) => p.collection_id === collection.id &&
-          (p.source.url === place.sourceUrl || (p.source.place_id && p.source.place_id === place.sourcePlaceId)),
+      const collectionPlaces = state.places.filter((p) => p.collection_id === collection.id);
+      const existing = findExistingPlaceByIdentity(collectionPlaces, {
+        source_provider: place.sourceProvider,
+        source_place_id: place.sourcePlaceId,
+        source_url: place.sourceUrl,
+      }) ?? collectionPlaces.find(
+        (p) => p.source.url === place.sourceUrl || (p.source.place_id && p.source.place_id === place.sourcePlaceId),
       );
 
       const now = new Date().toISOString();

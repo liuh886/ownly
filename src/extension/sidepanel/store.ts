@@ -1,6 +1,6 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { readCaptureStateV3, saveCaptureStateV3ViaWorker, writeCaptureStateV3 } from '../capture-state';
-import { EMPTY_CAPTURE_STATE_V3, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
+import { EMPTY_CAPTURE_STATE_V3, findExistingPlaceByIdentity, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
 import { I18N, type Lang } from '../i18n';
 import { sessionStorage } from '../session-storage';
 
@@ -200,6 +200,14 @@ export async function loadState(): Promise<void> {
 
 export function getExistingPlaceForUrl(sourceUrl: string, sourcePlaceId?: string): CapturePlace | undefined {
   const places = getActivePlaces();
+  // First: strong identity check (Google Place ID, CID)
+  const byIdentity = findExistingPlaceByIdentity(places, {
+    source_provider: store.currentPlace?.sourceProvider,
+    source_place_id: sourcePlaceId ?? store.currentPlace?.sourcePlaceId,
+    source_url: sourceUrl,
+  });
+  if (byIdentity) return byIdentity;
+  // Fallback: URL / place_id / coordinates
   return places.find(
     (p) =>
       p.source.url === sourceUrl ||

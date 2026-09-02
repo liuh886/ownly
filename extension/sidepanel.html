@@ -193,6 +193,15 @@
       </div>
     </details>
 
+    <div id="importReportBanner" class="import-report-banner" style="display: none;">
+      <div class="import-report-header">
+        <span id="importReportIcon">📥</span>
+        <span id="importReportTitle">导入结果</span>
+        <button id="importReportDismiss" class="link" type="button" style="color: var(--text-4); padding: 0 4px;">✕</button>
+      </div>
+      <div id="importReportStats" class="import-report-stats"></div>
+      <div id="importReportFailed" class="import-report-failed" style="display: none;"></div>
+    </div>
     <p id="status" class="status visible" aria-live="polite">就绪。</p>
   </main>
   <script src="sidepanel.js"></script>

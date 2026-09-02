@@ -17,6 +17,7 @@ import {
   haversineDistanceKm,
   inferPlaceKind,
   inferSourceProvider,
+  mapGoogleTypesToOwnlyKind,
   isPlausibleCustomTag,
   listTripDates,
   mergeCapturedPlaceResearch,
@@ -473,6 +474,24 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('N서울타워 전망대')).toBe('attraction');
     expect(inferPlaceKind('Cathédrale Notre-Dame de Paris')).toBe('attraction');
     expect(inferPlaceKind(undefined)).toBe('other');
+  });
+
+  it('maps Google types to Ownly kind', () => {
+    expect(mapGoogleTypesToOwnlyKind(['restaurant'])).toBe('food');
+    expect(mapGoogleTypesToOwnlyKind(['cafe'])).toBe('cafe');
+    expect(mapGoogleTypesToOwnlyKind(['bakery'])).toBe('cafe');
+    expect(mapGoogleTypesToOwnlyKind(['lodging'])).toBe('stay');
+    expect(mapGoogleTypesToOwnlyKind(['hotel'])).toBe('stay');
+    expect(mapGoogleTypesToOwnlyKind(['shopping_mall'])).toBe('shopping');
+    expect(mapGoogleTypesToOwnlyKind(['department_store'])).toBe('shopping');
+    expect(mapGoogleTypesToOwnlyKind(['transit_station'])).toBe('transit');
+    expect(mapGoogleTypesToOwnlyKind(['airport'])).toBe('transit');
+    expect(mapGoogleTypesToOwnlyKind(['amusement_park'])).toBe('experience');
+    expect(mapGoogleTypesToOwnlyKind(['museum'])).toBe('attraction');
+    expect(mapGoogleTypesToOwnlyKind(['hospital'])).toBe('service');
+    expect(mapGoogleTypesToOwnlyKind(['bank'])).toBe('service');
+    expect(mapGoogleTypesToOwnlyKind(['unknown_type_xyz'])).toBe('other');
+    expect(mapGoogleTypesToOwnlyKind([])).toBe('other');
   });
 
   it('normalizes tags and delimited values cleanly', () => {

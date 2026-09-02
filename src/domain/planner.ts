@@ -769,6 +769,43 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
   return 'other';
 }
 
+/**
+ * Maps a Google Places API types array to an Ownly place kind.
+ * Priority order: experience → stay → transit → shopping → cafe → food → attraction → other
+ *
+ * @see https://developers.google.com/maps/documentation/places/web-service/place-types
+ */
+export function mapGoogleTypesToOwnlyKind(types: string[]): PlannerPlaceKind {
+  if (!types.length) return 'other';
+  const joined = types.join(' ').toLowerCase();
+
+  // 1. Experience (theme parks, spas, activities)
+  if (/amusement_park|stadium|aquarium|zoo|spa|gym|bowling|casino|night_club/.test(joined)) return 'experience';
+
+  // 2. Stay (lodging)
+  if (/lodging|hotel|hostel|resort|rv_park|campground/.test(joined)) return 'stay';
+
+  // 3. Transit (transport hubs)
+  if (/transit_station|subway_station|train_station|bus_station|airport|ferry_terminal|parking/.test(joined)) return 'transit';
+
+  // 4. Shopping
+  if (/shopping_mall|department_store|supermarket|convenience_store|grocery_or_supermarket|clothing_store|electronics_store|furniture_store|hardware_store|home_goods_store|jewelry_store|liquor_store|shoe_store|variety_store|pet_store/.test(joined)) return 'shopping';
+
+  // 5. Cafe (coffee, bakery, dessert)
+  if (/cafe|bakery|coffee_shop|ice_cream/.test(joined)) return 'cafe';
+
+  // 6. Food (restaurants, bars)
+  if (/restaurant|bar|food|meal_takeaway|meal_delivery/.test(joined)) return 'food';
+
+  // 7. Attraction (tourism, culture, nature)
+  if (/tourist_attraction|museum|art_gallery|church|mosque|synagogue|temple|natural_feature|park|point_of_interest|premise|neighborhood/.test(joined)) return 'attraction';
+
+  // 8. Service (health, finance, government)
+  if (/hospital|pharmacy|bank|atm|dentist|doctor|veterinary_care|post_office|police|fire_station|gas_station|car_dealer|car_repair|car_wash/.test(joined)) return 'service';
+
+  return 'other';
+}
+
 export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
   if (/google\.[a-z.]+\/maps|maps\.google\./i.test(url)) return 'google_maps';
   if (/tabelog\.com/i.test(url)) return 'tabelog';

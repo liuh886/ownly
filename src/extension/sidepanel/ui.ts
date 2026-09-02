@@ -57,6 +57,48 @@ export function setStatus(message: string, tone: 'muted' | 'success' | 'error' =
   }
 }
 
+export function showImportReport(report: { received: number; created: string[]; updated: string[]; deduped: string[]; failed: { title: string; reason: string }[] }) {
+  const dict = t();
+  const banner = el.importReportBanner;
+  const stats = el.importReportStats;
+  const failedBox = el.importReportFailed;
+
+  const createdCount = report.created.length;
+  const dedupedCount = report.deduped.length + report.updated.length;
+  const failedCount = report.failed.length;
+
+  const hasFailures = failedCount > 0;
+  banner.className = 'import-report-banner ' + (hasFailures ? 'warning' : 'success');
+
+  el.importReportIcon.textContent = hasFailures ? '⚠️' : '✅';
+  el.importReportTitle.textContent = store.lang === 'zh'
+    ? `已导入 ${createdCount} 个地点${dedupedCount > 0 ? `，去重 ${dedupedCount} 个` : ''}`
+    : `Imported ${createdCount} places${dedupedCount > 0 ? `, ${dedupedCount} deduped` : ''}`;
+
+  stats.innerHTML = '';
+  const addStat = (label: string, count: number, cls: string) => {
+    if (count === 0) return;
+    const span = document.createElement('span');
+    span.className = 'import-report-stat ' + cls;
+    span.textContent = `${count} ${label}`;
+    stats.appendChild(span);
+  };
+  addStat(store.lang === 'zh' ? '新增' : 'created', createdCount, 'created');
+  addStat(store.lang === 'zh' ? '去重' : 'deduped', dedupedCount, 'deduped');
+  if (hasFailures) addStat(store.lang === 'zh' ? '失败' : 'failed', failedCount, 'failed');
+
+  if (hasFailures) {
+    failedBox.style.display = 'block';
+    failedBox.textContent = report.failed.map((f) => `• ${f.title}: ${f.reason}`).join('\n');
+  } else {
+    failedBox.style.display = 'none';
+    failedBox.textContent = '';
+  }
+
+  banner.style.display = 'block';
+  el.importReportDismiss.onclick = () => { banner.style.display = 'none'; };
+}
+
 export function applyI18n() {
   const dict = t();
   document.documentElement.lang = store.lang;

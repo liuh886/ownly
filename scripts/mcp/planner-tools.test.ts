@@ -69,7 +69,7 @@ describe('Planner MCP reads', () => {
     const detail = getPlannerTripDetail(root, 'trip-1') as {
       trip: PlannerTrip;
       budget: Record<string, unknown>;
-      conflicts: Array<{ date: string; collisions: Array<{ place: string; visit_id: string }> }>;
+      conflicts: Array<{ date: string; status: string; opening_hours_warnings: Array<{ title: string; visit_id: string; place_id: string }> }>;
       places: Array<{ id: string; state: string }>;
       visits: Array<{ id: string; place_id: string; date: string }>;
       expenses: unknown[];
@@ -80,7 +80,8 @@ describe('Planner MCP reads', () => {
     expect(detail.budget.per_person).toBe(500);
     expect(detail.budget.currencies_found).toEqual(['THB']);
     expect(detail.conflicts[0].date).toBe('2026-11-01');
-    expect(detail.conflicts[0].collisions[0]).toMatchObject({ place: 'Grand Palace', visit_id: 'visit:grand-palace:morning' });
+    expect(detail.conflicts[0].status).toBe('warning');
+    expect(detail.conflicts[0].opening_hours_warnings[0]).toMatchObject({ title: 'Grand Palace', visit_id: 'visit:grand-palace:morning', place_id: 'grand-palace' });
     expect(detail.places.every((p) => p.state === 'candidate')).toBe(true);
     expect(detail.visits).toEqual([expect.objectContaining({ place_id: 'grand-palace', date: '2026-11-01' })]);
     expect(detail.expenses).toEqual([]);

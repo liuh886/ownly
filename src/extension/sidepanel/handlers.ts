@@ -5,22 +5,21 @@ import {
   inferSourceProvider,
   normalizeDelimitedText,
   normalizeObservedPrice,
-  type PlannerPlaceKind,
 } from '../../domain/planner';
 import {
   findExistingPlace,
+  findExistingPlaceByIdentity,
   reorderPlaces,
   mergePlaceResearch,
   type CapturePlace,
 } from '../../domain/capture';
 import type { PlannerTripPlace } from '../../domain/planner';
-import { saveState, writeState, getActiveCollection, getActivePlaces, store, t, DEBUG_STORAGE_KEY, getExistingPlaceForUrl } from './store';
+import { saveState, getActiveCollection, getActivePlaces, store, t, DEBUG_STORAGE_KEY, getExistingPlaceForUrl } from './store';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
-import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, safeDecodeUri, today } from '../utils';
+import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, safeDecodeUri } from '../utils';
 import { readCurrentPlace } from './capture';
 import { enrichCandidatePlacesBatch, isCandidateMissingData, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
-import { downloadCollectionJson } from '../export';
 import {
   applyI18n,
   autoFillPlaceForm,
@@ -28,12 +27,13 @@ import {
   renderCurrencyPill,
   renderCurrentPlace,
   renderSmartListCard,
-  renderState,
   setStatus,
+  showImportReport,
   syncQuickChipStates,
   updateDebugLogViewer,
 } from './ui';
 import { logger } from '../logger';
+import { setupImportExportHandlers } from './import-export';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 
@@ -907,59 +907,6 @@ export function initHandlers(): void {
     })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
   });
 
-  el.btnExportCollection.addEventListener('click', () => {
-    const collection = getActiveCollection();
-    const places = getActivePlaces();
-    if (!collection || places.length === 0) {
-      setStatus(store.lang === 'zh' ? '没有可导出的地点。' : 'No places to export.', 'error');
-      return;
-    }
-    downloadCollectionJson(collection, places);
-    setStatus(t().exportSaved || (store.lang === 'zh' ? '合集已导出。' : 'Collection exported.'), 'success');
-  });
-
-  el.btnBackupState.addEventListener('click', () => {
-    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), captureState: store.stateV3 }, null, 2);
-    const blob = new Blob([payload], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ownly-capture-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setStatus(t().backupSaved, 'success');
-  });
-
-  el.btnRestoreState.addEventListener('click', () => el.fileRestoreState.click());
-
-  el.fileRestoreState.addEventListener('change', () => {
-    void (async () => {
-      const file = el.fileRestoreState.files?.[0];
-      if (!file) return;
-      try {
-        const parsed = JSON.parse(await file.text()) as { captureState?: unknown };
-        if (!window.confirm(t().confirmRestore)) return;
-        const raw = parsed.captureState ?? parsed;
-        let next;
-        if (raw && typeof raw === 'object' && 'version' in raw && (raw as { version: number }).version === 3) {
-          next = raw as import('../../domain/capture').OwnlyCaptureStateV3;
-        } else {
-          next = (await import('../../domain/capture')).migrateV2ToV3(raw as import('../../domain/capture').OwnlyCaptureStateV2);
-        }
-        await writeState(next);
-        renderState();
-        renderCurrentPlace();
-        renderSmartListCard();
-        renderCandidatesList();
-        const places = getActivePlaces();
-        setStatus(t().restoredCount(places.length), 'success');
-      } catch {
-        setStatus(store.lang === 'zh' ? '备份文件无效。' : 'Invalid backup file.', 'error');
-      }
-      el.fileRestoreState.value = '';
-    })();
-  });
-
   el.btnCloseSmartList.addEventListener('click', () => {
     store.smartListDismissed = true;
     renderSmartListCard();
@@ -1009,7 +956,12 @@ export function initHandlers(): void {
       for (const item of savedList.places) {
         const title = cleanExtractedText(item.title);
         if (!title || isJunkNavigationText(title)) continue;
-        const existing = findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
+        // Identity-first dedup: strong identity (Place ID/CID) → URL → coordinates
+        const existing = findExistingPlaceByIdentity(activePlaces, {
+          source_provider: item.sourceProvider,
+          source_place_id: item.sourcePlaceId,
+          source_url: item.sourceUrl,
+        }) ?? findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
         const id = existing?.id ?? crypto.randomUUID();
         syncedIds.add(id);
         const address = item.address ? cleanExtractedText(item.address) : undefined;
@@ -1154,6 +1106,7 @@ export function initHandlers(): void {
         ? ` · 评分 ${withRating}/${total} · 评论量 ${withReviews}/${total} · 价格 ${withPrice}/${total} · 分类 ${withCategory}/${total}`
         : ` · rating ${withRating}/${total} · reviews ${withReviews}/${total} · price ${withPrice}/${total} · category ${withCategory}/${total}`;
       setStatus(`${dict.savedListSynced(importedCount, savedList.listName)}${coverage}`, 'success');
+      showImportReport({ received: savedList.places.length, created: newPlaces.map((p) => p.title), updated: [], deduped: [], failed: [] });
     })().catch((error) => setStatus(String(error), 'error'));
   });
 
@@ -1190,7 +1143,11 @@ export function initHandlers(): void {
             const listItems = await resolveListPlacesSmart(line, collection.id);
             if (listItems && listItems.length > 0) {
               for (const item of listItems) {
-                const existing = findExistingPlace(activePlaces, item.source.url, item.source.place_id, item.coordinates);
+                const existing = findExistingPlaceByIdentity(activePlaces, {
+                  source_provider: item.source.provider,
+                  source_place_id: item.source.place_id,
+                  source_url: item.source.url,
+                }) ?? findExistingPlace(activePlaces, item.source.url, item.source.place_id, item.coordinates);
                 if (existing) continue;
                 const newId = crypto.randomUUID();
                 const newPlace: CapturePlace = { ...item, id: newId, collection_id: collection.id, captured_at: now };
@@ -1208,7 +1165,9 @@ export function initHandlers(): void {
 
         const sourceUrl = isUrl ? line : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(line)}`;
         const title = isUrl ? (line.match(/\/maps\/place\/([^/?#]+)/)?.[1]?.replace(/\+/g, ' ') || line) : line;
-        const existing = findExistingPlace(activePlaces, sourceUrl);
+        const existing = findExistingPlaceByIdentity(activePlaces, {
+          source_url: sourceUrl,
+        }) ?? findExistingPlace(activePlaces, sourceUrl);
         if (existing) continue;
         const kind = inferPlaceKind(safeDecodeUri(title));
         const newId = crypto.randomUUID();
@@ -1236,6 +1195,13 @@ export function initHandlers(): void {
       await saveState();
       el.bulkInputText.value = '';
       setStatus(errors.length > 0 ? dict.importedWithWarnings(importedCount, errors.join(', ')) : dict.importedCount(importedCount), 'success');
+      showImportReport({
+        received: lines.length,
+        created: newlyAdded.map((p) => p.title),
+        updated: [],
+        deduped: [],
+        failed: errors.map((e) => ({ title: e.split(':')[0] || e, reason: e })),
+      });
 
       // Asynchronously enrich newly imported places
       if (newlyAdded.length > 0) {
@@ -1303,7 +1269,11 @@ export function initHandlers(): void {
       const now = new Date().toISOString();
       const newPlaces: CapturePlace[] = [];
       for (const item of source.filter((place) => selectedUrls.has(place.sourceUrl))) {
-        const existing = findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
+        const existing = findExistingPlaceByIdentity(activePlaces, {
+          source_provider: item.sourceProvider,
+          source_place_id: item.sourcePlaceId,
+          source_url: item.sourceUrl,
+        }) ?? findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
         if (existing) continue;
         const kind = inferPlaceKind([item.title, item.category, item.address, ...(item.types || [])].filter(Boolean).join(' '));
         const place: CapturePlace = {
@@ -1473,4 +1443,5 @@ export function initHandlers(): void {
 
   initCandidateDelegation();
   initCandidateDragReorder();
+  setupImportExportHandlers();
 }

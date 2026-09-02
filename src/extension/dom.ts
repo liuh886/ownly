@@ -93,6 +93,12 @@ export type ElementMap = {
   btnExportDiagnostics: HTMLButtonElement;
   btnClearDebugLogs: HTMLButtonElement;
   debugLogViewer: HTMLElement;
+  importReportBanner: HTMLElement;
+  importReportIcon: HTMLElement;
+  importReportTitle: HTMLElement;
+  importReportDismiss: HTMLButtonElement;
+  importReportStats: HTMLElement;
+  importReportFailed: HTMLElement;
 };
 
 export function required<T extends HTMLElement>(id: string): T {
@@ -196,4 +202,10 @@ export const el: ElementMap = {
   btnExportDiagnostics: required<HTMLButtonElement>('btnExportDiagnostics'),
   btnClearDebugLogs: required<HTMLButtonElement>('btnClearDebugLogs'),
   debugLogViewer: required('debugLogViewer'),
+  importReportBanner: required('importReportBanner'),
+  importReportIcon: required('importReportIcon'),
+  importReportTitle: required('importReportTitle'),
+  importReportDismiss: required<HTMLButtonElement>('importReportDismiss'),
+  importReportStats: required('importReportStats'),
+  importReportFailed: required('importReportFailed'),
 };

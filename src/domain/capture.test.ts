@@ -5,6 +5,8 @@ import {
   parseCaptureCollectionExport,
   capturePlaceToPlannerPlace,
   findExistingPlace,
+  findExistingPlaceByIdentity,
+  placesShareStrongIdentity,
   reorderPlaces,
   mergePlaceResearch,
   migrateV2ToV3,
@@ -289,5 +291,110 @@ describe('migrateV2ToV3', () => {
     // Without activeContext, V2 places are not migrated (they belong to no trip)
     expect(v3.places).toHaveLength(0);
     expect(v3.collections).toHaveLength(0);
+  });
+});
+
+describe('findExistingPlaceByIdentity', () => {
+  it('finds by Google Place ID (ChIJ format)', () => {
+    const existing = makePlace({
+      id: 'existing-1',
+      source: { provider: 'google_maps', url: 'https://maps.google.com/place/abc', place_id: 'ChIJ1234567890abcdefghijklmnopqrstuvwxyz' },
+    });
+    const result = findExistingPlaceByIdentity([existing], {
+      source_provider: 'google_maps',
+      source_place_id: 'ChIJ1234567890abcdefghijklmnopqrstuvwxyz',
+      source_url: 'https://maps.google.com/place/xyz',
+    });
+    expect(result?.id).toBe('existing-1');
+  });
+
+  it('finds by Google CID (numeric)', () => {
+    const existing = makePlace({
+      id: 'existing-2',
+      source: { provider: 'google_maps', url: 'https://maps.google.com/?cid=1234567890', place_id: '0x1234567890:0xabcdef' },
+    });
+    const result = findExistingPlaceByIdentity([existing], {
+      source_provider: 'google_maps',
+      source_place_id: '0x1234567890:0xabcdef',
+      source_url: 'https://maps.google.com/place/different',
+    });
+    expect(result?.id).toBe('existing-2');
+  });
+
+  it('finds by source_place_id match', () => {
+    const existing = makePlace({
+      id: 'existing-3',
+      source: { provider: 'tabelog', url: 'https://tabelog.com/abc', place_id: 'tabelog-123' },
+    });
+    const result = findExistingPlaceByIdentity([existing], {
+      source_provider: 'tabelog',
+      source_place_id: 'tabelog-123',
+      source_url: 'https://tabelog.com/different',
+    });
+    expect(result?.id).toBe('existing-3');
+  });
+
+  it('returns undefined when no identity matches', () => {
+    const existing = makePlace({
+      id: 'existing-4',
+      source: { provider: 'google_maps', url: 'https://maps.google.com/place/abc', place_id: 'ChIJAAAA' },
+    });
+    const result = findExistingPlaceByIdentity([existing], {
+      source_provider: 'google_maps',
+      source_place_id: 'ChJIBBBBB',
+      source_url: 'https://maps.google.com/place/xyz',
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for empty places array', () => {
+    const result = findExistingPlaceByIdentity([], {
+      source_provider: 'google_maps',
+      source_place_id: 'ChIJ123',
+      source_url: 'https://maps.google.com/place/abc',
+    });
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('placesShareStrongIdentity', () => {
+  it('returns true when places share Google Place ID', () => {
+    const a = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/place/a', place_id: 'ChIJ1234567890abcdefghijklmnopqrstuvwxyz' },
+    });
+    const b = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/place/b', place_id: 'ChIJ1234567890abcdefghijklmnopqrstuvwxyz' },
+    });
+    expect(placesShareStrongIdentity(a, b)).toBe(true);
+  });
+
+  it('returns true when places share Google CID', () => {
+    const a = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/?cid=1234567890', place_id: '0x1234567890:0xabcdef' },
+    });
+    const b = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/?cid=1234567890', place_id: '0x1234567890:0x111111' },
+    });
+    expect(placesShareStrongIdentity(a, b)).toBe(true);
+  });
+
+  it('returns false when places have different identities', () => {
+    const a = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/place/a', place_id: 'ChIJAAAA' },
+    });
+    const b = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/place/b', place_id: 'ChJIBBBB' },
+    });
+    expect(placesShareStrongIdentity(a, b)).toBe(false);
+  });
+
+  it('returns false when one place has no identity', () => {
+    const a = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/place/a' },
+    });
+    const b = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/place/b', place_id: 'ChIJ123' },
+    });
+    expect(placesShareStrongIdentity(a, b)).toBe(false);
   });
 });

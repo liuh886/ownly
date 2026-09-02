@@ -415,6 +415,8 @@ export function parseCaptureCollectionExport(data: unknown): OwnlyCollectionExpo
 
 // ─── V3 Place lookup helpers ─────────────────────────────────────────────────
 
+import { getStrongPlaceIdentityKeys, shareStrongPlaceIdentity } from './place-identity';
+
 /** Find an existing place by URL, Place ID, or coordinates. */
 export function findExistingPlace(
   places: CapturePlace[],
@@ -430,6 +432,43 @@ export function findExistingPlace(
         p.coordinates.lat === coordinates.lat &&
         p.coordinates.lng === coordinates.lng),
   );
+}
+
+/** PlaceIdentityLike adapter for CapturePlace. */
+function captureToIdentityLike(place: CapturePlace): { source_provider?: string; source_place_id?: string; source_url?: string } {
+  return {
+    source_provider: place.source.provider,
+    source_place_id: place.source.place_id,
+    source_url: place.source.url,
+  };
+}
+
+/**
+ * Find an existing place using strong identity authority (Google Place ID, CID, etc).
+ * Falls back to URL/place_id/coordinates match if no strong identity is found.
+ * Returns the matching place, or undefined if no duplicate exists.
+ */
+export function findExistingPlaceByIdentity(
+  places: CapturePlace[],
+  candidate: { source_provider?: string; source_place_id?: string; source_url?: string },
+): CapturePlace | undefined {
+  const probeKeys = new Set(getStrongPlaceIdentityKeys(candidate));
+  if (probeKeys.size > 0) {
+    const match = places.find((p) => {
+      const placeKeys = getStrongPlaceIdentityKeys(captureToIdentityLike(p));
+      return placeKeys.some((key) => probeKeys.has(key));
+    });
+    if (match) return match;
+  }
+  return undefined;
+}
+
+/**
+ * Check if two places share strong identity (same Google Place ID, CID, etc).
+ * Used for dedup decisions during import.
+ */
+export function placesShareStrongIdentity(a: CapturePlace, b: CapturePlace): boolean {
+  return shareStrongPlaceIdentity(captureToIdentityLike(a), captureToIdentityLike(b));
 }
 
 /** Reorder places within a collection based on a visible ID order. Hidden/filtered places keep their absolute position. */
