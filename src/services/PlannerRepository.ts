@@ -331,6 +331,53 @@ export class PlannerRepository {
   async importCapturedPlaces(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }
   async importExternalCandidates(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }
 
+  async importBundle(bundle: { trip: PlannerTrip; places: PlannerTripPlace[]; visits: PlannerTripVisit[]; legs: PlannerTripLeg[] }): Promise<ImportReport> {
+    await this.initialize();
+    const report: ImportReport = { received: bundle.places.length, imported: [], failed: [] };
+
+    try {
+      await this.upsertTrip(bundle.trip);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      report.failed.push({ id: bundle.trip.id, title: bundle.trip.title, reason: 'write_error', detail: msg });
+      return report;
+    }
+
+    for (const place of bundle.places) {
+      try {
+        await this.upsertPlace(place);
+        report.imported.push(place.id);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        report.failed.push({ id: place.id, title: place.title || '(unknown)', reason: 'write_error', detail: msg });
+      }
+    }
+
+    for (const visit of bundle.visits) {
+      try {
+        await this.upsertVisit(visit);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        report.failed.push({ id: visit.id, title: `Visit ${visit.place_id}`, reason: 'write_error', detail: msg });
+      }
+    }
+
+    for (const leg of bundle.legs) {
+      try {
+        await this.upsertLeg(leg);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        report.failed.push({ id: leg.id, title: `Leg ${leg.from_place_id}→${leg.to_place_id}`, reason: 'write_error', detail: msg });
+      }
+    }
+
+    if (report.failed.length > 0) {
+      console.warn(`[PlannerRepository] Bundle import: ${report.imported.length}/${report.received} imported, ${report.failed.length} failed`, report.failed);
+    }
+
+    return report;
+  }
+
   async dropPlace(placeId: string): Promise<boolean> {
     await this.initialize();
     const existing = (await this.listPlaces()).find((place) => place.id === placeId);

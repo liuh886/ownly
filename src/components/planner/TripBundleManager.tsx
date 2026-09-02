@@ -164,12 +164,9 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
   const persistBundleCopy = async (bundle: OwnlyTripBundle) => {
     if (disabled) throw new Error(zh ? '请先连接 Ownly 数据目录，再复制这个 Trip。' : 'Connect Ownly before copying this Trip.');
     const copy = instantiateTripBundle(bundle);
-    await plannerRepository.upsertTrip(copy.trip);
-    await plannerRepository.upsertPlaces(copy.places);
-    for (const visit of copy.visits) await plannerRepository.upsertVisit(visit);
-    for (const leg of copy.legs) await plannerRepository.upsertLeg(leg);
+    const report = await plannerRepository.importBundle(copy);
     onImported?.(copy.trip.id);
-    return copy;
+    return { copy, report };
   };
 
   const handleGenerateShareLink = async (nativeShare: boolean) => {
@@ -234,8 +231,13 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
     }
     setBusy(true);
     try {
-      const copy = await persistBundleCopy(importPreview.bundle);
-      setNotice(zh ? `✓ 已导入「${copy.trip.title}」；费用账本为空。` : `✓ Imported “${copy.trip.title}”; ledger is empty.`);
+      const { copy, report } = await persistBundleCopy(importPreview.bundle);
+      if (report.failed.length > 0) {
+        const failSummary = report.failed.map((f) => f.title).join(', ');
+        setNotice(zh ? `⚠ 已导入「${copy.trip.title}」；${report.failed.length} 项失败：${failSummary}` : `⚠ Imported "${copy.trip.title}"; ${report.failed.length} failed: ${failSummary}`);
+      } else {
+        setNotice(zh ? `✓ 已导入「${copy.trip.title}」；费用账本为空。` : `✓ Imported "${copy.trip.title}"; ledger is empty.`);
+      }
       setRawImport('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

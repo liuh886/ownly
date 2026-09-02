@@ -1280,7 +1280,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="inline-flex items-center gap-1.5 rounded-lg bg-stone-100/80 px-2.5 py-1 text-xs font-medium text-stone-600">
               <span>📅</span>
               <span>{selectedTrip.start_date} → {selectedTrip.end_date}</span>
-              <span className="text-stone-400">({tripDates.length}{zh ? '天' : 'd'})</span>
+              <span className="text-stone-400">·</span>
+              <span>{tripDates.length}{zh ? '天' : 'd'}</span>
+              <span className="text-stone-400">·</span>
+              <span>{tripPlaces.length} {zh ? '地点' : 'places'}</span>
+              <span className="text-stone-400">·</span>
+              <span>{tripVisits.length} {zh ? '行程' : 'visits'}</span>
             </div>
           </div>
         </div>

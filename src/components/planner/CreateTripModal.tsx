@@ -142,12 +142,18 @@ export function CreateTripModal({
     try {
       const bundle = importPreview.bundle;
       const copy = instantiateTripBundle(bundle);
-      await plannerRepository.upsertTrip(copy.trip);
-      await plannerRepository.upsertPlaces(copy.places);
-      for (const visit of copy.visits) await plannerRepository.upsertVisit(visit);
-      for (const leg of copy.legs) await plannerRepository.upsertLeg(leg);
-      onImported?.(copy.trip.id);
-      setImportNotice(zh ? `✓ 已导入「${copy.trip.title}」；费用账本为空。` : `✓ Imported "${copy.trip.title}"; ledger is empty.`);
+      const report = await plannerRepository.importBundle(copy);
+      if (report.failed.length > 0) {
+        const failSummary = report.failed.map((f) => f.title).join(', ');
+        setImportNotice(
+          zh
+            ? `⚠ 已导入「${copy.trip.title}」；${report.failed.length} 项失败：${failSummary}`
+            : `⚠ Imported "${copy.trip.title}"; ${report.failed.length} failed: ${failSummary}`,
+        );
+      } else {
+        onImported?.(copy.trip.id);
+        setImportNotice(zh ? `✓ 已导入「${copy.trip.title}」；费用账本为空。` : `✓ Imported "${copy.trip.title}"; ledger is empty.`);
+      }
       setRawImport('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
