@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/one-shot-capture-import-report.py'
       - 'scripts/one-shot-capture-import-report-fix.py'
+      - 'scripts/one-shot-capture-import-report-fix2.py'
       - '.github/workflows/one-shot-capture-import-report.yml'
 
 permissions:
@@ -27,14 +28,16 @@ jobs:
         run: |
           python scripts/one-shot-capture-import-report.py
           python scripts/one-shot-capture-import-report-fix.py
+          python scripts/one-shot-capture-import-report-fix2.py
       - name: Validate focused regression
         run: |
+          node scripts/gen-git-sha.mjs
           npx tsc --noEmit
           npx vitest run src/domain/planner.test.ts src/extension/capture-state.test.ts src/extension/capture-import-report.test.ts src/services/PlannerRepository.schedule.test.ts src/services/PlannerRepository.thailand-golden-path.test.ts src/services/PlannerRepository.capture-import-report.test.ts
           npm run build:extension
       - name: Commit product changes and remove one-shot helpers
         run: |
-          git rm .github/workflows/one-shot-capture-import-report.yml scripts/one-shot-capture-import-report.py scripts/one-shot-capture-import-report-fix.py
+          git rm .github/workflows/one-shot-capture-import-report.yml scripts/one-shot-capture-import-report.py scripts/one-shot-capture-import-report-fix.py scripts/one-shot-capture-import-report-fix2.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src docs
