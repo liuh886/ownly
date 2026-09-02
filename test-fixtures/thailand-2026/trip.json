@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1",
+  "type": "trip",
+  "id": "golden-thailand-2026",
+  "title": "Thailand 2026 Golden Path",
+  "status": "planning",
+  "start_date": "2026-10-05",
+  "end_date": "2026-10-12",
+  "destinations": ["Bangkok", "Chiang Mai"],
+  "currency": "THB",
+  "members": ["Alice", "Bob"],
+  "transport_mode": "transit",
+  "tags": ["vacation", "golden-path"],
+  "created_at": "2026-09-01T00:00:00.000Z"
+}

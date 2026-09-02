@@ -28,6 +28,7 @@ import {
 } from '@/domain/calendar-feed';
 import type { PlannerTripCalendarFeed } from '@/domain/planner';
 import { validatePlannerTiming } from '@/domain/planner-schedule';
+import { migrateEntity } from '@/domain/migrations';
 import { obsidianService } from './ObsidianFileSystemService';
 
 export interface PlannerFileStore {
@@ -91,6 +92,9 @@ function expenseFileName(expenseId: string): string {
   return `expense--${safeEntityId(expenseId)}.md`;
 }
 
+/** Current schema version for all planner entities. Bump when making breaking changes. */
+export const CURRENT_SCHEMA_VERSION = '0.1';
+
 export class PlannerRepository {
   private root = '';
 
@@ -112,7 +116,8 @@ export class PlannerRepository {
       try {
         const parsed = parseMarkdownEntity<Record<string, unknown>>(file.content);
         if (parsed.frontmatter.type !== type) continue;
-        result.push(parsed.frontmatter as unknown as T);
+        const migrated = migrateEntity(parsed.frontmatter, CURRENT_SCHEMA_VERSION) as unknown as T;
+        result.push(migrated);
       } catch {
         console.warn(`Skipping invalid Ownly planner file: ${file.fileName}`);
       }
