@@ -6,6 +6,7 @@ import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { AccountsOverview } from '@/components/accounts/AccountsOverview';
 import { ReviewHome } from '@/components/reviews/ReviewHome';
 import { PlannerHome } from '@/components/planner/PlannerHome';
+import { TripBundleManager } from '@/components/planner/TripBundleManager';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import type { FirstObjectChoice } from '@/core/first-object-copy';
@@ -71,6 +72,7 @@ export function TabRenderer({
   } | null>(null);
 
   const [composerFocusTarget, setComposerFocusTarget] = useState<'quickLine' | 'title' | undefined>(undefined);
+  const [plannerRevision, setPlannerRevision] = useState(0);
 
   const quickLineTemplates = useMemo(
     () => getQuickLineTemplates(t, language),
@@ -181,7 +183,17 @@ export function TabRenderer({
   }
 
   if (activeTab === 'planner') {
-    return <PlannerHome disabled={!isConnected} />;
+    return (
+      <div className="space-y-2">
+        <div className="flex justify-end">
+          <TripBundleManager
+            disabled={!isConnected}
+            onImported={() => setPlannerRevision((revision) => revision + 1)}
+          />
+        </div>
+        <PlannerHome key={plannerRevision} disabled={!isConnected} />
+      </div>
+    );
   }
 
   if (activeTab === 'reviews') {
