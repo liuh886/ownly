@@ -1,5 +1,5 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
-import { readCaptureStateV3 } from '../capture-state';
+import { readCaptureStateV3, saveCaptureStateV3ViaWorker, writeCaptureStateV3 } from '../capture-state';
 import { EMPTY_CAPTURE_STATE_V3, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
 import { I18N, type Lang } from '../i18n';
 import { sessionStorage } from '../session-storage';
@@ -23,12 +23,12 @@ function detectDefaultLanguage(): Lang {
   }
 }
 
-/** V2-compatible facade over V3 state for minimal diff during transition. */
-function createV2Compat(v3: OwnlyCaptureStateV3) {
+/** Build a V2-compatible facade from V3 state for backward compat during transition. */
+function buildV2Facade(v3: OwnlyCaptureStateV3) {
   const activeCollection = v3.collections.find((c) => c.id === v3.active_collection_id) || v3.collections[0] || null;
-  const tripId = activeCollection?.id || '';
   const places = activeCollection ? v3.places.filter((p) => p.collection_id === activeCollection.id) : [];
   return {
+    version: 2 as const,
     activeContext: v3.planner_target
       ? { tripId: v3.planner_target.trip_id, title: v3.planner_target.title, currency: activeCollection?.currency }
       : (activeCollection ? { tripId: activeCollection.id, title: activeCollection.title, currency: activeCollection.currency } : null),
@@ -71,12 +71,15 @@ function createV2Compat(v3: OwnlyCaptureStateV3) {
       created_at: p.captured_at,
       updated_at: p.updated_at,
     })),
+    lastImportReport: undefined,
   };
 }
 
 export const store = {
   lang: detectDefaultLanguage(),
   stateV3: { ...EMPTY_CAPTURE_STATE_V3 } as OwnlyCaptureStateV3,
+  /** V2-compatible facade — mutable, updated whenever stateV3 changes. */
+  state: buildV2Facade(EMPTY_CAPTURE_STATE_V3),
   currentPlace: null as CurrentResearchPlace | null,
   detectedSavedList: null as DetectedSavedList | null,
   detectedListPlaces: [] as CurrentResearchPlace[],
@@ -95,8 +98,66 @@ export const store = {
   bulkSelected: new Set<string>(),
   debugModeEnabled: false,
 
-  /** V2-compatible getter for backward compat during transition. */
-  get state() { return createV2Compat(this.stateV3); },
+  /** Update V3 state and rebuild V2 facade. */
+  setState(next: OwnlyCaptureStateV3) {
+    this.stateV3 = next;
+    this.state = buildV2Facade(next);
+  },
+
+  /** Get the active collection. */
+  getActiveCollection(): CaptureCollection | null {
+    if (this.stateV3.collections.length === 0) return null;
+    return this.stateV3.collections.find((c) => c.id === this.stateV3.active_collection_id) || this.stateV3.collections[0];
+  },
+
+  /** Get places in the active collection. */
+  getActivePlaces(): CapturePlace[] {
+    const collection = this.getActiveCollection();
+    if (!collection) return [];
+    return this.stateV3.places.filter((p) => p.collection_id === collection.id);
+  },
+
+  /** Ensure a default collection exists. Returns it. */
+  ensureDefaultCollection(): CaptureCollection {
+    const existing = this.getActiveCollection();
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const collection: CaptureCollection = {
+      id: `default-${Date.now()}`,
+      title: '我的收藏',
+      created_at: now,
+    };
+    this.setState({
+      ...this.stateV3,
+      collections: [...this.stateV3.collections, collection],
+      active_collection_id: collection.id,
+    });
+    return collection;
+  },
+
+  /** Update a place in V3 state by id. */
+  updatePlace(placeId: string, mutator: (p: CapturePlace) => CapturePlace) {
+    this.setState({
+      ...this.stateV3,
+      places: this.stateV3.places.map((p) => p.id === placeId ? mutator(p) : p),
+    });
+  },
+
+  /** Remove a place from V3 state by id. */
+  removePlace(placeId: string) {
+    this.setState({
+      ...this.stateV3,
+      places: this.stateV3.places.filter((p) => p.id !== placeId),
+    });
+  },
+
+  /** Add a place to V3 state. */
+  addPlace(place: CapturePlace) {
+    this.setState({
+      ...this.stateV3,
+      places: [...this.stateV3.places.filter((p) => p.id !== place.id), place],
+    });
+  },
 };
 
 export const DEBUG_STORAGE_KEY = 'ownlyDebugMode';
@@ -105,18 +166,12 @@ export function t() {
   return I18N[store.lang];
 }
 
-/** Get the active collection from V3 state. */
 export function getActiveCollection(): CaptureCollection | null {
-  const state = store.stateV3;
-  if (state.collections.length === 0) return null;
-  return state.collections.find((c) => c.id === state.active_collection_id) || state.collections[0];
+  return store.getActiveCollection();
 }
 
-/** Get places in the active collection. */
 export function getActivePlaces(): CapturePlace[] {
-  const collection = getActiveCollection();
-  if (!collection) return [];
-  return store.stateV3.places.filter((p) => p.collection_id === collection.id);
+  return store.getActivePlaces();
 }
 
 export async function loadState(): Promise<void> {
@@ -139,7 +194,7 @@ export async function loadState(): Promise<void> {
     const raw = session[fxOverrideKey(tabId)];
     if (typeof raw === 'string' && raw.trim()) store.mapCurrencyOverride = raw.trim().toUpperCase();
   }
-  store.stateV3 = fresh;
+  store.setState(fresh);
 }
 
 export function getExistingPlaceForUrl(sourceUrl: string, sourcePlaceId?: string): CapturePlace | undefined {
@@ -152,4 +207,21 @@ export function getExistingPlaceForUrl(sourceUrl: string, sourcePlaceId?: string
         p.coordinates.lat === store.currentPlace.coordinates.lat &&
         p.coordinates.lng === store.currentPlace.coordinates.lng),
   );
+}
+
+/** Save V3 state via worker. */
+export async function saveState(): Promise<void> {
+  try {
+    const viaWorker = await saveCaptureStateV3ViaWorker(store.stateV3, store.locallyDeletedIds);
+    store.setState(viaWorker.state);
+    store.locallyDeletedIds.clear();
+  } catch (error) {
+    console.warn('[Ownly Capture] Failed to persist capture state', error);
+  }
+}
+
+/** Write V3 state directly (for restore). */
+export async function writeState(next: OwnlyCaptureStateV3): Promise<void> {
+  await writeCaptureStateV3(next);
+  store.setState(next);
 }

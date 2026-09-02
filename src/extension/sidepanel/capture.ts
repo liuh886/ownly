@@ -1,11 +1,11 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
-import { findExistingTripPlace, normalizeObservedPrice } from '../../domain/planner';
+import { normalizeObservedPrice } from '../../domain/planner';
 import { el } from '../dom';
-import { saveCaptureStateViaWorker } from '../capture-state';
 import { matchesSavedListContext } from '../saved-list-match';
 import { logger } from '../logger';
-import { store, t } from './store';
+import { store, t, saveState, getActiveCollection, getActivePlaces } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
+import type { CapturePlace } from '../../domain/capture';
 
 const PRICE_RETRY_DELAYS = [1500, 3000, 5000];
 let priceRetryCount = 0;
@@ -53,8 +53,8 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   };
   type ListMessageResponse = { listPlaces?: CurrentResearchPlace[]; listName?: string; truncated?: boolean };
 
-  const context = store.state.activeContext;
-  const targetTags = (context?.tags ?? []).filter(Boolean);
+  const collection = getActiveCollection();
+  const targetTags: string[] = [];
   let placeResp: PlaceMessageResponse | null = null;
   let listResp: ListMessageResponse | null = null;
 
@@ -63,7 +63,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
       chrome.tabs.sendMessage(tab.id, {
         type: 'OWNLY_GET_CURRENT_PLACE',
         targetTags,
-        targetCurrency: context?.currency,
+        targetCurrency: collection?.currency,
         overrideCurrency: store.mapCurrencyOverride,
       }) as Promise<PlaceMessageResponse>,
       chrome.tabs.sendMessage(tab.id, {
@@ -72,7 +72,6 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
       }) as Promise<ListMessageResponse>,
     ]);
   } catch {
-    // If receiving end does not exist, try to inject content script and retry once
     try {
       const scriptingApi = (chrome as unknown as { scripting?: { executeScript: (options: unknown) => Promise<unknown> } }).scripting;
       if (scriptingApi && tab.id) {
@@ -85,7 +84,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
           chrome.tabs.sendMessage(tab.id, {
             type: 'OWNLY_GET_CURRENT_PLACE',
             targetTags,
-            targetCurrency: context?.currency,
+            targetCurrency: collection?.currency,
             overrideCurrency: store.mapCurrencyOverride,
           }) as Promise<PlaceMessageResponse>,
           chrome.tabs.sendMessage(tab.id, {
@@ -114,7 +113,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   store.detectedAllLists = Array.isArray(placeResp?.allLists) ? placeResp.allLists : [];
 
   if ((!store.detectedSavedList || store.detectedSavedList.places.length === 0) && store.detectedAllLists.length > 0) {
-    const targetList = store.detectedAllLists.find((list) => matchesSavedListContext(list.listName, context))
+    const targetList = store.detectedAllLists.find((list) => matchesSavedListContext(list.listName, collection))
       || (store.detectedAllLists.length === 1 ? store.detectedAllLists[0] : undefined);
 
     if (targetList?.listId) {
@@ -161,38 +160,33 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   renderSmartListCard();
   renderCurrencyPill();
 
-  if (context && store.currentPlace?.priceLevel) {
-    const match = findExistingTripPlace(
-      store.state.pendingPlaces,
-      context.tripId,
-      store.currentPlace.sourceUrl,
-      store.currentPlace.sourcePlaceId,
-      store.currentPlace.coordinates,
+  // Auto-capture price from page if place exists in collection
+  if (store.currentPlace?.priceLevel) {
+    const places = getActivePlaces();
+    const match = places.find(
+      (p) => p.source.url === store.currentPlace!.sourceUrl ||
+        (store.currentPlace!.sourcePlaceId && p.source.place_id === store.currentPlace!.sourcePlaceId),
     );
-    if (match && !match.observed_price) {
+    if (match && !match.price?.raw) {
       const price = store.currentPlace.priceLevel;
       const normalizedPrice = normalizeObservedPrice(price, store.currentPlace.detectedCurrency || store.pageDetectedCurrency);
-      store.state = {
-        ...store.state,
-        pendingPlaces: store.state.pendingPlaces.map((place) =>
-          place.id === match.id ? {
-            ...place,
-            observed_price: price,
-            price_currency: normalizedPrice?.currency,
-            price_min: normalizedPrice?.min,
-            price_max: normalizedPrice?.max,
-            price_unit: normalizedPrice?.unit,
-            price_level: normalizedPrice?.level,
-            updated_at: new Date().toISOString(),
-          } : place,
-        ),
-      };
+      store.updatePlace(match.id, (p) => ({
+        ...p,
+        price: {
+          raw: price,
+          currency: normalizedPrice?.currency,
+          min: normalizedPrice?.min,
+          max: normalizedPrice?.max,
+          unit: normalizedPrice?.unit,
+          level: normalizedPrice?.level,
+        },
+        updated_at: new Date().toISOString(),
+      }));
       try {
-        const saved = await saveCaptureStateViaWorker(store.state, store.locallyDeletedIds);
-        store.state = saved.state;
+        await saveState();
         setStatus(`${store.lang === 'zh' ? '💰 已自动抓取价格：' : '💰 Price captured: '}${match.title} → ${price}`, 'success');
       } catch (error) {
-        setStatus(store.lang === 'zh' ? '价格已读取，但 Inbox 保存失败。' : 'Price was read, but the Inbox write failed.', 'error');
+        setStatus(store.lang === 'zh' ? '价格已读取，但保存失败。' : 'Price was read, but save failed.', 'error');
         logger.warn('capture', 'Failed to persist auto-captured price', String(error));
       }
     }
