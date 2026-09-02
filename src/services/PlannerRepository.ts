@@ -65,6 +65,17 @@ function fromRepoExpense(raw: Record<string, unknown>): TripExpenseItem {
   return expense as TripExpenseItem;
 }
 
+export interface ImportTraceEntry {
+  input_id: string;
+  title: string;
+  action: 'created' | 'updated' | 'deduped' | 'failed' | 'unknown';
+  reason: string;
+  match_type?: 'id' | 'strong_identity';
+  matched_id?: string;
+  matched_title?: string;
+  identity_key?: string;
+}
+
 function safeEntityId(id: string): string {
   const trimmed = id.trim();
   const safe = trimmed.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -345,6 +356,143 @@ export class PlannerRepository {
 
   async importCapturedPlaces(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }
   async importExternalCandidates(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }
+
+  /**
+   * Import with detailed per-place trace for debugging.
+   * Returns the same ImportReport plus a trace array showing exactly what happened to each place.
+   */
+  async importWithTrace(places: PlannerTripPlace[]): Promise<ImportReport & { trace: ImportTraceEntry[] }> {
+    const trace: ImportTraceEntry[] = [];
+    const report: ImportReport = { received: places.length, created: [], updated: [], deduped: [], failed: [] };
+    if (places.length === 0) return { ...report, trace };
+    await this.initialize();
+    const existingTrips = new Set((await this.listTrips()).map((t) => t.id));
+    const existing = await this.listPlaces();
+    const byId = new Map(existing.map((place) => [place.id, place] as const));
+    const byStrongIdentity = new Map<string, PlannerTripPlace>();
+
+    const indexPlace = (place: PlannerTripPlace) => {
+      byId.set(place.id, place);
+      for (const key of getStrongPlaceIdentityKeys(place)) {
+        byStrongIdentity.set(`${place.trip_id}::${key}`, place);
+      }
+    };
+    existing.forEach(indexPlace);
+    const touchedTripIds = new Set<string>();
+
+    for (const rawPlace of places) {
+      const traceEntry: ImportTraceEntry = {
+        input_id: rawPlace.id,
+        title: rawPlace.title || '(unknown)',
+        action: 'unknown',
+        reason: '',
+      };
+
+      if (!rawPlace.id) {
+        traceEntry.action = 'failed';
+        traceEntry.reason = 'missing_id';
+        report.failed.push({ id: '', title: rawPlace.title || '(unknown)', reason: 'missing_id' });
+        trace.push(traceEntry);
+        continue;
+      }
+      if (!rawPlace.trip_id) {
+        traceEntry.action = 'failed';
+        traceEntry.reason = 'missing_trip_id';
+        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'missing_trip_id' });
+        trace.push(traceEntry);
+        continue;
+      }
+      if (!existingTrips.has(rawPlace.trip_id)) {
+        traceEntry.action = 'failed';
+        traceEntry.reason = `unknown_trip: ${rawPlace.trip_id}`;
+        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'unknown_trip', detail: rawPlace.trip_id });
+        trace.push(traceEntry);
+        continue;
+      }
+      touchedTripIds.add(rawPlace.trip_id);
+      const plannerFields: PlannerTripPlace = { ...rawPlace };
+      delete (plannerFields as unknown as Record<string, unknown>).status;
+      delete (plannerFields as unknown as Record<string, unknown>).reason;
+      delete (plannerFields as unknown as Record<string, unknown>).lastAttempt;
+      const incoming: PlannerTripPlace = {
+        ...plannerFields,
+        tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
+        reservation_status: rawPlace.reservation_status ?? 'none',
+        state: 'candidate',
+      };
+
+      // Check for ID match
+      let existingPlace = byId.get(incoming.id);
+      if (existingPlace) {
+        traceEntry.match_type = 'id';
+        traceEntry.matched_id = existingPlace.id;
+        traceEntry.matched_title = existingPlace.title;
+      }
+
+      // Check for strong identity match
+      if (!existingPlace) {
+        for (const key of getStrongPlaceIdentityKeys(incoming)) {
+          const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
+          if (match) {
+            existingPlace = match;
+            traceEntry.match_type = 'strong_identity';
+            traceEntry.matched_id = match.id;
+            traceEntry.matched_title = match.title;
+            traceEntry.identity_key = key;
+            break;
+          }
+        }
+      }
+
+      try {
+        if (existingPlace) {
+          const persisted = mergeCapturedPlaceResearch(existingPlace, incoming);
+          await this.upsert(persisted);
+          indexPlace(persisted);
+          traceEntry.action = 'updated';
+          traceEntry.reason = `merged into existing place ${existingPlace.id}`;
+          report.updated.push(rawPlace.id);
+        } else {
+          await this.upsert(incoming);
+          indexPlace(incoming);
+          traceEntry.action = 'created';
+          traceEntry.reason = 'new place, no match found';
+          report.created.push(rawPlace.id);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        traceEntry.action = 'failed';
+        traceEntry.reason = `write_error: ${msg}`;
+        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, error);
+        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'write_error', detail: msg });
+      }
+      trace.push(traceEntry);
+    }
+
+    for (const tripId of touchedTripIds) {
+      try {
+        const dedupResult = await this.deduplicateTripPlaces(tripId);
+        if (dedupResult.removedCount > 0) {
+          const allPlacesAfter = await this.listPlaces();
+          const survivingIds = new Set(allPlacesAfter.map((p) => p.id));
+          for (const id of [...report.created, ...report.updated]) {
+            if (!survivingIds.has(id)) {
+              report.deduped.push(id);
+              const entry = trace.find((t) => t.input_id === id);
+              if (entry) {
+                entry.action = 'deduped';
+                entry.reason = `removed during auto-dedup in trip ${tripId}`;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[PlannerRepository] Auto-deduplication for trip ${tripId} encountered warning:`, err);
+      }
+    }
+
+    return { ...report, trace };
+  }
 
   async importBundle(bundle: { trip: PlannerTrip; places: PlannerTripPlace[]; visits: PlannerTripVisit[]; legs: PlannerTripLeg[] }): Promise<ImportReport> {
     await this.initialize();
