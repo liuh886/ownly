@@ -268,7 +268,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
-  const [isPoolCollapsed, setIsPoolCollapsed] = useState(false);
   const [poolSearch, setPoolSearch] = useState('');
   const dateNavRef = useRef<HTMLDivElement>(null);
 
@@ -1420,8 +1419,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             setDraggingPlaceId(null);
           }}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-4 py-3">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-3 pr-6">
+            <div className="flex flex-wrap items-center gap-2">
               <div>
                 <h2 className="text-sm font-semibold text-stone-900">{zh ? '执行时间线' : 'Execution Timeline'}</h2>
                 <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
@@ -1446,7 +1445,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <button
                 type="button"
                 onClick={() => {
-                  setIsPoolCollapsed(false);
                   document.getElementById('research-pool-section')?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="ml-1 inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 transition shadow-2xs"
@@ -2080,7 +2078,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 justify-end">
             {/* Inline Search */}
             <div className="relative">
               <input
@@ -2156,22 +2154,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 <span>{zh ? `住宿比选 (${candidateHotels.length})` : `Compare Stays (${candidateHotels.length})`}</span>
               </button>
             ) : null}
-
-            {/* Collapse / Expand Toggle */}
-            <button
-              type="button"
-              onClick={() => setIsPoolCollapsed((prev) => !prev)}
-              className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-600 hover:bg-stone-50 hover:text-stone-900 transition shadow-2xs"
-              title={isPoolCollapsed ? (zh ? '展开候选池' : 'Expand') : (zh ? '折叠候选池' : 'Collapse')}
-            >
-              {isPoolCollapsed ? (zh ? '▼ 展开' : '▼ Expand') : (zh ? '▲ 收起' : '▲ Collapse')}
-            </button>
           </div>
         </div>
 
-        {!isPoolCollapsed ? (
-          <>
-            {/* Category & Tag Filter Chips Bar */}
+        {/* Category & Tag Filter Chips Bar */}
             {filterChips.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5 border-b border-stone-100 bg-stone-50/50 px-4 py-2">
                 {filterChips.map((f) => {
@@ -2549,8 +2535,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
             {/* Layer 2 (formerly scheduled collapsible) removed — scheduled places now stay in main pool with 📅 badge */}
 
-          </>
-        ) : null}
       </section>
 
       <ImportCandidatesModal
