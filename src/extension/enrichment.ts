@@ -1,4 +1,5 @@
 import {
+  inferPlaceKind,
   isZeroOrPlaceholderPrice,
   isValidExtractedPriceCandidate,
   mergeCapturedPlaceResearch,
@@ -171,6 +172,14 @@ export async function enrichPlaceMetadata(
             const mergedTypes = [...new Set([...existingTypes, ...facts.types])];
             if (mergedTypes.length !== existingTypes.length) {
               next.types = mergedTypes;
+              mutated = true;
+            }
+          }
+          if (facts.category || (facts.types && facts.types.length > 0)) {
+            const categoryStr = [facts.category, ...(facts.types || []), next.title].filter(Boolean).join(' ');
+            const freshKind = inferPlaceKind(categoryStr);
+            if (freshKind && freshKind !== 'other' && (next.kind === 'other' || freshKind !== next.kind)) {
+              next.kind = freshKind;
               mutated = true;
             }
           }

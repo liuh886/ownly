@@ -916,10 +916,23 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
       const res = await fetch(searchUrl, { credentials: 'include', signal: controller.signal });
       if (res.ok) {
         const html = (await res.text()).slice(0, 3_000_000);
-        const facts = extractGoogleMapsResearchFromHtml(html);
-        if (facts.sourcePlaceId) {
-          place.sourcePlaceId = facts.sourcePlaceId;
-          savedListDetailCache.set(facts.sourcePlaceId, { at: Date.now(), facts });
+        let facts = extractGoogleMapsResearchFromHtml(html);
+        const placeId = facts.sourcePlaceId;
+        if (placeId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(placeId.trim())) {
+          place.sourcePlaceId = placeId;
+          const previewUrl = googleMapsPreviewPlaceUrl(placeId, window.location.origin);
+          if (previewUrl) {
+            try {
+              const prevRes = await fetch(previewUrl, { credentials: 'include' });
+              if (prevRes.ok) {
+                const rawPrev = await prevRes.text();
+                const cleanPrev = rawPrev.replace(/^\)\]\}'\s*/, '');
+                const previewFacts = extractGoogleMapsPreviewFacts(JSON.parse(cleanPrev));
+                facts = { ...facts, ...previewFacts, sourcePlaceId: placeId };
+              }
+            } catch {}
+          }
+          savedListDetailCache.set(placeId, { at: Date.now(), facts });
         }
         logger.parser('MapsTabDetail', `Resolved facts for query pin "${place.title}"`, facts);
         return facts;

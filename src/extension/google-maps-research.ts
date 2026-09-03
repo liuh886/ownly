@@ -424,45 +424,93 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
     }
   }
 
-  // APP_INITIALIZATION_STATE fallback
-  const appInitMatch = /window\.APP_INITIALIZATION_STATE\s*=\s*(\[[\s\S]*?\]);/.exec(html);
-  if (appInitMatch?.[1]) {
-    try {
-      const state = JSON.parse(appInitMatch[1]);
-      if (Array.isArray(state)) {
-        const queue: unknown[] = [...state];
-        let scannedState = 0;
-        while (queue.length > 0 && scannedState < 100) {
-          const item = queue.shift();
-          scannedState += 1;
-          if (typeof item === 'string') {
-            const clean = item.replace(/^\)\]\}'\s*/, '');
-            try {
-              const parsed = JSON.parse(clean);
-              const facts = extractGoogleMapsPreviewFacts(parsed);
-              if (facts.rating !== undefined && result.rating === undefined) result.rating = facts.rating;
-              if (facts.reviewCount !== undefined && result.reviewCount === undefined) result.reviewCount = facts.reviewCount;
-              if (facts.category && !result.category) result.category = facts.category;
-              if (facts.address && !result.address) result.address = facts.address;
-              if (facts.phone && !result.phone) result.phone = facts.phone;
-              if (facts.coordinates && !result.coordinates) result.coordinates = facts.coordinates;
-              if (facts.priceLevel && !result.priceLevel) result.priceLevel = facts.priceLevel;
-              if (facts.priceCurrency && !result.priceCurrency) result.priceCurrency = facts.priceCurrency;
-              if (facts.open_hours && !result.open_hours) result.open_hours = facts.open_hours;
-              if (facts.types && facts.types.length > 0) {
-                facts.types.forEach((t) => types.add(t));
-              }
-            } catch {}
-          } else if (Array.isArray(item)) {
-            queue.push(...item.slice(0, 20));
-          }
+  // APP_INITIALIZATION_STATE fallback with bracket-balanced extraction
+  const appInitMarker = 'APP_INITIALIZATION_STATE';
+  const markerIdx = html.indexOf(appInitMarker);
+  if (markerIdx !== -1) {
+    const eqIdx = html.indexOf('=', markerIdx);
+    if (eqIdx !== -1) {
+      let arrayStart = -1;
+      for (let i = eqIdx + 1; i < eqIdx + 30; i++) {
+        if (html[i] === '[') {
+          arrayStart = i;
+          break;
         }
       }
-    } catch {}
+      if (arrayStart !== -1) {
+        let depth = 0;
+        let inString = false;
+        let escapeChar = false;
+        let arrayEnd = -1;
+        for (let i = arrayStart; i < html.length && i < arrayStart + 2_500_000; i++) {
+          const ch = html[i];
+          if (escapeChar) {
+            escapeChar = false;
+            continue;
+          }
+          if (ch === '\\') {
+            escapeChar = true;
+            continue;
+          }
+          if (ch === '"') {
+            inString = !inString;
+            continue;
+          }
+          if (!inString) {
+            if (ch === '[') depth++;
+            else if (ch === ']') {
+              depth--;
+              if (depth === 0) {
+                arrayEnd = i + 1;
+                break;
+              }
+            }
+          }
+        }
+        if (arrayEnd !== -1) {
+          try {
+            const rawJson = html.slice(arrayStart, arrayEnd);
+            const state = JSON.parse(rawJson);
+            if (Array.isArray(state)) {
+              const queue: unknown[] = [...state];
+              let scannedState = 0;
+              while (queue.length > 0 && scannedState < 200) {
+                const item = queue.shift();
+                scannedState += 1;
+                if (typeof item === 'string') {
+                  const clean = item.replace(/^\)\]\}'\s*/, '');
+                  try {
+                    const parsed = JSON.parse(clean);
+                    const facts = extractGoogleMapsPreviewFacts(parsed);
+                    if (facts.rating !== undefined && result.rating === undefined) result.rating = facts.rating;
+                    if (facts.reviewCount !== undefined && result.reviewCount === undefined) result.reviewCount = facts.reviewCount;
+                    if (facts.category && !result.category) result.category = facts.category;
+                    if (facts.address && !result.address) result.address = facts.address;
+                    if (facts.phone && !result.phone) result.phone = facts.phone;
+                    if (facts.coordinates && !result.coordinates) result.coordinates = facts.coordinates;
+                    if (facts.priceLevel && !result.priceLevel) result.priceLevel = facts.priceLevel;
+                    if (facts.priceCurrency && !result.priceCurrency) result.priceCurrency = facts.priceCurrency;
+                    if (facts.open_hours && !result.open_hours) result.open_hours = facts.open_hours;
+                    if (facts.sourcePlaceId && !result.sourcePlaceId) result.sourcePlaceId = facts.sourcePlaceId;
+                    if (facts.types && facts.types.length > 0) {
+                      facts.types.forEach((t) => types.add(t));
+                    }
+                  } catch {}
+                } else if (Array.isArray(item)) {
+                  queue.push(...item.slice(0, 30));
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    }
   }
+
   // Extract Google feature ID (0x...:0x...) if present in HTML
   if (!result.sourcePlaceId) {
     const featMatch = /!1s(0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{6,})/.exec(html)
+      || /["'](0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{6,})["']/.exec(html)
       || /(0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{6,})/.exec(html);
     if (featMatch) {
       result.sourcePlaceId = featMatch[1] || featMatch[0];

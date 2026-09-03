@@ -1172,9 +1172,14 @@ function buildCandidateDetails(
     chk.dataset.placeId = place.id;
     wrapper.append(chk);
   }
-  // Inbox: 主显 类别标签（如 🏷️ 宾馆 / 🏷️ 面馆）、评分、价格（含汇率换算）、标签、位置
+  // Inbox: 主显 谷歌原生类别标签（如 🏷️ 国际机场 / 🏷️ 宾馆 / 🏷️ 面馆）、评分、价格（含汇率换算）、用户自定义标签、位置
+  const KNOWN_KINDS = new Set([
+    'transit', 'stay', 'food', 'cafe', 'attraction', 'shopping', 'experience', 'service', 'other',
+    '交通', '住宿', '美食', '咖啡', '景点体验', '景点', '体验', '购物', '服务', '其它', '其他',
+  ]);
   const mainParts: string[] = [];
-  const categoryLabel = place.source_category || (place.kind && place.kind !== 'other' ? place.kind : '');
+  const rawCategory = place.source_category?.trim() || (place.types && place.types.length > 0 ? place.types[0] : '');
+  const categoryLabel = rawCategory && !KNOWN_KINDS.has(rawCategory.toLowerCase()) ? rawCategory : '';
   if (categoryLabel) {
     mainParts.push(`<span class="badge" title="${escapeHtml(categoryLabel)}">🏷️ ${escapeHtml(categoryLabel)}</span>`);
   }
@@ -1193,9 +1198,10 @@ function buildCandidateDetails(
       mainParts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
     }
   }
-  if (place.tags.length) {
-    const shown = place.tags.slice(0, 2).join(', ');
-    const more = place.tags.length > 2 ? ` +${place.tags.length - 2}` : '';
+  const userTags = place.tags.filter((t) => !KNOWN_KINDS.has(t.trim().toLowerCase()));
+  if (userTags.length) {
+    const shown = userTags.slice(0, 2).join(', ');
+    const more = userTags.length > 2 ? ` +${userTags.length - 2}` : '';
     mainParts.push(`<span>🏷️ ${escapeHtml(shown)}${more}</span>`);
   }
   if (place.area || place.address) {
