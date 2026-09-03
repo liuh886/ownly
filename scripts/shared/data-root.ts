@@ -57,12 +57,12 @@ export function resolveOwnlyDataRoot(
   }
   if (detected.status === 'INVALID_FOLDER') {
     throw new Error(
-      `Invalid Ownly folder "${input}" — ${detected.message}. Please select a valid Ownly root or its parent containing Ownly/.`,
+      `Invalid Ownly folder "${input}" — not an Ownly data root: ${detected.message}. Please select a valid Ownly root or its parent containing Ownly/.`,
     );
   }
   if (detected.status === 'EMPTY_FOLDER') {
     throw new Error(
-      `Empty folder "${input}" — will create Ownly/ here. Re-run with --vault "${detected.path}" or allow create.`,
+      `Empty folder "${input}" — not an Ownly data root, will create Ownly/ here. Re-run with --vault "${detected.path}" or allow create.`,
     );
   }
   return detected.path;
