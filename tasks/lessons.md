@@ -10,3 +10,5 @@
    - When converting decimal representations to hex place IDs, ALWAYS support negative signs and convert via `BigInt.asUintN(64, BigInt(str)).toString(16)` to produce valid unsigned 64-bit hex.
    - Never assume protobuf integer arrays are only positive (`/^\d+$/`). Always provide real-world test fixtures covering signed 64-bit integer pairs.
    - Prevent unnecessary fallbacks to offscreen skeleton search HTML by maximizing in-tab provider metadata extraction.
+6. **Pre-Push CI Validation Integrity**:
+   - Always verify `npm run validate:fast` before remote push to ensure ESLint errors (e.g. `prefer-const`) and type checks pass locally without breaking GitHub Actions CI pipelines.
