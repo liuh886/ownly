@@ -9,19 +9,16 @@ import {
   cleanExtractedText,
   extractCleanPriceText,
   extractFeatureIdFromUrl,
-  findEntityListCategory,
-  findEntityListPlaceId,
   isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
   isValidExtractedPriceCandidate,
   isZeroOrPlaceholderPrice,
   normalizePhoneDisplay,
-  parseEntityListCoordinates,
   safeDecodeUri,
 } from './utils';
 import { SELECTORS, driftCheck } from './selectors';
-import { PLACE_PARSER, type SubtitleDecomposition } from './place-parser';
+import { PLACE_PARSER } from './place-parser';
 import { detectPageCurrency } from './currency-detector';
 import { extractGoogleMapsSavedListId, matchesSavedListContext } from './saved-list-match';
 import {
@@ -32,6 +29,25 @@ import {
   type GoogleMapsResearchFacts,
 } from './google-maps-research';
 import { logger } from './logger';
+import {
+  buildFromEntityList,
+  createSnapshot,
+  interpretDomBatch,
+  interpretRawDomCard,
+  type ExtractionSnapshot,
+  type SavedListResult,
+} from './maps/saved-list-parser';
+
+// PR5 debug snapshot — last extraction for diagnostics quantification
+let lastExtractionSnapshot: ExtractionSnapshot | null = null;
+const EXTRACTION_SNAPSHOT_STORAGE_KEY = 'ownlyExtractionSnapshot';
+function persistSnapshot(snap: ExtractionSnapshot): void {
+  lastExtractionSnapshot = snap;
+  try {
+    void chrome.storage?.local?.set({ [EXTRACTION_SNAPSHOT_STORAGE_KEY]: snap });
+  } catch {}
+  logger.info('Content', 'Extraction snapshot', snap);
+}
 
 export interface CurrentResearchPlace {
   title: string;
@@ -583,93 +599,42 @@ function pruneScavengedCache(pageUrl: string): void {
   }
 }
 
-function isGenericNavigationTitle(text: string): boolean {
-  const norm = text.trim().toLowerCase();
-  return /^(google|google maps|google 地图|directions|路线|保存|已保存|saved|share|分享|搜索|search|返回|back|菜单|menu|overview|概览|reviews|评价|photos|照片|about|关于)$/i.test(norm);
-}
-
-function readCardFields(card: HTMLElement | null) {
-  if (!card) return {};
-  const ratingText = card.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim() ||
-    card.querySelector<HTMLElement>(SELECTORS.ratingAria)?.getAttribute('aria-label');
-  const directRating = PLACE_PARSER.parseRating(ratingText);
-
-  // Scan ALL info lines in the card (e.g. multiple div.W4Efsd, div.fontBodyMedium)
-  const infoElements = Array.from(card.querySelectorAll<HTMLElement>(SELECTORS.cardInfo));
-  let subInfo: SubtitleDecomposition = {};
-
-  if (infoElements.length === 0) {
-    subInfo = PLACE_PARSER.parseSubtitleInfo(card.textContent);
-  } else {
-    for (const el of infoElements) {
-      const text = el.textContent?.trim();
-      if (!text) continue;
-      const parsed = PLACE_PARSER.parseSubtitleInfo(text);
-      subInfo = {
-        rating: subInfo.rating ?? parsed.rating,
-        reviewCount: subInfo.reviewCount ?? parsed.reviewCount,
-        category: subInfo.category ?? parsed.category,
-        priceLevel: subInfo.priceLevel ?? parsed.priceLevel,
-        openStatus: subInfo.openStatus ?? parsed.openStatus,
-        area: subInfo.area ?? parsed.area,
-      };
-    }
-  }
-
-  // Check dedicated hotel rate badge on card (e.g. span.fontHeadlineSmall) if present
-  if (!subInfo.priceLevel) {
-    const hotelBadge = card.querySelector<HTMLElement>('span.fontHeadlineSmall, div.fontHeadlineSmall');
-    if (hotelBadge) {
-      const badgeText = cleanExtractedText(hotelBadge.textContent || '');
-      const cleanPrice = extractCleanPriceText(badgeText);
-      if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice)) {
-        subInfo.priceLevel = cleanPrice;
-      }
-    }
-  }
-
-  const rawAddr = card.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
-  const address = rawAddr ? cleanExtractedText(rawAddr) : (subInfo.area || undefined);
-  const rawNote = card.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
-  const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
-
-  return {
-    rating: directRating ?? subInfo.rating,
-    reviewCount: subInfo.reviewCount,
-    category: subInfo.category,
-    priceLevel: subInfo.priceLevel,
-    openStatus: subInfo.openStatus,
-    address,
-    userNote,
-  };
+// Interpretation moved to maps/saved-list-parser.ts — content.ts only extracts raw DOM strings
+function cardToRaw(title: string, href: string, card: HTMLElement | null): import('./maps/saved-list-parser').RawDomCard {
+  const ratingText =
+    card?.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim() ||
+    (card?.querySelector<HTMLElement>(SELECTORS.ratingAria)?.getAttribute('aria-label') ?? undefined);
+  const infoEls = card ? Array.from(card.querySelectorAll<HTMLElement>(SELECTORS.cardInfo)) : [];
+  const infoTexts = infoEls.map((e) => e.textContent?.trim() || '').filter(Boolean);
+  if (infoTexts.length === 0 && card?.textContent) infoTexts.push(card.textContent);
+  const hotelBadge = card?.querySelector<HTMLElement>('span.fontHeadlineSmall, div.fontHeadlineSmall');
+  if (hotelBadge?.textContent) infoTexts.push(hotelBadge.textContent);
+  const addressRaw = card?.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
+  const noteRaw = card?.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
+  return { rawTitle: title, href: href || '', ratingText, infoTexts, addressRaw, noteRaw };
 }
 
 function rememberScavengedPlace(rawTitle: string, sourceUrl: string, card: HTMLElement | null): void {
-  const cleanTitle = cleanExtractedText(rawTitle);
-  if (!cleanTitle || cleanTitle.length < 2 || cleanTitle.length > 80 || isGenericNavigationTitle(cleanTitle) || isJunkNavigationText(cleanTitle) || isFakePlaceLabel(cleanTitle)) return;
-
-  const identityKey = extractFeatureIdFromUrl(sourceUrl) || sourceUrl || `unresolved:${cleanTitle.toLowerCase()}`;
-  if (scannedListPlaces.has(identityKey)) return;
-
-  const fields = readCardFields(card);
-  const url = sourceUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle)}`;
-  const kind = inferPlaceKind((fields.category || '') + ' ' + cleanTitle + ' ' + (fields.address || ''));
-
-  scannedListPlaces.set(identityKey, {
-    title: cleanTitle,
-    sourceUrl: url,
+  const raw = cardToRaw(rawTitle, sourceUrl, card);
+  const { candidate } = interpretRawDomCard(raw);
+  if (!candidate) return;
+  const key = candidate.featureId || candidate.url || `unresolved:${candidate.title.toLowerCase()}`;
+  if (scannedListPlaces.has(key)) return;
+  scannedListPlaces.set(key, {
+    title: candidate.title,
+    sourceUrl: candidate.url,
     sourceProvider: 'google_maps',
-    kind,
-    rating: fields.rating,
-    reviewCount: fields.reviewCount,
-    category: fields.category,
-    priceLevel: fields.priceLevel,
-    openStatus: fields.openStatus,
-    address: fields.address,
-    detectedCurrency: detectCurrencyFromPage(url, fields.priceLevel),
-    summary: fields.userNote,
-    userNote: fields.userNote,
-    coordinates: extractPlaceCoordinates(url) ?? undefined,
+    kind: (candidate.kind as PlannerPlaceKind) || inferPlaceKind((candidate.category || '') + ' ' + candidate.title + ' ' + (candidate.address || '')),
+    rating: candidate.rating,
+    reviewCount: candidate.reviewCount,
+    category: candidate.category,
+    priceLevel: candidate.priceLevel,
+    address: candidate.address,
+    detectedCurrency: candidate.detectedCurrency,
+    summary: candidate.summary,
+    userNote: candidate.userNote,
+    coordinates: candidate.coordinates ?? extractPlaceCoordinates(candidate.url) ?? undefined,
+    sourcePlaceId: candidate.sourcePlaceId,
   });
 }
 
@@ -677,44 +642,65 @@ const PLACE_LINK = 'a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[dat
 
 function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
   pruneScavengedCache(window.location.href);
+  const start = Date.now();
+  const rawCards: import('./maps/saved-list-parser').RawDomCard[] = [];
 
-  // Strategy 1: Scan all place link anchors directly
+  // Strategy 1: place link anchors — DOM access only
   const linkAnchors = document.querySelectorAll<HTMLAnchorElement>(SELECTORS.feedAnchors);
   for (const anchor of Array.from(linkAnchors)) {
     let title = anchor.getAttribute('aria-label') || '';
     const href = anchor.href || '';
-    if (!title && href) {
-      title = titleFromUrl(href);
-    }
-    if (!title || title.length < 2 || isGenericNavigationTitle(title)) continue;
-
+    if (!title && href) title = titleFromUrl(href);
     const card = anchor.closest<HTMLElement>(SELECTORS.cardContainers) || anchor.parentElement;
-    rememberScavengedPlace(title, href, card ?? null);
+    rawCards.push(cardToRaw(title, href, card ?? null));
   }
 
-  // Strategy 2: Scan all distinct item card containers inside lists
-  const cardElements = document.querySelectorAll<HTMLElement>(
-    `${SELECTORS.cardContainers}, div[role="feed"] > div`
-  );
+  // Strategy 2: distinct item card containers
+  const cardElements = document.querySelectorAll<HTMLElement>(`${SELECTORS.cardContainers}, div[role="feed"] > div`);
   for (const card of Array.from(cardElements)) {
     const headEl = card.querySelector<HTMLElement>(SELECTORS.cardTitle);
     const title = headEl?.textContent?.trim() || card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[aria-label]')?.getAttribute('aria-label') || '';
     const linkEl = card.querySelector<HTMLAnchorElement>(PLACE_LINK);
-    rememberScavengedPlace(title, linkEl?.href || '', card);
+    rawCards.push(cardToRaw(title, linkEl?.href || '', card));
   }
 
-  // Strategy 3: Scan all list item cards and rows inside feed/pane
-  const feedItems = document.querySelectorAll<HTMLElement>(
-    'div[role="feed"] > div, div[role="main"] div[jsaction], div.m6QErb > div[jsaction], div.m6QErb > div'
-  );
+  // Strategy 3: feed/pane rows
+  const feedItems = document.querySelectorAll<HTMLElement>('div[role="feed"] > div, div[role="main"] div[jsaction], div.m6QErb > div[jsaction], div.m6QErb > div');
   for (const card of Array.from(feedItems)) {
-    const titleEl = card.querySelector<HTMLElement>(
-      'h1, h2, h3, .fontHeadlineSmall, .qBF1Pd, .OSrXXb, [role="heading"], div[class*="headline"], span[class*="headline"]'
-    );
+    const titleEl = card.querySelector<HTMLElement>('h1, h2, h3, .fontHeadlineSmall, .qBF1Pd, .OSrXXb, [role="heading"], div[class*="headline"], span[class*="headline"]');
     const title = titleEl?.textContent?.trim() || card.querySelector('[aria-label]')?.getAttribute('aria-label') || '';
     const linkEl = card.querySelector<HTMLAnchorElement>(PLACE_LINK);
-    rememberScavengedPlace(title, linkEl?.href || '', card);
+    rawCards.push(cardToRaw(title, linkEl?.href || '', card));
   }
+
+  // Interpretation delegated to parser — single batch for coverage + failed aggregation
+  const batch: SavedListResult = interpretDomBatch(rawCards);
+  for (const cand of batch.places) {
+    const key = cand.featureId || cand.url || `unresolved:${cand.title.toLowerCase()}`;
+    if (scannedListPlaces.has(key)) continue;
+    scannedListPlaces.set(key, {
+      title: cand.title,
+      sourceUrl: cand.url,
+      sourceProvider: 'google_maps',
+      kind: (cand.kind as PlannerPlaceKind) || inferPlaceKind((cand.category || '') + ' ' + cand.title + ' ' + (cand.address || '')),
+      rating: cand.rating,
+      reviewCount: cand.reviewCount,
+      category: cand.category,
+      priceLevel: cand.priceLevel,
+      address: cand.address,
+      detectedCurrency: cand.detectedCurrency,
+      summary: cand.summary,
+      userNote: cand.userNote,
+      coordinates: cand.coordinates ?? extractPlaceCoordinates(cand.url) ?? undefined,
+      sourcePlaceId: cand.sourcePlaceId,
+    });
+  }
+
+  // Debug snapshot — quantifies candidate extraction quality over time
+  try {
+    const snap = createSnapshot({ url: window.location.href, parser: 'dom-scan', result: batch, durationMs: Date.now() - start });
+    persistSnapshot(snap);
+  } catch {}
 
   return Array.from(scannedListPlaces.values());
 }
@@ -829,6 +815,7 @@ let cachedEntityList: DetectedSavedList | null = null;
 let lastScannedListId: string | null = null;
 
 async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: string): Promise<DetectedSavedList | null> {
+  const started = Date.now();
   try {
     const authuserMatch = window.location.href.match(/authuser=(\d+)/);
     const authuser = authuserMatch ? authuserMatch[1] : '0';
@@ -842,47 +829,36 @@ async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: stri
       const listName = cleanExtractedText(rawListName);
       const rawItems = data[0]?.[8];
       if (Array.isArray(rawItems)) {
-        const places: CurrentResearchPlace[] = [];
-        for (const item of rawItems) {
-          const placeInfo = item[1];
-          const rawTitle = item[2] || (placeInfo && placeInfo[2]);
-          if (!rawTitle) continue;
-          const title = cleanExtractedText(rawTitle);
-          if (!title || isJunkNavigationText(title)) continue;
-
-          const rawAddress = placeInfo ? placeInfo[4] : undefined;
-          const address = rawAddress ? cleanExtractedText(rawAddress) : undefined;
-          const rawNote = item[3] || undefined;
-          const userNote = (rawNote && !isJunkNavigationText(rawNote)) ? cleanExtractedText(rawNote) : undefined;
-          const coordinates = parseEntityListCoordinates(placeInfo);
-          const sourcePlaceId = findEntityListPlaceId(item);
-          const sourceUrl = googleMapsDetailUrlFromSourceId(sourcePlaceId, title, window.location.origin)
-            || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
-
-          const research = PLACE_PARSER.extractEntityListResearch(item, title);
-          const category = research.category || findEntityListCategory(item, title);
-          const priceLevel = research.priceLevel;
-          const detectedCurrency = detectCurrencyFromPage(window.location.href, priceLevel, undefined, overrideCurrency);
-
-          places.push({
-            title,
-            sourceUrl,
-            sourceProvider: 'google_maps',
-            address,
-            userNote,
-            summary: userNote,
-            rating: research.rating,
-            reviewCount: research.reviewCount,
-            category,
-            priceLevel,
-            detectedCurrency,
-            types: research.types,
-            coordinates,
-            sourcePlaceId,
-          });
-        }
-
+        // Delegated interpretation — content.ts only fetched, parser owns decoding
+        const parsed: SavedListResult = buildFromEntityList({
+          listName,
+          listUrl: window.location.href,
+          rawItems,
+          origin: window.location.origin,
+          overrideCurrency,
+        });
+        const places: CurrentResearchPlace[] = parsed.places.map((cand) => ({
+          title: cand.title,
+          sourceUrl: cand.url,
+          sourceProvider: 'google_maps',
+          kind: (cand.kind as PlannerPlaceKind) || inferPlaceKind((cand.category || '') + ' ' + cand.title + ' ' + (cand.address || '')),
+          address: cand.address,
+          userNote: cand.userNote,
+          summary: cand.summary,
+          rating: cand.rating,
+          reviewCount: cand.reviewCount,
+          category: cand.category,
+          priceLevel: cand.priceLevel,
+          detectedCurrency: cand.detectedCurrency,
+          types: cand.types,
+          coordinates: cand.coordinates,
+          sourcePlaceId: cand.sourcePlaceId,
+        }));
         if (places.length > 0) {
+          try {
+            const snap = createSnapshot({ url: window.location.href, parser: 'entitylist', result: parsed, durationMs: Date.now() - started });
+            persistSnapshot(snap);
+          } catch {}
           return {
             listName,
             listUrl: window.location.href,
@@ -891,6 +867,11 @@ async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: stri
             truncated: rawItems.length >= 500,
           };
         }
+        // Even if no places, keep snapshot for failure diagnosis
+        try {
+          const snap = createSnapshot({ url: window.location.href, parser: 'entitylist', result: parsed, durationMs: Date.now() - started });
+          persistSnapshot(snap);
+        } catch {}
       }
     }
   } catch (e) {
@@ -1132,7 +1113,7 @@ function detectVisibleGoogleMapsListName(places: CurrentResearchPlace[]): string
   candidates.push(document.title.replace(/\s*[-–—]\s*Google Maps.*$/i, ''));
   for (const raw of candidates) {
     const title = cleanExtractedText(raw);
-    if (!title || title.length > 80 || isGenericNavigationTitle(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) continue;
+    if (!title || title.length > 80 || isGenericNavigationTitleLocal(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) continue;
     if (placeTitles.has(title.toLocaleLowerCase())) continue;
     return title;
   }
@@ -1229,13 +1210,17 @@ export interface SavedListCardSummary {
   url?: string;
 }
 
+function isGenericNavigationTitleLocal(text: string): boolean {
+  const norm = text.trim().toLowerCase();
+  return /^(google|google maps|google 地图|directions|路线|保存|已保存|saved|share|分享|搜索|search|返回|back|菜单|menu|overview|概览|reviews|评价|photos|照片|about|关于)$/i.test(norm);
+}
 function scanAllSavedListsOnPage(): SavedListCardSummary[] {
   const listsMap = new Map<string, SavedListCardSummary>();
 
   const pushList = (listId: string | undefined, rawTitle: string, count: number | undefined, url: string) => {
     const title = cleanExtractedText(rawTitle);
     if (!title || title.length < 2 || title.length > 80) return;
-    if (isGenericNavigationTitle(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) return;
+    if (isGenericNavigationTitleLocal(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) return;
     const key = (listId || title).toLowerCase();
     if (!listsMap.has(key)) {
       listsMap.set(key, { listId, listName: title, count, url });
@@ -1424,6 +1409,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const target = (message as { targetCurrency?: string }).targetCurrency;
     const detected = detectCurrencyFromPage(window.location.href, undefined, target);
     sendResponse({ detectedCurrency: detected });
+    return true;
+  }
+  if (msgType === 'OWNLY_GET_EXTRACTION_SNAPSHOT') {
+    // PR5 debug snapshot — quantifies candidate extraction quality over time
+    try {
+      const snap = lastExtractionSnapshot;
+      sendResponse({ snapshot: snap });
+    } catch {
+      sendResponse({ snapshot: null });
+    }
     return true;
   }
 });

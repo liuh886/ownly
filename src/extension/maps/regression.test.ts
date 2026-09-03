@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PlaceIdentityService } from '@/domain/place-identity';
+import { buildFromEntityList, createSnapshot, interpretDomBatch, interpretRawDomCard } from './saved-list-parser';
 
 describe('PR4 maps extractor regression fixtures', () => {
   it('TH query pin Baan Kuay without featureId still gets resilient key (url fallback)', () => {
@@ -62,5 +63,60 @@ describe('PR4 maps extractor regression fixtures', () => {
     const ka = PlaceIdentityService.getResilientKeys(a);
     const kb = PlaceIdentityService.getResilientKeys(b);
     expect(ka[0]).toBe(kb[0]);
+  });
+});
+
+describe('PR5 saved-list-parser', () => {
+  it('buildFromEntityList maps rawItems to candidates with coverage', () => {
+    const rawItems = [
+      [null, [null, null, 'Som Som Seafood', null, '659 Chula 4 Alley, Bangkok'], 'Som Som Seafood', 'cash seafood note', null, null, null, null, null],
+      [null, [null, null, 'Avalon Beach Resort'], 'Avalon Beach Resort', null, null, null, null, null, null],
+      [null, null, '', 'junk', null],
+    ];
+    // Inject a fake feature id into first item's deep array so findEntityListPlaceId can find it
+    (rawItems[0] as unknown[])[1] = [null, null, 'Som Som Seafood', null, 'addr', [null, null, '0x30e29911d7719da9:0x13f543e2fb3fff']];
+    const result = buildFromEntityList({
+      listName: 'TH26',
+      listUrl: 'https://www.google.com/maps/@16.39,97.25,7z/data=!4m6!1m2!10m1!1e1',
+      rawItems,
+      origin: 'https://www.google.com',
+    });
+    expect(result.rawCount).toBe(3);
+    expect(result.places.length).toBe(2);
+    expect(result.coverage.title).toBe(2);
+    expect(result.coverage.url).toBe(2);
+    expect(result.failed.length).toBe(1);
+    expect(result.failed[0].reason).toBe('no title');
+  });
+
+  it('interpretRawDomCard filters fake label and computes coverage', () => {
+    const fake = interpretRawDomCard({ rawTitle: 'Compare prices', href: 'https://www.google.com/maps/search/?api=1&query=Compare%20prices', infoTexts: [] });
+    expect(fake.candidate).toBeUndefined();
+    expect(fake.failedReason).toMatch(/fake/);
+
+    const ok = interpretRawDomCard({
+      rawTitle: 'Baan Kuay Tiew Ruathong',
+      href: 'https://www.google.com/maps/search/?api=1&query=Baan%20Kuay%20Tiew%20Ruathong',
+      infoTexts: ['Thai restaurant · 1.2km'],
+      addressRaw: '1/7 Ratchawithi Rd, Bangkok',
+    });
+    expect(ok.candidate?.title).toBe('Baan Kuay Tiew Ruathong');
+    expect(ok.candidate?.url).toContain('Baan');
+  });
+
+  it('interpretDomBatch dedupes and reports coverage title/url/id', () => {
+    const batch = interpretDomBatch([
+      { rawTitle: 'Sora Resort & Suites Sukhumvit', href: 'https://www.google.com/maps/search/?api=1&query=Sora%20Resort', infoTexts: ['Hotel · 4.5 (120)'] },
+      { rawTitle: 'Sora Resort & Suites Sukhumvit', href: 'https://www.google.com/maps/search/?api=1&query=Sora%20Resort', infoTexts: ['Hotel · 4.5 (120)'] },
+      { rawTitle: '', href: '', infoTexts: [] },
+    ]);
+    expect(batch.rawCount).toBe(3);
+    expect(batch.places.length).toBe(1);
+    expect(batch.coverage.title).toBe(1);
+    expect(batch.failed[0].reason).toBe('no title');
+    const snap = createSnapshot({ url: 'https://www.google.com/maps/@16.3,97.2', parser: 'dom-scan', result: batch, durationMs: 12 });
+    expect(snap.found).toBe(3);
+    expect(snap.success).toBe(1);
+    expect(snap.coverage.title).toBe(1);
   });
 });

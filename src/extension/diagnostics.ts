@@ -40,6 +40,10 @@ export interface OwnlyDiagnosticsBundleV2 {
     detectedSavedList: unknown | null;
     detectedAllLists: unknown[];
   } | null;
+  extraction?: {
+    liveSnapshot: unknown | null;
+    persistedSnapshot: unknown | null;
+  };
   storage: {
     captureStorageKey: string;
     storageQuota?: { bytesInUse?: number; quota?: number };
@@ -168,6 +172,32 @@ export async function buildDiagnosticsBundle(opts: {
     } catch {}
   }
 
+  // Extraction snapshot — PR5 quantification (found vs success + coverage title/url/id)
+  let liveSnapshot: unknown = null;
+  let persistedSnapshot: unknown = null;
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      const snapStore = await chrome.storage.local.get('ownlyExtractionSnapshot');
+      persistedSnapshot = (snapStore as Record<string, unknown>).ownlyExtractionSnapshot ?? null;
+    }
+  } catch {}
+  try {
+    if (typeof chrome !== 'undefined' && chrome.tabs?.query && chrome.tabs?.sendMessage) {
+      const qTabId = opts.tabId ?? (store ? undefined : undefined);
+      let targetId: number | undefined = qTabId;
+      if (targetId === undefined) {
+        try {
+          const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+          targetId = active?.id;
+        } catch {}
+      }
+      if (targetId !== undefined) {
+        const resp = await chrome.tabs.sendMessage(targetId, { type: 'OWNLY_GET_EXTRACTION_SNAPSHOT' }).catch(() => null) as { snapshot?: unknown } | null;
+        if (resp && typeof resp === 'object' && 'snapshot' in resp) liveSnapshot = (resp as { snapshot?: unknown }).snapshot ?? null;
+      }
+    }
+  } catch {}
+
   // Storage health
   const fxOverride: string | null = null;
   let quota: { bytesInUse?: number; quota?: number } | undefined;
@@ -238,6 +268,10 @@ export async function buildDiagnosticsBundle(opts: {
       stats,
     },
     tab: tabInfo,
+    extraction: {
+      liveSnapshot,
+      persistedSnapshot,
+    },
     storage: {
       captureStorageKey: CAPTURE_STORAGE_KEY,
       storageQuota: quota,
