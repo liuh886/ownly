@@ -11,6 +11,7 @@ import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
 import { WebDataOnboarding } from '@/components/onboarding/WebDataOnboarding';
 import { useI18n } from '@/core/i18n-context';
 import { trackOwnlyEvent } from '@/lib/analytics';
+import { checkWorkspaceRecovery, type RecoveryState } from '@/core/workspace-recovery';
 
 const ONBOARDING_DISMISSED_KEY = 'ownly_web_onboarding_dismissed';
 const basePath = process.env.NEXT_PUBLIC_OWNLY_BASE_PATH ?? '';
@@ -37,6 +38,7 @@ export function WebShell() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
   const [membership] = useState<WYQDMembershipState>(WEB_PRO_MEMBERSHIP);
+  const [recoveryState, setRecoveryState] = useState<RecoveryState | null>(null);
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -108,7 +110,19 @@ export function WebShell() {
       try {
         const connected = await obsidianService.initAutoConnect();
         if (!isMounted) return;
-        if (connected) await markdownEntityRepository.initialize();
+        if (connected) {
+          await markdownEntityRepository.initialize();
+          setRecoveryState('CONNECTED');
+        } else {
+          // Check recovery state for detailed UX (permission / missing)
+          try {
+            const { get } = await import('idb-keyval');
+            const handle = (await get('wyqd_obsidian_handle')) as FileSystemDirectoryHandle | null;
+            const rec = await checkWorkspaceRecovery(handle ?? null, navigator.onLine);
+            setRecoveryState(rec.state);
+            if (rec.state !== 'CONNECTED') setError(rec.message);
+          } catch {}
+        }
         if (isMounted) {
           setIsConnected(connected);
           const shouldPrompt = !connected
@@ -118,6 +132,7 @@ export function WebShell() {
       } catch (error) {
         if (isMounted) {
           setError(error instanceof Error ? error.message : localDataCopy.initializeFailed);
+          setRecoveryState('RECONNECT_REQUIRED');
           const shouldPrompt = window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
           setOnboardingOpen(shouldPrompt);
         }

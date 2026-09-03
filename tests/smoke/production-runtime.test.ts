@@ -17,9 +17,7 @@ describe('Risk 4: production build smoke', () => {
     const out = join(process.cwd(), 'out');
     if (!existsSync(out)) return;
     const hasManifest = existsSync(join(out, 'manifest.webmanifest')) || existsSync(join(out, 'manifest.json')) || existsSync(join(out, 'app', 'manifest.webmanifest'));
-    // At least one manifest or PWA check should pass; if not, warn but not fail in dev
-    if (!hasManifest) console.warn('PWA manifest not found in out — check next-pwa config');
-    expect(true).toBe(true);
+    expect(hasManifest).toBe(true);
   });
 
   it('folder picker entry exists in app bundle (production)', async () => {
