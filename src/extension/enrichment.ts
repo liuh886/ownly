@@ -74,6 +74,46 @@ export async function enrichPlaceMetadata(
     }
   }
 
+  // 1.5 If feature ID is still missing (e.g. search/?query=... pin), resolve it via Google Maps search HTML
+  if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
+    const searchUrl = next.source_url?.includes('/maps/search/')
+      ? next.source_url
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(next.title + (next.address ? ' ' + next.address : ''))}&hl=zh-CN`;
+    try {
+      logger.fetch('BackgroundEnrich', `Step 1: Resolving query pin for ${next.title}`, { searchUrl });
+      const res = await fetch(searchUrl, { credentials: 'include', signal: options?.signal });
+      if (res.ok) {
+        const html = (await res.text()).slice(0, 3_000_000);
+        const facts = extractGoogleMapsResearchFromHtml(html);
+        if (facts.sourcePlaceId) {
+          resolvedFeatureId = facts.sourcePlaceId;
+          next.source_place_id = resolvedFeatureId;
+          mutated = true;
+        }
+        if (facts.rating !== undefined) { next.observed_rating = facts.rating; mutated = true; }
+        if (facts.reviewCount !== undefined) { next.observed_review_count = facts.reviewCount; mutated = true; }
+        if (facts.category) { next.source_category = facts.category; mutated = true; }
+        if (facts.address) { next.address = facts.address; mutated = true; }
+        if (facts.phone) { next.phone = facts.phone; mutated = true; }
+        if (facts.coordinates) { next.coordinates = facts.coordinates; mutated = true; }
+        if (facts.plus_code) { next.plus_code = facts.plus_code; mutated = true; }
+        if (facts.open_hours) { next.open_hours = facts.open_hours; mutated = true; }
+        if (facts.priceLevel && !isZeroOrPlaceholderPrice(facts.priceLevel)) {
+          next.observed_price = facts.priceLevel;
+          const normalized = normalizeObservedPrice(facts.priceLevel, facts.priceCurrency);
+          if (normalized?.min !== undefined) next.price_min = normalized.min;
+          if (normalized?.max !== undefined) next.price_max = normalized.max;
+          if (normalized?.currency) next.price_currency = normalized.currency;
+          if (normalized?.level !== undefined) next.price_level = normalized.level;
+          if (normalized?.unit) next.price_unit = normalized.unit;
+          mutated = true;
+        }
+      }
+    } catch (err) {
+      logger.warn('BackgroundEnrich', `Query resolution failed for ${next.title}`, err instanceof Error ? err.message : String(err));
+    }
+  }
+
   // 2. With a verified Google feature id, fetch structured preview facts
   if (resolvedFeatureId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
     const previewUrl = googleMapsPreviewPlaceUrl(resolvedFeatureId);

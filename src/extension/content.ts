@@ -156,6 +156,20 @@ function extractPrice(): string | undefined {
     }
   }
 
+  // 4. Hotel rates and pricing comparison cards / pills in overview
+  const hotelRateEls = document.querySelectorAll<HTMLElement>(
+    'div[data-provider-name], button[data-tooltip*="价格"], div.F7nice, div[aria-label*="每晚"], span[aria-label*="每晚"], div[aria-label*="起"], span.fontHeadlineLarge, div.fontHeadlineLarge, span.fontTitleLarge, div.fontTitleLarge'
+  );
+  for (const el of Array.from(hotelRateEls)) {
+    const text = cleanExtractedText(el.getAttribute('aria-label') || el.textContent || '');
+    if (text && text.length < 50 && !/^(路线|directions|save|保存|share|分享|nearby|附近)$/i.test(text)) {
+      const cleanPrice = extractCleanPriceText(text);
+      if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice) && isValidExtractedPriceCandidate(cleanPrice)) {
+        return cleanPrice;
+      }
+    }
+  }
+
   return undefined;
 }
 
@@ -208,45 +222,43 @@ function extractUserNote(): string | undefined {
 function extractOpenStatus(): string | undefined {
   const openEl = document.querySelector<HTMLElement>(SELECTORS.openStatus);
   if (openEl?.textContent) {
-    const status = cleanExtractedText(openEl.textContent);
-    if (status && status.length < 40) return status;
+    const text = cleanExtractedText(openEl.textContent);
+    if (text && text.length < 60) return text;
   }
   return undefined;
 }
 
 function extractOpenHours(): string | undefined {
   const hoursTable = document.querySelector<HTMLElement>(SELECTORS.hoursTable);
-  if (hoursTable) {
-    const rows = Array.from(hoursTable.querySelectorAll(SELECTORS.hoursRows));
-    if (rows.length > 0) {
-      const text = cleanExtractedText(rows.map((r) => r.textContent?.replace(/\s+/g, ' ').trim()).filter(Boolean).join('; '));
-      if (text && text.length < 300) return text;
+  if (!hoursTable) {
+    const directHours = document.querySelector<HTMLElement>(SELECTORS.openStatus);
+    if (directHours) {
+      const text = cleanExtractedText(directHours.getAttribute('aria-label') || directHours.textContent || '');
+      if (text && text.length < 100 && /\d/.test(text)) return text;
     }
+    return undefined;
   }
-
-  const hoursEl = document.querySelector<HTMLElement>('div[data-item-id*="oh"]');
-  if (hoursEl) {
-    const aria = hoursEl.getAttribute('aria-label');
-    if (aria && aria.length < 300) return cleanExtractedText(aria);
-    const text = cleanExtractedText(hoursEl.textContent || '');
-    if (text && text.length < 300) return text;
+  const rows = hoursTable.querySelectorAll<HTMLElement>(SELECTORS.hoursRows);
+  const result: string[] = [];
+  for (const row of Array.from(rows)) {
+    const day = cleanExtractedText(row.querySelector('td:first-child, div:first-child')?.textContent || '');
+    const hours = cleanExtractedText(row.querySelector('td:last-child, div:last-child')?.textContent || '');
+    if (day && hours) result.push(`${day} ${hours}`);
   }
-
-  return undefined;
+  return result.length > 0 ? result.join(' | ') : undefined;
 }
 
 function extractWebsite(): string | undefined {
-  const webEl = document.querySelector<HTMLAnchorElement>(SELECTORS.website);
-  if (webEl?.href) return webEl.href;
+  const anchor = document.querySelector<HTMLAnchorElement>(SELECTORS.website);
+  if (anchor?.href && /^https?:\/\//i.test(anchor.href)) {
+    return anchor.href;
+  }
   return undefined;
 }
 
 function extractPhone(): string | undefined {
   const el = document.querySelector<HTMLElement>(SELECTORS.phone);
-  const aria = el?.getAttribute('aria-label') || '';
-  const fromAria = aria.match(/[\+]?[\d][\d\s\-()·]{6,}/);
-  if (fromAria) return normalizePhoneDisplay(fromAria[0]);
-  const href = (el as HTMLAnchorElement)?.href || document.querySelector<HTMLAnchorElement>('a[href^="tel:"]')?.href;
+  const href = el?.getAttribute('href') || el?.querySelector('a')?.getAttribute('href');
   if (href?.startsWith('tel:')) return normalizePhoneDisplay(decodeURIComponent(href.slice(4)));
   return normalizePhoneDisplay(el?.textContent || undefined);
 }
@@ -254,9 +266,27 @@ function extractPhone(): string | undefined {
 function extractPlusCode(): string | undefined {
   const el = document.querySelector<HTMLElement>(SELECTORS.plusCode);
   const text = cleanExtractedText(el?.textContent || el?.getAttribute('aria-label') || '');
-  // Plus codes look like "2VH5+XX Bangkok" or "7M3C+GP Phuket"
-  const match = /\b[A-Z0-9]{4}\+[A-Z0-9]{2,5}(?:\s+[^\n]{0,40})?/.exec(text.toUpperCase());
-  return match ? cleanExtractedText(match[0]) : undefined;
+  if (text) {
+    const match = /\b[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,5}\b/i.exec(text);
+    if (match) return match[0].toUpperCase();
+  }
+
+  // Fallback 1: Query any button/span with plus code aria-label or data-item-id
+  const candidates = document.querySelectorAll<HTMLElement>('button[data-item-id*="oloc"], button[aria-label*="code" i], button[aria-label*="代码"], span[class*="plusCode"]');
+  for (const c of Array.from(candidates)) {
+    const candText = cleanExtractedText(c.getAttribute('aria-label') || c.textContent || '');
+    const match = /\b[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,5}\b/i.exec(candText);
+    if (match) return match[0].toUpperCase();
+  }
+
+  // Fallback 2: Check address element
+  const addrEl = document.querySelector<HTMLElement>(SELECTORS.address);
+  if (addrEl?.textContent) {
+    const addrMatch = /\b[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,5}\b/i.exec(addrEl.textContent);
+    if (addrMatch) return addrMatch[0].toUpperCase();
+  }
+
+  return undefined;
 }
 
 function extractMenuLink(): string | undefined {
@@ -876,7 +906,29 @@ const savedListDetailCache = new Map<string, { at: number; facts: GoogleMapsRese
 async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<GoogleMapsResearchFacts | null> {
   const key = place.sourcePlaceId || extractFeatureIdFromUrl(place.sourceUrl);
   if (!key || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(key.trim())) {
-    logger.debug('MapsTabDetail', `Skipping detail fetch: search-query pin without 0x... feature id for "${place.title}"`);
+    const searchUrl = place.sourceUrl?.includes('/maps/search/')
+      ? place.sourceUrl
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.title + (place.address ? ' ' + place.address : ''))}&hl=zh-CN`;
+    logger.fetch('MapsTabDetail', `Resolving search-query pin for "${place.title}"`, { searchUrl });
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 6000);
+    try {
+      const res = await fetch(searchUrl, { credentials: 'include', signal: controller.signal });
+      if (res.ok) {
+        const html = (await res.text()).slice(0, 3_000_000);
+        const facts = extractGoogleMapsResearchFromHtml(html);
+        if (facts.sourcePlaceId) {
+          place.sourcePlaceId = facts.sourcePlaceId;
+          savedListDetailCache.set(facts.sourcePlaceId, { at: Date.now(), facts });
+        }
+        logger.parser('MapsTabDetail', `Resolved facts for query pin "${place.title}"`, facts);
+        return facts;
+      }
+    } catch (err) {
+      logger.warn('MapsTabDetail', `Search query resolution failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
+    } finally {
+      window.clearTimeout(timer);
+    }
     return null;
   }
   if (!place.sourcePlaceId) place.sourcePlaceId = key;

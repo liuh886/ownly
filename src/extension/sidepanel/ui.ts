@@ -1312,9 +1312,12 @@ function buildCandidateDetails(
     chk.dataset.placeId = place.id;
     wrapper.append(chk);
   }
-  // Inbox: 主显 评分/价格（含汇率换算）/kind/tags/位置
+  // Inbox: 主显 类别标签（如 🏷️ 宾馆 / 🏷️ 面馆）、评分、价格（含汇率换算）、标签、位置
   const mainParts: string[] = [];
-  if (place.kind && place.kind !== 'other') mainParts.push(`<span class="badge">${escapeHtml(place.kind)}</span>`);
+  const categoryLabel = place.source_category || (place.kind && place.kind !== 'other' ? place.kind : '');
+  if (categoryLabel) {
+    mainParts.push(`<span class="badge" title="${escapeHtml(categoryLabel)}">🏷️ ${escapeHtml(categoryLabel)}</span>`);
+  }
   if (place.observed_rating && place.observed_rating > 1.0 && place.observed_rating <= 5.0) {
     mainParts.push(`<span>★ ${place.observed_rating}</span>`);
   }
@@ -1340,13 +1343,12 @@ function buildCandidateDetails(
   }
   details.innerHTML = mainParts.join(' ');
 
-  // Extra details — source_category / plus_code / menu / reservation / duration / review_topics / signals / risks / notes
+  // Extra details — plus_code / menu / reservation / duration / review_topics / open_hours emoji / phone emoji / signals / risks / notes
   const extra = document.createElement('div');
   extra.className = 'candidate-extra';
   extra.style.display = 'block';
   const extraParts: string[] = [];
-  if (place.source_category) extraParts.push(`<span class="badge" title="${escapeHtml(place.source_category)}">🏷️ ${escapeHtml(place.source_category)}</span>`);
-  if (place.plus_code) extraParts.push(`<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`);
+  if (place.plus_code) extraParts.push(`<span class="badge" title="Plus Code: ${escapeHtml(place.plus_code)}">➕ ${escapeHtml(place.plus_code)}</span>`);
   const safeMenuUrl = sanitizeSafeHref(place.menu_url);
   if (safeMenuUrl) extraParts.push(`<a href="${escapeHtml(safeMenuUrl)}" target="_blank" rel="noreferrer" class="badge">${escapeHtml(dict.menuBadge)}</a>`);
   const safeResUrl = sanitizeSafeHref(place.reservation_url);
@@ -1355,7 +1357,10 @@ function buildCandidateDetails(
     extraParts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
   }
   if (place.open_hours) {
-    extraParts.push(`<span class="badge" title="${escapeHtml(place.open_hours)}">🕒 ${escapeHtml(place.open_hours)}</span>`);
+    extraParts.push(`<span class="badge" title="${escapeHtml(place.open_hours)}">🕒</span>`);
+  }
+  if (place.phone) {
+    extraParts.push(`<a href="tel:${escapeHtml(place.phone)}" class="badge" title="${escapeHtml(place.phone)}">📞</a>`);
   }
   if (place.duration_minutes) extraParts.push(`<span>⏱️ ${place.duration_minutes}m</span>`);
   if (place.tags.length > 2) extraParts.push(`<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`);

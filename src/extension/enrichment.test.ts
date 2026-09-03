@@ -120,9 +120,28 @@ describe('enrichPlaceMetadata', () => {
     expect(result.enriched).toBe(false);
   });
 
-  it('does not resolve Place ID or fetch facts from a title-only Google search URL', async () => {
+  it('resolves Place ID and facts from a Google search query URL', async () => {
     const originalFetch = global.fetch;
-    const fetchSpy = vi.fn();
+    const searchHtml = `
+      <!doctype html>
+      <html>
+        <head>
+          <title>Same Name Airport - Google Maps</title>
+          <meta property="og:title" content="Same Name Airport · 222 Airport Rd, Bangkok 10200">
+          <meta property="og:description" content="★ 4.6 (12,345) · 国际机场 · 222 Airport Rd">
+          <link rel="canonical" href="https://www.google.com/maps/place/Same+Name+Airport/@13.69,100.75,17z/data=!4m6!3m5!1s0x311d6032280d61f3:0x1010101010101010!8m2!3d13.69!4d100.75">
+        </head>
+        <body>
+          <script>window.APP_INITIALIZATION_STATE=[null,null,null,["0x311d6032280d61f3:0x1010101010101010"]]</script>
+        </body>
+      </html>
+    `;
+    const fetchSpy = vi.fn().mockImplementation(() => {
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(searchHtml),
+      });
+    });
     global.fetch = fetchSpy as unknown as typeof fetch;
     try {
       const place: PlannerTripPlace = {
@@ -133,9 +152,11 @@ describe('enrichPlaceMetadata', () => {
         reservation_status: 'none', state: 'candidate', created_at: '2026-08-30T00:00:00Z',
       };
       const result = await enrichPlaceMetadata(place);
-      expect(result.enriched).toBe(false);
-      expect(result.place.source_place_id).toBeUndefined();
-      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(result.enriched).toBe(true);
+      expect(result.place.source_place_id).toBe('0x311d6032280d61f3:0x1010101010101010');
+      expect(result.place.observed_rating).toBe(4.6);
+      expect(result.place.observed_review_count).toBe(12345);
+      expect(fetchSpy).toHaveBeenCalled();
     } finally {
       global.fetch = originalFetch;
     }

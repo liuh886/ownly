@@ -183,11 +183,11 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
     }
   }
 
-  // Plus Code from address string (e.g. "QXPP+QCQ Bangkok")
+  // Plus Code from address string (e.g. "QXPP+QCQ Bangkok" or "MPVW+8V8 Pattaya City")
   if (result.address) {
-    const plusMatch = /^[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,3}/i.exec(result.address);
+    const plusMatch = /\b[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,5}\b/i.exec(result.address);
     if (plusMatch) {
-      result.plus_code = plusMatch[0];
+      result.plus_code = plusMatch[0].toUpperCase();
     }
   }
 
@@ -459,6 +459,22 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
         }
       }
     } catch {}
+  }
+  // Extract Google feature ID (0x...:0x...) if present in HTML
+  if (!result.sourcePlaceId) {
+    const featMatch = /!1s(0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{6,})/.exec(html)
+      || /(0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{6,})/.exec(html);
+    if (featMatch) {
+      result.sourcePlaceId = featMatch[1] || featMatch[0];
+    }
+  }
+
+  // Plus Code from address or HTML text
+  if (!result.plus_code && result.address) {
+    const plusMatch = /\b[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,5}\b/i.exec(result.address);
+    if (plusMatch) {
+      result.plus_code = plusMatch[0].toUpperCase();
+    }
   }
 
   if (types.size > 0) result.types = [...types];
