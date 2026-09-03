@@ -93,6 +93,7 @@ export type ElementMap = {
   sumDebugDrawer: HTMLElement;
   btnCopyDebugLogs: HTMLButtonElement;
   btnExportDiagnostics: HTMLButtonElement;
+  btnCopyAIDiagnostics: HTMLButtonElement;
   btnClearDebugLogs: HTMLButtonElement;
   debugLogViewer: HTMLElement;
   importReportBanner: HTMLElement;
@@ -204,6 +205,7 @@ export const el: ElementMap = {
   sumDebugDrawer: required('sumDebugDrawer'),
   btnCopyDebugLogs: required<HTMLButtonElement>('btnCopyDebugLogs'),
   btnExportDiagnostics: required<HTMLButtonElement>('btnExportDiagnostics'),
+  btnCopyAIDiagnostics: required<HTMLButtonElement>('btnCopyAIDiagnostics'),
   btnClearDebugLogs: required<HTMLButtonElement>('btnClearDebugLogs'),
   debugLogViewer: required('debugLogViewer'),
   importReportBanner: required('importReportBanner'),

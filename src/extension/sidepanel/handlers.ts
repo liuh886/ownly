@@ -582,6 +582,37 @@ export function initHandlers(): void {
     });
   });
 
+  el.btnCopyAIDiagnostics.addEventListener('click', async () => {
+    const inbox = store.getInboxCollection();
+    const inboxPlaces = store.getInboxPlaces();
+    const bundle = {
+      hint: 'Copy this JSON and paste to AI for diagnosis — contains Inbox, Capture state, and logs',
+      exportedAt: new Date().toISOString(),
+      extension: { title: document.title, url: location.href, userAgent: navigator.userAgent },
+      captureStateV3: {
+        active_collection_id: store.stateV3.active_collection_id,
+        collections: store.stateV3.collections,
+        places: inboxPlaces.slice(0, 20),
+        places_total: inboxPlaces.length,
+        inbox: inbox ? { id: inbox.id, title: inbox.title } : null,
+        planner_target: store.stateV3.planner_target,
+      },
+      inboxSample: inboxPlaces.slice(0, 10).map((p) => ({ id: p.id, title: p.title, source: p.source, address: p.address, collection_id: p.collection_id })),
+      activeCollection: getActiveCollection() ? { id: getActiveCollection()!.id, title: getActiveCollection()!.title } : null,
+      detectedSavedList: store.detectedSavedList ? { listName: store.detectedSavedList.listName, placeCount: store.detectedSavedList.places.length, placesSample: store.detectedSavedList.places.slice(0, 5).map((p) => ({ title: p.title, sourceUrl: p.sourceUrl, sourcePlaceId: p.sourcePlaceId })) } : null,
+      currentPlace: store.currentPlace ? { title: store.currentPlace.title, sourceUrl: store.currentPlace.sourceUrl, sourcePlaceId: store.currentPlace.sourcePlaceId, category: store.currentPlace.category } : null,
+      storage: { lang: store.lang, pageDetectedCurrency: store.pageDetectedCurrency, mapCurrencyOverride: store.mapCurrencyOverride },
+      logs: logger.getLogs().slice(-80),
+    };
+    const text = JSON.stringify(bundle, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus(store.lang === 'zh' ? '🤖 AI 诊断包已复制，直接粘贴发给 AI 即可。' : '🤖 AI diagnostics copied — paste to AI.', 'success');
+    } catch {
+      window.prompt(store.lang === 'zh' ? '复制 AI 诊断包：' : 'Copy AI diagnostics:', text);
+    }
+  });
+
   el.btnExportDiagnostics.addEventListener('click', () => {
     const collection = getActiveCollection();
     const places = getActivePlaces();
