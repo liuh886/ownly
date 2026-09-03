@@ -219,26 +219,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const deletedIds = Array.isArray(rawDeleted)
       ? new Set(rawDeleted.filter((id): id is string => typeof id === 'string'))
       : undefined;
-    logger.info('Background', 'CAPTURE_SAVE_STATE_V3', { incomingPlaces: incoming.places.length, deletedIds: deletedIds?.size ?? 0, activeCollection: incoming.active_collection_id });
+    const rawDeletedCols = (message as { locallyDeletedCollectionIds?: unknown }).locallyDeletedCollectionIds;
+    const deletedColIds = Array.isArray(rawDeletedCols)
+      ? new Set(rawDeletedCols.filter((id): id is string => typeof id === 'string'))
+      : undefined;
+    logger.info('Background', 'CAPTURE_SAVE_STATE_V3', { incomingPlaces: incoming.places.length, deletedIds: deletedIds?.size ?? 0, deletedCols: deletedColIds?.size ?? 0, activeCollection: incoming.active_collection_id });
     void mutateCaptureStateV3InWorker((current) => {
-      // 1. Collections: merge by ID, incoming takes precedence for active/updated metadata
+      // 1. Collections: respect tombstones for deleted collections
       const colMap = new Map(current.collections.map((c) => [c.id, c]));
       for (const col of incoming.collections) {
+        if (deletedColIds?.has(col.id)) continue;
         colMap.set(col.id, col);
+      }
+      // Remove tombstoned collections from merged result
+      if (deletedColIds) {
+        for (const delId of deletedColIds) colMap.delete(delId);
       }
       const mergedCollections = Array.from(colMap.values());
 
       // 2. Places: incoming edits take precedence; keep non-incoming current places (excluding deleted)
       const incomingMap = new Map(incoming.places.map((p) => [p.id, p]));
       const preservedCurrent = current.places
-        .filter((p) => (!deletedIds || !deletedIds.has(p.id)) && !incomingMap.has(p.id));
+        .filter((p) => (!deletedIds || !deletedIds.has(p.id)) && !incomingMap.has(p.id) && (!deletedColIds || !deletedColIds.has(p.collection_id)));
       const validIncoming = incoming.places
-        .filter((p) => !deletedIds || !deletedIds.has(p.id));
+        .filter((p) => (!deletedIds || !deletedIds.has(p.id)) && (!deletedColIds || !deletedColIds.has(p.collection_id)));
 
       const mergedPlaces = [...preservedCurrent, ...validIncoming];
+      // Ensure active_collection_id points to existing collection
+      const activeId = incoming.active_collection_id || current.active_collection_id;
+      const activeExists = mergedCollections.some((c) => c.id === activeId);
+      const fallbackActive = mergedCollections[0]?.id;
       const merged: OwnlyCaptureStateV3 = {
         version: 3,
-        active_collection_id: incoming.active_collection_id || current.active_collection_id,
+        active_collection_id: activeExists ? activeId : fallbackActive,
         collections: mergedCollections,
         places: mergedPlaces,
         planner_target: incoming.planner_target || current.planner_target,

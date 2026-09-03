@@ -91,6 +91,7 @@ export const store = {
   pageDetectedCurrency: undefined as string | undefined,
   mapCurrencyOverride: undefined as string | undefined,
   locallyDeletedIds: new Set<string>(),
+  locallyDeletedCollectionIds: new Set<string>(),
   userDismissedPlaceUrl: null as string | null,
   smartListDismissed: false,
   smartListKey: '' as string,
@@ -200,6 +201,7 @@ export const store = {
     const remainingCols = this.stateV3.collections.filter((c) => c.id !== id);
     const remainingPlaces = this.stateV3.places.filter((p) => p.collection_id !== id);
     const nextActiveId = inbox?.id || remainingCols[0]?.id || `inbox-${Date.now()}`;
+    this.locallyDeletedCollectionIds.add(id);
     this.setState({
       ...this.stateV3,
       collections: remainingCols,
@@ -279,12 +281,13 @@ export function getExistingPlaceForUrl(sourceUrl: string, sourcePlaceId?: string
 /** Save V3 state via worker. */
 export async function saveState(): Promise<void> {
   const started = Date.now();
-  const payload = { places: store.stateV3.places.length, collections: store.stateV3.collections.length, deleted: store.locallyDeletedIds.size };
+  const payload = { places: store.stateV3.places.length, collections: store.stateV3.collections.length, deleted: store.locallyDeletedIds.size, deletedCols: store.locallyDeletedCollectionIds.size };
   logger.debug('Store', 'saveState → worker', payload);
   try {
-    const viaWorker = await saveCaptureStateV3ViaWorker(store.stateV3, store.locallyDeletedIds);
+    const viaWorker = await saveCaptureStateV3ViaWorker(store.stateV3, store.locallyDeletedIds, store.locallyDeletedCollectionIds);
     store.setState(viaWorker.state);
     store.locallyDeletedIds.clear();
+    store.locallyDeletedCollectionIds.clear();
     logger.info('Store', 'saveState persisted', { ...payload, ms: Date.now() - started, afterPlaces: viaWorker.state.places.length });
   } catch (error) {
     logger.error('Store', 'Failed to persist capture state', { error: error instanceof Error ? error.stack || error.message : String(error), payload });

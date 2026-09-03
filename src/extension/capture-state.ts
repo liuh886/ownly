@@ -229,11 +229,13 @@ async function sendWorkerV3<T>(message: Record<string, unknown>): Promise<Worker
 export async function saveCaptureStateV3ViaWorker(
   next: OwnlyCaptureStateV3,
   locallyDeletedIds?: ReadonlySet<string>,
+  locallyDeletedCollectionIds?: ReadonlySet<string>,
 ): Promise<{ ok: true; state: OwnlyCaptureStateV3 }> {
   const response = await sendWorkerV3<void>({
     type: 'CAPTURE_SAVE_STATE_V3',
     state: next,
     locallyDeletedIds: locallyDeletedIds ? [...locallyDeletedIds] : [],
+    locallyDeletedCollectionIds: locallyDeletedCollectionIds ? [...locallyDeletedCollectionIds] : [],
   });
   if (!response.state) throw new Error('Capture worker returned no state');
   return { ok: true, state: response.state };
