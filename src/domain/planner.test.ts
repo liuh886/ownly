@@ -14,6 +14,7 @@ import {
   extractPlaceCoordinates,
   extractPriceCurrency,
   findExistingTripPlace,
+  formatPlacePriceInTripCurrency,
   haversineDistanceKm,
   inferPlaceKind,
   inferSourceProvider,
@@ -1326,6 +1327,30 @@ describe('exportTripToMarkdown', () => {
       const watPair = pairs.find((p) => p.primaryPlace.title.includes('Trai') && p.secondaryPlace.title.includes('Trai'));
       expect(watPair).toBeDefined();
       expect(watPair?.distanceMeters).toBeLessThan(50);
+    });
+  });
+
+  describe('formatPlacePriceInTripCurrency', () => {
+    it('returns raw price if currency matches trip base currency', () => {
+      const p = { observed_price: '¥50', price_currency: 'CNY' };
+      expect(formatPlacePriceInTripCurrency(p, 'CNY')).toBe('¥50');
+    });
+
+    it('converts foreign price into trip currency with dual-currency display', () => {
+      const p = { observed_price: '฿200', price_currency: 'THB', price_min: 200 };
+      const formatted = formatPlacePriceInTripCurrency(p, 'CNY');
+      expect(formatted).toContain('约 ¥');
+      expect(formatted).toContain('(฿200)');
+    });
+
+    it('converts price ranges with dual-currency display', () => {
+      const p = { observed_price: '฿200–400', price_currency: 'THB', price_min: 200, price_max: 400 };
+      const formatted = formatPlacePriceInTripCurrency(p, 'CNY');
+      expect(formatted).toMatch(/^约 ¥\d+–\d+ \(฿200–400\)$/);
+    });
+
+    it('returns empty string if no price information exists', () => {
+      expect(formatPlacePriceInTripCurrency({}, 'CNY')).toBe('');
     });
   });
 });

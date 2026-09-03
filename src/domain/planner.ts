@@ -1571,6 +1571,79 @@ export function getCurrencyDecimals(code?: string | null): number {
   return CURRENCY_DECIMAL_DIGITS[upper] ?? 2;
 }
 
+/**
+ * Formats a place's price for display in Planner UI:
+ * - If the price currency matches the trip base currency, returns the raw observed_price.
+ * - If the currency is different (e.g. THB vs trip CNY), converts the amount using effectiveFxRate
+ *   and outputs a dual-currency format: e.g. "约 ¥42 (฿200)" or "约 ¥41–83 (฿200–400)".
+ */
+export function formatPlacePriceInTripCurrency(
+  place: {
+    observed_price?: string;
+    price_currency?: string;
+    price_min?: number;
+    price_max?: number;
+  },
+  tripCurrency = 'CNY',
+  fxOverrides?: Record<string, number>,
+): string {
+  const raw = place.observed_price?.trim();
+  if (!raw && typeof place.price_min !== 'number' && typeof place.price_max !== 'number') {
+    return '';
+  }
+
+  const base = (tripCurrency || 'CNY').trim().toUpperCase();
+  const sourceCurrency = (place.price_currency || extractPriceCurrency(raw) || '').trim().toUpperCase();
+
+  // If no currency is identifiable or it matches the trip base currency, display raw price
+  if (!sourceCurrency || sourceCurrency === base) {
+    return raw || (typeof place.price_min === 'number' ? `${currencySymbolFor(base)}${place.price_min}` : '');
+  }
+
+  const rate = effectiveFxRate(sourceCurrency, { base, overrides: fxOverrides });
+  if (rate === null || rate <= 0) {
+    return raw || '';
+  }
+
+  const baseSymbol = currencySymbolFor(base);
+
+  // If price_min and price_max are available
+  if (typeof place.price_min === 'number' && typeof place.price_max === 'number') {
+    const minConverted = Math.round(place.price_min * rate);
+    const maxConverted = Math.round(place.price_max * rate);
+    const convertedStr = minConverted === maxConverted ? `${baseSymbol}${minConverted}` : `${baseSymbol}${minConverted}–${maxConverted}`;
+    return raw ? `约 ${convertedStr} (${raw})` : `约 ${convertedStr}`;
+  }
+
+  if (typeof place.price_min === 'number') {
+    const minConverted = Math.round(place.price_min * rate);
+    return raw ? `约 ${baseSymbol}${minConverted} (${raw})` : `约 ${baseSymbol}${minConverted}`;
+  }
+
+  // Parse numeric ranges from raw observed_price (e.g. "฿200–400", "฿150/晚")
+  const matchRange = /(\d[\d.,]*)\s*[-–—〜~至到]\s*(\d[\d.,]*)/.exec(raw || '');
+  if (matchRange) {
+    const n1 = parseFloat(matchRange[1].replace(/,/g, ''));
+    const n2 = parseFloat(matchRange[2].replace(/,/g, ''));
+    if (Number.isFinite(n1) && Number.isFinite(n2)) {
+      const c1 = Math.round(n1 * rate);
+      const c2 = Math.round(n2 * rate);
+      return `约 ${baseSymbol}${c1}–${c2} (${raw})`;
+    }
+  }
+
+  const matchSingle = /(\d[\d.,]*)/.exec(raw || '');
+  if (matchSingle) {
+    const n = parseFloat(matchSingle[1].replace(/,/g, ''));
+    if (Number.isFinite(n)) {
+      const c = Math.round(n * rate);
+      return `约 ${baseSymbol}${c} (${raw})`;
+    }
+  }
+
+  return raw || '';
+}
+
 export const PLANNER_KIND_ICONS: Record<PlannerPlaceKind, string> = {
   attraction: '🏰',
   food: '🍜',

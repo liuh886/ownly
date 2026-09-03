@@ -79,7 +79,7 @@ export const I18N = {
     btnUpdateCandidate: '💾 保存修改',
     btnRemoveCandidate: '🗑️ 移出',
     candidateRemoved: '已从 Inbox 移出。',
-    drawerTitle: '📥 Inbox · 待整理',
+    drawerTitle: '📥 Inbox',
     searchPlaceholder: '🔍 搜索候选地点、区域或标签...',
     allFilter: '全部',
     mustFilter: '必去 (Must)',

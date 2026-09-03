@@ -24,13 +24,8 @@ export type ElementMap = {
   lblBulkText: HTMLElement;
   bulkInputText: HTMLTextAreaElement;
   btnParseBulkImport: HTMLButtonElement;
-  btnShareCollection: HTMLButtonElement;
-  btnBackupState: HTMLButtonElement;
-  btnRestoreState: HTMLButtonElement;
-  fileRestoreState: HTMLInputElement;
   btnBulkToggle: HTMLButtonElement;
   btnEnrichCandidates: HTMLButtonElement;
-  btnImportToPlanner: HTMLButtonElement;
   bulkActionBar: HTMLElement;
   bulkPrioritySelect: HTMLSelectElement;
   btnSelectAllCandidates: HTMLButtonElement;
@@ -142,13 +137,8 @@ export const el: ElementMap = {
   lblBulkText: required('lblBulkText'),
   bulkInputText: required<HTMLTextAreaElement>('bulkInputText'),
   btnParseBulkImport: required<HTMLButtonElement>('btnParseBulkImport'),
-  btnShareCollection: required<HTMLButtonElement>('btnShareCollection'),
-  btnBackupState: required<HTMLButtonElement>('btnBackupState'),
-  btnRestoreState: required<HTMLButtonElement>('btnRestoreState'),
-  fileRestoreState: required<HTMLInputElement>('fileRestoreState'),
   btnBulkToggle: required<HTMLButtonElement>('btnBulkToggle'),
   btnEnrichCandidates: required<HTMLButtonElement>('btnEnrichCandidates'),
-  btnImportToPlanner: required<HTMLButtonElement>('btnImportToPlanner'),
   bulkActionBar: required('bulkActionBar'),
   bulkPrioritySelect: required<HTMLSelectElement>('bulkPrioritySelect'),
   btnSelectAllCandidates: required<HTMLButtonElement>('btnSelectAllCandidates'),

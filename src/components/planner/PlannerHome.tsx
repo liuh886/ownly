@@ -20,6 +20,7 @@ import {
   exportPlacesToKML,
   exportTripToMarkdown,
   extractPlaceCoordinates,
+  formatPlacePriceInTripCurrency,
   getPlannerKindLabel,
   getTripAreaCounts,
   haversineDistanceKm,
@@ -1771,9 +1772,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 ★ {place.observed_rating}
                               </span>
                             ) : null}
-                            {place.observed_price ? (
+                            {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
                               <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
-                                {place.observed_price}
+                                {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
                               </span>
                             ) : null}
                             {place.priority === 'must' ? (
@@ -2425,9 +2426,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               ★ {place.observed_rating}
                             </span>
                           ) : null}
-                          {place.observed_price ? (
+                          {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
                             <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
-                              {place.observed_price}
+                              {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
                             </span>
                           ) : null}
                           {place.source_category ? (
@@ -2593,7 +2594,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         activeDayIndex={activeDayIndex}
         onSelectHotelForStaySpan={handleSelectHotelForStaySpan}
         onDropHotel={handleDropPlace}
-        onHoverHotel={setHighlightedPlaceId}
+        tripCurrency={selectedTrip?.currency || 'CNY'}
+        fxRates={selectedTrip?.fx_rates}
         language={language}
       />
 
@@ -2731,8 +2733,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           {pair.primaryPlace.observed_rating ? (
                             <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">★ {pair.primaryPlace.observed_rating}</span>
                           ) : null}
-                          {pair.primaryPlace.observed_price ? (
-                            <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">{pair.primaryPlace.observed_price}</span>
+                          {formatPlacePriceInTripCurrency(pair.primaryPlace, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
+                            <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">{formatPlacePriceInTripCurrency(pair.primaryPlace, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}</span>
                           ) : null}
                         </div>
                       </div>
@@ -2761,8 +2763,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           {pair.secondaryPlace.observed_rating ? (
                             <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">★ {pair.secondaryPlace.observed_rating}</span>
                           ) : null}
-                          {pair.secondaryPlace.observed_price ? (
-                            <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">{pair.secondaryPlace.observed_price}</span>
+                          {formatPlacePriceInTripCurrency(pair.secondaryPlace, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
+                            <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">{formatPlacePriceInTripCurrency(pair.secondaryPlace, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}</span>
                           ) : null}
                         </div>
                       </div>

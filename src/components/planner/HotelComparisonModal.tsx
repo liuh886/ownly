@@ -5,6 +5,7 @@ import type { PlannerScheduledPlace, PlannerTripPlace } from '@/domain/planner';
 import {
   calculateHotelProximity,
   calculateMultiDayHotelProximity,
+  formatPlacePriceInTripCurrency,
 } from '@/domain/planner';
 
 interface HotelComparisonModalProps {
@@ -16,6 +17,8 @@ interface HotelComparisonModalProps {
   tripDates?: string[];
   activeDate: string;
   activeDayIndex: number;
+  tripCurrency?: string;
+  fxRates?: Record<string, number>;
   onSelectHotelForStaySpan: (hotel: PlannerTripPlace, stayDates: string[]) => void;
   onDropHotel: (hotelId: string) => void;
   onHoverHotel?: (hotelId: string | null) => void;
@@ -31,6 +34,8 @@ export function HotelComparisonModal({
   tripDates = [],
   activeDate,
   activeDayIndex,
+  tripCurrency = 'CNY',
+  fxRates,
   onSelectHotelForStaySpan,
   onDropHotel,
   onHoverHotel,
@@ -227,7 +232,7 @@ export function HotelComparisonModal({
                       <div className="mt-3 flex items-center justify-between rounded-lg bg-stone-50 p-2.5 text-xs">
                         <span className="text-stone-500">{zh ? '抓取参考价' : 'Reference Price'}</span>
                         <strong className="text-emerald-700 font-semibold">
-                          {hotel.observed_price || (zh ? '暂无价格' : 'N/A')}
+                          {formatPlacePriceInTripCurrency(hotel, tripCurrency, fxRates) || (zh ? '暂无价格' : 'N/A')}
                         </strong>
                       </div>
 
