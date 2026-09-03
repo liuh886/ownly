@@ -1764,48 +1764,23 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             </div>
                           </div>
 
-                          {/* Meta & Fact Tags */}
+                          {/* Clean Meta Line & Price (minimal, no tags, star ratings, or categories) */}
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-500">
-                            <span>{placeMeta(place, language)}</span>
-                            {place.observed_rating ? (
-                              <span className="rounded-full bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-800">
-                                ★ {place.observed_rating}
-                              </span>
-                            ) : null}
+                            {placeMeta(place, language) ? <span>{placeMeta(place, language)}</span> : null}
                             {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
                               <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
                                 {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
                               </span>
                             ) : null}
-                            {place.priority === 'must' ? (
-                              <span className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-800">
-                                🎯 {zh ? '必去' : 'Must'}
-                              </span>
-                            ) : null}
-                            {place.tags.map((tag) => (
-                              <span key={tag} className="rounded-full border border-stone-200 bg-stone-50 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
-                                🏷️ {tag}
-                              </span>
-                            ))}
-                            {place.signals?.map((signal) => (
-                              <span key={signal} className="rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.2 text-[9.5px] font-medium text-teal-800">
-                                ✅ {signal}
-                              </span>
-                            ))}
-                            {place.risks?.map((risk) => (
-                              <span key={risk} className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.2 text-[9.5px] font-medium text-amber-800">
-                                ⚠️ {risk}
-                              </span>
-                            ))}
                           </div>
 
-                          {/* Quick Action External Links */}
+                          {/* Quick Action External Links (Map retains only emoji) */}
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
                             {place.phone ? (
                               <a
                                 href={`tel:${place.phone}`}
                                 className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
-                                title={zh ? '拨打官方电话' : 'Call'}
+                                title={zh ? `拨打官方电话: ${place.phone}` : `Call: ${place.phone}`}
                               >
                                 📞
                               </a>
@@ -1818,7 +1793,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
                                 title={zh ? '查看官方菜单' : 'Menu'}
                               >
-                                📖 {zh ? '菜单' : 'Menu'}
+                                📖
                               </a>
                             ) : null}
                             {place.reservation_url ? (
@@ -1829,7 +1804,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-bold text-amber-900 hover:bg-amber-100 transition shadow-2xs"
                                 title={zh ? '官方预订' : 'Reserve'}
                               >
-                                🎟️ {zh ? '官方预订' : 'Reserve'}
+                                🎟️
                               </a>
                             ) : null}
                             {place.source_url ? (
@@ -1840,7 +1815,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
                                 title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
                               >
-                                🗺️ {zh ? '地图' : 'Maps'}
+                                🗺️
                               </a>
                             ) : null}
                           </div>
@@ -2495,17 +2470,17 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               🎟️ {zh ? '预订' : 'Reserve'}
                             </a>
                           ) : null}
-                          {place.source_url ? (
-                            <a
-                              href={place.source_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
-                              title={zh ? '地图' : 'Maps'}
-                            >
-                              🗺️ {zh ? '地图' : 'Maps'}
-                            </a>
-                          ) : null}
+                            {place.source_url ? (
+                              <a
+                                href={place.source_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
+                              >
+                                🗺️
+                              </a>
+                            ) : null}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {place.state === 'dropped' ? (
