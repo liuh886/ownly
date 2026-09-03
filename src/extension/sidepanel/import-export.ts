@@ -28,8 +28,25 @@ export function setupImportExportHandlers(): void {
       await navigator.clipboard.writeText(url);
       setStatus(store.lang === 'zh' ? '分享链接已复制到剪贴板。' : 'Share link copied to clipboard.', 'success');
     } catch {
-      // Fallback: prompt
       window.prompt(store.lang === 'zh' ? '复制分享链接：' : 'Copy share link:', url);
+    }
+  });
+
+  el.btnImportToPlanner.addEventListener('click', async () => {
+    const collection = getActiveCollection();
+    const allPlaces = getActivePlaces();
+    const places = store.bulkMode && store.bulkSelected.size > 0 ? allPlaces.filter((p) => store.bulkSelected.has(p.id)) : allPlaces;
+    if (!places.length) {
+      setStatus(store.lang === 'zh' ? '没有可导入的地点。' : 'No places to import.', 'error');
+      return;
+    }
+    if (!collection) return;
+    const payload = JSON.stringify({ schema: 'ownly.capture.collection', version: 1, exported_at: new Date().toISOString(), collection: { id: collection.id, title: collection.title, place_count: places.length }, places }, null, 2);
+    try {
+      await navigator.clipboard.writeText(payload);
+      setStatus(store.lang === 'zh' ? `已复制 ${places.length} 个地点，去 Planner 行程管理 → 导入 粘贴即可。` : `Copied ${places.length} places — paste in Planner Trip Management Import.`, 'success');
+    } catch {
+      window.prompt(store.lang === 'zh' ? '复制以下 JSON 并在 Planner 行程管理导入：' : 'Copy JSON and import in Planner:', payload);
     }
   });
 

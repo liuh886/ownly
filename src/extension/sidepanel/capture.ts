@@ -159,6 +159,9 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   renderCurrentPlace();
   renderSmartListCard();
   renderCurrencyPill();
+  // PR-A 回退：有当前地点或列表时自动展开 添加收藏 面板，确保预览可见
+  const addPanel = document.getElementById('addPanel') as HTMLDetailsElement | null;
+  if (addPanel && (store.currentPlace || (store.detectedSavedList?.places.length ?? 0) > 0)) addPanel.open = true;
 
   // Auto-capture price from page if place exists in collection
   if (store.currentPlace?.priceLevel) {
