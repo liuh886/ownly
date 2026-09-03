@@ -896,8 +896,15 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
     try {
       const res = await fetch(searchUrl, { credentials: 'include', signal: controller.signal });
       if (res.ok) {
+        // DEBUG B→A: log final redirected URL — it often already contains 0x after Google redirect
+        const finalUrl = res.url || searchUrl;
+        const urlPlaceId = extractFeatureIdFromUrl(finalUrl) || (/ChIJ[A-Za-z0-9_-]{8,}/.exec(finalUrl)?.[0]);
+        logger.debug('MapsTabDetail', `Search fetch res.url for "${place.title}"`, { searchUrl, finalUrl: finalUrl.slice(0, 180), urlPlaceId: urlPlaceId || null, has0xInUrl: /0x/.test(finalUrl), hasChIJInUrl: /ChIJ/.test(finalUrl) });
         const html = (await res.text()).slice(0, 3_000_000);
         let facts = extractGoogleMapsResearchFromHtml(html);
+        // If html scan missed but URL already has id, prefer URL — this is the B→A conversion
+        if (!facts.sourcePlaceId && urlPlaceId) facts.sourcePlaceId = urlPlaceId;
+        logger.debug('MapsTabDetail', `Search HTML snippet for "${place.title}"`, { htmlHas0x: /0x[0-9a-f]+:0x[0-9a-f]+/i.test(html), htmlHasChIJ: /ChIJ/.test(html), htmlLen: html.length, htmlHead: html.slice(0, 500).replace(/\s+/g, ' ').slice(0, 200) });
         const placeId = facts.sourcePlaceId;
         if (placeId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(placeId.trim())) {
           place.sourcePlaceId = placeId;

@@ -18,6 +18,7 @@ import {
   googleMapsDetailUrlFromSourceId,
   type GoogleMapsResearchFacts,
 } from '../google-maps-research';
+import { logger } from '../logger';
 
 // ------------------------------------------------------------------
 // Public contracts — user requested shape
@@ -227,17 +228,20 @@ export function buildFromEntityList(input: EntityListParseInput): SavedListResul
   for (const item of input.rawItems) {
     if (!Array.isArray(item)) {
       failed.push({ reason: 'invalid item shape' });
+      logger.debug('EntityRaw', 'invalid shape', { raw: JSON.stringify(item).slice(0, 800) });
       continue;
     }
     const placeInfo = (item as unknown[])[1];
     const rawTitle = (item as unknown[])[2] || (placeInfo && (placeInfo as unknown[])[2]);
     if (!rawTitle || typeof rawTitle !== 'string') {
       failed.push({ reason: 'no title' });
+      logger.debug('EntityRaw', 'no title raw', { raw: JSON.stringify(item).slice(0, 1000) });
       continue;
     }
     const title = cleanExtractedText(rawTitle);
     if (!title || isJunkNavigationText(title) || isFakePlaceLabel(title)) {
       failed.push({ reason: !title ? 'no title' : 'junk/fake', rawTitle: rawTitle.slice(0, 40) });
+      logger.debug('EntityRaw', 'junk/fake', { title: rawTitle.slice(0, 40), raw: JSON.stringify(item).slice(0, 1000) });
       continue;
     }
     const rawAddress = placeInfo ? (placeInfo as unknown[])[4] : undefined;
@@ -253,6 +257,16 @@ export function buildFromEntityList(input: EntityListParseInput): SavedListResul
     const detectedCurrency = detectCurrencyForPlace(input.listUrl, priceLevel, undefined, input.overrideCurrency);
     const kind = inferPlaceKind((category || '') + ' ' + title + ' ' + (address || ''));
 
+    // Debug: B→A gap — log when entity has no featureId so we can capture ChIJ/!1s form
+    if (!sourcePlaceId) {
+      logger.debug('EntityRaw', 'no featureId — B candidate', {
+        title,
+        rawSnippet: JSON.stringify(item).slice(0, 1200),
+        hasChIJ: /ChIJ/.test(JSON.stringify(item)),
+        has0x: /0x/.test(JSON.stringify(item)),
+        hasBigIntPair: /\d{15,}/.test(JSON.stringify(item)),
+      });
+    }
     const cand: SavedPlaceCandidate = {
       title,
       url: sourceUrl,
@@ -277,6 +291,7 @@ export function buildFromEntityList(input: EntityListParseInput): SavedListResul
     places.push(cand);
   }
 
+  logger.debug('EntitySummary', 'buildFromEntityList done', { rawCount: input.rawItems.length, success: places.length, coverage, failed: failed.slice(0, 5) });
   return { places, coverage, rawCount: input.rawItems.length, failed };
 }
 
