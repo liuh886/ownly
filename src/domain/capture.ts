@@ -114,6 +114,15 @@ export const EMPTY_CAPTURE_STATE_V3: OwnlyCaptureStateV3 = {
   places: [],
 };
 
+export const DEFAULT_INBOX_TITLE = 'Inbox';
+
+export function ensureInboxCollection(state: OwnlyCaptureStateV3): OwnlyCaptureStateV3 {
+  if (state.collections.length > 0) return state;
+  const now = new Date().toISOString();
+  const inbox: CaptureCollection = { id: `inbox-${Date.now()}`, title: DEFAULT_INBOX_TITLE, created_at: now };
+  return { ...state, collections: [inbox], active_collection_id: inbox.id };
+}
+
 // ─── Collection Export (portable JSON) ───────────────────────────────────────
 // 权限边界（P0）：Collection 是「地点集合」，Trip 是「个人执行计划」
 // 分享 Collection 时：

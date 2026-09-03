@@ -1,6 +1,6 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { readCaptureStateV3, saveCaptureStateV3ViaWorker, writeCaptureStateV3 } from '../capture-state';
-import { EMPTY_CAPTURE_STATE_V3, findExistingPlaceByIdentity, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
+import { DEFAULT_INBOX_TITLE, EMPTY_CAPTURE_STATE_V3, ensureInboxCollection, findExistingPlaceByIdentity, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
 import { I18N, type Lang } from '../i18n';
 import { sessionStorage } from '../session-storage';
 
@@ -118,14 +118,16 @@ export const store = {
     return this.stateV3.places.filter((p) => p.collection_id === collection.id);
   },
 
-  /** Ensure a default collection exists. Returns it. */
+  /** Ensure a default collection exists. Returns it. — P0: Capture 无需 Trip */
   ensureDefaultCollection(): CaptureCollection {
+    const ensured = ensureInboxCollection(this.stateV3);
+    if (ensured !== this.stateV3) this.setState(ensured);
     const existing = this.getActiveCollection();
     if (existing) return existing;
     const now = new Date().toISOString();
     const collection: CaptureCollection = {
-      id: `default-${Date.now()}`,
-      title: '我的收藏',
+      id: `inbox-${Date.now()}`,
+      title: DEFAULT_INBOX_TITLE,
       created_at: now,
     };
     this.setState({

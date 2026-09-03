@@ -8,6 +8,7 @@ import {
 } from '../domain/planner';
 import {
   EMPTY_CAPTURE_STATE_V3,
+  ensureInboxCollection,
   migrateV2ToV3,
   type OwnlyCaptureStateV3,
   type OwnlyCollectionExportV1,
@@ -157,16 +158,16 @@ function normalizePlace(value: unknown): CapturePlace | null {
 }
 
 export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
-  if (!value || typeof value !== 'object') return { ...EMPTY_CAPTURE_STATE_V3 };
+  if (!value || typeof value !== 'object') return ensureInboxCollection({ ...EMPTY_CAPTURE_STATE_V3 });
   const raw = value as Record<string, unknown>;
   const version = raw.version;
 
-  // V2 detected → auto-migrate
+  // V2 detected → auto-migrate → ensure inbox
   if (version === 2) {
-    return migrateV2ToV3(value as Parameters<typeof migrateV2ToV3>[0]);
+    return ensureInboxCollection(migrateV2ToV3(value as Parameters<typeof migrateV2ToV3>[0]));
   }
 
-  if (version !== 3) return { ...EMPTY_CAPTURE_STATE_V3 };
+  if (version !== 3) return ensureInboxCollection({ ...EMPTY_CAPTURE_STATE_V3 });
 
   const state = value as Partial<OwnlyCaptureStateV3>;
 
@@ -185,7 +186,7 @@ export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
     ? state.active_collection_id
     : collections[0]?.id;
 
-  return {
+  const normalized: OwnlyCaptureStateV3 = {
     version: 3,
     active_collection_id: activeCollectionId,
     collections,
@@ -198,6 +199,7 @@ export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
       : undefined,
     last_export_at: typeof state.last_export_at === 'string' ? state.last_export_at : undefined,
   };
+  return ensureInboxCollection(normalized);
 }
 
 // ─── Read / Write ────────────────────────────────────────────────────────────
