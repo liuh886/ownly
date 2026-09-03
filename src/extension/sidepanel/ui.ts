@@ -668,7 +668,7 @@ export function renderSmartListCard() {
               if (!title) continue;
               const existing = findExistingPlaceByIdentity(activePlaces, { source_provider: item.sourceProvider, source_place_id: item.sourcePlaceId, source_url: item.sourceUrl }) ?? findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
               const id = existing?.id ?? crypto.randomUUID();
-              const kind = inferPlaceKind([title, item.category, item.address, ...(item.types || [])].filter(Boolean).join(' '));
+              const kind = inferPlaceKind([title, item.category, item.address, item.userNote, item.summary, ...(item.types || [])].filter(Boolean).join(' '));
               const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || saved.detectedCurrency || store.pageDetectedCurrency);
               const place: CapturePlace = {
                 id,
@@ -1312,14 +1312,23 @@ function buildCandidateDetails(
     chk.dataset.placeId = place.id;
     wrapper.append(chk);
   }
-  // Inbox: 主显 评分/价格/kind/tags（Maps 标签已省）
+  // Inbox: 主显 评分/价格（含汇率换算）/kind/tags/位置
   const mainParts: string[] = [];
   if (place.kind && place.kind !== 'other') mainParts.push(`<span class="badge">${escapeHtml(place.kind)}</span>`);
   if (place.observed_rating && place.observed_rating > 1.0 && place.observed_rating <= 5.0) {
     mainParts.push(`<span>★ ${place.observed_rating}</span>`);
   }
   if (place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price)) {
-    mainParts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
+    const activeTrip = store.state.activeContext;
+    const sourceCurrency = place.price_currency || store.mapCurrencyOverride || store.pageDetectedCurrency;
+    const converted = activeTrip?.currency
+      ? convertPriceRange(place.observed_price, activeTrip.currency, undefined, sourceCurrency)
+      : null;
+    if (converted && converted.sourceCurrency !== converted.targetCurrency && converted.convertedMin > 0) {
+      mainParts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);
+    } else {
+      mainParts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
+    }
   }
   if (place.tags.length) {
     const shown = place.tags.slice(0, 2).join(', ');
@@ -1331,7 +1340,7 @@ function buildCandidateDetails(
   }
   details.innerHTML = mainParts.join(' ');
 
-  // Extra details — rating / price / duration / review_topics / signals / risks / notes (always directly expanded)
+  // Extra details — source_category / plus_code / menu / reservation / duration / review_topics / signals / risks / notes
   const extra = document.createElement('div');
   extra.className = 'candidate-extra';
   extra.style.display = 'block';
@@ -1345,20 +1354,8 @@ function buildCandidateDetails(
   if (place.review_topics && place.review_topics.length > 0) {
     extraParts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
   }
-  if (place.observed_rating && place.observed_rating > 1.0 && place.observed_rating <= 5.0) {
-    extraParts.push(`<span>★ ${place.observed_rating}</span>`);
-  }
-  if (place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price)) {
-    const activeTrip = store.state.activeContext;
-    const sourceCurrency = place.price_currency || store.mapCurrencyOverride || store.pageDetectedCurrency;
-    const converted = activeTrip?.currency
-      ? convertPriceRange(place.observed_price, activeTrip.currency, undefined, sourceCurrency)
-      : null;
-    if (converted && converted.sourceCurrency !== converted.targetCurrency && converted.convertedMin > 0) {
-      extraParts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);
-    } else {
-      extraParts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
-    }
+  if (place.open_hours) {
+    extraParts.push(`<span class="badge" title="${escapeHtml(place.open_hours)}">🕒 ${escapeHtml(place.open_hours)}</span>`);
   }
   if (place.duration_minutes) extraParts.push(`<span>⏱️ ${place.duration_minutes}m</span>`);
   if (place.tags.length > 2) extraParts.push(`<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`);

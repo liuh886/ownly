@@ -396,6 +396,10 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('全聚德烤鸭店')).toBe('food');
     expect(inferPlaceKind('陶陶居酒家 (Dim Sum)')).toBe('food');
     expect(inferPlaceKind('Din Tai Fung Dumplings')).toBe('food');
+    expect(inferPlaceKind('Baan Kuay Tiew Ruathong')).toBe('food');
+    expect(inferPlaceKind('Hann Khao Soi Lovers')).toBe('food');
+    expect(inferPlaceKind('泰国船面 (Boat Noodles)')).toBe('food');
+    expect(inferPlaceKind('泰北咖喱面')).toBe('food');
 
     // 2. Cafes & Desserts (咖啡 / 甜品 / 烘焙 / 茶饮)
     expect(inferPlaceKind('Coffee Shop & Roastery')).toBe('cafe');

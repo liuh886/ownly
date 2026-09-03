@@ -184,7 +184,7 @@ function buildPlaceFromDetected(
 ): CapturePlace {
   const cleanTitle = cleanExtractedText(item.title);
   const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
-  const inferredKind = inferPlaceKind([cleanTitle, item.category, cleanAddress, ...(item.types || [])].filter(Boolean).join(' '));
+  const inferredKind = inferPlaceKind([cleanTitle, item.category, cleanAddress, item.userNote, item.summary, ...(item.types || [])].filter(Boolean).join(' '));
   const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || store.pageDetectedCurrency);
   return {
     id: crypto.randomUUID(),
@@ -1251,7 +1251,7 @@ export function initHandlers(): void {
         const id = existing?.id ?? crypto.randomUUID();
         syncedIds.add(id);
         const address = item.address ? cleanExtractedText(item.address) : undefined;
-        const kind = inferPlaceKind([title, item.category, address, ...(item.types || [])].filter(Boolean).join(' '));
+        const kind = inferPlaceKind([title, item.category, address, item.userNote, item.summary, ...(item.types || [])].filter(Boolean).join(' '));
         const rawExistingPrice = existing?.price?.raw;
         const validExistingPrice = (rawExistingPrice && !isZeroOrPlaceholderPrice(rawExistingPrice))
           ? rawExistingPrice
