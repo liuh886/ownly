@@ -365,7 +365,7 @@ function initCandidateDelegation() {
     }
   });
 
-  el.candidatesListContainer.addEventListener('click', (e) => {
+  el.candidatesListContainer.addEventListener('click', async (e) => {
     const target = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
     if (!target) return;
     const action = target.dataset.action;
@@ -415,6 +415,29 @@ function initCandidateDelegation() {
       void saveState().then(() => {
         renderCurrentPlace();
       });
+    } else if (action === 'archive') {
+      // PR-C: Gmail-style archive — same as delete for Inbox, but semantically归档
+      store.locallyDeletedIds.add(placeId);
+      store.removePlace(placeId);
+      if (store.editingCandidateId === placeId) store.editingCandidateId = null;
+      void saveState().then(() => {
+        setStatus(store.lang === 'zh' ? '已归档。' : 'Archived.', 'success');
+        renderCurrentPlace();
+      });
+    } else if (action === 'add-to-trip') {
+      const place = getActivePlaces().find((p) => p.id === placeId);
+      if (!place) {
+        setStatus(store.lang === 'zh' ? '未找到地点。' : 'Place not found.', 'error');
+        return;
+      }
+      // For now, copy single-place share JSON; Planner's Import modal can paste it
+      try {
+        const singleJson = JSON.stringify({ schema: 'ownly.capture.collection', version: 1, exported_at: new Date().toISOString(), collection: { id: place.collection_id, title: 'Inbox', place_count: 1 }, places: [place] }, null, 2);
+        await navigator.clipboard.writeText(singleJson);
+        setStatus(store.lang === 'zh' ? '已复制，去行程管理中导入即可加入行程。' : 'Copied — paste in Trip Management Import to add to trip.', 'success');
+      } catch {
+        window.prompt(store.lang === 'zh' ? '复制以下 JSON 并在行程管理导入：' : 'Copy JSON and import in Trip Management:', JSON.stringify(place));
+      }
     } else if (action === 'cancel-inline') {
       store.editingCandidateId = null;
       renderCandidatesList();

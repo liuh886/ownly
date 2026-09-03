@@ -1081,22 +1081,39 @@ function buildCandidateDetails(
     chk.dataset.placeId = place.id;
     wrapper.append(chk);
   }
-  const parts: string[] = [];
-  if (place.area || place.address) parts.push('<span title="' + escapeHtml(place.address ?? place.area ?? '') + '">📍</span>');
-  if (place.source_category) parts.push(`<span class="badge" title="${escapeHtml(place.source_category)}">🏷️ ${escapeHtml(place.source_category)}</span>`);
-  if (place.plus_code) parts.push(`<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`);
-  if (place.source_place_id) {
-    parts.push(`<span class="badge" title="${escapeHtml(place.source_place_id)}">🆔</span>`);
+  // PR-B: Inbox minimal — only address / provider / kind tag visible; rating/price etc. collapsed
+  const mainParts: string[] = [];
+  if (place.area || place.address) {
+    const shortAddr = (place.area || place.address || '').split(/[,\n]/)[0]?.trim() || place.address || place.area;
+    mainParts.push(`<span title="${escapeHtml(place.address ?? place.area ?? '')}">📍 ${escapeHtml(shortAddr ?? '')}</span>`);
   }
+  // provider + kind as compact badges
+  const providerLabel = place.source_provider === 'google_maps' ? 'Maps' : place.source_provider;
+  mainParts.push(`<span class="badge">${escapeHtml(providerLabel)}</span>`);
+  if (place.kind && place.kind !== 'other') mainParts.push(`<span class="badge">${escapeHtml(place.kind)}</span>`);
+  if (place.tags.length) {
+    const shown = place.tags.slice(0, 2).join(', ');
+    const more = place.tags.length > 2 ? ` +${place.tags.length - 2}` : '';
+    mainParts.push(`<span>🏷️ ${escapeHtml(shown)}${more}</span>`);
+  }
+  details.innerHTML = mainParts.join(' ');
+
+  // Extra (collapsed) — rating / price / duration / review_topics / signals / risks / notes
+  const extra = document.createElement('div');
+  extra.className = 'candidate-extra';
+  extra.style.display = 'none';
+  const extraParts: string[] = [];
+  if (place.source_category) extraParts.push(`<span class="badge" title="${escapeHtml(place.source_category)}">🏷️ ${escapeHtml(place.source_category)}</span>`);
+  if (place.plus_code) extraParts.push(`<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`);
   const safeMenuUrl = sanitizeSafeHref(place.menu_url);
-  if (safeMenuUrl) parts.push(`<a href="${escapeHtml(safeMenuUrl)}" target="_blank" rel="noreferrer" class="badge">${escapeHtml(dict.menuBadge)}</a>`);
+  if (safeMenuUrl) extraParts.push(`<a href="${escapeHtml(safeMenuUrl)}" target="_blank" rel="noreferrer" class="badge">${escapeHtml(dict.menuBadge)}</a>`);
   const safeResUrl = sanitizeSafeHref(place.reservation_url);
-  if (safeResUrl) parts.push(`<a href="${escapeHtml(safeResUrl)}" target="_blank" rel="noreferrer" class="badge highlight">${escapeHtml(dict.reserveBadge)}</a>`);
+  if (safeResUrl) extraParts.push(`<a href="${escapeHtml(safeResUrl)}" target="_blank" rel="noreferrer" class="badge highlight">${escapeHtml(dict.reserveBadge)}</a>`);
   if (place.review_topics && place.review_topics.length > 0) {
-    parts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
+    extraParts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
   }
   if (place.observed_rating && place.observed_rating > 1.0 && place.observed_rating <= 5.0) {
-    parts.push(`<span>★ ${place.observed_rating}</span>`);
+    extraParts.push(`<span>★ ${place.observed_rating}</span>`);
   }
   if (place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price)) {
     const activeTrip = store.state.activeContext;
@@ -1105,24 +1122,37 @@ function buildCandidateDetails(
       ? convertPriceRange(place.observed_price, activeTrip.currency, undefined, sourceCurrency)
       : null;
     if (converted && converted.sourceCurrency !== converted.targetCurrency && converted.convertedMin > 0) {
-      parts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);
+      extraParts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);
     } else {
-      parts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
+      extraParts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
     }
   }
-  if (place.duration_minutes) parts.push(`<span>⏱️ ${place.duration_minutes}m</span>`);
-  if (place.tags.length) parts.push(`<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`);
+  if (place.duration_minutes) extraParts.push(`<span>⏱️ ${place.duration_minutes}m</span>`);
+  if (place.tags.length > 2) extraParts.push(`<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`);
   if (place.signals && place.signals.length > 0) {
-    parts.push(...place.signals.map((s) => `<span class="badge">✅ ${escapeHtml(s)}</span>`));
+    extraParts.push(...place.signals.map((s) => `<span class="badge">✅ ${escapeHtml(s)}</span>`));
   }
   if (place.risks && place.risks.length > 0) {
-    parts.push(...place.risks.map((r) => `<span class="risk-flag">⚠️ ${escapeHtml(r)}</span>`));
+    extraParts.push(...place.risks.map((r) => `<span class="risk-flag">⚠️ ${escapeHtml(r)}</span>`));
   }
   const noteText = place.notes || place.why;
   if (noteText) {
-    parts.push(`<div class="note-line">📝 ${escapeHtml(noteText)}</div>`);
+    extraParts.push(`<div class="note-line">📝 ${escapeHtml(noteText)}</div>`);
   }
-  details.innerHTML = parts.join('');
+  if (extraParts.length) {
+    extra.innerHTML = extraParts.join(' ');
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'link';
+    toggle.textContent = '⋯ 更多';
+    toggle.style.fontSize = '11px';
+    toggle.addEventListener('click', () => {
+      const isHidden = extra.style.display === 'none';
+      extra.style.display = isHidden ? 'block' : 'none';
+      toggle.textContent = isHidden ? '收起' : '⋯ 更多';
+    });
+    details.append(toggle);
+  }
 
   const actions = document.createElement('div');
   actions.className = 'candidate-actions';
@@ -1138,6 +1168,21 @@ function buildCandidateDetails(
   editBtn.dataset.placeId = place.id;
   editBtn.textContent = `✏️ ${dict.editAction}`;
 
+  const archiveBtn = document.createElement('button');
+  archiveBtn.type = 'button';
+  archiveBtn.className = 'card-btn';
+  archiveBtn.dataset.action = 'archive';
+  archiveBtn.dataset.placeId = place.id;
+  archiveBtn.textContent = `📦 ${store.lang === 'zh' ? '归档' : 'Archive'}`;
+  archiveBtn.title = store.lang === 'zh' ? '归档（移出 Inbox）' : 'Archive';
+
+  const addToTripBtn = document.createElement('button');
+  addToTripBtn.type = 'button';
+  addToTripBtn.className = 'card-btn';
+  addToTripBtn.dataset.action = 'add-to-trip';
+  addToTripBtn.dataset.placeId = place.id;
+  addToTripBtn.textContent = `➕ ${store.lang === 'zh' ? '加入行程' : 'Add to Trip'}`;
+
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.className = 'card-btn del';
@@ -1145,9 +1190,10 @@ function buildCandidateDetails(
   delBtn.dataset.placeId = place.id;
   delBtn.textContent = `🗑️ ${dict.deleteAction}`;
 
-  btnGroup.append(editBtn, delBtn);
+  btnGroup.append(editBtn, archiveBtn, addToTripBtn, delBtn);
   actions.append(btnGroup);
 
-  wrapper.append(details, actions);
+  if (extraParts.length) wrapper.append(details, extra, actions);
+  else wrapper.append(details, actions);
   return wrapper;
 }
