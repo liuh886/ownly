@@ -939,7 +939,8 @@ export function initHandlers(): void {
   el.btnSmartSyncAll.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      const collection = getActiveCollection();
+      const inbox = store.getInboxCollection() ?? store.ensureDefaultCollection();
+      const collection = inbox;
       let savedList = store.detectedSavedList;
       if (!collection) {
         setStatus(dict.tripRequiredError, 'error');
@@ -1279,7 +1280,8 @@ export function initHandlers(): void {
 
   el.btnBatchAdd.addEventListener('click', () => {
     void (async () => {
-      const collection = getActiveCollection();
+      const inbox = store.getInboxCollection() ?? store.ensureDefaultCollection();
+      const collection = inbox;
       if (!collection) {
         setStatus(t().tripRequiredError, 'error');
         return;
@@ -1368,7 +1370,8 @@ export function initHandlers(): void {
   el.captureForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const dict = t();
-    const collection = getActiveCollection();
+    const inbox = store.getInboxCollection() ?? store.ensureDefaultCollection();
+    const collection = inbox;
     if (!collection) {
       setStatus(dict.tripRequiredError, 'error');
       return;

@@ -1,6 +1,6 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { readCaptureStateV3, saveCaptureStateV3ViaWorker, writeCaptureStateV3 } from '../capture-state';
-import { DEFAULT_INBOX_TITLE, EMPTY_CAPTURE_STATE_V3, ensureInboxCollection, findExistingPlaceByIdentity, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
+import { DEFAULT_INBOX_TITLE, EMPTY_CAPTURE_STATE_V3, ensureInboxCollection, findExistingPlaceByIdentity, getInboxCollection as getInboxCollectionDomain, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
 import { I18N, type Lang } from '../i18n';
 import { sessionStorage } from '../session-storage';
 
@@ -109,6 +109,16 @@ export const store = {
   getActiveCollection(): CaptureCollection | null {
     if (this.stateV3.collections.length === 0) return null;
     return this.stateV3.collections.find((c) => c.id === this.stateV3.active_collection_id) || this.stateV3.collections[0];
+  },
+
+  getInboxCollection(): CaptureCollection | null {
+    return getInboxCollectionDomain(this.stateV3);
+  },
+
+  getInboxPlaces(): CapturePlace[] {
+    const inbox = this.getInboxCollection();
+    if (!inbox) return [];
+    return this.stateV3.places.filter((p) => p.collection_id === inbox.id);
   },
 
   /** Get places in the active collection. */

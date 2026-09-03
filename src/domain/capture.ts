@@ -117,10 +117,16 @@ export const EMPTY_CAPTURE_STATE_V3: OwnlyCaptureStateV3 = {
 export const DEFAULT_INBOX_TITLE = 'Inbox';
 
 export function ensureInboxCollection(state: OwnlyCaptureStateV3): OwnlyCaptureStateV3 {
-  if (state.collections.length > 0) return state;
+  const hasInbox = state.collections.some((c) => c.title === DEFAULT_INBOX_TITLE || c.id.startsWith('inbox-'));
+  if (hasInbox) return state;
   const now = new Date().toISOString();
   const inbox: CaptureCollection = { id: `inbox-${Date.now()}`, title: DEFAULT_INBOX_TITLE, created_at: now };
-  return { ...state, collections: [inbox], active_collection_id: inbox.id };
+  // Keep existing active_collection_id if already set (e.g., migrated trip), just ensure inbox exists
+  return { ...state, collections: [...state.collections, inbox], active_collection_id: state.active_collection_id ?? inbox.id };
+}
+
+export function getInboxCollection(state: OwnlyCaptureStateV3): CaptureCollection | null {
+  return state.collections.find((c) => c.title === DEFAULT_INBOX_TITLE || c.id.startsWith('inbox-')) ?? null;
 }
 
 // ─── Collection Export (portable JSON) ───────────────────────────────────────

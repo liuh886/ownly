@@ -11,6 +11,7 @@ import {
   type PlannerPlaceKind,
 } from '../../domain/planner';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
+import type { CapturePlace } from '../../domain/capture';
 import { el } from '../dom';
 import { logger } from '../logger';
 import { escapeHtml, isPlausiblePriceText, isZeroOrPlaceholderPrice } from '../utils';
@@ -776,9 +777,51 @@ export function renderCandidatesList() {
   const dict = t();
   const dictKey = store.lang;
 
-  let candidates = store.state.pendingPlaces.filter(
-    (p) => p.trip_id === store.state.activeContext?.tripId,
-  );
+  // Inbox-first: show Inbox places, not trip-filtered pendingPlaces
+  let candidates: V2FacadePlace[] = (store.getInboxPlaces() as unknown as V2FacadePlace[]).map((p) => {
+    const cp = p as unknown as CapturePlace;
+    // Map CapturePlace to V2FacadePlace shape for existing card rendering
+    return {
+      id: cp.id,
+      trip_id: cp.collection_id,
+      title: cp.title,
+      source_provider: cp.source.provider,
+      source_url: cp.source.url,
+      source_place_id: cp.source.place_id,
+      source_category: cp.source.category,
+      types: cp.source.types,
+      kind: cp.inferred_kind || 'other',
+      area: cp.address?.split(/[,，·]/)[0]?.trim(),
+      priority: cp.user?.priority,
+      tags: cp.user?.tags || [],
+      why: cp.user?.why,
+      notes: cp.user?.notes,
+      observed_rating: cp.rating,
+      observed_review_count: cp.review_count,
+      observed_price: cp.price?.raw,
+      price_currency: cp.price?.currency,
+      price_min: cp.price?.min,
+      price_max: cp.price?.max,
+      price_unit: cp.price?.unit,
+      price_level: cp.price?.level,
+      open_hours: cp.open_hours,
+      address: cp.address,
+      coordinates: cp.coordinates,
+      phone: cp.phone,
+      plus_code: cp.plus_code,
+      preferred_window: cp.user?.preferred_window,
+      duration_minutes: cp.user?.duration_minutes,
+      menu_url: cp.menu_url,
+      reservation_url: cp.reservation_url,
+      review_topics: cp.review_topics,
+      signals: [],
+      risks: [],
+      reservation_status: 'none' as const,
+      state: 'candidate' as const,
+      created_at: cp.captured_at,
+      updated_at: cp.updated_at,
+    };
+  });
   el.candidatesCountBadge.textContent = String(candidates.length);
 
   el.btnEnrichCandidates.style.display = store.bulkMode ? 'none' : 'inline-block';
