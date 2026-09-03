@@ -309,11 +309,9 @@ function renderFilters() {
           return lower === kindTagZh || lower === kindTagEn;
         }),
     ).length;
-    if (count > 0) {
-      const cleanName = getPlannerKindLabel(kind, store.lang);
-      const label = `${KIND_ICONS[kind] || ''} ${cleanName}`;
-      filters.push({ id: kind, label, count });
-    }
+    const cleanName = getPlannerKindLabel(kind, store.lang);
+    const label = `${KIND_ICONS[kind] || ''} ${cleanName}`;
+    filters.push({ id: kind, label, count });
   }
 
   // Dynamically add non-kind tags as filter chips (e.g. 曼谷, 清迈, 普吉)
@@ -1143,8 +1141,7 @@ function buildCandidateDetails(
     mainParts.push(`<span>🏷️ ${escapeHtml(shown)}${more}</span>`);
   }
   if (place.area || place.address) {
-    const shortAddr = (place.area || place.address || '').split(/[,\n]/)[0]?.trim() || '';
-    if (shortAddr) mainParts.push(`<span title="${escapeHtml(place.address ?? place.area ?? '')}" style="opacity:0.7">📍 ${escapeHtml(shortAddr)}</span>`);
+    mainParts.push(`<span title="${escapeHtml(place.address ?? place.area ?? '')}">📍</span>`);
   }
   details.innerHTML = mainParts.join(' ');
 
