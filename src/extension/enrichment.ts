@@ -89,12 +89,14 @@ export async function enrichPlaceMetadata(
     }
     const candidates: string[] = [];
     if (next.source_url?.includes('/maps/search/')) candidates.push(next.source_url);
-    // Fallback 1: title + address query (api=1 skeleton often empty, but try)
-    candidates.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitleForSearch(next.title) + (next.address ? ' ' + next.address : ''))}&hl=zh-CN`);
-    // Fallback 2: viewport-aware search (yields first-result ChIJ in HTML)
+    // B→A priority: place/@lat,lng directly 302s to single place with 0x (most reliable for query pins)
     if (next.coordinates) {
+      candidates.push(`https://www.google.com/maps/place/${encodeURIComponent(cleanTitleForSearch(next.title))}/@${next.coordinates.lat},${next.coordinates.lng},17z?hl=zh-CN`);
       candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitleForSearch(next.title))}/@${next.coordinates.lat},${next.coordinates.lng},14z?hl=zh-CN`);
-    } else {
+    }
+    // Fallback: api=1 query (skeleton, often no 0x) and plain search
+    candidates.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitleForSearch(next.title) + (next.address ? ' ' + next.address : ''))}&hl=zh-CN`);
+    if (!next.coordinates) {
       candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitleForSearch(next.title))}?hl=zh-CN`);
     }
 

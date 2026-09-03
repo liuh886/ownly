@@ -7,6 +7,7 @@ import {
 import {
   EMPTY_CAPTURE_STATE_V3,
   findExistingPlaceByIdentity,
+  findExistingPlaceByResilientIdentity,
   type CaptureCollection,
   type CapturePlace,
   type OwnlyCaptureStateV3,
@@ -79,7 +80,13 @@ async function quickCaptureCurrentPlace() {
     const capturedId = await mutateCaptureStateV3InWorker((state) => {
       const collection = getDefaultCollection(state);
       const collectionPlaces = state.places.filter((p) => p.collection_id === collection.id);
-      const existing = findExistingPlaceByIdentity(collectionPlaces, {
+      const existing = findExistingPlaceByResilientIdentity(collectionPlaces, {
+        source_provider: place.sourceProvider,
+        source_place_id: place.sourcePlaceId,
+        source_url: place.sourceUrl,
+        title: place.title,
+        coordinates: place.coordinates ?? null,
+      }) ?? findExistingPlaceByIdentity(collectionPlaces, {
         source_provider: place.sourceProvider,
         source_place_id: place.sourcePlaceId,
         source_url: place.sourceUrl,

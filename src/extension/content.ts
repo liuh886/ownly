@@ -923,14 +923,24 @@ const savedListDetailCache = new Map<string, { at: number; facts: GoogleMapsRese
 async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<GoogleMapsResearchFacts | null> {
   const key = place.sourcePlaceId || extractFeatureIdFromUrl(place.sourceUrl);
   if (!key || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(key.trim())) {
-    const searchUrl = place.sourceUrl?.includes('/maps/search/')
-      ? place.sourceUrl
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.title + (place.address ? ' ' + place.address : ''))}&hl=zh-CN`;
-    logger.fetch('MapsTabDetail', `Resolving search-query pin for "${place.title}"`, { searchUrl });
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 6000);
-    try {
-      const res = await fetch(searchUrl, { credentials: 'include', signal: controller.signal });
+    // B→A: try place/@lat,lng first (302 to 0x), then viewport search, then api=1
+    const candidates: string[] = [];
+    if (place.sourceUrl?.includes('/maps/search/')) candidates.push(place.sourceUrl);
+    const cleanTitle = place.title?.trim() || '';
+    const addrSuffix = place.address ? ' ' + place.address : '';
+    if (place.coordinates) {
+      candidates.push(`https://www.google.com/maps/place/${encodeURIComponent(cleanTitle)}/@${place.coordinates.lat},${place.coordinates.lng},17z?hl=zh-CN`);
+      candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitle)}/@${place.coordinates.lat},${place.coordinates.lng},14z?hl=zh-CN`);
+    }
+    candidates.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle + addrSuffix)}&hl=zh-CN`);
+    if (!place.coordinates) candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitle)}?hl=zh-CN`);
+    let lastFacts: GoogleMapsResearchFacts | null = null;
+    for (const searchUrl of candidates) {
+      logger.fetch('MapsTabDetail', `Resolving search-query pin for "${place.title}"`, { searchUrl });
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 6000);
+      try {
+        const res = await fetch(searchUrl, { credentials: 'include', signal: controller.signal });
       if (res.ok) {
         // DEBUG B→A: log final redirected URL — it often already contains 0x after Google redirect
         const finalUrl = res.url || searchUrl;
@@ -975,13 +985,24 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
           }
           savedListDetailCache.set(placeId, { at: Date.now(), facts });
         }
-        logger.parser('MapsTabDetail', `Resolved facts for query pin "${place.title}"`, facts);
-        return facts;
+        // Only return if we got meaningful facts; otherwise try next candidate (B→A place/@lat,lng may have succeeded where api=1 failed)
+        if (facts.sourcePlaceId || facts.rating !== undefined || facts.address || facts.coordinates) {
+          logger.parser('MapsTabDetail', `Resolved facts for query pin "${place.title}"`, facts);
+          return facts;
+        } else {
+          lastFacts = facts;
+          logger.debug('MapsTabDetail', `Empty facts for "${place.title}" on ${searchUrl}, trying next`, { hasPlaceId: Boolean(facts.sourcePlaceId) });
+        }
       }
     } catch (err) {
       logger.warn('MapsTabDetail', `Search query resolution failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
     } finally {
       window.clearTimeout(timer);
+    }
+    }
+    if (lastFacts && (lastFacts.sourcePlaceId || lastFacts.rating !== undefined)) {
+      logger.parser('MapsTabDetail', `Resolved facts for query pin "${place.title}" (last)`, lastFacts);
+      return lastFacts;
     }
     return null;
   }
