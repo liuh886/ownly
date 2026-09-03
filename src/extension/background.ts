@@ -36,16 +36,17 @@ async function flashBadge(tabId: number, text: string, color: string) {
 }
 
 function getDefaultCollection(state: OwnlyCaptureStateV3): CaptureCollection {
+  const inbox = state.collections.find((c) => c.title === 'Inbox' || c.id.startsWith('inbox-'));
+  if (inbox) return inbox;
   if (state.collections.length > 0) {
     const active = state.collections.find((c) => c.id === state.active_collection_id);
     if (active) return active;
     return state.collections[0];
   }
-  // No collection exists → create default
   const now = new Date().toISOString();
   return {
-    id: `default-${Date.now()}`,
-    title: '我的收藏',
+    id: `inbox-${Date.now()}`,
+    title: 'Inbox',
     created_at: now,
   };
 }
