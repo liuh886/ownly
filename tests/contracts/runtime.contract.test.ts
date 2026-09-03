@@ -41,8 +41,7 @@ describe('PR3 runtime contract: Extension -> Vault -> Web -> Planner', () => {
     const raw = readBack[0] as unknown as Record<string, unknown>;
     expect(raw.id).toBeTruthy();
     expect(raw.title).toBeTruthy();
-    // @ts-ignore
-    expect(raw.source?.url).toBeTruthy();
+    expect((raw as unknown as { source?: { url?: string } }).source?.url).toBeTruthy();
 
     // 4. 转为 Planner Place
     const plannerPlace = capturePlaceToPlannerPlace(capture, 'trip-1');

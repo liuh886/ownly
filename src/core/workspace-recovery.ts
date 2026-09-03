@@ -27,15 +27,14 @@ export async function checkWorkspaceRecovery(
     return { state: 'RECONNECT_REQUIRED', message: 'No folder selected — please reconnect your Ownly folder.', actionLabel: 'Reconnect' };
   }
   try {
-    // @ts-ignore — requestPermission may not exist in all browsers
-    if (handle.requestPermission) {
+    if ((handle as unknown as { requestPermission?: unknown }).requestPermission) {
       const perm = await (handle as unknown as { requestPermission: (o: { mode: 'readwrite' }) => Promise<PermissionState> }).requestPermission({ mode: 'readwrite' });
       if (perm === 'denied') return { state: 'PERMISSION_REQUIRED', message: 'Permission denied — please allow access to your Ownly folder.', actionLabel: 'Allow' };
       if (perm !== 'granted') return { state: 'PERMISSION_REQUIRED', message: 'Permission required — please allow access.', actionLabel: 'Allow' };
     }
     // Try to read to detect moved/deleted folder
-    // @ts-ignore
-    for await (const _ of handle.values()) { break; }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _item of (handle as unknown as { values: () => AsyncIterableIterator<unknown> }).values()) { break; }
     return { state: 'CONNECTED', message: 'Connected' };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
