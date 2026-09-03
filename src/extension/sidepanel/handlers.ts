@@ -11,6 +11,7 @@ import {
   findExistingPlaceByIdentity,
   reorderPlaces,
   mergePlaceResearch,
+  buildShareableCollectionExport,
   type CapturePlace,
 } from '../../domain/capture';
 import type { PlannerTripPlace } from '../../domain/planner';
@@ -175,20 +176,6 @@ async function strengthenCandidatesThroughMaps(
 }
 
 let searchDebounce: number | undefined;
-
-function applyBulk(mutate: (place: CapturePlace, value?: string) => CapturePlace, value?: string): void {
-  const dict = t();
-  if (store.bulkSelected.size === 0) return;
-  const ids = new Set(store.bulkSelected);
-  const collection = getActiveCollection();
-  if (!collection) return;
-  const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
-  const activePlaces = getActivePlaces().map((p) => (ids.has(p.id) ? mutate(p, value) : p));
-  store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
-  const count = ids.size;
-  store.bulkSelected.clear();
-  void saveState().then(() => setStatus(dict.bulkApplied(count), 'success'));
-}
 
 function buildPlaceFromDetected(
   item: CurrentResearchPlace,
@@ -574,6 +561,17 @@ export function initHandlers(): void {
     renderCandidatesList();
   });
 
+  el.btnSelectAllCandidates.addEventListener('click', () => {
+    const active = getActivePlaces();
+    if (store.bulkSelected.size === active.length && active.length > 0) {
+      store.bulkSelected.clear();
+    } else {
+      store.bulkSelected.clear();
+      for (const p of active) store.bulkSelected.add(p.id);
+    }
+    renderCandidatesList();
+  });
+
   el.btnBulkDelete.addEventListener('click', () => {
     const dict = t();
     if (store.bulkSelected.size === 0) return;
@@ -586,15 +584,178 @@ export function initHandlers(): void {
       store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
     }
     store.bulkSelected.clear();
-    void saveState().then(() => setStatus(dict.candidateRemoved, 'success'));
+    void saveState().then(() => {
+      renderState();
+      renderCandidatesList();
+      renderCurrentPlace();
+      setStatus(dict.candidateRemoved, 'success');
+    });
   });
 
   el.bulkPrioritySelect.addEventListener('change', () => {
-    applyBulk((place, value) => ({
-      ...place,
-      user: { ...place.user, priority: value as CapturePlace['user'] extends { priority?: infer P } ? P : never },
-    }));
+    const val = el.bulkPrioritySelect.value;
+    if (!val || store.bulkSelected.size === 0) return;
+    const ids = new Set(store.bulkSelected);
+    const collection = getActiveCollection();
+    if (collection) {
+      const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+      const activePlaces = getActivePlaces().map((p) => {
+        if (!ids.has(p.id)) return p;
+        return {
+          ...p,
+          user: { ...p.user, priority: val as 'must' | 'want' | 'optional' },
+          updated_at: new Date().toISOString(),
+        };
+      });
+      store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
+      void saveState().then(() => {
+        renderState();
+        renderCandidatesList();
+        setStatus(store.lang === 'zh' ? `已批量设置 ${ids.size} 个地点的优先级` : `Updated priority for ${ids.size} places`, 'success');
+      });
+    }
     el.bulkPrioritySelect.value = '';
+  });
+
+  const runBatchEnrichment = async (placesToEnrich: CapturePlace[]) => {
+    if (placesToEnrich.length === 0) {
+      setStatus(store.lang === 'zh' ? '没有可补强的地点' : 'No places to enrich', 'error');
+      return;
+    }
+    setStatus(store.lang === 'zh' ? `正在补强 ${placesToEnrich.length} 个地点…` : `Enriching ${placesToEnrich.length} places…`, 'muted');
+
+    const facadePlaces: PlannerTripPlace[] = placesToEnrich.map((p) => ({
+      schema_version: '0.1' as const,
+      type: 'trip_place' as const,
+      id: p.id,
+      trip_id: p.collection_id,
+      title: p.title,
+      source_provider: p.source.provider,
+      source_url: p.source.url,
+      source_place_id: p.source.place_id,
+      source_category: p.source.category,
+      types: p.source.types,
+      kind: p.inferred_kind || 'other',
+      priority: p.user?.priority || 'want',
+      tags: p.user?.tags || [],
+      observed_rating: p.rating,
+      observed_review_count: p.review_count,
+      observed_price: p.price?.raw,
+      price_currency: p.price?.currency,
+      price_min: p.price?.min,
+      price_max: p.price?.max,
+      price_unit: p.price?.unit as PlannerTripPlace['price_unit'],
+      price_level: p.price?.level,
+      open_hours: p.open_hours,
+      address: p.address,
+      coordinates: p.coordinates,
+      phone: p.phone,
+      plus_code: p.plus_code,
+      signals: [],
+      risks: [],
+      reservation_status: 'none',
+      state: 'candidate',
+      created_at: p.captured_at,
+      updated_at: p.updated_at,
+    }));
+
+    try {
+      const result = await enrichCandidatePlacesBatch(facadePlaces, (completed, total) => {
+        setStatus(store.lang === 'zh' ? `正在补强 (${completed}/${total})…` : `Enriching (${completed}/${total})…`, 'muted');
+      });
+
+      const enrichedMap = new Map(result.enrichedPlaces.map((ep) => [ep.id, ep]));
+      const collection = getActiveCollection();
+      if (collection) {
+        const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+        const activePlaces = getActivePlaces().map((p) => {
+          const ep = enrichedMap.get(p.id);
+          if (!ep) return p;
+          return {
+            ...p,
+            rating: ep.observed_rating ?? p.rating,
+            review_count: ep.observed_review_count ?? p.review_count,
+            address: ep.address ?? p.address,
+            coordinates: ep.coordinates ?? p.coordinates,
+            phone: ep.phone ?? p.phone,
+            plus_code: ep.plus_code ?? p.plus_code,
+            open_hours: ep.open_hours ?? p.open_hours,
+            menu_url: ep.menu_url ?? p.menu_url,
+            reservation_url: ep.reservation_url ?? p.reservation_url,
+            review_topics: ep.review_topics ?? p.review_topics,
+            inferred_kind: ep.kind !== 'other' ? ep.kind : p.inferred_kind,
+            price: ep.observed_price ? {
+              raw: ep.observed_price,
+              currency: ep.price_currency || p.price?.currency,
+              min: ep.price_min ?? p.price?.min,
+              max: ep.price_max ?? p.price?.max,
+              unit: ep.price_unit ?? p.price?.unit,
+              level: ep.price_level ?? p.price?.level,
+            } : p.price,
+            updated_at: new Date().toISOString(),
+          };
+        });
+        store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
+        await saveState();
+        renderState();
+        renderCandidatesList();
+        setStatus(
+          store.lang === 'zh'
+            ? `补强完成：成功更新 ${result.totalEnriched} 个地点`
+            : `Enrichment complete: updated ${result.totalEnriched} places`,
+          'success',
+        );
+      }
+    } catch (err) {
+      logger.error('Enrichment', 'Batch enrichment failed', String(err));
+      setStatus(store.lang === 'zh' ? '补强过程中发生错误' : 'Enrichment failed', 'error');
+    }
+  };
+
+  el.btnBulkEnrich.addEventListener('click', () => {
+    const active = getActivePlaces();
+    const targets = store.bulkSelected.size > 0
+      ? active.filter((p) => store.bulkSelected.has(p.id))
+      : active;
+    void runBatchEnrichment(targets);
+  });
+
+  el.btnEnrichCandidates.addEventListener('click', () => {
+    void runBatchEnrichment(getActivePlaces());
+  });
+
+  el.btnImportToPlanner.addEventListener('click', async () => {
+    const activePlaces = getActivePlaces();
+    const selectedPlaces = store.bulkSelected.size > 0
+      ? activePlaces.filter((p) => store.bulkSelected.has(p.id))
+      : activePlaces;
+    if (selectedPlaces.length === 0) {
+      setStatus(store.lang === 'zh' ? '当前没有可导入的地点。' : 'No places to import.', 'error');
+      return;
+    }
+
+    const currentCollection = getActiveCollection() || {
+      id: 'inbox',
+      title: 'Inbox',
+      currency: 'CNY',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const exportBundle = buildShareableCollectionExport(currentCollection, selectedPlaces);
+
+    const jsonText = JSON.stringify(exportBundle, null, 2);
+    try {
+      await navigator.clipboard.writeText(jsonText);
+      setStatus(
+        store.lang === 'zh'
+          ? `已复制 ${selectedPlaces.length} 个地点！在 Planner 点击【⚡ 同步扩展候选】或【导入】即可载入。`
+          : `Copied ${selectedPlaces.length} places! Click 'Sync from Extension' or 'Import' in Planner to load.`,
+        'success',
+      );
+    } catch (err) {
+      logger.error('ImportToPlanner', 'Clipboard copy failed', String(err));
+      setStatus(store.lang === 'zh' ? '复制失败，请重试' : 'Copy failed', 'error');
+    }
   });
 
   el.btnCopyDebugLogs.addEventListener('click', () => {

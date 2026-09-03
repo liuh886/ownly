@@ -326,13 +326,18 @@ export function syncQuickChipStates(): void {
 
 function renderFilters() {
   const dict = t();
-  // Inbox-first: filters based on Inbox places
-  const inboxPlaces = store.getInboxPlaces() as unknown as V2FacadePlace[];
-  const tripPlaces = inboxPlaces.map((p) => ({
-    ...p,
-    tags: p.tags || [],
-    signals: (p as unknown as { signals?: string[] }).signals || [],
-    risks: (p as unknown as { risks?: string[] }).risks || [],
+  // Active collection places for filter calculation
+  const activePlaces = store.getActivePlaces();
+  const tripPlaces = activePlaces.map((p) => ({
+    id: p.id,
+    title: p.title,
+    address: p.address,
+    area: p.address?.split(/[,，·]/)[0]?.trim(),
+    kind: p.inferred_kind || 'other',
+    priority: p.user?.priority,
+    tags: p.user?.tags || [],
+    signals: [] as string[],
+    risks: [] as string[],
   }));
 
   const filters: { id: string; label: string; count: number }[] = [
@@ -1326,10 +1331,10 @@ function buildCandidateDetails(
   }
   details.innerHTML = mainParts.join(' ');
 
-  // Extra (collapsed) — rating / price / duration / review_topics / signals / risks / notes
+  // Extra details — rating / price / duration / review_topics / signals / risks / notes (always directly expanded)
   const extra = document.createElement('div');
   extra.className = 'candidate-extra';
-  extra.style.display = 'none';
+  extra.style.display = 'block';
   const extraParts: string[] = [];
   if (place.source_category) extraParts.push(`<span class="badge" title="${escapeHtml(place.source_category)}">🏷️ ${escapeHtml(place.source_category)}</span>`);
   if (place.plus_code) extraParts.push(`<span class="badge" title="Plus Code">➕ ${escapeHtml(place.plus_code)}</span>`);
@@ -1369,22 +1374,10 @@ function buildCandidateDetails(
   }
   if (extraParts.length) {
     extra.innerHTML = extraParts.join(' ');
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'link';
-    toggle.textContent = '⋯ 更多';
-    toggle.style.fontSize = '11px';
-    toggle.addEventListener('click', () => {
-      const isHidden = extra.style.display === 'none';
-      extra.style.display = isHidden ? 'block' : 'none';
-      toggle.textContent = isHidden ? '收起' : '⋯ 更多';
-    });
-    details.append(toggle);
   }
 
   const actions = document.createElement('div');
   actions.className = 'candidate-actions';
-
 
   const btnGroup = document.createElement('div');
   btnGroup.className = 'card-btns';
@@ -1394,7 +1387,8 @@ function buildCandidateDetails(
   editBtn.className = 'card-btn';
   editBtn.dataset.action = 'edit';
   editBtn.dataset.placeId = place.id;
-  editBtn.textContent = `✏️ ${dict.editAction}`;
+  editBtn.textContent = '✏️';
+  editBtn.title = dict.editAction;
 
   const mustBtn = document.createElement('button');
   mustBtn.type = 'button';
@@ -1402,22 +1396,26 @@ function buildCandidateDetails(
   mustBtn.dataset.action = 'toggle-must';
   mustBtn.dataset.placeId = place.id;
   const isMust = place.priority === 'must';
-  mustBtn.textContent = isMust ? `⭐ ${store.lang === 'zh' ? '已必去' : 'Must'}` : `☆ ${store.lang === 'zh' ? '设为必去' : 'Set Must'}`;
-  mustBtn.title = store.lang === 'zh' ? '切换必去状态' : 'Toggle Must priority';
+  mustBtn.textContent = isMust ? '⭐' : '☆';
+  mustBtn.title = isMust
+    ? (store.lang === 'zh' ? '已标记为必去（点击取消）' : 'Marked as Must (click to toggle)')
+    : (store.lang === 'zh' ? '设为必去' : 'Mark as Must');
 
   const addToTripBtn = document.createElement('button');
   addToTripBtn.type = 'button';
   addToTripBtn.className = 'card-btn';
   addToTripBtn.dataset.action = 'add-to-trip';
   addToTripBtn.dataset.placeId = place.id;
-  addToTripBtn.textContent = `➕ ${store.lang === 'zh' ? '加入行程' : 'Add to Trip'}`;
+  addToTripBtn.textContent = '➕';
+  addToTripBtn.title = store.lang === 'zh' ? '加入行程' : 'Add to Trip';
 
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.className = 'card-btn del';
   delBtn.dataset.action = 'delete';
   delBtn.dataset.placeId = place.id;
-  delBtn.textContent = `🗑️ ${dict.deleteAction}`;
+  delBtn.textContent = '🗑️';
+  delBtn.title = dict.deleteAction;
 
   btnGroup.append(editBtn, mustBtn, addToTripBtn, delBtn);
   actions.append(btnGroup);
