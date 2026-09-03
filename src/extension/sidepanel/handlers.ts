@@ -726,9 +726,17 @@ export function initHandlers(): void {
   });
 
   el.btnEnrichCandidates.addEventListener('click', () => {
-    void runBatchEnrichment(getActivePlaces());
+    // 多选时仅补强选中目标（与 bulkEnrich 一致），避免全量慢补全
+    const active = getActivePlaces();
+    const targets = store.bulkMode && store.bulkSelected.size > 0
+      ? active.filter((p) => store.bulkSelected.has(p.id))
+      : active;
+    void runBatchEnrichment(targets);
   });
 
+  // 导入行程：Planner 已改为同步实现，侧边栏按钮仅保留兼容，默认隐藏避免误导
+  el.btnImportToPlanner.style.display = 'none';
+  el.btnImportToPlanner.title = store.lang === 'zh' ? '已由 Planner 同步实现' : 'Synced via Planner';
   el.btnImportToPlanner.addEventListener('click', async () => {
     const activePlaces = getActivePlaces();
     const selectedPlaces = store.bulkSelected.size > 0

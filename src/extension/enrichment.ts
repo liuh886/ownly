@@ -27,6 +27,9 @@ export interface EnrichmentResult {
  * Strips leading/trailing decorative emojis and symbols for search resolution.
  * e.g. "🍜 合成發" -> "合成發", "🍜 Thipsamai Padthai Pratoopee" -> "Thipsamai Padthai Pratoopee"
  */
+const failedResolveCache = new Map<string, number>();
+const FAILED_COOLDOWN_MS = 15 * 60 * 1000;
+
 export function cleanTitleForSearch(title: string): string {
   return title
     .replace(/^[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+/u, '')
@@ -76,8 +79,14 @@ export async function enrichPlaceMetadata(
   }
 
   // 1.5 If feature ID is still missing (e.g. search/?query=... pin), resolve it via Google Maps search HTML
-  // Two-hop: search page -> extract ChIJ/0x -> preview. Prevent empty {} infinite loop.
+  // Two-hop: search page -> extract ChIJ/0x -> preview. Prevent empty {} infinite loop + slow multi-round.
   if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
+    const cacheKey = `${next.source_place_id || next.source_url || next.title}`;
+    const lastFail = failedResolveCache.get(cacheKey);
+    if (lastFail && Date.now() - lastFail < FAILED_COOLDOWN_MS) {
+      logger.debug('BackgroundEnrich', `Skip recently failed query pin: ${next.title}`);
+      return { place: next, enriched: false, error: 'Recently failed, cooldown' };
+    }
     const candidates: string[] = [];
     if (next.source_url?.includes('/maps/search/')) candidates.push(next.source_url);
     // Fallback 1: title + address query (api=1 skeleton often empty, but try)
@@ -141,9 +150,12 @@ export async function enrichPlaceMetadata(
         logger.warn('BackgroundEnrich', `Query resolution failed for ${next.title}`, err instanceof Error ? err.message : String(err));
       }
     }
-    // If still no ID and no facts, do not loop forever: mark as non-retryable this run
+    // If still no ID and no facts, do not loop forever: mark as non-retryable this run + cooldown
     if (!resolvedFromSearch && !mutated) {
-      logger.warn('BackgroundEnrich', `Query pin unresolved (will retry next enrich): ${next.title}`);
+      failedResolveCache.set(cacheKey, Date.now());
+      logger.warn('BackgroundEnrich', `Query pin unresolved (cooldown 15m): ${next.title}`);
+    } else if (resolvedFromSearch) {
+      failedResolveCache.delete(cacheKey);
     }
   }
 
