@@ -160,6 +160,9 @@ Ownly exposes deterministic JSON read/write commands for scripts and external ag
 ```bash
 export OWNLY_VAULT=/path/to/location-containing-Ownly
 
+# Recommended (wyqd remains for backward compatibility)
+npm run --silent ownly -- object list --json
+# Legacy alias
 npm run --silent wyqd -- object list --json
 npm run --silent wyqd -- object get --id <id> --json
 npm run --silent wyqd -- object history --id <id> --json
