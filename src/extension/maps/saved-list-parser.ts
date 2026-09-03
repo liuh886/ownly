@@ -249,7 +249,15 @@ export function buildFromEntityList(input: EntityListParseInput): SavedListResul
     const rawNote = (item as unknown[])[3] as string | undefined;
     const userNote = rawNote && !isJunkNavigationText(rawNote) ? cleanExtractedText(rawNote) : undefined;
     const coordinates = parseEntityListCoordinates(placeInfo);
-    const sourcePlaceId = findEntityListPlaceId(item);
+    let sourcePlaceId = findEntityListPlaceId(item);
+    // B→A: entitylist 里有些条目只有 ChIJ，没有 0x。补一层 ChIJ 提取，使其直接走 A（preview/detail）而非 B（search HTML）
+    if (!sourcePlaceId) {
+      try {
+        const blob = JSON.stringify(item);
+        const chij = /ChIJ[A-Za-z0-9_-]{8,}/.exec(blob)?.[0];
+        if (chij) sourcePlaceId = chij;
+      } catch {}
+    }
     const sourceUrl = googleMapsDetailUrlFromSourceId(sourcePlaceId, title, input.origin) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
     const research = PLACE_PARSER.extractEntityListResearch(item, title);
     const category = research.category || findEntityListCategory(item, title);

@@ -95,12 +95,16 @@ export async function enrichPlaceMetadata(
         logger.fetch('BackgroundEnrich', `Step 1: Resolving query pin for ${next.title}`, { searchUrl });
         const res = await fetch(searchUrl, { credentials: 'include', signal: options?.signal });
         if (!res.ok) continue;
+        // B→A: finalUrl often already contains 0x/ChIJ after redirect — prefer it over HTML scan
+        const finalUrl = res.url || searchUrl;
+        const urlId = extractFeatureIdFromUrl(finalUrl) || /ChIJ[A-Za-z0-9_-]{15,}/.exec(finalUrl)?.[0] || null;
+        if (urlId) logger.debug('BackgroundEnrich', `Search res.url has id for ${next.title}`, { finalUrl: finalUrl.slice(0, 180), urlId });
         const html = (await res.text()).slice(0, 3_000_000);
         // Direct ChIJ / 0x extraction before HTML parser (skeleton pages have them in APP_INITIALIZATION_STATE)
         const chijMatch = /"(ChIJ[A-Za-z0-9_-]{15,})"/.exec(html)?.[1];
         const featureMatch = /0x[0-9a-f]+:0x[0-9a-f]+/i.exec(html)?.[0];
         const facts = extractGoogleMapsResearchFromHtml(html);
-        const candidateId = chijMatch || featureMatch || facts.sourcePlaceId;
+        const candidateId = urlId || chijMatch || featureMatch || facts.sourcePlaceId;
         if (candidateId) {
           // Prefer 0x for preview; keep ChIJ as source_place_id if only ChIJ found (preview supports ChIJ via query_place_id)
           if (/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(candidateId)) resolvedFeatureId = candidateId;

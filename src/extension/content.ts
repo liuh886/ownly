@@ -921,6 +921,23 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
             } catch {}
           }
           savedListDetailCache.set(placeId, { at: Date.now(), facts });
+        } else if (placeId && /^ChIJ[A-Za-z0-9_-]{8,}/.test(placeId.trim())) {
+          // B→A for ChIJ: fetch via detail URL (cid/search with query_place_id) then parse
+          place.sourcePlaceId = placeId;
+          const detailUrl = googleMapsDetailUrlFromSourceId(placeId, place.title, window.location.origin);
+          if (detailUrl) {
+            try {
+              const dRes = await fetch(detailUrl, { credentials: 'include' });
+              if (dRes.ok) {
+                const dHtml = (await dRes.text()).slice(0, 3_000_000);
+                const dFacts = extractGoogleMapsResearchFromHtml(dHtml);
+                // Merge but keep ChIJ as canonical id
+                facts = { ...dFacts, ...facts, sourcePlaceId: placeId } as typeof facts;
+                if ((dFacts as unknown as { rating?: number }).rating !== undefined) facts.rating = (dFacts as unknown as { rating?: number }).rating;
+              }
+            } catch {}
+          }
+          savedListDetailCache.set(placeId, { at: Date.now(), facts });
         }
         logger.parser('MapsTabDetail', `Resolved facts for query pin "${place.title}"`, facts);
         return facts;
