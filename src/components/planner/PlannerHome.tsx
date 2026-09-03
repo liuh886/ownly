@@ -1501,7 +1501,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   href={buildGoogleMapsRouteUrl(scheduled, 'driving')}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  className="hidden sm:inline-flex rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
                   title={zh ? '驾车路线' : 'Driving Route'}
                 >
                   🚗
@@ -1510,7 +1510,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                   href={buildGoogleMapsRouteUrl(scheduled, 'walking')}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  className="hidden sm:inline-flex rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
                   title={zh ? '步行路线' : 'Walking Route'}
                 >
                   🚶
@@ -1518,7 +1518,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 <button
                   type="button"
                   onClick={downloadKML}
-                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  className="hidden sm:inline-flex rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
                   title={zh ? '导出 KML (用于导入 Google 我的地图)' : 'Export KML for Google My Maps'}
                 >
                   📍 KML
@@ -1526,7 +1526,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 <button
                   type="button"
                   onClick={downloadCSV}
-                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                  className="hidden sm:inline-flex rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
                   title={zh ? '导出 CSV (用于导入 Google 表格或自定义地图)' : 'Export CSV'}
                 >
                   📊 CSV
@@ -1641,11 +1641,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     return (
                     <li
                       key={place.id}
-                      className="space-y-2"
+                      className="group space-y-2"
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
                     >
-                      <div className={`relative flex items-start gap-3 rounded-xl border p-3.5 transition-all duration-150 shadow-2xs ${
+                      <div className={`relative flex items-start gap-3 rounded-xl border p-3.5 pr-6 transition-all duration-150 shadow-2xs ${
                         highlightedPlaceId === place.id
                           ? 'border-emerald-500 ring-2 ring-emerald-300/50 bg-emerald-50/30'
                           : 'border-stone-200/90 bg-white hover:border-stone-300'
@@ -1683,8 +1683,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               ) : null}
                             </div>
 
-                            {/* Grouped 4-Action Controls */}
-                            <div className="inline-flex items-center rounded-lg border border-stone-200 bg-stone-50/80 p-0.5 shadow-2xs shrink-0">
+                            {/* Grouped 4-Action Controls — hover to reduce crowding */}
+                            <div className="inline-flex items-center rounded-lg border border-stone-200 bg-stone-50/80 p-0.5 shadow-2xs shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                               <button
                                 type="button"
                                 aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
