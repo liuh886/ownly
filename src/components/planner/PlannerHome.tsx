@@ -2606,7 +2606,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           await plannerRepository.deleteTrip(tripId);
           await load();
           setNotice(zh ? '已删除行程' : 'Trip deleted');
-          if (selectedTripId === tripId) setSelectedTripId(trips.find((t) => t.id !== tripId)?.id ?? '');
+          // Use functional update to avoid stale trips closure when deleting current trip
+          setSelectedTripId((prev) => (prev === tripId ? '' : prev));
         }}
         language={language}
         disabled={disabled}
