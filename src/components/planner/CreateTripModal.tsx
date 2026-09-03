@@ -7,13 +7,15 @@ import {
 } from '../../domain/trip-bundle';
 import { plannerRepository } from '../../services/PlannerRepository';
 
-type TabMode = 'create' | 'import';
+type TabMode = 'manage' | 'create' | 'import';
 
 interface CreateTripModalProps {
   open: boolean;
   onClose: () => void;
   onCreate: (trip: PlannerTrip) => Promise<void>;
   onImported?: (tripId: string) => void;
+  onDeleteTrip?: (tripId: string) => Promise<void>;
+  trips?: PlannerTrip[];
   language?: 'zh' | 'en';
   disabled?: boolean;
 }
@@ -25,11 +27,14 @@ export function CreateTripModal({
   onClose,
   onCreate,
   onImported,
+  onDeleteTrip,
+  trips = [],
   language = 'zh',
   disabled = false,
 }: CreateTripModalProps) {
   const zh = language === 'zh';
-  const [tab, setTab] = useState<TabMode>('create');
+  const [tab, setTab] = useState<TabMode>('manage');
+  const [deleteBusy, setDeleteBusy] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -169,7 +174,7 @@ export function CreateTripModal({
           <div className="flex items-center gap-2">
             <span className="text-xl">✈️</span>
             <h2 className="text-base font-bold text-stone-900">
-              {zh ? '创建新旅行行程' : 'Create New Trip'}
+              {zh ? '行程管理' : 'Manage Trips'}
             </h2>
           </div>
           <button
@@ -182,7 +187,16 @@ export function CreateTripModal({
         </div>
 
         {/* Tab Navigation */}
-        <div className="grid grid-cols-2 border-b border-stone-100 bg-stone-50/70 p-1.5 mt-4 rounded-lg">
+        <div className="grid grid-cols-3 border-b border-stone-100 bg-stone-50/70 p-1.5 mt-4 rounded-lg">
+          <button
+            type="button"
+            onClick={() => { setTab('manage'); setError(null); setImportNotice(''); }}
+            className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+              tab === 'manage' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            📋 {zh ? '管理' : 'Manage'}
+          </button>
           <button
             type="button"
             onClick={() => { setTab('create'); setError(null); setImportNotice(''); }}
@@ -190,7 +204,7 @@ export function CreateTripModal({
               tab === 'create' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
-            ✨ {zh ? '新建行程' : 'Create Trip'}
+            ✨ {zh ? '新建' : 'Create'}
           </button>
           <button
             type="button"
@@ -199,7 +213,7 @@ export function CreateTripModal({
               tab === 'import' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
-            📥 {zh ? '导入行程' : 'Import Trip'}
+            📥 {zh ? '导入' : 'Import'}
           </button>
         </div>
 
@@ -216,7 +230,53 @@ export function CreateTripModal({
             </div>
           ) : null}
 
-          {tab === 'create' ? (
+          {tab === 'manage' ? (
+            <div className="space-y-3">
+              {trips.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-6 text-center text-sm text-stone-500">
+                  {zh ? '暂无行程，去新建一个吧' : 'No trips yet — create one'}
+                </div>
+              ) : (
+                <ul className="max-h-80 space-y-2 overflow-auto pr-1">
+                  {trips.map((trip) => (
+                    <li key={trip.id} className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-stone-900">{trip.title}</div>
+                        <div className="text-[11px] text-stone-500">{trip.start_date} → {trip.end_date} · {trip.destinations.join(', ')}</div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={deleteBusy === trip.id}
+                        onClick={async () => {
+                          const ok = window.confirm(zh ? `确定删除行程「${trip.title}」？该操作会同步删除其下的地点、日程与费用，且不可撤销。` : `Delete trip "${trip.title}"? This will also delete its places, visits and expenses.`);
+                          if (!ok) return;
+                          setError(null);
+                          setDeleteBusy(trip.id);
+                          try {
+                            if (onDeleteTrip) await onDeleteTrip(trip.id);
+                            else await plannerRepository.deleteTrip(trip.id);
+                            setImportNotice(zh ? `已删除「${trip.title}」` : `Deleted "${trip.title}"`);
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : String(err));
+                          } finally {
+                            setDeleteBusy(null);
+                          }
+                        }}
+                        className="ml-3 shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                      >
+                        {deleteBusy === trip.id ? (zh ? '删除中…' : 'Deleting…') : (zh ? '删除' : 'Delete')}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex justify-end border-t border-stone-100 pt-3">
+                <button type="button" onClick={handleClose} className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50">
+                  {zh ? '关闭' : 'Close'}
+                </button>
+              </div>
+            </div>
+          ) : tab === 'create' ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Title */}
               <div>

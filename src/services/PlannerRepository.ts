@@ -659,6 +659,33 @@ export class PlannerRepository {
     return true;
   }
 
+  async deleteTrip(tripId: string): Promise<boolean> {
+    await this.initialize();
+    const trip = (await this.listTrips()).find((t) => t.id === tripId);
+    if (!trip) return false;
+    // cascade: places / visits / legs / expenses
+    const [places, visits, legs, expenses] = await Promise.all([
+      this.listPlaces(),
+      this.listVisits(),
+      this.listLegs(),
+      this.listExpenses(),
+    ]);
+    for (const p of places.filter((x) => x.trip_id === tripId)) {
+      await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.places), entityFileName(p));
+    }
+    for (const v of visits.filter((x) => x.trip_id === tripId)) {
+      await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.visits), entityFileName(v));
+    }
+    for (const l of legs.filter((x) => x.trip_id === tripId)) {
+      await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.legs), entityFileName(l));
+    }
+    for (const e of expenses.filter((x) => x.trip_id === tripId)) {
+      await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.expenses), expenseFileName(e.id ?? (e as unknown as Record<string, string>).expense_id));
+    }
+    await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.trips), entityFileName(trip));
+    return true;
+  }
+
   /**
    * Identifies suspected duplicate pairs in a trip for manual user review.
    */

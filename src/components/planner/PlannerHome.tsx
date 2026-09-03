@@ -1231,7 +1231,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               onClick={() => setIsCreateTripOpen(true)}
               className="rounded-lg bg-stone-950 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-stone-800"
             >
-              + {zh ? '创建新行程' : 'Create New Trip'}
+              {zh ? '行程管理' : 'Manage Trips'}
             </button>
           </div>
           {notice ? <p className="mt-3 text-xs text-stone-500">{notice}</p> : null}
@@ -1240,6 +1240,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           key={isCreateTripOpen ? 'open' : 'closed'}
           open={isCreateTripOpen}
           onClose={() => setIsCreateTripOpen(false)}
+          trips={trips}
           onCreate={async (newTrip) => {
             await plannerRepository.upsertTrip(newTrip);
             await load();
@@ -1249,6 +1250,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           onImported={(tripId) => {
             void load();
             setSelectedTripId(tripId);
+          }}
+          onDeleteTrip={async (tripId) => {
+            await plannerRepository.deleteTrip(tripId);
+            await load();
+            setNotice(zh ? '已删除行程' : 'Trip deleted');
+            if (selectedTripId === tripId) setSelectedTripId(trips.find((t) => t.id !== tripId)?.id ?? '');
           }}
           language={language}
           disabled={disabled}
@@ -1279,9 +1286,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               type="button"
               onClick={() => setIsCreateTripOpen(true)}
               className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-950 active:scale-98"
-              title={zh ? '创建新行程' : 'Create new trip'}
+              title={zh ? '管理行程（新建/删除）' : 'Manage trips'}
             >
-              + {zh ? '新建行程' : 'New Trip'}
+              {zh ? '行程管理' : 'Manage Trips'}
             </button>
             <div className="inline-flex items-center gap-1.5 rounded-lg bg-stone-100/80 px-2.5 py-1 text-xs font-medium text-stone-600">
               <span>📅</span>
@@ -2595,6 +2602,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         key={isCreateTripOpen ? 'open' : 'closed'}
         open={isCreateTripOpen}
         onClose={() => setIsCreateTripOpen(false)}
+        trips={trips}
         onCreate={async (newTrip) => {
           await plannerRepository.upsertTrip(newTrip);
           await load();
@@ -2604,6 +2612,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         onImported={(tripId) => {
           void load();
           setSelectedTripId(tripId);
+        }}
+        onDeleteTrip={async (tripId) => {
+          await plannerRepository.deleteTrip(tripId);
+          await load();
+          setNotice(zh ? '已删除行程' : 'Trip deleted');
+          if (selectedTripId === tripId) setSelectedTripId(trips.find((t) => t.id !== tripId)?.id ?? '');
         }}
         language={language}
         disabled={disabled}
