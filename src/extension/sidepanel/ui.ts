@@ -668,7 +668,7 @@ export function renderSmartListCard() {
               if (!title) continue;
               const existing = findExistingPlaceByIdentity(activePlaces, { source_provider: item.sourceProvider, source_place_id: item.sourcePlaceId, source_url: item.sourceUrl }) ?? findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
               const id = existing?.id ?? crypto.randomUUID();
-              const kind = inferPlaceKind([title, item.category, item.address, item.userNote, item.summary, ...(item.types || [])].filter(Boolean).join(' '));
+              const kind = inferPlaceKind([title, item.category, item.address, ...(item.types || [])].filter(Boolean).join(' '));
               const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || saved.detectedCurrency || store.pageDetectedCurrency);
               const place: CapturePlace = {
                 id,
