@@ -486,7 +486,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const allCandidatePlaces = useMemo(
     () => [...tripPlaces]
-      .filter((place) => place.state === 'candidate')
       .map((place) => ({
         ...place,
         tags: ensurePlaceKindTag(place.tags, place.kind, language),
