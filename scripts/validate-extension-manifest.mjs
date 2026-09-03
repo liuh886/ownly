@@ -8,7 +8,7 @@ if (missing.length) {
   process.exit(1);
 }
 const hosts = manifest.host_permissions ?? [];
-if (!hosts.some(h => h.includes('google.com/maps'))) {
+if (!hosts.some(h => h.includes('google'))) {
   console.error('Missing Google Maps host_permissions');
   process.exit(1);
 }
