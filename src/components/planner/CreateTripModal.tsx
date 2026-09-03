@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
 import {
+  createShareableTripBundle,
   parseTripBundle,
   instantiateTripBundle,
+  tripBundleFileName,
   type OwnlyTripBundle,
 } from '../../domain/trip-bundle';
 import { plannerRepository } from '../../services/PlannerRepository';
@@ -35,6 +37,8 @@ export function CreateTripModal({
   const zh = language === 'zh';
   const [tab, setTab] = useState<TabMode>('manage');
   const [deleteBusy, setDeleteBusy] = useState<string | null>(null);
+  const [editingTrip, setEditingTrip] = useState<PlannerTrip | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -77,11 +81,73 @@ export function CreateTripModal({
     setError(null);
     setRawImport('');
     setImportNotice('');
+    setEditingTrip(null);
   };
 
   const handleClose = () => {
     resetForm();
     onClose();
+  };
+
+  const startEdit = (trip: PlannerTrip) => {
+    setEditingTrip(trip);
+    setTitle(trip.title);
+    setStartDate(trip.start_date);
+    setEndDate(trip.end_date);
+    setDestinations(trip.destinations.join(', '));
+    setCurrency(trip.currency ?? 'THB');
+    setTransportMode(trip.transport_mode ?? 'transit');
+    setTags((trip.tags ?? []).join(', '));
+    setTab('create');
+  };
+
+  const handleExportTrip = async (trip: PlannerTrip) => {
+    setActionBusy(trip.id);
+    setError(null);
+    try {
+      const [allPlaces, allVisits, allLegs] = await Promise.all([
+        plannerRepository.listPlaces(),
+        plannerRepository.listVisits(),
+        plannerRepository.listLegs(),
+      ]);
+      const bundle = createShareableTripBundle(trip, allPlaces, allVisits, allLegs);
+      const json = JSON.stringify(bundle, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = tripBundleFileName(trip.title);
+      a.click();
+      URL.revokeObjectURL(url);
+      setImportNotice(zh ? `已导出「${trip.title}」` : `Exported "${trip.title}"`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const handleShareTrip = async (trip: PlannerTrip) => {
+    setActionBusy(trip.id);
+    setError(null);
+    try {
+      const [allPlaces, allVisits, allLegs] = await Promise.all([
+        plannerRepository.listPlaces(),
+        plannerRepository.listVisits(),
+        plannerRepository.listLegs(),
+      ]);
+      const bundle = createShareableTripBundle(trip, allPlaces, allVisits, allLegs);
+      const json = JSON.stringify(bundle);
+      const b64 = typeof Buffer !== 'undefined' ? Buffer.from(json).toString('base64') : btoa(unescape(encodeURIComponent(json)));
+      const token = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const url = `${window.location.origin}${window.location.pathname}#tripShare=${token}`;
+      await navigator.clipboard.writeText(url);
+      setImportNotice(zh ? `分享链接已复制「${trip.title}」` : `Share link copied for "${trip.title}"`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActionBusy(null);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,16 +173,16 @@ export function CreateTripModal({
     const newTrip: PlannerTrip = {
       schema_version: '0.1',
       type: 'trip',
-      id: crypto.randomUUID(),
+      id: editingTrip?.id ?? crypto.randomUUID(),
       title: cleanTitle,
-      status: 'planning',
+      status: editingTrip?.status ?? 'planning',
       start_date: startDate,
       end_date: endDate,
       destinations: destList.length > 0 ? destList : [cleanTitle],
       currency: currency.toUpperCase().trim() || 'THB',
       transport_mode: transportMode,
       tags: tagList,
-      created_at: now,
+      created_at: editingTrip?.created_at ?? now,
       updated_at: now,
     };
 
@@ -124,6 +190,7 @@ export function CreateTripModal({
     setError(null);
     try {
       await onCreate(newTrip);
+      setEditingTrip(null);
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -239,33 +306,39 @@ export function CreateTripModal({
               ) : (
                 <ul className="max-h-80 space-y-2 overflow-auto pr-1">
                   {trips.map((trip) => (
-                    <li key={trip.id} className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-3 py-2.5">
-                      <div className="min-w-0">
+                    <li key={trip.id} className="flex items-center justify-between gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2.5">
+                      <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-stone-900">{trip.title}</div>
                         <div className="text-[11px] text-stone-500">{trip.start_date} → {trip.end_date} · {trip.destinations.join(', ')}</div>
                       </div>
-                      <button
-                        type="button"
-                        disabled={deleteBusy === trip.id}
-                        onClick={async () => {
-                          const ok = window.confirm(zh ? `确定删除行程「${trip.title}」？该操作会同步删除其下的地点、日程与费用，且不可撤销。` : `Delete trip "${trip.title}"? This will also delete its places, visits and expenses.`);
-                          if (!ok) return;
-                          setError(null);
-                          setDeleteBusy(trip.id);
-                          try {
-                            if (onDeleteTrip) await onDeleteTrip(trip.id);
-                            else await plannerRepository.deleteTrip(trip.id);
-                            setImportNotice(zh ? `已删除「${trip.title}」` : `Deleted "${trip.title}"`);
-                          } catch (err) {
-                            setError(err instanceof Error ? err.message : String(err));
-                          } finally {
-                            setDeleteBusy(null);
-                          }
-                        }}
-                        className="ml-3 shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                      >
-                        {deleteBusy === trip.id ? (zh ? '删除中…' : 'Deleting…') : (zh ? '删除' : 'Delete')}
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button type="button" onClick={() => startEdit(trip)} className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-[11px] font-semibold text-stone-600 hover:bg-stone-50" title={zh ? '编辑' : 'Edit'}>✏️</button>
+                        <button type="button" disabled={actionBusy === trip.id} onClick={() => void handleExportTrip(trip)} className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-[11px] font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-50" title={zh ? '导出' : 'Export'}>📤</button>
+                        <button type="button" disabled={actionBusy === trip.id} onClick={() => void handleShareTrip(trip)} className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-[11px] font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-50" title={zh ? '分享' : 'Share'}>🔗</button>
+                        <button
+                          type="button"
+                          disabled={deleteBusy === trip.id}
+                          onClick={async () => {
+                            const ok = window.confirm(zh ? `确定删除行程「${trip.title}」？该操作会同步删除其下的地点、日程与费用，且不可撤销。` : `Delete trip "${trip.title}"? This will also delete its places, visits and expenses.`);
+                            if (!ok) return;
+                            setError(null);
+                            setDeleteBusy(trip.id);
+                            try {
+                              if (onDeleteTrip) await onDeleteTrip(trip.id);
+                              else await plannerRepository.deleteTrip(trip.id);
+                              setImportNotice(zh ? `已删除「${trip.title}」` : `Deleted "${trip.title}"`);
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : String(err));
+                            } finally {
+                              setDeleteBusy(null);
+                            }
+                          }}
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                          title={zh ? '删除' : 'Delete'}
+                        >
+                          {deleteBusy === trip.id ? '…' : '🗑️'}
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -386,21 +459,30 @@ export function CreateTripModal({
                 />
               </div>
 
+              {editingTrip ? (
+                <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">✏️ {zh ? `正在编辑「${editingTrip.title}」` : `Editing "${editingTrip.title}"`}</div>
+              ) : null}
               {/* Buttons */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
-                >
-                  {zh ? '取消' : 'Cancel'}
-                </button>
+                {editingTrip ? (
+                  <button type="button" onClick={() => { setEditingTrip(null); resetForm(); }} className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50">
+                    {zh ? '取消编辑' : 'Cancel edit'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
+                  >
+                    {zh ? '取消' : 'Cancel'}
+                  </button>
+                )}
                 <button
                   type="submit"
                   disabled={busy}
                   className="rounded-lg bg-stone-950 px-5 py-2 text-xs font-bold text-white hover:bg-stone-800 disabled:opacity-50 transition"
                 >
-                  {busy ? (zh ? '创建中…' : 'Creating…') : (zh ? '确认创建行程' : 'Create Trip')}
+                  {busy ? (zh ? '保存中…' : 'Saving…') : editingTrip ? (zh ? '保存修改' : 'Save changes') : (zh ? '确认创建行程' : 'Create Trip')}
                 </button>
               </div>
             </form>
