@@ -35,6 +35,7 @@
     "test:runtime-parity": "vitest run src/core/runtime-parity.test.ts",
     "deps:reset": "node -e \"require('node:fs').rmSync('node_modules',{recursive:true,force:true})\" && npm ci",
     "wyqd": "tsx scripts/wyqd-cli.ts",
+    "ownly": "tsx scripts/wyqd-cli.ts",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run"
