@@ -158,7 +158,7 @@ export function normalizeSourceUrl(raw: string | null | undefined): string | nul
     url.search = '';
     for (const [k, v] of kept) url.searchParams.append(k, v);
     // Remove trailing slash for root, normalize
-    let result = url.toString();
+    const result = url.toString();
     // URL.toString() always includes trailing slash for origin-only; keep as-is for dedup stability
     return result;
   } catch {
