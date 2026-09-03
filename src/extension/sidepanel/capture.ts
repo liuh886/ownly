@@ -1,5 +1,5 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
-import { normalizeObservedPrice } from '../../domain/planner';
+import { inferSourceProvider, normalizeObservedPrice } from '../../domain/planner';
 import { el } from '../dom';
 import { matchesSavedListContext } from '../saved-list-match';
 import { logger } from '../logger';
@@ -48,7 +48,19 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
     renderCurrencyPill();
     return;
   }
-  logger.debug('Capture', 'readCurrentPlace tab', { tabId: tab.id, url: tab.url?.slice(0, 80) });
+
+  const provider = tab.url ? inferSourceProvider(tab.url) : 'other';
+  if (provider === 'other') {
+    logger.debug('Capture', 'readCurrentPlace: tab is not a supported provider', { url: tab.url?.slice(0, 80) });
+    clearPageState();
+    el.placePanel.classList.remove('is-loading');
+    renderCurrentPlace();
+    renderSmartListCard();
+    renderCurrencyPill();
+    return;
+  }
+
+  logger.debug('Capture', 'readCurrentPlace tab', { tabId: tab.id, provider, url: tab.url?.slice(0, 80) });
 
   type PlaceMessageResponse = {
     place?: CurrentResearchPlace | null;
@@ -115,7 +127,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
         setStatus(store.lang === 'zh' ? '当前页面不支持 Capture 或未完全加载。' : 'Capture is not available or page is not loaded.', 'error');
       }
       const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
-      logger.error('Capture', 'Could not read current provider page after content-script retry', { error: msg, tabId: tab.id, url: tab.url?.slice(0, 80) });
+      logger.debug('Capture', 'Could not read current provider page after content-script retry', { error: msg, tabId: tab.id, url: tab.url?.slice(0, 80) });
     }
   }
 

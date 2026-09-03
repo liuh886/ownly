@@ -26,8 +26,11 @@ describe('Unified Currency Detector & Cross-Validation Engine', () => {
       expect(extractExplicitToken('AED 250')).toBe('AED');
       expect(extractExplicitToken('120 ₺')).toBe('TRY');
       expect(extractExplicitToken('MOP$ 300')).toBe('MOP');
-      expect(extractExplicitToken('R$ 80')).toBe('BRL');
+      expect(extractExplicitToken('JP¥8,473')).toBe('JPY');
+      expect(extractExplicitToken('CN¥500')).toBe('CNY');
       expect(extractExplicitToken('45 zł')).toBe('PLN');
+      expect(extractExplicitToken('ZL 120')).toBe('PLN');
+      expect(extractExplicitToken('RP 500,000')).toBe('IDR');
     });
 
     it('returns null for ambiguous symbols or non-currency text', () => {

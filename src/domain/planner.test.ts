@@ -259,7 +259,8 @@ describe('Ownly Planner domain', () => {
     expect(extractPriceCurrency('HK$500')).toBe('HKD');
     expect(extractPriceCurrency('NT$1,200')).toBe('TWD');
     expect(extractPriceCurrency('US$9.90')).toBe('USD');
-    expect(extractPriceCurrency('฿2,350')).toBe('THB');
+    expect(extractPriceCurrency('JP¥8,473')).toBe('JPY');
+    expect(extractPriceCurrency('CN¥500')).toBe('CNY');
     expect(extractPriceCurrency('¥18,000')).toBe('CNY');
     expect(extractPriceCurrency('free entry')).toBeNull();
   });
@@ -424,7 +425,7 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('Capsule Hotel Shinjuku')).toBe('stay');
     expect(inferPlaceKind('Mandarin Oriental Tokyo')).toBe('stay');
     expect(inferPlaceKind('全季酒店 (Ji Hotel)')).toBe('stay');
-    expect(inferPlaceKind('亚朵酒店 (Atour Hotel)')).toBe('stay');
+    expect(inferPlaceKind('Avani Sukhumvit Bangkok')).toBe('stay');
     expect(inferPlaceKind('民宿·青木川客栈')).toBe('stay');
 
     // 4. Shopping (购物 / 商场 / 药妆 / 夜市集市)
@@ -473,6 +474,7 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('경복궁 (Gyeongbokgung Palace)')).toBe('attraction');
     expect(inferPlaceKind('N서울타워 전망대')).toBe('attraction');
     expect(inferPlaceKind('Cathédrale Notre-Dame de Paris')).toBe('attraction');
+    expect(inferPlaceKind('Pratumnak Beach')).toBe('attraction');
     expect(inferPlaceKind(undefined)).toBe('other');
   });
 

@@ -76,10 +76,14 @@ const UNAMBIGUOUS_SYMBOLS: Record<string, string> = {
   'NZD': 'NZD',
   '纽币': 'NZD',
   'JPY': 'JPY',
+  'JP¥': 'JPY',
+  'JP￥': 'JPY',
   '円': 'JPY',
   '日元': 'JPY',
   '日币': 'JPY',
   'CNY': 'CNY',
+  'CN¥': 'CNY',
+  'CN￥': 'CNY',
   'RMB': 'CNY',
   '人民币': 'CNY',
   'CHF': 'CHF',
@@ -111,6 +115,7 @@ const UNAMBIGUOUS_SYMBOLS: Record<string, string> = {
   'MOP$': 'MOP',
   '澳门币': 'MOP',
   '葡币': 'MOP',
+  'SG$': 'SGD',
 };
 
 const DOLLAR_CURRENCIES = ['SGD', 'HKD', 'AUD', 'CAD', 'NZD', 'USD', 'TWD'];
@@ -118,13 +123,19 @@ const DOLLAR_CURRENCIES = ['SGD', 'HKD', 'AUD', 'CAD', 'NZD', 'USD', 'TWD'];
 export function extractExplicitToken(raw?: string | null): string | null {
   if (!raw || typeof raw !== 'string') return null;
 
-  const specificMatch = /(?:S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|ZL|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|PHP|IDR|AED|TRY|SEK|NOK|DKK|PLN|BRL|SAR|MOP|\bRM\b|\bRP\b|新台币|人民币|日元|日币|泰铢|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔)/i.exec(raw);
-  if (specificMatch) {
-    const rawKey = specificMatch[0];
+  const symbolMatch = /(?:JP[¥￥]|CN[¥￥]|S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|\bZL\b|\bRM\b|\bRP\b|新台币|人民币|日元|日币|泰铢|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔)/i.exec(raw);
+  if (symbolMatch) {
+    const rawKey = symbolMatch[0];
     const key = rawKey.toUpperCase();
     if (UNAMBIGUOUS_SYMBOLS[rawKey]) return UNAMBIGUOUS_SYMBOLS[rawKey];
     if (UNAMBIGUOUS_SYMBOLS[key]) return UNAMBIGUOUS_SYMBOLS[key];
     return key.replace(/\$$/, '');
+  }
+
+  const isoMatch = /\b(SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|PHP|IDR|AED|TRY|SEK|NOK|DKK|PLN|BRL|SAR|MOP)\b/i.exec(raw);
+  if (isoMatch) {
+    const key = isoMatch[1].toUpperCase();
+    return UNAMBIGUOUS_SYMBOLS[key] || key;
   }
 
   const singleMatch = /(?:[฿€£₩₫₹円铢원₱₺])/i.exec(raw);
@@ -376,17 +387,27 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     });
   }
 
-  // Decision Matrix
+  // 1. Explicit Token (Highest priority — e.g. JP¥, S$, HK$, US$, ฿, etc.)
+  if (explicit) {
+    return {
+      currency: explicit,
+      confidence: 100,
+      signals,
+      isAmbiguousResolved: false,
+    };
+  }
+
+  // Decision Matrix for Ambiguous Symbols
   const priceRaw = ctx.priceText || '';
-  const isBareDollar = priceRaw.includes('$') && !/S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$/i.test(priceRaw);
-  const isYenOrYuan = priceRaw.includes('¥') || priceRaw.includes('￥');
+  const isBareDollar = priceRaw.includes('$') && !/S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$/i.test(priceRaw);
+  const isBareYenOrYuan = (priceRaw.includes('¥') || priceRaw.includes('￥')) && !/JP[¥￥]|CN[¥￥]|JPY|CNY|RMB|円|日元|人民币/i.test(priceRaw);
 
   const scores: Record<string, number> = {};
   for (const s of signals) {
     scores[s.currency] = (scores[s.currency] || 0) + s.confidence;
   }
 
-  // 1. Bare "$" disambiguation
+  // 2. Bare "$" disambiguation
   if (isBareDollar) {
     const hint = ctx.hintCurrency?.trim().toUpperCase();
     let bestCurr = (hint && DOLLAR_CURRENCIES.includes(hint)) ? hint : 'USD';
@@ -407,8 +428,17 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     };
   }
 
-  // 2. "¥" disambiguation
-  if (isYenOrYuan) {
+  // 3. Bare "¥" disambiguation
+  if (isBareYenOrYuan) {
+    const hint = ctx.hintCurrency?.trim().toUpperCase();
+    if (hint === 'JPY' || hint === 'CNY') {
+      return {
+        currency: hint,
+        confidence: 95,
+        signals,
+        isAmbiguousResolved: true,
+      };
+    }
     const jpyScore = scores['JPY'] || 0;
     const cnyScore = scores['CNY'] || 0;
     const resolved = jpyScore > cnyScore || jpyScore >= 70 ? 'JPY' : 'CNY';
@@ -417,16 +447,6 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
       confidence: Math.max(jpyScore, cnyScore, 60),
       signals,
       isAmbiguousResolved: true,
-    };
-  }
-
-  // 3. Explicit Token
-  if (explicit) {
-    return {
-      currency: explicit,
-      confidence: 100,
-      signals,
-      isAmbiguousResolved: false,
     };
   }
 

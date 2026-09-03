@@ -9,6 +9,7 @@
 import { logger } from './logger';
 import { readCaptureStateV3, CAPTURE_STORAGE_KEY } from './capture-state';
 import { sessionStorage } from './session-storage';
+import { inferSourceProvider } from '../domain/planner';
 
 export interface OwnlyDiagnosticsBundleV2 {
   schema: 'ownly.diagnostics';
@@ -183,15 +184,36 @@ export async function buildDiagnosticsBundle(opts: {
   const recentWarns = allLogs.filter((l) => l.level === 'WARN').slice(-20);
   const recentErrors = allLogs.filter((l) => l.level === 'ERROR').slice(-20);
 
+  // Actionable errors (exclude expected host permission / unsupported tab / soft injection skips)
+  const actionableErrors = recentErrors.filter((l) => {
+    const msg = typeof l.message === 'string' ? l.message : JSON.stringify(l.message || '');
+    return !/Cannot access contents of url|Extension manifest must request permission|primary sendMessage failed|Missing strong Google Maps identity/i.test(msg);
+  });
+
   // Health warnings
   const warnings: string[] = [];
   const errors: string[] = [];
-  if (stats.inboxPlaces === 0) warnings.push('Inbox empty — no places to verify add flow');
-  if (stats.withCoordinates < stats.totalPlaces * 0.5 && stats.totalPlaces > 0) warnings.push(`Only ${stats.withCoordinates}/${stats.totalPlaces} places have coordinates — enrichment may be failing`);
-  if (stats.withPrice < stats.totalPlaces * 0.3 && stats.totalPlaces > 0) warnings.push(`Only ${stats.withPrice}/${stats.totalPlaces} places have price — price extraction may be broken`);
-  if (recentErrors.length > 0) errors.push(`${recentErrors.length} error logs in buffer`);
+  if (stats.inboxPlaces === 0 && stats.totalPlaces === 0) warnings.push('Inbox empty — no places captured yet');
+  if (stats.withCoordinates < stats.totalPlaces * 0.5 && stats.totalPlaces > 0) warnings.push(`Only ${stats.withCoordinates}/${stats.totalPlaces} places have coordinates`);
+
+  // Price coverage check: only evaluate against places where price is expected (stay / food)
+  const placesList = Array.isArray((captureState as { places?: Array<{ inferred_kind?: string }> })?.places)
+    ? (captureState as { places: Array<{ inferred_kind?: string }> }).places
+    : [];
+  const stayAndFoodCount = placesList.filter((p) => p.inferred_kind === 'stay' || p.inferred_kind === 'food').length;
+  if (stayAndFoodCount > 0 && stats.withPrice < stayAndFoodCount * 0.3) {
+    warnings.push(`Only ${stats.withPrice}/${stayAndFoodCount} stay/food places have price`);
+  }
+
+  if (actionableErrors.length > 0) errors.push(`${actionableErrors.length} error logs in buffer`);
   if (selectorDrifts.length > 0) warnings.push(`Selector drift detected: ${selectorDrifts.join(', ')}`);
-  if (!tabInfo?.url || !/^https:\/\//.test(tabInfo.url)) warnings.push('Active tab is not a capturable Maps/provider page');
+
+  if (tabInfo?.url && /^https?:\/\//.test(tabInfo.url)) {
+    const provider = inferSourceProvider(tabInfo.url);
+    if (provider !== 'other' && !tabInfo.currentPlace) {
+      warnings.push(`Active travel page (${provider}) could not be extracted`);
+    }
+  }
 
   const runtimeAny = chrome.runtime as unknown as { getManifest?: () => { version: string } };
   const bundle: OwnlyDiagnosticsBundleV2 = {

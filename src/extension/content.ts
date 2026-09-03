@@ -876,7 +876,7 @@ const savedListDetailCache = new Map<string, { at: number; facts: GoogleMapsRese
 async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<GoogleMapsResearchFacts | null> {
   const key = place.sourcePlaceId || extractFeatureIdFromUrl(place.sourceUrl);
   if (!key || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(key.trim())) {
-    logger.warn('MapsTabDetail', `Skipping detail fetch: missing verified feature id for "${place.title}"`);
+    logger.debug('MapsTabDetail', `Skipping detail fetch: search-query pin without 0x... feature id for "${place.title}"`);
     return null;
   }
   if (!place.sourcePlaceId) place.sourcePlaceId = key;

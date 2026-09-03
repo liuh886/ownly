@@ -713,11 +713,14 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
   if (/\b(?:ski\s*resort|golf\s*resort|spa\s*resort)\b|滑雪场|滑雪度假村|温泉度假区/i.test(lower)) {
     return 'experience';
   }
+  if (/\b(?:beach|waterfall|viewpoint|lookout|mountain|peak|island)\b|海滩|沙滩|瀑布|观景台|展望台/i.test(lower) && !/\b(?:resort|hotel|hostel|villas?|suites?|inn|ryokan|homestay)\b|度假村|度假酒店|酒店|旅馆|民宿/i.test(lower)) {
+    return 'attraction';
+  }
 
-  // 1. Lodging & Stays (Hotels, Resorts, Villas, Hostels, Ryokans, Serviced Apartments, Brands like Oakwood/IHG/Marriott/UHG, etc.)
+  // 1. Lodging & Stays (Hotels, Resorts, Villas, Hostels, Ryokans, Serviced Apartments, Brands like Oakwood/IHG/Marriott/UHG/Avani, etc.)
   // Evaluated before generic dining so hotels with in-house restaurants/bars (tagged with 'restaurant' in Google Maps types) are not misclassified as food
   if (
-    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|ji\s*hotel|citadines|somerset|ascott|dusit|six\s*senses|belmond|outrigger|centara|centre\s*point|chatrium|sindhorn|salil|asai|the\s*quarter|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|doubletree|waldorf\s*astoria|conrad|curio|canopy|tapestry|mgallery|swissotel|adagio|oakwood|pan\s*pacific|parkroyal|fraser|mandarin\s*oriental|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|m[oö]venpick|le\s*m[eé]ridien|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|love\s*hotel|machiya|hanok|riad|agriturismo|campground|rv\s*park|\d\s*[-–—]?\s*stars?\s*hotel)\b|호텔|리조트|게스트하우스|펜션|모텔|민박|호스텔|한옥|โรงแรม|ที่พัก|รีสอร์ท|โฮสเทล|เกสต์เฮาส์|วิลล่า|บังกะโล|ม่านรูด|ホテル|旅館|民宿|宿|ペンション|ゲストハウス|カプセルホテル|湯宿|坊|酒店|旅馆|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|星级酒店|精品酒店|宾馆|别馆|营地|庄园|驿站|招待所|万豪|希尔顿|凯悦|洲际|喜来登|香格里拉|四季酒店|丽思卡尔顿|瑞吉|文华东方|半岛酒店|悦榕庄|安纳塔拉|亚朵|全季|汉庭|如家|锦江之星|桔子酒店|khách\s*sạn|hôtel|albergue|posada|parador|pousada|albergo/i.test(lower)
+    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|avani|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|ji\s*hotel|citadines|somerset|ascott|dusit|six\s*senses|belmond|outrigger|centara|centre\s*point|chatrium|sindhorn|salil|asai|the\s*quarter|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|doubletree|waldorf\s*astoria|conrad|curio|canopy|tapestry|mgallery|swissotel|adagio|oakwood|pan\s*pacific|parkroyal|fraser|mandarin\s*oriental|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|m[oö]venpick|le\s*m[eé]ridien|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|love\s*hotel|machiya|hanok|riad|agriturismo|campground|rv\s*park|\d\s*[-–—]?\s*stars?\s*hotel)\b|호텔|리조트|게스트하우스|펜션|모텔|민박|호스텔|한옥|โรงแรม|ที่พัก|รีสอร์ท|โฮสเทล|เกสต์เฮาส์|วิลล่า|บังกะโล|ม่านรูด|ホテル|旅館|民宿|宿|ペンション|ゲストハウス|カプセルホテル|湯宿|坊|酒店|旅馆|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|星级酒店|精品酒店|宾馆|别馆|营地|庄园|驿站|招待所|万豪|希尔顿|凯悦|洲际|喜来登|香格里拉|四季酒店|丽思卡尔顿|瑞吉|文华东方|半岛酒店|悦榕庄|安纳塔拉|亚朵|全季|汉庭|如家|锦江之星|桔子酒店|khách\s*sạn|hôtel|albergue|posada|parador|pousada|albergo/i.test(lower)
   ) {
     return 'stay';
   }
@@ -1445,10 +1448,10 @@ export interface TripSettlementResult {
 }
 
 const SYMBOL_TO_CODE: Record<string, string> = {
-  '¥': 'CNY', '￥': 'CNY', '円': 'JPY', '日元': 'JPY', '元': 'CNY', '块': 'CNY', '人民币': 'CNY',
+  '¥': 'CNY', '￥': 'CNY', 'JP¥': 'JPY', 'JP￥': 'JPY', 'CN¥': 'CNY', 'CN￥': 'CNY', '円': 'JPY', '日元': 'JPY', '日币': 'JPY', '元': 'CNY', '块': 'CNY', '人民币': 'CNY',
   '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '铢': 'THB', '泰铢': 'THB', 'บาท': 'THB', '.-': 'THB', '.–': 'THB', '₩': 'KRW', '원': 'KRW', '韩元': 'KRW',
-  'S$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD', 'A$': 'AUD', 'AU$': 'AUD', 'C$': 'CAD', 'CA$': 'CAD', 'NZ$': 'NZD',
-  '₫': 'VND', '₹': 'INR', 'RM': 'MYR', 'CHF': 'CHF',
+  'S$': 'SGD', 'SG$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD', 'A$': 'AUD', 'AU$': 'AUD', 'C$': 'CAD', 'CA$': 'CAD', 'NZ$': 'NZD',
+  '₫': 'VND', '₹': 'INR', 'RM': 'MYR', 'CHF': 'CHF', 'MOP$': 'MOP', 'R$': 'BRL', 'RP': 'IDR', 'ZL': 'PLN', 'zł': 'PLN',
 };
 
 /**
@@ -1504,10 +1507,15 @@ export function effectiveFxRate(
 /** Extracts a normalized ISO-ish currency marker from a free-text price string. */
 export function extractPriceCurrency(raw?: string | null): string | null {
   if (!raw) return null;
-  const specificMatch = /(?:S\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|\bRM\b|新台币|人民币|日元|泰铢|韩元|บาท|\.-|\.–)/i.exec(raw);
-  if (specificMatch) {
-    const marker = specificMatch[0].toUpperCase();
-    return SYMBOL_TO_CODE[marker] ?? SYMBOL_TO_CODE[specificMatch[0]] ?? marker.replace(/\$$/, '');
+  const symbolMatch = /(?:JP[¥￥]|CN[¥￥]|S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|\bZL\b|\bRM\b|\bRP\b|新台币|人民币|日元|日币|泰铢|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔|\.-|\.–)/i.exec(raw);
+  if (symbolMatch) {
+    const marker = symbolMatch[0].toUpperCase();
+    return SYMBOL_TO_CODE[marker] ?? SYMBOL_TO_CODE[symbolMatch[0]] ?? marker.replace(/\$$/, '');
+  }
+
+  const isoMatch = /\b(SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|PHP|IDR|AED|TRY|SEK|NOK|DKK|PLN|BRL|SAR|MOP)\b/i.exec(raw);
+  if (isoMatch) {
+    return isoMatch[1].toUpperCase();
   }
 
   const singleMatch = /(?:[¥￥฿$€£₩₫₹円铢元块원])/i.exec(raw);
