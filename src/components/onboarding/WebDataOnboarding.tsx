@@ -54,6 +54,9 @@ export function WebDataOnboarding({
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
             {copy.onboarding.description}
           </p>
+          <div className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs leading-5 text-stone-700 ring-1 ring-emerald-200">
+            {language === 'zh' ? 'Ownly 不上传你的数据，你的数据保存在你选择的文件夹中。' : 'Ownly never uploads your data — it stays in the folder you choose.'}
+          </div>
         </div>
 
         <div className="px-6 pt-6 sm:px-8 sm:pt-8">

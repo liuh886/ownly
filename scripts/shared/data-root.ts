@@ -40,6 +40,11 @@ export function resolveOwnlyDataRoot(
   }
 
   if (options.allowCreateDefault) return defaultChild;
+  if (!looksLikeDataRoot(selected) && !isDirectory(selected)) {
+    throw new Error(
+      'No Ownly folder configured. Run: npm run --silent wyqd -- --vault /path/to/folder object list --json  or set OWNLY_VAULT env.',
+    );
+  }
   return selected;
 }
 
