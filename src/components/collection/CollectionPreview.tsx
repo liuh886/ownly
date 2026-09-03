@@ -3,7 +3,8 @@
 import type { OwnlyCollectionExportV1 } from '@/domain/capture';
 import { capturePlaceToPlannerPlace } from '@/domain/capture';
 import { plannerRepository } from '@/services/PlannerRepository';
-import { useCallback, useState } from 'react';
+import { trackCollectionEvent } from '@/lib/collection-analytics';
+import { useCallback, useEffect, useState } from 'react';
 
 export function CollectionPreview({
   data,
@@ -17,7 +18,12 @@ export function CollectionPreview({
   const places = data.places.slice(0, 20);
   const hasMore = data.places.length > 20;
 
+  useEffect(() => {
+    trackCollectionEvent({ type: 'preview_viewed', collectionId: data.collection.id, placeCount: data.collection.place_count });
+  }, [data.collection.id, data.collection.place_count]);
+
   const handleImport = useCallback(async () => {
+    trackCollectionEvent({ type: 'import_clicked', collectionId: data.collection.id, placeCount: data.collection.place_count });
     setBusy(true);
     setResult(null);
     try {
@@ -45,6 +51,7 @@ export function CollectionPreview({
       const plannerPlaces = data.places.map((p) => capturePlaceToPlannerPlace(p, tripId!, data.provenance) as never);
       const report = await plannerRepository.importCapturedPlaces(plannerPlaces as never);
       const created = report.created.length + report.updated.length;
+      trackCollectionEvent({ type: 'import_succeeded', collectionId: data.collection.id, created, failed: report.failed.length });
       setResult(`已导入 ${created} 个地点` + (report.failed.length ? `，失败 ${report.failed.length} 个` : ''));
       onImported?.(created);
     } catch (e) {
