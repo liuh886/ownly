@@ -421,27 +421,12 @@ export class PlannerRepository {
         state: 'candidate',
       };
 
-      // Check for ID match
-      let existingPlace = byId.get(incoming.id);
+      // Check for exact ID match to update if re-importing the same place
+      const existingPlace = byId.get(incoming.id);
       if (existingPlace) {
         traceEntry.match_type = 'id';
         traceEntry.matched_id = existingPlace.id;
         traceEntry.matched_title = existingPlace.title;
-      }
-
-      // Check for strong identity match
-      if (!existingPlace) {
-        for (const key of getStrongPlaceIdentityKeys(incoming)) {
-          const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
-          if (match) {
-            existingPlace = match;
-            traceEntry.match_type = 'strong_identity';
-            traceEntry.matched_id = match.id;
-            traceEntry.matched_title = match.title;
-            traceEntry.identity_key = key;
-            break;
-          }
-        }
       }
 
       try {
@@ -450,13 +435,13 @@ export class PlannerRepository {
           await this.upsert(persisted);
           indexPlace(persisted);
           traceEntry.action = 'updated';
-          traceEntry.reason = `merged into existing place ${existingPlace.id}`;
+          traceEntry.reason = `updated existing place ${existingPlace.id}`;
           report.updated.push(rawPlace.id);
         } else {
           await this.upsert(incoming);
           indexPlace(incoming);
           traceEntry.action = 'created';
-          traceEntry.reason = 'new place, no match found';
+          traceEntry.reason = 'new place imported';
           report.created.push(rawPlace.id);
         }
       } catch (error) {
@@ -467,28 +452,6 @@ export class PlannerRepository {
         report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'write_error', detail: msg });
       }
       trace.push(traceEntry);
-    }
-
-    for (const tripId of touchedTripIds) {
-      try {
-        const dedupResult = await this.deduplicateTripPlaces(tripId);
-        if (dedupResult.removedCount > 0) {
-          const allPlacesAfter = await this.listPlaces();
-          const survivingIds = new Set(allPlacesAfter.map((p) => p.id));
-          for (const id of [...report.created, ...report.updated]) {
-            if (!survivingIds.has(id)) {
-              report.deduped.push(id);
-              const entry = trace.find((t) => t.input_id === id);
-              if (entry) {
-                entry.action = 'deduped';
-                entry.reason = `removed during auto-dedup in trip ${tripId}`;
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn(`[PlannerRepository] Auto-deduplication for trip ${tripId} encountered warning:`, err);
-      }
     }
 
     return { ...report, trace };

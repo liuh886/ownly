@@ -144,27 +144,32 @@ async function strengthenCandidatesThroughMaps(
   const collection = getActiveCollection();
   if (collection) {
     const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
-    const latestTargets = store.stateV3.places.filter((place) => targetIds.has(place.id));
-    const updatedActivePlaces = latestTargets.map((p) => {
+    const activePlaces = getActivePlaces().map((p) => {
+      if (!targetIds.has(p.id)) return p;
       const enrichedVp = mergedById.get(p.id);
       if (!enrichedVp) return p;
       return mergePlaceResearch(p, {
         title: enrichedVp.title,
-        source: { ...p.source, category: enrichedVp.source_category, types: enrichedVp.types },
-        address: enrichedVp.address,
-        coordinates: enrichedVp.coordinates,
-        rating: enrichedVp.observed_rating,
-        review_count: enrichedVp.observed_review_count,
-        price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : undefined,
-        phone: enrichedVp.phone,
-        plus_code: enrichedVp.plus_code,
-        open_hours: enrichedVp.open_hours,
-        menu_url: enrichedVp.menu_url,
-        reservation_url: enrichedVp.reservation_url,
-        review_topics: enrichedVp.review_topics,
+        source: {
+          ...p.source,
+          place_id: enrichedVp.source_place_id || p.source.place_id,
+          category: enrichedVp.source_category || p.source.category,
+          types: enrichedVp.types || p.source.types,
+        },
+        address: enrichedVp.address || p.address,
+        coordinates: enrichedVp.coordinates || p.coordinates,
+        rating: enrichedVp.observed_rating ?? p.rating,
+        review_count: enrichedVp.observed_review_count ?? p.review_count,
+        price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : p.price,
+        phone: enrichedVp.phone || p.phone,
+        plus_code: enrichedVp.plus_code || p.plus_code,
+        open_hours: enrichedVp.open_hours || p.open_hours,
+        menu_url: enrichedVp.menu_url || p.menu_url,
+        reservation_url: enrichedVp.reservation_url || p.reservation_url,
+        review_topics: enrichedVp.review_topics || p.review_topics,
       });
     });
-    store.setState({ ...store.stateV3, places: [...otherPlaces, ...updatedActivePlaces] });
+    store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
     await saveState();
   }
   return {
@@ -1043,18 +1048,26 @@ export function initHandlers(): void {
             if (!enrichedVp) return cp;
             return mergePlaceResearch(cp, {
               title: enrichedVp.title,
-              source: { ...cp.source, category: enrichedVp.source_category, types: enrichedVp.types },
-              address: enrichedVp.address,
-              coordinates: enrichedVp.coordinates,
-              rating: enrichedVp.observed_rating,
-              review_count: enrichedVp.observed_review_count,
-              price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : undefined,
-              phone: enrichedVp.phone,
-              plus_code: enrichedVp.plus_code,
-              open_hours: enrichedVp.open_hours,
-              menu_url: enrichedVp.menu_url,
-              reservation_url: enrichedVp.reservation_url,
-              review_topics: enrichedVp.review_topics,
+              source: {
+                ...cp.source,
+                place_id: enrichedVp.source_place_id || cp.source.place_id,
+                category: enrichedVp.source_category || cp.source.category,
+                types: enrichedVp.types || cp.source.types,
+              },
+              address: enrichedVp.address || cp.address,
+              coordinates: enrichedVp.coordinates || cp.coordinates,
+              rating: enrichedVp.observed_rating ?? cp.rating,
+              review_count: enrichedVp.observed_review_count ?? cp.review_count,
+              price: enrichedVp.observed_price
+                ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level }
+                : cp.price,
+              phone: enrichedVp.phone || cp.phone,
+              plus_code: enrichedVp.plus_code || cp.plus_code,
+              open_hours: enrichedVp.open_hours || cp.open_hours,
+              menu_url: enrichedVp.menu_url || cp.menu_url,
+              reservation_url: enrichedVp.reservation_url || cp.reservation_url,
+              review_topics: enrichedVp.review_topics || cp.review_topics,
+              inferred_kind: (enrichedVp.kind && enrichedVp.kind !== 'other') ? (enrichedVp.kind as unknown as import('../../domain/capture').CapturePlaceKind) : cp.inferred_kind,
             });
           });
           store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
@@ -1144,18 +1157,26 @@ export function initHandlers(): void {
             if (!enrichedVp) return cp;
             return mergePlaceResearch(cp, {
               title: enrichedVp.title,
-              source: { ...cp.source, category: enrichedVp.source_category, types: enrichedVp.types },
-              address: enrichedVp.address,
-              coordinates: enrichedVp.coordinates,
-              rating: enrichedVp.observed_rating,
-              review_count: enrichedVp.observed_review_count,
-              price: enrichedVp.observed_price ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level } : undefined,
-              phone: enrichedVp.phone,
-              plus_code: enrichedVp.plus_code,
-              open_hours: enrichedVp.open_hours,
-              menu_url: enrichedVp.menu_url,
-              reservation_url: enrichedVp.reservation_url,
-              review_topics: enrichedVp.review_topics,
+              source: {
+                ...cp.source,
+                place_id: enrichedVp.source_place_id || cp.source.place_id,
+                category: enrichedVp.source_category || cp.source.category,
+                types: enrichedVp.types || cp.source.types,
+              },
+              address: enrichedVp.address || cp.address,
+              coordinates: enrichedVp.coordinates || cp.coordinates,
+              rating: enrichedVp.observed_rating ?? cp.rating,
+              review_count: enrichedVp.observed_review_count ?? cp.review_count,
+              price: enrichedVp.observed_price
+                ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level }
+                : cp.price,
+              phone: enrichedVp.phone || cp.phone,
+              plus_code: enrichedVp.plus_code || cp.plus_code,
+              open_hours: enrichedVp.open_hours || cp.open_hours,
+              menu_url: enrichedVp.menu_url || cp.menu_url,
+              reservation_url: enrichedVp.reservation_url || cp.reservation_url,
+              review_topics: enrichedVp.review_topics || cp.review_topics,
+              inferred_kind: (enrichedVp.kind && enrichedVp.kind !== 'other') ? (enrichedVp.kind as unknown as import('../../domain/capture').CapturePlaceKind) : cp.inferred_kind,
             });
           });
           store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
