@@ -11,6 +11,8 @@ export type ElementMap = {
   captureContextHint: HTMLElement;
   collectionSelector: HTMLSelectElement;
   btnCreateCollection: HTMLButtonElement;
+  btnExportActiveCollection: HTMLButtonElement;
+  btnDeleteActiveCollection: HTMLButtonElement;
   createCollectionRow: HTMLElement;
   inputNewCollection: HTMLInputElement;
   btnConfirmCreateCollection: HTMLButtonElement;
@@ -23,7 +25,6 @@ export type ElementMap = {
   bulkInputText: HTMLTextAreaElement;
   btnParseBulkImport: HTMLButtonElement;
   btnShareCollection: HTMLButtonElement;
-  btnExportCollection: HTMLButtonElement;
   btnBackupState: HTMLButtonElement;
   btnRestoreState: HTMLButtonElement;
   fileRestoreState: HTMLInputElement;
@@ -36,13 +37,8 @@ export type ElementMap = {
   btnBulkEnrich: HTMLButtonElement;
   btnBulkDelete: HTMLButtonElement;
   btnBulkExit: HTMLButtonElement;
-  smartListSection: HTMLElement;
-  smartListBadge: HTMLElement;
-  smartListCountBadge: HTMLElement;
-  smartListTitle: HTMLElement;
-  smartListDesc: HTMLElement;
+  smartListContainer: HTMLElement;
   btnSmartSyncAll: HTMLButtonElement;
-  btnCloseSmartList: HTMLButtonElement;
   btnToggleListPreview: HTMLButtonElement;
   smartListPreviewContainer: HTMLElement;
   batchListContainer: HTMLElement;
@@ -133,6 +129,8 @@ export const el: ElementMap = {
   captureContextHint: required('captureContextHint'),
   collectionSelector: required<HTMLSelectElement>('collectionSelector'),
   btnCreateCollection: required<HTMLButtonElement>('btnCreateCollection'),
+  btnExportActiveCollection: required<HTMLButtonElement>('btnExportActiveCollection'),
+  btnDeleteActiveCollection: required<HTMLButtonElement>('btnDeleteActiveCollection'),
   createCollectionRow: required('createCollectionRow'),
   inputNewCollection: required<HTMLInputElement>('inputNewCollection'),
   btnConfirmCreateCollection: required<HTMLButtonElement>('btnConfirmCreateCollection'),
@@ -145,7 +143,6 @@ export const el: ElementMap = {
   bulkInputText: required<HTMLTextAreaElement>('bulkInputText'),
   btnParseBulkImport: required<HTMLButtonElement>('btnParseBulkImport'),
   btnShareCollection: required<HTMLButtonElement>('btnShareCollection'),
-  btnExportCollection: required<HTMLButtonElement>('btnExportCollection'),
   btnBackupState: required<HTMLButtonElement>('btnBackupState'),
   btnRestoreState: required<HTMLButtonElement>('btnRestoreState'),
   fileRestoreState: required<HTMLInputElement>('fileRestoreState'),
@@ -158,13 +155,8 @@ export const el: ElementMap = {
   btnBulkEnrich: required<HTMLButtonElement>('btnBulkEnrich'),
   btnBulkDelete: required<HTMLButtonElement>('btnBulkDelete'),
   btnBulkExit: required<HTMLButtonElement>('btnBulkExit'),
-  smartListSection: required('smartListSection'),
-  smartListBadge: required('smartListBadge'),
-  smartListCountBadge: required('smartListCountBadge'),
-  smartListTitle: required('smartListTitle'),
-  smartListDesc: required('smartListDesc'),
+  smartListContainer: required('smartListContainer'),
   btnSmartSyncAll: required<HTMLButtonElement>('btnSmartSyncAll'),
-  btnCloseSmartList: required<HTMLButtonElement>('btnCloseSmartList'),
   btnToggleListPreview: required<HTMLButtonElement>('btnToggleListPreview'),
   smartListPreviewContainer: required('smartListPreviewContainer'),
   batchListContainer: required('batchListContainer'),

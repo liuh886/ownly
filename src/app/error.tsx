@@ -108,6 +108,14 @@ export default function Error({
     void runDiagnostics();
   };
 
+  const isChunkLoadError = error.name === 'ChunkLoadError' || /ChunkLoadError|Failed to load chunk/i.test(error.message || '');
+
+  const handleHardRefresh = () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = window.location.pathname + '?_v=' + Date.now();
+    }
+  };
+
   const handleContinueDemo = () => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('ownly_web_onboarding_dismissed', 'true');
@@ -118,18 +126,26 @@ export default function Error({
   return (
     <div className="flex h-full min-h-screen flex-col items-center justify-center bg-stone-50 p-6 text-stone-900">
       <div className="rounded-2xl border border-stone-200 bg-white p-8 shadow-sm max-w-xl w-full space-y-6">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-          <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
+        <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${isChunkLoadError ? 'bg-amber-100' : 'bg-red-100'}`}>
+          {isChunkLoadError ? (
+            <span className="text-2xl">🚀</span>
+          ) : (
+            <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          )}
         </div>
 
         <div className="text-center">
-          <h2 className="text-xl font-bold text-stone-900">Something went wrong</h2>
+          <h2 className="text-xl font-bold text-stone-900">
+            {isChunkLoadError ? '应用版本已更新 (Version Updated)' : 'Something went wrong'}
+          </h2>
           <p className="mt-2 text-sm text-stone-600 leading-relaxed">
-            加载工作区时遇到异常。可能是本地存储数据格式异常或浏览器文件系统权限未就绪。
+            {isChunkLoadError
+              ? '检测到 Ownly 已部署新版本，浏览器缓存的旧代码脚本已失效。请点击下方按钮硬刷新以加载最新代码。'
+              : '加载工作区时遇到异常。可能是本地存储数据格式异常或浏览器文件系统权限未就绪。'}
           </p>
-          {error.message && (
+          {error.message && !isChunkLoadError && (
             <div className="mt-3 rounded-lg bg-red-50 p-3 text-left font-mono text-xs text-red-800 break-words border border-red-200">
               {error.message}
             </div>
@@ -143,12 +159,21 @@ export default function Error({
         )}
 
         <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={() => reset()}
-            className="flex-1 rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-stone-800"
-          >
-            🔄 重新加载 (Retry)
-          </button>
+          {isChunkLoadError ? (
+            <button
+              onClick={handleHardRefresh}
+              className="flex-1 rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-stone-800"
+            >
+              🔄 刷新加载最新版本 (Reload Latest)
+            </button>
+          ) : (
+            <button
+              onClick={() => reset()}
+              className="flex-1 rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-stone-800"
+            >
+              🔄 重新加载 (Retry)
+            </button>
+          )}
           <button
             onClick={handleContinueDemo}
             className="rounded-lg border border-stone-300 bg-stone-50 px-4 py-2.5 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-100"

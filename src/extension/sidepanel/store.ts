@@ -189,6 +189,27 @@ export const store = {
     return col;
   },
 
+  /** Delete a collection by id. Cannot delete default inbox collection. */
+  deleteCollection(id: string): boolean {
+    const target = this.stateV3.collections.find((c) => c.id === id);
+    if (!target) return false;
+    const inbox = this.getInboxCollection();
+    if (inbox && target.id === inbox.id) {
+      throw new Error(store.lang === 'zh' ? '默认 Inbox 合集不可删除' : 'Default Inbox collection cannot be deleted');
+    }
+    const remainingCols = this.stateV3.collections.filter((c) => c.id !== id);
+    const remainingPlaces = this.stateV3.places.filter((p) => p.collection_id !== id);
+    const nextActiveId = inbox?.id || remainingCols[0]?.id || `inbox-${Date.now()}`;
+    this.setState({
+      ...this.stateV3,
+      collections: remainingCols,
+      places: remainingPlaces,
+      active_collection_id: nextActiveId,
+    });
+    logger.info('Store', 'deleteCollection', { id, title: target.title });
+    return true;
+  },
+
   /** Set active collection by id. */
   setActiveCollection(id: string): boolean {
     if (!this.stateV3.collections.some((c) => c.id === id)) return false;

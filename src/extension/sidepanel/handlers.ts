@@ -1192,11 +1192,7 @@ export function initHandlers(): void {
     })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
   });
 
-  el.btnCloseSmartList.addEventListener('click', () => {
-    logger.info('SmartList', 'dismiss clicked');
-    store.smartListDismissed = true;
-    renderSmartListCard();
-  });
+
 
   // Smart-list import: independent — imports to active collection (no Planner required)
   el.btnSmartSyncAll.addEventListener('click', () => {
@@ -1782,6 +1778,35 @@ export function initHandlers(): void {
   el.inputNewCollection.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') el.btnConfirmCreateCollection.click();
     if (e.key === 'Escape') el.btnCancelCreateCollection.click();
+  });
+
+  el.btnDeleteActiveCollection.addEventListener('click', () => {
+    const activeCol = store.getActiveCollection();
+    if (!activeCol) return;
+    const inbox = store.getInboxCollection();
+    if (inbox && activeCol.id === inbox.id) {
+      setStatus(store.lang === 'zh' ? '默认 Inbox 合集不可删除' : 'Default Inbox collection cannot be deleted', 'error');
+      return;
+    }
+    const places = store.getActivePlaces();
+    const confirmMsg = store.lang === 'zh'
+      ? `确定要删除合集「${activeCol.title}」及其中的 ${places.length} 个地点吗？此操作不可撤销。`
+      : `Are you sure you want to delete collection "${activeCol.title}" and its ${places.length} places? This cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      store.deleteCollection(activeCol.id);
+      void saveState().then(() => {
+        renderState();
+        renderCandidatesList();
+        renderSmartListCard();
+        renderCurrentPlace();
+        setStatus(store.lang === 'zh' ? `已删除合集「${activeCol.title}」` : `Deleted ${activeCol.title}`, 'success');
+      });
+    } catch (e) {
+      logger.error('Collection', 'delete failed', String(e));
+      setStatus(String(e), 'error');
+    }
   });
 
   void chrome.storage.local.get('ownly_fx_tooltip_enabled').then((data) => {

@@ -6,18 +6,16 @@ import {
   inferPlaceKind,
   isPlausibleCustomTag,
   normalizeDelimitedText,
-  normalizeObservedPrice,
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
   type PlannerPlaceKind,
 } from '../../domain/planner';
-import type { CurrentResearchPlace, DetectedSavedList } from '../content';
-import { findExistingPlace, findExistingPlaceByIdentity, type CapturePlace } from '../../domain/capture';
+import type { CurrentResearchPlace } from '../content';
+import type { CapturePlace } from '../../domain/capture';
 import { el } from '../dom';
 import { logger } from '../logger';
-import { cleanExtractedText, escapeHtml, isPlausiblePriceText, isZeroOrPlaceholderPrice } from '../utils';
-import { matchesSavedListContext } from '../saved-list-match';
-import { getExistingPlaceForUrl, saveState, store, t } from './store';
+import { escapeHtml, isPlausiblePriceText, isZeroOrPlaceholderPrice } from '../utils';
+import { getExistingPlaceForUrl, store, t } from './store';
 
 const KIND_ICONS = PLANNER_KIND_ICONS;
 
@@ -117,7 +115,9 @@ export function applyI18n() {
   el.bulkInputText.placeholder = dict.bulkPlaceholder;
   el.btnParseBulkImport.textContent = dict.btnParseBulkImport;
   el.btnShareCollection.textContent = (dict as unknown as Record<string, string>).shareBtn ?? (store.lang === 'zh' ? '🔗 分享合集' : '🔗 Share');
-  el.btnExportCollection.textContent = dict.exportBtn;
+  el.btnCreateCollection.textContent = store.lang === 'zh' ? '＋ 新建' : '+ New';
+  el.btnExportActiveCollection.textContent = store.lang === 'zh' ? '📤 导出' : 'Export';
+  el.btnDeleteActiveCollection.textContent = store.lang === 'zh' ? '🗑️ 删除' : 'Delete';
   el.btnBackupState.textContent = dict.backupBtn;
   el.btnRestoreState.textContent = dict.restoreBtn;
 
@@ -485,6 +485,20 @@ export function renderState() {
       }
       sel.value = activeCollection?.id || prev || store.stateV3.collections[0]?.id || '';
     }
+    const isInboxActive = activeCollection?.id === inbox?.id;
+    if (el.btnDeleteActiveCollection) {
+      el.btnDeleteActiveCollection.disabled = Boolean(isInboxActive);
+      el.btnDeleteActiveCollection.style.opacity = isInboxActive ? '0.4' : '1';
+      el.btnDeleteActiveCollection.style.cursor = isInboxActive ? 'not-allowed' : 'pointer';
+      el.btnDeleteActiveCollection.title = isInboxActive
+        ? (store.lang === 'zh' ? '默认 Inbox 合集不可删除' : 'Default Inbox cannot be deleted')
+        : (store.lang === 'zh' ? `删除合集：${activeCollection?.title}` : `Delete collection: ${activeCollection?.title}`);
+    }
+    if (el.btnExportActiveCollection) {
+      el.btnExportActiveCollection.title = store.lang === 'zh'
+        ? `导出当前合集「${activeCollection?.title || 'Inbox'}」为 JSON 文件`
+        : `Export active collection "${activeCollection?.title || 'Inbox'}" as JSON`;
+    }
   } catch {}
   renderChips();
   renderFilters();
@@ -565,217 +579,7 @@ export function renderCurrencyPill() {
 }
 
 export function renderSmartListCard() {
-  const dict = t();
-  if (store.smartListDismissed) {
-    el.smartListSection.style.display = 'none';
-    return;
-  }
-  const activeTrip = store.state.activeContext;
-
-  // 1. Overview page with multiple Google lists found — independent collections mode
-  if ((!store.detectedSavedList || store.detectedSavedList.places.length === 0) && store.detectedAllLists.length > 0) {
-    el.smartListSection.style.display = 'block';
-    el.smartListSection.className = 'panel stack match-banner neutral';
-    el.smartListBadge.textContent = dict.listsFoundBadge;
-    el.smartListTitle.textContent = dict.listsFoundTitle(store.detectedAllLists.length);
-    const activeCol = store.getActiveCollection();
-    el.smartListCountBadge.textContent = activeCol ? (store.lang === 'zh' ? `将导入到：${activeCol.title}` : `Target: ${activeCol.title}`) : dict.clickToLoad;
-    // Build overview: each Google list → can view or directly import to active collection
-    el.smartListDesc.innerHTML = '';
-    const intro = document.createElement('div');
-    intro.textContent = dict.loadListIntro;
-    intro.style.fontSize = '11px';
-    intro.style.color = 'var(--text-3)';
-    el.smartListDesc.append(intro);
-    const tip = document.createElement('div');
-    tip.textContent = store.lang === 'zh'
-      ? `提示：上方“当前合集”可切换目标合集；点击列表可预览；“导入”直接写入该合集。`
-      : `Tip: switch target collection above, then import.`;
-    tip.style.fontSize = '10px';
-    tip.style.color = 'var(--text-4)';
-    tip.style.marginTop = '4px';
-    el.smartListDesc.append(tip);
-    const grid = document.createElement('div');
-    grid.style.cssText = 'margin-top:8px; display:grid; gap:6px;';
-    for (const l of store.detectedAllLists) {
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.style.cssText = 'gap:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface); align-items:center;';
-      // Match hint: does an Ownly collection already have same name?
-      const matchedCol = store.stateV3.collections.find((c) => matchesSavedListContext(l.listName, { title: c.title }));
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'list-chip';
-      chip.dataset.listId = l.listId || '';
-      chip.textContent = `📁 ${l.listName}${l.count ? ` (${l.count})` : ''}`;
-      chip.title = matchedCol ? (store.lang === 'zh' ? `已匹配合集：${matchedCol.title}` : `Matched: ${matchedCol.title}`) : (store.lang === 'zh' ? '点击预览' : 'View');
-      if (matchedCol) chip.style.borderColor = 'var(--accent-border-strong)';
-      chip.style.flex = '1';
-      const btnView = document.createElement('button');
-      btnView.type = 'button';
-      btnView.className = 'secondary';
-      btnView.style.cssText = 'font-size:10px; padding:4px 8px; white-space:nowrap;';
-      btnView.textContent = store.lang === 'zh' ? '查看' : 'View';
-      btnView.addEventListener('click', () => {
-        const listId = chip.dataset.listId;
-        if (!listId) return;
-        logger.info('SmartList', 'overview view clicked', { listName: l.listName, listId });
-        setStatus(dict.fetchingList);
-        void chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
-          if (activeTab?.id) {
-            void (chrome.tabs.sendMessage(activeTab.id, { type: 'OWNLY_FETCH_LIST_BY_ID', listId }) as Promise<{ savedList?: DetectedSavedList | null }>).then((resp) => {
-              if (resp?.savedList) {
-                store.detectedSavedList = resp.savedList;
-                renderSmartListCard();
-                renderCurrentPlace();
-                setStatus(dict.fetchedListStatus(resp.savedList!.listName, resp.savedList!.places.length), 'success');
-                logger.info('SmartList', 'fetched list', { listName: resp.savedList!.listName, count: resp.savedList!.places.length });
-              } else {
-                logger.warn('SmartList', 'fetch returned empty', { listName: l.listName });
-                setStatus(store.lang === 'zh' ? '未获取到列表内容' : 'No list data', 'error');
-              }
-            }).catch((e) => logger.error('SmartList', 'fetch failed', String(e)));
-          }
-        });
-      });
-      const btnImport = document.createElement('button');
-      btnImport.type = 'button';
-      btnImport.className = 'primary';
-      btnImport.style.cssText = 'font-size:10px; padding:4px 8px; white-space:nowrap;';
-      btnImport.textContent = store.lang === 'zh' ? `↗ 导入到 ${activeCol ? activeCol.title : 'Inbox'}` : `Import`;
-      btnImport.title = store.lang === 'zh' ? `直接导入到当前合集：${activeCol?.title ?? 'Inbox'}` : `Import to active collection`;
-      btnImport.addEventListener('click', () => {
-        const listId = chip.dataset.listId;
-        if (!listId) return;
-        logger.info('SmartList', 'overview direct import clicked', { listName: l.listName, targetCollection: activeCol?.title });
-        setStatus(store.lang === 'zh' ? `正在导入“${l.listName}”到 ${activeCol?.title ?? 'Inbox'}…` : `Importing ${l.listName}…`);
-        void chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
-          if (!activeTab?.id) return;
-          void (chrome.tabs.sendMessage(activeTab.id, { type: 'OWNLY_FETCH_LIST_BY_ID', listId, overrideCurrency: store.mapCurrencyOverride }) as Promise<{ savedList?: DetectedSavedList | null }>).then(async (resp) => {
-            const saved = resp?.savedList;
-            if (!saved?.places.length) {
-              setStatus(store.lang === 'zh' ? '未获取到列表内容' : 'No list data', 'error');
-              return;
-            }
-            // Perform import to active collection (independent, no Planner required)
-            const targetCol = store.getActiveCollection() ?? store.ensureDefaultCollection();
-            const now = new Date().toISOString();
-            const activePlaces = store.stateV3.places.filter((p) => p.collection_id === targetCol.id);
-            const newPlaces: CapturePlace[] = [];
-            let importedCount = 0;
-            for (const item of saved.places) {
-              const title = cleanExtractedText(item.title);
-              if (!title) continue;
-              const existing = findExistingPlaceByIdentity(activePlaces, { source_provider: item.sourceProvider, source_place_id: item.sourcePlaceId, source_url: item.sourceUrl }) ?? findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
-              const id = existing?.id ?? crypto.randomUUID();
-              const kind = inferPlaceKind([title, item.category, item.address, ...(item.types || [])].filter(Boolean).join(' '));
-              const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || saved.detectedCurrency || store.pageDetectedCurrency);
-              const place: CapturePlace = {
-                id,
-                collection_id: targetCol.id,
-                title,
-                source: { provider: item.sourceProvider || 'google_maps', url: item.sourceUrl, place_id: item.sourcePlaceId, category: item.category, types: item.types ?? [] },
-                inferred_kind: kind as CapturePlace['inferred_kind'],
-                address: item.address ? cleanExtractedText(item.address) : undefined,
-                rating: item.rating,
-                review_count: item.reviewCount,
-                price: item.priceLevel ? { raw: item.priceLevel, currency: normalizedPrice?.currency, min: normalizedPrice?.min, max: normalizedPrice?.max, unit: normalizedPrice?.unit, level: normalizedPrice?.level } : undefined,
-                open_hours: item.openHours,
-                phone: item.phone,
-                plus_code: item.plusCode,
-                menu_url: item.menuUrl,
-                reservation_url: item.reservationUrl,
-                review_topics: item.reviewTopics,
-                user: { priority: 'want', tags: ensurePlaceKindTag(saved.listName ? [saved.listName] : [], kind, store.lang), why: item.userNote ?? item.summary, notes: item.userNote },
-                captured_at: now,
-              };
-              newPlaces.push(place);
-              importedCount += 1;
-            }
-            const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== targetCol.id);
-            const existingActive = activePlaces.filter((p) => !newPlaces.some((np) => np.id === p.id));
-            store.setState({ ...store.stateV3, places: [...otherPlaces, ...existingActive, ...newPlaces] });
-            await saveState();
-            renderCandidatesList();
-            renderState();
-            setStatus(store.lang === 'zh' ? `已导入 ${importedCount} 个地点到「${targetCol.title}」` : `Imported ${importedCount} to ${targetCol.title}`, 'success');
-            logger.info('SmartList', 'direct import done', { listName: l.listName, importedCount, target: targetCol.title });
-          });
-        });
-      });
-      row.append(chip, btnView, btnImport);
-      grid.append(row);
-    }
-    el.smartListDesc.append(grid);
-    el.btnSmartSyncAll.style.display = 'none';
-    el.btnToggleListPreview.style.display = 'none';
-    el.smartListPreviewContainer.style.display = 'none';
-    return;
-  }
-
-  // 2. Single list detected
-  if (!store.detectedSavedList || store.detectedSavedList.places.length === 0) {
-    el.smartListSection.style.display = 'none';
-    return;
-  }
-
-  const places = store.detectedSavedList.places;
-  const truncNote = store.detectedSavedList.truncated ? ` ⚠️ ${dict.truncatedWarn(places.length)}` : '';
-  el.smartListSection.style.display = 'block';
-  el.btnSmartSyncAll.style.display = 'block';
-  el.btnToggleListPreview.style.display = 'block';
-  el.smartListTitle.textContent = store.detectedSavedList.listName;
-  el.smartListCountBadge.textContent = dict.placesCountBadge(places.length);
-
-  let isMatched = false;
-  if (activeTrip) {
-    isMatched = matchesSavedListContext(store.detectedSavedList.listName, activeTrip);
-
-    el.smartListSection.className = isMatched ? 'panel stack match-banner' : 'panel stack match-banner neutral';
-    el.smartListBadge.textContent = isMatched ? dict.matchedBadge : dict.sensedBadge;
-    el.smartListDesc.textContent = isMatched
-      ? dict.matchedDesc(store.detectedSavedList.listName, activeTrip.title) + truncNote
-      : dict.unmatchedDesc(places.length, activeTrip.title) + truncNote;
-    el.btnSmartSyncAll.textContent = dict.syncAllBtn(places.length);
-  } else {
-    el.smartListSection.className = 'panel stack match-banner neutral';
-    el.smartListBadge.textContent = dict.sensedBadge;
-    el.smartListDesc.textContent = dict.sensedNoTripDesc(store.detectedSavedList.listName, places.length) + truncNote;
-    el.btnSmartSyncAll.textContent = dict.importAllBtn(places.length);
-  }
-
-  // Preview container render
-  el.smartListPreviewContainer.style.display = store.isListPreviewOpen ? 'block' : 'none';
-  el.btnToggleListPreview.textContent = store.isListPreviewOpen ? dict.collapseList : dict.pickPlaces;
-  el.batchListContainer.innerHTML = '';
-
-  for (const item of places) {
-    const row = document.createElement('div');
-    row.className = 'batch-item';
-
-    const thumb = document.createElement('span');
-    thumb.className = 'batch-thumb';
-    thumb.textContent = KIND_ICONS[inferPlaceKind(item.category || item.title)] || '📍';
-
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.checked = true;
-    chk.dataset.url = item.sourceUrl;
-
-    const info = document.createElement('div');
-    info.className = 'batch-item-info';
-    const sub = [item.category, item.rating ? `★ ${item.rating}` : '', item.userNote ? `📝 ${item.userNote}` : ''].filter(Boolean).join(' · ');
-    const titleEl = document.createElement('div');
-    titleEl.className = 'batch-item-title';
-    titleEl.textContent = item.title;
-    const subEl = document.createElement('div');
-    subEl.className = 'batch-item-sub';
-    subEl.textContent = sub;
-    info.append(titleEl, subEl);
-
-    row.append(thumb, chk, info);
-    el.batchListContainer.append(row);
-  }
+  renderCurrentPlace();
 }
 
 export function autoFillPlaceForm(place: CurrentResearchPlace) {
@@ -865,16 +669,69 @@ export function renderCurrentPlace() {
   } else {
     el.placeProvider.style.display = 'none';
   }
+
   if (!store.currentPlace) {
     if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
       const dictLocal = t();
-      el.placeTitle.textContent = dictLocal.browsingListTitle(store.detectedSavedList.listName);
+      el.lblCurrentPlace.textContent = store.lang === 'zh' ? '当前识别：📋 收藏列表' : 'Recognized List';
+      el.placeTitle.textContent = store.detectedSavedList.listName;
       el.placeUrl.textContent = dictLocal.browsingListDesc(store.detectedSavedList.places.length);
+      el.placeCapturedBanner.style.display = 'none';
+
+      const bCount = document.createElement('span');
+      bCount.className = 'badge highlight';
+      bCount.textContent = `📋 ${store.detectedSavedList.places.length} 个地点`;
+      el.placeMetaBadges.append(bCount);
+
+      if (store.detectedSavedList.truncated) {
+        const bTrunc = document.createElement('span');
+        bTrunc.className = 'badge';
+        bTrunc.textContent = store.lang === 'zh' ? `⚠️ 列表已截断至 500 个` : `⚠️ Truncated to 500`;
+        el.placeMetaBadges.append(bTrunc);
+      }
+
+      el.smartListContainer.style.display = 'block';
+      el.btnSmartSyncAll.textContent = dict.syncAllBtn(store.detectedSavedList.places.length);
+      el.btnToggleListPreview.textContent = store.isListPreviewOpen ? dict.collapseList : dict.pickPlaces;
+      el.smartListPreviewContainer.style.display = store.isListPreviewOpen ? 'block' : 'none';
+
+      el.batchListContainer.innerHTML = '';
+      for (const item of store.detectedSavedList.places) {
+        const row = document.createElement('div');
+        row.className = 'batch-item';
+
+        const thumb = document.createElement('span');
+        thumb.className = 'batch-thumb';
+        thumb.textContent = KIND_ICONS[inferPlaceKind(item.category || item.title)] || '📍';
+
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = true;
+        chk.dataset.url = item.sourceUrl;
+
+        const info = document.createElement('div');
+        info.className = 'batch-item-info';
+        const sub = [item.category, item.rating ? `★ ${item.rating}` : '', item.userNote ? `📝 ${item.userNote}` : ''].filter(Boolean).join(' · ');
+        const titleEl = document.createElement('div');
+        titleEl.className = 'batch-item-title';
+        titleEl.textContent = item.title;
+        const subEl = document.createElement('div');
+        subEl.className = 'batch-item-sub';
+        subEl.textContent = sub || item.address || '';
+        info.append(titleEl, subEl);
+
+        row.append(chk, thumb, info);
+        el.batchListContainer.append(row);
+      }
+
       el.captureForm.style.display = 'none';
       setStatus(dictLocal.listSensedStatus(store.detectedSavedList.places.length));
+      return;
     } else {
+      el.lblCurrentPlace.textContent = dict.currentPlaceLabel;
       el.placeTitle.textContent = dict.noPlaceTitle;
       el.placeUrl.textContent = dict.noPlaceUrl;
+      el.smartListContainer.style.display = 'none';
       el.captureForm.style.display = 'block';
       setStatus(dict.noPlaceStatus);
     }
@@ -883,6 +740,9 @@ export function renderCurrentPlace() {
     el.btnRemoveCandidate.style.display = 'none';
     return;
   }
+
+  el.lblCurrentPlace.textContent = store.lang === 'zh' ? '当前识别：📍 地点' : 'Recognized Place';
+  el.smartListContainer.style.display = 'none';
   el.captureForm.style.display = 'block';
   el.placeTitle.textContent = store.currentPlace.title;
   el.placeUrl.textContent = store.currentPlace.sourceUrl;

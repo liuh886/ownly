@@ -50,11 +50,11 @@ export function setupImportExportHandlers(): void {
     }
   });
 
-  el.btnExportCollection.addEventListener('click', () => {
+  el.btnExportActiveCollection.addEventListener('click', () => {
     const collection = getActiveCollection();
     const places = getActivePlaces();
     if (!collection || places.length === 0) {
-      setStatus(store.lang === 'zh' ? '没有可导出的地点。' : 'No places to export.', 'error');
+      setStatus(store.lang === 'zh' ? '当前合集没有可导出的地点。' : 'No places to export.', 'error');
       return;
     }
     downloadCollectionJson(collection, places);
