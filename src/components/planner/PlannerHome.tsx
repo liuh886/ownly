@@ -1959,7 +1959,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="flex-1 min-h-[380px] p-2 flex flex-col">
               <PlannerMap
                 scheduledPlaces={mapScheduled}
-                candidatePlaces={sortedPendingCandidates.filter((place) => !mapScheduledPlaceIds.has(place.id))}
+                candidatePlaces={sortedPendingCandidates}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
@@ -2040,7 +2040,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             <div className="flex-1 p-2">
               <PlannerMap
                 scheduledPlaces={mapScheduled}
-                candidatePlaces={sortedPendingCandidates.filter((place) => !mapScheduledPlaceIds.has(place.id))}
+                candidatePlaces={sortedPendingCandidates}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
