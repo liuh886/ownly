@@ -1644,6 +1644,75 @@ export function formatPlacePriceInTripCurrency(
   return raw || '';
 }
 
+/**
+ * Infers a place's city or main destination from its area, address, or title.
+ * Checks against known trip destinations first, then common world cities,
+ * and falls back to area or '未分类城市'.
+ */
+export function inferPlaceCity(
+  place: { area?: string; address?: string; title?: string },
+  knownDestinations: string[] = [],
+): string {
+  const text = `${place.area || ''} ${place.address || ''} ${place.title || ''}`.toLowerCase();
+
+  // 1. Match against trip destinations if provided
+  for (const dest of knownDestinations) {
+    const trimmed = dest.trim();
+    if (trimmed && text.includes(trimmed.toLowerCase())) {
+      return trimmed;
+    }
+  }
+
+  // 2. Common tourist destinations matcher
+  const CITY_MATCHERS: Array<{ name: string; regex: RegExp }> = [
+    { name: '曼谷 (Bangkok)', regex: /bangkok|曼谷|krung thep/i },
+    { name: '芭提雅 (Pattaya)', regex: /pattaya|芭提雅|芭达雅|chon buri/i },
+    { name: '清迈 (Chiang Mai)', regex: /chiang mai|清迈|chiangmai/i },
+    { name: '普吉岛 (Phuket)', regex: /phuket|普吉/i },
+    { name: '苏梅岛 (Koh Samui)', regex: /samui|苏梅/i },
+    { name: '甲米 (Krabi)', regex: /krabi|甲米/i },
+    { name: '华欣 (Hua Hin)', regex: /hua hin|华欣/i },
+    { name: '东京 (Tokyo)', regex: /tokyo|东京|東京都/i },
+    { name: '京都 (Kyoto)', regex: /kyoto|京都/i },
+    { name: '大阪 (Osaka)', regex: /osaka|大阪/i },
+    { name: '北海道 (Hokkaido)', regex: /hokkaido|北海道|sapporo|札幌/i },
+    { name: '冲绳 (Okinawa)', regex: /okinawa|冲绳|那霸/i },
+    { name: '首尔 (Seoul)', regex: /seoul|首尔/i },
+    { name: '釜山 (Busan)', regex: /busan|釜山/i },
+    { name: '济州岛 (Jeju)', regex: /jeju|济州/i },
+    { name: '新加坡 (Singapore)', regex: /singapore|新加坡/i },
+    { name: '吉隆坡 (Kuala Lumpur)', regex: /kuala lumpur|吉隆坡/i },
+    { name: '槟城 (Penang)', regex: /penang|槟城/i },
+    { name: '香港 (Hong Kong)', regex: /hong kong|香港/i },
+    { name: '澳门 (Macau)', regex: /macau|macao|澳门/i },
+    { name: '台北 (Taipei)', regex: /taipei|台北/i },
+    { name: '伦敦 (London)', regex: /london|伦敦/i },
+    { name: '巴黎 (Paris)', regex: /paris|巴黎/i },
+    { name: '罗马 (Rome)', regex: /rome|roma|罗马/i },
+    { name: '米兰 (Milan)', regex: /milan|milano|米兰/i },
+    { name: '纽约 (New York)', regex: /new york|纽约/i },
+    { name: '旧金山 (San Francisco)', regex: /san francisco|旧金山/i },
+    { name: '洛杉矶 (Los Angeles)', regex: /los angeles|洛杉矶/i },
+  ];
+
+  for (const item of CITY_MATCHERS) {
+    if (item.regex.test(text)) {
+      // If a known destination also matches this same city matcher regex, prefer the user's destination label!
+      const matchedDest = knownDestinations.find((d) => item.regex.test(d));
+      if (matchedDest) {
+        return matchedDest.trim();
+      }
+      return item.name;
+    }
+  }
+
+  if (place.area?.trim()) {
+    return place.area.trim();
+  }
+
+  return '未分类城市';
+}
+
 export const PLANNER_KIND_ICONS: Record<PlannerPlaceKind, string> = {
   attraction: '🏰',
   food: '🍜',

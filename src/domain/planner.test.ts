@@ -16,6 +16,7 @@ import {
   findExistingTripPlace,
   formatPlacePriceInTripCurrency,
   haversineDistanceKm,
+  inferPlaceCity,
   inferPlaceKind,
   inferSourceProvider,
   mapGoogleTypesToOwnlyKind,
@@ -1351,6 +1352,23 @@ describe('exportTripToMarkdown', () => {
 
     it('returns empty string if no price information exists', () => {
       expect(formatPlacePriceInTripCurrency({}, 'CNY')).toBe('');
+    });
+  });
+
+  describe('inferPlaceCity', () => {
+    it('matches against trip destinations first', () => {
+      const p = { area: 'Sukhumvit', address: 'Bangkok, Thailand', title: 'Oakwood Hotel' };
+      expect(inferPlaceCity(p, ['曼谷', '芭提雅'])).toBe('曼谷');
+    });
+
+    it('infers world cities by regex heuristic when no trip destinations match', () => {
+      const p = { address: 'Chon Buri, Pattaya, Thailand', title: 'Centara Grand' };
+      expect(inferPlaceCity(p)).toBe('芭提雅 (Pattaya)');
+    });
+
+    it('falls back to area if no known city matched', () => {
+      const p = { area: '日落海滩', address: 'Some remote road', title: 'Cliff Resort' };
+      expect(inferPlaceCity(p)).toBe('日落海滩');
     });
   });
 });

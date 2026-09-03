@@ -2594,6 +2594,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         activeDayIndex={activeDayIndex}
         onSelectHotelForStaySpan={handleSelectHotelForStaySpan}
         onDropHotel={handleDropPlace}
+        destinations={selectedTrip?.destinations}
         tripCurrency={selectedTrip?.currency || 'CNY'}
         fxRates={selectedTrip?.fx_rates}
         language={language}
