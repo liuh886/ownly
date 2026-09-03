@@ -278,10 +278,14 @@ export function syncQuickChipStates(): void {
 
 function renderFilters() {
   const dict = t();
-  const activeTrip = store.state.activeContext;
-  const tripPlaces = store.state.pendingPlaces.filter(
-    (p) => p.trip_id === store.state.activeContext?.tripId,
-  );
+  // Inbox-first: filters based on Inbox places
+  const inboxPlaces = store.getInboxPlaces() as unknown as V2FacadePlace[];
+  const tripPlaces = inboxPlaces.map((p) => ({
+    ...p,
+    tags: p.tags || [],
+    signals: (p as unknown as { signals?: string[] }).signals || [],
+    risks: (p as unknown as { risks?: string[] }).risks || [],
+  }));
 
   const filters: { id: string; label: string; count: number }[] = [
     { id: 'all', label: dict.allFilter, count: tripPlaces.length },
@@ -1124,20 +1128,23 @@ function buildCandidateDetails(
     chk.dataset.placeId = place.id;
     wrapper.append(chk);
   }
-  // PR-B: Inbox minimal — only address / provider / kind tag visible; rating/price etc. collapsed
+  // Inbox: 主显 评分/价格/kind/tags（Maps 标签已省）
   const mainParts: string[] = [];
-  if (place.area || place.address) {
-    const shortAddr = (place.area || place.address || '').split(/[,\n]/)[0]?.trim() || place.address || place.area;
-    mainParts.push(`<span title="${escapeHtml(place.address ?? place.area ?? '')}">📍 ${escapeHtml(shortAddr ?? '')}</span>`);
-  }
-  // provider + kind as compact badges
-  const providerLabel = place.source_provider === 'google_maps' ? 'Maps' : place.source_provider;
-  mainParts.push(`<span class="badge">${escapeHtml(providerLabel)}</span>`);
   if (place.kind && place.kind !== 'other') mainParts.push(`<span class="badge">${escapeHtml(place.kind)}</span>`);
+  if (place.observed_rating && place.observed_rating > 1.0 && place.observed_rating <= 5.0) {
+    mainParts.push(`<span>★ ${place.observed_rating}</span>`);
+  }
+  if (place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price)) {
+    mainParts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
+  }
   if (place.tags.length) {
     const shown = place.tags.slice(0, 2).join(', ');
     const more = place.tags.length > 2 ? ` +${place.tags.length - 2}` : '';
     mainParts.push(`<span>🏷️ ${escapeHtml(shown)}${more}</span>`);
+  }
+  if (place.area || place.address) {
+    const shortAddr = (place.area || place.address || '').split(/[,\n]/)[0]?.trim() || '';
+    if (shortAddr) mainParts.push(`<span title="${escapeHtml(place.address ?? place.area ?? '')}" style="opacity:0.7">📍 ${escapeHtml(shortAddr)}</span>`);
   }
   details.innerHTML = mainParts.join(' ');
 
@@ -1216,8 +1223,8 @@ function buildCandidateDetails(
   archiveBtn.className = 'card-btn';
   archiveBtn.dataset.action = 'archive';
   archiveBtn.dataset.placeId = place.id;
-  archiveBtn.textContent = `📦 ${store.lang === 'zh' ? '归档' : 'Archive'}`;
-  archiveBtn.title = store.lang === 'zh' ? '归档（移出 Inbox）' : 'Archive';
+  archiveBtn.textContent = `⭐ ${store.lang === 'zh' ? '必去' : 'Must'}`;
+  archiveBtn.title = store.lang === 'zh' ? '标记为必去' : 'Mark as Must';
 
   const addToTripBtn = document.createElement('button');
   addToTripBtn.type = 'button';
