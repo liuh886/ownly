@@ -464,36 +464,52 @@ export function mergeDetectedResearchIntoPlannerPlaces(
 }
 
 /**
- * Enriches a list of candidate places concurrently with rate limiting and progress reporting.
+ * Priority queue for detail fetch — hasChIJ/high to avoid throttling and head-of-line blocking.
+ * Sorts candidates so 0x/ChIJ (A) go first, query pins (B) later, and limits to 3 workers.
  */
+function priorityOf(place: PlannerTripPlace): number {
+  const id = place.source_place_id?.trim() || '';
+  if (/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(id)) return 0; // featureId highest
+  if (/^ChIJ[A-Za-z0-9_-]{8,}$/.test(id)) return 1;
+  if (/^\d{8,}$/.test(id)) return 2; // cid
+  if (place.source_url && /0x[0-9a-f]+:0x[0-9a-f]+/i.test(place.source_url)) return 0;
+  if (place.source_url && /ChIJ/.test(place.source_url)) return 1;
+  return 3; // query pin lowest
+}
+
 export async function enrichCandidatePlacesBatch(
   places: PlannerTripPlace[],
   onProgress?: (processed: number, total: number, currentPlace: PlannerTripPlace) => void,
   options?: { concurrency?: number; signal?: AbortSignal }
 ): Promise<{ enrichedPlaces: PlannerTripPlace[]; totalEnriched: number }> {
   const concurrency = Math.max(1, Math.min(options?.concurrency ?? 3, 5));
+  // Priority queue: A (0x/ChIJ) before B (query), stable for same priority
+  const sorted = [...places].sort((a, b) => priorityOf(a) - priorityOf(b));
+  // Map back to original indices for result placement
+  const indexById = new Map(sorted.map((p, i) => [`${p.id}:${i}`, places.indexOf(p)]));
+  // Use sorted order for processing but keep results in original order
   const results = [...places];
   let totalEnriched = 0;
   let processed = 0;
-
-  for (let i = 0; i < results.length; i += concurrency) {
-    if (options?.signal?.aborted) break;
-    const batch = results.slice(i, i + concurrency);
-    const batchPromises = batch.map(async (p, idx) => {
-      const res = await enrichPlaceMetadata(p, { signal: options?.signal, force: true });
+  // Worker pool of size concurrency
+  let cursor = 0;
+  async function worker() {
+    while (cursor < sorted.length) {
+      if (options?.signal?.aborted) break;
+      const idx = cursor++;
+      const place = sorted[idx];
+      const originalIndex = places.indexOf(place);
+      const res = await enrichPlaceMetadata(place, { signal: options?.signal, force: true });
       if (res.enriched) {
-        results[i + idx] = res.place;
+        results[originalIndex] = res.place;
         totalEnriched += 1;
       }
       processed += 1;
       onProgress?.(processed, results.length, res.place);
-      // Polite inter-request delay
-      await new Promise((r) => setTimeout(r, 100));
-      return res.place;
-    });
-
-    await Promise.all(batchPromises);
+      // Polite delay + jitter to avoid burst throttling (Google 429)
+      await new Promise((r) => setTimeout(r, 120 + Math.random() * 80));
+    }
   }
-
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return { enrichedPlaces: results, totalEnriched };
 }

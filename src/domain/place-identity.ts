@@ -1,3 +1,14 @@
+export interface GooglePlaceIdentity {
+  /** 0x…:0x… — Maps featureId, used for preview/place?pb */
+  featureId?: string;
+  /** ChIJ… — Places API placeId, used for query_place_id */
+  placeId?: string;
+  /** numeric CID — canonical https://www.google.com/maps?cid= */
+  cid?: string;
+  /** canonicalUrl derived from the above, e.g. https://www.google.com/maps?cid=… or ?query_place_id=… */
+  canonicalUrl?: string;
+}
+
 export interface PlaceIdentityLike {
   source_provider?: string | null;
   source_place_id?: string | null;
@@ -6,6 +17,67 @@ export interface PlaceIdentityLike {
   title?: string | null;
   address?: string | null;
   coordinates?: { lat: number; lng: number } | null;
+  /** New unified holder — source_place_id is deprecated as multi-meaning carrier */
+  googlePlaceIdentity?: GooglePlaceIdentity | null;
+}
+
+export function classifyRawPlaceId(raw: string): { featureId?: string; placeId?: string; cid?: string } {
+  const t = raw.trim();
+  if (/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(t)) return { featureId: t };
+  if (/^ChIJ[A-Za-z0-9_-]{8,}$/.test(t)) return { placeId: t };
+  if (/^\d{8,}$/.test(t)) return { cid: t };
+  return {};
+}
+
+export function toGooglePlaceIdentity(place: PlaceIdentityLike): GooglePlaceIdentity {
+  // Prefer explicit googlePlaceIdentity if present
+  if (place.googlePlaceIdentity && (place.googlePlaceIdentity.featureId || place.googlePlaceIdentity.placeId || place.googlePlaceIdentity.cid)) {
+    return normalizeGooglePlaceIdentity(place.googlePlaceIdentity);
+  }
+  const raw = place.source_place_id?.trim();
+  const base: GooglePlaceIdentity = {};
+  if (raw) Object.assign(base, classifyRawPlaceId(raw));
+  // Derive from URL as fallback
+  const url = place.source_url?.trim();
+  if (url) {
+    try {
+      const u = new URL(url);
+      const cid = u.searchParams.get('cid');
+      if (cid && /^\d+$/.test(cid) && !base.cid) base.cid = cid;
+      const qpid = u.searchParams.get('query_place_id');
+      if (qpid && /^ChIJ/.test(qpid) && !base.placeId) base.placeId = qpid;
+    } catch {}
+    const m0x = /0x[0-9a-f]+:0x[0-9a-f]+/i.exec(url)?.[0];
+    if (m0x && !base.featureId) base.featureId = m0x;
+    const mChIJ = /ChIJ[A-Za-z0-9_-]{8,}/.exec(url)?.[0];
+    if (mChIJ && !base.placeId) base.placeId = mChIJ;
+  }
+  if (base.featureId && !base.cid) {
+    const c = cidFromHexFeatureId(base.featureId);
+    if (c) base.cid = c;
+  }
+  base.canonicalUrl = googlePlaceIdentityToCanonicalUrl(base);
+  return base;
+}
+
+export function googlePlaceIdentityToCanonicalUrl(id: GooglePlaceIdentity): string | undefined {
+  if (id.cid) return `https://www.google.com/maps?cid=${id.cid}`;
+  if (id.featureId) {
+    const cid = cidFromHexFeatureId(id.featureId);
+    if (cid) return `https://www.google.com/maps?cid=${cid}`;
+  }
+  if (id.placeId) return `https://www.google.com/maps/search/?api=1&query_place_id=${encodeURIComponent(id.placeId)}`;
+  if (id.canonicalUrl) return id.canonicalUrl;
+  return undefined;
+}
+
+export function normalizeGooglePlaceIdentity(id: GooglePlaceIdentity): GooglePlaceIdentity {
+  const n: GooglePlaceIdentity = {};
+  if (id.featureId) n.featureId = id.featureId.trim();
+  if (id.placeId) n.placeId = id.placeId.trim();
+  if (id.cid) n.cid = id.cid.trim();
+  n.canonicalUrl = id.canonicalUrl?.trim() || googlePlaceIdentityToCanonicalUrl(n);
+  return n;
 }
 
 export type StrongPlaceIdentityKind = 'source_place_id' | 'google_cid' | 'google_place_id';

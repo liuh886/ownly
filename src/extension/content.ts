@@ -186,6 +186,18 @@ function extractPrice(): string | undefined {
     }
   }
 
+  // 5. Fallback: broad scan for explicit price token (JP¥/¥/฿) — catches hotel cards where price is plain text
+  const allCandidates = document.querySelectorAll<HTMLElement>('span, div, button');
+  for (const el of Array.from(allCandidates).slice(0, 400)) {
+    const text = cleanExtractedText(el.textContent || '');
+    if (!text || text.length > 60 || text.length < 3) continue;
+    if (!/[¥฿$€£₩]|JP¥|CN¥|S\$|HK\$/.test(text)) continue;
+    const cleanPrice = extractCleanPriceText(text);
+    if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice) && isValidExtractedPriceCandidate(cleanPrice) && /\d/.test(cleanPrice)) {
+      return cleanPrice;
+    }
+  }
+
   return undefined;
 }
 
@@ -513,6 +525,30 @@ async function enrichFromPlaceHtml(
           if (priceMatch && isPlausiblePriceText(priceMatch[1])) place.priceLevel = cleanExtractedText(priceMatch[1]);
         }
       }
+    }
+    // If still no price and we have 0x, try structured preview (most reliable for hotels like The Neuf)
+    if (!place.priceLevel && place.sourcePlaceId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(place.sourcePlaceId)) {
+      try {
+        const previewUrl = googleMapsPreviewPlaceUrl(place.sourcePlaceId, window.location.origin);
+        if (previewUrl) {
+          const pRes = await fetch(previewUrl, { credentials: 'include' });
+          if (pRes.ok) {
+            const raw = await pRes.text();
+            const clean = raw.replace(/^\)\]\}'\s*/, '');
+            const data = JSON.parse(clean);
+            const pf = extractGoogleMapsPreviewFacts(data);
+            if (pf.priceLevel && !isZeroOrPlaceholderPrice(pf.priceLevel)) {
+              place.priceLevel = pf.priceLevel;
+              if (pf.priceCurrency) place.detectedCurrency = pf.priceCurrency;
+            }
+          }
+        }
+      } catch {}
+    }
+    // Ensure detectedCurrency follows price when price now exists
+    if (place.priceLevel && !place.detectedCurrency) {
+      const cur = detectPageCurrency({ url: place.sourceUrl, priceText: place.priceLevel, doc: typeof document !== 'undefined' ? document : undefined }).currency;
+      if (cur) place.detectedCurrency = cur;
     }
   } catch {
     // enrichment is best-effort; DOM extraction already provided the basics
