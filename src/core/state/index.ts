@@ -38,5 +38,29 @@ export function createStore<T extends object>(initial: T) {
 }
 
 export const workspaceStore = createStore<WorkspaceState>({ vaultPath: '', connection: 'missing', sync: 'idle' });
-// 兼容旧全局变量（逐步迁移）
-export const workspaceState = workspaceStore.getState();
+/**
+ * @deprecated 直接读 workspaceState 为 snapshot 已废弃，短期以 Proxy 代理至 workspaceStore.getState() 保证旧引用不 stale；新代码请用 workspaceStore.getState() / workspaceStore.useStore() / workspaceStore.subscribe()
+ */
+export const workspaceState: WorkspaceState = new Proxy({} as WorkspaceState, {
+  get(_t, prop) {
+    return (workspaceStore.getState() as unknown as Record<string, unknown>)[prop as string];
+  },
+  set(_t, prop, value) {
+    workspaceStore.setState({ [prop as string]: value } as unknown as Partial<WorkspaceState>);
+    return true;
+  },
+  ownKeys() {
+    return Reflect.ownKeys(workspaceStore.getState());
+  },
+  getOwnPropertyDescriptor(_t, prop) {
+    return {
+      configurable: true,
+      enumerable: true,
+      value: (workspaceStore.getState() as unknown as Record<string, unknown>)[prop as string],
+      writable: true,
+    };
+  },
+  has(_t, prop) {
+    return prop in workspaceStore.getState();
+  },
+});
