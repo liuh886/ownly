@@ -115,6 +115,13 @@ export const EMPTY_CAPTURE_STATE_V3: OwnlyCaptureStateV3 = {
 };
 
 // ─── Collection Export (portable JSON) ───────────────────────────────────────
+// 权限边界（P0）：Collection 是「地点集合」，Trip 是「个人执行计划」
+// 分享 Collection 时：
+//   允许：地点（title/address/coordinates/source）、标签（tags）、描述（why）、图片（未落库，预留）
+//   禁止：费用（price.*）、私人备注（user.notes）、行程日期（仅 Trip 拥有，Collection 不含）
+// 实现：buildCollectionExport 默认完整导出（含私有字段，用于个人备份）；
+//       buildShareableCollectionExport / sanitizePlaceForShare 用于对外分享（自动剥离禁止字段）
+//       协议文档：docs/architecture/ARCHITECTURE.md#Capture Boundary Constraint
 
 export interface OwnlyCollectionExportV1 {
   schema: 'ownly.capture.collection';
@@ -130,6 +137,13 @@ export interface OwnlyCollectionExportV1 {
     place_count: number;
   };
   places: CapturePlace[];
+  /** P1: 来源追踪（可选，分享导入时填充） */
+  provenance?: {
+    source_type: 'shared_collection';
+    creator?: string;
+    collection_id: string;
+    shared_at?: string;
+  };
 }
 
 // ─── Export builder ──────────────────────────────────────────────────────────
@@ -152,6 +166,44 @@ export function buildCollectionExport(
       place_count: places.length,
     },
     places,
+  };
+}
+
+/** P0: 分享用净化 — 剥离费用/私人备注等禁止字段 */
+export function sanitizePlaceForShare(place: CapturePlace): CapturePlace {
+  const { price: _price, ...rest } = place;
+  const user = place.user ? { ...place.user } : undefined;
+  if (user) {
+    delete user.notes; // 私人备注禁止外泄
+    // why/tags 视为描述/标签，允许分享；如需更严格可一并删除 user.why
+  }
+  return {
+    ...rest,
+    price: undefined,
+    user: user && Object.keys(user).length > 0 ? user : undefined,
+  };
+}
+
+export function buildShareableCollectionExport(
+  collection: CaptureCollection,
+  places: CapturePlace[],
+  provenance?: OwnlyCollectionExportV1['provenance'],
+): OwnlyCollectionExportV1 {
+  return {
+    schema: 'ownly.capture.collection',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    collection: {
+      id: collection.id,
+      title: collection.title,
+      source_provider: collection.source_provider,
+      source_list_id: collection.source_list_id,
+      source_url: collection.source_url,
+      currency: collection.currency,
+      place_count: places.length,
+    },
+    places: places.map(sanitizePlaceForShare),
+    provenance,
   };
 }
 
@@ -353,6 +405,13 @@ export interface PlannerTripPlaceLike {
   risks: string[];
   reservation_status: 'none';
   state: 'candidate';
+  import_provenance?: {
+    source_type: 'shared_collection';
+    creator?: string;
+    collection_id: string;
+    shared_at?: string;
+    imported_at: string;
+  };
   created_at: string;
 }
 
@@ -363,6 +422,7 @@ export interface PlannerTripPlaceLike {
 export function capturePlaceToPlannerPlace(
   capture: CapturePlace,
   tripId: string,
+  provenance?: OwnlyCollectionExportV1['provenance'],
 ): PlannerTripPlaceLike {
   const now = new Date().toISOString();
   return {
@@ -399,6 +459,15 @@ export function capturePlaceToPlannerPlace(
     risks: [],
     reservation_status: 'none',
     state: 'candidate',
+    import_provenance: provenance
+      ? {
+          source_type: 'shared_collection',
+          creator: provenance.creator,
+          collection_id: provenance.collection_id,
+          shared_at: provenance.shared_at,
+          imported_at: now,
+        }
+      : undefined,
     created_at: now,
   };
 }

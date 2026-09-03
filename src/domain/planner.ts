@@ -103,6 +103,14 @@ export interface PlannerTripPlace {
   review_topics?: string[];
   /** Google taxonomy types, e.g. ["lodging","restaurant","tourist_attraction"]. */
   types?: string[];
+  /** P1: 分享来源追踪 — 记录该地点是否来自他人分享的 Collection */
+  import_provenance?: {
+    source_type: 'shared_collection';
+    creator?: string;
+    collection_id: string;
+    shared_at?: string;
+    imported_at: string;
+  };
   created_at: string;
   updated_at?: string;
 }

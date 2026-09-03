@@ -102,3 +102,13 @@ Capture and Planner are **decoupled domains** with a single shared contract:
 2. Planner never owns Capture collection state (collections, user annotations, enrichment).
 3. The only data flow between them is through the portable Capture Collection JSON schema.
 4. V2→V3 migration (`migrateV2ToV3`) is a one-time bridge that converts old Planner-coupled state into independent Capture collections.
+
+**P0 Permission Boundary (Collection vs Trip)**:
+- Collection is a *place set* (shareable). Trip is a *personal execution plan* (private).
+- **Share allowed**: `title`/`address`/`coordinates`/`source`/`tags`/`why`/`inferred_kind`/`rating`/`review_count`/`open_hours`/`phone`/`plus_code`
+- **Share prohibited**: `price.*` (费用)、`user.notes` (私人备注)、行程日期（仅 Trip 的 `Visit.date/start` 拥有，Collection 不含）
+- Enforcement: `buildShareableCollectionExport()` / `sanitizePlaceForShare()` auto-strips prohibited fields; `buildCollectionExport()` retains full fidelity for personal backup.
+- Provenance (P1): share link embeds `provenance: { source_type:'shared_collection', creator, collection_id, shared_at }`; import maps to `PlannerTripPlace.import_provenance` for copy tracing.
+
+**P2 Ownly Health (unified Doctor)**:
+- Former `Planner Doctor` → `Ownly Health` (`src/domain/ownly-health.ts:1` `checkOwnlyHealth()`): cross-layer checks — `capture` (orphan place / empty collection / no active) + `planner` (`checkPlannerIntegrity()` 5 checks) → single `summary { errors, warnings, infos }` for `Settings/Admin` health board.

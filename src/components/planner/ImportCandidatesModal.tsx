@@ -60,7 +60,7 @@ export function ImportCandidatesModal({
           if (isCollectionExport(parsed)) {
             const exportData = parseCaptureCollectionExport(parsed);
             if (exportData) {
-              const converted = exportData.places.map((p) => capturePlaceToPlannerPlace(p, tripId)) as PlannerTripPlace[];
+              const converted = exportData.places.map((p) => capturePlaceToPlannerPlace(p, tripId, exportData.provenance)) as PlannerTripPlace[];
               setParsedPlaces(converted);
               setErrorMsg('');
               return;
