@@ -168,6 +168,26 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
       places: directListPlaces,
       truncated: Boolean(listResp.truncated),
     };
+  } else if (
+    store.detectedSavedList &&
+    listResp?.listPlaces &&
+    listResp.listName &&
+    store.detectedSavedList.listName === listResp.listName &&
+    listResp.listPlaces.length > store.detectedSavedList.places.length
+  ) {
+    // 同名列表且 DOM 更长时优先 DOM（不动 EntityList/Identity/enrichment，仅侧面板择优）
+    logger.info('Capture', 'DOM list longer than EntityList, preferring DOM', {
+      listName: listResp.listName,
+      entityCount: store.detectedSavedList.places.length,
+      domCount: listResp.listPlaces.length,
+    });
+    store.detectedSavedList = {
+      listName: listResp.listName,
+      listUrl: tab.url || '',
+      detectedCurrency: placeResp?.detectedCurrency ?? store.detectedSavedList.detectedCurrency,
+      places: listResp.listPlaces,
+      truncated: Boolean(listResp.truncated),
+    };
   }
   store.detectedListPlaces = store.detectedSavedList?.places.length
     ? store.detectedSavedList.places
