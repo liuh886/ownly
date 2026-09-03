@@ -14,7 +14,7 @@ import {
   type SuspectedDuplicatePair,
   type TripExpenseItem,
 } from '@/domain/planner';
-import { getStrongPlaceIdentityKeys, shareStrongPlaceIdentity } from '@/domain/place-identity';
+import { PlaceIdentityService, getStrongPlaceIdentityKeys, shareStrongPlaceIdentity } from '@/domain/place-identity';
 import {
   createPlannerTripVisit,
   plannerTripVisitFileName,
@@ -210,7 +210,9 @@ export class PlannerRepository {
 
     const indexPlace = (place: PlannerTripPlace) => {
       byId.set(place.id, place);
-      for (const key of getStrongPlaceIdentityKeys(place)) {
+      const keys = getStrongPlaceIdentityKeys(place);
+      const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+      for (const key of effective) {
         byStrongIdentity.set(`${place.trip_id}::${key}`, place);
       }
     };
@@ -243,12 +245,11 @@ export class PlannerRepository {
       };
       let existingPlace = byId.get(incoming.id);
       if (!existingPlace) {
-        for (const key of getStrongPlaceIdentityKeys(incoming)) {
+        const sKeys = getStrongPlaceIdentityKeys(incoming);
+        const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+        for (const key of effective) {
           const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
-          if (match) {
-            existingPlace = match;
-            break;
-          }
+          if (match) { existingPlace = match; break; }
         }
       }
 
@@ -373,7 +374,9 @@ export class PlannerRepository {
 
     const indexPlace = (place: PlannerTripPlace) => {
       byId.set(place.id, place);
-      for (const key of getStrongPlaceIdentityKeys(place)) {
+      const keys = getStrongPlaceIdentityKeys(place);
+      const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+      for (const key of effective) {
         byStrongIdentity.set(`${place.trip_id}::${key}`, place);
       }
     };
@@ -422,11 +425,18 @@ export class PlannerRepository {
       };
 
       // Check for exact ID match to update if re-importing the same place
-      const existingPlace = byId.get(incoming.id);
+      let existingPlace: PlannerTripPlace | undefined = byId.get(incoming.id);
       if (existingPlace) {
         traceEntry.match_type = 'id';
         traceEntry.matched_id = existingPlace.id;
         traceEntry.matched_title = existingPlace.title;
+      } else {
+        const sKeys = getStrongPlaceIdentityKeys(incoming);
+        const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+        for (const key of effective) {
+          const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
+          if (match) { existingPlace = match; traceEntry.match_type = 'strong_identity'; traceEntry.matched_id = match.id; traceEntry.matched_title = match.title; traceEntry.identity_key = key; break; }
+        }
       }
 
       try {

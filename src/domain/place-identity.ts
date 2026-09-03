@@ -233,4 +233,19 @@ export const PlaceIdentityService = {
   isAutoMergeCandidate(a: PlaceIdentityLike, b: PlaceIdentityLike): boolean {
     return shareStrongPlaceIdentity(a, b);
   },
+  /** Resilient keys: strong if present, else weak url/coord/name fallback (PR3) */
+  getResilientKeys(place: PlaceIdentityLike): string[] {
+    const strong = getStrongPlaceIdentityKeys(place);
+    if (strong.length > 0) return strong;
+    const weak = getWeakPlaceIdentityEvidence(place);
+    // Prefer url > coord > name
+    const url = weak.find((w) => w.kind === 'canonical_url');
+    if (url) return [url.key];
+    const coord = weak.find((w) => w.kind === 'coord_hash');
+    const name = weak.find((w) => w.kind === 'normalized_name');
+    if (coord && name) return [`${coord.key}|${name.key}`];
+    if (coord) return [coord.key];
+    if (name) return [name.key];
+    return [];
+  },
 };
