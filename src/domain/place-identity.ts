@@ -2,6 +2,10 @@ export interface PlaceIdentityLike {
   source_provider?: string | null;
   source_place_id?: string | null;
   source_url?: string | null;
+  // Extended fields for unified identity resolution (P1)
+  title?: string | null;
+  address?: string | null;
+  coordinates?: { lat: number; lng: number } | null;
 }
 
 export type StrongPlaceIdentityKind = 'source_place_id' | 'google_cid' | 'google_place_id';
@@ -130,3 +134,103 @@ export function haveConflictingStrongPlaceIdentity(a: PlaceIdentityLike, b: Plac
   }
   return false;
 }
+
+// ─── P1: Unified normalizers (canonical URL / coordinate hash / normalized name) ─
+
+const TRACKING_PARAMS = new Set([
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+  'gclid', 'fbclid', 'igshid', 'ved', 'uact', 'ei', 'oq',
+]);
+
+/** Canonical URL: lowercase host, strip tracking params, sort remaining query, trim. */
+export function normalizeSourceUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    url.hostname = url.hostname.toLowerCase();
+    url.hash = '';
+    // Respect explicit provider case by lowercasing only host, not path
+    const kept = Array.from(url.searchParams.entries())
+      .filter(([k]) => !TRACKING_PARAMS.has(k.toLowerCase()))
+      .sort(([a], [b]) => a.localeCompare(b));
+    url.search = '';
+    for (const [k, v] of kept) url.searchParams.append(k, v);
+    // Remove trailing slash for root, normalize
+    let result = url.toString();
+    // URL.toString() always includes trailing slash for origin-only; keep as-is for dedup stability
+    return result;
+  } catch {
+    // Non-absolute or malformed URL: lowercase and trim as weak signal
+    return trimmed.toLowerCase();
+  }
+}
+
+/** Coordinate hash: rounded to ~1.1m (5 decimals) — used only for weak suggestion, never auto-merge. */
+export function hashCoordinates(
+  coordinates: { lat: number; lng: number } | null | undefined,
+  precision = 5,
+): string | null {
+  if (!coordinates || !Number.isFinite(coordinates.lat) || !Number.isFinite(coordinates.lng)) return null;
+  if (coordinates.lat < -90 || coordinates.lat > 90 || coordinates.lng < -180 || coordinates.lng > 180) return null;
+  const lat = coordinates.lat.toFixed(precision);
+  const lng = coordinates.lng.toFixed(precision);
+  return `coord:${lat},${lng}`;
+}
+
+/** Normalized title: NFKC, lowercase, trim, collapse whitespace, strip leading/trailing punctuation. */
+export function normalizePlaceTitle(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let s = raw.normalize('NFKC').toLowerCase().trim();
+  s = s.replace(/\s+/g, ' ');
+  s = s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  if (s.length < 2) return null;
+  return s;
+}
+
+// ─── Weak evidence (suggestion only, never auto-merge) ───────────────────────
+
+export type WeakPlaceIdentityKind = 'canonical_url' | 'coord_hash' | 'normalized_name';
+
+export interface WeakPlaceIdentityEvidence {
+  kind: WeakPlaceIdentityKind;
+  value: string;
+  key: string;
+  confidence: number; // 0-1, for UI sorting
+}
+
+export function getWeakPlaceIdentityEvidence(place: PlaceIdentityLike): WeakPlaceIdentityEvidence[] {
+  const result: WeakPlaceIdentityEvidence[] = [];
+  const url = normalizeSourceUrl(place.source_url);
+  if (url) result.push({ kind: 'canonical_url', value: url, key: `weak:canonical_url:${url}`, confidence: 0.6 });
+  const coord = hashCoordinates(place.coordinates);
+  if (coord) result.push({ kind: 'coord_hash', value: coord, key: `weak:${coord}`, confidence: 0.4 });
+  const name = normalizePlaceTitle(place.title);
+  if (name) result.push({ kind: 'normalized_name', value: name, key: `weak:normalized_name:${name}`, confidence: 0.3 });
+  return result;
+}
+
+// ─── Unified Service (single import for Capture / Planner / Import / Doctor) ─
+
+export const PlaceIdentityService = {
+  getStrongEvidence: getStrongPlaceIdentityEvidence,
+  getStrongKeys: getStrongPlaceIdentityKeys,
+  sharesStrongIdentity: shareStrongPlaceIdentity,
+  hasConflict: haveConflictingStrongPlaceIdentity,
+  normalizeUrl: normalizeSourceUrl,
+  hashCoords: hashCoordinates,
+  normalizeTitle: normalizePlaceTitle,
+  getWeakEvidence: getWeakPlaceIdentityEvidence,
+  /** All keys (strong + weak) for diagnostic / duplicate suggestion surfaces. */
+  getAllKeys(place: PlaceIdentityLike): string[] {
+    return [
+      ...getStrongPlaceIdentityKeys(place),
+      ...getWeakPlaceIdentityEvidence(place).map((e) => e.key),
+    ];
+  },
+  /** Strong-only match — the sole authority for auto-merge. */
+  isAutoMergeCandidate(a: PlaceIdentityLike, b: PlaceIdentityLike): boolean {
+    return shareStrongPlaceIdentity(a, b);
+  },
+};
