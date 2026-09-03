@@ -877,7 +877,7 @@ export function renderCandidatesList() {
   }
 
   // Show active collection places (or Inbox places when Inbox is selected)
-  let candidates: V2FacadePlace[] = visiblePlaces.map((cp) => {
+  const candidates: V2FacadePlace[] = visiblePlaces.map((cp) => {
     // Map CapturePlace to V2FacadePlace shape for existing card rendering
     return {
       id: cp.id,
