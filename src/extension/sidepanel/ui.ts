@@ -114,6 +114,7 @@ export function applyI18n() {
   setLeadingLabel(el.lblBulkText, dict.lblBulkText);
   el.bulkInputText.placeholder = dict.bulkPlaceholder;
   el.btnParseBulkImport.textContent = dict.btnParseBulkImport;
+  el.btnShareCollection.textContent = (dict as unknown as Record<string, string>).shareBtn ?? (store.lang === 'zh' ? '🔗 分享合集' : '🔗 Share');
   el.btnExportCollection.textContent = dict.exportBtn;
   el.btnBackupState.textContent = dict.backupBtn;
   el.btnRestoreState.textContent = dict.restoreBtn;

@@ -7,6 +7,8 @@ import { HomeCostSection } from './HomeCostSection';
 import { HomeReviewSection } from './HomeReviewSection';
 import { HomeDataScaleSection } from './HomeDataScaleSection';
 import { HomeDoctorSection } from './HomeDoctorSection';
+import { CaptureOnboarding, dismissCaptureOnboarding, shouldShowCaptureOnboarding } from '@/components/onboarding/CaptureOnboarding';
+import { useState } from 'react';
 
 const springTransition = {
   type: 'spring' as const,
@@ -44,6 +46,8 @@ export function HomeDashboard({
   snapshots: AccountSnapshot[];
   onOpenObjects: (focus: Omit<ObjectListFocus, 'token'>) => void;
 }) {
+  const [dismissed, setDismissed] = useState(false);
+  const showOnboarding = !dismissed && shouldShowCaptureOnboarding(objects.length === 0);
   return (
     <motion.section
       variants={containerVariants}
@@ -51,6 +55,17 @@ export function HomeDashboard({
       animate="visible"
       className="space-y-5"
     >
+      <CaptureOnboarding
+        open={showOnboarding}
+        onDismiss={() => {
+          dismissCaptureOnboarding();
+          setDismissed(true);
+        }}
+        onStart={() => {
+          dismissCaptureOnboarding();
+          setDismissed(true);
+        }}
+      />
       <HomeOwnSection
         metrics={metrics}
         snapshots={snapshots}

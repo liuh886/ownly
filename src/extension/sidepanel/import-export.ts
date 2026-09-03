@@ -1,6 +1,7 @@
 import { writeState, getActiveCollection, getActivePlaces, store, t } from './store';
 import { el } from '../dom';
 import { downloadCollectionJson } from '../export';
+import { createShareableCollectionShareLink } from '../../domain/collection-share';
 import {
   renderCandidatesList,
   renderCurrentPlace,
@@ -11,6 +12,27 @@ import {
 import type { OwnlyCaptureStateV2, OwnlyCaptureStateV3 } from '../../domain/capture';
 
 export function setupImportExportHandlers(): void {
+  el.btnShareCollection.addEventListener('click', async () => {
+    const collection = getActiveCollection();
+    const places = getActivePlaces();
+    if (!collection || places.length === 0) {
+      setStatus(store.lang === 'zh' ? '没有可分享的地点。' : 'No places to share.', 'error');
+      return;
+    }
+    const { url, truncated } = createShareableCollectionShareLink(collection, places);
+    if (truncated) {
+      setStatus(store.lang === 'zh' ? '合集过大，已自动净化但链接仍超长，建议用“导出当前合集”分享 JSON。' : 'Collection too large for link — use Export JSON instead.', 'error');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus(store.lang === 'zh' ? '分享链接已复制到剪贴板。' : 'Share link copied to clipboard.', 'success');
+    } catch {
+      // Fallback: prompt
+      window.prompt(store.lang === 'zh' ? '复制分享链接：' : 'Copy share link:', url);
+    }
+  });
+
   el.btnExportCollection.addEventListener('click', () => {
     const collection = getActiveCollection();
     const places = getActivePlaces();

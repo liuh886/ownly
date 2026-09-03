@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from 'react';
 import { CollectionPreview } from '@/components/collection/CollectionPreview';
