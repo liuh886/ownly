@@ -397,7 +397,8 @@ async function enrichFromPlaceHtml(
   place: CurrentResearchPlace,
   options?: { soft?: boolean },
 ): Promise<CurrentResearchPlace> {
-  const cached = enrichCache.get(place.sourceUrl);
+  const cacheKey = place.sourcePlaceId || `${place.sourceUrl}#${place.title}`;
+  const cached = enrichCache.get(cacheKey);
   if (cached && Date.now() - cached.at < ENRICH_CACHE_TTL_MS) {
     return applyEnriched(place, cached.place);
   }
@@ -471,7 +472,7 @@ async function enrichFromPlaceHtml(
     // enrichment is best-effort; DOM extraction already provided the basics
     return place;
   }
-  enrichCache.set(place.sourceUrl, { at: Date.now(), place });
+  enrichCache.set(cacheKey, { at: Date.now(), place });
   if (enrichCache.size > ENRICH_CACHE_MAX) {
     const oldest = enrichCache.keys().next().value;
     if (oldest !== undefined) enrichCache.delete(oldest);
@@ -1153,7 +1154,7 @@ function currentPlace(): CurrentResearchPlace | null {
   if (provider === 'tabelog') return extractTabelogPlace();
   if (provider === 'xiaohongshu') return extractXiaohongshuPlace();
   if (provider === 'booking') return extractBookingPlace();
-  return extractGoogleMapsPlace();
+  return null;
 }
 
 export interface SavedListCardSummary {
@@ -1250,6 +1251,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const msgType = (message as { type?: string }).type;
   if (msgType === 'OWNLY_GET_CURRENT_PLACE') {
+    const start = Date.now();
+    logger.debug('Content', 'OWNLY_GET_CURRENT_PLACE received', { url: window.location.href.slice(0, 80), overrideCurrency: (message as { overrideCurrency?: string }).overrideCurrency });
     void (async () => {
       try {
         const provider = inferSourceProvider(window.location.href);
@@ -1266,6 +1269,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if ((!savedList || savedList.places.length === 0) && targetTags.length > 0 && allLists.length > 0) {
           const matched = allLists.find((list) => matchesSavedListContext(list.listName, { tags: targetTags }));
           if (matched?.listId) {
+            logger.info('Content', `Fetching matched list by tag: ${matched.listName}`, { listId: matched.listId });
             savedList = await fetchGoogleMapsEntityList(matched.listId, overrideCurrency);
           }
         }
@@ -1274,8 +1278,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const place = provider === 'google_maps' && detectedPlace
           ? await enrichFromPlaceHtml(detectedPlace)
           : detectedPlace;
+        logger.info('Content', 'OWNLY_GET_CURRENT_PLACE done', {
+          provider, hasPlace: Boolean(place), title: place?.title?.slice(0, 30), hasSavedList: Boolean(savedList), savedCount: savedList?.places.length ?? 0, allLists: allLists.length, ms: Date.now() - start,
+        });
         sendResponse({ place, savedList, allLists, detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, targetCurrency, overrideCurrency) });
       } catch (e) {
+        logger.error('Content', 'OWNLY_GET_CURRENT_PLACE failed', e instanceof Error ? e.stack || e.message : String(e));
         console.warn('OWNLY_GET_CURRENT_PLACE failed:', e);
         sendResponse({ place: null, savedList: null, allLists: [] });
       }
@@ -1283,41 +1291,58 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (msgType === 'OWNLY_ENRICH_SAVED_LIST') {
+    logger.debug('Content', 'OWNLY_ENRICH_SAVED_LIST received', { places: (message as { savedList?: DetectedSavedList }).savedList?.places.length, force: (message as { force?: boolean }).force });
     void (async () => {
       const incoming = (message as { savedList?: DetectedSavedList; overrideCurrency?: string; force?: boolean }).savedList;
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       const force = Boolean((message as { force?: boolean }).force);
       if (!incoming?.places?.length) {
+        logger.warn('Content', 'OWNLY_ENRICH_SAVED_LIST empty incoming');
         sendResponse({ savedList: incoming ?? null, attempted: 0, enriched: 0, failed: 0 });
         return;
       }
-      const result = await enrichSavedListDetails(incoming, overrideCurrency, force);
-      sendResponse({ savedList: result.list, attempted: result.attempted, enriched: result.enriched, failed: result.failed });
+      const start = Date.now();
+      try {
+        const result = await enrichSavedListDetails(incoming, overrideCurrency, force);
+        logger.info('Content', 'OWNLY_ENRICH_SAVED_LIST done', { listName: incoming.listName, attempted: result.attempted, enriched: result.enriched, failed: result.failed, ms: Date.now() - start });
+        sendResponse({ savedList: result.list, attempted: result.attempted, enriched: result.enriched, failed: result.failed });
+      } catch (e) {
+        logger.error('Content', 'OWNLY_ENRICH_SAVED_LIST error', String(e));
+        sendResponse({ savedList: incoming, attempted: 0, enriched: 0, failed: 0 });
+      }
     })();
     return true;
   }
   if (msgType === 'OWNLY_FETCH_LIST_BY_ID') {
+    const lid = (message as { listId?: string }).listId || (message as { listUrl?: string }).listUrl?.slice(0, 60);
+    logger.debug('Content', 'OWNLY_FETCH_LIST_BY_ID received', { lid });
     void (async () => {
       let listId = (message as { listId?: string }).listId;
       const listUrl = (message as { listUrl?: string }).listUrl;
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       if (!listId && listUrl) listId = extractGoogleMapsSavedListId(listUrl);
       if (!listId) {
+        logger.warn('Content', 'OWNLY_FETCH_LIST_BY_ID no id', { listUrl });
         sendResponse({ savedList: null });
         return;
       }
+      const start = Date.now();
       const listData = await fetchGoogleMapsEntityList(listId, overrideCurrency);
+      logger.info('Content', 'OWNLY_FETCH_LIST_BY_ID done', { listId, hasList: Boolean(listData), count: listData?.places.length ?? 0, ms: Date.now() - start });
       sendResponse({ savedList: listData });
     })();
     return true;
   }
   if (msgType === 'OWNLY_GET_VISIBLE_LIST_PLACES') {
+    logger.debug('Content', 'OWNLY_GET_VISIBLE_LIST_PLACES received');
     void (async () => {
+      const start = Date.now();
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       await autoScrollFeed();
       const savedList = await resolveGoogleMapsList(overrideCurrency);
       const listPlaces = savedList?.places ?? detectGoogleMapsListPlaces();
       const listName = savedList?.listName ?? detectVisibleGoogleMapsListName(listPlaces);
+      logger.info('Content', 'OWNLY_GET_VISIBLE_LIST_PLACES done', { listName, count: listPlaces.length, truncated: savedList?.truncated, ms: Date.now() - start });
       sendResponse({ listPlaces, listName, truncated: savedList?.truncated ?? false });
     })();
     return true;

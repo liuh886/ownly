@@ -27,6 +27,7 @@ import {
   renderCurrencyPill,
   renderCurrentPlace,
   renderSmartListCard,
+  renderState,
   setStatus,
   showImportReport,
   syncQuickChipStates,
@@ -408,11 +409,32 @@ function initCandidateDelegation() {
           if (editing.source.url) void revealPlaceInMaps(editing.source.url);
         }
       }
+    } else if (action === 'toggle-must') {
+      const place = getActivePlaces().find((p) => p.id === placeId);
+      if (place) {
+        const nextPriority = place.user?.priority === 'must' ? undefined : 'must';
+        store.updatePlace(placeId, (p) => ({
+          ...p,
+          user: { ...p.user, priority: nextPriority },
+          updated_at: new Date().toISOString(),
+        }));
+        void saveState().then(() => {
+          setStatus(nextPriority === 'must'
+            ? (store.lang === 'zh' ? '已标记为必去。' : 'Marked as Must.')
+            : (store.lang === 'zh' ? '已取消必去标记。' : 'Unmarked Must.'),
+            'success');
+          renderState();
+          renderCandidatesList();
+          renderCurrentPlace();
+        });
+      }
     } else if (action === 'delete') {
       store.locallyDeletedIds.add(placeId);
       store.removePlace(placeId);
       if (store.editingCandidateId === placeId) store.editingCandidateId = null;
       void saveState().then(() => {
+        renderState();
+        renderCandidatesList();
         renderCurrentPlace();
       });
     } else if (action === 'archive') {
@@ -422,6 +444,8 @@ function initCandidateDelegation() {
       if (store.editingCandidateId === placeId) store.editingCandidateId = null;
       void saveState().then(() => {
         setStatus(store.lang === 'zh' ? '已归档。' : 'Archived.', 'success');
+        renderState();
+        renderCandidatesList();
         renderCurrentPlace();
       });
     } else if (action === 'add-to-trip') {
@@ -574,79 +598,124 @@ export function initHandlers(): void {
   });
 
   el.btnCopyDebugLogs.addEventListener('click', () => {
+    logger.info('Diagnostics', 'Copy debug logs clicked', logger.getStats());
     const text = logger.getAllFormattedText();
     void navigator.clipboard.writeText(text).then(() => {
+      logger.info('Diagnostics', 'Debug logs copied', { chars: text.length });
       setStatus(t().debugLogsCopied, 'success');
-    }).catch(() => {
+    }).catch((e) => {
+      logger.error('Diagnostics', 'Copy logs failed', String(e));
       setStatus('Failed to copy logs', 'error');
     });
   });
 
   el.btnCopyAIDiagnostics.addEventListener('click', async () => {
-    const inbox = store.getInboxCollection();
-    const inboxPlaces = store.getInboxPlaces();
-    const bundle = {
-      hint: 'Copy this JSON and paste to AI for diagnosis — contains Inbox, Capture state, and logs',
-      exportedAt: new Date().toISOString(),
-      extension: { title: document.title, url: location.href, userAgent: navigator.userAgent },
-      captureStateV3: {
-        active_collection_id: store.stateV3.active_collection_id,
-        collections: store.stateV3.collections,
-        places: inboxPlaces.slice(0, 20),
-        places_total: inboxPlaces.length,
-        inbox: inbox ? { id: inbox.id, title: inbox.title } : null,
-        planner_target: store.stateV3.planner_target,
-      },
-      inboxSample: inboxPlaces.slice(0, 10).map((p) => ({ id: p.id, title: p.title, source: p.source, address: p.address, collection_id: p.collection_id })),
-      activeCollection: getActiveCollection() ? { id: getActiveCollection()!.id, title: getActiveCollection()!.title } : null,
-      detectedSavedList: store.detectedSavedList ? { listName: store.detectedSavedList.listName, placeCount: store.detectedSavedList.places.length, placesSample: store.detectedSavedList.places.slice(0, 5).map((p) => ({ title: p.title, sourceUrl: p.sourceUrl, sourcePlaceId: p.sourcePlaceId })) } : null,
-      currentPlace: store.currentPlace ? { title: store.currentPlace.title, sourceUrl: store.currentPlace.sourceUrl, sourcePlaceId: store.currentPlace.sourcePlaceId, category: store.currentPlace.category } : null,
-      storage: { lang: store.lang, pageDetectedCurrency: store.pageDetectedCurrency, mapCurrencyOverride: store.mapCurrencyOverride },
-      logs: logger.getLogs().slice(-80),
-    };
-    const text = JSON.stringify(bundle, null, 2);
+    logger.info('Diagnostics', 'Copy AI diagnostics clicked', { inboxCount: store.getInboxPlaces().length });
     try {
-      await navigator.clipboard.writeText(text);
-      setStatus(store.lang === 'zh' ? '🤖 AI 诊断包已复制，直接粘贴发给 AI 即可。' : '🤖 AI diagnostics copied — paste to AI.', 'success');
-    } catch {
-      window.prompt(store.lang === 'zh' ? '复制 AI 诊断包：' : 'Copy AI diagnostics:', text);
+      const { buildDiagnosticsBundle, bundleToText } = await import('../diagnostics');
+      const bundle = await buildDiagnosticsBundle({ store });
+      const text = bundleToText(bundle);
+      try {
+        await navigator.clipboard.writeText(text);
+        logger.info('Diagnostics', 'AI diagnostics copied', { sessionId: bundle.sessionId, health: bundle.health.status });
+        setStatus(store.lang === 'zh' ? `🤖 AI 诊断包已复制（${bundle.capture.stats.inboxPlaces} 地点，${bundle.logs.stats.total} 日志，健康：${bundle.health.status}）` : `🤖 AI diagnostics copied (${bundle.capture.stats.inboxPlaces} places, ${bundle.logs.stats.total} logs)`, 'success');
+      } catch {
+        logger.warn('Diagnostics', 'Clipboard fallback to prompt');
+        window.prompt(store.lang === 'zh' ? '复制 AI 诊断包：' : 'Copy AI diagnostics:', text);
+      }
+    } catch (e) {
+      // Fallback to legacy bundle if diagnostics module fails
+      logger.error('Diagnostics', 'buildDiagnosticsBundle failed, fallback', String(e));
+      const inbox = store.getInboxCollection();
+      const inboxPlaces = store.getInboxPlaces();
+      const bundle = {
+        hint: 'Copy this JSON and paste to AI for diagnosis — contains Inbox, Capture state, and logs',
+        exportedAt: new Date().toISOString(),
+        extension: { title: document.title, url: location.href, userAgent: navigator.userAgent },
+        captureStateV3: {
+          active_collection_id: store.stateV3.active_collection_id,
+          collections: store.stateV3.collections,
+          places: inboxPlaces.slice(0, 20),
+          places_total: inboxPlaces.length,
+          inbox: inbox ? { id: inbox.id, title: inbox.title } : null,
+          planner_target: store.stateV3.planner_target,
+        },
+        inboxSample: inboxPlaces.slice(0, 10).map((p) => ({ id: p.id, title: p.title, source: p.source, address: p.address, collection_id: p.collection_id })),
+        activeCollection: getActiveCollection() ? { id: getActiveCollection()!.id, title: getActiveCollection()!.title } : null,
+        detectedSavedList: store.detectedSavedList ? { listName: store.detectedSavedList.listName, placeCount: store.detectedSavedList.places.length, placesSample: store.detectedSavedList.places.slice(0, 5).map((p) => ({ title: p.title, sourceUrl: p.sourceUrl, sourcePlaceId: p.sourcePlaceId })) } : null,
+        currentPlace: store.currentPlace ? { title: store.currentPlace.title, sourceUrl: store.currentPlace.sourceUrl, sourcePlaceId: store.currentPlace.sourcePlaceId, category: store.currentPlace.category } : null,
+        storage: { lang: store.lang, pageDetectedCurrency: store.pageDetectedCurrency, mapCurrencyOverride: store.mapCurrencyOverride },
+        logs: logger.getLogs().slice(-80),
+      };
+      const text = JSON.stringify(bundle, null, 2);
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus(store.lang === 'zh' ? '🤖 AI 诊断包已复制，直接粘贴发给 AI 即可。' : '🤖 AI diagnostics copied — paste to AI.', 'success');
+      } catch {
+        window.prompt(store.lang === 'zh' ? '复制 AI 诊断包：' : 'Copy AI diagnostics:', text);
+      }
     }
   });
 
   el.btnExportDiagnostics.addEventListener('click', () => {
-    const collection = getActiveCollection();
-    const places = getActivePlaces();
-    const payload = logger.exportDiagnostics({
-      activeContext: collection ? { tripId: collection.id, title: collection.title, currency: collection.currency } : null,
-      pendingPlacesCount: places.length,
-      pendingPlacesSample: places.slice(0, 10),
-      detectedSavedList: store.detectedSavedList ? {
-        listName: store.detectedSavedList.listName,
-        placeCount: store.detectedSavedList.places.length,
-        placesSample: store.detectedSavedList.places.slice(0, 5),
-      } : null,
-      pageDetectedCurrency: store.pageDetectedCurrency,
-      mapCurrencyOverride: store.mapCurrencyOverride,
-      lang: store.lang,
-    });
-    const blob = new Blob([payload], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ownly-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setStatus(t().debugDiagnosticsExported, 'success');
+    void (async () => {
+      try {
+        const { buildDiagnosticsBundle, bundleToText } = await import('../diagnostics');
+        const bundle = await buildDiagnosticsBundle({ store });
+        const payload = bundleToText(bundle);
+        const blob = new Blob([payload], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ownly-diagnostics-${bundle.sessionId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        logger.info('Diagnostics', 'Diagnostics JSON exported', { sessionId: bundle.sessionId });
+        setStatus(t().debugDiagnosticsExported, 'success');
+      } catch (e) {
+        const collection = getActiveCollection();
+        const places = getActivePlaces();
+        const payload = logger.exportDiagnostics({
+          activeContext: collection ? { tripId: collection.id, title: collection.title, currency: collection.currency } : null,
+          pendingPlacesCount: places.length,
+          pendingPlacesSample: places.slice(0, 10),
+          detectedSavedList: store.detectedSavedList ? {
+            listName: store.detectedSavedList.listName,
+            placeCount: store.detectedSavedList.places.length,
+            placesSample: store.detectedSavedList.places.slice(0, 5),
+          } : null,
+          pageDetectedCurrency: store.pageDetectedCurrency,
+          mapCurrencyOverride: store.mapCurrencyOverride,
+          lang: store.lang,
+        });
+        const blob = new Blob([payload], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ownly-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        logger.error('Diagnostics', 'Fallback exportDiagnostics used', String(e));
+        setStatus(t().debugDiagnosticsExported, 'success');
+      }
+    })();
   });
 
   el.btnClearDebugLogs.addEventListener('click', () => {
-    logger.clear();
-    updateDebugLogViewer();
-    setStatus(t().debugLogsCleared, 'muted');
+    logger.info('Diagnostics', 'Clear logs clicked', logger.getStats());
+    void logger.clearAndPersist().then(() => {
+      updateDebugLogViewer();
+      setStatus(t().debugLogsCleared, 'muted');
+    });
   });
 
-  logger.subscribe(() => {
+  logger.subscribe((entry) => {
     updateDebugLogViewer();
+    // Flash debug drawer if error and debug drawer closed
+    if (entry.level === 'ERROR' && !store.debugModeEnabled) {
+      el.debugDrawer.style.outline = '1px solid #b91c1c';
+      window.setTimeout(() => { el.debugDrawer.style.outline = ''; }, 1200);
+    }
   });
 
   // Page-currency override is tab/session scoped. When the user manually overrides currency (e.g. to SGD),
@@ -751,6 +820,7 @@ export function initHandlers(): void {
 
   // One-click strengthen all candidates in the active collection (Maps in-tab pass + background batch enrichment)
   el.btnEnrichCandidates.addEventListener('click', () => {
+    logger.info('Enrich', 'btnEnrichCandidates clicked');
     void (async () => {
       const dict = t();
       const collection = getActiveCollection();
@@ -962,16 +1032,16 @@ export function initHandlers(): void {
   });
 
   el.btnCloseSmartList.addEventListener('click', () => {
+    logger.info('SmartList', 'dismiss clicked');
     store.smartListDismissed = true;
     renderSmartListCard();
   });
 
-  // Smart-list import only fills the Capture inbox for the active collection.
+  // Smart-list import: independent — imports to active collection (no Planner required)
   el.btnSmartSyncAll.addEventListener('click', () => {
     void (async () => {
       const dict = t();
-      const inbox = store.getInboxCollection() ?? store.ensureDefaultCollection();
-      const collection = inbox;
+      const collection = store.getActiveCollection() ?? store.ensureDefaultCollection();
       let savedList = store.detectedSavedList;
       if (!collection) {
         setStatus(dict.tripRequiredError, 'error');
@@ -1401,13 +1471,15 @@ export function initHandlers(): void {
   el.captureForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const dict = t();
-    const inbox = store.getInboxCollection() ?? store.ensureDefaultCollection();
-    const collection = inbox;
+    logger.info('CaptureForm', 'submit', { title: store.currentPlace?.title, url: store.currentPlace?.sourceUrl?.slice(0, 60), kind: el.kind.value, targetCollection: store.getActiveCollection()?.title });
+    const collection = store.getActiveCollection() ?? store.ensureDefaultCollection();
     if (!collection) {
+      logger.error('CaptureForm', 'no collection');
       setStatus(dict.tripRequiredError, 'error');
       return;
     }
     if (!store.currentPlace) {
+      logger.warn('CaptureForm', 'no currentPlace on submit');
       setStatus(dict.placeRequiredError, 'error');
       return;
     }
@@ -1465,11 +1537,16 @@ export function initHandlers(): void {
       },
       captured_at: existing?.captured_at ?? now,
     };
+    logger.info('CaptureForm', existing ? 'updating place' : 'creating place', { id, title: place.title, existing: Boolean(existing), placeId: place.source.place_id });
     store.setState({ ...store.stateV3, places: [...store.stateV3.places.filter((item) => item.id !== id), place] });
     void saveState().then(() => {
       syncQuickChipStates();
       setStatus(existing ? dict.candidateUpdated : dict.candidateAdded, 'success');
+      logger.info('CaptureForm', existing ? 'place updated' : 'place added', { id, title: place.title });
       flashNewCandidate(place.id);
+    }).catch((e) => {
+      logger.error('CaptureForm', 'saveState failed after submit', String(e));
+      setStatus(store.lang === 'zh' ? '保存失败，请重试。' : 'Save failed, retry.', 'error');
     });
   });
 
@@ -1487,6 +1564,63 @@ export function initHandlers(): void {
       : t().pricePlaceholder;
     const currentTags = normalizeDelimitedText(el.tags.value);
     el.tags.value = ensurePlaceKindTag(currentTags, newKind, store.lang).join(', ');
+  });
+
+  // ── Collection Switcher (independent, no Planner needed) ──────────────────
+  el.collectionSelector.addEventListener('change', () => {
+    const id = el.collectionSelector.value;
+    if (!id) return;
+    const ok = store.setActiveCollection(id);
+    if (ok) {
+      logger.info('Collection', 'switch active', { id, title: store.getActiveCollection()?.title });
+      void saveState().then(() => {
+        renderState();
+        renderCandidatesList();
+        renderSmartListCard();
+        renderCurrentPlace();
+        setStatus(store.lang === 'zh' ? `已切换到合集：${store.getActiveCollection()?.title}` : `Switched to ${store.getActiveCollection()?.title}`, 'success');
+      }).catch((e) => logger.error('Collection', 'switch save failed', String(e)));
+      // Immediate feedback before persistence
+      renderState();
+      renderCandidatesList();
+      renderSmartListCard();
+    }
+  });
+  el.btnCreateCollection.addEventListener('click', () => {
+    el.createCollectionRow.style.display = 'flex';
+    el.inputNewCollection.value = '';
+    el.inputNewCollection.focus();
+    logger.debug('Collection', 'create row opened');
+  });
+  el.btnCancelCreateCollection.addEventListener('click', () => {
+    el.createCollectionRow.style.display = 'none';
+    el.inputNewCollection.value = '';
+  });
+  el.btnConfirmCreateCollection.addEventListener('click', () => {
+    const title = el.inputNewCollection.value.trim();
+    if (!title) {
+      setStatus(store.lang === 'zh' ? '请输入合集名称' : 'Enter collection name', 'error');
+      return;
+    }
+    try {
+      const col = store.createCollection(title);
+      logger.info('Collection', 'created', { id: col.id, title: col.title });
+      el.createCollectionRow.style.display = 'none';
+      el.inputNewCollection.value = '';
+      void saveState().then(() => {
+        renderState();
+        renderCandidatesList();
+        renderSmartListCard();
+        setStatus(store.lang === 'zh' ? `已创建合集：${col.title}` : `Created ${col.title}`, 'success');
+      });
+    } catch (e) {
+      logger.error('Collection', 'create failed', String(e));
+      setStatus(String(e), 'error');
+    }
+  });
+  el.inputNewCollection.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') el.btnConfirmCreateCollection.click();
+    if (e.key === 'Escape') el.btnCancelCreateCollection.click();
   });
 
   void chrome.storage.local.get('ownly_fx_tooltip_enabled').then((data) => {

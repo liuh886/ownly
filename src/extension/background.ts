@@ -18,11 +18,14 @@ import {
 } from './capture-state';
 import type { CurrentResearchPlace } from './content';
 import { sessionStorage } from './session-storage';
+import { logger } from './logger';
 
 async function configureSidePanel() {
   try {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    logger.info('Background', 'Side panel behavior configured: openPanelOnActionClick');
   } catch (error) {
+    logger.warn('Background', 'Could not configure side panel', String(error));
     console.warn('[Ownly Capture] Could not configure side panel', error);
   }
 }
@@ -52,9 +55,14 @@ function getDefaultCollection(state: OwnlyCaptureStateV3): CaptureCollection {
 }
 
 async function quickCaptureCurrentPlace() {
+  const started = Date.now();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return;
+  if (!tab?.id) {
+    logger.warn('Background', 'Quick capture aborted: no active tab');
+    return;
+  }
   const tabId = tab.id;
+  logger.info('Background', 'Quick capture triggered', { tabId, url: tab.url });
 
   try {
     const response = await chrome.tabs.sendMessage(tabId, {
@@ -62,9 +70,11 @@ async function quickCaptureCurrentPlace() {
     }) as { place?: CurrentResearchPlace | null };
     const place = response?.place;
     if (!place?.title || !place.sourceUrl) {
+      logger.warn('Background', 'Quick capture: no place detected on page', { tabId, url: tab.url, response });
       void flashBadge(tabId, '!', '#b91c1c');
       return;
     }
+    logger.info('Background', 'Quick capture: place detected', { title: place.title, url: place.sourceUrl, placeId: place.sourcePlaceId, rating: place.rating });
 
     const capturedId = await mutateCaptureStateV3InWorker((state) => {
       const collection = getDefaultCollection(state);
@@ -137,25 +147,32 @@ async function quickCaptureCurrentPlace() {
     });
 
     if (!capturedId) {
+      logger.error('Background', 'Quick capture: mutate returned empty id', { tabId });
       void flashBadge(tabId, '!', '#b91c1c');
       return;
     }
+    logger.info('Background', 'Quick capture: persisted', { capturedId, tabId, ms: Date.now() - started });
     void flashBadge(tabId, '✓', '#047857');
     try {
       await chrome.sidePanel.open({ tabId });
       await chrome.runtime.sendMessage({ type: 'OWNLY_FOCUS_CAPTURE' }).catch(() => {});
-    } catch {}
+      logger.info('Background', 'Quick capture: sidepanel opened', { tabId });
+    } catch (e) {
+      logger.warn('Background', 'Quick capture: sidepanel open failed', String(e));
+    }
   } catch (error) {
+    logger.error('Background', 'Quick capture error', { error: error instanceof Error ? error.stack || error.message : String(error), tabId });
     console.warn('[Ownly Capture] Quick capture error', error);
     void flashBadge(tabId, '!', '#b91c1c');
   }
 }
 
 chrome.commands.onCommand.addListener((command) => {
+  logger.info('Background', 'Command received', { command });
   if (command === 'quick-capture-place') void quickCaptureCurrentPlace();
 });
 
-const TRACKED_TAB_URL = /^https:\/\//i;
+const TRACKED_TAB_URL = /^(?:https:\/\/|http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/)/i;
 const FX_RATES_CACHE_KEY = 'ownly_fx_rates';
 const FX_RATES_TIME_KEY = 'ownly_fx_rates_updated_at';
 const FX_TOOLTIP_ENABLED_KEY = 'ownly_fx_tooltip_enabled';
@@ -166,15 +183,18 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!tab.active || (!changeInfo.url && !changeInfo.status)) return;
   const url = changeInfo.url || tab.url || '';
   if (!TRACKED_TAB_URL.test(url)) return;
+  logger.debug('Background', 'Tab updated', { tabId, url: url.slice(0, 80), status: changeInfo.status });
   void chrome.runtime.sendMessage({ type: 'OWNLY_TAB_CHANGED', tabId, url }).catch(() => {});
 });
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
+  logger.debug('Background', 'Tab activated', { tabId });
   void chrome.tabs.get(tabId).then((tab) => {
     if (tab.url && TRACKED_TAB_URL.test(tab.url)) {
+      logger.debug('Background', 'Tab activated with URL', { tabId, url: tab.url.slice(0, 80) });
       void chrome.runtime.sendMessage({ type: 'OWNLY_TAB_CHANGED', tabId, url: tab.url }).catch(() => {});
     }
-  }).catch(() => {});
+  }).catch((e) => logger.warn('Background', 'Tab get failed on activated', String(e)));
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -182,8 +202,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const type = (message as { type?: string }).type;
 
   if (type === 'OWNLY_SELECTOR_DRIFT') {
+    const selector = (message as { selector?: string }).selector || 'unknown';
+    logger.warn('Background', `Selector drift: ${selector}`, { sender: sender.tab?.url?.slice(0, 60) });
     void chrome.action.setBadgeText({ text: '!' }).catch(() => {});
     void chrome.action.setBadgeBackgroundColor({ color: '#b91c1c' }).catch(() => {});
+    // Also broadcast to diagnostics layer — diagnostics.ts listens for this type
     sendResponse({ ok: true });
     return;
   }
@@ -196,24 +219,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const deletedIds = Array.isArray(rawDeleted)
       ? new Set(rawDeleted.filter((id): id is string => typeof id === 'string'))
       : undefined;
+    logger.info('Background', 'CAPTURE_SAVE_STATE_V3', { incomingPlaces: incoming.places.length, deletedIds: deletedIds?.size ?? 0, activeCollection: incoming.active_collection_id });
     void mutateCaptureStateV3InWorker((current) => {
-      // Merge: keep local places not in deletedIds, add incoming places, deduplicate by id
-      const localPlaces = deletedIds
-        ? current.places.filter((p) => !deletedIds.has(p.id))
-        : current.places;
-      const localPlaceIds = new Set(localPlaces.map((p) => p.id));
-      const incomingOnly = incoming.places.filter((p) => !localPlaceIds.has(p.id));
+      // 1. Collections: merge by ID, incoming takes precedence for active/updated metadata
+      const colMap = new Map(current.collections.map((c) => [c.id, c]));
+      for (const col of incoming.collections) {
+        colMap.set(col.id, col);
+      }
+      const mergedCollections = Array.from(colMap.values());
+
+      // 2. Places: incoming edits take precedence; keep non-incoming current places (excluding deleted)
+      const incomingMap = new Map(incoming.places.map((p) => [p.id, p]));
+      const preservedCurrent = current.places
+        .filter((p) => (!deletedIds || !deletedIds.has(p.id)) && !incomingMap.has(p.id));
+      const validIncoming = incoming.places
+        .filter((p) => !deletedIds || !deletedIds.has(p.id));
+
+      const mergedPlaces = [...preservedCurrent, ...validIncoming];
       const merged: OwnlyCaptureStateV3 = {
         version: 3,
         active_collection_id: incoming.active_collection_id || current.active_collection_id,
-        collections: [...current.collections],
-        places: [...localPlaces, ...incomingOnly],
+        collections: mergedCollections,
+        places: mergedPlaces,
         planner_target: incoming.planner_target || current.planner_target,
       };
       return { state: merged, result: merged };
     })
-      .then((state) => sendResponse({ ok: true, state }))
-      .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
+      .then((state) => {
+        logger.info('Background', 'CAPTURE_SAVE_STATE_V3 persisted', { totalPlaces: state.places.length, collections: state.collections.length });
+        sendResponse({ ok: true, state });
+      })
+      .catch((error: unknown) => {
+        logger.error('Background', 'CAPTURE_SAVE_STATE_V3 failed', String(error));
+        sendResponse({ ok: false, error: String(error) });
+      });
     return true;
   }
 
@@ -275,9 +314,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (type === 'CAPTURE_APPLY_IMPORT_REPORT' || type === 'CAPTURE_APPLY_IMPORT_REPORT_V3') {
+    const report = (message as { report?: { created?: string[]; updated?: string[]; deduped?: string[] } }).report;
+    if (report) {
+      const importedIds = new Set([
+        ...(report.created || []),
+        ...(report.updated || []),
+        ...(report.deduped || []),
+      ].filter(Boolean));
+      if (importedIds.size > 0) {
+        void mutateCaptureStateV3InWorker((current) => ({
+          state: {
+            ...current,
+            places: current.places.filter((p) => !importedIds.has(p.id)),
+          },
+          result: undefined,
+        }))
+          .then(() => sendResponse({ ok: true }))
+          .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
+        return true;
+      }
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+
   // ─── Legacy V2 Handlers (kept during transition) ───────────────────────────
 
-  if (type === 'CAPTURE_SAVE_STATE' || type === 'CAPTURE_REPLACE_STATE' || type === 'CAPTURE_SET_CONTEXT' || type === 'CAPTURE_APPLY_IMPORT_REPORT') {
+  if (type === 'CAPTURE_SAVE_STATE' || type === 'CAPTURE_REPLACE_STATE' || type === 'CAPTURE_SET_CONTEXT') {
     // Forward V2 messages to V3 by migrating on the fly
     if (type === 'CAPTURE_SET_CONTEXT') {
       const context = (message as { context?: unknown }) as { context?: { tripId?: string; title?: string; currency?: string } };
@@ -319,7 +383,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    // For SAVE/REPLACE/APPLY_REPORT, read V2 and forward
     sendResponse({ ok: true });
     return true;
   }
@@ -330,9 +393,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = (message as { tabId?: unknown }).tabId;
     const currency = (message as { currency?: unknown }).currency;
     if (typeof tabId !== 'number') {
+      logger.warn('Background', 'OWNLY_SET_FX_OVERRIDE missing tabId');
       sendResponse({ ok: false, error: 'missing tab id' });
       return;
     }
+    logger.info('Background', 'OWNLY_SET_FX_OVERRIDE', { tabId, currency });
     void (async () => {
       const key = fxOverrideKey(tabId);
       const normalized = typeof currency === 'string' && currency.trim() && currency !== 'AUTO'
@@ -341,8 +406,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (normalized) await sessionStorage.set({ [key]: normalized });
       else await sessionStorage.remove(key);
       await chrome.tabs.sendMessage(tabId, { type: 'OWNLY_CURRENCY_OVERRIDE_CHANGED', overrideCurrency: normalized }).catch(() => {});
+      logger.info('Background', 'FX override applied', { tabId, normalized: normalized ?? 'AUTO' });
       sendResponse({ ok: true });
-    })().catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
+    })().catch((error: unknown) => {
+      logger.error('Background', 'OWNLY_SET_FX_OVERRIDE failed', String(error));
+      sendResponse({ ok: false, error: String(error) });
+    });
     return true;
   }
 
@@ -360,12 +429,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const raw = session[fxOverrideKey(tabId)];
         if (typeof raw === 'string' && raw.trim()) overrideCurrency = raw.trim().toUpperCase();
       }
-      // Get currency from active collection or planner target
+      // Get currency from active collection or default to CNY
       const activeCollection = state.collections.find((c) => c.id === state.active_collection_id);
-      const targetCurrency = activeCollection?.currency || state.planner_target?.title ? undefined : 'CNY';
+      const targetCurrency = activeCollection?.currency || 'CNY';
       sendResponse({
         ok: true,
-        targetCurrency: targetCurrency || activeCollection?.currency || 'CNY',
+        targetCurrency,
         rates,
         enabled: stored[FX_TOOLTIP_ENABLED_KEY] !== false,
         overrideCurrency,
@@ -403,8 +472,12 @@ async function getCachedFxRates(): Promise<Record<string, number>> {
 
 async function refreshFxRates(): Promise<Record<string, number>> {
   try {
+    logger.debug('Background', 'Refreshing FX rates');
     const res = await fetch('https://open.er-api.com/v6/latest/USD');
-    if (!res.ok) return DEFAULT_USD_PIVOT;
+    if (!res.ok) {
+      logger.warn('Background', 'FX fetch HTTP not ok', { status: res.status });
+      return DEFAULT_USD_PIVOT;
+    }
     const data = (await res.json()) as { result?: string; rates?: Record<string, number> };
     if (data?.result === 'success' && data.rates) {
       const pivotMap: Record<string, number> = { USD: 1 };
@@ -412,9 +485,12 @@ async function refreshFxRates(): Promise<Record<string, number>> {
         if (typeof rate === 'number' && rate > 0) pivotMap[code.toUpperCase()] = Math.round((1 / rate) * 100000) / 100000;
       }
       await chrome.storage.local.set({ [FX_RATES_CACHE_KEY]: pivotMap, [FX_RATES_TIME_KEY]: Date.now() });
+      logger.info('Background', 'FX rates refreshed', { count: Object.keys(pivotMap).length });
       return pivotMap;
     }
+    logger.warn('Background', 'FX response not success', data);
   } catch (error) {
+    logger.error('Background', 'Failed to fetch live FX rates', String(error));
     console.warn('[Ownly Capture] Failed to fetch live FX rates:', error);
   }
   return DEFAULT_USD_PIVOT;

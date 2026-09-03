@@ -338,7 +338,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       setVisits(nextVisits);
       setLegs(nextLegs);
       setSelectedTripId((current) => current || nextTrips[0]?.id || '');
-      setCapturePending(state ? state.pendingPlaces.length : null);
+      setCapturePending(state && Array.isArray(state.pendingPlaces) ? state.pendingPlaces.length : null);
       try {
         await hydrateLedgerFromVault(nextTrips);
       } catch (error) {
@@ -1145,8 +1145,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       }
 
       await plannerRepository.initialize();
-      if (state.pendingPlaces.length > 0) {
-        const report = await plannerRepository.importCapturedPlaces(state.pendingPlaces);
+      const pending = Array.isArray(state.pendingPlaces) ? state.pendingPlaces : [];
+      if (pending.length > 0) {
+        const targetTripId = selectedTripId || state.activeContext?.tripId || trips[0]?.id || '';
+        const placesToImport = pending.map((p) => ({
+          ...p,
+          trip_id: p.trip_id || targetTripId,
+        })) as PlannerTripPlace[];
+        const report = await plannerRepository.importCapturedPlaces(placesToImport);
 
         let ackFailed = false;
         try {

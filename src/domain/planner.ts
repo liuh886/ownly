@@ -995,11 +995,14 @@ export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: 
         ${place.reservation_url ? `<p><b>预订:</b> ${escapeXml(place.reservation_url)}</p>` : ''}
         ${place.source_url ? `<p><a href="${escapeXml(place.source_url)}">Google Maps 链接</a></p>` : ''}
       `);
+    const coordXml = place.coordinates && Number.isFinite(place.coordinates.lat) && Number.isFinite(place.coordinates.lng)
+      ? `\n      <Point><coordinates>${place.coordinates.lng},${place.coordinates.lat},0</coordinates></Point>`
+      : '';
     return `
     <Placemark>
       <name>${index + 1}. ${escapeXml(place.title)}</name>
       <description><![CDATA[${description}]]></description>
-      ${place.address ? `<address>${escapeXml(place.address)}</address>` : ''}
+      ${place.address ? `<address>${escapeXml(place.address)}</address>` : ''}${coordXml}
     </Placemark>`;
   }).join('\n');
 
@@ -1014,24 +1017,30 @@ export function exportPlacesToKML(tripTitle: string, dateOrDay: string, places: 
 }
 
 export function exportPlacesToCSV(places: Array<PlannerTripPlace | PlannerScheduledPlace>): string {
-  const headers = ['Order', 'Title', 'Kind', 'Rating', 'Price', 'Address', 'Why', 'Notes', 'Tags', 'Google_Maps_URL', 'Phone', 'Plus_Code', 'Menu_URL', 'Reservation_URL'];
+  const headers = ['Order', 'Title', 'Kind', 'Rating', 'Price', 'Address', 'Why', 'Notes', 'Tags', 'Google_Maps_URL', 'Phone', 'Plus_Code', 'Menu_URL', 'Reservation_URL', 'Date', 'Start_Time', 'Duration_Min'];
   const cell = (value: string) => `"${csvSafeCell(value.replace(/"/g, '""'))}"`;
-  const rows = places.map((p, i) => [
-    i + 1,
-    cell(p.title || ''),
-    `"${p.kind}"`,
-    p.observed_rating ?? '',
-    cell(p.observed_price || ''),
-    cell(p.address || ''),
-    cell(p.why || ''),
-    cell(p.notes || ''),
-    cell((p.tags || []).join(';')),
-    cell(p.source_url || ''),
-    cell(p.phone || ''),
-    cell(p.plus_code || ''),
-    cell(p.menu_url || ''),
-    cell(p.reservation_url || ''),
-  ].join(','));
+  const rows = places.map((p, i) => {
+    const scheduled = p as PlannerScheduledPlace;
+    return [
+      i + 1,
+      cell(p.title || ''),
+      `"${p.kind}"`,
+      p.observed_rating ?? '',
+      cell(p.observed_price || ''),
+      cell(p.address || ''),
+      cell(p.why || ''),
+      cell(p.notes || ''),
+      cell((p.tags || []).join(';')),
+      cell(p.source_url || ''),
+      cell(p.phone || ''),
+      cell(p.plus_code || ''),
+      cell(p.menu_url || ''),
+      cell(p.reservation_url || ''),
+      cell(scheduled.scheduled_date || ''),
+      cell(scheduled.scheduled_start || ''),
+      scheduled.duration_minutes ?? '',
+    ].join(',');
+  });
   return [headers.join(','), ...rows].join('\n');
 }
 
@@ -1920,9 +1929,23 @@ export function estimateTripBudget(
   const validTravelers = Math.max(1, travelerCount);
 
   scheduledPlaces.forEach((place) => {
-    const price = parseNumericPrice(place.observed_price);
+    let price = 0;
+    if (typeof place.price_min === 'number' && typeof place.price_max === 'number') {
+      price = (place.price_min + place.price_max) / 2;
+    } else if (typeof place.price_min === 'number') {
+      price = place.price_min;
+    } else if (typeof place.price_max === 'number') {
+      price = place.price_max;
+    } else {
+      price = parseNumericPrice(place.observed_price);
+    }
+
     let marker: string | null = null;
-    if (place.observed_price) {
+    if (place.price_currency?.trim()) {
+      marker = place.price_currency.trim().toUpperCase();
+      foundCurrencies.add(marker);
+      if (!currency) currency = marker;
+    } else if (place.observed_price) {
       marker = extractPriceCurrency(place.observed_price);
       if (marker) {
         foundCurrencies.add(marker);
@@ -2439,6 +2462,7 @@ export function exportTripToMarkdown(
       const icon = PLANNER_KIND_ICONS[p.kind] || '📍';
       const kindLabel = getPlannerKindLabel(p.kind, language);
       const metaParts = [
+        p.scheduled_start ? (zh ? `时间: ${p.scheduled_start}` : `Time: ${p.scheduled_start}`) : null,
         kindLabel,
         p.area,
         p.preferred_window ? (zh ? `时段: ${p.preferred_window}` : `Window: ${p.preferred_window}`) : null,

@@ -30,13 +30,17 @@ function clearPageState(): void {
 }
 
 export async function readCurrentPlace(options?: { soft?: boolean }): Promise<void> {
-  if (!options?.soft) {
+  const started = Date.now();
+  const soft = Boolean(options?.soft);
+  if (!soft) {
     setStatus(t().readingStatus);
     el.placePanel.classList.add('is-loading');
   }
+  logger.debug('Capture', 'readCurrentPlace start', { soft });
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
+    logger.warn('Capture', 'readCurrentPlace: no active tab');
     clearPageState();
     el.placePanel.classList.remove('is-loading');
     renderCurrentPlace();
@@ -44,6 +48,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
     renderCurrencyPill();
     return;
   }
+  logger.debug('Capture', 'readCurrentPlace tab', { tabId: tab.id, url: tab.url?.slice(0, 80) });
 
   type PlaceMessageResponse = {
     place?: CurrentResearchPlace | null;
@@ -58,6 +63,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   let placeResp: PlaceMessageResponse | null = null;
   let listResp: ListMessageResponse | null = null;
 
+  let readError: string | null = null;
   try {
     [placeResp, listResp] = await Promise.all([
       chrome.tabs.sendMessage(tab.id, {
@@ -71,7 +77,16 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
         overrideCurrency: store.mapCurrencyOverride,
       }) as Promise<ListMessageResponse>,
     ]);
-  } catch {
+    logger.info('Capture', 'readCurrentPlace: content responses', {
+      hasPlace: Boolean(placeResp?.place),
+      hasSavedList: Boolean(placeResp?.savedList),
+      allLists: placeResp?.allLists?.length ?? 0,
+      listPlaces: listResp?.listPlaces?.length ?? 0,
+      ms: Date.now() - started,
+    });
+  } catch (e) {
+    readError = e instanceof Error ? e.message : String(e);
+    logger.warn('Capture', 'readCurrentPlace: primary sendMessage failed, retrying injection', readError);
     try {
       const scriptingApi = (chrome as unknown as { scripting?: { executeScript: (options: unknown) => Promise<unknown> } }).scripting;
       if (scriptingApi && tab.id) {
@@ -92,13 +107,15 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
             overrideCurrency: store.mapCurrencyOverride,
           }) as Promise<ListMessageResponse>,
         ]);
+        logger.info('Capture', 'readCurrentPlace: retry injection succeeded', { hasPlace: Boolean(placeResp?.place), ms: Date.now() - started });
       }
     } catch (innerErr) {
       clearPageState();
       if (!options?.soft) {
         setStatus(store.lang === 'zh' ? '当前页面不支持 Capture 或未完全加载。' : 'Capture is not available or page is not loaded.', 'error');
       }
-      logger.warn('capture', 'Could not read current provider page after content-script retry', String(innerErr));
+      const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+      logger.error('Capture', 'Could not read current provider page after content-script retry', { error: msg, tabId: tab.id, url: tab.url?.slice(0, 80) });
     }
   }
 
@@ -163,6 +180,16 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   const addPanel = document.getElementById('addPanel') as HTMLDetailsElement | null;
   if (addPanel && (store.currentPlace || (store.detectedSavedList?.places.length ?? 0) > 0)) addPanel.open = true;
 
+  logger.debug('Capture', 'readCurrentPlace: render done', {
+    hasPlace: Boolean(store.currentPlace),
+    placeTitle: store.currentPlace?.title?.slice(0, 30),
+    savedList: store.detectedSavedList?.listName,
+    savedCount: store.detectedSavedList?.places.length ?? 0,
+    currency: store.pageDetectedCurrency,
+    ms: Date.now() - started,
+    error: readError,
+  });
+
   // Auto-capture price from page if place exists in collection
   if (store.currentPlace?.priceLevel) {
     const places = getActivePlaces();
@@ -172,6 +199,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
     );
     if (match && !match.price?.raw) {
       const price = store.currentPlace.priceLevel;
+      logger.info('Capture', 'Auto-capturing price for existing place', { title: match.title, price, currency: store.currentPlace.detectedCurrency });
       const normalizedPrice = normalizeObservedPrice(price, store.currentPlace.detectedCurrency || store.pageDetectedCurrency);
       store.updatePlace(match.id, (p) => ({
         ...p,
@@ -188,24 +216,30 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
       try {
         await saveState();
         setStatus(`${store.lang === 'zh' ? '💰 已自动抓取价格：' : '💰 Price captured: '}${match.title} → ${price}`, 'success');
+        logger.info('Capture', 'Auto price persisted', { title: match.title, price });
       } catch (error) {
         setStatus(store.lang === 'zh' ? '价格已读取，但保存失败。' : 'Price was read, but save failed.', 'error');
-        logger.warn('capture', 'Failed to persist auto-captured price', String(error));
+        logger.error('Capture', 'Failed to persist auto-captured price', { error: error instanceof Error ? error.message : String(error), title: match.title });
       }
     }
   }
 
-  if (store.currentPlace) autoFillPlaceForm(store.currentPlace);
+  if (store.currentPlace) {
+    logger.debug('Capture', 'autoFillPlaceForm', { title: store.currentPlace.title });
+    autoFillPlaceForm(store.currentPlace);
+  }
 
   if (needsPriceRetry()) {
     const delay = PRICE_RETRY_DELAYS[Math.min(priceRetryCount, PRICE_RETRY_DELAYS.length - 1)];
     priceRetryCount += 1;
     lastPriceRetryUrl = store.currentPlace!.sourceUrl;
     const retryUrl = lastPriceRetryUrl;
+    logger.info('Capture', 'Scheduling price retry', { delay, retryCount: priceRetryCount, url: retryUrl.slice(0, 60) });
     window.setTimeout(() => {
       if (store.currentPlace?.sourceUrl === retryUrl) void readCurrentPlace({ soft: true });
     }, delay);
   } else {
+    if (priceRetryCount > 0) logger.debug('Capture', 'Price retry finished', { finalPrice: store.currentPlace?.priceLevel });
     priceRetryCount = 0;
   }
 }

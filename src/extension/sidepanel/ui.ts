@@ -6,17 +6,18 @@ import {
   inferPlaceKind,
   isPlausibleCustomTag,
   normalizeDelimitedText,
+  normalizeObservedPrice,
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
   type PlannerPlaceKind,
 } from '../../domain/planner';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
-import type { CapturePlace } from '../../domain/capture';
+import { findExistingPlace, findExistingPlaceByIdentity, type CapturePlace } from '../../domain/capture';
 import { el } from '../dom';
 import { logger } from '../logger';
-import { escapeHtml, isPlausiblePriceText, isZeroOrPlaceholderPrice } from '../utils';
+import { cleanExtractedText, escapeHtml, isPlausiblePriceText, isZeroOrPlaceholderPrice } from '../utils';
 import { matchesSavedListContext } from '../saved-list-match';
-import { getExistingPlaceForUrl, store, t } from './store';
+import { getExistingPlaceForUrl, saveState, store, t } from './store';
 
 const KIND_ICONS = PLANNER_KIND_ICONS;
 
@@ -186,10 +187,41 @@ export function applyI18n() {
   updateDebugLogViewer();
 }
 
+let debugLevelFilter: string = 'ALL';
+let debugSearchQuery: string = '';
+let debugAutoScroll = true;
+
 export function updateDebugLogViewer() {
-  const viewer = el.debugLogViewer;
+  const viewer = el.debugLogViewer as HTMLElement | null;
   if (!viewer) return;
-  const logs = logger.getAllFormattedText();
+  // Sync filter UI state
+  try {
+    debugLevelFilter = (el.debugLogLevelFilter?.value as string) || debugLevelFilter;
+    debugSearchQuery = (el.debugLogSearch?.value as string) ?? debugSearchQuery;
+    debugAutoScroll = el.debugLogAutoScroll ? el.debugLogAutoScroll.checked : debugAutoScroll;
+  } catch {}
+
+  const stats = logger.getStats();
+  const statsEl = el.debugLogStats as HTMLElement | null;
+  if (statsEl) {
+    const byLevel = Object.entries(stats.byLevel).map(([k, v]) => `${k}:${v}`).join(' ');
+    statsEl.textContent = `${stats.total} 日志${byLevel ? ` · ${byLevel}` : ''} · ${stats.sessionId.slice(0, 8)}`;
+    statsEl.title = `Session: ${stats.sessionId}\nBy scope: ${Object.entries(stats.byScope).map(([k, v]) => `${k}:${v}`).join(' ')}`;
+  }
+
+  // Filter logs
+  let logs = logger.getLogs();
+  if (debugLevelFilter && debugLevelFilter !== 'ALL') {
+    logs = logs.filter((e) => e.level === debugLevelFilter);
+  }
+  if (debugSearchQuery.trim()) {
+    const q = debugSearchQuery.trim().toLowerCase();
+    logs = logs.filter((e) => `${e.scope} ${e.message} ${JSON.stringify(e.data ?? '')}`.toLowerCase().includes(q));
+  }
+  // Cap display to last 300 to avoid DOM thrash
+  const displayLogs = logs.slice(-300);
+  const formatted = displayLogs.map((e) => logger.formatEntryText(e)).join('\n');
+
   const report = store.state.lastImportReport;
   const importDebug = report
     ? [
@@ -202,8 +234,24 @@ export function updateDebugLogViewer() {
           : []),
       ].join('\n')
     : '';
-  viewer.textContent = [importDebug, logs].filter(Boolean).join('\n\n') || (store.lang === 'zh' ? '[暂无调试日志]' : '[No debug logs yet]');
-  viewer.scrollTop = viewer.scrollHeight;
+
+  const text = [importDebug, formatted].filter(Boolean).join('\n\n') || (store.lang === 'zh' ? '[暂无调试日志 — 试试切换到 Google Maps 地点页后点 刷新]' : '[No debug logs yet]');
+  // Highlight errors inline by wrapping? keep plain but add prefix
+  viewer.textContent = text;
+  if (debugAutoScroll) viewer.scrollTop = viewer.scrollHeight;
+}
+
+export function initDebugLogFilters(): void {
+  try {
+    el.debugLogLevelFilter?.addEventListener('change', () => updateDebugLogViewer());
+    el.debugLogSearch?.addEventListener('input', () => {
+      // debounce input
+      window.setTimeout(() => updateDebugLogViewer(), 80);
+    });
+    el.debugLogAutoScroll?.addEventListener('change', () => {
+      debugAutoScroll = el.debugLogAutoScroll.checked;
+    });
+  } catch {}
 }
 
 function renderChips() {
@@ -393,15 +441,46 @@ function renderFilters() {
 
 export function renderState() {
   const dict = t();
-  el.pending.textContent = `${store.state.pendingPlaces.length} ${dict.pendingSuffix}`;
-  const context = store.state.activeContext;
-  el.captureContextTitle.textContent = context
-    ? `${context.title}${context.currency ? ` [${context.currency}]` : ''}`
-    : (store.lang === 'zh' ? '未连接 Planner 行程' : 'No Planner trip selected');
-  el.captureContextHint.textContent = context
-    ? (store.lang === 'zh' ? '由 Planner 控制 · Capture 只收集研究候选' : 'Controlled by Planner · Capture only collects research candidates')
-    : (store.lang === 'zh' ? '请先在 Ownly Planner 选择一个行程' : 'Select a trip in Ownly Planner first');
-  el.btnCaptureSubmit.disabled = !context;
+  // Pending count now reflects active collection (Inbox-first)
+  const activePlaces = store.getActivePlaces();
+  el.pending.textContent = `${activePlaces.length} ${dict.pendingSuffix}`;
+  const activeCollection = store.getActiveCollection();
+  const inbox = store.getInboxCollection();
+  // Show active collection as primary context (independent from Planner)
+  if (activeCollection) {
+    el.captureContextTitle.textContent = `${activeCollection.title}${activeCollection.currency ? ` [${activeCollection.currency}]` : ''} · ${activePlaces.length} 地点`;
+    const planner = store.stateV3.planner_target;
+    if (planner) {
+      el.captureContextHint.textContent = store.lang === 'zh'
+        ? `已关联 Planner：${planner.title}（可一键导入）`
+        : `Linked Planner: ${planner.title}`;
+    } else {
+      el.captureContextHint.textContent = store.lang === 'zh'
+        ? `独立合集 · ${store.stateV3.collections.length} 个合集，当前：${activeCollection.title}`
+        : `Independent collection · ${store.stateV3.collections.length} collections`;
+    }
+  } else {
+    el.captureContextTitle.textContent = store.lang === 'zh' ? 'Inbox' : 'Inbox';
+    el.captureContextHint.textContent = store.lang === 'zh' ? '独立合集 · 可直接收藏，无需 Planner' : 'Independent · capture without Planner';
+  }
+  el.btnCaptureSubmit.disabled = !activeCollection;
+  // Populate collection selector
+  try {
+    const sel = el.collectionSelector as HTMLSelectElement;
+    if (sel) {
+      const prev = sel.value;
+      sel.innerHTML = '';
+      for (const col of store.stateV3.collections) {
+        const opt = document.createElement('option');
+        opt.value = col.id;
+        const count = store.stateV3.places.filter((p) => p.collection_id === col.id).length;
+        const isInbox = col.id === inbox?.id;
+        opt.textContent = `${isInbox ? '📥 ' : '📁 '}${col.title} (${count})`;
+        sel.append(opt);
+      }
+      sel.value = activeCollection?.id || prev || store.stateV3.collections[0]?.id || '';
+    }
+  } catch {}
   renderChips();
   renderFilters();
 }
@@ -488,42 +567,144 @@ export function renderSmartListCard() {
   }
   const activeTrip = store.state.activeContext;
 
-  // 1. Overview page with multiple lists found
+  // 1. Overview page with multiple Google lists found — independent collections mode
   if ((!store.detectedSavedList || store.detectedSavedList.places.length === 0) && store.detectedAllLists.length > 0) {
     el.smartListSection.style.display = 'block';
     el.smartListSection.className = 'panel stack match-banner neutral';
     el.smartListBadge.textContent = dict.listsFoundBadge;
     el.smartListTitle.textContent = dict.listsFoundTitle(store.detectedAllLists.length);
-    el.smartListCountBadge.textContent = dict.clickToLoad;
-    el.smartListDesc.innerHTML = `${escapeHtml(dict.loadListIntro)}<div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:5px;">` +
-      store.detectedAllLists.map((l) => `<button type="button" class="list-chip" data-list-id="${escapeHtml(l.listId || '')}">📁 ${escapeHtml(l.listName)}${l.count ? ` (${l.count})` : ''}</button>`).join('') +
-      '</div>';
+    const activeCol = store.getActiveCollection();
+    el.smartListCountBadge.textContent = activeCol ? (store.lang === 'zh' ? `将导入到：${activeCol.title}` : `Target: ${activeCol.title}`) : dict.clickToLoad;
+    // Build overview: each Google list → can view or directly import to active collection
+    el.smartListDesc.innerHTML = '';
+    const intro = document.createElement('div');
+    intro.textContent = dict.loadListIntro;
+    intro.style.fontSize = '11px';
+    intro.style.color = 'var(--text-3)';
+    el.smartListDesc.append(intro);
+    const tip = document.createElement('div');
+    tip.textContent = store.lang === 'zh'
+      ? `提示：上方“当前合集”可切换目标合集；点击列表可预览；“导入”直接写入该合集。`
+      : `Tip: switch target collection above, then import.`;
+    tip.style.fontSize = '10px';
+    tip.style.color = 'var(--text-4)';
+    tip.style.marginTop = '4px';
+    el.smartListDesc.append(tip);
+    const grid = document.createElement('div');
+    grid.style.cssText = 'margin-top:8px; display:grid; gap:6px;';
+    for (const l of store.detectedAllLists) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.cssText = 'gap:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface); align-items:center;';
+      // Match hint: does an Ownly collection already have same name?
+      const matchedCol = store.stateV3.collections.find((c) => matchesSavedListContext(l.listName, { title: c.title }));
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'list-chip';
+      chip.dataset.listId = l.listId || '';
+      chip.textContent = `📁 ${l.listName}${l.count ? ` (${l.count})` : ''}`;
+      chip.title = matchedCol ? (store.lang === 'zh' ? `已匹配合集：${matchedCol.title}` : `Matched: ${matchedCol.title}`) : (store.lang === 'zh' ? '点击预览' : 'View');
+      if (matchedCol) chip.style.borderColor = 'var(--accent-border-strong)';
+      chip.style.flex = '1';
+      const btnView = document.createElement('button');
+      btnView.type = 'button';
+      btnView.className = 'secondary';
+      btnView.style.cssText = 'font-size:10px; padding:4px 8px; white-space:nowrap;';
+      btnView.textContent = store.lang === 'zh' ? '查看' : 'View';
+      btnView.addEventListener('click', () => {
+        const listId = chip.dataset.listId;
+        if (!listId) return;
+        logger.info('SmartList', 'overview view clicked', { listName: l.listName, listId });
+        setStatus(dict.fetchingList);
+        void chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
+          if (activeTab?.id) {
+            void (chrome.tabs.sendMessage(activeTab.id, { type: 'OWNLY_FETCH_LIST_BY_ID', listId }) as Promise<{ savedList?: DetectedSavedList | null }>).then((resp) => {
+              if (resp?.savedList) {
+                store.detectedSavedList = resp.savedList;
+                renderSmartListCard();
+                renderCurrentPlace();
+                setStatus(dict.fetchedListStatus(resp.savedList!.listName, resp.savedList!.places.length), 'success');
+                logger.info('SmartList', 'fetched list', { listName: resp.savedList!.listName, count: resp.savedList!.places.length });
+              } else {
+                logger.warn('SmartList', 'fetch returned empty', { listName: l.listName });
+                setStatus(store.lang === 'zh' ? '未获取到列表内容' : 'No list data', 'error');
+              }
+            }).catch((e) => logger.error('SmartList', 'fetch failed', String(e)));
+          }
+        });
+      });
+      const btnImport = document.createElement('button');
+      btnImport.type = 'button';
+      btnImport.className = 'primary';
+      btnImport.style.cssText = 'font-size:10px; padding:4px 8px; white-space:nowrap;';
+      btnImport.textContent = store.lang === 'zh' ? `↗ 导入到 ${activeCol ? activeCol.title : 'Inbox'}` : `Import`;
+      btnImport.title = store.lang === 'zh' ? `直接导入到当前合集：${activeCol?.title ?? 'Inbox'}` : `Import to active collection`;
+      btnImport.addEventListener('click', () => {
+        const listId = chip.dataset.listId;
+        if (!listId) return;
+        logger.info('SmartList', 'overview direct import clicked', { listName: l.listName, targetCollection: activeCol?.title });
+        setStatus(store.lang === 'zh' ? `正在导入“${l.listName}”到 ${activeCol?.title ?? 'Inbox'}…` : `Importing ${l.listName}…`);
+        void chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
+          if (!activeTab?.id) return;
+          void (chrome.tabs.sendMessage(activeTab.id, { type: 'OWNLY_FETCH_LIST_BY_ID', listId, overrideCurrency: store.mapCurrencyOverride }) as Promise<{ savedList?: DetectedSavedList | null }>).then(async (resp) => {
+            const saved = resp?.savedList;
+            if (!saved?.places.length) {
+              setStatus(store.lang === 'zh' ? '未获取到列表内容' : 'No list data', 'error');
+              return;
+            }
+            // Perform import to active collection (independent, no Planner required)
+            const targetCol = store.getActiveCollection() ?? store.ensureDefaultCollection();
+            const now = new Date().toISOString();
+            const activePlaces = store.stateV3.places.filter((p) => p.collection_id === targetCol.id);
+            const newPlaces: CapturePlace[] = [];
+            let importedCount = 0;
+            for (const item of saved.places) {
+              const title = cleanExtractedText(item.title);
+              if (!title) continue;
+              const existing = findExistingPlaceByIdentity(activePlaces, { source_provider: item.sourceProvider, source_place_id: item.sourcePlaceId, source_url: item.sourceUrl }) ?? findExistingPlace(activePlaces, item.sourceUrl, item.sourcePlaceId, item.coordinates);
+              const id = existing?.id ?? crypto.randomUUID();
+              const kind = inferPlaceKind([title, item.category, item.address, ...(item.types || [])].filter(Boolean).join(' '));
+              const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || saved.detectedCurrency || store.pageDetectedCurrency);
+              const place: CapturePlace = {
+                id,
+                collection_id: targetCol.id,
+                title,
+                source: { provider: item.sourceProvider || 'google_maps', url: item.sourceUrl, place_id: item.sourcePlaceId, category: item.category, types: item.types ?? [] },
+                inferred_kind: kind as CapturePlace['inferred_kind'],
+                address: item.address ? cleanExtractedText(item.address) : undefined,
+                rating: item.rating,
+                review_count: item.reviewCount,
+                price: item.priceLevel ? { raw: item.priceLevel, currency: normalizedPrice?.currency, min: normalizedPrice?.min, max: normalizedPrice?.max, unit: normalizedPrice?.unit, level: normalizedPrice?.level } : undefined,
+                open_hours: item.openHours,
+                phone: item.phone,
+                plus_code: item.plusCode,
+                menu_url: item.menuUrl,
+                reservation_url: item.reservationUrl,
+                review_topics: item.reviewTopics,
+                user: { priority: 'want', tags: ensurePlaceKindTag(saved.listName ? [saved.listName] : [], kind, store.lang), why: item.userNote ?? item.summary, notes: item.userNote },
+                captured_at: now,
+              };
+              newPlaces.push(place);
+              importedCount += 1;
+            }
+            const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== targetCol.id);
+            const existingActive = activePlaces.filter((p) => !newPlaces.some((np) => np.id === p.id));
+            store.setState({ ...store.stateV3, places: [...otherPlaces, ...existingActive, ...newPlaces] });
+            await saveState();
+            renderCandidatesList();
+            renderState();
+            setStatus(store.lang === 'zh' ? `已导入 ${importedCount} 个地点到「${targetCol.title}」` : `Imported ${importedCount} to ${targetCol.title}`, 'success');
+            logger.info('SmartList', 'direct import done', { listName: l.listName, importedCount, target: targetCol.title });
+          });
+        });
+      });
+      row.append(chip, btnView, btnImport);
+      grid.append(row);
+    }
+    el.smartListDesc.append(grid);
     el.btnSmartSyncAll.style.display = 'none';
     el.btnToggleListPreview.style.display = 'none';
     el.smartListPreviewContainer.style.display = 'none';
-
-    // Add click listeners to list chips
-    const chips = el.smartListDesc.querySelectorAll<HTMLButtonElement>('.list-chip');
-    chips.forEach((chip) => {
-      chip.addEventListener('click', () => {
-        const listId = chip.dataset.listId;
-        if (listId) {
-          setStatus(dict.fetchingList);
-          void chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
-            if (activeTab?.id) {
-              void (chrome.tabs.sendMessage(activeTab.id, { type: 'OWNLY_FETCH_LIST_BY_ID', listId }) as Promise<{ savedList?: DetectedSavedList | null }>).then((resp) => {
-                if (resp?.savedList) {
-                  store.detectedSavedList = resp.savedList;
-                  renderSmartListCard();
-                  renderCurrentPlace();
-                  setStatus(dict.fetchedListStatus(resp.savedList!.listName, resp.savedList!.places.length), 'success');
-                }
-              });
-            }
-          });
-        }
-      });
-    });
     return;
   }
 
@@ -779,8 +960,8 @@ export function renderCandidatesList() {
   const dict = t();
   const dictKey = store.lang;
 
-  // Inbox-first: show Inbox places, not trip-filtered pendingPlaces
-  let candidates: V2FacadePlace[] = (store.getInboxPlaces() as unknown as V2FacadePlace[]).map((p) => {
+  // Show active collection places (or Inbox places when Inbox is selected)
+  let candidates: V2FacadePlace[] = (store.getActivePlaces() as unknown as V2FacadePlace[]).map((p) => {
     const cp = p as unknown as CapturePlace;
     // Map CapturePlace to V2FacadePlace shape for existing card rendering
     return {
@@ -1215,13 +1396,14 @@ function buildCandidateDetails(
   editBtn.dataset.placeId = place.id;
   editBtn.textContent = `✏️ ${dict.editAction}`;
 
-  const archiveBtn = document.createElement('button');
-  archiveBtn.type = 'button';
-  archiveBtn.className = 'card-btn';
-  archiveBtn.dataset.action = 'archive';
-  archiveBtn.dataset.placeId = place.id;
-  archiveBtn.textContent = `⭐ ${store.lang === 'zh' ? '必去' : 'Must'}`;
-  archiveBtn.title = store.lang === 'zh' ? '标记为必去' : 'Mark as Must';
+  const mustBtn = document.createElement('button');
+  mustBtn.type = 'button';
+  mustBtn.className = 'card-btn';
+  mustBtn.dataset.action = 'toggle-must';
+  mustBtn.dataset.placeId = place.id;
+  const isMust = place.priority === 'must';
+  mustBtn.textContent = isMust ? `⭐ ${store.lang === 'zh' ? '已必去' : 'Must'}` : `☆ ${store.lang === 'zh' ? '设为必去' : 'Set Must'}`;
+  mustBtn.title = store.lang === 'zh' ? '切换必去状态' : 'Toggle Must priority';
 
   const addToTripBtn = document.createElement('button');
   addToTripBtn.type = 'button';
@@ -1237,7 +1419,7 @@ function buildCandidateDetails(
   delBtn.dataset.placeId = place.id;
   delBtn.textContent = `🗑️ ${dict.deleteAction}`;
 
-  btnGroup.append(editBtn, archiveBtn, addToTripBtn, delBtn);
+  btnGroup.append(editBtn, mustBtn, addToTripBtn, delBtn);
   actions.append(btnGroup);
 
   if (extraParts.length) wrapper.append(details, extra, actions);

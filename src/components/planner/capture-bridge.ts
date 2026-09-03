@@ -1,4 +1,6 @@
-import type { CaptureContext, ImportReport, OwnlyCaptureState } from '@/domain/planner';
+import type { CaptureContext, CaptureCandidate, ImportReport, OwnlyCaptureState } from '@/domain/planner';
+import { asCaptureCandidate } from '@/domain/planner';
+import { capturePlaceToPlannerPlace, type CapturePlace, type OwnlyCaptureStateV3 } from '@/domain/capture';
 
 const REQUEST_SOURCE = 'ownly-planner-web';
 const RESPONSE_SOURCE = 'ownly-capture-extension';
@@ -82,8 +84,41 @@ function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 2500): Pr
   });
 }
 
-export function pullCaptureState(): Promise<OwnlyCaptureState | null> {
-  return requestBridge<OwnlyCaptureState>('PULL_CAPTURE_STATE');
+export async function pullCaptureState(): Promise<OwnlyCaptureState | null> {
+  const raw = await requestBridge<unknown>('PULL_CAPTURE_STATE');
+  if (!raw || typeof raw !== 'object') return null;
+
+  const rawObj = raw as Record<string, unknown>;
+
+  // V3 state shape
+  if (rawObj.version === 3 || Array.isArray(rawObj.places)) {
+    const v3 = raw as OwnlyCaptureStateV3;
+    const targetTripId = v3.planner_target?.trip_id || v3.active_collection_id || '';
+    const activeCollection = v3.collections?.find((c) => c.id === v3.active_collection_id) || v3.collections?.[0];
+    const activeContext: CaptureContext | null = v3.planner_target
+      ? { tripId: v3.planner_target.trip_id, title: v3.planner_target.title }
+      : (activeCollection ? { tripId: activeCollection.id, title: activeCollection.title, currency: activeCollection.currency } : null);
+
+    const places = Array.isArray(v3.places) ? v3.places : [];
+    const pendingPlaces: CaptureCandidate[] = places.map((place: CapturePlace) =>
+      asCaptureCandidate(capturePlaceToPlannerPlace(place, targetTripId, undefined, { preserveId: true }) as never)
+    );
+
+    return {
+      version: 2,
+      activeContext,
+      pendingPlaces,
+    };
+  }
+
+  // V2 state shape
+  const v2 = raw as Partial<OwnlyCaptureState>;
+  return {
+    version: 2,
+    activeContext: v2.activeContext ?? null,
+    pendingPlaces: Array.isArray(v2.pendingPlaces) ? v2.pendingPlaces : [],
+    lastImportReport: v2.lastImportReport,
+  };
 }
 
 export async function applyCaptureImportReport(report: ImportReport): Promise<boolean> {
@@ -95,3 +130,4 @@ export async function setCaptureContext(context: CaptureContext | null): Promise
   const result = await requestBridge<{ ok: true }>('SET_CAPTURE_CONTEXT', { context });
   return result?.ok === true;
 }
+

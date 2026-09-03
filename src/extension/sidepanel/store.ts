@@ -3,6 +3,7 @@ import { readCaptureStateV3, saveCaptureStateV3ViaWorker, writeCaptureStateV3 } 
 import { DEFAULT_INBOX_TITLE, EMPTY_CAPTURE_STATE_V3, ensureInboxCollection, findExistingPlaceByIdentity, getInboxCollection as getInboxCollectionDomain, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
 import { I18N, type Lang } from '../i18n';
 import { sessionStorage } from '../session-storage';
+import { logger } from '../logger';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 const fxOverrideKey = (tabId: number) => `ownlyFxOverride:${tabId}`;
@@ -171,6 +172,30 @@ export const store = {
       places: [...this.stateV3.places.filter((p) => p.id !== place.id), place],
     });
   },
+
+  /** Create a new collection with given title. Returns it and sets as active. */
+  createCollection(title: string): CaptureCollection {
+    const clean = title.trim();
+    if (!clean) throw new Error('Collection title required');
+    const existing = this.stateV3.collections.find((c) => c.title.toLocaleLowerCase() === clean.toLocaleLowerCase());
+    if (existing) {
+      this.setState({ ...this.stateV3, active_collection_id: existing.id });
+      return existing;
+    }
+    const now = new Date().toISOString();
+    const col: CaptureCollection = { id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: clean, created_at: now };
+    this.setState({ ...this.stateV3, collections: [...this.stateV3.collections, col], active_collection_id: col.id });
+    logger.info('Store', 'createCollection', { id: col.id, title: col.title });
+    return col;
+  },
+
+  /** Set active collection by id. */
+  setActiveCollection(id: string): boolean {
+    if (!this.stateV3.collections.some((c) => c.id === id)) return false;
+    this.setState({ ...this.stateV3, active_collection_id: id });
+    logger.info('Store', 'setActiveCollection', { id });
+    return true;
+  },
 };
 
 export const DEBUG_STORAGE_KEY = 'ownlyDebugMode';
@@ -232,12 +257,18 @@ export function getExistingPlaceForUrl(sourceUrl: string, sourcePlaceId?: string
 
 /** Save V3 state via worker. */
 export async function saveState(): Promise<void> {
+  const started = Date.now();
+  const payload = { places: store.stateV3.places.length, collections: store.stateV3.collections.length, deleted: store.locallyDeletedIds.size };
+  logger.debug('Store', 'saveState → worker', payload);
   try {
     const viaWorker = await saveCaptureStateV3ViaWorker(store.stateV3, store.locallyDeletedIds);
     store.setState(viaWorker.state);
     store.locallyDeletedIds.clear();
+    logger.info('Store', 'saveState persisted', { ...payload, ms: Date.now() - started, afterPlaces: viaWorker.state.places.length });
   } catch (error) {
+    logger.error('Store', 'Failed to persist capture state', { error: error instanceof Error ? error.stack || error.message : String(error), payload });
     console.warn('[Ownly Capture] Failed to persist capture state', error);
+    throw error;
   }
 }
 

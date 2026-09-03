@@ -28,4 +28,24 @@ describe('Capture import report application', () => {
     });
     expect(next.lastImportReport).toMatchObject({ received: 2, created: ['ok'] });
   });
+
+  it('filters imported place IDs from V3 CapturePlace array', () => {
+    const v3Places = [
+      { id: 'p1', collection_id: 'c1', title: 'Grand Palace', source: { provider: 'google_maps' as const, url: 'https://maps.google.com/?cid=1' }, captured_at: '2026-09-02' },
+      { id: 'p2', collection_id: 'c1', title: 'Wat Pho', source: { provider: 'google_maps' as const, url: 'https://maps.google.com/?cid=2' }, captured_at: '2026-09-02' },
+      { id: 'p3', collection_id: 'c1', title: 'Wat Arun', source: { provider: 'google_maps' as const, url: 'https://maps.google.com/?cid=3' }, captured_at: '2026-09-02' },
+    ];
+    const report = {
+      received: 3,
+      created: ['p1'],
+      updated: ['p2'],
+      deduped: [],
+      failed: [],
+    };
+    const importedIds = new Set([...report.created, ...report.updated, ...report.deduped]);
+    const remaining = v3Places.filter((p) => !importedIds.has(p.id));
+
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).toBe('p3');
+  });
 });

@@ -1,10 +1,19 @@
-# Ownly — Systematic Technical Debt & Next Steps
+# Ownly — Task Progress & Review
 
-> Analysis date: 2026-09-02. Generated from architecture review of recent重构 (#135–#147).
+## Completed: Planner & Capture Extension Functional Review & Fixes (2026-09-03)
+- [x] **Capture ↔ Planner Bridge Protocol**: Resolved V2/V3 shape mismatch in `src/components/planner/capture-bridge.ts`, `src/components/planner/PlannerHome.tsx`, and `src/extension/ownly-bridge.ts`. Fixed candidate count initialization and sync crashes (`undefined.length`).
+- [x] **Import Report ACK & Queue Boundary**: Updated `src/extension/ownly-bridge.ts` and `src/extension/background.ts` to acknowledge imported IDs and delete them from Capture inbox storage upon sync.
+- [x] **Candidate Card "Must" Action**: Fixed critical bug in `ui.ts` / `handlers.ts` where clicking "⭐ 必去" permanently deleted the place via an `archive` action. Now correctly toggles `must` priority.
+- [x] **Background Worker State Merging**: Fixed `CAPTURE_SAVE_STATE_V3` in `src/extension/background.ts` to merge `incoming.collections` and apply user edits to existing places without discarding them.
+- [x] **MV3 Single Writer Compliance**: Removed direct storage write on read from `readCaptureStateV3` in `src/extension/capture-state.ts`.
+- [x] **Candidate Drawer Multi-Collection Support**: Updated `renderCandidatesList()` in `src/extension/sidepanel/ui.ts` to render `store.getActivePlaces()` rather than hardcoded inbox-only places.
+- [x] **Currency Detector & Tooltip**: Added `RP`/`ZL` support in `currency-detector.ts`, ensured safe DOM attachment in `fx-tooltip.ts`, and prevented SPA cache collisions in `content.ts`.
+- [x] **KML / CSV / Markdown Export Integrity**: Added `<Point><coordinates>` to KML placemarks, included scheduled timing columns in CSV exports, added `scheduled_start` to daily Markdown itinerary, and enforced structured price authority (`price_currency`, `price_min`, `price_max`) in `estimateTripBudget`.
+- [x] **Build & Verification**: Built and verified extension in `dist/extension/` (all 8 bundles present), passing `npm run validate:extension` (132 tests) and `npm run validate` (full project build & test suite).
 
 ---
 
-## P0 — Must Fix Now
+# Systematic Technical Debt & Next Steps
 
 ### 1. Schema Version + Migration Framework
 **Why:** Place model evolved from single-entity (schedule inside Place) to dual-entity (Place + Visit). All core entities lack version tracking. Old data from Obsidian vaults, imports, bundles, and Capture will break silently.

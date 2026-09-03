@@ -9,6 +9,12 @@ export type ElementMap = {
   lblActiveTrip: HTMLElement;
   captureContextTitle: HTMLElement;
   captureContextHint: HTMLElement;
+  collectionSelector: HTMLSelectElement;
+  btnCreateCollection: HTMLButtonElement;
+  createCollectionRow: HTMLElement;
+  inputNewCollection: HTMLInputElement;
+  btnConfirmCreateCollection: HTMLButtonElement;
+  btnCancelCreateCollection: HTMLButtonElement;
   pageCurrencyBar: HTMLElement;
   currencySelector: HTMLSelectElement;
   btnRedetectCurrency: HTMLButtonElement;
@@ -96,6 +102,10 @@ export type ElementMap = {
   btnCopyAIDiagnostics: HTMLButtonElement;
   btnClearDebugLogs: HTMLButtonElement;
   debugLogViewer: HTMLElement;
+  debugLogLevelFilter: HTMLSelectElement;
+  debugLogSearch: HTMLInputElement;
+  debugLogStats: HTMLElement;
+  debugLogAutoScroll: HTMLInputElement;
   importReportBanner: HTMLElement;
   importReportIcon: HTMLElement;
   importReportTitle: HTMLElement;
@@ -121,6 +131,12 @@ export const el: ElementMap = {
   lblActiveTrip: required('lblActiveTrip'),
   captureContextTitle: required('captureContextTitle'),
   captureContextHint: required('captureContextHint'),
+  collectionSelector: required<HTMLSelectElement>('collectionSelector'),
+  btnCreateCollection: required<HTMLButtonElement>('btnCreateCollection'),
+  createCollectionRow: required('createCollectionRow'),
+  inputNewCollection: required<HTMLInputElement>('inputNewCollection'),
+  btnConfirmCreateCollection: required<HTMLButtonElement>('btnConfirmCreateCollection'),
+  btnCancelCreateCollection: required<HTMLButtonElement>('btnCancelCreateCollection'),
   pageCurrencyBar: required('pageCurrencyBar'),
   currencySelector: required<HTMLSelectElement>('currencySelector'),
   btnRedetectCurrency: required<HTMLButtonElement>('btnRedetectCurrency'),
@@ -208,6 +224,10 @@ export const el: ElementMap = {
   btnCopyAIDiagnostics: required<HTMLButtonElement>('btnCopyAIDiagnostics'),
   btnClearDebugLogs: required<HTMLButtonElement>('btnClearDebugLogs'),
   debugLogViewer: required('debugLogViewer'),
+  debugLogLevelFilter: required<HTMLSelectElement>('debugLogLevelFilter'),
+  debugLogSearch: required<HTMLInputElement>('debugLogSearch'),
+  debugLogStats: required('debugLogStats'),
+  debugLogAutoScroll: required<HTMLInputElement>('debugLogAutoScroll'),
   importReportBanner: required('importReportBanner'),
   importReportIcon: required('importReportIcon'),
   importReportTitle: required('importReportTitle'),

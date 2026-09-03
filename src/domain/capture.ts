@@ -438,12 +438,16 @@ export function capturePlaceToPlannerPlace(
   capture: CapturePlace,
   tripId: string,
   provenance?: OwnlyCollectionExportV1['provenance'],
+  options?: { preserveId?: boolean },
 ): PlannerTripPlaceLike {
   const now = new Date().toISOString();
+  const id = options?.preserveId && capture.id
+    ? capture.id
+    : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `plc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
   return {
     schema_version: '0.1',
     type: 'trip_place',
-    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `plc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    id,
     trip_id: tripId,
     title: capture.title,
     source_provider: capture.source.provider,

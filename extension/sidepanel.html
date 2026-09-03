@@ -29,15 +29,25 @@
     <section class="panel stack">
       <div class="row" style="justify-content: space-between; align-items: center;">
         <div style="min-width: 0;">
-          <div id="lblActiveTrip" class="label">当前行程</div>
-          <strong id="captureContextTitle" style="display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">未连接 Planner 行程</strong>
-          <span id="captureContextHint" class="url" style="display:block; margin-top:2px;">请先在 Ownly Planner 选择一个行程</span>
+          <div id="lblActiveTrip" class="label">当前合集</div>
+          <strong id="captureContextTitle" style="display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Inbox</strong>
+          <span id="captureContextHint" class="url" style="display:block; margin-top:2px;">独立合集 · 可直接收藏，无需 Planner</span>
         </div>
         <div id="pageCurrencyBar" class="row" style="align-items: center; gap: 3px;">
           <span style="font-size: 10px; opacity: 0.65;" title="页面货币 / Page currency">💱</span>
           <select id="currencySelector" class="mini-currency-select" aria-label="页面货币 / Page currency"></select>
           <button id="btnRedetectCurrency" class="mini-icon-btn" type="button" title="重新自动检测 / Re-detect">🔄</button>
         </div>
+      </div>
+      <!-- Collection Switcher (independent) -->
+      <div class="row" style="gap:6px; margin-top:6px; align-items:center;">
+        <select id="collectionSelector" style="flex:1; font-size:11px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface);"></select>
+        <button id="btnCreateCollection" class="secondary" type="button" style="font-size:10px; padding:4px 8px; white-space:nowrap;" title="新建合集">＋ 新建合集</button>
+      </div>
+      <div id="createCollectionRow" class="row" style="display:none; gap:6px; margin-top:6px;">
+        <input id="inputNewCollection" placeholder="合集名称，如：京都美食" style="flex:1; font-size:11px; padding:4px 6px;" />
+        <button id="btnConfirmCreateCollection" class="primary" type="button" style="font-size:10px; padding:4px 10px;">创建</button>
+        <button id="btnCancelCreateCollection" class="link" type="button" style="font-size:10px;">取消</button>
       </div>
       <details class="new-trip">
         <summary id="sumBulkImport">📥 导入工具</summary>
@@ -183,7 +193,7 @@
     </form>
     </details>
 
-    <!-- Debug & Diagnostic Logs Drawer (Toggleable) -->
+    <!-- Debug & Diagnostic Logs Drawer (Enhanced) -->
     <details id="debugDrawer" class="panel stack drawer" style="display: none; margin-top: 8px; border-top: 1px solid var(--border);">
       <summary style="font-size: 11px; color: var(--text-3); cursor: pointer; user-select: none;">
         <span id="sumDebugDrawer">🐛 诊断与调试日志 (Debug Mode)</span>
@@ -194,8 +204,24 @@
           <button id="btnClearDebugLogs" class="link" type="button" style="font-size: 10px;" title="清空日志">🗑️</button>
         </span>
       </summary>
-      <div class="stack" style="margin-top: 6px;">
-        <div id="debugLogViewer" style="max-height: 200px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; background: rgba(0,0,0,0.35); padding: 8px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; border: 1px solid var(--border); color: #a1a1aa; line-height: 1.45; user-select: text;">[00:00:00] [INFO] [System] Debug Logger Initialized.</div>
+      <div class="stack" style="margin-top: 6px; gap: 6px;">
+        <!-- Filter bar -->
+        <div class="row" style="gap: 6px; flex-wrap: wrap; align-items: center;">
+          <select id="debugLogLevelFilter" style="font-size: 10px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); max-width: 110px;">
+            <option value="ALL">全部 Level</option>
+            <option value="ERROR">ERROR</option>
+            <option value="WARN">WARN</option>
+            <option value="INFO">INFO</option>
+            <option value="DEBUG">DEBUG</option>
+            <option value="FETCH">FETCH</option>
+            <option value="PARSER">PARSER</option>
+            <option value="MAPS_TAB">MAPS_TAB</option>
+          </select>
+          <input id="debugLogSearch" placeholder="🔍 搜索 scope/消息…" style="flex: 1; min-width: 90px; font-size: 10px; padding: 4px 6px;" />
+          <label style="display:inline-flex; align-items:center; gap:3px; font-size:10px; color:var(--text-3); user-select:none;"><input type="checkbox" id="debugLogAutoScroll" checked /> 自动滚动</label>
+          <span id="debugLogStats" style="font-size: 10px; color: var(--text-4); white-space: nowrap;">0 日志</span>
+        </div>
+        <div id="debugLogViewer" style="max-height: 260px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; background: rgba(0,0,0,0.35); padding: 8px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; border: 1px solid var(--border); color: #a1a1aa; line-height: 1.45; user-select: text;">[00:00:00] [INFO] [System] Debug Logger Initialized.</div>
       </div>
     </details>
 

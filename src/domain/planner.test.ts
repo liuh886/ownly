@@ -550,7 +550,7 @@ describe('Ownly Planner domain', () => {
 
   it('exports valid KML and CSV format for Google My Maps', () => {
     const stops = [
-      place('1', { title: '浅草寺', kind: 'attraction', observed_rating: 4.6, address: 'Tokyo, Asakusa' }),
+      place('1', { title: '浅草寺', kind: 'attraction', observed_rating: 4.6, address: 'Tokyo, Asakusa', coordinates: { lat: 35.7147, lng: 139.7967 } }),
       place('2', { title: 'Blue Bottle', kind: 'cafe', observed_price: '¥800', address: 'Tokyo, Shibuya' }),
     ];
     stops[0].phone = '+81312345678';
@@ -560,10 +560,40 @@ describe('Ownly Planner domain', () => {
     expect(kml).toContain('<kml xmlns="http://www.opengis.net/kml/2.2">');
     expect(kml).toContain('<name>1. 浅草寺</name>');
     expect(kml).toContain('<name>2. Blue Bottle</name>');
+    expect(kml).toContain('<Point><coordinates>139.7967,35.7147,0</coordinates></Point>');
 
     const csv = exportPlacesToCSV(stops);
-    expect(csv).toContain('Google_Maps_URL,Phone,Plus_Code,Menu_URL,Reservation_URL');
+    expect(csv).toContain('Google_Maps_URL,Phone,Plus_Code,Menu_URL,Reservation_URL,Date,Start_Time,Duration_Min');
     expect(csv).toContain('1,"浅草寺","attraction",4.6');
+  });
+
+  it('exports scheduled date, start time and duration to CSV for scheduled places', () => {
+    const scheduled = [
+      scheduledPlace(place('1', { title: 'Wat Arun', kind: 'attraction' }), '2026-11-01', 0, { scheduled_start: '09:30', duration_minutes: 90 }),
+    ];
+    const csv = exportPlacesToCSV(scheduled);
+    expect(csv).toContain('1,"Wat Arun","attraction"');
+    expect(csv).toContain('"2026-11-01","09:30",90');
+  });
+
+  it('prioritizes structured price_currency, price_min, price_max over ambiguous strings in budget estimation', () => {
+    const places = [
+      place('1', {
+        title: 'Bangkok Hotel',
+        kind: 'stay',
+        observed_price: '$150', // ambiguous dollar symbol
+        price_currency: 'SGD', // authoritative structured currency
+        price_min: 120,
+        price_max: 180,
+      }),
+    ];
+    const budget = estimateTripBudget(places, 1, {
+      base: 'USD',
+      overrides: { SGD: 0.75 },
+    });
+    // avg price is (120+180)/2 = 150 SGD * 0.75 USD/SGD = 112.5 USD
+    expect(budget.categoryBreakdown.stay).toBe(112.5);
+    expect(budget.detectedCurrency).toBe('SGD');
   });
 
   it('classifies research chips accurately into risks and signals', () => {

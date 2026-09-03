@@ -206,12 +206,7 @@ export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
 
 export async function readCaptureStateV3(): Promise<OwnlyCaptureStateV3> {
   const result = await chrome.storage.local.get(CAPTURE_STORAGE_KEY);
-  const v3 = normalizeCaptureStateV3(result[CAPTURE_STORAGE_KEY]);
-  // Auto-persist migration if V2 was detected
-  if (v3.collections.length > 0 || v3.places.length > 0) {
-    await chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: v3 });
-  }
-  return v3;
+  return normalizeCaptureStateV3(result[CAPTURE_STORAGE_KEY]);
 }
 
 /** Read V2 state (for backward compatibility during migration). */

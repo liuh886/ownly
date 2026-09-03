@@ -44,7 +44,7 @@ function ensureTooltip(): HTMLDivElement {
     #ownly-fx-tooltip .ownly-fx-badge{background:rgba(255,255,255,.1);padding:1px 4px;border-radius:4px;color:#d4d4d8;font-size:9px}
     #ownly-fx-tooltip button{background:transparent;border:0;color:#71717a;cursor:pointer;padding:2px 4px}
   `;
-  document.head.appendChild(style);
+  (document.head || document.documentElement).appendChild(style);
 
   const isZh = isChineseUi();
   const headerText = isZh ? '💱 划词汇率' : '💱 Selection FX';
@@ -62,7 +62,7 @@ function ensureTooltip(): HTMLDivElement {
     event.stopPropagation();
     hideTooltip();
   });
-  document.body.appendChild(node);
+  (document.body || document.documentElement).appendChild(node);
   return node;
 }
 
