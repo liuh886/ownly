@@ -89,11 +89,12 @@ export function parseReviewCount(raw?: string | null): number | undefined {
   const text = cleanExtractedText(raw).trim();
   if (!text) return undefined;
 
-  // Handle "1.2K" or "1.5万" abbreviations with word boundary on K
-  const kMatch = /([\d.,]+)\s*([kK](?=[^a-zA-Z]|$)|千|万|万件)/.exec(text);
+  // Handle "1.2K", "1.5万", "2.1M", "200万" abbreviations with word boundary on K/M
+  const kMatch = /([\d.,]+)\s*([kKmM](?=[^a-zA-Z]|$)|千|万|万件|百万)/.exec(text);
   if (kMatch?.[1]) {
     const base = parseFloat(kMatch[1].replace(',', '.'));
-    const multiplier = /万/.test(kMatch[2]) ? 10000 : 1000;
+    const multUnit = kMatch[2];
+    const multiplier = /[mM]|百万/.test(multUnit) ? 1000000 : /万/.test(multUnit) ? 10000 : 1000;
     if (Number.isFinite(base) && base > 0) return Math.round(base * multiplier);
   }
 

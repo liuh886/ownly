@@ -284,10 +284,12 @@ export async function saveState(): Promise<void> {
   const payload = { places: store.stateV3.places.length, collections: store.stateV3.collections.length, deleted: store.locallyDeletedIds.size, deletedCols: store.locallyDeletedCollectionIds.size };
   logger.debug('Store', 'saveState → worker', payload);
   try {
-    const viaWorker = await saveCaptureStateV3ViaWorker(store.stateV3, store.locallyDeletedIds, store.locallyDeletedCollectionIds);
+    const currentDeletedIds = new Set(store.locallyDeletedIds);
+    const currentDeletedColIds = new Set(store.locallyDeletedCollectionIds);
+    const viaWorker = await saveCaptureStateV3ViaWorker(store.stateV3, currentDeletedIds, currentDeletedColIds);
     store.setState(viaWorker.state);
-    store.locallyDeletedIds.clear();
-    store.locallyDeletedCollectionIds.clear();
+    for (const id of currentDeletedIds) store.locallyDeletedIds.delete(id);
+    for (const id of currentDeletedColIds) store.locallyDeletedCollectionIds.delete(id);
     logger.info('Store', 'saveState persisted', { ...payload, ms: Date.now() - started, afterPlaces: viaWorker.state.places.length });
   } catch (error) {
     logger.error('Store', 'Failed to persist capture state', { error: error instanceof Error ? error.stack || error.message : String(error), payload });

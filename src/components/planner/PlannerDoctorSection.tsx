@@ -35,8 +35,8 @@ export function PlannerDoctorSection({ itemVariants }: { itemVariants?: Variants
       const result = await plannerRepository.reconstructOrphanPlaces();
       setLastResult(`已修复 ${result.reconstructed.length} 个孤儿 Visit，失败 ${result.failed.length} 个`);
       await runCheck();
-    } catch {
-      setLastResult(null);
+    } catch (err) {
+      setLastResult(err instanceof Error ? `修复失败: ${err.message}` : '修复过程中出现异常');
     } finally {
       setRepairing(false);
     }

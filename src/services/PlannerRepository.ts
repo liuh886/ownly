@@ -6,6 +6,7 @@ import {
   ensurePlaceKindTag,
   mergeCapturedPlaceResearch,
   plannerTripLegFileName,
+  stablePlannerHash,
   type ImportReport,
   type ImportFailure,
   type PlannerTrip,
@@ -81,12 +82,7 @@ function safeEntityId(id: string): string {
   const safe = trimmed.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
   const hasNonAscii = /[^\x00-\x7F]/.test(trimmed);
   if (!safe || hasNonAscii) {
-    let hash = 0;
-    for (let i = 0; i < trimmed.length; i++) {
-      hash = ((hash << 5) - hash) + trimmed.charCodeAt(i);
-      hash |= 0;
-    }
-    const hashStr = Math.abs(hash).toString(36);
+    const hashStr = stablePlannerHash(trimmed);
     return safe ? `${safe.slice(0, 30)}-${hashStr}` : `entity-${hashStr}`;
   }
   return safe;

@@ -154,7 +154,7 @@ export interface PlannerTripLeg {
   updated_at?: string;
 }
 
-function stablePlannerHash(value: string): string {
+export function stablePlannerHash(value: string): string {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);

@@ -269,6 +269,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
   const [poolSearch, setPoolSearch] = useState('');
+  const [isBatchOperating, setIsBatchOperating] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
   const dateNavRef = useRef<HTMLDivElement>(null);
 
   let isPro = true;
@@ -811,12 +813,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   }, []);
 
   const handleBatchDeleteCandidates = useCallback(async () => {
-    if (selectedCandidateIds.size === 0 || disabled) return;
+    if (selectedCandidateIds.size === 0 || disabled || isBatchOperating) return;
     const count = selectedCandidateIds.size;
     const confirmMsg = zh
       ? `确定要彻底删除已选中的 ${count} 个地点吗？`
       : `Are you sure you want to permanently delete ${count} selected places?`;
     if (!window.confirm(confirmMsg)) return;
+    setIsBatchOperating(true);
     try {
       for (const id of selectedCandidateIds) {
         await plannerRepository.deletePlace(id);
@@ -829,12 +832,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
       setTimeout(() => setNotice(''), 4000);
+    } finally {
+      setIsBatchOperating(false);
     }
-  }, [disabled, load, selectedCandidateIds, zh]);
+  }, [disabled, isBatchOperating, load, selectedCandidateIds, zh]);
 
   const handleBatchShelveCandidates = useCallback(async () => {
-    if (selectedCandidateIds.size === 0 || disabled) return;
+    if (selectedCandidateIds.size === 0 || disabled || isBatchOperating) return;
     const count = selectedCandidateIds.size;
+    setIsBatchOperating(true);
     try {
       for (const id of selectedCandidateIds) {
         await plannerRepository.dropPlace(id);
@@ -847,12 +853,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
       setTimeout(() => setNotice(''), 4000);
+    } finally {
+      setIsBatchOperating(false);
     }
-  }, [disabled, load, selectedCandidateIds, zh]);
+  }, [disabled, isBatchOperating, load, selectedCandidateIds, zh]);
 
   const handleBatchScheduleCandidates = useCallback(async () => {
-    if (selectedCandidateIds.size === 0 || !activeDate || disabled) return;
+    if (selectedCandidateIds.size === 0 || !activeDate || disabled || isBatchOperating) return;
     const count = selectedCandidateIds.size;
+    setIsBatchOperating(true);
     try {
       for (const id of selectedCandidateIds) {
         await plannerRepository.addVisit(id, activeDate);
@@ -865,11 +874,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
       setTimeout(() => setNotice(''), 4000);
+    } finally {
+      setIsBatchOperating(false);
     }
-  }, [activeDate, disabled, load, selectedCandidateIds, zh]);
+  }, [activeDate, disabled, isBatchOperating, load, selectedCandidateIds, zh]);
 
   const handleBatchMergeCandidates = useCallback(async () => {
-    if (selectedCandidateIds.size < 2 || disabled) return;
+    if (selectedCandidateIds.size < 2 || disabled || isBatchOperating) return;
     const selectedPlaces = sortedPendingCandidates.filter((p) => selectedCandidateIds.has(p.id));
     if (selectedPlaces.length < 2) return;
     const primary = selectedPlaces[0];
@@ -877,6 +888,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       ? `确定将选中的 ${selectedPlaces.length} 个地点合并为「${primary.title}」吗？`
       : `Merge ${selectedPlaces.length} selected places into "${primary.title}"?`;
     if (!window.confirm(confirmMsg)) return;
+    setIsBatchOperating(true);
     try {
       for (let i = 1; i < selectedPlaces.length; i++) {
         await plannerRepository.mergePlaces(primary.id, selectedPlaces[i].id);
@@ -889,8 +901,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
       setTimeout(() => setNotice(''), 4000);
+    } finally {
+      setIsBatchOperating(false);
     }
-  }, [disabled, load, selectedCandidateIds, sortedPendingCandidates, zh]);
+  }, [disabled, isBatchOperating, load, selectedCandidateIds, sortedPendingCandidates, zh]);
 
   const handleSavePlaceTiming = useCallback(
     async (
@@ -1111,10 +1125,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   }, [selectedTrip, scheduled, activeDate, zh]);
 
   const schedulePlace = useCallback(async (placeId: string, date = activeDate) => {
-    if (!date) return;
-    await plannerRepository.addVisit(placeId, date);
-    await load();
-  }, [activeDate, load]);
+    if (!date || disabled || isScheduling) return;
+    setIsScheduling(true);
+    try {
+      await plannerRepository.addVisit(placeId, date);
+      await load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+      setTimeout(() => setNotice(''), 3500);
+    } finally {
+      setIsScheduling(false);
+    }
+  }, [activeDate, disabled, isScheduling, load]);
 
   const removeVisit = useCallback(async (place: PlannerScheduledPlace) => {
     await plannerRepository.removeVisit(place.visit_id);
@@ -1279,6 +1301,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 onChange={(event) => {
                   setSelectedTripId(event.target.value);
                   setActiveFilter('all');
+                  setSelectedCandidateIds(new Set());
+                  setIsMultiSelectMode(false);
+                  setPoolSearch('');
                 }}
                 className="max-w-full rounded-xl border border-stone-300 bg-stone-50/80 px-3.5 py-2 text-sm font-bold text-stone-900 shadow-2xs outline-none transition focus:border-stone-900 focus:bg-white cursor-pointer"
                 aria-label={zh ? '选择行程' : 'Select trip'}
@@ -2271,7 +2296,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       <button
                         type="button"
                         onClick={() => void handleBatchMergeCandidates()}
-                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 transition shadow-xs"
+                        disabled={isBatchOperating || disabled}
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-35 transition shadow-xs"
                       >
                         ✨ {zh ? '合并同类' : 'Merge'}
                       </button>
@@ -2279,15 +2305,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     <button
                       type="button"
                       onClick={() => void handleBatchScheduleCandidates()}
-                      disabled={selectedCandidateIds.size === 0}
+                      disabled={selectedCandidateIds.size === 0 || isBatchOperating || disabled}
                       className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-35 transition shadow-xs"
                     >
-                      + {zh ? '排入当天' : 'Schedule'}
+                      {isBatchOperating ? (zh ? '处理中...' : 'Processing...') : `+ ${zh ? '排入当天' : 'Schedule'}`}
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleBatchShelveCandidates()}
-                      disabled={selectedCandidateIds.size === 0}
+                      disabled={selectedCandidateIds.size === 0 || isBatchOperating || disabled}
                       className="rounded-lg bg-stone-800 border border-stone-700 px-3 py-1.5 text-xs font-medium text-stone-200 hover:bg-stone-700 disabled:opacity-35 transition"
                     >
                       🙈 {zh ? '暂不考虑' : 'Shelve'}
@@ -2295,7 +2321,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     <button
                       type="button"
                       onClick={() => void handleBatchDeleteCandidates()}
-                      disabled={selectedCandidateIds.size === 0}
+                      disabled={selectedCandidateIds.size === 0 || isBatchOperating || disabled}
                       className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-500 disabled:opacity-35 transition shadow-xs"
                     >
                       🗑️ {zh ? '批量删除' : 'Delete'}

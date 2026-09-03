@@ -821,13 +821,66 @@ function candidateCardSig(place: { id: string; updated_at?: string; price_curren
   ].join('|');
 }
 
+export function getVisibleFilteredPlaces(): CapturePlace[] {
+  const all = store.getActivePlaces();
+  const kindMatches = (p: CapturePlace, kind: PlannerPlaceKind): boolean => {
+    const zhLabel = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
+    const enLabel = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
+    return (
+      p.inferred_kind === kind ||
+      (p.user?.tags || []).some((t) => {
+        const lower = t.trim().toLowerCase();
+        return lower === zhLabel || lower === enLabel;
+      })
+    );
+  };
+
+  let filtered = all;
+  if (store.activeFilter === 'must') filtered = filtered.filter((p) => p.user?.priority === 'must');
+  if (store.activeFilter === 'want') filtered = filtered.filter((p) => p.user?.priority === 'want');
+  if (store.activeFilter === 'stay') filtered = filtered.filter((p) => kindMatches(p, 'stay'));
+  if (store.activeFilter === 'food') filtered = filtered.filter((p) => kindMatches(p, 'food'));
+  if (store.activeFilter === 'cafe') filtered = filtered.filter((p) => kindMatches(p, 'cafe'));
+  if (store.activeFilter === 'attraction') filtered = filtered.filter((p) => kindMatches(p, 'attraction'));
+  if (store.activeFilter === 'experience') filtered = filtered.filter((p) => kindMatches(p, 'experience'));
+  if (store.activeFilter === 'shopping') filtered = filtered.filter((p) => kindMatches(p, 'shopping'));
+  if (store.activeFilter === 'transit') filtered = filtered.filter((p) => kindMatches(p, 'transit'));
+  if (store.activeFilter === 'service') filtered = filtered.filter((p) => kindMatches(p, 'service'));
+  if (store.activeFilter === 'other') filtered = filtered.filter((p) => kindMatches(p, 'other'));
+  if (store.activeFilter.startsWith('tag:')) {
+    const filterTag = store.activeFilter.slice(4).trim().toLowerCase();
+    filtered = filtered.filter((p) => (p.user?.tags || []).some((tag) => tag.trim().toLowerCase() === filterTag));
+  }
+
+  if (store.searchQuery.trim()) {
+    const query = store.searchQuery.trim().toLowerCase();
+    filtered = filtered.filter((p) =>
+      p.title.toLowerCase().includes(query) ||
+      p.address?.toLowerCase().includes(query) ||
+      (p.user?.tags || []).some((tag) => tag.toLowerCase().includes(query))
+    );
+  }
+
+  return filtered;
+}
+
 export function renderCandidatesList() {
   const dict = t();
   const dictKey = store.lang;
 
+  const totalActivePlaces = store.getActivePlaces();
+  const visiblePlaces = getVisibleFilteredPlaces();
+  el.candidatesCountBadge.textContent = String(totalActivePlaces.length);
+
+  el.btnEnrichCandidates.style.display = store.bulkMode ? 'none' : 'inline-block';
+  if (store.bulkMode) {
+    el.btnBulkEnrich.textContent = store.bulkSelected.size > 0
+      ? (store.lang === 'zh' ? `⚡ 一键补强 (${store.bulkSelected.size})` : `⚡ Strengthen (${store.bulkSelected.size})`)
+      : dict.btnBulkEnrichCandidates;
+  }
+
   // Show active collection places (or Inbox places when Inbox is selected)
-  let candidates: V2FacadePlace[] = (store.getActivePlaces() as unknown as V2FacadePlace[]).map((p) => {
-    const cp = p as unknown as CapturePlace;
+  let candidates: V2FacadePlace[] = visiblePlaces.map((cp) => {
     // Map CapturePlace to V2FacadePlace shape for existing card rendering
     return {
       id: cp.id,
@@ -870,51 +923,6 @@ export function renderCandidatesList() {
       updated_at: cp.updated_at,
     };
   });
-  el.candidatesCountBadge.textContent = String(candidates.length);
-
-  el.btnEnrichCandidates.style.display = store.bulkMode ? 'none' : 'inline-block';
-  if (store.bulkMode) {
-    el.btnBulkEnrich.textContent = store.bulkSelected.size > 0
-      ? (store.lang === 'zh' ? `⚡ 一键补强 (${store.bulkSelected.size})` : `⚡ Strengthen (${store.bulkSelected.size})`)
-      : dict.btnBulkEnrichCandidates;
-  }
-
-  const kindMatches = (p: { kind?: string; tags?: string[] }, kind: PlannerPlaceKind): boolean => {
-    const zhLabel = PLANNER_KIND_LABELS[kind]?.zh.toLowerCase() || '';
-    const enLabel = PLANNER_KIND_LABELS[kind]?.en.toLowerCase() || '';
-    return (
-      p.kind === kind ||
-      (p.tags || []).some((t) => {
-        const lower = t.trim().toLowerCase();
-        return lower === zhLabel || lower === enLabel;
-      })
-    );
-  };
-
-  if (store.activeFilter === 'must') candidates = candidates.filter((p) => p.priority === 'must');
-  if (store.activeFilter === 'want') candidates = candidates.filter((p) => p.priority === 'want');
-  if (store.activeFilter === 'stay') candidates = candidates.filter((p) => kindMatches(p, 'stay'));
-  if (store.activeFilter === 'food') candidates = candidates.filter((p) => kindMatches(p, 'food'));
-  if (store.activeFilter === 'cafe') candidates = candidates.filter((p) => kindMatches(p, 'cafe'));
-  if (store.activeFilter === 'attraction') candidates = candidates.filter((p) => kindMatches(p, 'attraction'));
-  if (store.activeFilter === 'experience') candidates = candidates.filter((p) => kindMatches(p, 'experience'));
-  if (store.activeFilter === 'shopping') candidates = candidates.filter((p) => kindMatches(p, 'shopping'));
-  if (store.activeFilter === 'transit') candidates = candidates.filter((p) => kindMatches(p, 'transit'));
-  if (store.activeFilter === 'service') candidates = candidates.filter((p) => kindMatches(p, 'service'));
-  if (store.activeFilter === 'other') candidates = candidates.filter((p) => kindMatches(p, 'other'));
-  if (store.activeFilter.startsWith('tag:')) {
-    const filterTag = store.activeFilter.slice(4).trim().toLowerCase();
-    candidates = candidates.filter((p) => p.tags.some((tag) => tag.trim().toLowerCase() === filterTag));
-  }
-
-  if (store.searchQuery.trim()) {
-    const query = store.searchQuery.trim().toLowerCase();
-    candidates = candidates.filter((p) =>
-      p.title.toLowerCase().includes(query) ||
-      p.area?.toLowerCase().includes(query) ||
-      p.tags.some((tag) => tag.toLowerCase().includes(query))
-    );
-  }
 
   el.candidatesListContainer.innerHTML = '';
   if (candidates.length === 0) {

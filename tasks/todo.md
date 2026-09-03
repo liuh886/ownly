@@ -1,15 +1,22 @@
 # Ownly — Task Progress & Review
 
-## Completed: Planner & Capture Extension Functional Review & Fixes (2026-09-03)
-- [x] **Capture ↔ Planner Bridge Protocol**: Resolved V2/V3 shape mismatch in `src/components/planner/capture-bridge.ts`, `src/components/planner/PlannerHome.tsx`, and `src/extension/ownly-bridge.ts`. Fixed candidate count initialization and sync crashes (`undefined.length`).
-- [x] **Import Report ACK & Queue Boundary**: Updated `src/extension/ownly-bridge.ts` and `src/extension/background.ts` to acknowledge imported IDs and delete them from Capture inbox storage upon sync.
-- [x] **Candidate Card "Must" Action**: Fixed critical bug in `ui.ts` / `handlers.ts` where clicking "⭐ 必去" permanently deleted the place via an `archive` action. Now correctly toggles `must` priority.
-- [x] **Background Worker State Merging**: Fixed `CAPTURE_SAVE_STATE_V3` in `src/extension/background.ts` to merge `incoming.collections` and apply user edits to existing places without discarding them.
-- [x] **MV3 Single Writer Compliance**: Removed direct storage write on read from `readCaptureStateV3` in `src/extension/capture-state.ts`.
-- [x] **Candidate Drawer Multi-Collection Support**: Updated `renderCandidatesList()` in `src/extension/sidepanel/ui.ts` to render `store.getActivePlaces()` rather than hardcoded inbox-only places.
-- [x] **Currency Detector & Tooltip**: Added `RP`/`ZL` support in `currency-detector.ts`, ensured safe DOM attachment in `fx-tooltip.ts`, and prevented SPA cache collisions in `content.ts`.
-- [x] **KML / CSV / Markdown Export Integrity**: Added `<Point><coordinates>` to KML placemarks, included scheduled timing columns in CSV exports, added `scheduled_start` to daily Markdown itinerary, and enforced structured price authority (`price_currency`, `price_min`, `price_max`) in `estimateTripBudget`.
-- [x] **Build & Verification**: Built and verified extension in `dist/extension/` (all 8 bundles present), passing `npm run validate:extension` (132 tests) and `npm run validate` (full project build & test suite).
+## Completed: Interactive Buttons & UI Defect Fixes (2026-09-04)
+- [x] **Fix 1: Deduplicate Sidepanel Click Listeners** (`src/extension/sidepanel/handlers.ts`, `src/extension/sidepanel/import-export.ts`)
+  - Removed redundant 2nd registration of `btnSelectAllCandidates`, `btnBulkEnrich`, `btnEnrichCandidates`, `btnImportToPlanner`.
+- [x] **Fix 2: Scope "Select All" to Filtered Visible Places** (`src/extension/sidepanel/handlers.ts`, `src/extension/sidepanel/ui.ts`)
+  - Exported `getVisibleFilteredPlaces()` and ensured `btnSelectAllCandidates` only selects places currently visible under active filter/search query.
+- [x] **Fix 3: Optimize Bulk Delete Feedback & Mode Reset** (`src/extension/sidepanel/handlers.ts`)
+  - Added confirmation dialog, cleanly exit bulk mode when collection becomes empty, and immediately update UI state.
+- [x] **Fix 4: Improve `btnDismissPlace` SPA Navigation Reset** (`src/extension/sidepanel/capture.ts`)
+  - Automatically cleared `userDismissedPlaceUrl` when navigating to a distinct place URL on Google Maps SPA.
+- [x] **Fix 5: Target Collection Alignment in `btnBatchAdd`** (`src/extension/sidepanel/handlers.ts`)
+  - Fixed `btnBatchAdd` to add places to the currently active collection rather than forcing default Inbox.
+- [x] **Fix 6: Guard Trip Switcher & Multi-Select Locks** (`src/components/planner/PlannerHome.tsx`)
+  - Cleared selection state when switching trips; added `isBatchOperating` and `isScheduling` locks to prevent duplicate visit creations and spam-clicks.
+- [x] **Fix 7: Reset File Input in Upload Modal & Repair Error Handling** (`src/components/planner/ImportCandidatesModal.tsx`, `src/components/planner/PlannerDoctorSection.tsx`)
+  - Added `target.value = ''` reset on file read; added error reporting banner for failed doctor orphan repair.
+- [x] **Fix 8: Verify Test Suites & Rebuild Extension** (`npm run build:extension && npm run validate:extension`)
+  - All 132 extension tests and 488 total test suites pass with 0 errors; extension bundle compiled cleanly in `dist/extension/`.
 
 ---
 

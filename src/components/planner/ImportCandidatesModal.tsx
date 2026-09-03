@@ -52,9 +52,11 @@ export function ImportCandidatesModal({
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
+      const target = event.target;
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = String(e.target?.result || '');
+        target.value = '';
         try {
           const parsed = JSON.parse(content);
           if (isCollectionExport(parsed)) {
@@ -72,6 +74,7 @@ export function ImportCandidatesModal({
         handleTextChange(content);
       };
       reader.onerror = () => {
+        target.value = '';
         setErrorMsg(zh ? '文件读取失败' : 'Failed to read file');
       };
       reader.readAsText(file);

@@ -24,6 +24,7 @@ import { enrichCandidatePlacesBatch, isCandidateMissingData, mergeDetectedResear
 import {
   applyI18n,
   autoFillPlaceForm,
+  getVisibleFilteredPlaces,
   renderCandidatesList,
   renderCurrencyPill,
   renderCurrentPlace,
@@ -567,12 +568,13 @@ export function initHandlers(): void {
   });
 
   el.btnSelectAllCandidates.addEventListener('click', () => {
-    const active = getActivePlaces();
-    if (store.bulkSelected.size === active.length && active.length > 0) {
-      store.bulkSelected.clear();
+    const visible = getVisibleFilteredPlaces();
+    if (visible.length === 0) return;
+    const allVisibleSelected = visible.every((p) => store.bulkSelected.has(p.id));
+    if (allVisibleSelected) {
+      for (const p of visible) store.bulkSelected.delete(p.id);
     } else {
-      store.bulkSelected.clear();
-      for (const p of active) store.bulkSelected.add(p.id);
+      for (const p of visible) store.bulkSelected.add(p.id);
     }
     renderCandidatesList();
   });
@@ -580,6 +582,12 @@ export function initHandlers(): void {
   el.btnBulkDelete.addEventListener('click', () => {
     const dict = t();
     if (store.bulkSelected.size === 0) return;
+    const count = store.bulkSelected.size;
+    const confirmMsg = store.lang === 'zh'
+      ? `确定要删除选中的 ${count} 个地点吗？`
+      : `Are you sure you want to delete ${count} selected places?`;
+    if (!window.confirm(confirmMsg)) return;
+
     const ids = new Set(store.bulkSelected);
     for (const id of ids) store.locallyDeletedIds.add(id);
     const collection = getActiveCollection();
@@ -589,6 +597,11 @@ export function initHandlers(): void {
       store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
     }
     store.bulkSelected.clear();
+    if (getActivePlaces().length === 0) {
+      store.bulkMode = false;
+      el.bulkActionBar.style.display = 'none';
+      el.btnBulkToggle.textContent = '☑️';
+    }
     void saveState().then(() => {
       renderState();
       renderCandidatesList();
@@ -620,155 +633,6 @@ export function initHandlers(): void {
       });
     }
     el.bulkPrioritySelect.value = '';
-  });
-
-  const runBatchEnrichment = async (placesToEnrich: CapturePlace[]) => {
-    if (placesToEnrich.length === 0) {
-      setStatus(store.lang === 'zh' ? '没有可补强的地点' : 'No places to enrich', 'error');
-      return;
-    }
-    setStatus(store.lang === 'zh' ? `正在补强 ${placesToEnrich.length} 个地点…` : `Enriching ${placesToEnrich.length} places…`, 'muted');
-
-    const facadePlaces: PlannerTripPlace[] = placesToEnrich.map((p) => ({
-      schema_version: '0.1' as const,
-      type: 'trip_place' as const,
-      id: p.id,
-      trip_id: p.collection_id,
-      title: p.title,
-      source_provider: p.source.provider,
-      source_url: p.source.url,
-      source_place_id: p.source.place_id,
-      source_category: p.source.category,
-      types: p.source.types,
-      kind: p.inferred_kind || 'other',
-      priority: p.user?.priority || 'want',
-      tags: p.user?.tags || [],
-      observed_rating: p.rating,
-      observed_review_count: p.review_count,
-      observed_price: p.price?.raw,
-      price_currency: p.price?.currency,
-      price_min: p.price?.min,
-      price_max: p.price?.max,
-      price_unit: p.price?.unit as PlannerTripPlace['price_unit'],
-      price_level: p.price?.level,
-      open_hours: p.open_hours,
-      address: p.address,
-      coordinates: p.coordinates,
-      phone: p.phone,
-      plus_code: p.plus_code,
-      signals: [],
-      risks: [],
-      reservation_status: 'none',
-      state: 'candidate',
-      created_at: p.captured_at,
-      updated_at: p.updated_at,
-    }));
-
-    try {
-      const result = await enrichCandidatePlacesBatch(facadePlaces, (completed, total) => {
-        setStatus(store.lang === 'zh' ? `正在补强 (${completed}/${total})…` : `Enriching (${completed}/${total})…`, 'muted');
-      });
-
-      const enrichedMap = new Map(result.enrichedPlaces.map((ep) => [ep.id, ep]));
-      const collection = getActiveCollection();
-      if (collection) {
-        const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
-        const activePlaces = getActivePlaces().map((p) => {
-          const ep = enrichedMap.get(p.id);
-          if (!ep) return p;
-          return {
-            ...p,
-            rating: ep.observed_rating ?? p.rating,
-            review_count: ep.observed_review_count ?? p.review_count,
-            address: ep.address ?? p.address,
-            coordinates: ep.coordinates ?? p.coordinates,
-            phone: ep.phone ?? p.phone,
-            plus_code: ep.plus_code ?? p.plus_code,
-            open_hours: ep.open_hours ?? p.open_hours,
-            menu_url: ep.menu_url ?? p.menu_url,
-            reservation_url: ep.reservation_url ?? p.reservation_url,
-            review_topics: ep.review_topics ?? p.review_topics,
-            inferred_kind: ep.kind !== 'other' ? ep.kind : p.inferred_kind,
-            price: ep.observed_price ? {
-              raw: ep.observed_price,
-              currency: ep.price_currency || p.price?.currency,
-              min: ep.price_min ?? p.price?.min,
-              max: ep.price_max ?? p.price?.max,
-              unit: ep.price_unit ?? p.price?.unit,
-              level: ep.price_level ?? p.price?.level,
-            } : p.price,
-            updated_at: new Date().toISOString(),
-          };
-        });
-        store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
-        await saveState();
-        renderState();
-        renderCandidatesList();
-        setStatus(
-          store.lang === 'zh'
-            ? `补强完成：成功更新 ${result.totalEnriched} 个地点`
-            : `Enrichment complete: updated ${result.totalEnriched} places`,
-          'success',
-        );
-      }
-    } catch (err) {
-      logger.error('Enrichment', 'Batch enrichment failed', String(err));
-      setStatus(store.lang === 'zh' ? '补强过程中发生错误' : 'Enrichment failed', 'error');
-    }
-  };
-
-  el.btnBulkEnrich.addEventListener('click', () => {
-    const active = getActivePlaces();
-    const targets = store.bulkSelected.size > 0
-      ? active.filter((p) => store.bulkSelected.has(p.id))
-      : active;
-    void runBatchEnrichment(targets);
-  });
-
-  el.btnEnrichCandidates.addEventListener('click', () => {
-    // 多选时仅补强选中目标（与 bulkEnrich 一致），避免全量慢补全
-    const active = getActivePlaces();
-    const targets = store.bulkMode && store.bulkSelected.size > 0
-      ? active.filter((p) => store.bulkSelected.has(p.id))
-      : active;
-    void runBatchEnrichment(targets);
-  });
-
-  // 导入行程：Planner 已改为同步实现，侧边栏按钮仅保留兼容，默认隐藏避免误导
-  el.btnImportToPlanner.style.display = 'none';
-  el.btnImportToPlanner.title = store.lang === 'zh' ? '已由 Planner 同步实现' : 'Synced via Planner';
-  el.btnImportToPlanner.addEventListener('click', async () => {
-    const activePlaces = getActivePlaces();
-    const selectedPlaces = store.bulkSelected.size > 0
-      ? activePlaces.filter((p) => store.bulkSelected.has(p.id))
-      : activePlaces;
-    if (selectedPlaces.length === 0) {
-      setStatus(store.lang === 'zh' ? '当前没有可导入的地点。' : 'No places to import.', 'error');
-      return;
-    }
-
-    const currentCollection = getActiveCollection() || {
-      id: 'inbox',
-      title: 'Inbox',
-      currency: 'CNY',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    const exportBundle = buildShareableCollectionExport(currentCollection, selectedPlaces);
-
-    const jsonText = JSON.stringify(exportBundle, null, 2);
-    try {
-      await navigator.clipboard.writeText(jsonText);
-      setStatus(
-        store.lang === 'zh'
-          ? `已复制 ${selectedPlaces.length} 个地点！在 Planner 点击【⚡ 同步扩展候选】或【导入】即可载入。`
-          : `Copied ${selectedPlaces.length} places! Click 'Sync from Extension' or 'Import' in Planner to load.`,
-        'success',
-      );
-    } catch (err) {
-      logger.error('ImportToPlanner', 'Clipboard copy failed', String(err));
-      setStatus(store.lang === 'zh' ? '复制失败，请重试' : 'Copy failed', 'error');
-    }
   });
 
   el.btnCopyDebugLogs.addEventListener('click', () => {
@@ -983,17 +847,11 @@ export function initHandlers(): void {
     })().catch((error) => setStatus(String(error), 'error'));
   });
 
-  // Select all / deselect all in bulk mode
-  el.btnSelectAllCandidates.addEventListener('click', () => {
-    const checkboxes = el.candidatesListContainer.querySelectorAll<HTMLInputElement>('.bulk-check');
-    const allChecked = [...checkboxes].every((c) => c.checked);
-    checkboxes.forEach((c) => { c.checked = !allChecked; });
-    if (allChecked) store.bulkSelected.clear();
-    else checkboxes.forEach((c) => { if (c.dataset.placeId) store.bulkSelected.add(c.dataset.placeId); });
-  });
+  let isEnrichingBusy = false;
 
   // One-click strengthen all candidates in the active collection (Maps in-tab pass + background batch enrichment)
   el.btnEnrichCandidates.addEventListener('click', () => {
+    if (isEnrichingBusy) return;
     logger.info('Enrich', 'btnEnrichCandidates clicked');
     void (async () => {
       const dict = t();
@@ -1007,110 +865,123 @@ export function initHandlers(): void {
         setStatus(dict.emptyCandidates, 'muted');
         return;
       }
+
+      isEnrichingBusy = true;
+      el.btnEnrichCandidates.disabled = true;
+      el.btnBulkEnrich.disabled = true;
       setStatus(dict.strengtheningStart(candidates.length));
       logger.info('EnrichCandidates', `Starting enrichment for ${candidates.length} candidates`, {
         candidatesSample: candidates.slice(0, 5).map((p) => ({ title: p.title, source_place_id: p.source.place_id })),
       });
 
-      // Phase 1: Try fast in-tab Maps pass for items with Place ID if Maps tab is open
-      let mapsEnrichedCount = 0;
-      let targetCandidates = [...candidates];
       try {
-        const mapsTab = await findGoogleMapsTab();
-        const withPlaceId = targetCandidates.filter((p) => p.source.provider === 'google_maps' && Boolean(p.source.place_id));
-        logger.maps('EnrichCandidates', `Found Google Maps tab (id: ${mapsTab?.id}), ${withPlaceId.length} places with placeId`);
-        if (mapsTab?.id && withPlaceId.length > 0) {
-          const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
-          logger.maps('EnrichCandidates', 'In-tab Maps strengthen result', mapsResult);
-          if (mapsResult && mapsResult.enriched > 0) {
-            mapsEnrichedCount = mapsResult.enriched;
-            targetCandidates = getActivePlaces();
+        // Phase 1: Try fast in-tab Maps pass for items with Place ID if Maps tab is open
+        let mapsEnrichedCount = 0;
+        let targetCandidates = [...candidates];
+        try {
+          const mapsTab = await findGoogleMapsTab();
+          const withPlaceId = targetCandidates.filter((p) => p.source.provider === 'google_maps' && Boolean(p.source.place_id));
+          logger.maps('EnrichCandidates', `Found Google Maps tab (id: ${mapsTab?.id}), ${withPlaceId.length} places with placeId`);
+          if (mapsTab?.id && withPlaceId.length > 0) {
+            const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
+            logger.maps('EnrichCandidates', 'In-tab Maps strengthen result', mapsResult);
+            if (mapsResult && mapsResult.enriched > 0) {
+              mapsEnrichedCount = mapsResult.enriched;
+              targetCandidates = getActivePlaces();
+            }
           }
+        } catch (err) {
+          logger.warn('EnrichCandidates', 'In-tab Google Maps pass skipped', err instanceof Error ? err.message : String(err));
+          console.warn('[Ownly Capture] In-tab Google Maps pass skipped:', err);
         }
-      } catch (err) {
-        logger.warn('EnrichCandidates', 'In-tab Google Maps pass skipped', err instanceof Error ? err.message : String(err));
-        console.warn('[Ownly Capture] In-tab Google Maps pass skipped:', err);
-      }
 
-      // Phase 2: Run batch enrichment for any candidates still missing facts
-      const targetIds = new Set(targetCandidates.map((c) => c.id));
-      const facadeForEnrich = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
-      const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
-      logger.info('EnrichCandidates', `Phase 2: ${needEnrichment.length} candidates need background fetch`);
+        // Phase 2: Run batch enrichment for any candidates still missing facts
+        const targetIds = new Set(targetCandidates.map((c) => c.id));
+        const facadeForEnrich = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
+        const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
+        logger.info('EnrichCandidates', `Phase 2: ${needEnrichment.length} candidates need background fetch`);
 
-      let batchEnrichedCount = 0;
-      if (needEnrichment.length > 0) {
-        const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
-          needEnrichment,
-          (processed, total, currentPlace) => {
-            setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
-            renderCandidatesList();
-          }
-        );
-        batchEnrichedCount = totalEnriched;
-        if (totalEnriched > 0) {
-          const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
-          const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
-          const activePlaces = getActivePlaces().map((cp) => {
-            const enrichedVp = enrichedMap.get(cp.id);
-            if (!enrichedVp) return cp;
-            return mergePlaceResearch(cp, {
-              title: enrichedVp.title,
-              source: {
-                ...cp.source,
-                place_id: enrichedVp.source_place_id || cp.source.place_id,
-                category: enrichedVp.source_category || cp.source.category,
-                types: enrichedVp.types || cp.source.types,
-              },
-              address: enrichedVp.address || cp.address,
-              coordinates: enrichedVp.coordinates || cp.coordinates,
-              rating: enrichedVp.observed_rating ?? cp.rating,
-              review_count: enrichedVp.observed_review_count ?? cp.review_count,
-              price: enrichedVp.observed_price
-                ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level }
-                : cp.price,
-              phone: enrichedVp.phone || cp.phone,
-              plus_code: enrichedVp.plus_code || cp.plus_code,
-              open_hours: enrichedVp.open_hours || cp.open_hours,
-              menu_url: enrichedVp.menu_url || cp.menu_url,
-              reservation_url: enrichedVp.reservation_url || cp.reservation_url,
-              review_topics: enrichedVp.review_topics || cp.review_topics,
-              inferred_kind: (enrichedVp.kind && enrichedVp.kind !== 'other') ? (enrichedVp.kind as unknown as import('../../domain/capture').CapturePlaceKind) : cp.inferred_kind,
+        let batchEnrichedCount = 0;
+        if (needEnrichment.length > 0) {
+          const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
+            needEnrichment,
+            (processed, total, currentPlace) => {
+              setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
+              renderCandidatesList();
+            }
+          );
+          batchEnrichedCount = totalEnriched;
+          if (totalEnriched > 0) {
+            const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
+            const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+            const activePlaces = getActivePlaces().map((cp) => {
+              const enrichedVp = enrichedMap.get(cp.id);
+              if (!enrichedVp) return cp;
+              return mergePlaceResearch(cp, {
+                title: enrichedVp.title,
+                source: {
+                  ...cp.source,
+                  place_id: enrichedVp.source_place_id || cp.source.place_id,
+                  category: enrichedVp.source_category || cp.source.category,
+                  types: enrichedVp.types || cp.source.types,
+                },
+                address: enrichedVp.address || cp.address,
+                coordinates: enrichedVp.coordinates || cp.coordinates,
+                rating: enrichedVp.observed_rating ?? cp.rating,
+                review_count: enrichedVp.observed_review_count ?? cp.review_count,
+                price: enrichedVp.observed_price
+                  ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level }
+                  : cp.price,
+                phone: enrichedVp.phone || cp.phone,
+                plus_code: enrichedVp.plus_code || cp.plus_code,
+                open_hours: enrichedVp.open_hours || cp.open_hours,
+                menu_url: enrichedVp.menu_url || cp.menu_url,
+                reservation_url: enrichedVp.reservation_url || cp.reservation_url,
+                review_topics: enrichedVp.review_topics || cp.review_topics,
+                inferred_kind: (enrichedVp.kind && enrichedVp.kind !== 'other') ? (enrichedVp.kind as unknown as import('../../domain/capture').CapturePlaceKind) : cp.inferred_kind,
+              });
             });
-          });
-          store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
-          await saveState();
+            store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
+            await saveState();
+          }
         }
-      }
 
-      const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
-      const latestCandidates = getActivePlaces();
-      if (totalEnriched > 0) {
-        setStatus(
-          `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestCandidates)}`,
-          'success',
-        );
-      } else {
-        const stillMissing = latestCandidates.some((p) => !p.rating || !p.address || !p.source.category);
-        if (stillMissing) {
+        const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
+        const latestCandidates = getActivePlaces();
+        if (totalEnriched > 0) {
           setStatus(
-            store.lang === 'zh'
-              ? `未通过当前会话补全到新信息 · ${formatStrengthenCoverage(latestCandidates)}`
-              : `No new details could be enriched · ${formatStrengthenCoverage(latestCandidates)}`,
-            'muted',
+            `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestCandidates)}`,
+            'success',
           );
         } else {
-          setStatus(
-            `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestCandidates)}`,
-            'muted',
-          );
+          const stillMissing = latestCandidates.some((p) => !p.rating || !p.address || !p.source.category);
+          if (stillMissing) {
+            setStatus(
+              store.lang === 'zh'
+                ? `未通过当前会话补全到新信息 · ${formatStrengthenCoverage(latestCandidates)}`
+                : `No new details could be enriched · ${formatStrengthenCoverage(latestCandidates)}`,
+              'muted',
+            );
+          } else {
+            setStatus(
+              `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestCandidates)}`,
+              'muted',
+            );
+          }
         }
+        renderCandidatesList();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error), 'error');
+      } finally {
+        isEnrichingBusy = false;
+        el.btnEnrichCandidates.disabled = false;
+        el.btnBulkEnrich.disabled = false;
       }
-      renderCandidatesList();
-    })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
+    })();
   });
 
   el.btnBulkEnrich.addEventListener('click', () => {
+    if (isEnrichingBusy) return;
     void (async () => {
       const dict = t();
       const collection = getActiveCollection();
@@ -1124,101 +995,112 @@ export function initHandlers(): void {
         : getActivePlaces();
       if (candidates.length === 0) return;
 
+      isEnrichingBusy = true;
+      el.btnEnrichCandidates.disabled = true;
+      el.btnBulkEnrich.disabled = true;
       setStatus(dict.strengtheningStart(candidates.length));
 
-      // Phase 1: Try in-tab Maps pass for selected items with Place ID
-      let mapsEnrichedCount = 0;
-      let targetCandidates = [...candidates];
       try {
-        const mapsTab = await findGoogleMapsTab();
-        const withPlaceId = targetCandidates.filter((p) => p.source.provider === 'google_maps' && Boolean(p.source.place_id));
-        if (mapsTab?.id && withPlaceId.length > 0) {
-          const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
-          if (mapsResult && mapsResult.enriched > 0) {
-            mapsEnrichedCount = mapsResult.enriched;
-            targetCandidates = getActivePlaces();
+        // Phase 1: Try in-tab Maps pass for selected items with Place ID
+        let mapsEnrichedCount = 0;
+        let targetCandidates = [...candidates];
+        try {
+          const mapsTab = await findGoogleMapsTab();
+          const withPlaceId = targetCandidates.filter((p) => p.source.provider === 'google_maps' && Boolean(p.source.place_id));
+          if (mapsTab?.id && withPlaceId.length > 0) {
+            const mapsResult = await strengthenCandidatesThroughMaps(withPlaceId);
+            if (mapsResult && mapsResult.enriched > 0) {
+              mapsEnrichedCount = mapsResult.enriched;
+              targetCandidates = getActivePlaces();
+            }
           }
+        } catch (err) {
+          console.warn('[Ownly Capture] In-tab Google Maps pass skipped:', err);
         }
-      } catch (err) {
-        console.warn('[Ownly Capture] In-tab Google Maps pass skipped:', err);
-      }
 
-      // Phase 2: Run batch enrichment on selected candidates
-      let batchEnrichedCount = 0;
-      if (targetCandidates.length > 0) {
-        const targetIds = new Set(targetCandidates.map((c) => c.id));
-        const facadeForEnrich = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
-        const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
-        const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
-          needEnrichment,
-          (processed, total, currentPlace) => {
-            setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
-            renderCandidatesList();
-          }
-        );
-        batchEnrichedCount = totalEnriched;
-        if (totalEnriched > 0) {
-          const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
-          const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
-          const activePlaces = getActivePlaces().map((cp) => {
-            const enrichedVp = enrichedMap.get(cp.id);
-            if (!enrichedVp) return cp;
-            return mergePlaceResearch(cp, {
-              title: enrichedVp.title,
-              source: {
-                ...cp.source,
-                place_id: enrichedVp.source_place_id || cp.source.place_id,
-                category: enrichedVp.source_category || cp.source.category,
-                types: enrichedVp.types || cp.source.types,
-              },
-              address: enrichedVp.address || cp.address,
-              coordinates: enrichedVp.coordinates || cp.coordinates,
-              rating: enrichedVp.observed_rating ?? cp.rating,
-              review_count: enrichedVp.observed_review_count ?? cp.review_count,
-              price: enrichedVp.observed_price
-                ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level }
-                : cp.price,
-              phone: enrichedVp.phone || cp.phone,
-              plus_code: enrichedVp.plus_code || cp.plus_code,
-              open_hours: enrichedVp.open_hours || cp.open_hours,
-              menu_url: enrichedVp.menu_url || cp.menu_url,
-              reservation_url: enrichedVp.reservation_url || cp.reservation_url,
-              review_topics: enrichedVp.review_topics || cp.review_topics,
-              inferred_kind: (enrichedVp.kind && enrichedVp.kind !== 'other') ? (enrichedVp.kind as unknown as import('../../domain/capture').CapturePlaceKind) : cp.inferred_kind,
+        // Phase 2: Run batch enrichment on selected candidates
+        let batchEnrichedCount = 0;
+        if (targetCandidates.length > 0) {
+          const targetIds = new Set(targetCandidates.map((c) => c.id));
+          const facadeForEnrich = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
+          const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
+          const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
+            needEnrichment,
+            (processed, total, currentPlace) => {
+              setStatus(dict.enrichingProgress(processed, total, currentPlace.title));
+              renderCandidatesList();
+            }
+          );
+          batchEnrichedCount = totalEnriched;
+          if (totalEnriched > 0) {
+            const enrichedMap = new Map(enrichedPlaces.map((p) => [p.id, p] as const));
+            const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
+            const activePlaces = getActivePlaces().map((cp) => {
+              const enrichedVp = enrichedMap.get(cp.id);
+              if (!enrichedVp) return cp;
+              return mergePlaceResearch(cp, {
+                title: enrichedVp.title,
+                source: {
+                  ...cp.source,
+                  place_id: enrichedVp.source_place_id || cp.source.place_id,
+                  category: enrichedVp.source_category || cp.source.category,
+                  types: enrichedVp.types || cp.source.types,
+                },
+                address: enrichedVp.address || cp.address,
+                coordinates: enrichedVp.coordinates || cp.coordinates,
+                rating: enrichedVp.observed_rating ?? cp.rating,
+                review_count: enrichedVp.observed_review_count ?? cp.review_count,
+                price: enrichedVp.observed_price
+                  ? { raw: enrichedVp.observed_price, currency: enrichedVp.price_currency, min: enrichedVp.price_min, max: enrichedVp.price_max, unit: enrichedVp.price_unit, level: enrichedVp.price_level }
+                  : cp.price,
+                phone: enrichedVp.phone || cp.phone,
+                plus_code: enrichedVp.plus_code || cp.plus_code,
+                open_hours: enrichedVp.open_hours || cp.open_hours,
+                menu_url: enrichedVp.menu_url || cp.menu_url,
+                reservation_url: enrichedVp.reservation_url || cp.reservation_url,
+                review_topics: enrichedVp.review_topics || cp.review_topics,
+                inferred_kind: (enrichedVp.kind && enrichedVp.kind !== 'other') ? (enrichedVp.kind as unknown as import('../../domain/capture').CapturePlaceKind) : cp.inferred_kind,
+              });
             });
-          });
-          store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
-          await saveState();
+            store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
+            await saveState();
+          }
         }
-      }
 
-      const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
-      const latestCandidates = selected.size > 0
-        ? getActivePlaces().filter((p) => selected.has(p.id))
-        : getActivePlaces();
-      if (totalEnriched > 0) {
-        setStatus(
-          `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestCandidates)}`,
-          'success',
-        );
-      } else {
-        const stillMissing = latestCandidates.some((p) => !p.rating || !p.address || !p.source.category);
-        if (stillMissing) {
+        const totalEnriched = mapsEnrichedCount + batchEnrichedCount;
+        const latestCandidates = selected.size > 0
+          ? getActivePlaces().filter((p) => selected.has(p.id))
+          : getActivePlaces();
+        if (totalEnriched > 0) {
           setStatus(
-            store.lang === 'zh'
-              ? `未通过当前会话补全到新信息 · ${formatStrengthenCoverage(latestCandidates)}`
-              : `No new details could be enriched · ${formatStrengthenCoverage(latestCandidates)}`,
-            'muted',
+            `${dict.enrichComplete(totalEnriched)} · ${formatStrengthenCoverage(latestCandidates)}`,
+            'success',
           );
         } else {
-          setStatus(
-            `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestCandidates)}`,
-            'muted',
-          );
+          const stillMissing = latestCandidates.some((p) => !p.rating || !p.address || !p.source.category);
+          if (stillMissing) {
+            setStatus(
+              store.lang === 'zh'
+                ? `未通过当前会话补全到新信息 · ${formatStrengthenCoverage(latestCandidates)}`
+                : `No new details could be enriched · ${formatStrengthenCoverage(latestCandidates)}`,
+              'muted',
+            );
+          } else {
+            setStatus(
+              `${dict.enrichNoneNeeded} · ${formatStrengthenCoverage(latestCandidates)}`,
+              'muted',
+            );
+          }
         }
+        renderCandidatesList();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error), 'error');
+      } finally {
+        isEnrichingBusy = false;
+        el.btnEnrichCandidates.disabled = false;
+        el.btnBulkEnrich.disabled = false;
       }
-      renderCandidatesList();
-    })().catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
+    })();
   });
 
 
@@ -1567,8 +1449,7 @@ export function initHandlers(): void {
 
   el.btnBatchAdd.addEventListener('click', () => {
     void (async () => {
-      const inbox = store.getInboxCollection() ?? store.ensureDefaultCollection();
-      const collection = inbox;
+      const collection = store.getActiveCollection() ?? store.getInboxCollection() ?? store.ensureDefaultCollection();
       if (!collection) {
         setStatus(t().tripRequiredError, 'error');
         return;

@@ -123,7 +123,7 @@ const DOLLAR_CURRENCIES = ['SGD', 'HKD', 'AUD', 'CAD', 'NZD', 'USD', 'TWD'];
 export function extractExplicitToken(raw?: string | null): string | null {
   if (!raw || typeof raw !== 'string') return null;
 
-  const symbolMatch = /(?:JP[¥￥]|CN[¥￥]|S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|\bZL\b|\bRM\b|\bRP\b|新台币|人民币|日元|日币|泰铢|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔)/i.exec(raw);
+  const symbolMatch = /(?:JP[¥￥]|CN[¥￥]|S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|\bZL\b|\bRM\b|\bRP\b|新台币|人民币|日元|日币|泰铢|บาท|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔)/i.exec(raw);
   if (symbolMatch) {
     const rawKey = symbolMatch[0];
     const key = rawKey.toUpperCase();
@@ -141,6 +141,11 @@ export function extractExplicitToken(raw?: string | null): string | null {
   const singleMatch = /(?:[฿€£₩₫₹円铢원₱₺])/i.exec(raw);
   if (singleMatch && UNAMBIGUOUS_SYMBOLS[singleMatch[0]]) {
     return UNAMBIGUOUS_SYMBOLS[singleMatch[0]];
+  }
+
+  // Detect Thai price dash suffix: e.g. "150.-" or "250.–"
+  if (/\d\s*(?:\.-|\.–)(?![A-Za-z0-9])/i.test(raw)) {
+    return 'THB';
   }
 
   return null;
