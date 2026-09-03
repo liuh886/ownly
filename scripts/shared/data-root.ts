@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
 export const DEFAULT_OWNLY_DATA_FOLDER = 'Ownly';
@@ -33,7 +33,6 @@ export function detectRootStatus(input: string): { status: RootStatus; path: str
   }
   // Exists, is directory, but not valid and no child Ownly
   try {
-    const { readdirSync } = require('node:fs') as typeof import('node:fs');
     const entries = readdirSync(selected);
     if (entries.length === 0) return { status: 'EMPTY_FOLDER', path: defaultChild, message: 'Empty folder — will create Ownly/ here' };
   } catch {}
