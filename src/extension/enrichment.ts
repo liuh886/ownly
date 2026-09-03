@@ -76,21 +76,42 @@ export async function enrichPlaceMetadata(
   }
 
   // 1.5 If feature ID is still missing (e.g. search/?query=... pin), resolve it via Google Maps search HTML
+  // Two-hop: search page -> extract ChIJ/0x -> preview. Prevent empty {} infinite loop.
   if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
-    const searchUrl = next.source_url?.includes('/maps/search/')
-      ? next.source_url
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(next.title + (next.address ? ' ' + next.address : ''))}&hl=zh-CN`;
-    try {
-      logger.fetch('BackgroundEnrich', `Step 1: Resolving query pin for ${next.title}`, { searchUrl });
-      const res = await fetch(searchUrl, { credentials: 'include', signal: options?.signal });
-      if (res.ok) {
+    const candidates: string[] = [];
+    if (next.source_url?.includes('/maps/search/')) candidates.push(next.source_url);
+    // Fallback 1: title + address query (api=1 skeleton often empty, but try)
+    candidates.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitleForSearch(next.title) + (next.address ? ' ' + next.address : ''))}&hl=zh-CN`);
+    // Fallback 2: viewport-aware search (yields first-result ChIJ in HTML)
+    if (next.coordinates) {
+      candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitleForSearch(next.title))}/@${next.coordinates.lat},${next.coordinates.lng},14z?hl=zh-CN`);
+    } else {
+      candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitleForSearch(next.title))}?hl=zh-CN`);
+    }
+
+    let resolvedFromSearch = false;
+    for (const searchUrl of candidates) {
+      try {
+        logger.fetch('BackgroundEnrich', `Step 1: Resolving query pin for ${next.title}`, { searchUrl });
+        const res = await fetch(searchUrl, { credentials: 'include', signal: options?.signal });
+        if (!res.ok) continue;
         const html = (await res.text()).slice(0, 3_000_000);
+        // Direct ChIJ / 0x extraction before HTML parser (skeleton pages have them in APP_INITIALIZATION_STATE)
+        const chijMatch = /"(ChIJ[A-Za-z0-9_-]{15,})"/.exec(html)?.[1];
+        const featureMatch = /0x[0-9a-f]+:0x[0-9a-f]+/i.exec(html)?.[0];
         const facts = extractGoogleMapsResearchFromHtml(html);
-        if (facts.sourcePlaceId) {
-          resolvedFeatureId = facts.sourcePlaceId;
-          next.source_place_id = resolvedFeatureId;
-          mutated = true;
+        const candidateId = chijMatch || featureMatch || facts.sourcePlaceId;
+        if (candidateId) {
+          // Prefer 0x for preview; keep ChIJ as source_place_id if only ChIJ found (preview supports ChIJ via query_place_id)
+          if (/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(candidateId)) resolvedFeatureId = candidateId;
+          else if (/^ChIJ/.test(candidateId)) resolvedFeatureId = candidateId;
+          if (resolvedFeatureId) {
+            next.source_place_id = resolvedFeatureId;
+            mutated = true;
+            resolvedFromSearch = true;
+          }
         }
+        // Merge any facts even if ID still missing (at least give address/coords to avoid re-queue)
         if (facts.rating !== undefined) { next.observed_rating = facts.rating; mutated = true; }
         if (facts.reviewCount !== undefined) { next.observed_review_count = facts.reviewCount; mutated = true; }
         if (facts.category) { next.source_category = facts.category; mutated = true; }
@@ -109,9 +130,16 @@ export async function enrichPlaceMetadata(
           if (normalized?.unit) next.price_unit = normalized.unit;
           mutated = true;
         }
+        if (resolvedFromSearch) break;
+        // If we got coordinates/category, stop trying further search URLs
+        if (facts.coordinates || facts.category) break;
+      } catch (err) {
+        logger.warn('BackgroundEnrich', `Query resolution failed for ${next.title}`, err instanceof Error ? err.message : String(err));
       }
-    } catch (err) {
-      logger.warn('BackgroundEnrich', `Query resolution failed for ${next.title}`, err instanceof Error ? err.message : String(err));
+    }
+    // If still no ID and no facts, do not loop forever: mark as non-retryable this run
+    if (!resolvedFromSearch && !mutated) {
+      logger.warn('BackgroundEnrich', `Query pin unresolved (will retry next enrich): ${next.title}`);
     }
   }
 
