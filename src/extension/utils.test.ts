@@ -194,6 +194,11 @@ describe('findEntityListPlaceId & findEntityListCategory', () => {
     expect(findEntityListPlaceId(item)).toBe(expected);
   });
 
+  it('reconstructs feature id when second integer is a negative signed 64-bit integer', () => {
+    const item = [null, [null, null, 'Tawaen Beach', null, 'Address', [null, null, 12.925, 100.778], ['3531552460148579037', '-6449251292864702433'], '/g/11b6t7jjvq'], 'Tawaen Beach'];
+    expect(findEntityListPlaceId(item)).toBe('0x3102984064d01add:0xa67fa81e6592181f');
+  });
+
   it('returns undefined when no feature id exists or input is invalid', () => {
     expect(findEntityListPlaceId(undefined)).toBeUndefined();
     expect(findEntityListPlaceId(['plain', ['nested', 'values']])).toBeUndefined();

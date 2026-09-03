@@ -119,11 +119,15 @@ export function findEntityListPlaceId(item?: unknown): string | undefined {
       if (current.length >= 2) {
         const first = current[0];
         const second = current[1];
-        const firstText = typeof first === 'string' || typeof first === 'number' ? String(first) : '';
-        const secondText = typeof second === 'string' || typeof second === 'number' ? String(second) : '';
-        if (/^\d{15,20}$/.test(firstText) && /^\d{15,20}$/.test(secondText)) {
+        const firstText = typeof first === 'string' || typeof first === 'number' ? String(first).trim() : '';
+        const secondText = typeof second === 'string' || typeof second === 'number' ? String(second).trim() : '';
+        if (/^-?\d{12,20}$/.test(firstText) && /^-?\d{12,20}$/.test(secondText)) {
           try {
-            return `0x${BigInt(firstText).toString(16)}:0x${BigInt(secondText).toString(16)}`;
+            const b1 = BigInt.asUintN(64, BigInt(firstText)).toString(16);
+            const b2 = BigInt.asUintN(64, BigInt(secondText)).toString(16);
+            if (b1.length >= 8 && b2.length >= 6) {
+              return `0x${b1}:0x${b2}`;
+            }
           } catch {}
         }
       }
