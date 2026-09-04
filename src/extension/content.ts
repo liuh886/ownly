@@ -9,6 +9,8 @@ import {
   cleanExtractedText,
   extractCleanPriceText,
   extractFeatureIdFromUrl,
+  extractHotelPropertyFacts,
+  type HotelPropertyFacts,
   isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
@@ -74,6 +76,7 @@ export interface CurrentResearchPlace {
   reservationUrl?: string;
   reviewTopics?: string[];
   types?: string[];
+  hotelFacts?: HotelPropertyFacts;
 }
 
 function titleFromUrl(url: string): string {
@@ -412,8 +415,10 @@ window.addEventListener('ownly-app-state' as keyof WindowEventMap, ((event: Cust
 export async function enrichPlaceFromHtml(
   place: CurrentResearchPlace,
   options?: { soft?: boolean },
+  overrideCurrency?: string,
+  hintCurrency?: string,
 ): Promise<CurrentResearchPlace> {
-  return enrichFromPlaceHtml(place, options);
+  return enrichFromPlaceHtml(place, options, overrideCurrency, hintCurrency);
 }
 
 const ENRICH_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -453,6 +458,8 @@ const TAXONOMY_TYPES = /(restaurant|lodging|hotel|hostel|bed_and_breakfast|guest
 async function enrichFromPlaceHtml(
   place: CurrentResearchPlace,
   options?: { soft?: boolean },
+  overrideCurrency?: string,
+  hintCurrency?: string,
 ): Promise<CurrentResearchPlace> {
   const cacheKey = place.sourcePlaceId || `${place.sourceUrl}#${place.title}`;
   const cached = enrichCache.get(cacheKey);
@@ -472,7 +479,7 @@ async function enrichFromPlaceHtml(
     place.reviewCount ??= research.reviewCount;
     place.category ??= research.category;
     place.priceLevel ??= research.priceLevel;
-    place.detectedCurrency ??= research.priceCurrency;
+    place.detectedCurrency = overrideCurrency || research.priceCurrency || place.detectedCurrency;
     place.address ??= research.address;
     place.website ??= research.website;
     place.phone ??= research.phone;
@@ -545,8 +552,14 @@ async function enrichFromPlaceHtml(
       } catch {}
     }
     // Ensure detectedCurrency follows price when price now exists
-    if (place.priceLevel && !place.detectedCurrency) {
-      const cur = detectPageCurrency({ url: place.sourceUrl, priceText: place.priceLevel, doc: typeof document !== 'undefined' ? document : undefined }).currency;
+    if (place.priceLevel && (!place.detectedCurrency || overrideCurrency)) {
+      const cur = detectPageCurrency({
+        url: place.sourceUrl,
+        priceText: place.priceLevel,
+        hintCurrency,
+        overrideCurrency,
+        doc: typeof document !== 'undefined' ? document : undefined,
+      }).currency;
       if (cur) place.detectedCurrency = cur;
     }
   } catch {
@@ -716,7 +729,7 @@ function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
   return Array.from(scannedListPlaces.values());
 }
 
-function extractGoogleMapsPlace(): CurrentResearchPlace | null {
+function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const detailHeading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
     ?? document.querySelector<HTMLElement>('main h1')
@@ -760,7 +773,7 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
 
   const priceLevel = extractPrice() || jsonLd.priceLevel;
   const address = extractAddress() || jsonLd.address;
-  const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel);
+  const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel, hintCurrency, overrideCurrency);
   const userNote = extractUserNote();
   const summary = extractSummary();
   const openHours = extractOpenHours();
@@ -800,6 +813,7 @@ function extractGoogleMapsPlace(): CurrentResearchPlace | null {
       return topics.length > 0 ? topics : undefined;
     })(),
     types: stateSignals?.types,
+    hotelFacts: extractHotelPropertyFacts(summary, typeof document !== 'undefined' ? document : null),
   };
 }
 
@@ -1176,7 +1190,7 @@ function detectVisibleGoogleMapsListName(places: CurrentResearchPlace[]): string
   return undefined;
 }
 
-function extractTabelogPlace(): CurrentResearchPlace | null {
+function extractTabelogPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const titleEl = document.querySelector<HTMLElement>('h2.display-name span, h1.rstinfo-table__name, h1');
   const title = titleEl?.textContent?.trim();
@@ -1202,11 +1216,12 @@ function extractTabelogPlace(): CurrentResearchPlace | null {
     rating: Number.isFinite(rating) && rating ? rating : undefined,
     category: category ? `Tabelog: ${category}` : 'Tabelog 美食',
     priceLevel,
+    detectedCurrency: detectCurrencyFromPage(sourceUrl, priceLevel, hintCurrency, overrideCurrency) ?? 'JPY',
     address,
   };
 }
 
-function extractXiaohongshuPlace(): CurrentResearchPlace | null {
+function extractXiaohongshuPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const titleEl = document.querySelector<HTMLElement>('#detail-title, .title, meta[property="og:title"]');
   const title = titleEl instanceof HTMLMetaElement ? titleEl.content : titleEl?.textContent?.trim();
@@ -1223,12 +1238,13 @@ function extractXiaohongshuPlace(): CurrentResearchPlace | null {
     sourceUrl,
     sourceProvider: 'xiaohongshu',
     category: '小红书灵感',
+    detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined, hintCurrency, overrideCurrency) ?? 'CNY',
     summary,
     address,
   };
 }
 
-function extractBookingPlace(): CurrentResearchPlace | null {
+function extractBookingPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
   const titleEl = document.querySelector<HTMLElement>('h2.d2fee87e0b, h2.pp-header__title, h1');
   const title = titleEl?.textContent?.trim();
@@ -1246,16 +1262,179 @@ function extractBookingPlace(): CurrentResearchPlace | null {
     sourceProvider: 'booking',
     rating: Number.isFinite(rating) && rating ? Math.min(5, Math.round((rating / 2) * 10) / 10) : undefined,
     category: 'Booking 住宿',
+    detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined, hintCurrency, overrideCurrency),
     address,
+    hotelFacts: extractHotelPropertyFacts(undefined, typeof document !== 'undefined' ? document : null),
   };
 }
 
-function currentPlace(): CurrentResearchPlace | null {
+function extractGoogleTravelPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
+  const sourceUrl = window.location.href;
+
+  // 1. Title Extraction
+  const titleSelectors = [
+    'h1.Q2A6Id',
+    'h1.fpNxPd',
+    'h1.LBgRLc',
+    'div.fpNxPd',
+    'div[role="heading"][aria-level="1"]',
+    'h1',
+    'h2[role="heading"]',
+  ];
+  let title = '';
+  for (const sel of titleSelectors) {
+    const el = document.querySelector<HTMLElement>(sel);
+    const text = el?.textContent?.trim();
+    if (text && text.length > 1 && !isGenericNavigationTitleLocal(text) && !isJunkNavigationText(text)) {
+      title = cleanExtractedText(text);
+      break;
+    }
+  }
+  if (!title) {
+    const metaTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.content;
+    if (metaTitle) {
+      title = cleanExtractedText(metaTitle.replace(/\s*[-–—|]\s*Google\s*(Travel|Hotels|Flights|旅行|酒店|机票).*$/i, ''));
+    }
+  }
+  if (!title) {
+    const docTitle = document.title.replace(/\s*[-–—|]\s*Google\s*(Travel|Hotels|Flights|旅行|酒店|机票).*$/i, '');
+    if (docTitle && !/^(google|google travel|google hotels|hotels|travel)$/i.test(docTitle.trim())) {
+      title = cleanExtractedText(docTitle);
+    }
+  }
+  if (!title) return null;
+
+  // 2. Rating & Review Count Extraction
+  let rating: number | undefined;
+  let reviewCount: number | undefined;
+  const ratingEl = document.querySelector<HTMLElement>(
+    'span[aria-label*="星" i], span[aria-label*="star" i], span.kJyTrb, div.TT9eId span.k5tQ5d, span.MWDdpd, span.zvDXA'
+  );
+  if (ratingEl) {
+    rating = PLACE_PARSER.parseRating(ratingEl.getAttribute('aria-label') || ratingEl.textContent);
+  }
+  const reviewEl = document.querySelector<HTMLElement>(
+    'span.kJyTrb ~ span, span.wV9y8c, span.k5tQ5d, span.iP206b, span.w0f50b, div.TT9eId span:nth-of-type(2)'
+  );
+  if (reviewEl) {
+    reviewCount = PLACE_PARSER.parseReviewCount(reviewEl.getAttribute('aria-label') || reviewEl.textContent);
+  }
+
+  // 3. Category / Hotel Class
+  let category: string | undefined;
+  const classEl = document.querySelector<HTMLElement>(
+    'div.Adn9Eb, span.CPm6me, span.k5tQ5d, div.k5tQ5d, span.I39tAc'
+  );
+  if (classEl?.textContent) {
+    const text = cleanExtractedText(classEl.textContent);
+    if (text && /(hotel|resort|inn|hostel|lodging|stay|酒店|旅馆|民宿|度假村|星级|star)/i.test(text)) {
+      category = text;
+    }
+  }
+  if (!category) {
+    category = 'Google Travel 住宿';
+  }
+
+  // 4. Price & Currency
+  let priceLevel: string | undefined;
+  const priceSelectors = [
+    'span.MWDdpd',
+    'span.F9iKBc',
+    'span.l5fa0b',
+    'div.w70Oqd',
+    'div.taTOhd',
+    'span.nD4Sfe',
+    'span[aria-label*="每晚" i]',
+    'span[aria-label*="per night" i]',
+    'span[aria-label*="night" i]',
+    'div.I8ZJze',
+    'span[data-price]',
+  ];
+  for (const sel of priceSelectors) {
+    const el = document.querySelector<HTMLElement>(sel);
+    const text = el?.getAttribute('aria-label') || el?.textContent || '';
+    if (text && isPlausiblePriceText(text)) {
+      const clean = extractCleanPriceText(text);
+      if (clean && isValidExtractedPriceCandidate(clean)) {
+        priceLevel = clean;
+        break;
+      }
+    }
+  }
+
+  const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel, hintCurrency, overrideCurrency);
+
+  // 5. Address / Area
+  let address: string | undefined;
+  let area: string | undefined;
+  const addrEl = document.querySelector<HTMLElement>(
+    'div.K4nuhf, span.I39tAc, div.R61m2e, div.d6vP1c, div.CFG7A, div.c9bXce, span.YwN01b'
+  );
+  if (addrEl?.textContent) {
+    const rawAddr = cleanExtractedText(addrEl.textContent);
+    if (rawAddr && rawAddr.length > 3) {
+      address = rawAddr;
+      const parts = rawAddr.split(/[,，·]/).map((s) => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        area = parts[parts.length - 2] || parts[0];
+      }
+    }
+  }
+
+  // 6. Coordinates
+  let coordinates = extractPlaceCoordinates(sourceUrl) ?? undefined;
+  if (!coordinates) {
+    const mapLink = document.querySelector<HTMLAnchorElement>('a[href*="/maps/"], a[href*="maps.google."]');
+    if (mapLink?.href) {
+      coordinates = extractPlaceCoordinates(mapLink.href) ?? undefined;
+    }
+  }
+
+  // 7. Source Place ID
+  let sourcePlaceId: string | undefined;
+  const entityMatch = /\/hotels\/entity\/([^/?#]+)/.exec(sourceUrl) || /[?&]entity=([^&#]+)/.exec(sourceUrl);
+  if (entityMatch && entityMatch[1]) {
+    sourcePlaceId = safeDecodeUri(entityMatch[1]);
+  }
+
+  // 8. Amenities / Highlights
+  const amenities: string[] = [];
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('div.P3g0Ub, div.I6rF8e, span.Z1asvd, div.j7L08d, div.iNpWBb'))) {
+    const text = cleanExtractedText(el.textContent || '');
+    if (text && text.length > 1 && text.length < 30 && !amenities.includes(text)) {
+      amenities.push(text);
+      if (amenities.length >= 4) break;
+    }
+  }
+  const summary = amenities.length > 0 ? amenities.join(' · ') : undefined;
+  const hotelFacts = extractHotelPropertyFacts(summary, typeof document !== 'undefined' ? document : null);
+
+  return {
+    title,
+    sourceUrl,
+    sourceProvider: 'google_travel',
+    kind: 'stay',
+    rating: Number.isFinite(rating) && rating ? rating : undefined,
+    reviewCount: Number.isFinite(reviewCount) && reviewCount ? reviewCount : undefined,
+    category,
+    priceLevel,
+    detectedCurrency,
+    address,
+    area,
+    coordinates,
+    sourcePlaceId,
+    summary,
+    hotelFacts,
+  };
+}
+
+function currentPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
   const provider = inferSourceProvider(window.location.href);
-  if (provider === 'google_maps') return extractGoogleMapsPlace();
-  if (provider === 'tabelog') return extractTabelogPlace();
-  if (provider === 'xiaohongshu') return extractXiaohongshuPlace();
-  if (provider === 'booking') return extractBookingPlace();
+  if (provider === 'google_maps') return extractGoogleMapsPlace(overrideCurrency, hintCurrency);
+  if (provider === 'google_travel') return extractGoogleTravelPlace(overrideCurrency, hintCurrency);
+  if (provider === 'tabelog') return extractTabelogPlace(overrideCurrency, hintCurrency);
+  if (provider === 'xiaohongshu') return extractXiaohongshuPlace(overrideCurrency, hintCurrency);
+  if (provider === 'booking') return extractBookingPlace(overrideCurrency, hintCurrency);
   return null;
 }
 
@@ -1380,9 +1559,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           }
         }
 
-        const detectedPlace = currentPlace();
+        const detectedPlace = currentPlace(overrideCurrency, targetCurrency);
         const place = provider === 'google_maps' && detectedPlace
-          ? await enrichFromPlaceHtml(detectedPlace)
+          ? await enrichFromPlaceHtml(detectedPlace, undefined, overrideCurrency, targetCurrency)
           : detectedPlace;
         logger.info('Content', 'OWNLY_GET_CURRENT_PLACE done', {
           provider, hasPlace: Boolean(place), title: place?.title?.slice(0, 30), hasSavedList: Boolean(savedList), savedCount: savedList?.places.length ?? 0, allLists: allLists.length, ms: Date.now() - start,
@@ -1479,6 +1658,146 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
+function initQuickCaptureFab(): void {
+  if (typeof document === 'undefined' || !document.body) return;
+  if (document.getElementById('ownly-quick-capture-fab-root')) return;
+
+  const provider = inferSourceProvider(window.location.href);
+  if (provider === 'other') return;
+
+  const container = document.createElement('div');
+  container.id = 'ownly-quick-capture-fab-root';
+  container.style.cssText = [
+    'position: fixed',
+    'bottom: 24px',
+    'right: 24px',
+    'z-index: 2147483647',
+    'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    'user-select: none',
+    'pointer-events: auto',
+  ].join(';');
+
+  const shadow = container.attachShadow ? container.attachShadow({ mode: 'open' }) : null;
+  const root = shadow || container;
+
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .fab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 15px;
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 9999px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22), 0 2px 4px rgba(0, 0, 0, 0.08);
+      cursor: pointer;
+      outline: none;
+      transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(8px);
+    }
+    .fab-btn:hover {
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 6px 20px rgba(4, 120, 87, 0.42), 0 2px 6px rgba(0, 0, 0, 0.12);
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+    .fab-btn:active {
+      transform: translateY(0) scale(0.98);
+    }
+    .fab-btn.is-success {
+      background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+      border-color: #6ee7b7;
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.55);
+    }
+    .fab-btn.is-loading {
+      opacity: 0.85;
+      cursor: wait;
+    }
+    .fab-icon {
+      font-size: 15px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+    .fab-text {
+      white-space: nowrap;
+      letter-spacing: 0.2px;
+    }
+  `;
+  root.appendChild(styleEl);
+
+  const btn = document.createElement('button');
+  btn.className = 'fab-btn';
+  btn.setAttribute('type', 'button');
+  btn.setAttribute('title', '一键快速采集当前地点到 Ownly 案板 (Inbox)');
+  btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
+
+  let isSaving = false;
+
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isSaving) return;
+
+    isSaving = true;
+    btn.classList.add('is-loading');
+    btn.innerHTML = '<span class="fab-icon">⏳</span><span class="fab-text">采集中...</span>';
+
+    try {
+      const place = currentPlace();
+      if (!place || !place.title) {
+        btn.classList.remove('is-loading');
+        btn.innerHTML = '<span class="fab-icon">⚠️</span><span class="fab-text">未检测到地点</span>';
+        setTimeout(() => {
+          btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
+          isSaving = false;
+        }, 2000);
+        return;
+      }
+
+      const fullPlace = provider === 'google_maps' ? await enrichFromPlaceHtml(place) : place;
+
+      const resp = (await chrome.runtime.sendMessage({
+        type: 'OWNLY_QUICK_SAVE_PLACE',
+        place: fullPlace,
+      }).catch((err: unknown) => ({ ok: false, error: String(err) }))) as { ok?: boolean; placeId?: string; error?: string } | undefined;
+
+      btn.classList.remove('is-loading');
+      if (resp?.ok) {
+        btn.classList.add('is-success');
+        btn.innerHTML = '<span class="fab-icon">✓</span><span class="fab-text">已放入案板</span>';
+        setTimeout(() => {
+          btn.classList.remove('is-success');
+          btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
+          isSaving = false;
+        }, 2500);
+      } else {
+        btn.innerHTML = '<span class="fab-icon">⚠️</span><span class="fab-text">保存失败</span>';
+        setTimeout(() => {
+          btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
+          isSaving = false;
+        }, 2000);
+      }
+    } catch {
+      btn.classList.remove('is-loading');
+      btn.innerHTML = '<span class="fab-icon">⚠️</span><span class="fab-text">错误</span>';
+      setTimeout(() => {
+        btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
+        isSaving = false;
+      }, 2000);
+    }
+  });
+
+  root.appendChild(btn);
+  document.body.appendChild(container);
+}
+
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const isGoogleMaps = /google\.[a-z.]+\/maps|maps\.google\.[a-z.]+/i.test(window.location.href);
   if (isGoogleMaps) {
@@ -1499,4 +1818,16 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       }
     } catch {}
   }
+
+  // Initialize in-page quick capture floating ball (FAB)
+  if (document.readyState !== 'loading') {
+    initQuickCaptureFab();
+  } else {
+    document.addEventListener('DOMContentLoaded', initQuickCaptureFab, { once: true });
+  }
+
+  // Re-check FAB on SPA navigations
+  window.addEventListener('popstate', () => {
+    setTimeout(initQuickCaptureFab, 500);
+  });
 }

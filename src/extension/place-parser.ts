@@ -5,7 +5,9 @@ import {
 import {
   cleanExtractedText,
   extractCleanPriceText,
+  extractHotelPropertyFacts,
   findEntityListCategory,
+  type HotelPropertyFacts,
   isFakePlaceLabel,
   isJunkNavigationText,
   isValidExtractedPriceCandidate,
@@ -39,6 +41,7 @@ export interface ParsedPlaceData {
   tierNote?: string;
   coordinates?: { lat: number; lng: number };
   sourcePlaceId?: string;
+  hotelFacts?: HotelPropertyFacts;
 }
 
 export interface AppStateSignals {
@@ -273,6 +276,10 @@ export function extractStructuredJsonLd(doc: Document | HTMLElement): Partial<Pa
       } catch {
         // Skip individually malformed script tags without terminating search
       }
+    }
+    const hotelFacts = extractHotelPropertyFacts(undefined, doc);
+    if (hotelFacts) {
+      result.hotelFacts = hotelFacts;
     }
   } catch {}
   return result;

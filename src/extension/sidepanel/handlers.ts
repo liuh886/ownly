@@ -39,17 +39,6 @@ import { setupImportExportHandlers } from './import-export';
 
 const LANG_STORAGE_KEY = 'ownlyCaptureLang';
 
-function scrollCardIntoView(placeId: string, focusEditor = false): void {
-  requestAnimationFrame(() => {
-    const card = el.candidatesListContainer.querySelector<HTMLElement>(`.candidate-card[data-place-id="${placeId}"]`);
-    if (!card) return;
-    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    if (focusEditor) {
-      card.querySelector<HTMLSelectElement>('.candidate-inline-editor select')?.focus({ preventScroll: true });
-    }
-  });
-}
-
 function flashNewCandidate(placeId: string): void {
   el.candidatesDrawer.open = true;
   requestAnimationFrame(() => {
@@ -190,7 +179,8 @@ function buildPlaceFromDetected(
   const cleanTitle = cleanExtractedText(item.title);
   const cleanAddress = item.address ? cleanExtractedText(item.address) : undefined;
   const inferredKind = inferPlaceKind([cleanTitle, item.category, cleanAddress, ...(item.types || [])].filter(Boolean).join(' '));
-  const normalizedPrice = normalizeObservedPrice(item.priceLevel, item.detectedCurrency || store.pageDetectedCurrency);
+  const effectiveCurrency = store.mapCurrencyOverride || item.detectedCurrency || store.pageDetectedCurrency;
+  const normalizedPrice = normalizeObservedPrice(item.priceLevel, effectiveCurrency);
   return {
     id: crypto.randomUUID(),
     collection_id: collectionId,
@@ -364,13 +354,15 @@ function initCandidateDelegation() {
     const action = target.dataset.action;
     const placeId = target.dataset.placeId;
     if (!placeId) return;
-    const dict = t();
 
     if (action === 'edit') {
-      store.editingCandidateId = store.editingCandidateId === placeId ? null : placeId;
-      renderCandidatesList();
-      if (store.editingCandidateId === placeId) {
-        scrollCardIntoView(placeId, true);
+      const isAlreadyEditing = store.editingCandidateId === placeId;
+      if (isAlreadyEditing) {
+        store.editingCandidateId = null;
+        renderCandidatesList();
+        setStatus(store.lang === 'zh' ? '已退出编辑模式。' : 'Exited edit mode.');
+      } else {
+        store.editingCandidateId = placeId;
         const editing = getActivePlaces().find((p) => p.id === placeId);
         if (editing) {
           store.currentPlace = {
@@ -395,9 +387,16 @@ function initCandidateDelegation() {
             reviewTopics: editing.review_topics,
             types: editing.source.types,
           };
+          renderCandidatesList();
           renderCurrentPlace();
           autoFillPlaceForm(store.currentPlace);
           syncQuickChipStates();
+          const addPanel = document.getElementById('addPanel') as HTMLDetailsElement | null;
+          if (addPanel) {
+            addPanel.open = true;
+            addPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          setStatus(store.lang === 'zh' ? `正在编辑「${editing.title}」，请在上方面板修改并保存。` : `Editing "${editing.title}", modify above and save.`);
           if (editing.source.url) void revealPlaceInMaps(editing.source.url);
         }
       }
@@ -454,64 +453,6 @@ function initCandidateDelegation() {
       } catch {
         window.prompt(store.lang === 'zh' ? '复制以下 JSON 并在行程管理导入：' : 'Copy JSON and import in Trip Management:', JSON.stringify(place));
       }
-    } else if (action === 'cancel-inline') {
-      store.editingCandidateId = null;
-      renderCandidatesList();
-    } else if (action === 'save-inline') {
-      const card = target.closest<HTMLElement>('.candidate-card');
-      if (!card) return;
-      const form = card.querySelector<HTMLFormElement>('.candidate-inline-editor');
-      if (!form) return;
-
-      const kindSelect = form.querySelector<HTMLSelectElement>('select[name="kind"]');
-      const prioritySelect = form.querySelector<HTMLSelectElement>('select[name="priority"]');
-      const priceInput = form.querySelector<HTMLInputElement>('input[name="price"]');
-      const ratingInput = form.querySelector<HTMLInputElement>('input[name="rating"]');
-      const durationInput = form.querySelector<HTMLInputElement>('input[name="duration"]');
-      const tagsInput = form.querySelector<HTMLInputElement>('input[name="tags"]');
-      const notesTextarea = form.querySelector<HTMLTextAreaElement>('textarea[name="notes"]');
-
-      const newKind = (kindSelect?.value || 'attraction') as CapturePlace['inferred_kind'];
-      const newPriority = (prioritySelect?.value || 'want') as CapturePlace['user'] extends { priority?: infer P } ? P : never;
-      const newPrice = priceInput ? cleanExtractedText(priceInput.value) || undefined : undefined;
-      const numRating = ratingInput ? parseFloat(ratingInput.value) : NaN;
-      const numDuration = durationInput ? parseInt(durationInput.value, 10) : NaN;
-      const rawTags = tagsInput ? normalizeDelimitedText(tagsInput.value).map(cleanExtractedText).filter(Boolean) : [];
-      const newTags = ensurePlaceKindTag(rawTags, newKind, store.lang);
-      const newNotes = notesTextarea ? cleanExtractedText(notesTextarea.value) || undefined : undefined;
-
-      store.updatePlace(placeId, (p) => {
-        const normalizedPrice = normalizeObservedPrice(newPrice, p.price?.currency || store.pageDetectedCurrency);
-        return {
-          ...p,
-          inferred_kind: newKind,
-          user: {
-            ...p.user,
-            priority: newPriority,
-            tags: newTags,
-            notes: newNotes,
-            why: newNotes || p.user?.why,
-            duration_minutes: Number.isFinite(numDuration) && numDuration > 0 ? Math.min(1440, numDuration) : undefined,
-          },
-          price: normalizedPrice ? {
-            raw: newPrice,
-            currency: normalizedPrice.currency,
-            min: normalizedPrice.min,
-            max: normalizedPrice.max,
-            unit: normalizedPrice.unit,
-            level: normalizedPrice.level,
-          } : (newPrice ? { raw: newPrice } : p.price),
-          rating: Number.isFinite(numRating) && numRating >= 1 && numRating <= 5 ? numRating : undefined,
-          updated_at: new Date().toISOString(),
-        };
-      });
-
-      void saveState().then(() => {
-        store.editingCandidateId = null;
-        setStatus(dict.candidateUpdated, 'success');
-        renderCandidatesList();
-        scrollCardIntoView(placeId);
-      });
     }
   });
 }
@@ -521,6 +462,8 @@ export function initHandlers(): void {
     if (store.currentPlace) {
       store.userDismissedPlaceUrl = store.currentPlace.sourceUrl;
       store.currentPlace = null;
+      store.editingCandidateId = null;
+      renderCandidatesList();
       renderCurrentPlace();
       renderSmartListCard();
     }
@@ -1163,7 +1106,10 @@ export function initHandlers(): void {
           ? rawExistingPrice
           : undefined;
         const effectivePrice = item.priceLevel || validExistingPrice;
-        const normalizedPrice = normalizeObservedPrice(effectivePrice, item.detectedCurrency || savedList.detectedCurrency || store.pageDetectedCurrency);
+        const normalizedPrice = normalizeObservedPrice(
+          effectivePrice,
+          store.mapCurrencyOverride || item.detectedCurrency || savedList.detectedCurrency || store.pageDetectedCurrency,
+        );
         let captured: CapturePlace;
         if (existing) {
           captured = mergePlaceResearch(existing, {
@@ -1562,7 +1508,10 @@ export function initHandlers(): void {
     const kind = (el.kind.value as CapturePlace['inferred_kind']) || 'other';
     const tags = ensurePlaceKindTag(normalizeDelimitedText(el.tags.value), kind, store.lang);
     const rawPrice = el.price.value.trim() || undefined;
-    const normalizedPrice = normalizeObservedPrice(rawPrice, store.currentPlace.detectedCurrency || existing?.price?.currency || store.pageDetectedCurrency);
+    const normalizedPrice = normalizeObservedPrice(
+      rawPrice,
+      store.mapCurrencyOverride || store.currentPlace.detectedCurrency || existing?.price?.currency || store.pageDetectedCurrency,
+    );
     const id = existing?.id ?? crypto.randomUUID();
     const place: CapturePlace = {
       id,
@@ -1606,7 +1555,10 @@ export function initHandlers(): void {
     logger.info('CaptureForm', existing ? 'updating place' : 'creating place', { id, title: place.title, existing: Boolean(existing), placeId: place.source.place_id });
     store.setState({ ...store.stateV3, places: [...store.stateV3.places.filter((item) => item.id !== id), place] });
     void saveState().then(() => {
+      store.editingCandidateId = null;
       syncQuickChipStates();
+      renderCandidatesList();
+      renderCurrentPlace();
       setStatus(existing ? dict.candidateUpdated : dict.candidateAdded, 'success');
       logger.info('CaptureForm', existing ? 'place updated' : 'place added', { id, title: place.title });
       flashNewCandidate(place.id);

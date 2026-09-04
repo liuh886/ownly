@@ -1,5 +1,78 @@
 # Ownly — Task Progress & Review
 
+## Completed: Hotel Opening Year & Renovation Facts Extraction (2026-09-04)
+- [x] **1. DOM Extraction & Multilingual Pattern Matching**
+  - Analyzed DOM structures across Google Maps (About tab, editorial summaries, JSON-LD), Google Travel (Property overview chips & amenities), and Booking.com (Description fine print & facilities).
+  - Implemented `extractHotelPropertyFacts(textOrSnippet?, doc?)` in [`src/extension/utils.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/utils.ts) parsing:
+    - `opened_year`: Opening/Built/Established year in Chinese (`2022年全新开业`, `自2021年开始接待客人`, `始建于2019`) and English (`Opened in 2022`, `Built in 2020`, `Established in 1998`, `Welcoming guests since Dec 2019`, JSON-LD `foundingDate`/`dateCreated`).
+    - `renovated_year`: Renovation year in Chinese (`2024年重新装修`, `最近装修：2023年`) and English (`Renovated in 2023`, `Refurbished in 2024`).
+    - `room_count`: Total room/suite count (`120 间客房`, `85 rooms`, JSON-LD `numberOfRooms`).
+    - `check_in` / `check_out`: Times (`15:00` / `12:00`, `Check-in from 14:00, check-out until 11:00`).
+- [x] **2. Domain Model & Signal Automation**
+  - Defined unified `HotelPropertyFacts` in [`src/domain/planner.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/planner.ts).
+  - Preserved `hotel_facts` on `CapturePlace`, `PlannerTripPlace`, `PlannerScheduledPlace`, and `CurrentResearchPlace`.
+  - Implemented `deriveHotelSignals(facts)` to automatically generate user-facing badges (e.g. `🆕 2024年开业 (新开业)`, `📅 2019年开业`, `✨ 2025年新装修`, `🔨 2018年装修`).
+  - Automatically populated badges into `signals` upon capturing or converting places into Planner candidates.
+- [x] **3. UI Presentation in Hotel Comparison Modal**
+  - Updated [`src/components/planner/HotelComparisonModal.tsx`](file:///D:/Documents/GitHub/Ownly/src/components/planner/HotelComparisonModal.tsx) to display `📅 ${opened_year} 开业` and `✨ ${renovated_year} 装修` badges in both the Table view (under Category) and the Grid Card view.
+- [x] **4. Comprehensive Unit Tests & Validation**
+  - Added unit test suite in [`src/extension/utils.test.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/utils.test.ts) covering Chinese, English, Booking.com formats, and signal generation.
+  - Validated with `npm run validate:extension` (159/159 tests passed, extension build clean).
+  - Validated with `npm run validate:fast` (0 errors, clean lint & types).
+
+## Completed: Google Travel Provider & In-Page Quick Capture FAB (2026-09-04)
+- [x] **1. Clarify `.bz` ccTLD & Google Travel Architecture**
+  - Clarified that `.bz` is Belize's ccTLD (Google regional portal), where Google Travel hotel searches often route.
+  - Authored [`docs/CAPTURE_PRODUCT_RFC.md`](file:///D:/Documents/GitHub/Ownly/docs/CAPTURE_PRODUCT_RFC.md) formally defining the mental model: "Inbox 是案板 (Staging Area for raw scraping & grooming) -> Planner 是下锅 (Trip Itinerary & Budget)".
+  - Logged tracking RFC issues (#CAPTURE-RFC-01 ~ 04) for future sync decoupling without breaking current single-source-of-truth invariants.
+- [x] **2. Implement Google Travel Place Extractor**
+  - Updated [`extension/manifest.json`](file:///D:/Documents/GitHub/Ownly/extension/manifest.json) `host_permissions` and `content_scripts` to cover `google.com/travel/*`, `google.com.bz/*`, `google.co.th/travel/*`, and major regional ccTLDs.
+  - Added `'google_travel'` to [`src/domain/planner.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/planner.ts) `PlannerPlaceSourceProvider` and `inferSourceProvider()`.
+  - Added `'google_travel'` to [`src/domain/capture.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/capture.ts) `CaptureSourceProvider`.
+  - Added `google_travel: { emoji: '✈️', label: 'Google Travel' }` to [`src/extension/sidepanel/ui.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/sidepanel/ui.ts).
+  - Implemented `extractGoogleTravelPlace()` in [`src/extension/content.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/content.ts) parsing hotel title, rating, review count, nightly pricing, currency detection, address/neighborhood, coordinates, entity ID, and amenities.
+- [x] **3. Implement In-Page Quick Capture Floating Ball (FAB)**
+  - Injected Shadow-DOM encapsulated floating pill button (`#ownly-quick-capture-fab-root`) in [`src/extension/content.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/content.ts) on all supported travel/map sites.
+  - Added states: `idle` (`📌 放入案板`), `loading` (`⏳ 采集中...`), `success` (`✓ 已放入案板`), `error` (`⚠️ 未检测到地点`).
+  - Implemented atomic worker storage handler `OWNLY_QUICK_SAVE_PLACE` in [`src/extension/background.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/background.ts) saving directly into the active Inbox collection ("案板") with background badge feedback (`✓`).
+- [x] **4. Verification & Validation**
+  - Added unit test cases for `google_travel` in [`src/domain/planner.test.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/planner.test.ts).
+  - Validated with `npm run validate:extension` (155/155 tests passed, extension build clean).
+  - Validated with `npm run validate:fast` (0 errors, clean lint & types).
+  - Validated with `npm run validate:shared` (100% contracts & MCP passing).
+
+---
+
+## Completed: UI Polish & Unified Recognition/Edit Experience (2026-09-04)
+- [x] **1. Save Button Visual Polish & High Contrast**
+  - Updated `--primary` from dark black (`#1c1917`) to vibrant Ownly emerald green (`#047857` / `#059669`) in [`extension/sidepanel.css`](file:///D:/Documents/GitHub/Ownly/extension/sidepanel.css).
+  - Ensured white text (`#ffffff`) has crisp, sharp contrast and subtle shadow so button labels ("➕ 加入候选池", "✓ 更新地点信息") are immediately readable.
+- [x] **2. Unify Card Editing into Single Authoritative Panel**
+  - Removed confusing duplicate inline edit box (`buildInlineEditor`) inside Inbox cards.
+  - Clicking ✏️ on any card in Inbox now loads the place into the top `#placePanel` / `#captureForm`, opens `#addPanel`, scrolls to it, and gives the user ONE single authoritative Save button (`#btnCaptureSubmit`).
+  - Active card in Inbox receives `.is-active-editing` highlight badge (`✏️ 编辑中`) with clean emerald border.
+- [x] **3. Code Cleanup & Verification**
+  - Cleaned up obsolete inline action listeners (`save-inline`, `cancel-inline`) and unused helper functions.
+  - Verified with `npm run validate:extension` (155/155 tests passed) and `npm run validate:fast` (0 errors).
+
+---
+
+## Completed: Currency Detection & Override Propagation Fix (2026-09-04)
+- [x] **1. Root Cause Analysis & Confirmation**
+  - Clarified why Google Maps hotel pages in English UI output bare `$84` without explicit `SGD` token in the DOM.
+  - Identified that `extractGoogleMapsPlace()` in `content.ts` did not pass `overrideCurrency` / `targetCurrency` into `detectCurrencyFromPage()`.
+  - Discovered that bare `$` with non-dollar regional coordinates (e.g. Pattaya, Thailand) defaulted to `'USD'` in `currency-detector.ts`.
+  - Found that `sidepanel/capture.ts` line 134 ternary bypassed user override if place had existing `detectedCurrency`.
+- [x] **2. Implement Fixes**
+  - Updated `src/extension/content.ts` to pass `overrideCurrency` and `targetCurrency` through `currentPlace()`, `extractGoogleMapsPlace()`, and `enrichFromPlaceHtml()`.
+  - Updated `src/extension/sidepanel/capture.ts` to ensure `store.mapCurrencyOverride` takes top precedence in `store.currentPlace` and `store.detectedSavedList`.
+  - Updated `src/extension/sidepanel/handlers.ts` to ensure `store.mapCurrencyOverride` is prioritized in `buildPlaceFromDetected` and price normalizers.
+- [x] **3. Write Tests & Verification**
+  - Added test cases in `src/extension/currency-detector.test.ts` for bare `$84` in Pattaya with `overrideCurrency: 'SGD'` and `hintCurrency: 'SGD'`.
+  - Validated with `npm run validate:extension` (155/155 passed), `npm run validate:fast` (0 errors), and `npx vitest run` (512/512 passed across 59 test suites).
+
+---
+
 ## Completed: Full-Codebase Quality Elevation & Technical Debt Clearance (2026-09-04)
 - [x] **Phase 1: Remove Dead Files & Unreferenced Stubs**
   - [x] Deleted orphaned `src/domain/entities/` (`Place.ts`, `Trip.ts`, `Capture.ts`, `index.ts`)

@@ -6,10 +6,13 @@
  * Their only shared contract is the portable Capture Collection schema.
  */
 
+import { type HotelPropertyFacts } from './planner';
+
 // ─── Source provider ──────────────────────────────────────────────────────────
 
 export type CaptureSourceProvider =
   | 'google_maps'
+  | 'google_travel'
   | 'booking'
   | 'tabelog'
   | 'xiaohongshu'
@@ -77,6 +80,7 @@ export interface CapturePlace {
   menu_url?: string;
   reservation_url?: string;
   review_topics?: string[];
+  hotel_facts?: HotelPropertyFacts;
 
   inferred_kind?: CapturePlaceKind;
 
@@ -284,7 +288,7 @@ export interface OwnlyCaptureStateV2 {
 }
 
 function mapProvider(raw?: string): CaptureSourceProvider {
-  if (raw === 'google_maps' || raw === 'booking' || raw === 'tabelog' || raw === 'xiaohongshu') return raw;
+  if (raw === 'google_maps' || raw === 'google_travel' || raw === 'booking' || raw === 'tabelog' || raw === 'xiaohongshu') return raw;
   return 'other';
 }
 
@@ -411,6 +415,7 @@ export interface PlannerTripPlaceLike {
   coordinates?: { lat: number; lng: number };
   phone?: string;
   plus_code?: string;
+  hotel_facts?: HotelPropertyFacts;
   preferred_window?: string;
   duration_minutes?: number;
   signals: string[];
@@ -469,9 +474,31 @@ export function capturePlaceToPlannerPlace(
     coordinates: capture.coordinates,
     phone: capture.phone,
     plus_code: capture.plus_code,
+    hotel_facts: capture.hotel_facts,
     preferred_window: capture.user?.preferred_window,
     duration_minutes: capture.user?.duration_minutes,
-    signals: [],
+    signals: (() => {
+      const sigs: string[] = [];
+      if (capture.hotel_facts?.opened_year) {
+        const y = parseInt(capture.hotel_facts.opened_year, 10);
+        const nowYear = new Date().getFullYear();
+        if (Number.isFinite(y) && nowYear - y <= 3 && nowYear >= y) {
+          sigs.push(`🆕 ${capture.hotel_facts.opened_year}年开业 (新开业)`);
+        } else {
+          sigs.push(`📅 ${capture.hotel_facts.opened_year}年开业`);
+        }
+      }
+      if (capture.hotel_facts?.renovated_year) {
+        const ry = parseInt(capture.hotel_facts.renovated_year, 10);
+        const nowYear = new Date().getFullYear();
+        if (Number.isFinite(ry) && nowYear - ry <= 3 && nowYear >= ry) {
+          sigs.push(`✨ ${capture.hotel_facts.renovated_year}年新装修`);
+        } else {
+          sigs.push(`🔨 ${capture.hotel_facts.renovated_year}年装修`);
+        }
+      }
+      return sigs;
+    })(),
     risks: [],
     reservation_status: 'none',
     state: 'candidate',

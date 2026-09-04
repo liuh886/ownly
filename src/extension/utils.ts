@@ -344,3 +344,166 @@ export function isJunkNavigationText(text?: string | null): boolean {
   return false;
 }
 
+import { type HotelPropertyFacts } from '../domain/planner';
+export { type HotelPropertyFacts };
+
+/**
+ * Extracts hotel property metadata (opening year, renovation year, room count, check-in/out)
+ * from DOM elements, JSON-LD, or summary snippets across Google Maps, Google Travel, and Booking.com.
+ */
+export function extractHotelPropertyFacts(
+  textOrSnippet?: string | null,
+  doc?: Document | HTMLElement | null,
+): HotelPropertyFacts | undefined {
+  const snippets: string[] = [];
+  if (textOrSnippet) snippets.push(textOrSnippet);
+
+  if (doc) {
+    // 1. Target sections in Google Maps (About tab, attribute description, editorial summary)
+    const gmapsNodes = doc.querySelectorAll<HTMLElement>(
+      'div[aria-label*="About" i], div[aria-label*="关于" i], div.m6QErb, div.Io6YTe, div.section-attribute-description, div.O8qbJf, div.LTs0Rc, div.fontBodyMedium, div.PYvSYb, div.W4Efsd, div.bJzME'
+    );
+    for (const node of Array.from(gmapsNodes).slice(0, 20)) {
+      const t = cleanExtractedText(node.textContent || node.getAttribute('aria-label') || '');
+      if (t && t.length > 3) snippets.push(t);
+    }
+
+    // 2. Target sections in Google Travel
+    const gtravelNodes = doc.querySelectorAll<HTMLElement>(
+      'div.I6rF8e, div.P3g0Ub, div.CFG7A, div.k2879c, div.t5l4ge, div.Adn9Eb, span.k5tQ5d, div.fpNxPd, div.iNpWBb'
+    );
+    for (const node of Array.from(gtravelNodes).slice(0, 20)) {
+      const t = cleanExtractedText(node.textContent || node.getAttribute('aria-label') || '');
+      if (t && t.length > 3) snippets.push(t);
+    }
+
+    // 3. Target sections in Booking.com
+    const bookingNodes = doc.querySelectorAll<HTMLElement>(
+      '#property_description_content, p.hotel_description_fine_print, div.hp_desc_important_facilities, div.hp-desc-facility-item, span.hp_address_subtitle'
+    );
+    for (const node of Array.from(bookingNodes).slice(0, 20)) {
+      const t = cleanExtractedText(node.textContent || '');
+      if (t && t.length > 3) snippets.push(t);
+    }
+
+    // 4. JSON-LD structured data
+    try {
+      const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+      for (const s of Array.from(scripts)) {
+        if (!s.textContent) continue;
+        const data = JSON.parse(s.textContent);
+        const item = Array.isArray(data) ? data[0] : (data?.['@graph'] ? data['@graph'][0] : data);
+        if (item && typeof item === 'object') {
+          if (item.foundingDate) snippets.push(`opened ${item.foundingDate}`);
+          if (item.dateCreated) snippets.push(`opened ${item.dateCreated}`);
+          if (item.numberOfRooms) snippets.push(`${item.numberOfRooms} rooms`);
+        }
+      }
+    } catch {}
+  }
+
+  const combined = snippets.join(' \n ');
+  if (!combined.trim()) return undefined;
+
+  let opened_year: string | undefined;
+  let renovated_year: string | undefined;
+  let room_count: number | undefined;
+  let check_in: string | undefined;
+  let check_out: string | undefined;
+
+  // ─── Opening Year ────────────────────────────────────────────────────────
+  const openRegexes = [
+    /(?:opened|established|built|est\.?|since)\s*(?:in|around)?\s*[:：]?\s*(19\d{2}|20\d{2})/i,
+    /(?:开业|建成|建立|创立|始建|成立时间|自)\s*(?:时间|年份)?\s*[:：]?\s*(19\d{2}|20\d{2})\s*(?:年)?/i,
+    /(19\d{2}|20\d{2})\s*年\s*(?:全新)?\s*(?:开业|建成|建立|创立|营运)/i,
+    /welcoming\s+booking\.com\s+guests\s+since\s+(?:[a-z]+\s+)?(19\d{2}|20\d{2})/i,
+    /自\s*(19\d{2}|20\d{2})\s*年(?:[0-9一二三四五六七八九十]+月)?开始接待/i,
+    /(?:开业|建立|建于)\s*(19\d{2}|20\d{2})/i,
+  ];
+  for (const reg of openRegexes) {
+    const m = reg.exec(combined);
+    if (m?.[1]) {
+      const y = parseInt(m[1], 10);
+      if (y >= 1900 && y <= 2035) {
+        opened_year = m[1];
+        break;
+      }
+    }
+  }
+
+  // ─── Renovation Year ─────────────────────────────────────────────────────
+  const renoRegexes = [
+    /(?:renovated|refurbished|remodeled)\s*(?:in|around)?\s*[:：]?\s*(19\d{2}|20\d{2})/i,
+    /(?:装修|翻新|重新装修|重装|改造|翻新时间|最近装修)\s*(?:时间|年份)?\s*[:：]?\s*(19\d{2}|20\d{2})\s*(?:年)?/i,
+    /(19\d{2}|20\d{2})\s*年\s*(?:重新)?\s*(?:装修|翻新|重装|升级改造)/i,
+  ];
+  for (const reg of renoRegexes) {
+    const m = reg.exec(combined);
+    if (m?.[1]) {
+      const y = parseInt(m[1], 10);
+      if (y >= 1900 && y <= 2035) {
+        renovated_year = m[1];
+        break;
+      }
+    }
+  }
+
+  // ─── Room Count ──────────────────────────────────────────────────────────
+  const roomMatch = /(\d{1,4})\s*(?:rooms|guest\s*rooms|keys|间客房|间房|间套房)/i.exec(combined);
+  if (roomMatch?.[1]) {
+    const count = parseInt(roomMatch[1], 10);
+    if (count > 0 && count < 10000) room_count = count;
+  }
+
+  // ─── Check-in / Check-out ────────────────────────────────────────────────
+  const inMatch = /(?:check-in|check\s*in|入住)\s*(?:time|时间|from|after|starts?\s*at|起)?\s*[:：]?\s*(\d{1,2}:\d{2})/i.exec(combined);
+  if (inMatch?.[1]) check_in = inMatch[1];
+  const outMatch = /(?:check-out|check\s*out|退房)\s*(?:time|时间|until|before|ends?\s*at|前|止)?\s*[:：]?\s*(\d{1,2}:\d{2})/i.exec(combined);
+  if (outMatch?.[1]) check_out = outMatch[1];
+
+  if (!opened_year && !renovated_year && !room_count && !check_in && !check_out) {
+    return undefined;
+  }
+
+  return {
+    opened_year,
+    renovated_year,
+    room_count,
+    check_in,
+    check_out,
+  };
+}
+
+/**
+ * Derives user-facing signal badges from hotel property facts.
+ */
+export function deriveHotelSignals(facts?: HotelPropertyFacts): string[] {
+  if (!facts) return [];
+  const signals: string[] = [];
+  const currentYear = new Date().getFullYear();
+
+  if (facts.opened_year) {
+    const year = parseInt(facts.opened_year, 10);
+    if (Number.isFinite(year)) {
+      if (currentYear - year <= 3 && currentYear >= year) {
+        signals.push(`🆕 ${facts.opened_year}年开业 (新开业)`);
+      } else {
+        signals.push(`📅 ${facts.opened_year}年开业`);
+      }
+    }
+  }
+
+  if (facts.renovated_year) {
+    const rYear = parseInt(facts.renovated_year, 10);
+    if (Number.isFinite(rYear)) {
+      if (currentYear - rYear <= 3 && currentYear >= rYear) {
+        signals.push(`✨ ${facts.renovated_year}年新装修`);
+      } else {
+        signals.push(`🔨 ${facts.renovated_year}年装修`);
+      }
+    }
+  }
+
+  return signals;
+}
+

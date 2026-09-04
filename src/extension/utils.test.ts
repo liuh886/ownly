@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   cleanExtractedText,
+  deriveHotelSignals,
   extractCleanPriceText,
   extractFeatureIdFromUrl,
+  extractHotelPropertyFacts,
   findEntityListCategory,
   findEntityListPlaceId,
   isJunkNavigationText,
@@ -232,5 +234,55 @@ describe('extractFeatureIdFromUrl & normalizePhoneDisplay', () => {
     expect(normalizePhoneDisplay('tel:+66812345678')).toBe('+66812345678');
     expect(normalizePhoneDisplay('abc')).toBeUndefined();
     expect(normalizePhoneDisplay(null)).toBeUndefined();
+  });
+});
+
+describe('extractHotelPropertyFacts & deriveHotelSignals', () => {
+  it('extracts hotel opening year and renovation year from Chinese description snippets', () => {
+    const text1 = 'Cross Pattaya Pratamnak. 2024 年全新开业奢华度假酒店，2025 年重新装修，共 120 间客房。入住时间：15:00，退房时间：12:00';
+    const facts1 = extractHotelPropertyFacts(text1);
+    expect(facts1).toEqual({
+      opened_year: '2024',
+      renovated_year: '2025',
+      room_count: 120,
+      check_in: '15:00',
+      check_out: '12:00',
+    });
+
+    const signals1 = deriveHotelSignals(facts1);
+    expect(signals1).toContain('🆕 2024年开业 (新开业)');
+    expect(signals1).toContain('✨ 2025年新装修');
+  });
+
+  it('extracts hotel opening year from English Booking.com / Google formats', () => {
+    const text2 = 'Welcoming Booking.com guests since Dec 2019. Built in 2019. 85 rooms. Check-in from 14:00, check-out until 11:00.';
+    const facts2 = extractHotelPropertyFacts(text2);
+    expect(facts2).toEqual({
+      opened_year: '2019',
+      renovated_year: undefined,
+      room_count: 85,
+      check_in: '14:00',
+      check_out: '11:00',
+    });
+
+    const signals2 = deriveHotelSignals(facts2);
+    expect(signals2).toContain('📅 2019年开业');
+  });
+
+  it('extracts established / est date and renovation facts accurately', () => {
+    const text3 = 'Historic luxury hotel. Established in 1998, fully renovated in 2023.';
+    const facts3 = extractHotelPropertyFacts(text3);
+    expect(facts3?.opened_year).toBe('1998');
+    expect(facts3?.renovated_year).toBe('2023');
+
+    const signals3 = deriveHotelSignals(facts3);
+    expect(signals3).toContain('📅 1998年开业');
+    expect(signals3).toContain('✨ 2023年新装修');
+  });
+
+  it('returns undefined when no property facts are present', () => {
+    expect(extractHotelPropertyFacts('Great restaurant with authentic Pad Thai')).toBeUndefined();
+    expect(extractHotelPropertyFacts('')).toBeUndefined();
+    expect(extractHotelPropertyFacts(null)).toBeUndefined();
   });
 });

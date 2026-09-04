@@ -53,28 +53,17 @@ function getDefaultCollection(state: OwnlyCaptureStateV3): CaptureCollection {
   };
 }
 
-async function quickCaptureCurrentPlace() {
-  const started = Date.now();
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) {
-    logger.warn('Background', 'Quick capture aborted: no active tab');
-    return;
+async function savePlaceIntoInboxDirectly(
+  place: CurrentResearchPlace,
+  tabId?: number,
+  openSidepanel = false,
+): Promise<{ ok: boolean; placeId?: string; error?: string }> {
+  if (!place?.title || !place.sourceUrl) {
+    if (tabId) void flashBadge(tabId, '!', '#b91c1c');
+    return { ok: false, error: 'no place detected' };
   }
-  const tabId = tab.id;
-  logger.info('Background', 'Quick capture triggered', { tabId, url: tab.url });
-
+  const started = Date.now();
   try {
-    const response = await chrome.tabs.sendMessage(tabId, {
-      type: 'OWNLY_GET_CURRENT_PLACE',
-    }) as { place?: CurrentResearchPlace | null };
-    const place = response?.place;
-    if (!place?.title || !place.sourceUrl) {
-      logger.warn('Background', 'Quick capture: no place detected on page', { tabId, url: tab.url, response });
-      void flashBadge(tabId, '!', '#b91c1c');
-      return;
-    }
-    logger.info('Background', 'Quick capture: place detected', { title: place.title, url: place.sourceUrl, placeId: place.sourcePlaceId, rating: place.rating });
-
     const capturedId = await mutateCaptureStateV3InWorker((state) => {
       const collection = getDefaultCollection(state);
       const collectionPlaces = state.places.filter((p) => p.collection_id === collection.id);
@@ -126,6 +115,7 @@ async function quickCaptureCurrentPlace() {
         menu_url: place.menuUrl ?? existing?.menu_url,
         reservation_url: place.reservationUrl ?? existing?.reservation_url,
         review_topics: place.reviewTopics ?? existing?.review_topics,
+        hotel_facts: place.hotelFacts ?? existing?.hotel_facts,
         inferred_kind: effectiveKind,
         user: existing?.user ? {
           ...existing.user,
@@ -152,19 +142,51 @@ async function quickCaptureCurrentPlace() {
     });
 
     if (!capturedId) {
-      logger.error('Background', 'Quick capture: mutate returned empty id', { tabId });
+      logger.error('Background', 'Quick save: mutate returned empty id', { tabId });
+      if (tabId) void flashBadge(tabId, '!', '#b91c1c');
+      return { ok: false, error: 'failed to persist' };
+    }
+
+    logger.info('Background', 'Quick save: persisted', { capturedId, tabId, ms: Date.now() - started });
+    if (tabId) void flashBadge(tabId, '✓', '#047857');
+
+    if (openSidepanel && tabId) {
+      try {
+        await chrome.sidePanel.open({ tabId });
+        await chrome.runtime.sendMessage({ type: 'OWNLY_FOCUS_CAPTURE' }).catch(() => {});
+      } catch (e) {
+        logger.warn('Background', 'Quick capture: sidepanel open failed', String(e));
+      }
+    }
+
+    return { ok: true, placeId: capturedId };
+  } catch (error) {
+    logger.error('Background', 'Quick save error', { error: error instanceof Error ? error.stack || error.message : String(error), tabId });
+    if (tabId) void flashBadge(tabId, '!', '#b91c1c');
+    return { ok: false, error: String(error) };
+  }
+}
+
+async function quickCaptureCurrentPlace() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    logger.warn('Background', 'Quick capture aborted: no active tab');
+    return;
+  }
+  const tabId = tab.id;
+  logger.info('Background', 'Quick capture triggered', { tabId, url: tab.url });
+
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: 'OWNLY_GET_CURRENT_PLACE',
+    }) as { place?: CurrentResearchPlace | null };
+    const place = response?.place;
+    if (!place?.title || !place.sourceUrl) {
+      logger.warn('Background', 'Quick capture: no place detected on page', { tabId, url: tab.url, response });
       void flashBadge(tabId, '!', '#b91c1c');
       return;
     }
-    logger.info('Background', 'Quick capture: persisted', { capturedId, tabId, ms: Date.now() - started });
-    void flashBadge(tabId, '✓', '#047857');
-    try {
-      await chrome.sidePanel.open({ tabId });
-      await chrome.runtime.sendMessage({ type: 'OWNLY_FOCUS_CAPTURE' }).catch(() => {});
-      logger.info('Background', 'Quick capture: sidepanel opened', { tabId });
-    } catch (e) {
-      logger.warn('Background', 'Quick capture: sidepanel open failed', String(e));
-    }
+    await savePlaceIntoInboxDirectly(place, tabId, true);
   } catch (error) {
     logger.error('Background', 'Quick capture error', { error: error instanceof Error ? error.stack || error.message : String(error), tabId });
     console.warn('[Ownly Capture] Quick capture error', error);
@@ -214,6 +236,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Also broadcast to diagnostics layer — diagnostics.ts listens for this type
     sendResponse({ ok: true });
     return;
+  }
+
+  if (type === 'OWNLY_QUICK_SAVE_PLACE') {
+    const place = (message as { place?: CurrentResearchPlace }).place;
+    const tabId = sender.tab?.id;
+    if (!place) {
+      sendResponse({ ok: false, error: 'no place data' });
+      return true;
+    }
+    void savePlaceIntoInboxDirectly(place, tabId, false).then(sendResponse);
+    return true;
   }
 
   // ─── V3 Handlers ───────────────────────────────────────────────────────────

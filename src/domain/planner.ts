@@ -55,10 +55,19 @@ export interface PlannerTripCalendarFeed {
 
 export type PlannerPlaceSourceProvider =
   | 'google_maps'
+  | 'google_travel'
   | 'tabelog'
   | 'xiaohongshu'
   | 'booking'
   | 'other';
+
+export interface HotelPropertyFacts {
+  opened_year?: string;
+  renovated_year?: string;
+  room_count?: number;
+  check_in?: string;
+  check_out?: string;
+}
 
 export interface PlannerTripPlace {
   schema_version: '0.1';
@@ -103,6 +112,8 @@ export interface PlannerTripPlace {
   review_topics?: string[];
   /** Google taxonomy types, e.g. ["lodging","restaurant","tourist_attraction"]. */
   types?: string[];
+  /** Hotel property metadata (opening year, renovation year, rooms, check-in/out). */
+  hotel_facts?: HotelPropertyFacts;
   /** P1: 分享来源追踪 — 记录该地点是否来自他人分享的 Collection */
   import_provenance?: {
     source_type: 'shared_collection';
@@ -819,6 +830,7 @@ export function mapGoogleTypesToOwnlyKind(types: string[]): PlannerPlaceKind {
 }
 
 export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
+  if (/google\.[a-z.]+\/travel/i.test(url)) return 'google_travel';
   if (/google\.[a-z.]+\/maps|maps\.google\./i.test(url)) return 'google_maps';
   if (/tabelog\.com/i.test(url)) return 'tabelog';
   if (/xiaohongshu\.com|xhslink\.com/i.test(url)) return 'xiaohongshu';
@@ -2491,7 +2503,7 @@ export function parseImportPayload(rawText: string, tripId: string): PlannerTrip
       || (partial.category ? inferPlaceKind(partial.category) : undefined)
       || (partial.source_category ? inferPlaceKind(partial.source_category) : undefined)
       || inferPlaceKind(partial.title);
-    const allowedProviders: PlannerPlaceSourceProvider[] = ['google_maps', 'tabelog', 'xiaohongshu', 'booking', 'other'];
+    const allowedProviders: PlannerPlaceSourceProvider[] = ['google_maps', 'google_travel', 'tabelog', 'xiaohongshu', 'booking', 'other'];
     const sourceProvider = allowedProviders.includes(partial.source_provider as PlannerPlaceSourceProvider)
       ? partial.source_provider as PlannerPlaceSourceProvider
       : (partial.source_url ? inferSourceProvider(partial.source_url) : 'other');
@@ -2559,6 +2571,7 @@ export function parseImportPayload(rawText: string, tripId: string): PlannerTrip
       reservation_status: partial.reservation_status || 'none',
       review_topics: reviewTopics,
       types,
+      hotel_facts: partial.hotel_facts,
       state: 'candidate',
       created_at: partial.created_at || now,
       updated_at: partial.updated_at || now,

@@ -631,6 +631,8 @@ describe('Ownly Planner domain', () => {
 
   it('infers source provider correctly from travel research URLs', () => {
     expect(inferSourceProvider('https://www.google.com/maps/place/Tokyo+Tower')).toBe('google_maps');
+    expect(inferSourceProvider('https://www.google.com/travel/hotels/entity/ChIJ_xxx')).toBe('google_travel');
+    expect(inferSourceProvider('https://www.google.com.bz/travel/hotels/entity/ChIJ_xxx')).toBe('google_travel');
     expect(inferSourceProvider('https://tabelog.com/tokyo/A1301/A130101/13002243/')).toBe('tabelog');
     expect(inferSourceProvider('https://www.xiaohongshu.com/explore/64a1b2c3')).toBe('xiaohongshu');
     expect(inferSourceProvider('https://www.booking.com/hotel/jp/tokyo-station.html')).toBe('booking');

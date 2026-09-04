@@ -234,5 +234,25 @@ describe('Unified Currency Detector & Cross-Validation Engine', () => {
       expect(result.currency).toBe('EUR');
       expect(result.confidence).toBe(100);
     });
+
+    it('honors overrideCurrency SGD for bare $84 hotel in Pattaya Thailand', () => {
+      const result = detectPageCurrency({
+        priceText: '$84',
+        url: 'https://www.google.com/maps/place/Cross+Pattaya+Pratamnak/@12.9188285,100.8576083,19z',
+        overrideCurrency: 'SGD',
+      });
+      expect(result.currency).toBe('SGD');
+      expect(result.confidence).toBe(100);
+    });
+
+    it('disambiguates bare $84 to SGD in Thailand when active trip currency is SGD (hintCurrency)', () => {
+      const result = detectPageCurrency({
+        priceText: '$84',
+        url: 'https://www.google.com/maps/place/Cross+Pattaya+Pratamnak/@12.9188285,100.8576083,19z',
+        hintCurrency: 'SGD',
+      });
+      expect(result.currency).toBe('SGD');
+      expect(result.isAmbiguousResolved).toBe(true);
+    });
   });
 });

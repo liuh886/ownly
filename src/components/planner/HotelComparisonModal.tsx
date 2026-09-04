@@ -557,6 +557,20 @@ export function HotelComparisonModal({
                               </span>
                             </div>
                           ) : null}
+                          {hotel.hotel_facts?.opened_year ? (
+                            <div className="mt-1">
+                              <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.2 text-[9.5px] font-semibold text-emerald-800 border border-emerald-200">
+                                📅 {hotel.hotel_facts.opened_year} {zh ? '开业' : 'Opened'}
+                              </span>
+                            </div>
+                          ) : null}
+                          {hotel.hotel_facts?.renovated_year ? (
+                            <div className="mt-0.5">
+                              <span className="inline-block rounded bg-teal-50 px-1.5 py-0.2 text-[9.5px] font-semibold text-teal-800 border border-teal-200">
+                                ✨ {hotel.hotel_facts.renovated_year} {zh ? '装修' : 'Renovated'}
+                              </span>
+                            </div>
+                          ) : null}
                         </td>
 
                         {/* 4. Proximity & Commute */}
@@ -758,6 +772,16 @@ export function HotelComparisonModal({
                             {hotel.source_category ? (
                               <span className="rounded bg-amber-50 px-1.5 py-0.2 text-[10px] font-medium text-amber-800 border border-amber-200">
                                 🏷️ {hotel.source_category}
+                              </span>
+                            ) : null}
+                            {hotel.hotel_facts?.opened_year ? (
+                              <span className="rounded bg-emerald-50 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+                                📅 {hotel.hotel_facts.opened_year} {zh ? '开业' : 'Opened'}
+                              </span>
+                            ) : null}
+                            {hotel.hotel_facts?.renovated_year ? (
+                              <span className="rounded bg-teal-50 px-1.5 py-0.2 text-[10px] font-semibold text-teal-800 border border-teal-200">
+                                ✨ {hotel.hotel_facts.renovated_year} {zh ? '装修' : 'Renovated'}
                               </span>
                             ) : null}
                           </div>

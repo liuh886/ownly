@@ -131,9 +131,11 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   }
 
   if (placeResp?.place && placeResp.place.sourceUrl !== store.userDismissedPlaceUrl) {
-    store.currentPlace = placeResp.place.detectedCurrency || !placeResp.detectedCurrency
-      ? placeResp.place
-      : { ...placeResp.place, detectedCurrency: placeResp.detectedCurrency };
+    const effectiveCurrency = store.mapCurrencyOverride || placeResp.place.detectedCurrency || placeResp.detectedCurrency;
+    store.currentPlace = {
+      ...placeResp.place,
+      detectedCurrency: effectiveCurrency,
+    };
   } else {
     store.currentPlace = null;
   }
@@ -163,7 +165,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
     store.detectedSavedList = {
       listName: listResp.listName,
       listUrl: tab.url || '',
-      detectedCurrency: placeResp?.detectedCurrency,
+      detectedCurrency: store.mapCurrencyOverride || placeResp?.detectedCurrency,
       places: directListPlaces,
       truncated: Boolean(listResp.truncated),
     };
@@ -183,7 +185,7 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
     store.detectedSavedList = {
       listName: listResp.listName,
       listUrl: tab.url || '',
-      detectedCurrency: placeResp?.detectedCurrency ?? store.detectedSavedList.detectedCurrency,
+      detectedCurrency: store.mapCurrencyOverride || placeResp?.detectedCurrency || store.detectedSavedList.detectedCurrency,
       places: listResp.listPlaces,
       truncated: Boolean(listResp.truncated),
     };

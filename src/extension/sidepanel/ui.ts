@@ -21,6 +21,7 @@ const KIND_ICONS = PLANNER_KIND_ICONS;
 
 const PROVIDER_META: Record<string, { emoji: string; label: string }> = {
   google_maps: { emoji: '🗺️', label: 'Maps' },
+  google_travel: { emoji: '✈️', label: 'Google Travel' },
   tabelog: { emoji: '🍜', label: 'Tabelog' },
   xiaohongshu: { emoji: '📕', label: '小红书' },
   booking: { emoji: '🏨', label: 'Booking' },
@@ -995,167 +996,36 @@ function buildCandidateCard(
   place: V2FacadePlace,
   dict: ReturnType<typeof t>,
 ): HTMLDivElement {
+  const isEditing = store.editingCandidateId === place.id;
   const card = document.createElement('div');
-  card.className = 'candidate-card' + (store.bulkMode && store.bulkSelected.has(place.id) ? ' bulk-selected' : '');
+  card.className = 'candidate-card'
+    + (store.bulkMode && store.bulkSelected.has(place.id) ? ' bulk-selected' : '')
+    + (isEditing ? ' is-active-editing' : '');
   card.dataset.placeId = place.id;
 
-    const header = document.createElement('div');
-    header.className = 'candidate-header';
+  const header = document.createElement('div');
+  header.className = 'candidate-header';
 
-    const grip = document.createElement('span');
-    grip.className = 'grip';
-    grip.draggable = true;
-    grip.textContent = '⠿';
-    grip.title = store.lang === 'zh' ? '拖动调整候选池顺序' : 'Drag to reorder the pool';
+  const grip = document.createElement('span');
+  grip.className = 'grip';
+  grip.draggable = true;
+  grip.textContent = '⠿';
+  grip.title = store.lang === 'zh' ? '拖动调整候选池顺序' : 'Drag to reorder the pool';
 
-    const titleEl = document.createElement('div');
-    titleEl.className = 'candidate-title';
-    titleEl.textContent = `${KIND_ICONS[place.kind as PlannerPlaceKind] || '📍'} ${place.title}`;
+  const titleEl = document.createElement('div');
+  titleEl.className = 'candidate-title';
+  titleEl.textContent = `${KIND_ICONS[place.kind as PlannerPlaceKind] || '📍'} ${place.title}`;
 
-    header.append(grip, titleEl);
+  header.append(grip, titleEl);
+  if (isEditing) {
+    const editBadge = document.createElement('span');
+    editBadge.className = 'badge highlight';
+    editBadge.textContent = store.lang === 'zh' ? '✏️ 编辑中' : '✏️ Editing';
+    header.append(editBadge);
+  }
 
-    if (store.editingCandidateId === place.id) {
-      card.append(header, buildInlineEditor(place, dict));
-    } else {
-      card.append(header, buildCandidateDetails(place, dict));
-    }
+  card.append(header, buildCandidateDetails(place, dict));
   return card;
-}
-
-
-function buildInlineEditor(
-  place: V2FacadePlace,
-  dict: ReturnType<typeof t>,
-): HTMLFormElement {
-  const form = document.createElement('form');
-  form.className = 'candidate-inline-editor';
-  form.addEventListener('submit', (e) => e.preventDefault());
-
-  // Row 1: Kind & Priority
-  const row1 = document.createElement('div');
-  row1.className = 'inline-row';
-
-  const kindLabel = document.createElement('label');
-  kindLabel.textContent = dict.kindLabel;
-  const kindSelect = document.createElement('select');
-  kindSelect.name = 'kind';
-  Object.entries(dict.kinds).forEach(([key, val]) => {
-    const opt = document.createElement('option');
-    opt.value = key;
-    opt.textContent = `${KIND_ICONS[key as PlannerPlaceKind] || ''} ${val}`;
-    kindSelect.append(opt);
-  });
-  kindSelect.value = place.kind || 'attraction';
-  kindLabel.append(kindSelect);
-
-  const priorityLabel = document.createElement('label');
-  priorityLabel.textContent = dict.priorityLabel;
-  const prioritySelect = document.createElement('select');
-  prioritySelect.name = 'priority';
-  Object.entries(dict.priorities).forEach(([key, val]) => {
-    const opt = document.createElement('option');
-    opt.value = key;
-    opt.textContent = val;
-    prioritySelect.append(opt);
-  });
-  prioritySelect.value = place.priority || 'want';
-  priorityLabel.append(prioritySelect);
-
-  row1.append(kindLabel, priorityLabel);
-
-  // Row 2: Price & Rating
-  const row2 = document.createElement('div');
-  row2.className = 'inline-row';
-
-  const priceLabel = document.createElement('label');
-  priceLabel.textContent = dict.priceLabel;
-  const priceInput = document.createElement('input');
-  priceInput.name = 'price';
-  priceInput.type = 'text';
-  priceInput.value = place.observed_price || '';
-  priceInput.placeholder = dict.pricePlaceholder;
-  priceLabel.append(priceInput);
-
-  const ratingLabel = document.createElement('label');
-  ratingLabel.textContent = dict.ratingLabel;
-  const ratingInput = document.createElement('input');
-  ratingInput.name = 'rating';
-  ratingInput.type = 'number';
-  ratingInput.step = '0.1';
-  ratingInput.min = '1';
-  ratingInput.max = '5';
-  ratingInput.value = place.observed_rating ? String(place.observed_rating) : '';
-  ratingInput.placeholder = dict.ratingPlaceholder;
-  ratingLabel.append(ratingInput);
-
-  row2.append(priceLabel, ratingLabel);
-
-  // Row 3: Duration & Tags
-  const row3 = document.createElement('div');
-  row3.className = 'inline-row';
-
-  const durationLabel = document.createElement('label');
-  durationLabel.textContent = dict.durationLabel;
-  const durationInput = document.createElement('input');
-  durationInput.name = 'duration';
-  durationInput.type = 'number';
-  durationInput.step = '15';
-  durationInput.min = '15';
-  durationInput.max = '1440';
-  durationInput.value = place.duration_minutes ? String(place.duration_minutes) : '';
-  durationInput.placeholder = dict.durationPlaceholder;
-  durationLabel.append(durationInput);
-
-  row3.append(durationLabel);
-
-  // Row 4: Tags
-  const row4 = document.createElement('div');
-  row4.className = 'inline-row';
-  const tagsLabel = document.createElement('label');
-  tagsLabel.style.width = '100%';
-  tagsLabel.textContent = dict.tagsLabel;
-  const tagsInput = document.createElement('input');
-  tagsInput.name = 'tags';
-  tagsInput.type = 'text';
-  tagsInput.value = place.tags.join(', ');
-  tagsInput.placeholder = dict.tagsPlaceholder;
-  tagsLabel.append(tagsInput);
-  row4.append(tagsLabel);
-
-  // Row 5: Notes / Why
-  const row5 = document.createElement('div');
-  row5.className = 'inline-row';
-  const notesLabel = document.createElement('label');
-  notesLabel.style.width = '100%';
-  notesLabel.textContent = dict.notesLabel;
-  const notesTextarea = document.createElement('textarea');
-  notesTextarea.name = 'notes';
-  notesTextarea.value = place.notes || place.why || '';
-  notesTextarea.placeholder = dict.notesPlaceholder;
-  notesLabel.append(notesTextarea);
-  row5.append(notesLabel);
-
-  // Action buttons with dataset actions
-  const actionRow = document.createElement('div');
-  actionRow.className = 'inline-actions';
-
-  const btnCancel = document.createElement('button');
-  btnCancel.type = 'button';
-  btnCancel.className = 'btn-cancel-inline';
-  btnCancel.dataset.action = 'cancel-inline';
-  btnCancel.dataset.placeId = place.id;
-  btnCancel.textContent = dict.btnCancelInlineEdit;
-
-  const btnSave = document.createElement('button');
-  btnSave.type = 'button';
-  btnSave.className = 'btn-save-inline';
-  btnSave.dataset.action = 'save-inline';
-  btnSave.dataset.placeId = place.id;
-  btnSave.textContent = dict.btnSaveInlineEdit;
-
-  actionRow.append(btnCancel, btnSave);
-  form.append(row1, row2, row3, row4, row5, actionRow);
-  return form;
 }
 
 function buildCandidateDetails(

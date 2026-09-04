@@ -21,8 +21,8 @@
   --border: #e7e5e4;
   --border-2: #d6d3d1;
 
-  --primary: #1c1917;
-  --primary-hover: #292524;
+  --primary: #047857;
+  --primary-hover: #065f46;
   --on-primary: #ffffff;
 
   --accent: #047857;
@@ -64,9 +64,9 @@
     --border: #44403c;
     --border-2: #57534e;
 
-    --primary: #fafaf9;
-    --primary-hover: #e7e5e4;
-    --on-primary: #1c1917;
+    --primary: #059669;
+    --primary-hover: #10b981;
+    --on-primary: #ffffff;
 
     --accent: #34d399;
     --accent-strong: #6ee7b7;
@@ -976,10 +976,11 @@ hr.divider {
   animation: flash-new 0.9s ease-out;
 }
 
+.candidate-card.is-active-editing,
 .candidate-card:has(.candidate-inline-editor) {
   border-color: var(--accent-border-strong);
   background: var(--accent-softer);
-  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.12);
+  box-shadow: 0 0 0 2px var(--accent-soft), 0 1px 4px rgba(16, 185, 129, 0.15);
 }
 
 .candidate-header {
