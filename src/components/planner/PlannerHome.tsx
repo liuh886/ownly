@@ -1717,21 +1717,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
                     >
-                      <div className={`relative flex items-start gap-3 rounded-xl border p-3.5 pr-6 transition-all duration-150 shadow-2xs ${
+                      <div className={`relative flex items-start gap-3 rounded-xl border p-3 transition-all duration-150 shadow-2xs ${
                         highlightedPlaceId === place.id
                           ? 'border-emerald-500 ring-2 ring-emerald-300/50 bg-emerald-50/30'
                           : 'border-stone-200/90 bg-white hover:border-stone-300'
                       }`}>
                         {/* Stop Number Circle */}
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-900 text-xs font-bold text-white shrink-0 shadow-2xs">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-900 text-xs font-bold text-white shrink-0 shadow-2xs mt-0.5">
                           {index + 1}
                         </div>
 
                         {/* Stop Content Body */}
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1 space-y-1.5">
                           {/* Title & Timing Trigger Header */}
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
                               <h3 className="text-sm font-bold text-stone-900 truncate leading-snug" title={place.title}>
                                 {place.title}
                               </h3>
@@ -1750,13 +1750,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               </button>
                               {place.locked ? (
                                 <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[9.5px] font-bold text-amber-800 ring-1 ring-amber-200/80">
-                                  📌 {zh ? '固定顺位' : 'Pinned'}
+                                  📌 {zh ? '固定' : 'Pinned'}
                                 </span>
                               ) : null}
                             </div>
 
-                            {/* Grouped 4-Action Controls — hover to reduce crowding */}
-                            <div className="inline-flex items-center rounded-lg border border-stone-200 bg-stone-50/80 p-0.5 shadow-2xs shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                            {/* Grouped 4-Action Controls */}
+                            <div className="inline-flex items-center rounded-lg border border-stone-200 bg-stone-50/80 p-0.5 shadow-2xs shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
                               <button
                                 type="button"
                                 aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
@@ -1805,65 +1805,67 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             </div>
                           </div>
 
-                          {/* Clean Meta Line & Price (minimal, no tags, star ratings, or categories) */}
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-500">
-                            {placeMeta(place, language) ? <span>{placeMeta(place, language)}</span> : null}
-                            {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
-                              <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-semibold text-stone-600">
-                                {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
-                              </span>
-                            ) : null}
-                          </div>
+                          {/* Unified Sub-line: Meta Details, Price & Quick Action Links */}
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-stone-500">
+                            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                              {placeMeta(place, language) ? <span className="text-stone-600">{placeMeta(place, language)}</span> : null}
+                              {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
+                                <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-700">
+                                  {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
+                                </span>
+                              ) : null}
+                            </div>
 
-                          {/* Quick Action External Links (Map retains only emoji) */}
-                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-                            {place.phone ? (
-                              <a
-                                href={`tel:${place.phone}`}
-                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
-                                title={zh ? `拨打官方电话: ${place.phone}` : `Call: ${place.phone}`}
-                              >
-                                📞
-                              </a>
-                            ) : null}
-                            {place.menu_url ? (
-                              <a
-                                href={place.menu_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-700 hover:bg-stone-200 transition"
-                                title={zh ? '查看官方菜单' : 'Menu'}
-                              >
-                                📖
-                              </a>
-                            ) : null}
-                            {place.reservation_url ? (
-                              <a
-                                href={place.reservation_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-bold text-amber-900 hover:bg-amber-100 transition shadow-2xs"
-                                title={zh ? '官方预订' : 'Reserve'}
-                              >
-                                🎟️
-                              </a>
-                            ) : null}
-                            {place.source_url ? (
-                              <a
-                                href={place.source_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 rounded bg-stone-100 px-1.5 py-0.5 font-medium text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
-                                title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
-                              >
-                                🗺️
-                              </a>
-                            ) : null}
+                            {/* Quick Action External Links */}
+                            <div className="flex items-center gap-1 shrink-0 text-[11px]">
+                              {place.phone ? (
+                                <a
+                                  href={`tel:${place.phone}`}
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-stone-200 transition"
+                                  title={zh ? `拨打电话: ${place.phone}` : `Call: ${place.phone}`}
+                                >
+                                  📞
+                                </a>
+                              ) : null}
+                              {place.menu_url ? (
+                                <a
+                                  href={place.menu_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-stone-200 transition"
+                                  title={zh ? '查看菜单' : 'Menu'}
+                                >
+                                  📖
+                                </a>
+                              ) : null}
+                              {place.reservation_url ? (
+                                <a
+                                  href={place.reservation_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition shadow-2xs"
+                                  title={zh ? '官方预订' : 'Reserve'}
+                                >
+                                  🎟️
+                                </a>
+                              ) : null}
+                              {place.source_url ? (
+                                <a
+                                  href={place.source_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                  title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
+                                >
+                                  🗺️
+                                </a>
+                              ) : null}
+                            </div>
                           </div>
 
                           {/* Warning / Conflict Alerts */}
                           {col?.isCollision ? (
-                            <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[10.5px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[10.5px] font-semibold text-amber-800 ring-1 ring-amber-200">
                               <span>⚠️</span>
                               <span>{col.reason}</span>
                             </div>
@@ -1871,12 +1873,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
                           {/* Research Note / Why Insight */}
                           {place.why ? (
-                            <p className="mt-1.5 line-clamp-2 rounded-md bg-stone-50/80 px-2 py-1 text-xs text-stone-700 leading-relaxed">
+                            <p className="line-clamp-2 rounded-md bg-stone-50 px-2 py-1 text-xs text-stone-700 leading-relaxed">
                               💡 <strong>{zh ? '推荐理由:' : 'Why:'}</strong> {place.why}
                             </p>
                           ) : null}
                           {place.notes ? (
-                            <p className="mt-1 line-clamp-2 text-xs text-stone-500 italic">
+                            <p className="line-clamp-2 text-xs text-stone-500 italic pl-1">
                               📝 {place.notes}
                             </p>
                           ) : null}

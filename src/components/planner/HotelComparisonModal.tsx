@@ -51,9 +51,20 @@ export function HotelComparisonModal({
   const zh = language === 'zh';
   const totalDays = tripDates.length || 1;
 
-  // Stay Range Selection
+  // Stay Slot & Range Selection (填空式槽位)
+  const [stayStartIndex, setStayStartIndex] = useState<number>(activeDayIndex);
   const [stayEndIndex, setStayEndIndex] = useState<number>(activeDayIndex);
   const [isFullTripStay, setIsFullTripStay] = useState<boolean>(false);
+
+  // Existing scheduled stays map per date
+  const scheduledStaysByDate = useMemo(() => {
+    const map = new Map<string, PlannerScheduledPlace>();
+    Object.entries(placesByDate).forEach(([date, places]) => {
+      const stay = places.find((p) => p.kind === 'stay');
+      if (stay) map.set(date, stay);
+    });
+    return map;
+  }, [placesByDate]);
 
   // Filters, Search & View Controls
   const [selectedCity, setSelectedCity] = useState<string>('ALL');
@@ -66,9 +77,10 @@ export function HotelComparisonModal({
     if (isFullTripStay && tripDates.length > 0) {
       return tripDates;
     }
-    const end = Math.min(Math.max(stayEndIndex, activeDayIndex), totalDays - 1);
-    return tripDates.length > 0 ? tripDates.slice(activeDayIndex, end + 1) : [activeDate];
-  }, [isFullTripStay, tripDates, stayEndIndex, activeDayIndex, totalDays, activeDate]);
+    const start = Math.min(Math.max(stayStartIndex, 0), totalDays - 1);
+    const end = Math.min(Math.max(stayEndIndex, start), totalDays - 1);
+    return tripDates.length > 0 ? tripDates.slice(start, end + 1) : [activeDate];
+  }, [isFullTripStay, tripDates, stayStartIndex, stayEndIndex, totalDays, activeDate]);
 
   const stayNightsCount = targetStayDates.length;
   const isMultiNight = stayNightsCount > 1;
@@ -221,70 +233,117 @@ export function HotelComparisonModal({
             </div>
           </div>
 
-          {/* Stay Range Selector */}
-          {totalDays > 1 ? (
-            <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl bg-white p-2 border border-stone-200 shadow-2xs">
-              <span className="text-xs font-bold text-stone-700 flex items-center gap-1">
-                <span>📅</span> {zh ? '入住跨度:' : 'Stay Span:'}
-              </span>
+          {/* Fill-in-the-Blank Stay Slots Strip */}
+          {totalDays > 0 ? (
+            <div className="mt-2.5 rounded-xl bg-white p-2.5 border border-stone-200 shadow-2xs space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
+                  <span>🗓️</span>
+                  <span>{zh ? '行程住宿槽位填空:' : 'Stay Day Slots:'}</span>
+                  <span className="text-[11px] font-medium text-stone-500">
+                    {zh
+                      ? `当前目标: 第 ${stayStartIndex + 1}${stayEndIndex > stayStartIndex ? `~${stayEndIndex + 1}` : ''} 天 (${targetStayDates.length} 晚)`
+                      : `Target: Day ${stayStartIndex + 1}${stayEndIndex > stayStartIndex ? `-${stayEndIndex + 1}` : ''} (${targetStayDates.length}N)`}
+                  </span>
+                </div>
 
-              {/* Single Active Day */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsFullTripStay(false);
-                  setStayEndIndex(activeDayIndex);
-                }}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                  !isFullTripStay && stayEndIndex === activeDayIndex
-                    ? 'bg-stone-900 text-white shadow-2xs'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                }`}
-              >
-                {zh ? `第 ${activeDayIndex + 1} 天 (${targetStayDates[0]} 1晚)` : `Day ${activeDayIndex + 1} (1N)`}
-              </button>
-
-              {/* Multi-day consecutive buttons */}
-              {Array.from({ length: totalDays - activeDayIndex - 1 }, (_, i) => activeDayIndex + 1 + i).map(
-                (targetIdx) => {
-                  const nights = targetIdx - activeDayIndex + 1;
-                  const isSelected = !isFullTripStay && stayEndIndex === targetIdx;
-                  return (
+                {/* Quick Span Helpers */}
+                <div className="flex items-center gap-1 text-xs">
+                  {stayEndIndex > stayStartIndex ? (
                     <button
-                      key={targetIdx}
                       type="button"
                       onClick={() => {
                         setIsFullTripStay(false);
-                        setStayEndIndex(targetIdx);
+                        setStayEndIndex(stayStartIndex);
                       }}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                        isSelected
-                          ? 'bg-emerald-700 text-white shadow-2xs'
+                      className="rounded-md bg-stone-100 hover:bg-stone-200 px-2 py-0.5 text-[11px] font-semibold text-stone-700 transition"
+                    >
+                      {zh ? '改住 1 晚' : '1 Night Only'}
+                    </button>
+                  ) : null}
+                  {stayEndIndex < totalDays - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFullTripStay(false);
+                        setStayEndIndex((cur) => Math.min(totalDays - 1, cur + 1));
+                      }}
+                      className="rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 transition"
+                    >
+                      ➕ {zh ? '连住+1天' : '+1 Night'}
+                    </button>
+                  ) : null}
+                  {totalDays > 2 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFullTripStay(true);
+                        setStayStartIndex(0);
+                        setStayEndIndex(totalDays - 1);
+                      }}
+                      className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition ${
+                        isFullTripStay
+                          ? 'bg-amber-600 text-white shadow-2xs'
                           : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                       }`}
                     >
-                      {zh
-                        ? `连住至第 ${targetIdx + 1} 天 (${nights} 晚)`
-                        : `Through Day ${targetIdx + 1} (${nights}N)`}
+                      {zh ? `全程连住 (${totalDays}晚)` : `Full Trip (${totalDays}N)`}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Interactive Day Slots List */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5">
+                {tripDates.map((date, idx) => {
+                  const scheduledStay = scheduledStaysByDate.get(date);
+                  const isTarget = isFullTripStay || (idx >= stayStartIndex && idx <= stayEndIndex);
+                  const isStart = !isFullTripStay && idx === stayStartIndex;
+                  const isEnd = !isFullTripStay && idx === stayEndIndex;
+
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      onClick={() => {
+                        setIsFullTripStay(false);
+                        if (stayStartIndex === idx && stayEndIndex === idx) {
+                          if (idx < totalDays - 1) {
+                            setStayEndIndex(idx + 1);
+                          }
+                        } else {
+                          setStayStartIndex(idx);
+                          setStayEndIndex(idx);
+                        }
+                      }}
+                      className={`flex flex-col items-start min-w-[120px] max-w-[160px] p-1.5 rounded-lg border text-left transition shadow-2xs ${
+                        isTarget
+                          ? 'border-emerald-600 bg-emerald-50/80 ring-2 ring-emerald-400/40 text-emerald-950'
+                          : 'border-stone-200 bg-stone-50 hover:bg-white hover:border-stone-300 text-stone-700'
+                      }`}
+                      title={zh ? `点击选择第 ${idx + 1} 天为待填空位，再次点击可连住` : `Click Day ${idx + 1} to select`}
+                    >
+                      <div className="flex items-center justify-between w-full text-[11px] font-bold">
+                        <span>D{idx + 1} · {date.slice(5)}</span>
+                        {isTarget ? (
+                          <span className="text-[10px] font-bold text-emerald-700">
+                            {isStart && isEnd ? '📍 目标' : isStart ? '🚩 起始' : isEnd ? '🏁 结束' : '🔗 连住'}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 truncate text-[10.5px] font-medium w-full">
+                        {scheduledStay ? (
+                          <span className="text-stone-900" title={scheduledStay.title}>
+                            🏨 {scheduledStay.title}
+                          </span>
+                        ) : (
+                          <span className="text-stone-400 italic">⚪ 待选空位</span>
+                        )}
+                      </div>
                     </button>
                   );
-                },
-              )}
-
-              {/* Full Trip Stay */}
-              {activeDayIndex > 0 || totalDays > 2 ? (
-                <button
-                  type="button"
-                  onClick={() => setIsFullTripStay(true)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                    isFullTripStay
-                      ? 'bg-amber-600 text-white shadow-2xs'
-                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                  }`}
-                >
-                  {zh ? `全程连住 (${totalDays} 晚)` : `Full Trip (${totalDays}N)`}
-                </button>
-              ) : null}
+                })}
+              </div>
             </div>
           ) : null}
 
@@ -460,8 +519,8 @@ export function HotelComparisonModal({
                                 {priceFormatted}
                               </strong>
                               {isMultiNight && typeof hotel.price_min === 'number' ? (
-                                <span className="mt-0.5 inline-block text-[10px] text-stone-500 bg-stone-100 px-1.5 py-0.2 rounded font-medium">
-                                  {zh ? `${stayNightsCount}晚预估: ` : `${stayNightsCount}N Est: `}
+                                <span className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-bold">
+                                  {zh ? `总${stayNightsCount}晚约 ` : `${stayNightsCount}N Est: `}
                                   {formatPlacePriceInTripCurrency(
                                     { ...hotel, price_min: hotel.price_min * stayNightsCount, price_max: hotel.price_max ? hotel.price_max * stayNightsCount : undefined },
                                     tripCurrency,
@@ -475,15 +534,29 @@ export function HotelComparisonModal({
                           )}
                         </td>
 
-                        {/* 3. Rating & Reviews */}
+                        {/* 3. Rating, Class & Reviews */}
                         <td className="px-3 py-3 align-top">
                           {hotel.observed_rating ? (
-                            <div className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 font-bold text-amber-800 text-[11px]">
-                              ★ {hotel.observed_rating}
+                            <div>
+                              <div className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 font-bold text-amber-800 text-[11px]">
+                                ★ {hotel.observed_rating}
+                              </div>
+                              {hotel.observed_review_count ? (
+                                <span className="mt-0.5 block text-[10px] text-stone-400">
+                                  ({hotel.observed_review_count > 999 ? `${(hotel.observed_review_count / 1000).toFixed(1)}k` : hotel.observed_review_count} {zh ? '条点评' : 'reviews'})
+                                </span>
+                              ) : null}
                             </div>
                           ) : (
                             <span className="text-stone-400 text-[11px]">—</span>
                           )}
+                          {hotel.source_category ? (
+                            <div className="mt-1">
+                              <span className="inline-block rounded bg-amber-50/80 px-1.5 py-0.2 text-[9.5px] font-medium text-amber-900 border border-amber-200/80">
+                                🏷️ {hotel.source_category}
+                              </span>
+                            </div>
+                          ) : null}
                         </td>
 
                         {/* 4. Proximity & Commute */}
@@ -533,7 +606,7 @@ export function HotelComparisonModal({
                           )}
                         </td>
 
-                        {/* 5. Signals, Risks & Why */}
+                        {/* 5. Signals, Review Topics, Risks & Why */}
                         <td className="px-3.5 py-3 align-top">
                           <div className="space-y-1 max-w-[240px]">
                             {hotel.signals.length > 0 ? (
@@ -541,6 +614,15 @@ export function HotelComparisonModal({
                                 {hotel.signals.slice(0, 3).map((sig) => (
                                   <span key={sig} className="rounded bg-emerald-50 px-1.5 py-0.2 text-[9.5px] font-medium text-emerald-800 border border-emerald-200">
                                     ✓ {sig}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                            {hotel.review_topics && hotel.review_topics.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {hotel.review_topics.slice(0, 3).map((topic) => (
+                                  <span key={topic} className="rounded bg-sky-50 px-1.5 py-0.2 text-[9.5px] font-medium text-sky-800 border border-sky-200">
+                                    💬 {topic}
                                   </span>
                                 ))}
                               </div>
@@ -606,9 +688,25 @@ export function HotelComparisonModal({
                               onClose();
                             }}
                             className="w-full rounded-md bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition"
+                            title={zh ? '填入选定天' : 'Fill selected slot'}
                           >
-                            ⭐ {isMultiNight ? (zh ? `连住 ${stayNightsCount} 晚` : `${stayNightsCount}N Stay`) : (zh ? '设为入住' : 'Select')}
+                            ⭐ {zh ? `填入第 ${stayStartIndex + 1}${stayEndIndex > stayStartIndex ? `~${stayEndIndex + 1}` : ''} 天 (${stayNightsCount} 晚)` : `Set Day ${stayStartIndex + 1}${stayEndIndex > stayStartIndex ? `-${stayEndIndex + 1}` : ''} (${stayNightsCount}N)`}
                           </button>
+                          {stayEndIndex < totalDays - 1 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextEnd = Math.min(totalDays - 1, stayEndIndex + 1);
+                                setStayEndIndex(nextEnd);
+                                const nextDates = tripDates.slice(stayStartIndex, nextEnd + 1);
+                                onSelectHotelForStaySpan(hotel, nextDates);
+                              }}
+                              className="mt-1 w-full rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
+                              title={zh ? `连住+1天（连住至第 ${stayEndIndex + 2} 天）` : `Extend +1 night`}
+                            >
+                              ➕ {zh ? `连住+1天 (至第${stayEndIndex + 2}天)` : `+1N (Through D${stayEndIndex + 2})`}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => onDropHotel(hotel.id)}
@@ -657,11 +755,23 @@ export function HotelComparisonModal({
                                 📍 {hotel.area}
                               </span>
                             ) : null}
+                            {hotel.source_category ? (
+                              <span className="rounded bg-amber-50 px-1.5 py-0.2 text-[10px] font-medium text-amber-800 border border-amber-200">
+                                🏷️ {hotel.source_category}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         {hotel.observed_rating ? (
-                          <div className="flex items-center gap-1 shrink-0 rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700 border border-amber-200">
-                            ★ {hotel.observed_rating}
+                          <div className="flex flex-col items-end shrink-0">
+                            <div className="flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700 border border-amber-200">
+                              ★ {hotel.observed_rating}
+                            </div>
+                            {hotel.observed_review_count ? (
+                              <span className="mt-0.5 text-[9.5px] text-stone-400">
+                                {hotel.observed_review_count > 999 ? `${(hotel.observed_review_count / 1000).toFixed(1)}k` : hotel.observed_review_count} {zh ? '条点评' : 'reviews'}
+                              </span>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
@@ -669,9 +779,21 @@ export function HotelComparisonModal({
                       {/* Price & Class */}
                       <div className="mt-3 flex items-center justify-between rounded-lg bg-stone-50 p-2.5 text-xs">
                         <span className="text-stone-500">{zh ? '抓取参考价' : 'Reference Price'}</span>
-                        <strong className="text-emerald-700 font-semibold">
-                          {priceFormatted || (zh ? '暂无价格' : 'N/A')}
-                        </strong>
+                        <div className="text-right">
+                          <strong className="text-emerald-700 font-semibold block">
+                            {priceFormatted || (zh ? '暂无价格' : 'N/A')}
+                          </strong>
+                          {isMultiNight && typeof hotel.price_min === 'number' ? (
+                            <span className="mt-0.5 inline-block text-[9.5px] text-emerald-800 font-bold bg-emerald-50 px-1 rounded border border-emerald-200">
+                              {zh ? `总${stayNightsCount}晚约 ` : `${stayNightsCount}N: `}
+                              {formatPlacePriceInTripCurrency(
+                                { ...hotel, price_min: hotel.price_min * stayNightsCount, price_max: hotel.price_max ? hotel.price_max * stayNightsCount : undefined },
+                                tripCurrency,
+                                fxRates,
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
 
                       {/* Proximity Metrics */}
@@ -759,6 +881,19 @@ export function HotelComparisonModal({
                           </div>
                         ) : null}
 
+                        {hotel.review_topics && hotel.review_topics.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {hotel.review_topics.slice(0, 3).map((topic) => (
+                              <span
+                                key={topic}
+                                className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 border border-sky-200"
+                              >
+                                💬 {topic}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+
                         {hotel.risks.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {hotel.risks.map((risk) => (
@@ -788,23 +923,27 @@ export function HotelComparisonModal({
                           onSelectHotelForStaySpan(hotel, targetStayDates);
                           onClose();
                         }}
-                        className={`w-full rounded-lg px-3 py-2 text-xs font-semibold text-white transition ${
-                          isMultiNight
-                            ? 'bg-emerald-800 hover:bg-emerald-700 shadow-sm'
-                            : 'bg-stone-950 hover:bg-stone-800'
-                        }`}
+                        className="w-full rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-2 text-xs font-semibold text-white transition shadow-2xs"
                       >
-                        ⭐{' '}
-                        {isMultiNight
-                          ? zh
-                            ? `设为 ${targetStayDates[0]} ~ ${targetStayDates[targetStayDates.length - 1]} 连住宿点 (${stayNightsCount} 晚)`
-                            : `Select for ${stayNightsCount} Nights (${targetStayDates[0]} ~ ${targetStayDates[targetStayDates.length - 1]})`
-                          : zh
-                          ? `选定为第 ${activeDayIndex + 1} 天住宿`
-                          : `Select for Day ${activeDayIndex + 1}`}
+                        ⭐ {zh ? `填入第 ${stayStartIndex + 1}${stayEndIndex > stayStartIndex ? `~${stayEndIndex + 1}` : ''} 天 (${stayNightsCount} 晚)` : `Set Day ${stayStartIndex + 1}${stayEndIndex > stayStartIndex ? `-${stayEndIndex + 1}` : ''} (${stayNightsCount}N)`}
                       </button>
 
-                      <div className="flex items-center justify-between text-[11px]">
+                      {stayEndIndex < totalDays - 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextEnd = Math.min(totalDays - 1, stayEndIndex + 1);
+                            setStayEndIndex(nextEnd);
+                            const nextDates = tripDates.slice(stayStartIndex, nextEnd + 1);
+                            onSelectHotelForStaySpan(hotel, nextDates);
+                          }}
+                          className="w-full rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
+                        >
+                          ➕ {zh ? `连住+1天 (至第${stayEndIndex + 2}天)` : `+1 Night (Through Day ${stayEndIndex + 2})`}
+                        </button>
+                      ) : null}
+
+                      <div className="flex items-center justify-between text-[11px] mt-0.5">
                         <a
                           href={hotel.source_url}
                           target="_blank"

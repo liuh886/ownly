@@ -1437,7 +1437,7 @@ describe('exportTripToMarkdown', () => {
     it('handles single valid point', () => {
       const res = calculateBounds([{ lat: 13.7563, lng: 100.5018 }]);
       expect(res.center).toEqual({ lat: 13.7563, lng: 100.5018 });
-      expect(res.zoom).toBe(14);
+      expect(res.zoom).toBe(12);
     });
 
     it('filters out invalid or (0,0) coordinates', () => {

@@ -1212,7 +1212,7 @@ export function calculateBounds(pts: Array<{ lat: number; lng: number }>): MapBo
     return { center: { lat: fallbackLat, lng: fallbackLng }, zoom: 13 };
   }
   if (validPts.length === 1) {
-    return { center: { lat: validPts[0].lat, lng: validPts[0].lng }, zoom: 14 };
+    return { center: { lat: validPts[0].lat, lng: validPts[0].lng }, zoom: 12 };
   }
 
   // Calculate median center
@@ -1262,15 +1262,15 @@ export function calculateBounds(pts: Array<{ lat: number; lng: number }>): MapBo
   const centerLng = (minLng + maxLng) / 2;
   const maxSpan = Math.max(maxLat - minLat, (maxLng - minLng) * Math.abs(cosLat));
 
-  let z = 14;
-  if (maxSpan > 15) z = 5;
-  else if (maxSpan > 8) z = 7;
-  else if (maxSpan > 3.5) z = 9;
-  else if (maxSpan > 1.2) z = 11;
-  else if (maxSpan > 0.5) z = 12;
-  else if (maxSpan > 0.15) z = 13;
-  else if (maxSpan > 0.04) z = 14;
-  else z = 15;
+  let z = 12;
+  if (maxSpan > 15) z = 4;
+  else if (maxSpan > 8) z = 6;
+  else if (maxSpan > 3.5) z = 8;
+  else if (maxSpan > 1.2) z = 10;
+  else if (maxSpan > 0.5) z = 11;
+  else if (maxSpan > 0.15) z = 12;
+  else if (maxSpan > 0.04) z = 12;
+  else z = 13;
 
   return { center: { lat: centerLat, lng: centerLng }, zoom: z };
 }
