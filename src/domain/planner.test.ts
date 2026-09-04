@@ -636,6 +636,7 @@ describe('Ownly Planner domain', () => {
     expect(inferSourceProvider('https://tabelog.com/tokyo/A1301/A130101/13002243/')).toBe('tabelog');
     expect(inferSourceProvider('https://www.xiaohongshu.com/explore/64a1b2c3')).toBe('xiaohongshu');
     expect(inferSourceProvider('https://www.booking.com/hotel/jp/tokyo-station.html')).toBe('booking');
+    expect(inferSourceProvider('https://www.agoda.com/zh-cn/grande-centre-point-space-pattaya/hotel/pattaya-th.html')).toBe('agoda');
     expect(inferSourceProvider('https://example.com/blog/travel')).toBe('other');
   });
 

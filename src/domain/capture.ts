@@ -14,6 +14,7 @@ export type CaptureSourceProvider =
   | 'google_maps'
   | 'google_travel'
   | 'booking'
+  | 'agoda'
   | 'tabelog'
   | 'xiaohongshu'
   | 'other';
@@ -288,7 +289,7 @@ export interface OwnlyCaptureStateV2 {
 }
 
 function mapProvider(raw?: string): CaptureSourceProvider {
-  if (raw === 'google_maps' || raw === 'google_travel' || raw === 'booking' || raw === 'tabelog' || raw === 'xiaohongshu') return raw;
+  if (raw === 'google_maps' || raw === 'google_travel' || raw === 'booking' || raw === 'agoda' || raw === 'tabelog' || raw === 'xiaohongshu') return raw;
   return 'other';
 }
 

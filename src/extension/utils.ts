@@ -2,6 +2,8 @@ export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+export { extractPlaceCoordinates } from '../domain/planner';
+
 export function escapeHtml(unsafe: string): string {
   return unsafe
     .replace(/&/g, '&amp;')
@@ -58,6 +60,17 @@ export function cleanExtractedText(raw?: string | null): string {
     .trim();
 
   return str;
+}
+
+/**
+ * Strips leading/trailing decorative emojis and symbols for search resolution.
+ * e.g. "🍜 合成發" -> "合成發", "🏨 Mayana Beach Resort" -> "Mayana Beach Resort"
+ */
+export function cleanTitleForSearch(title: string): string {
+  return title
+    .replace(/^[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+/u, '')
+    .replace(/[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+$/u, '')
+    .trim() || title.trim();
 }
 
 /**

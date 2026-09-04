@@ -7,7 +7,8 @@ import {
   type PlannerTripPlace,
 } from '../domain/planner';
 import type { CurrentResearchPlace } from './content';
-import { extractFeatureIdFromUrl } from './utils';
+import { cleanTitleForSearch, extractFeatureIdFromUrl } from './utils';
+export { cleanTitleForSearch };
 import { logger } from './logger';
 import {
   extractGoogleMapsPreviewFacts,
@@ -23,19 +24,8 @@ export interface EnrichmentResult {
   error?: string;
 }
 
-/**
- * Strips leading/trailing decorative emojis and symbols for search resolution.
- * e.g. "🍜 合成發" -> "合成發", "🍜 Thipsamai Padthai Pratoopee" -> "Thipsamai Padthai Pratoopee"
- */
 const failedResolveCache = new Map<string, number>();
 const FAILED_COOLDOWN_MS = 15 * 60 * 1000;
-
-export function cleanTitleForSearch(title: string): string {
-  return title
-    .replace(/^[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+/u, '')
-    .replace(/[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+$/u, '')
-    .trim() || title.trim();
-}
 
 /**
  * Determines whether a candidate place is missing essential objective facts.
@@ -89,13 +79,16 @@ export async function enrichPlaceMetadata(
     }
     const candidates: string[] = [];
     if (next.source_url?.includes('/maps/search/')) candidates.push(next.source_url);
-    // B→A priority: place/@lat,lng directly 302s to single place with 0x (most reliable for query pins)
+    // 1. Lat/Lng targeted place link (direct 302s to single entity page)
     if (next.coordinates) {
       candidates.push(`https://www.google.com/maps/place/${encodeURIComponent(cleanTitleForSearch(next.title))}/@${next.coordinates.lat},${next.coordinates.lng},17z?hl=zh-CN`);
       candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitleForSearch(next.title))}/@${next.coordinates.lat},${next.coordinates.lng},14z?hl=zh-CN`);
     }
-    // Fallback: api=1 query (skeleton, often no 0x) and plain search
-    candidates.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitleForSearch(next.title) + (next.address ? ' ' + next.address : ''))}&hl=zh-CN`);
+    // 2. Desktop query search (renders APP_INITIALIZATION_STATE with entities)
+    const cleanSearchQuery = cleanTitleForSearch(next.title) + (next.address ? ' ' + next.address : '');
+    candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanSearchQuery)}?hl=zh-CN`);
+    // 3. Fallback: query API search
+    candidates.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanSearchQuery)}&hl=zh-CN`);
     if (!next.coordinates) {
       candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitleForSearch(next.title))}?hl=zh-CN`);
     }
@@ -110,6 +103,10 @@ export async function enrichPlaceMetadata(
         const finalUrl = res.url || searchUrl;
         const urlId = extractFeatureIdFromUrl(finalUrl) || /ChIJ[A-Za-z0-9_-]{15,}/.exec(finalUrl)?.[0] || null;
         if (urlId) logger.debug('BackgroundEnrich', `Search res.url has id for ${next.title}`, { finalUrl: finalUrl.slice(0, 180), urlId });
+        if (finalUrl.includes('/maps/place/') || finalUrl.includes('?cid=')) {
+          next.source_url = finalUrl;
+          mutated = true;
+        }
         const html = (await res.text()).slice(0, 3_000_000);
         // Direct ChIJ / 0x extraction before HTML parser (skeleton pages have them in APP_INITIALIZATION_STATE)
         const chijMatch = /"(ChIJ[A-Za-z0-9_-]{15,})"/.exec(html)?.[1];

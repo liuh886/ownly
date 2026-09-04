@@ -1,5 +1,80 @@
 # Ownly — Task Progress & Review
 
+## Completed: Technical Debt Clearance & Universal Provider Adapter Architecture (2026-09-05)
+- [x] **1. Create Universal Inline Capture Button UI Component (`src/extension/ui/inline-capture-button.ts`)**
+  - Extracted reusable Shadow-DOM encapsulated button injection helper with unified states (idle -> loading -> success -> error).
+  - Eliminated duplicated button styling and DOM injection boilerplate across all providers.
+- [x] **2. Establish Modular Provider Adapter Architecture (`src/extension/adapters/`)**
+  - Created `types.ts` defining `PageAdapter`, `CurrentResearchPlace`, `DetectedSavedList`, and `SavedListCardSummary` interfaces.
+  - Implemented dedicated adapters: `GoogleTravelAdapter`, `AgodaAdapter`, `BookingAdapter`, `XiaohongshuAdapter`, `TabelogAdapter`, `GoogleMapsAdapter`.
+  - Implemented `AdapterRegistry` (`registry.ts`) to manage dynamic provider dispatching based on URL matching.
+- [x] **3. Standardize Google Maps Search & Entity Resolution Engine (`src/extension/resolution/google-maps-resolver.ts`)**
+  - Encapsulated canonical Google Maps query URL formulation, 302 redirect tracking, and `APP_INITIALIZATION_STATE` protobuf extraction into a single authoritative engine.
+  - Standardized entity resolution across background worker auto-enrichment and content script lookups.
+- [x] **4. Refactor `src/extension/content.ts` into a Lean Orchestration Script**
+  - Replaced monolithic if/else cascades and redundant card parser code in `content.ts` with clean `AdapterRegistry` delegations.
+  - Reduced `content.ts` from 2,864 lines down to ~700 lines (~75% reduction) with improved testability and modularity.
+- [x] **5. Full Multi-Target Verification Pass**
+  - Validated with `npm run validate:extension` (161/161 tests passing, clean build).
+  - Validated with `npm run validate:fast` (0 errors, clean types & linter).
+  - Validated with `npm run validate:shared` (100% contracts & MCP passing).
+
+
+## Completed: Universal Quick Capture ("放入案板") & Authoritative Google Maps Entity Resolution (2026-09-05)
+- [x] **1. Architecture Specification: 3-Layer Capture & Resolution Flow**
+  - Defined clear separation: (1) DOM Card Ingestion -> (2) Instant Worker Save (0ms latency) -> (3) Asynchronous Background Google Maps Entity Resolution.
+- [x] **2. Implement Asynchronous Background Entity Resolver (`resolveAndEnrichCapturedPlace`)**
+  - In [`src/extension/background.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/background.ts), trigger background resolution immediately upon `savePlaceIntoInboxDirectly`.
+  - Mutate stored `CapturePlace` in `chrome.storage.local` with resolved Google Place ID (`0x...:0x...`), canonical Place URL (`/maps/place/...` or `cid=...`), coordinates, verified ratings/reviews, and opening hours.
+  - Broadcast `OWNLY_STORAGE_CHANGED` to live-update the Sidepanel and App bridge.
+- [x] **3. Upgrade Google Maps Search Resolution in `enrichment.ts` & `google-maps-research.ts`**
+  - Query desktop Google Maps `/maps/search/<query>?hl=zh-CN` to capture 302 entity redirect URLs directly (`/maps/place/...`).
+  - Extract hex CID, Place ID, coordinates, and canonical address from `APP_INITIALIZATION_STATE` and JSON-LD.
+  - Formulate canonical Google Maps URLs and update `source.url` from search query to real entity page.
+- [x] **4. Standardize Universal In-Page Inline Buttons Across Providers**
+  - Ensured uniform front-of-title inline button injection and clean data normalization across Google Maps, Google Travel, Agoda, Booking.com, Xiaohongshu, and Tabelog.
+- [x] **5. Full Verification & Regression Testing**
+  - Ran `npm run validate:extension` (161/161 tests passed), `npm run validate:fast` (0 errors), and `npm run validate:shared` (100% passed).
+
+
+## Completed: Universal Google Maps Standardization for Xiaohongshu, Booking.com & Agoda (2026-09-04)
+- [x] **1. Extend Manifest & Domain Support for Agoda**
+  - Added `https://www.agoda.com/*`, `https://*.agoda.com/*` to [`extension/manifest.json`](file:///D:/Documents/GitHub/Ownly/extension/manifest.json) `host_permissions` and `content_scripts`.
+  - Added `'agoda'` to `PlannerPlaceSourceProvider` and `CaptureSourceProvider` in [`src/domain/planner.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/planner.ts) and [`src/domain/capture.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/capture.ts).
+  - Updated `inferSourceProvider(url)` and `PROVIDER_META` to detect and display Agoda.
+- [x] **2. Standardize Booking.com Extraction & Inject Inline Card Buttons**
+  - Extracted Schema.org JSON-LD microdata, exact coordinates, address, phone, rating, nightly price, and hotel facts from Booking.com.
+  - Standardized output to `sourceProvider: 'google_maps'` with canonical Google Maps URLs (`https://www.google.com/maps/place/...` or `/maps/search/?api=1&query=...`).
+  - Injected inline "📌 放入案板" buttons on Booking.com search result cards (`div[data-testid="property-card"]`, `div.sr_item`, `div[role="listitem"]`) with dynamic mutation & scroll observers.
+- [x] **3. Implement Agoda Extraction, Saved List Batch Ingest & Inline Card Buttons**
+  - Implemented `extractAgodaPlace()` parsing JSON-LD microdata, header name, rating, address, price, and hotel property facts.
+  - Implemented `detectAgodaSavedList()` supporting Agoda Saved / Trips collection pages (`/trips/detail?navBack=true&id=...&tab=saved`) and search lists for 1-click batch import in Sidepanel.
+  - Standardized output to `sourceProvider: 'google_maps'` with canonical Google Maps URLs (`https://www.google.com/maps/search/?api=1&query=${hotelName + address}&hl=zh-CN`).
+  - Injected inline "📌 放入案板" action buttons directly in front of each hotel name across Agoda saved lists (`div[data-selenium="saved-hotel-item"]`) and search cards.
+- [x] **4. Standardize Xiaohongshu Note & Places List Extraction**
+  - In `extractXiaohongshuPlace()` and `detectXiaohongshuNoteList()`, constructed canonical Google Maps search URLs (`https://www.google.com/maps/search/?api=1&query=...`) and standardized `sourceProvider: 'google_maps'`.
+  - Preserved original note title and context in `summary` (`来自小红书笔记「...」`) and standard taxonomy `types: ['point_of_interest', 'establishment']`.
+- [x] **5. Full Verification & Regression Testing**
+  - Added test cases in [`src/domain/planner.test.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/planner.test.ts).
+  - Validated with `npm run validate:extension` (161/161 tests passing, clean build).
+  - Validated with `npm run validate:fast` (0 errors, clean types & linter).
+  - Validated with `npm run validate:shared` (100% contracts & MCP passing).
+
+## Completed: Google Travel Entity Deep Resolution & FAB Cleanup (2026-09-04)
+- [x] **1. Remove Legacy Global Floating Ball (FAB)**
+  - Completely deleted the fixed bottom-right floating pill (`#ownly-quick-capture-fab-root`) from [`src/extension/content.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/content.ts) to keep page viewports clean.
+  - Retained clean inline card-level "📌 放入案板" action buttons on Google Travel cards.
+- [x] **2. Deep Entity Link Resolution (`resolveGoogleTravelEntityToMapsPlace`)**
+  - When clicking "📌 放入案板" on a Google Travel card, the extension fetches the hotel entity page (`/travel/hotels/entity/...`) in the background.
+  - Extracts Schema.org JSON-LD microdata, exact postal address, phone, geo-coordinates, rating, review count, nightly pricing, and hotel property facts (`opened_year`, `renovated_year`, `room_count`).
+- [x] **3. Standardize Output to Google Maps Objects**
+  - Stored captured hotel entities strictly as standard Google Maps places (`sourceProvider: 'google_maps'`), generating canonical Google Maps URLs (`https://www.google.com/maps/place/...` or search query fallbacks).
+  - Assigned standard lodging taxonomy (`types: ['lodging', 'hotel', 'establishment']`) and inferred `stay` kind for 100% compatibility with Planner route calculation, hotel comparison, and itinerary scheduling.
+- [x] **4. Full Validation Pass**
+  - `npm run validate:extension` (161/161 tests passing, clean build).
+  - `npm run validate:fast` (0 errors, clean types & linter).
+  - `npm run validate:shared` (100% contract, parity & MCP tests passing).
+
 ## Completed: Google Travel Search List Extraction & Inline Card Quick Capture (2026-09-04)
 - [x] **1. Filter Out Generic Search Titles in Place Detection**
   - Extended `FAKE_PLACE_PATTERNS` and `isGenericNavigationTitleLocal` in [`src/extension/utils.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/utils.ts) and [`src/extension/content.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/content.ts) to reject `Google Travel \d+ results`, `\d+ 处搜索结果`, `Search results`, and generic search headers.

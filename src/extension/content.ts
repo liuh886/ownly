@@ -1,48 +1,41 @@
-import {
-  inferPlaceKind,
-  inferSourceProvider,
-  extractPlaceCoordinates,
-  type PlannerPlaceKind,
-  type PlannerPlaceSourceProvider,
-} from '../domain/planner';
+import { inferSourceProvider } from '../domain/planner';
 import {
   cleanExtractedText,
-  extractCleanPriceText,
   extractFeatureIdFromUrl,
-  extractHotelPropertyFacts,
-  type HotelPropertyFacts,
   isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
   isValidExtractedPriceCandidate,
   isZeroOrPlaceholderPrice,
   normalizePhoneDisplay,
-  safeDecodeUri,
 } from './utils';
-import { SELECTORS, driftCheck } from './selectors';
-import { PLACE_PARSER } from './place-parser';
-import { detectPageCurrency } from './currency-detector';
+import { detectPageCurrency, detectCurrencyFromPage } from './currency-detector';
 import { extractGoogleMapsSavedListId, matchesSavedListContext } from './saved-list-match';
 import {
   extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
   googleMapsDetailUrlFromSourceId,
   googleMapsPreviewPlaceUrl,
-  type GoogleMapsResearchFacts,
 } from './google-maps-research';
 import { logger } from './logger';
-import {
-  buildFromEntityList,
-  createSnapshot,
-  interpretDomBatch,
-  type ExtractionSnapshot,
-  type SavedListResult,
+import type {
+  ExtractionSnapshot,
 } from './maps/saved-list-parser';
+import { getAdapterForUrl } from './adapters/registry';
+import {
+  scanAllGoogleMapsPlaces,
+  fetchGoogleMapsEntityList,
+  resolveGoogleMapsList,
+} from './adapters/google-maps';
+import type { CurrentResearchPlace, DetectedSavedList, SavedListCardSummary } from './adapters/types';
 
-// PR5 debug snapshot — last extraction for diagnostics quantification
+export type { CurrentResearchPlace, DetectedSavedList, SavedListCardSummary };
+export { detectCurrencyFromPage };
+
 let lastExtractionSnapshot: ExtractionSnapshot | null = null;
 const EXTRACTION_SNAPSHOT_STORAGE_KEY = 'ownlyExtractionSnapshot';
-function persistSnapshot(snap: ExtractionSnapshot): void {
+
+export function persistSnapshot(snap: ExtractionSnapshot): void {
   lastExtractionSnapshot = snap;
   try {
     void chrome.storage?.local?.set({ [EXTRACTION_SNAPSHOT_STORAGE_KEY]: snap });
@@ -50,382 +43,10 @@ function persistSnapshot(snap: ExtractionSnapshot): void {
   logger.info('Content', 'Extraction snapshot', snap);
 }
 
-export interface CurrentResearchPlace {
-  title: string;
-  sourceUrl: string;
-  sourceProvider: PlannerPlaceSourceProvider;
-  kind?: PlannerPlaceKind;
-  rating?: number;
-  reviewCount?: number;
-  category?: string;
-  priceLevel?: string;
-  detectedCurrency?: string;
-  address?: string;
-  area?: string;
-  summary?: string;
-  userNote?: string;
-  openStatus?: string;
-  openHours?: string;
-  website?: string;
-  coordinates?: { lat: number; lng: number };
-  sourcePlaceId?: string;
-  tierNote?: string;
-  phone?: string;
-  plusCode?: string;
-  menuUrl?: string;
-  reservationUrl?: string;
-  reviewTopics?: string[];
-  types?: string[];
-  hotelFacts?: HotelPropertyFacts;
-}
-
-function titleFromUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const match = /\/maps\/place\/([^/]+)/.exec(parsed.pathname);
-    if (!match?.[1]) return '';
-    return safeDecodeUri(match[1]);
-  } catch {
-    return '';
-  }
-}
-
-function extractRating(): number | undefined {
-  const ratingEl = document.querySelector<HTMLElement>(SELECTORS.rating);
-  const ariaEl = document.querySelector<HTMLElement>(SELECTORS.ratingAria);
-  return PLACE_PARSER.parseRating(ratingEl?.textContent || ariaEl?.getAttribute('aria-label'));
-}
-
-function extractReviewCount(): number | undefined {
-  const countEl = document.querySelector<HTMLElement>(SELECTORS.reviewCount);
-  return PLACE_PARSER.parseReviewCount(countEl?.getAttribute('aria-label') || countEl?.textContent);
-}
-
-function extractCategory(): string | undefined {
-  // 1. Primary Google Maps category button
-  const catBtn = document.querySelector<HTMLElement>(SELECTORS.category);
-  if (catBtn?.textContent) {
-    const cat = cleanExtractedText(catBtn.textContent);
-    if (cat && cat.length < 50 && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(cat)) return cat;
-  }
-
-  // 2. Hotel classification / Star rating badge (e.g. "4-star hotel", "5 星级酒店", "Resort hotel")
-  const hotelClassEl = document.querySelector<HTMLElement>(
-    'span[aria-label*="star hotel" i], span[aria-label*="星级酒店"], button[aria-label*="hotel" i], span.mgr77e, div.mgr77e'
-  );
-  if (hotelClassEl) {
-    const text = cleanExtractedText(hotelClassEl.getAttribute('aria-label') || hotelClassEl.textContent || '');
-    if (text && text.length < 50 && /(hotel|resort|inn|hostel|lodging|stay|酒店|旅馆|民宿|度假村|星级)/i.test(text)) return text;
-  }
-
-  // 3. Schema.org JSON-LD structured metadata
-  try {
-    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-    for (const s of Array.from(scripts)) {
-      if (!s.textContent) continue;
-      const data = JSON.parse(s.textContent);
-      const item = Array.isArray(data) ? data[0] : (data?.['@graph'] ? data['@graph'][0] : data);
-      const type = item?.['@type'] || item?.type;
-      if (type && typeof type === 'string' && type !== 'Place' && type !== 'LocalBusiness') {
-        return cleanExtractedText(type);
-      }
-    }
-  } catch {}
-
-  // 4. Header subtitle row span scanning
-  const subSpans = document.querySelectorAll<HTMLElement>('div.fontBodyMedium button, div.fontBodyMedium span.mgr77e, div.LBgpqf span');
-  for (const span of Array.from(subSpans).slice(0, 5)) {
-    const text = cleanExtractedText(span.textContent || '');
-    if (text && text.length < 40 && !/^(directions|save|share|nearby|路线|保存|分享|附近|\d+)/i.test(text)) {
-      return text;
-    }
-  }
-
-  return undefined;
-}
-
-function extractPrice(): string | undefined {
-  // 1. Direct dedicated price badge in Google Maps place header
-  const priceEl = document.querySelector<HTMLElement>(SELECTORS.priceBadge);
-  if (priceEl) {
-    const text = cleanExtractedText(priceEl.getAttribute('aria-label') || priceEl.textContent || '');
-    if (text && text.length < 40 && !/^(路线|directions|save|保存|share|分享|nearby|附近)$/i.test(text)) {
-      const cleanPrice = extractCleanPriceText(text);
-      if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice)) return cleanPrice;
-    }
-  }
-
-  // 2. Structured price level pills ($$, $$$, ¥¥) in header
-  const levelSpans = document.querySelectorAll<HTMLElement>(SELECTORS.priceLevels);
-  for (const span of Array.from(levelSpans)) {
-    const label = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
-    if (label && isPlausiblePriceText(label) && !isZeroOrPlaceholderPrice(label)) {
-      return extractCleanPriceText(label) || label;
-    }
-  }
-
-  // 3. Structured header price container (span.mgr77e, div.mgr77e)
-  const infoSpans = document.querySelectorAll<HTMLElement>('span.mgr77e, div.mgr77e span');
-  for (const span of Array.from(infoSpans)) {
-    const text = cleanExtractedText(span.getAttribute('aria-label') || span.textContent || '');
-    if (text && text.length < 40) {
-      const cleanPrice = extractCleanPriceText(text);
-      if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice)) return cleanPrice;
-    }
-  }
-
-  // 4. Hotel rates and pricing comparison cards / pills in overview
-  const hotelRateEls = document.querySelectorAll<HTMLElement>(
-    'div[data-provider-name], button[data-tooltip*="价格"], div.F7nice, div[aria-label*="每晚"], span[aria-label*="每晚"], div[aria-label*="起"], span.fontHeadlineLarge, div.fontHeadlineLarge, span.fontTitleLarge, div.fontTitleLarge'
-  );
-  for (const el of Array.from(hotelRateEls)) {
-    const text = cleanExtractedText(el.getAttribute('aria-label') || el.textContent || '');
-    if (text && text.length < 50 && !/^(路线|directions|save|保存|share|分享|nearby|附近)$/i.test(text)) {
-      const cleanPrice = extractCleanPriceText(text);
-      if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice) && isValidExtractedPriceCandidate(cleanPrice)) {
-        return cleanPrice;
-      }
-    }
-  }
-
-  // 5. Fallback: broad scan for explicit price token (JP¥/¥/฿) — catches hotel cards where price is plain text
-  const allCandidates = document.querySelectorAll<HTMLElement>('span, div, button');
-  for (const el of Array.from(allCandidates).slice(0, 400)) {
-    const text = cleanExtractedText(el.textContent || '');
-    if (!text || text.length > 60 || text.length < 3) continue;
-    if (!/[¥฿$€£₩]|JP¥|CN¥|S\$|HK\$/.test(text)) continue;
-    const cleanPrice = extractCleanPriceText(text);
-    if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice) && isValidExtractedPriceCandidate(cleanPrice) && /\d/.test(cleanPrice)) {
-      return cleanPrice;
-    }
-  }
-
-  return undefined;
-}
-
-function extractHotelTier(): string | undefined {
-  const tierEl = document.querySelector<HTMLElement>(
-    'span[class*="price"], div.mgr77e, span.mgr77e span, div.fontBodyMedium span'
-  );
-  const candidates: string[] = [];
-  if (tierEl) candidates.push(tierEl.textContent || tierEl.getAttribute('aria-label') || '');
-  for (const span of Array.from(document.querySelectorAll<HTMLElement>('div.fontBodyMedium span, div.W4Efsd span')).slice(0, 10)) {
-    candidates.push(span.textContent || '');
-  }
-  for (const raw of candidates) {
-    const text = cleanExtractedText(raw);
-    if (!text || text.length > 40) continue;
-    if (/\b\d\s*[-–—]?\s*(?:star|stars?)\b|星级/i.test(text) && !isJunkNavigationText(text) && !isPlausiblePriceText(text)) {
-      return text;
-    }
-  }
-  return undefined;
-}
-
-function extractAddress(): string | undefined {
-  const addrEl = document.querySelector<HTMLElement>(SELECTORS.address);
-  if (addrEl?.textContent) {
-    const addr = cleanExtractedText(addrEl.textContent);
-    if (addr && addr.length < 150) return addr;
-  }
-  return undefined;
-}
-
-function extractSummary(): string | undefined {
-  const summaryEl = document.querySelector<HTMLElement>(SELECTORS.summary);
-  if (summaryEl?.textContent) {
-    const sum = cleanExtractedText(summaryEl.textContent);
-    if (sum && sum.length < 300 && !isJunkNavigationText(sum)) return sum;
-  }
-  return undefined;
-}
-
-function extractUserNote(): string | undefined {
-  const noteEl = document.querySelector<HTMLElement>(SELECTORS.note);
-  if (noteEl) {
-    const text = cleanExtractedText(noteEl.textContent || (noteEl as HTMLTextAreaElement).value || '');
-    if (text && text.length < 500 && !isJunkNavigationText(text)) return text;
-  }
-  return undefined;
-}
-
-function extractOpenStatus(): string | undefined {
-  const openEl = document.querySelector<HTMLElement>(SELECTORS.openStatus);
-  if (openEl?.textContent) {
-    const text = cleanExtractedText(openEl.textContent);
-    if (text && text.length < 60) return text;
-  }
-  return undefined;
-}
-
-function extractOpenHours(): string | undefined {
-  const hoursTable = document.querySelector<HTMLElement>(SELECTORS.hoursTable);
-  if (!hoursTable) {
-    const directHours = document.querySelector<HTMLElement>(SELECTORS.openStatus);
-    if (directHours) {
-      const text = cleanExtractedText(directHours.getAttribute('aria-label') || directHours.textContent || '');
-      if (text && text.length < 100 && /\d/.test(text)) return text;
-    }
-    return undefined;
-  }
-  const rows = hoursTable.querySelectorAll<HTMLElement>(SELECTORS.hoursRows);
-  const result: string[] = [];
-  for (const row of Array.from(rows)) {
-    const day = cleanExtractedText(row.querySelector('td:first-child, div:first-child')?.textContent || '');
-    const hours = cleanExtractedText(row.querySelector('td:last-child, div:last-child')?.textContent || '');
-    if (day && hours) result.push(`${day} ${hours}`);
-  }
-  return result.length > 0 ? result.join(' | ') : undefined;
-}
-
-function extractWebsite(): string | undefined {
-  const anchor = document.querySelector<HTMLAnchorElement>(SELECTORS.website);
-  if (anchor?.href && /^https?:\/\//i.test(anchor.href)) {
-    return anchor.href;
-  }
-  return undefined;
-}
-
-function extractPhone(): string | undefined {
-  const el = document.querySelector<HTMLElement>(SELECTORS.phone);
-  const href = el?.getAttribute('href') || el?.querySelector('a')?.getAttribute('href');
-  if (href?.startsWith('tel:')) return normalizePhoneDisplay(decodeURIComponent(href.slice(4)));
-  return normalizePhoneDisplay(el?.textContent || undefined);
-}
-
-function extractPlusCode(): string | undefined {
-  const el = document.querySelector<HTMLElement>(SELECTORS.plusCode);
-  const text = cleanExtractedText(el?.textContent || el?.getAttribute('aria-label') || '');
-  if (text) {
-    const match = /\b[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,5}\b/i.exec(text);
-    if (match) return match[0].toUpperCase();
-  }
-
-  // Fallback 1: Query any button/span with plus code aria-label or data-item-id
-  const candidates = document.querySelectorAll<HTMLElement>('button[data-item-id*="oloc"], button[aria-label*="code" i], button[aria-label*="代码"], span[class*="plusCode"]');
-  for (const c of Array.from(candidates)) {
-    const candText = cleanExtractedText(c.getAttribute('aria-label') || c.textContent || '');
-    const match = /\b[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,5}\b/i.exec(candText);
-    if (match) return match[0].toUpperCase();
-  }
-
-  // Fallback 2: Check address element
-  const addrEl = document.querySelector<HTMLElement>(SELECTORS.address);
-  if (addrEl?.textContent) {
-    const addrMatch = /\b[2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,5}\b/i.exec(addrEl.textContent);
-    if (addrMatch) return addrMatch[0].toUpperCase();
-  }
-
-  return undefined;
-}
-
-function extractMenuLink(): string | undefined {
-  const anchor = document.querySelector<HTMLAnchorElement>(SELECTORS.menuLink);
-  return anchor?.href || undefined;
-}
-
-const RESERVE_URL_HINT = /(reserve|booking|tablecheck|sevenrooms|opentable|quandoo|eatigo|tabelog.*reserve)/i;
-
-function extractReservation(): { url?: string; available: boolean } {
-  const nodes = document.querySelectorAll<HTMLElement>(SELECTORS.reserveAction);
-  for (const node of Array.from(nodes).slice(0, 10)) {
-    const anchor = node instanceof HTMLAnchorElement ? node : node.querySelector<HTMLAnchorElement>('a[href]');
-    if (anchor?.href && RESERVE_URL_HINT.test(anchor.href)) {
-      return { url: anchor.href, available: true };
-    }
-  }
-  const visibleReserve = [...document.querySelectorAll<HTMLElement>('[aria-label]')]
-    .filter((el) => /reserve|book a table|预订|订座/i.test(el.getAttribute('aria-label') || ''))
-    .slice(0, 5);
-  if (visibleReserve.length > 0) return { available: true };
-  return { available: false };
-}
-
-function extractReviewTopics(): string[] {
-  const topics: string[] = [];
-  const seen = new Set<string>();
-  for (const chip of Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.reviewTopicChips)).slice(0, 60)) {
-    const label = cleanExtractedText(chip.getAttribute('aria-label') || chip.textContent || '');
-    const m = /^(.{1,24}?)\s*[-–]\s*(\d{1,5})$|^(.{1,24}?)\s+(\d{1,5})\s*(?:条评论|reviews?)$/i.exec(label);
-    const topic = m ? (m[1] || m[3]) : '';
-    if (!topic || topic.length < 2) continue;
-    const key = topic.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      topics.push(topic);
-    }
-    if (topics.length >= 5) break;
-  }
-  return topics;
-}
-
-interface AppStateSignals {
-  placeId?: string;
-  intlPhone?: string;
-  plusCode?: string;
-  types?: string[];
-}
-
-let appStateSignals: AppStateSignals | null = null;
-let lastBridgeUrl = '';
-
-/** Reads Google's APP_INITIALIZATION_STATE in the page world via a bridge. */
-function injectAppStateBridge(): void {
-  const currentUrl = window.location.href;
-  if (currentUrl !== lastBridgeUrl) {
-    appStateSignals = null;
-    lastBridgeUrl = currentUrl;
-  }
-  try {
-    const script = document.createElement('script');
-    script.textContent = `(() => {
-      const out = {};
-      try {
-        let nodes = [window.APP_INITIALIZATION_STATE];
-        let scanned = 0;
-        while (nodes.length && scanned < 6000) {
-          const cur = nodes.shift(); scanned++;
-          if (typeof cur === 'string') {
-            if (/^ChIJ[A-Za-z0-9_-]{8,}$/.test(cur) && !out.placeId) out.placeId = cur;
-            else if (/^\\+[0-9][0-9 ()-]{7,}$/.test(cur) && !out.intlPhone) out.intlPhone = cur;
-            else if (/^[A-Z0-9]{4}\\+[A-Z0-9]{2,5}/.test(cur) && !out.plusCode) out.plusCode = cur.split(/[,; ]/)[0];
-            continue;
-          }
-          if (Array.isArray(cur)) {
-            for (const child of cur) { if (nodes.length < 4000) nodes.push(child); }
-          }
-        }
-        const typesBlob = JSON.stringify(window.APP_INITIALIZATION_STATE || '').match(/"(restaurant|lodging|hotel|hostel|bed_and_breakfast|guest_house|motel|campground|cafe|coffee_shop|bakery|bar|pub|meal_takeaway|meal_delivery|food_court|tourist_attraction|museum|art_gallery|park|national_park|historical_landmark|historical_place|scenic_viewpoint|spa|massage|gym|fitness_center|amusement_park|water_park|aquarium|zoo|shopping_mall|department_store|supermarket|grocery_or_supermarket|convenience_store|transit_station|subway_station|train_station|bus_station|airport|ferry_terminal|store|night_club)"/g);
-        if (typesBlob) out.types = [...new Set(typesBlob.map(t => t.replace(/"/g, '')))].slice(0, 12);
-      } catch {}
-      window.dispatchEvent(new CustomEvent('ownly-app-state', { detail: out }));
-    })();`;
-    document.documentElement.appendChild(script);
-    script.remove();
-  } catch {}
-}
-
-window.addEventListener('ownly-app-state' as keyof WindowEventMap, ((event: CustomEvent<AppStateSignals>) => {
-  if (event.detail && typeof event.detail === 'object') {
-    appStateSignals = event.detail;
-  }
-}) as EventListener);
-
-/** Public wrapper so the side panel can enrich the place it already holds. */
-export async function enrichPlaceFromHtml(
-  place: CurrentResearchPlace,
-  options?: { soft?: boolean },
-  overrideCurrency?: string,
-  hintCurrency?: string,
-): Promise<CurrentResearchPlace> {
-  return enrichFromPlaceHtml(place, options, overrideCurrency, hintCurrency);
-}
-
 const ENRICH_CACHE_TTL_MS = 5 * 60 * 1000;
 const ENRICH_CACHE_MAX = 20;
 const enrichCache = new Map<string, { at: number; place: CurrentResearchPlace }>();
 
-/** Fills only the fields a cache hit can provide without re-fetching the page. */
 function applyEnriched(target: CurrentResearchPlace, enriched: CurrentResearchPlace): CurrentResearchPlace {
   return {
     ...target,
@@ -443,19 +64,9 @@ function applyEnriched(target: CurrentResearchPlace, enriched: CurrentResearchPl
   };
 }
 
-function collectAppStateSignals(): AppStateSignals | null {
-  injectAppStateBridge();
-  return appStateSignals;
-}
-
 const TAXONOMY_TYPES = /(restaurant|lodging|hotel|hostel|bed_and_breakfast|guest_house|motel|campground|cafe|coffee_shop|bakery|bar|pub|meal_takeaway|meal_delivery|food_court|tourist_attraction|museum|art_gallery|park|national_park|historical_landmark|historical_place|scenic_viewpoint|spa|massage|gym|fitness_center|amusement_park|water_park|aquarium|zoo|shopping_mall|department_store|supermarket|grocery_or_supermarket|convenience_store|transit_station|subway_station|train_station|bus_station|airport|ferry_terminal|store|night_club)/g;
 
-/**
- * Same-origin fetch of the place page HTML: the server-rendered blob embeds a
- * complete APP_INITIALIZATION_STATE (ChIJ id, phone, plus code, taxonomy) that
- * is far more robust than CSS classes. Fills only missing fields.
- */
-async function enrichFromPlaceHtml(
+export async function enrichFromPlaceHtml(
   place: CurrentResearchPlace,
   options?: { soft?: boolean },
   overrideCurrency?: string,
@@ -466,10 +77,10 @@ async function enrichFromPlaceHtml(
   if (cached && Date.now() - cached.at < ENRICH_CACHE_TTL_MS) {
     return applyEnriched(place, cached.place);
   }
-  // Soft refreshes (price retries, tab refocus) skip the multi-MB re-fetch
-  // unless a critical identity field is still missing.
+
   const missingCritical = !place.sourcePlaceId || !place.phone;
   if (options?.soft && !missingCritical) return place;
+
   try {
     const res = await fetch(window.location.href, { credentials: 'include' });
     if (!res.ok) return place;
@@ -510,7 +121,6 @@ async function enrichFromPlaceHtml(
       if (found.size > 0) place.types = [...found];
     }
     if (!place.priceLevel) {
-      // Google Hotels embeds price strings near known keys in the state blob
       const pricePatterns = [
         /"(?:displayPrice|priceString|ratePerNight|startingPrice)":\s*"([^"]{2,30})"/,
         /"(?:priceText|nightlyPrice)":\s*"([^"]{2,30})"/,
@@ -522,7 +132,6 @@ async function enrichFromPlaceHtml(
           if (isPlausiblePriceText(candidate)) { place.priceLevel = candidate; break; }
         }
       }
-      // Fallback: scan for currency+amount near "hotel" or "rate" context
       if (!place.priceLevel) {
         const ctxIdx = html.search(/(?:"hotelRates"|"ratePlan"|"pricingForStay")/i);
         if (ctxIdx >= 0) {
@@ -532,7 +141,6 @@ async function enrichFromPlaceHtml(
         }
       }
     }
-    // If still no price and we have 0x, try structured preview (most reliable for hotels like The Neuf)
     if (!place.priceLevel && place.sourcePlaceId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(place.sourcePlaceId)) {
       try {
         const previewUrl = googleMapsPreviewPlaceUrl(place.sourcePlaceId, window.location.origin);
@@ -551,7 +159,6 @@ async function enrichFromPlaceHtml(
         }
       } catch {}
     }
-    // Ensure detectedCurrency follows price when price now exists
     if (place.priceLevel && (!place.detectedCurrency || overrideCurrency)) {
       const cur = detectPageCurrency({
         url: place.sourceUrl,
@@ -563,7 +170,6 @@ async function enrichFromPlaceHtml(
       if (cur) place.detectedCurrency = cur;
     }
   } catch {
-    // enrichment is best-effort; DOM extraction already provided the basics
     return place;
   }
   enrichCache.set(cacheKey, { at: Date.now(), place });
@@ -574,35 +180,78 @@ async function enrichFromPlaceHtml(
   return place;
 }
 
-export function detectCurrencyFromPage(
-  sourceUrl: string,
-  priceText?: string,
-  hintCurrency?: string,
+export async function enrichPlaceFromHtml(
+  place: CurrentResearchPlace,
+  options?: { soft?: boolean },
   overrideCurrency?: string,
-): string | undefined {
-  const result = detectPageCurrency({
-    url: sourceUrl,
-    priceText,
-    hintCurrency,
-    overrideCurrency,
-    doc: typeof document !== 'undefined' ? document : undefined,
-  });
-  return result.currency;
+  hintCurrency?: string,
+): Promise<CurrentResearchPlace> {
+  return enrichFromPlaceHtml(place, options, overrideCurrency, hintCurrency);
 }
 
-export interface DetectedSavedList {
-  listName: string;
-  listUrl: string;
-  detectedCurrency?: string;
-  places: CurrentResearchPlace[];
-  truncated?: boolean;
+function isGenericNavigationTitleLocal(text: string): boolean {
+  const norm = text.trim().toLowerCase();
+  if (/^(google|google maps|google 地图|google travel|google hotels|google flights|directions|路线|保存|已保存|saved|share|分享|搜索|search|返回|back|菜单|menu|overview|概览|reviews|评价|photos|照片|about|关于)$/i.test(norm)) {
+    return true;
+  }
+  if (/^google\s*(travel|hotels?|flights?)(\s*\d+\s*(results?|处(搜索)?结果))?$/i.test(norm)) {
+    return true;
+  }
+  if (/^\d+\s*(results?|处(搜索)?结果)$/i.test(norm)) {
+    return true;
+  }
+  if (/^(search\s*results?|搜索结果|all\s*filters|全部筛选|sort\s*by|排序方式)$/i.test(norm)) {
+    return true;
+  }
+  return false;
+}
+
+function scanAllSavedListsOnPage(): SavedListCardSummary[] {
+  const listsMap = new Map<string, SavedListCardSummary>();
+
+  const pushList = (listId: string | undefined, rawTitle: string, count: number | undefined, url: string) => {
+    const title = cleanExtractedText(rawTitle);
+    if (!title || title.length < 2 || title.length > 80) return;
+    if (isGenericNavigationTitleLocal(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) return;
+    const key = (listId || title).toLowerCase();
+    if (!listsMap.has(key)) {
+      listsMap.set(key, { listId, listName: title, count, url });
+    }
+  };
+
+  const countOf = (scope: HTMLElement | null): number | undefined => {
+    const m = /(\d+)\s*(places|个地点|项|items)/i.exec(scope?.textContent || '');
+    return m ? parseInt(m[1], 10) : undefined;
+  };
+
+  const listAnchors = document.querySelectorAll<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!1s"], a[href*="!2s"], a[href*="?list="]');
+  for (const anchor of Array.from(listAnchors)) {
+    const href = anchor.href || '';
+    const listId = extractGoogleMapsSavedListId(href);
+    if (!listId) continue;
+
+    const card = anchor.closest<HTMLElement>('div[role="listitem"], div.m6QErb, div.Nv2PK, li') ?? anchor;
+    const titleEl = card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, [role="heading"], h2, h3');
+    const title = titleEl?.textContent?.trim() || anchor.getAttribute('aria-label')?.trim() || '';
+    pushList(listId, title, countOf(card), href || window.location.href);
+  }
+
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-list-id]'))) {
+    const dataId = el.getAttribute('data-list-id') || '';
+    if (!/^[A-Za-z0-9_-]{8,}$/.test(dataId)) continue;
+    const titleEl = el.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, [role="heading"], h2, h3');
+    const title = titleEl?.textContent?.trim() || el.getAttribute('aria-label')?.trim() || '';
+    pushList(dataId, title, countOf(el), window.location.href);
+  }
+
+  return Array.from(listsMap.values());
 }
 
 const FEED_SCROLL_MAX_ROUNDS = 40;
 const FEED_SCROLL_STABLE_LIMIT = 4;
 
 async function autoScrollFeed(): Promise<void> {
-  const feed = document.querySelector<HTMLElement>(SELECTORS.feed);
+  const feed = document.querySelector<HTMLElement>('div[role="feed"], div.m6QErb[aria-label]');
   if (!feed) return;
   let scroller: HTMLElement | null = feed;
   while (scroller && scroller.scrollHeight <= scroller.clientHeight) {
@@ -619,300 +268,30 @@ async function autoScrollFeed(): Promise<void> {
   }
 }
 
-const MAX_SCAVENGED_PLACES = 600;
-const scannedListPlaces = new Map<string, CurrentResearchPlace>();
-let lastScannedPageUrl = '';
-
-function getCanonicalPageKey(url: string): string {
-  try {
-    const u = new URL(url);
-    const path = u.pathname.replace(/@[-0-9.,]+z\/?/, '');
-    return `${u.origin}${path}${u.search}`;
-  } catch {
-    return url;
+function detectVisibleGoogleMapsListName(places: CurrentResearchPlace[]): string | undefined {
+  if (places.length < 2) return undefined;
+  const placeTitles = new Set(places.map((place) => cleanExtractedText(place.title).toLocaleLowerCase()).filter(Boolean));
+  const candidates: string[] = [];
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('div[role="main"] h1, h1.fontHeadlineLarge, h1')).slice(0, 8)) {
+    candidates.push(el.textContent || el.getAttribute('aria-label') || '');
   }
-}
-
-function pruneScavengedCache(pageUrl: string): void {
-  const canonical = getCanonicalPageKey(pageUrl);
-  if (canonical !== lastScannedPageUrl) {
-    scannedListPlaces.clear();
-    lastScannedPageUrl = canonical;
-    return;
+  candidates.push(document.title.replace(/\s*[-–—]\s*Google Maps.*$/i, ''));
+  for (const raw of candidates) {
+    const title = cleanExtractedText(raw);
+    if (!title || title.length > 80 || isGenericNavigationTitleLocal(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) continue;
+    if (placeTitles.has(title.toLocaleLowerCase())) continue;
+    return title;
   }
-  if (scannedListPlaces.size <= MAX_SCAVENGED_PLACES) return;
-  const dropCount = Math.floor(MAX_SCAVENGED_PLACES / 3);
-  for (const key of [...scannedListPlaces.keys()].slice(0, dropCount)) {
-    scannedListPlaces.delete(key);
-  }
-}
-
-// Interpretation moved to maps/saved-list-parser.ts — content.ts only extracts raw DOM strings
-function cardToRaw(title: string, href: string, card: HTMLElement | null): import('./maps/saved-list-parser').RawDomCard {
-  const ratingText =
-    card?.querySelector<HTMLElement>(SELECTORS.cardRating)?.textContent?.trim() ||
-    (card?.querySelector<HTMLElement>(SELECTORS.ratingAria)?.getAttribute('aria-label') ?? undefined);
-  const infoEls = card ? Array.from(card.querySelectorAll<HTMLElement>(SELECTORS.cardInfo)) : [];
-  const infoTexts = infoEls.map((e) => e.textContent?.trim() || '').filter(Boolean);
-  if (infoTexts.length === 0 && card?.textContent) infoTexts.push(card.textContent);
-  const hotelBadge = card?.querySelector<HTMLElement>('span.fontHeadlineSmall, div.fontHeadlineSmall');
-  if (hotelBadge?.textContent) infoTexts.push(hotelBadge.textContent);
-  const addressRaw = card?.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
-  const noteRaw = card?.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
-  return { rawTitle: title, href: href || '', ratingText, infoTexts, addressRaw, noteRaw };
-}
-
-const PLACE_LINK = 'a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]';
-
-function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
-  pruneScavengedCache(window.location.href);
-  const start = Date.now();
-  const rawCards: import('./maps/saved-list-parser').RawDomCard[] = [];
-
-  // Strategy 1: place link anchors — DOM access only
-  const linkAnchors = document.querySelectorAll<HTMLAnchorElement>(SELECTORS.feedAnchors);
-  for (const anchor of Array.from(linkAnchors)) {
-    let title = anchor.getAttribute('aria-label') || '';
-    const href = anchor.href || '';
-    if (!title && href) title = titleFromUrl(href);
-    const card = anchor.closest<HTMLElement>(SELECTORS.cardContainers) || anchor.parentElement;
-    rawCards.push(cardToRaw(title, href, card ?? null));
-  }
-
-  // Strategy 2: distinct item card containers
-  const cardElements = document.querySelectorAll<HTMLElement>(`${SELECTORS.cardContainers}, div[role="feed"] > div`);
-  for (const card of Array.from(cardElements)) {
-    const headEl = card.querySelector<HTMLElement>(SELECTORS.cardTitle);
-    const title = headEl?.textContent?.trim() || card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[aria-label]')?.getAttribute('aria-label') || '';
-    const linkEl = card.querySelector<HTMLAnchorElement>(PLACE_LINK);
-    rawCards.push(cardToRaw(title, linkEl?.href || '', card));
-  }
-
-  // Strategy 3: feed/pane rows
-  const feedItems = document.querySelectorAll<HTMLElement>('div[role="feed"] > div, div[role="main"] div[jsaction], div.m6QErb > div[jsaction], div.m6QErb > div');
-  for (const card of Array.from(feedItems)) {
-    const titleEl = card.querySelector<HTMLElement>('h1, h2, h3, .fontHeadlineSmall, .qBF1Pd, .OSrXXb, [role="heading"], div[class*="headline"], span[class*="headline"]');
-    const title = titleEl?.textContent?.trim() || card.querySelector('[aria-label]')?.getAttribute('aria-label') || '';
-    const linkEl = card.querySelector<HTMLAnchorElement>(PLACE_LINK);
-    rawCards.push(cardToRaw(title, linkEl?.href || '', card));
-  }
-
-  // Interpretation delegated to parser — single batch for coverage + failed aggregation
-  const batch: SavedListResult = interpretDomBatch(rawCards);
-  for (const cand of batch.places) {
-    const key = cand.featureId || cand.url || `unresolved:${cand.title.toLowerCase()}`;
-    if (scannedListPlaces.has(key)) continue;
-    scannedListPlaces.set(key, {
-      title: cand.title,
-      sourceUrl: cand.url,
-      sourceProvider: 'google_maps',
-      kind: (cand.kind as PlannerPlaceKind) || inferPlaceKind((cand.category || '') + ' ' + cand.title + ' ' + (cand.address || '')),
-      rating: cand.rating,
-      reviewCount: cand.reviewCount,
-      category: cand.category,
-      priceLevel: cand.priceLevel,
-      address: cand.address,
-      detectedCurrency: cand.detectedCurrency,
-      summary: cand.summary,
-      userNote: cand.userNote,
-      coordinates: cand.coordinates ?? extractPlaceCoordinates(cand.url) ?? undefined,
-      sourcePlaceId: cand.sourcePlaceId,
-    });
-  }
-
-  // Debug snapshot — quantifies candidate extraction quality over time
-  try {
-    const snap = createSnapshot({ url: window.location.href, parser: 'dom-scan', result: batch, durationMs: Date.now() - start });
-    persistSnapshot(snap);
-  } catch {}
-
-  return Array.from(scannedListPlaces.values());
-}
-
-function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
-  const sourceUrl = window.location.href;
-  const detailHeading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
-    ?? document.querySelector<HTMLElement>('main h1')
-    ?? document.querySelector<HTMLElement>('h1');
-  const hasVisibleDetailFacts = Boolean(
-    document.querySelector(SELECTORS.address)
-    || document.querySelector(SELECTORS.rating)
-    || document.querySelector(SELECTORS.category)
-    || document.querySelector(SELECTORS.phone)
-    || document.querySelector(SELECTORS.website),
-  );
-  // Google Maps is a SPA: a real place details pane can be open while the URL
-  // remains on /maps/@... or a search route. DOM detail facts are therefore
-  // authoritative; URL shape is only another positive signal.
-  const hasVisiblePlaceDetails = Boolean(cleanExtractedText(detailHeading?.textContent || '') && hasVisibleDetailFacts);
-  const isDedicatedPlacePage = /\/maps\/place\/[^/?#]+/i.test(window.location.pathname)
-    || /data=.*!1s0x/i.test(window.location.href)
-    || /cid=\d+/i.test(window.location.search)
-    || hasVisiblePlaceDetails;
-
-  // If there are multiple places in a list and no place details pane is open, don't falsely recognize list header
-  if (!isDedicatedPlacePage && !hasVisiblePlaceDetails) {
-    const listPlaces = scanAllGoogleMapsPlaces();
-    if (listPlaces.length > 1) {
-      return null;
-    }
-  }
-  
-  // A saved-list carrier is not a place by itself. A visible details pane above overrides this.
-  if (!isDedicatedPlacePage && extractGoogleMapsSavedListId(sourceUrl)) {
-    return null;
-  }
-
-  const jsonLd = PLACE_PARSER.extractJsonLd(document);
-  const heading = detailHeading;
-  const title = heading?.textContent?.trim() || jsonLd.title || titleFromUrl(sourceUrl);
-  if (!title && isDedicatedPlacePage) {
-    driftCheck('placeHeading', null);
-  }
-  if (!title || (!/\/maps/i.test(window.location.pathname) && !window.location.hostname.includes('maps.google') && !window.location.href.includes('/maps'))) return null;
-
-  const priceLevel = extractPrice() || jsonLd.priceLevel;
-  const address = extractAddress() || jsonLd.address;
-  const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel, hintCurrency, overrideCurrency);
-  const userNote = extractUserNote();
-  const summary = extractSummary();
-  const openHours = extractOpenHours();
-  const openStatus = extractOpenStatus();
-  const stateSignals = collectAppStateSignals();
-  const reservation = extractReservation();
-  const rating = extractRating() || jsonLd.rating;
-  const reviewCount = extractReviewCount() || jsonLd.reviewCount;
-  const category = extractCategory() || jsonLd.category;
-  const kind = inferPlaceKind((category || '') + ' ' + title + ' ' + (address || '') + ' ' + ((stateSignals?.types || []).join(' ')));
-
-  return {
-    title,
-    sourceUrl,
-    sourceProvider: 'google_maps',
-    sourcePlaceId: extractFeatureIdFromUrl(sourceUrl) ?? stateSignals?.placeId,
-    kind,
-    rating,
-    reviewCount,
-    category,
-    priceLevel,
-    detectedCurrency,
-    address,
-    summary,
-    userNote,
-    openStatus,
-    openHours,
-    website: extractWebsite() || jsonLd.website,
-    coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
-    tierNote: extractHotelTier(),
-    phone: extractPhone() ?? jsonLd.phone ?? stateSignals?.intlPhone,
-    plusCode: extractPlusCode() ?? stateSignals?.plusCode,
-    menuUrl: extractMenuLink(),
-    reservationUrl: reservation.url,
-    reviewTopics: (() => {
-      const topics = extractReviewTopics();
-      return topics.length > 0 ? topics : undefined;
-    })(),
-    types: stateSignals?.types,
-    hotelFacts: extractHotelPropertyFacts(summary, typeof document !== 'undefined' ? document : null),
-  };
-}
-
-function extractGoogleMapsListId(): string | null {
-  const fromUrl = extractGoogleMapsSavedListId(window.location.href);
-  if (fromUrl) return fromUrl;
-
-  const links = document.querySelectorAll<HTMLLinkElement | HTMLAnchorElement>(
-    'link[href*="getlist"], link[href*="entitylist"], a[href*="!1s"], a[href*="!2s"], a[href*="/placelists/list/"], a[href*="?list="]'
-  );
-  for (const link of Array.from(links)) {
-    const id = extractGoogleMapsSavedListId(link.href || '');
-    if (id) return id;
-  }
-
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-list-id]'))) {
-    const id = (el.getAttribute('data-list-id') || '').trim();
-    if (/^[A-Za-z0-9_-]{8,}$/.test(id)) return id;
-  }
-  return null;
-}
-
-let cachedEntityList: DetectedSavedList | null = null;
-let lastScannedListId: string | null = null;
-
-async function fetchGoogleMapsEntityList(listId: string, overrideCurrency?: string): Promise<DetectedSavedList | null> {
-  const started = Date.now();
-  try {
-    const authuserMatch = window.location.href.match(/authuser=(\d+)/);
-    const authuser = authuserMatch ? authuserMatch[1] : '0';
-    const fetchUrl = `/maps/preview/entitylist/getlist?authuser=${authuser}&hl=zh-CN&pb=!1m4!1s${listId}!2e1!3m1!1e1!2e2!3e2!4i500!16b1`;
-    const res = await fetch(fetchUrl);
-    if (res.ok) {
-      const raw = await res.text();
-      const cleanJson = raw.replace(/^\)\]\}'\s*/, '');
-      const data = JSON.parse(cleanJson);
-      const rawListName = data[0]?.[4] || 'Google Maps 收藏列表';
-      const listName = cleanExtractedText(rawListName);
-      const rawItems = data[0]?.[8];
-      if (Array.isArray(rawItems)) {
-        // Delegated interpretation — content.ts only fetched, parser owns decoding
-        const parsed: SavedListResult = buildFromEntityList({
-          listName,
-          listUrl: window.location.href,
-          rawItems,
-          origin: window.location.origin,
-          overrideCurrency,
-        });
-        const places: CurrentResearchPlace[] = parsed.places.map((cand) => ({
-          title: cand.title,
-          sourceUrl: cand.url,
-          sourceProvider: 'google_maps',
-          kind: (cand.kind as PlannerPlaceKind) || inferPlaceKind((cand.category || '') + ' ' + cand.title + ' ' + (cand.address || '')),
-          address: cand.address,
-          userNote: cand.userNote,
-          summary: cand.summary,
-          rating: cand.rating,
-          reviewCount: cand.reviewCount,
-          category: cand.category,
-          priceLevel: cand.priceLevel,
-          detectedCurrency: cand.detectedCurrency,
-          types: cand.types,
-          coordinates: cand.coordinates,
-          sourcePlaceId: cand.sourcePlaceId,
-        }));
-        if (places.length > 0) {
-          try {
-            const snap = createSnapshot({ url: window.location.href, parser: 'entitylist', result: parsed, durationMs: Date.now() - started });
-            persistSnapshot(snap);
-          } catch {}
-          return {
-            listName,
-            listUrl: window.location.href,
-            detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, undefined, overrideCurrency),
-            places,
-            truncated: rawItems.length >= 500,
-          };
-        }
-        // Even if no places, keep snapshot for failure diagnosis
-        try {
-          const snap = createSnapshot({ url: window.location.href, parser: 'entitylist', result: parsed, durationMs: Date.now() - started });
-          persistSnapshot(snap);
-        } catch {}
-      }
-    }
-  } catch (e) {
-    console.warn('Entitylist direct fetch failed:', e);
-  }
-  return null;
+  return undefined;
 }
 
 const SAVED_LIST_DETAIL_CONCURRENCY = 4;
 const SAVED_LIST_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
-const savedListDetailCache = new Map<string, { at: number; facts: GoogleMapsResearchFacts }>();
+const savedListDetailCache = new Map<string, { at: number; facts: import('./google-maps-research').GoogleMapsResearchFacts }>();
 
-async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<GoogleMapsResearchFacts | null> {
+async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<import('./google-maps-research').GoogleMapsResearchFacts | null> {
   const key = place.sourcePlaceId || extractFeatureIdFromUrl(place.sourceUrl);
   if (!key || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(key.trim())) {
-    // B→A: try place/@lat,lng first (302 to 0x), then viewport search, then api=1
     const candidates: string[] = [];
     if (place.sourceUrl?.includes('/maps/search/')) candidates.push(place.sourceUrl);
     const cleanTitle = place.title?.trim() || '';
@@ -923,74 +302,64 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
     }
     candidates.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle + addrSuffix)}&hl=zh-CN`);
     if (!place.coordinates) candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitle)}?hl=zh-CN`);
-    let lastFacts: GoogleMapsResearchFacts | null = null;
+    let lastFacts: import('./google-maps-research').GoogleMapsResearchFacts | null = null;
     for (const searchUrl of candidates) {
       logger.fetch('MapsTabDetail', `Resolving search-query pin for "${place.title}"`, { searchUrl });
       const controller = new AbortController();
       const timer = window.setTimeout(() => controller.abort(), 6000);
       try {
         const res = await fetch(searchUrl, { credentials: 'include', signal: controller.signal });
-      if (res.ok) {
-        // DEBUG B→A: log final redirected URL — it often already contains 0x after Google redirect
-        const finalUrl = res.url || searchUrl;
-        const urlPlaceId = extractFeatureIdFromUrl(finalUrl) || (/ChIJ[A-Za-z0-9_-]{8,}/.exec(finalUrl)?.[0]);
-        logger.debug('MapsTabDetail', `Search fetch res.url for "${place.title}"`, { searchUrl, finalUrl: finalUrl.slice(0, 180), urlPlaceId: urlPlaceId || null, has0xInUrl: /0x/.test(finalUrl), hasChIJInUrl: /ChIJ/.test(finalUrl) });
-        const html = (await res.text()).slice(0, 3_000_000);
-        let facts = extractGoogleMapsResearchFromHtml(html);
-        // If html scan missed but URL already has id, prefer URL — this is the B→A conversion
-        if (!facts.sourcePlaceId && urlPlaceId) facts.sourcePlaceId = urlPlaceId;
-        logger.debug('MapsTabDetail', `Search HTML snippet for "${place.title}"`, { htmlHas0x: /0x[0-9a-f]+:0x[0-9a-f]+/i.test(html), htmlHasChIJ: /ChIJ/.test(html), htmlLen: html.length, htmlHead: html.slice(0, 500).replace(/\s+/g, ' ').slice(0, 200) });
-        const placeId = facts.sourcePlaceId;
-        if (placeId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(placeId.trim())) {
-          place.sourcePlaceId = placeId;
-          const previewUrl = googleMapsPreviewPlaceUrl(placeId, window.location.origin);
-          if (previewUrl) {
-            try {
-              const prevRes = await fetch(previewUrl, { credentials: 'include' });
-              if (prevRes.ok) {
-                const rawPrev = await prevRes.text();
-                const cleanPrev = rawPrev.replace(/^\)\]\}'\s*/, '');
-                const previewFacts = extractGoogleMapsPreviewFacts(JSON.parse(cleanPrev));
-                facts = { ...facts, ...previewFacts, sourcePlaceId: placeId };
-              }
-            } catch {}
+        if (res.ok) {
+          const finalUrl = res.url || searchUrl;
+          const urlPlaceId = extractFeatureIdFromUrl(finalUrl) || (/ChIJ[A-Za-z0-9_-]{8,}/.exec(finalUrl)?.[0]);
+          const html = (await res.text()).slice(0, 3_000_000);
+          let facts = extractGoogleMapsResearchFromHtml(html);
+          if (!facts.sourcePlaceId && urlPlaceId) facts.sourcePlaceId = urlPlaceId;
+          const placeId = facts.sourcePlaceId;
+          if (placeId && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(placeId.trim())) {
+            place.sourcePlaceId = placeId;
+            const previewUrl = googleMapsPreviewPlaceUrl(placeId, window.location.origin);
+            if (previewUrl) {
+              try {
+                const prevRes = await fetch(previewUrl, { credentials: 'include' });
+                if (prevRes.ok) {
+                  const rawPrev = await prevRes.text();
+                  const cleanPrev = rawPrev.replace(/^\)\]\}'\s*/, '');
+                  const previewFacts = extractGoogleMapsPreviewFacts(JSON.parse(cleanPrev));
+                  facts = { ...facts, ...previewFacts, sourcePlaceId: placeId };
+                }
+              } catch {}
+            }
+            savedListDetailCache.set(placeId, { at: Date.now(), facts });
+          } else if (placeId && /^ChIJ[A-Za-z0-9_-]{8,}/.test(placeId.trim())) {
+            place.sourcePlaceId = placeId;
+            const detailUrl = googleMapsDetailUrlFromSourceId(placeId, place.title, window.location.origin);
+            if (detailUrl) {
+              try {
+                const dRes = await fetch(detailUrl, { credentials: 'include' });
+                if (dRes.ok) {
+                  const dHtml = (await dRes.text()).slice(0, 3_000_000);
+                  const dFacts = extractGoogleMapsResearchFromHtml(dHtml);
+                  facts = { ...dFacts, ...facts, sourcePlaceId: placeId } as typeof facts;
+                  if ((dFacts as unknown as { rating?: number }).rating !== undefined) facts.rating = (dFacts as unknown as { rating?: number }).rating;
+                }
+              } catch {}
+            }
+            savedListDetailCache.set(placeId, { at: Date.now(), facts });
           }
-          savedListDetailCache.set(placeId, { at: Date.now(), facts });
-        } else if (placeId && /^ChIJ[A-Za-z0-9_-]{8,}/.test(placeId.trim())) {
-          // B→A for ChIJ: fetch via detail URL (cid/search with query_place_id) then parse
-          place.sourcePlaceId = placeId;
-          const detailUrl = googleMapsDetailUrlFromSourceId(placeId, place.title, window.location.origin);
-          if (detailUrl) {
-            try {
-              const dRes = await fetch(detailUrl, { credentials: 'include' });
-              if (dRes.ok) {
-                const dHtml = (await dRes.text()).slice(0, 3_000_000);
-                const dFacts = extractGoogleMapsResearchFromHtml(dHtml);
-                // Merge but keep ChIJ as canonical id
-                facts = { ...dFacts, ...facts, sourcePlaceId: placeId } as typeof facts;
-                if ((dFacts as unknown as { rating?: number }).rating !== undefined) facts.rating = (dFacts as unknown as { rating?: number }).rating;
-              }
-            } catch {}
+          if (facts.sourcePlaceId || facts.rating !== undefined || facts.address || facts.coordinates) {
+            return facts;
+          } else {
+            lastFacts = facts;
           }
-          savedListDetailCache.set(placeId, { at: Date.now(), facts });
         }
-        // Only return if we got meaningful facts; otherwise try next candidate (B→A place/@lat,lng may have succeeded where api=1 failed)
-        if (facts.sourcePlaceId || facts.rating !== undefined || facts.address || facts.coordinates) {
-          logger.parser('MapsTabDetail', `Resolved facts for query pin "${place.title}"`, facts);
-          return facts;
-        } else {
-          lastFacts = facts;
-          logger.debug('MapsTabDetail', `Empty facts for "${place.title}" on ${searchUrl}, trying next`, { hasPlaceId: Boolean(facts.sourcePlaceId) });
-        }
+      } catch (err) {
+        logger.warn('MapsTabDetail', `Search query resolution failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
+      } finally {
+        window.clearTimeout(timer);
       }
-    } catch (err) {
-      logger.warn('MapsTabDetail', `Search query resolution failed for "${place.title}"`, err instanceof Error ? err.message : String(err));
-    } finally {
-      window.clearTimeout(timer);
-    }
     }
     if (lastFacts && (lastFacts.sourcePlaceId || lastFacts.rating !== undefined)) {
-      logger.parser('MapsTabDetail', `Resolved facts for query pin "${place.title}" (last)`, lastFacts);
       return lastFacts;
     }
     return null;
@@ -1001,10 +370,8 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
     return { ...cached.facts, sourcePlaceId: key };
   }
 
-  // 1. Primary: Use fast structured /maps/preview/place endpoint for 0x... feature IDs
   const previewUrl = googleMapsPreviewPlaceUrl(key, window.location.origin);
   if (previewUrl) {
-    logger.fetch('MapsTabDetail', `Fetching preview for "${place.title}"`, { previewUrl, key });
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 6000);
     try {
@@ -1015,7 +382,6 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
         const data = JSON.parse(clean);
         const facts = extractGoogleMapsPreviewFacts(data);
         facts.sourcePlaceId = key;
-        logger.parser('MapsTabDetail', `Preview facts for "${place.title}"`, facts);
         savedListDetailCache.set(key, { at: Date.now(), facts });
         return facts;
       }
@@ -1026,33 +392,16 @@ async function fetchSavedListDetail(place: CurrentResearchPlace): Promise<Google
     }
   }
 
-  // 2. Fallback: Detail URL HTML scraping
   const detailUrl = googleMapsDetailUrlFromSourceId(key, place.title, window.location.origin);
-  if (!detailUrl) {
-    logger.warn('MapsTabDetail', `Could not generate detail URL for "${place.title}" (key: ${key})`);
-    return null;
-  }
-  logger.fetch('MapsTabDetail', `Fetching HTML for "${place.title}"`, { detailUrl, key });
+  if (!detailUrl) return null;
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 5000);
   try {
     const res = await fetch(detailUrl, { credentials: 'include', signal: controller.signal });
-    if (!res.ok) {
-      logger.warn('MapsTabDetail', `HTTP ${res.status} fetching "${place.title}"`, { url: detailUrl });
-      return null;
-    }
+    if (!res.ok) return null;
     const html = (await res.text()).slice(0, 3_000_000);
     const facts = extractGoogleMapsResearchFromHtml(html);
     facts.sourcePlaceId = key;
-    logger.parser('MapsTabDetail', `Extracted facts for "${place.title}"`, {
-      htmlLength: html.length,
-      rating: facts.rating,
-      reviewCount: facts.reviewCount,
-      category: facts.category,
-      priceLevel: facts.priceLevel,
-      address: facts.address,
-      coordinates: facts.coordinates,
-    });
     savedListDetailCache.set(key, { at: Date.now(), facts });
     return facts;
   } catch (err) {
@@ -1149,628 +498,29 @@ async function enrichSavedListDetails(
   return { list: { ...list, places }, attempted, enriched, failed };
 }
 
-async function resolveGoogleMapsList(overrideCurrency?: string): Promise<DetectedSavedList | null> {
-  const listId = extractGoogleMapsListId();
-  if (listId && listId === lastScannedListId && cachedEntityList) {
-    return cachedEntityList;
-  }
-
-  if (listId) {
-    const entityList = await fetchGoogleMapsEntityList(listId, overrideCurrency);
-    if (entityList) {
-      cachedEntityList = entityList;
-      lastScannedListId = listId;
-      return cachedEntityList;
-    }
-  }
-
-  // DOM-scan list detection removed: entitylist API is the only reliable source.
-  // DOM scanning picks up UI chrome ("Compare prices", "Nearby", etc.) as fake places.
-  return null;
-}
-
-function detectGoogleMapsListPlaces(): CurrentResearchPlace[] {
-  return scanAllGoogleMapsPlaces();
-}
-
-function detectVisibleGoogleMapsListName(places: CurrentResearchPlace[]): string | undefined {
-  if (places.length < 2) return undefined;
-  const placeTitles = new Set(places.map((place) => cleanExtractedText(place.title).toLocaleLowerCase()).filter(Boolean));
-  const candidates: string[] = [];
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>('div[role="main"] h1, h1.fontHeadlineLarge, h1')).slice(0, 8)) {
-    candidates.push(el.textContent || el.getAttribute('aria-label') || '');
-  }
-  candidates.push(document.title.replace(/\s*[-–—]\s*Google Maps.*$/i, ''));
-  for (const raw of candidates) {
-    const title = cleanExtractedText(raw);
-    if (!title || title.length > 80 || isGenericNavigationTitleLocal(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) continue;
-    if (placeTitles.has(title.toLocaleLowerCase())) continue;
-    return title;
-  }
-  return undefined;
-}
-
-function extractTabelogPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
-  const sourceUrl = window.location.href;
-  const titleEl = document.querySelector<HTMLElement>('h2.display-name span, h1.rstinfo-table__name, h1');
-  const title = titleEl?.textContent?.trim();
-  if (!title) return null;
-
-  const ratingEl = document.querySelector<HTMLElement>('span.c-rating__val, b.c-rating__val');
-  const rating = ratingEl?.textContent ? parseFloat(ratingEl.textContent.trim()) : undefined;
-
-  const catEl = document.querySelector<HTMLElement>('span.rstinfo-table__badge, span.rstinfo-table__subject-text, div.rdhead-subinfo dl dd');
-  const category = catEl?.textContent?.trim();
-
-  const priceEl = document.querySelector<HTMLElement>('p.c-rating-v3__time span, span.c-rating-v3__val');
-  const rawPrice = priceEl?.textContent?.trim();
-  const priceLevel = rawPrice && isPlausiblePriceText(rawPrice) ? rawPrice : undefined;
-
-  const addrEl = document.querySelector<HTMLElement>('p.rstinfo-table__address, p.rdhead-subinfo__address');
-  const address = addrEl?.textContent?.trim();
-
-  return {
-    title,
-    sourceUrl,
-    sourceProvider: 'tabelog',
-    rating: Number.isFinite(rating) && rating ? rating : undefined,
-    category: category ? `Tabelog: ${category}` : 'Tabelog 美食',
-    priceLevel,
-    detectedCurrency: detectCurrencyFromPage(sourceUrl, priceLevel, hintCurrency, overrideCurrency) ?? 'JPY',
-    address,
-  };
-}
-
-function extractXiaohongshuPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
-  const sourceUrl = window.location.href;
-  const titleEl = document.querySelector<HTMLElement>('#detail-title, .title, meta[property="og:title"]');
-  const title = titleEl instanceof HTMLMetaElement ? titleEl.content : titleEl?.textContent?.trim();
-  if (!title) return null;
-
-  const descEl = document.querySelector<HTMLElement>('#detail-desc, .desc, .content');
-  const summary = descEl?.textContent?.trim().slice(0, 200);
-
-  const locEl = document.querySelector<HTMLElement>('.location-item, .geo, a[href*="/search_result?keyword="]');
-  const address = locEl?.textContent?.trim();
-
-  return {
-    title: title.slice(0, 50),
-    sourceUrl,
-    sourceProvider: 'xiaohongshu',
-    category: '小红书灵感',
-    detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined, hintCurrency, overrideCurrency) ?? 'CNY',
-    summary,
-    address,
-  };
-}
-
-function extractBookingPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
-  const sourceUrl = window.location.href;
-  const titleEl = document.querySelector<HTMLElement>('h2.d2fee87e0b, h2.pp-header__title, h1');
-  const title = titleEl?.textContent?.trim();
-  if (!title) return null;
-
-  const ratingEl = document.querySelector<HTMLElement>('div.a3b8729ab1, div.d10a0e9803');
-  const rating = ratingEl?.textContent ? parseFloat(ratingEl.textContent.trim()) : undefined;
-
-  const addrEl = document.querySelector<HTMLElement>('span.hp_address_subtitle');
-  const address = addrEl?.textContent?.trim();
-
-  return {
-    title,
-    sourceUrl,
-    sourceProvider: 'booking',
-    rating: Number.isFinite(rating) && rating ? Math.min(5, Math.round((rating / 2) * 10) / 10) : undefined,
-    category: 'Booking 住宿',
-    detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined, hintCurrency, overrideCurrency),
-    address,
-    hotelFacts: extractHotelPropertyFacts(undefined, typeof document !== 'undefined' ? document : null),
-  };
-}
-
-function parseGoogleTravelCard(
-  cardEl: HTMLElement,
-  overrideCurrency?: string,
-  hintCurrency?: string,
-): CurrentResearchPlace | null {
-  if (!cardEl) return null;
-
-  // 1. Entity Link & Source URL
-  const anchor = cardEl.querySelector<HTMLAnchorElement>(
-    'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"]'
-  ) || (cardEl.tagName === 'A' && (cardEl as HTMLAnchorElement).href.includes('/hotels/entity/') ? (cardEl as HTMLAnchorElement) : null);
-
-  const entityHref = anchor?.href || window.location.href;
-
-  // 2. Title Extraction
-  const titleEl = cardEl.querySelector<HTMLElement>(
-    'h2.BgYkof, h2[role="heading"], h3[role="heading"], div.BgYkof, div.k2879c, span.B4NdKc, div.fpNxPd, h1.Q2A6Id, a.kDe2bf'
-  );
-
-  const rawTitle = titleEl?.textContent?.trim() ||
-    anchor?.getAttribute('aria-label')?.trim() ||
-    cardEl.getAttribute('aria-label')?.trim() ||
-    anchor?.textContent?.trim() ||
-    '';
-
-  let title = cleanExtractedText(rawTitle);
-
-  // If title inside anchor has subheadings or multiple lines, take the first valid line
-  if (title.includes('\n')) {
-    title = title.split('\n').map((s) => s.trim()).filter(Boolean)[0] || title;
-  }
-
-  if (
-    !title ||
-    title.length < 2 ||
-    isFakePlaceLabel(title) ||
-    isGenericNavigationTitleLocal(title) ||
-    isJunkNavigationText(title)
-  ) {
-    return null;
-  }
-
-  // 3. Rating & Review Count
-  let rating: number | undefined;
-  let reviewCount: number | undefined;
-  const ratingEl = cardEl.querySelector<HTMLElement>(
-    'span.kJyTrb, span.MWDdpd, span.zvDXA, span[aria-label*="star" i], span[aria-label*="星" i]'
-  );
-  if (ratingEl) {
-    rating = PLACE_PARSER.parseRating(ratingEl.getAttribute('aria-label') || ratingEl.textContent);
-  }
-
-  const reviewEl = cardEl.querySelector<HTMLElement>(
-    'span.kJyTrb ~ span, span.wV9y8c, span.k5tQ5d, span.iP206b, span.w0f50b, div.TT9eId span:nth-of-type(2)'
-  );
-  if (reviewEl) {
-    reviewCount = PLACE_PARSER.parseReviewCount(reviewEl.getAttribute('aria-label') || reviewEl.textContent);
-  }
-
-  // 4. Category / Class
-  let category: string | undefined;
-  const classEl = cardEl.querySelector<HTMLElement>(
-    'div.Adn9Eb, span.CPm6me, span.k5tQ5d, div.k5tQ5d, span.I39tAc'
-  );
-  if (classEl?.textContent) {
-    const text = cleanExtractedText(classEl.textContent);
-    if (text && /(hotel|resort|inn|hostel|lodging|stay|酒店|旅馆|民宿|度假村|星级|star)/i.test(text)) {
-      category = text;
-    }
-  }
-  if (!category) {
-    category = 'Google Travel 住宿';
-  }
-
-  // 5. Price & Currency
-  let priceLevel: string | undefined;
-  const priceSelectors = [
-    'span.MWDdpd',
-    'span.F9iKBc',
-    'span.l5fa0b',
-    'div.w70Oqd',
-    'div.taTOhd',
-    'span.nD4Sfe',
-    'span[aria-label*="每晚" i]',
-    'span[aria-label*="per night" i]',
-    'span[aria-label*="night" i]',
-    'span[data-price]',
-    'div.I8ZJze',
-  ];
-  for (const sel of priceSelectors) {
-    const el = cardEl.querySelector<HTMLElement>(sel);
-    const text = el?.getAttribute('aria-label') || el?.textContent || '';
-    if (text && isPlausiblePriceText(text)) {
-      const clean = extractCleanPriceText(text);
-      if (clean && isValidExtractedPriceCandidate(clean)) {
-        priceLevel = clean;
-        break;
-      }
-    }
-  }
-
-  if (!priceLevel) {
-    for (const el of Array.from(cardEl.querySelectorAll<HTMLElement>('span, div, button')).slice(0, 30)) {
-      const text = cleanExtractedText(el.textContent || '');
-      if (!text || text.length > 40) continue;
-      if (/[¥฿$€£₩]|JP¥|CN¥|S\$|HK\$/.test(text)) {
-        const clean = extractCleanPriceText(text);
-        if (clean && isValidExtractedPriceCandidate(clean) && !isZeroOrPlaceholderPrice(clean)) {
-          priceLevel = clean;
-          break;
-        }
-      }
-    }
-  }
-
-  const detectedCurrency = detectCurrencyFromPage(entityHref, priceLevel, hintCurrency, overrideCurrency);
-
-  // 6. Address & Area
-  let address: string | undefined;
-  let area: string | undefined;
-  const addrEl = cardEl.querySelector<HTMLElement>(
-    'div.K4nuhf, span.I39tAc, div.R61m2e, div.d6vP1c, div.CFG7A, div.c9bXce, span.YwN01b'
-  );
-  if (addrEl?.textContent) {
-    const rawAddr = cleanExtractedText(addrEl.textContent);
-    if (rawAddr && rawAddr.length > 3) {
-      address = rawAddr;
-      const parts = rawAddr.split(/[,，·]/).map((s) => s.trim()).filter(Boolean);
-      if (parts.length > 1) {
-        area = parts[parts.length - 2] || parts[0];
-      }
-    }
-  }
-
-  // 7. Coordinates & Source Place ID
-  const coordinates = extractPlaceCoordinates(entityHref) ?? undefined;
-  let sourcePlaceId: string | undefined;
-  const entityMatch = /\/hotels\/entity\/([^/?#]+)/.exec(entityHref) || /[?&]entity=([^&#]+)/.exec(entityHref);
-  if (entityMatch && entityMatch[1]) {
-    sourcePlaceId = safeDecodeUri(entityMatch[1]);
-  }
-
-  // 8. Summary & Hotel Facts
-  const amenities: string[] = [];
-  for (const el of Array.from(cardEl.querySelectorAll<HTMLElement>('div.P3g0Ub, div.I6rF8e, span.Z1asvd, div.j7L08d, div.iNpWBb'))) {
-    const text = cleanExtractedText(el.textContent || '');
-    if (text && text.length > 1 && text.length < 30 && !amenities.includes(text)) {
-      amenities.push(text);
-      if (amenities.length >= 4) break;
-    }
-  }
-  const summary = amenities.length > 0 ? amenities.join(' · ') : undefined;
-  const hotelFacts = extractHotelPropertyFacts(summary || cardEl.textContent, cardEl);
-
-  return {
-    title,
-    sourceUrl: entityHref,
-    sourceProvider: 'google_travel',
-    kind: 'stay',
-    rating: Number.isFinite(rating) && rating ? rating : undefined,
-    reviewCount: Number.isFinite(reviewCount) && reviewCount ? reviewCount : undefined,
-    category,
-    priceLevel,
-    detectedCurrency,
-    address,
-    area,
-    coordinates,
-    sourcePlaceId,
-    summary,
-    hotelFacts,
-  };
-}
-
-function extractGoogleTravelPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
-  const sourceUrl = window.location.href;
-  const isSearchPage = /\/travel\/search|\/travel\/hotels[?#]/.test(sourceUrl) && !/\/hotels\/entity\//.test(sourceUrl);
-
-  // If on search / list page, scan for the active / focused card or top entity card
-  if (isSearchPage) {
-    // 1. Check open modal / drawer
-    const openModal = document.querySelector<HTMLElement>('div[role="dialog"], div.uaTTDe.is-active, div.fpNxPd');
-    if (openModal) {
-      const modalPlace = parseGoogleTravelCard(openModal, overrideCurrency, hintCurrency);
-      if (modalPlace && modalPlace.title) return modalPlace;
-    }
-
-    // 2. Scan hotel cards on page
-    const cardSelectors = [
-      'c-wiz[data-entity-id]',
-      'div[data-hotel-id]',
-      'div.uaTTDe',
-      'div.nId1nc',
-      'div.BWBWic',
-      'div.kDe2bf',
-      'div[role="listitem"]',
-      'a[href*="/hotels/entity/"]',
-    ];
-    for (const sel of cardSelectors) {
-      const cards = document.querySelectorAll<HTMLElement>(sel);
-      for (const card of Array.from(cards)) {
-        const place = parseGoogleTravelCard(card, overrideCurrency, hintCurrency);
-        if (place && place.title) {
-          return place;
-        }
-      }
-    }
-  }
-
-  // 1. Title Extraction for Entity Detail Page
-  const titleSelectors = [
-    'h1.Q2A6Id',
-    'h1.fpNxPd',
-    'h1.LBgRLc',
-    'div.fpNxPd',
-    'div[role="heading"][aria-level="1"]',
-    'h1',
-    'h2[role="heading"]',
-  ];
-  let title = '';
-  for (const sel of titleSelectors) {
-    const el = document.querySelector<HTMLElement>(sel);
-    const text = el?.textContent?.trim();
-    if (text && text.length > 1 && !isGenericNavigationTitleLocal(text) && !isJunkNavigationText(text) && !isFakePlaceLabel(text)) {
-      title = cleanExtractedText(text);
-      break;
-    }
-  }
-  if (!title) {
-    const metaTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.content;
-    if (metaTitle) {
-      const cleaned = cleanExtractedText(metaTitle.replace(/\s*[-–—|]\s*Google\s*(Travel|Hotels|Flights|旅行|酒店|机票).*$/i, ''));
-      if (!isGenericNavigationTitleLocal(cleaned) && !isFakePlaceLabel(cleaned) && !isJunkNavigationText(cleaned)) {
-        title = cleaned;
-      }
-    }
-  }
-  if (!title) {
-    const docTitle = document.title.replace(/\s*[-–—|]\s*Google\s*(Travel|Hotels|Flights|旅行|酒店|机票).*$/i, '');
-    if (docTitle && !isGenericNavigationTitleLocal(docTitle) && !isFakePlaceLabel(docTitle) && !isJunkNavigationText(docTitle)) {
-      title = cleanExtractedText(docTitle);
-    }
-  }
-  if (!title || isGenericNavigationTitleLocal(title) || isFakePlaceLabel(title)) return null;
-
-  // 2. Rating & Review Count Extraction
-  let rating: number | undefined;
-  let reviewCount: number | undefined;
-  const ratingEl = document.querySelector<HTMLElement>(
-    'span[aria-label*="星" i], span[aria-label*="star" i], span.kJyTrb, div.TT9eId span.k5tQ5d, span.MWDdpd, span.zvDXA'
-  );
-  if (ratingEl) {
-    rating = PLACE_PARSER.parseRating(ratingEl.getAttribute('aria-label') || ratingEl.textContent);
-  }
-  const reviewEl = document.querySelector<HTMLElement>(
-    'span.kJyTrb ~ span, span.wV9y8c, span.k5tQ5d, span.iP206b, span.w0f50b, div.TT9eId span:nth-of-type(2)'
-  );
-  if (reviewEl) {
-    reviewCount = PLACE_PARSER.parseReviewCount(reviewEl.getAttribute('aria-label') || reviewEl.textContent);
-  }
-
-  // 3. Category / Hotel Class
-  let category: string | undefined;
-  const classEl = document.querySelector<HTMLElement>(
-    'div.Adn9Eb, span.CPm6me, span.k5tQ5d, div.k5tQ5d, span.I39tAc'
-  );
-  if (classEl?.textContent) {
-    const text = cleanExtractedText(classEl.textContent);
-    if (text && /(hotel|resort|inn|hostel|lodging|stay|酒店|旅馆|民宿|度假村|星级|star)/i.test(text)) {
-      category = text;
-    }
-  }
-  if (!category) {
-    category = 'Google Travel 住宿';
-  }
-
-  // 4. Price & Currency
-  let priceLevel: string | undefined;
-  const priceSelectors = [
-    'span.MWDdpd',
-    'span.F9iKBc',
-    'span.l5fa0b',
-    'div.w70Oqd',
-    'div.taTOhd',
-    'span.nD4Sfe',
-    'span[aria-label*="每晚" i]',
-    'span[aria-label*="per night" i]',
-    'span[aria-label*="night" i]',
-    'div.I8ZJze',
-    'span[data-price]',
-  ];
-  for (const sel of priceSelectors) {
-    const el = document.querySelector<HTMLElement>(sel);
-    const text = el?.getAttribute('aria-label') || el?.textContent || '';
-    if (text && isPlausiblePriceText(text)) {
-      const clean = extractCleanPriceText(text);
-      if (clean && isValidExtractedPriceCandidate(clean)) {
-        priceLevel = clean;
-        break;
-      }
-    }
-  }
-
-  const detectedCurrency = detectCurrencyFromPage(sourceUrl, priceLevel, hintCurrency, overrideCurrency);
-
-  // 5. Address / Area
-  let address: string | undefined;
-  let area: string | undefined;
-  const addrEl = document.querySelector<HTMLElement>(
-    'div.K4nuhf, span.I39tAc, div.R61m2e, div.d6vP1c, div.CFG7A, div.c9bXce, span.YwN01b'
-  );
-  if (addrEl?.textContent) {
-    const rawAddr = cleanExtractedText(addrEl.textContent);
-    if (rawAddr && rawAddr.length > 3) {
-      address = rawAddr;
-      const parts = rawAddr.split(/[,，·]/).map((s) => s.trim()).filter(Boolean);
-      if (parts.length > 1) {
-        area = parts[parts.length - 2] || parts[0];
-      }
-    }
-  }
-
-  // 6. Coordinates
-  let coordinates = extractPlaceCoordinates(sourceUrl) ?? undefined;
-  if (!coordinates) {
-    const mapLink = document.querySelector<HTMLAnchorElement>('a[href*="/maps/"], a[href*="maps.google."]');
-    if (mapLink?.href) {
-      coordinates = extractPlaceCoordinates(mapLink.href) ?? undefined;
-    }
-  }
-
-  // 7. Source Place ID
-  let sourcePlaceId: string | undefined;
-  const entityMatch = /\/hotels\/entity\/([^/?#]+)/.exec(sourceUrl) || /[?&]entity=([^&#]+)/.exec(sourceUrl);
-  if (entityMatch && entityMatch[1]) {
-    sourcePlaceId = safeDecodeUri(entityMatch[1]);
-  }
-
-  // 8. Amenities / Highlights
-  const amenities: string[] = [];
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>('div.P3g0Ub, div.I6rF8e, span.Z1asvd, div.j7L08d, div.iNpWBb'))) {
-    const text = cleanExtractedText(el.textContent || '');
-    if (text && text.length > 1 && text.length < 30 && !amenities.includes(text)) {
-      amenities.push(text);
-      if (amenities.length >= 4) break;
-    }
-  }
-  const summary = amenities.length > 0 ? amenities.join(' · ') : undefined;
-  const hotelFacts = extractHotelPropertyFacts(summary, typeof document !== 'undefined' ? document : null);
-
-  return {
-    title,
-    sourceUrl,
-    sourceProvider: 'google_travel',
-    kind: 'stay',
-    rating: Number.isFinite(rating) && rating ? rating : undefined,
-    reviewCount: Number.isFinite(reviewCount) && reviewCount ? reviewCount : undefined,
-    category,
-    priceLevel,
-    detectedCurrency,
-    address,
-    area,
-    coordinates,
-    sourcePlaceId,
-    summary,
-    hotelFacts,
-  };
-}
-
-function currentPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
-  const provider = inferSourceProvider(window.location.href);
-  if (provider === 'google_maps') return extractGoogleMapsPlace(overrideCurrency, hintCurrency);
-  if (provider === 'google_travel') return extractGoogleTravelPlace(overrideCurrency, hintCurrency);
-  if (provider === 'tabelog') return extractTabelogPlace(overrideCurrency, hintCurrency);
-  if (provider === 'xiaohongshu') return extractXiaohongshuPlace(overrideCurrency, hintCurrency);
-  if (provider === 'booking') return extractBookingPlace(overrideCurrency, hintCurrency);
-  return null;
-}
-
-export interface SavedListCardSummary {
-  listId?: string;
-  listName: string;
-  count?: number;
-  url?: string;
-}
-
-function isGenericNavigationTitleLocal(text: string): boolean {
-  const norm = text.trim().toLowerCase();
-  if (/^(google|google maps|google 地图|google travel|google hotels|google flights|directions|路线|保存|已保存|saved|share|分享|搜索|search|返回|back|菜单|menu|overview|概览|reviews|评价|photos|照片|about|关于)$/i.test(norm)) {
-    return true;
-  }
-  if (/^google\s*(travel|hotels?|flights?)(\s*\d+\s*(results?|处(搜索)?结果))?$/i.test(norm)) {
-    return true;
-  }
-  if (/^\d+\s*(results?|处(搜索)?结果)$/i.test(norm)) {
-    return true;
-  }
-  if (/^(search\s*results?|搜索结果|all\s*filters|全部筛选|sort\s*by|排序方式)$/i.test(norm)) {
-    return true;
-  }
-  return false;
-}
-function scanAllSavedListsOnPage(): SavedListCardSummary[] {
-  const listsMap = new Map<string, SavedListCardSummary>();
-
-  const pushList = (listId: string | undefined, rawTitle: string, count: number | undefined, url: string) => {
-    const title = cleanExtractedText(rawTitle);
-    if (!title || title.length < 2 || title.length > 80) return;
-    if (isGenericNavigationTitleLocal(title) || isJunkNavigationText(title) || isFakePlaceLabel(title)) return;
-    const key = (listId || title).toLowerCase();
-    if (!listsMap.has(key)) {
-      listsMap.set(key, { listId, listName: title, count, url });
-    }
-  };
-
-  const countOf = (scope: HTMLElement | null): number | undefined => {
-    const m = /(\d+)\s*(places|个地点|项|items)/i.exec(scope?.textContent || '');
-    return m ? parseInt(m[1], 10) : undefined;
-  };
-
-  // Only real saved-list carriers qualify: an anchor that links to a placelist
-  // (its href carries the list id needed for the entitylist fetch), or a card
-  // that explicitly exposes data-list-id. Generic feed containers, role=listitem
-  // blocks and bare anchors are Google UI chrome ("Compare prices", "Guests",
-  // "All reviews", …) — matching them produced dozens of phantom "lists".
-  const listAnchors = document.querySelectorAll<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!1s"], a[href*="!2s"], a[href*="?list="]');
-  for (const anchor of Array.from(listAnchors)) {
-    const href = anchor.href || '';
-    const listId = extractGoogleMapsSavedListId(href);
-    if (!listId) continue;
-
-    const card = anchor.closest<HTMLElement>('div[role="listitem"], div.m6QErb, div.Nv2PK, li') ?? anchor;
-    const titleEl = card.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, [role="heading"], h2, h3');
-    const title = titleEl?.textContent?.trim() || anchor.getAttribute('aria-label')?.trim() || '';
-    pushList(listId, title, countOf(card), href || window.location.href);
-  }
-
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-list-id]'))) {
-    const dataId = el.getAttribute('data-list-id') || '';
-    if (!/^[A-Za-z0-9_-]{8,}$/.test(dataId)) continue;
-    const titleEl = el.querySelector<HTMLElement>('.qBF1Pd, .fontHeadlineSmall, [role="heading"], h2, h3');
-    const title = titleEl?.textContent?.trim() || el.getAttribute('aria-label')?.trim() || '';
-    pushList(dataId, title, countOf(el), window.location.href);
-  }
-
-  return Array.from(listsMap.values());
-}
-
-function detectXiaohongshuNoteList(): DetectedSavedList | null {
-  const noteTitle = extractXiaohongshuPlace()?.title || document.title.replace(/ - 小红书$/, '');
-  const found = new Map<string, CurrentResearchPlace>();
-
-  const pushPlace = (rawTitle: string, url?: string) => {
-    const title = cleanExtractedText(rawTitle).slice(0, 60);
-    if (!title || title.length < 2 || isJunkNavigationText(title)) return;
-    const key = title.toLowerCase();
-    if (found.has(key)) return;
-    found.set(key, {
-      title,
-      sourceUrl: url || `https://www.xiaohongshu.com/search_result?keyword=${encodeURIComponent(title)}`,
-      sourceProvider: 'xiaohongshu',
-      category: '小红书笔记地点',
-      summary: `来自笔记「${noteTitle}」`,
-    });
-  };
-
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>('.location-item, .geo, a[href*="/search_result?keyword="], a[href*="/explore/"] .tag, #detail-desc a'))) {
-    pushPlace(el.textContent?.trim() || '', (el as HTMLAnchorElement).href);
-  }
-
-  const descText = document.querySelector<HTMLElement>('#detail-desc, .desc, .content')?.textContent || '';
-  for (const m of descText.matchAll(/📍\s*([^\n📍#]{2,30})/g)) pushPlace(m[1]);
-  for (const m of descText.matchAll(/#([^#\s]{2,20})/g)) {
-    if (/店|餐|cafe|咖啡|景点|hotel|bar/i.test(m[1])) pushPlace(m[1]);
-  }
-
-  if (found.size === 0) return null;
-  return {
-    listName: `📕 ${noteTitle}`,
-    listUrl: window.location.href,
-    detectedCurrency: undefined,
-    places: [...found.values()],
-  };
-}
-
+// Global Chrome Message Router
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const msgType = (message as { type?: string }).type;
+
   if (msgType === 'OWNLY_GET_CURRENT_PLACE') {
     const start = Date.now();
-    logger.debug('Content', 'OWNLY_GET_CURRENT_PLACE received', { url: window.location.href.slice(0, 80), overrideCurrency: (message as { overrideCurrency?: string }).overrideCurrency });
+    const currentUrl = window.location.href;
+    const adapter = getAdapterForUrl(currentUrl);
+    const provider = adapter?.id || inferSourceProvider(currentUrl);
+    const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
+    const targetCurrency = (message as { targetCurrency?: string }).targetCurrency;
+    const targetTags = ((message as { targetTags?: string[] }).targetTags || []).map((t) => t.trim().toLowerCase());
+
     void (async () => {
       try {
-        const provider = inferSourceProvider(window.location.href);
-        const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
-        let savedList = provider === 'xiaohongshu' ? detectXiaohongshuNoteList() : null;
-        if (!savedList || savedList.places.length === 0) {
-          savedList = await resolveGoogleMapsList(overrideCurrency);
+        let savedList: DetectedSavedList | null = null;
+        if (adapter?.detectSavedList) {
+          savedList = await adapter.detectSavedList(overrideCurrency);
         }
-        const allLists = scanAllSavedListsOnPage();
-        const targetTags = ((message as { targetTags?: string[] }).targetTags || []).map((t) => t.trim().toLowerCase());
-        const targetCurrency = (message as { targetCurrency?: string }).targetCurrency;
 
-        // If page has multiple lists and no single list is currently open, auto-fetch the list matching the target trip tag
+        const allLists = scanAllSavedListsOnPage();
+
         if ((!savedList || savedList.places.length === 0) && targetTags.length > 0 && allLists.length > 0) {
           const matched = allLists.find((list) => matchesSavedListContext(list.listName, { tags: targetTags }));
           if (matched?.listId) {
@@ -1779,37 +529,46 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           }
         }
 
-        const detectedPlace = currentPlace(overrideCurrency, targetCurrency);
-        const place = provider === 'google_maps' && detectedPlace
-          ? await enrichFromPlaceHtml(detectedPlace, undefined, overrideCurrency, targetCurrency)
-          : detectedPlace;
+        const rawPlace = adapter?.extractPlace(overrideCurrency, targetCurrency) ?? null;
+        const place = provider === 'google_maps' && rawPlace
+          ? await enrichFromPlaceHtml(rawPlace, undefined, overrideCurrency, targetCurrency)
+          : rawPlace;
+
         logger.info('Content', 'OWNLY_GET_CURRENT_PLACE done', {
-          provider, hasPlace: Boolean(place), title: place?.title?.slice(0, 30), hasSavedList: Boolean(savedList), savedCount: savedList?.places.length ?? 0, allLists: allLists.length, ms: Date.now() - start,
+          provider,
+          hasPlace: Boolean(place),
+          title: place?.title?.slice(0, 30),
+          hasSavedList: Boolean(savedList),
+          savedCount: savedList?.places.length ?? 0,
+          allLists: allLists.length,
+          ms: Date.now() - start,
         });
-        sendResponse({ place, savedList, allLists, detectedCurrency: detectCurrencyFromPage(window.location.href, undefined, targetCurrency, overrideCurrency) });
+
+        sendResponse({
+          place,
+          savedList,
+          allLists,
+          detectedCurrency: detectCurrencyFromPage(currentUrl, undefined, targetCurrency, overrideCurrency),
+        });
       } catch (e) {
         logger.error('Content', 'OWNLY_GET_CURRENT_PLACE failed', e instanceof Error ? e.stack || e.message : String(e));
-        console.warn('OWNLY_GET_CURRENT_PLACE failed:', e);
         sendResponse({ place: null, savedList: null, allLists: [] });
       }
     })();
     return true;
   }
+
   if (msgType === 'OWNLY_ENRICH_SAVED_LIST') {
-    logger.debug('Content', 'OWNLY_ENRICH_SAVED_LIST received', { places: (message as { savedList?: DetectedSavedList }).savedList?.places.length, force: (message as { force?: boolean }).force });
     void (async () => {
       const incoming = (message as { savedList?: DetectedSavedList; overrideCurrency?: string; force?: boolean }).savedList;
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       const force = Boolean((message as { force?: boolean }).force);
       if (!incoming?.places?.length) {
-        logger.warn('Content', 'OWNLY_ENRICH_SAVED_LIST empty incoming');
         sendResponse({ savedList: incoming ?? null, attempted: 0, enriched: 0, failed: 0 });
         return;
       }
-      const start = Date.now();
       try {
         const result = await enrichSavedListDetails(incoming, overrideCurrency, force);
-        logger.info('Content', 'OWNLY_ENRICH_SAVED_LIST done', { listName: incoming.listName, attempted: result.attempted, enriched: result.enriched, failed: result.failed, ms: Date.now() - start });
         sendResponse({ savedList: result.list, attempted: result.attempted, enriched: result.enriched, failed: result.failed });
       } catch (e) {
         logger.error('Content', 'OWNLY_ENRICH_SAVED_LIST error', String(e));
@@ -1818,410 +577,124 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     })();
     return true;
   }
+
   if (msgType === 'OWNLY_FETCH_LIST_BY_ID') {
-    const lid = (message as { listId?: string }).listId || (message as { listUrl?: string }).listUrl?.slice(0, 60);
-    logger.debug('Content', 'OWNLY_FETCH_LIST_BY_ID received', { lid });
     void (async () => {
       let listId = (message as { listId?: string }).listId;
       const listUrl = (message as { listUrl?: string }).listUrl;
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       if (!listId && listUrl) listId = extractGoogleMapsSavedListId(listUrl);
       if (!listId) {
-        logger.warn('Content', 'OWNLY_FETCH_LIST_BY_ID no id', { listUrl });
         sendResponse({ savedList: null });
         return;
       }
-      const start = Date.now();
       const listData = await fetchGoogleMapsEntityList(listId, overrideCurrency);
-      logger.info('Content', 'OWNLY_FETCH_LIST_BY_ID done', { listId, hasList: Boolean(listData), count: listData?.places.length ?? 0, ms: Date.now() - start });
       sendResponse({ savedList: listData });
     })();
     return true;
   }
+
   if (msgType === 'OWNLY_GET_VISIBLE_LIST_PLACES') {
-    logger.debug('Content', 'OWNLY_GET_VISIBLE_LIST_PLACES received');
     void (async () => {
       const start = Date.now();
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
-      await autoScrollFeed();
-      const savedList = await resolveGoogleMapsList(overrideCurrency);
-      const listPlaces = savedList?.places ?? detectGoogleMapsListPlaces();
-      const listName = savedList?.listName ?? detectVisibleGoogleMapsListName(listPlaces);
-      logger.info('Content', 'OWNLY_GET_VISIBLE_LIST_PLACES done', { listName, count: listPlaces.length, truncated: savedList?.truncated, ms: Date.now() - start });
-      sendResponse({ listPlaces, listName, truncated: savedList?.truncated ?? false });
+      const adapter = getAdapterForUrl(window.location.href);
+
+      let savedList: DetectedSavedList | null = null;
+      if (adapter?.detectSavedList) {
+        savedList = await adapter.detectSavedList(overrideCurrency);
+      }
+
+      if (savedList && savedList.places.length > 0) {
+        sendResponse({ listPlaces: savedList.places, listName: savedList.listName, truncated: savedList.truncated ?? false });
+        return;
+      }
+
+      if (adapter?.id === 'google_maps') {
+        await autoScrollFeed();
+        const resolved = await resolveGoogleMapsList(overrideCurrency);
+        const listPlaces = resolved?.places ?? scanAllGoogleMapsPlaces();
+        const listName = resolved?.listName ?? detectVisibleGoogleMapsListName(listPlaces);
+        logger.info('Content', 'OWNLY_GET_VISIBLE_LIST_PLACES done', { listName, count: listPlaces.length, ms: Date.now() - start });
+        sendResponse({ listPlaces, listName, truncated: resolved?.truncated ?? false });
+        return;
+      }
+
+      sendResponse({ listPlaces: [], listName: undefined, truncated: false });
     })();
     return true;
   }
+
   if (msgType === 'OWNLY_GET_SAVED_LIST') {
     void (async () => {
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
-      const savedList = await resolveGoogleMapsList(overrideCurrency);
+      const adapter = getAdapterForUrl(window.location.href);
+      let savedList: DetectedSavedList | null = null;
+      if (adapter?.detectSavedList) {
+        savedList = await adapter.detectSavedList(overrideCurrency);
+      }
+      if (!savedList && adapter?.id === 'google_maps') {
+        savedList = await resolveGoogleMapsList(overrideCurrency);
+      }
       sendResponse({ savedList });
     })();
     return true;
   }
+
   if (msgType === 'OWNLY_REDETECT_PAGE_CURRENCY') {
     const target = (message as { targetCurrency?: string }).targetCurrency;
     const detected = detectCurrencyFromPage(window.location.href, undefined, target);
     sendResponse({ detectedCurrency: detected });
     return true;
   }
+
   if (msgType === 'OWNLY_GET_EXTRACTION_SNAPSHOT') {
-    // PR5 debug snapshot — quantifies candidate extraction quality over time
-    try {
-      const snap = lastExtractionSnapshot;
-      sendResponse({ snapshot: snap });
-    } catch {
-      sendResponse({ snapshot: null });
-    }
+    sendResponse({ snapshot: lastExtractionSnapshot });
     return true;
   }
 });
 
-function initQuickCaptureFab(): void {
-  if (typeof document === 'undefined' || !document.body) return;
-  if (document.getElementById('ownly-quick-capture-fab-root')) return;
-
-  const provider = inferSourceProvider(window.location.href);
-  if (provider === 'other') return;
-
-  const container = document.createElement('div');
-  container.id = 'ownly-quick-capture-fab-root';
-  container.style.cssText = [
-    'position: fixed',
-    'bottom: 24px',
-    'right: 24px',
-    'z-index: 2147483647',
-    'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-    'user-select: none',
-    'pointer-events: auto',
-  ].join(';');
-
-  const shadow = container.attachShadow ? container.attachShadow({ mode: 'open' }) : null;
-  const root = shadow || container;
-
-  const styleEl = document.createElement('style');
-  styleEl.textContent = `
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    .fab-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 9px 15px;
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
-      color: #ffffff;
-      font-size: 13px;
-      font-weight: 600;
-      line-height: 1;
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      border-radius: 9999px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22), 0 2px 4px rgba(0, 0, 0, 0.08);
-      cursor: pointer;
-      outline: none;
-      transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-      backdrop-filter: blur(8px);
-    }
-    .fab-btn:hover {
-      transform: translateY(-2px) scale(1.02);
-      box-shadow: 0 6px 20px rgba(4, 120, 87, 0.42), 0 2px 6px rgba(0, 0, 0, 0.12);
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    }
-    .fab-btn:active {
-      transform: translateY(0) scale(0.98);
-    }
-    .fab-btn.is-success {
-      background: linear-gradient(135deg, #10b981 0%, #047857 100%);
-      border-color: #6ee7b7;
-      box-shadow: 0 0 18px rgba(16, 185, 129, 0.55);
-    }
-    .fab-btn.is-loading {
-      opacity: 0.85;
-      cursor: wait;
-    }
-    .fab-icon {
-      font-size: 15px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-    }
-    .fab-text {
-      white-space: nowrap;
-      letter-spacing: 0.2px;
-    }
-  `;
-  root.appendChild(styleEl);
-
-  const btn = document.createElement('button');
-  btn.className = 'fab-btn';
-  btn.setAttribute('type', 'button');
-  btn.setAttribute('title', '一键快速采集当前地点到 Ownly 案板 (Inbox)');
-  btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
-
-  let isSaving = false;
-
-  btn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (isSaving) return;
-
-    isSaving = true;
-    btn.classList.add('is-loading');
-    btn.innerHTML = '<span class="fab-icon">⏳</span><span class="fab-text">采集中...</span>';
-
-    try {
-      const place = currentPlace();
-      if (!place || !place.title) {
-        btn.classList.remove('is-loading');
-        btn.innerHTML = '<span class="fab-icon">⚠️</span><span class="fab-text">未检测到地点</span>';
-        setTimeout(() => {
-          btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
-          isSaving = false;
-        }, 2000);
-        return;
-      }
-
-      const fullPlace = provider === 'google_maps' ? await enrichFromPlaceHtml(place) : place;
-
-      const resp = (await chrome.runtime.sendMessage({
-        type: 'OWNLY_QUICK_SAVE_PLACE',
-        place: fullPlace,
-      }).catch((err: unknown) => ({ ok: false, error: String(err) }))) as { ok?: boolean; placeId?: string; error?: string } | undefined;
-
-      btn.classList.remove('is-loading');
-      if (resp?.ok) {
-        btn.classList.add('is-success');
-        btn.innerHTML = '<span class="fab-icon">✓</span><span class="fab-text">已放入案板</span>';
-        setTimeout(() => {
-          btn.classList.remove('is-success');
-          btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
-          isSaving = false;
-        }, 2500);
-      } else {
-        btn.innerHTML = '<span class="fab-icon">⚠️</span><span class="fab-text">保存失败</span>';
-        setTimeout(() => {
-          btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
-          isSaving = false;
-        }, 2000);
-      }
-    } catch {
-      btn.classList.remove('is-loading');
-      btn.innerHTML = '<span class="fab-icon">⚠️</span><span class="fab-text">错误</span>';
-      setTimeout(() => {
-        btn.innerHTML = '<span class="fab-icon">📌</span><span class="fab-text">放入案板</span>';
-        isSaving = false;
-      }, 2000);
-    }
-  });
-
-  root.appendChild(btn);
-  document.body.appendChild(container);
-}
-
-function initGoogleTravelInlineButtons(): void {
-  if (typeof document === 'undefined' || !document.body) return;
-  const isGoogleTravel = /google\.[a-z.]+\/travel/i.test(window.location.href);
-  if (!isGoogleTravel) return;
-
-  const entityAnchors = document.querySelectorAll<HTMLAnchorElement>(
-    'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"]'
-  );
-
-  for (const anchor of Array.from(entityAnchors)) {
-    const card = (anchor.closest<HTMLElement>(
-      'c-wiz, [role="listitem"], div.uaTTDe, div.nId1nc, div.BWBWic, div.kDe2bf, div.P2h0Yb'
-    ) || anchor.parentElement?.parentElement) as HTMLElement | null;
-
-    if (!card || card.dataset.ownlyCardInjected === 'true') continue;
-
-    const parsedPlace = parseGoogleTravelCard(card);
-    if (!parsedPlace || !parsedPlace.title) continue;
-
-    card.dataset.ownlyCardInjected = 'true';
-
-    const btnContainer = document.createElement('div');
-    btnContainer.className = 'ownly-travel-inline-fab';
-    btnContainer.style.cssText = [
-      'display: inline-flex',
-      'align-items: center',
-      'margin: 6px 0',
-      'user-select: none',
-      'z-index: 10',
-    ].join(';');
-
-    const shadow = btnContainer.attachShadow ? btnContainer.attachShadow({ mode: 'open' }) : null;
-    const root = shadow || btnContainer;
-
-    const styleEl = document.createElement('style');
-    styleEl.textContent = `
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      .card-fab-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 5px 12px;
-        background: linear-gradient(135deg, #059669 0%, #047857 100%);
-        color: #ffffff;
-        font-size: 12px;
-        font-weight: 600;
-        line-height: 1.2;
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        border-radius: 9999px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
-        cursor: pointer;
-        outline: none;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      }
-      .card-fab-btn:hover {
-        transform: translateY(-1px) scale(1.02);
-        box-shadow: 0 4px 14px rgba(4, 120, 87, 0.38);
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      }
-      .card-fab-btn.is-success {
-        background: linear-gradient(135deg, #10b981 0%, #047857 100%);
-        border-color: #6ee7b7;
-        box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
-      }
-      .card-fab-btn.is-loading {
-        opacity: 0.85;
-        cursor: wait;
-      }
-      .card-fab-icon {
-        font-size: 13px;
-        display: inline-flex;
-      }
-      .card-fab-text {
-        white-space: nowrap;
-      }
-    `;
-    root.appendChild(styleEl);
-
-    const btn = document.createElement('button');
-    btn.className = 'card-fab-btn';
-    btn.setAttribute('type', 'button');
-    btn.setAttribute('title', `一键采集「${parsedPlace.title}」到 Ownly 案板 (Inbox)`);
-    btn.innerHTML = '<span class="card-fab-icon">📌</span><span class="card-fab-text">放入案板</span>';
-
-    let isSaving = false;
-    btn.addEventListener('click', async (ev) => {
-      ev.stopPropagation();
-      ev.preventDefault();
-      if (isSaving) return;
-
-      isSaving = true;
-      btn.classList.add('is-loading');
-      btn.innerHTML = '<span class="card-fab-icon">⏳</span><span class="card-fab-text">采集中...</span>';
-
-      try {
-        const currentPlaceFacts = parseGoogleTravelCard(card);
-        const placeToSave = currentPlaceFacts || parsedPlace;
-
-        const resp = (await chrome.runtime.sendMessage({
-          type: 'OWNLY_QUICK_SAVE_PLACE',
-          place: placeToSave,
-        }).catch((err: unknown) => ({ ok: false, error: String(err) }))) as { ok?: boolean; placeId?: string; error?: string } | undefined;
-
-        btn.classList.remove('is-loading');
-        if (resp?.ok) {
-          btn.classList.add('is-success');
-          btn.innerHTML = '<span class="card-fab-icon">✓</span><span class="card-fab-text">已放入案板</span>';
-          setTimeout(() => {
-            btn.classList.remove('is-success');
-            btn.innerHTML = '<span class="card-fab-icon">📌</span><span class="card-fab-text">放入案板</span>';
-            isSaving = false;
-          }, 2500);
-        } else {
-          btn.innerHTML = '<span class="card-fab-icon">⚠️</span><span class="card-fab-text">保存失败</span>';
-          setTimeout(() => {
-            btn.innerHTML = '<span class="card-fab-icon">📌</span><span class="card-fab-text">放入案板</span>';
-            isSaving = false;
-          }, 2000);
-        }
-      } catch {
-        btn.classList.remove('is-loading');
-        btn.innerHTML = '<span class="card-fab-icon">⚠️</span><span class="card-fab-text">错误</span>';
-        setTimeout(() => {
-          btn.innerHTML = '<span class="card-fab-icon">📌</span><span class="card-fab-text">放入案板</span>';
-          isSaving = false;
-        }, 2000);
-      }
-    });
-
-    root.appendChild(btn);
-
-    const actionTarget = card.querySelector<HTMLElement>(
-      '.BgYkof, [role="heading"], div.w70Oqd, div.n7qZ7b, div.f5L0be, div.eUe7je'
-    ) || anchor;
-
-    if (actionTarget && actionTarget.parentNode) {
-      if (actionTarget.nextSibling) {
-        actionTarget.parentNode.insertBefore(btnContainer, actionTarget.nextSibling);
-      } else {
-        actionTarget.parentNode.appendChild(btnContainer);
-      }
-    } else {
-      card.appendChild(btnContainer);
-    }
-  }
-}
-
-function initPageQuickCapture(): void {
-  initQuickCaptureFab();
-  initGoogleTravelInlineButtons();
-}
-
+// Unified DOM & Page Observer for Inline Buttons & List Scanning
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  const isGoogleMaps = /google\.[a-z.]+\/maps|maps\.google\.[a-z.]+/i.test(window.location.href);
-  const isGoogleTravel = /google\.[a-z.]+\/travel/i.test(window.location.href);
+  const DEBOUNCE_MS = 350;
+  let scanTimer: number | undefined;
 
-  if (isGoogleMaps) {
-    const SCAN_DEBOUNCE_MS = 400;
-    let scanTimer: number | undefined;
-    const scheduleScan = () => {
-      if (scanTimer !== undefined) window.clearTimeout(scanTimer);
-      scanTimer = window.setTimeout(() => {
-        scanTimer = undefined;
-        scanAllGoogleMapsPlaces();
-      }, SCAN_DEBOUNCE_MS);
-    };
-    window.addEventListener('scroll', scheduleScan, { passive: true });
-    try {
-      const observer = new MutationObserver(scheduleScan);
-      if (document.body) {
-        observer.observe(document.body, { childList: true, subtree: true });
-      }
-    } catch {}
-  }
+  const triggerAdapterScan = () => {
+    const adapter = getAdapterForUrl(window.location.href);
+    if (!adapter) return;
 
-  if (isGoogleTravel) {
-    const TRAVEL_DEBOUNCE_MS = 300;
-    let travelTimer: number | undefined;
-    const scheduleTravelScan = () => {
-      if (travelTimer !== undefined) window.clearTimeout(travelTimer);
-      travelTimer = window.setTimeout(() => {
-        travelTimer = undefined;
-        initGoogleTravelInlineButtons();
-      }, TRAVEL_DEBOUNCE_MS);
-    };
-    window.addEventListener('scroll', scheduleTravelScan, { passive: true });
-    try {
-      const observer = new MutationObserver(scheduleTravelScan);
-      if (document.body) {
-        observer.observe(document.body, { childList: true, subtree: true });
-      }
-    } catch {}
-  }
+    if (adapter.id === 'google_maps') {
+      scanAllGoogleMapsPlaces();
+    }
+    if (adapter.initInlineButtons) {
+      adapter.initInlineButtons();
+    }
+  };
 
-  // Initialize in-page quick capture floating ball & inline buttons
+  const scheduleScan = () => {
+    if (scanTimer !== undefined) window.clearTimeout(scanTimer);
+    scanTimer = window.setTimeout(() => {
+      scanTimer = undefined;
+      triggerAdapterScan();
+    }, DEBOUNCE_MS);
+  };
+
+  window.addEventListener('scroll', scheduleScan, { passive: true });
+
+  try {
+    const observer = new MutationObserver(scheduleScan);
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  } catch {}
+
   if (document.readyState !== 'loading') {
-    initPageQuickCapture();
+    triggerAdapterScan();
   } else {
-    document.addEventListener('DOMContentLoaded', initPageQuickCapture, { once: true });
+    document.addEventListener('DOMContentLoaded', triggerAdapterScan, { once: true });
   }
 
-  // Re-check on SPA navigations
   window.addEventListener('popstate', () => {
-    setTimeout(initPageQuickCapture, 500);
+    setTimeout(triggerAdapterScan, 400);
   });
 }

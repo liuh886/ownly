@@ -472,3 +472,19 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     isAmbiguousResolved: false,
   };
 }
+
+export function detectCurrencyFromPage(
+  sourceUrl: string,
+  priceText?: string,
+  hintCurrency?: string,
+  overrideCurrency?: string,
+): string | undefined {
+  const result = detectPageCurrency({
+    url: sourceUrl,
+    priceText,
+    hintCurrency,
+    overrideCurrency,
+    doc: typeof document !== 'undefined' ? document : undefined,
+  });
+  return result.currency;
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cleanExtractedText,
+  cleanTitleForSearch,
   deriveHotelSignals,
   extractCleanPriceText,
   extractFeatureIdFromUrl,
@@ -298,5 +299,14 @@ describe('extractHotelPropertyFacts & deriveHotelSignals', () => {
     expect(extractHotelPropertyFacts('Great restaurant with authentic Pad Thai')).toBeUndefined();
     expect(extractHotelPropertyFacts('')).toBeUndefined();
     expect(extractHotelPropertyFacts(null)).toBeUndefined();
+  });
+});
+
+describe('cleanTitleForSearch', () => {
+  it('strips leading and trailing emojis and symbols cleanly', () => {
+    expect(cleanTitleForSearch('🏨 Mayana Beach Resort')).toBe('Mayana Beach Resort');
+    expect(cleanTitleForSearch('🍜 合成發 • 潮州魚蛋粉')).toBe('合成發 • 潮州魚蛋粉');
+    expect(cleanTitleForSearch('📍 Cross Pattaya Pratamnak ⭐')).toBe('Cross Pattaya Pratamnak');
+    expect(cleanTitleForSearch('  Oakwood Studios Bangkok  ')).toBe('Oakwood Studios Bangkok');
   });
 });

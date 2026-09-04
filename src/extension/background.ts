@@ -2,6 +2,7 @@ import {
   DEFAULT_USD_PIVOT,
   ensurePlaceKindTag,
   inferPlaceKind,
+  type PlannerTripPlace,
 } from '../domain/planner';
 import {
   findExistingPlaceByIdentity,
@@ -16,6 +17,7 @@ import {
   readCaptureStateV3,
 } from './capture-state';
 import type { CurrentResearchPlace } from './content';
+import { enrichPlaceMetadata } from './enrichment';
 import { sessionStorage } from './session-storage';
 import { logger } from './logger';
 
@@ -51,6 +53,122 @@ function getDefaultCollection(state: OwnlyCaptureStateV3): CaptureCollection {
     title: 'Inbox',
     created_at: now,
   };
+}
+
+async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
+  try {
+    const state = await readCaptureStateV3();
+    const place = state.places.find((p) => p.id === placeId);
+    if (!place) return;
+
+    // Check if place needs Google Maps entity resolution or fact enrichment
+    const isSearchQuery = place.source.url?.includes('/maps/search/') || !place.source.url?.includes('/maps/place/');
+    const isMissingId = !place.source.place_id || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(place.source.place_id.trim());
+    const isMissingCoords = !place.coordinates;
+    const isMissingRating = place.rating === undefined;
+
+    if (!isSearchQuery && !isMissingId && !isMissingCoords && !isMissingRating) {
+      return;
+    }
+
+    logger.info('Background', `Auto-resolving Google Maps entity for: ${place.title}`, { placeId, sourceUrl: place.source.url });
+
+    const adapterPlace: PlannerTripPlace = {
+      schema_version: '0.1',
+      type: 'trip_place',
+      id: place.id,
+      trip_id: 'inbox',
+      title: place.title,
+      source_provider: 'google_maps',
+      source_url: place.source.url,
+      source_place_id: place.source.place_id,
+      source_category: place.source.category,
+      types: place.source.types,
+      address: place.address,
+      coordinates: place.coordinates,
+      observed_rating: place.rating,
+      observed_review_count: place.review_count,
+      observed_price: place.price?.raw,
+      open_hours: place.open_hours,
+      phone: place.phone,
+      plus_code: place.plus_code,
+      menu_url: place.menu_url,
+      reservation_url: place.reservation_url,
+      review_topics: place.review_topics,
+      hotel_facts: place.hotel_facts,
+      kind: place.inferred_kind || 'other',
+      priority: place.user?.priority || 'want',
+      why: place.user?.why,
+      notes: place.user?.notes,
+      tags: place.user?.tags || [],
+      signals: [],
+      risks: [],
+      reservation_status: 'none',
+      state: 'candidate',
+      created_at: place.captured_at,
+      updated_at: place.updated_at,
+    };
+
+    const enrichmentResult = await enrichPlaceMetadata(adapterPlace, { force: true });
+    if (!enrichmentResult.enriched) {
+      logger.debug('Background', `Entity auto-resolution did not mutate place: ${place.title}`);
+      return;
+    }
+
+    const enriched = enrichmentResult.place;
+
+    await mutateCaptureStateV3InWorker((currentState) => {
+      const idx = currentState.places.findIndex((p) => p.id === placeId);
+      if (idx === -1) return { state: currentState, result: false };
+
+      const existingPlace = currentState.places[idx];
+      const updatedPlace: CapturePlace = {
+        ...existingPlace,
+        title: existingPlace.title,
+        source: {
+          ...existingPlace.source,
+          provider: 'google_maps',
+          url: enriched.source_url || existingPlace.source.url,
+          place_id: enriched.source_place_id || existingPlace.source.place_id,
+          category: enriched.source_category || existingPlace.source.category,
+          types: Array.from(new Set([...(existingPlace.source.types || []), ...(enriched.types || [])])),
+        },
+        address: enriched.address || existingPlace.address,
+        coordinates: enriched.coordinates || existingPlace.coordinates,
+        rating: enriched.observed_rating ?? existingPlace.rating,
+        review_count: enriched.observed_review_count ?? existingPlace.review_count,
+        price: enriched.observed_price ? { raw: enriched.observed_price } : existingPlace.price,
+        open_hours: enriched.open_hours || existingPlace.open_hours,
+        phone: enriched.phone || existingPlace.phone,
+        plus_code: enriched.plus_code || existingPlace.plus_code,
+        menu_url: enriched.menu_url || existingPlace.menu_url,
+        reservation_url: enriched.reservation_url || existingPlace.reservation_url,
+        review_topics: enriched.review_topics || existingPlace.review_topics,
+        hotel_facts: enriched.hotel_facts || existingPlace.hotel_facts,
+        inferred_kind: enriched.kind && enriched.kind !== 'other' ? enriched.kind : existingPlace.inferred_kind,
+        updated_at: new Date().toISOString(),
+      };
+
+      const updatedPlaces = [...currentState.places];
+      updatedPlaces[idx] = updatedPlace;
+
+      return {
+        state: { ...currentState, places: updatedPlaces },
+        result: true,
+      };
+    });
+
+    logger.info('Background', `Entity auto-resolution successfully updated place: ${place.title}`, {
+      placeId,
+      resolvedUrl: enriched.source_url,
+      resolvedPlaceId: enriched.source_place_id,
+      coordinates: enriched.coordinates,
+    });
+
+    void chrome.runtime.sendMessage({ type: 'OWNLY_STORAGE_CHANGED', placeId }).catch(() => {});
+  } catch (err) {
+    logger.warn('Background', `Auto-resolution failed for place ${placeId}:`, err instanceof Error ? err.message : String(err));
+  }
 }
 
 async function savePlaceIntoInboxDirectly(
@@ -149,6 +267,9 @@ async function savePlaceIntoInboxDirectly(
 
     logger.info('Background', 'Quick save: persisted', { capturedId, tabId, ms: Date.now() - started });
     if (tabId) void flashBadge(tabId, '✓', '#047857');
+
+    // Trigger asynchronous background Google Maps entity resolution & fact enrichment
+    void resolveAndEnrichCapturedPlace(capturedId);
 
     if (openSidepanel && tabId) {
       try {

@@ -59,6 +59,7 @@ export type PlannerPlaceSourceProvider =
   | 'tabelog'
   | 'xiaohongshu'
   | 'booking'
+  | 'agoda'
   | 'other';
 
 export interface HotelPropertyFacts {
@@ -835,6 +836,7 @@ export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
   if (/tabelog\.com/i.test(url)) return 'tabelog';
   if (/xiaohongshu\.com|xhslink\.com/i.test(url)) return 'xiaohongshu';
   if (/booking\.com/i.test(url)) return 'booking';
+  if (/agoda\.com/i.test(url)) return 'agoda';
   return 'other';
 }
 
@@ -2503,7 +2505,7 @@ export function parseImportPayload(rawText: string, tripId: string): PlannerTrip
       || (partial.category ? inferPlaceKind(partial.category) : undefined)
       || (partial.source_category ? inferPlaceKind(partial.source_category) : undefined)
       || inferPlaceKind(partial.title);
-    const allowedProviders: PlannerPlaceSourceProvider[] = ['google_maps', 'google_travel', 'tabelog', 'xiaohongshu', 'booking', 'other'];
+    const allowedProviders: PlannerPlaceSourceProvider[] = ['google_maps', 'google_travel', 'tabelog', 'xiaohongshu', 'booking', 'agoda', 'other'];
     const sourceProvider = allowedProviders.includes(partial.source_provider as PlannerPlaceSourceProvider)
       ? partial.source_provider as PlannerPlaceSourceProvider
       : (partial.source_url ? inferSourceProvider(partial.source_url) : 'other');

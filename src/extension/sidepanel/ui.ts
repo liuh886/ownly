@@ -25,6 +25,7 @@ const PROVIDER_META: Record<string, { emoji: string; label: string }> = {
   tabelog: { emoji: '🍜', label: 'Tabelog' },
   xiaohongshu: { emoji: '📕', label: '小红书' },
   booking: { emoji: '🏨', label: 'Booking' },
+  agoda: { emoji: '🏨', label: 'Agoda' },
   other: { emoji: '🔗', label: 'Link' },
 };
 
