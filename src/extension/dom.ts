@@ -78,6 +78,8 @@ export type ElementMap = {
   notes: HTMLTextAreaElement;
   btnCaptureSubmit: HTMLButtonElement;
   btnRemoveCandidate: HTMLButtonElement;
+  addPanel: HTMLDetailsElement;
+  sumAddPanel: HTMLElement;
   candidatesDrawer: HTMLDetailsElement;
   sumCandidatesDrawer: HTMLElement;
   candidatesCountBadge: HTMLElement;
@@ -191,6 +193,8 @@ export const el: ElementMap = {
   notes: required<HTMLTextAreaElement>('notes'),
   btnCaptureSubmit: required<HTMLButtonElement>('btnCaptureSubmit'),
   btnRemoveCandidate: required<HTMLButtonElement>('btnRemoveCandidate'),
+  addPanel: required<HTMLDetailsElement>('addPanel'),
+  sumAddPanel: required('sumAddPanel'),
   candidatesDrawer: required<HTMLDetailsElement>('candidatesDrawer'),
   sumCandidatesDrawer: required('sumCandidatesDrawer'),
   candidatesCountBadge: required('candidatesCountBadge'),

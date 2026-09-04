@@ -126,6 +126,11 @@ export class AgodaAdapter implements PageAdapter {
 
   extractPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
     const sourceUrl = window.location.href;
+    const isListPage = /\/trips|\/search|tab=saved/i.test(sourceUrl) || Boolean(document.querySelector('div[data-selenium="saved-hotel-item"]'));
+    if (isListPage) {
+      return null;
+    }
+
     const html = typeof document !== 'undefined' ? document.documentElement.outerHTML : '';
     const facts = extractGoogleMapsResearchFromHtml(html);
 
@@ -193,12 +198,33 @@ export class AgodaAdapter implements PageAdapter {
   initInlineButtons(): void {
     if (typeof document === 'undefined' || !document.body) return;
 
+    // 1. Single Hotel Detail Page: inject next to main hotel title
+    const detailTitleEl = document.querySelector<HTMLElement>(
+      'h1[data-selenium="hotel-header-name"], h1.HeaderCerebrum__Name, [data-element="hotel-name"]'
+    );
+    if (detailTitleEl) {
+      const container = (detailTitleEl.parentElement || detailTitleEl) as HTMLElement;
+      if (container.dataset.ownlyCardInjected !== 'true' && !container.querySelector('.ownly-inline-fab-root')) {
+        const place = this.extractPlace();
+        if (place && place.title) {
+          injectInlineCaptureButton({
+            container,
+            anchor: detailTitleEl,
+            position: 'before',
+            customStyle: 'margin-right: 10px; margin-bottom: 4px;',
+            getPlace: () => this.extractPlace() || place,
+          });
+        }
+      }
+    }
+
+    // 2. Saved List & Search Result Cards
     const cards = document.querySelectorAll<HTMLElement>(
-      'div[data-selenium="saved-hotel-item"], div[data-selenium="hotel-item"], li[data-selenium="hotel-item"], div.TripItem, div.SavedItem, div.SavedHotelCard, [data-selenium="trip-saved-card"], [data-selenium="saved-item"], div.PropertyCard, [data-element="hotel-card"], div[data-testid="saved-hotel-card"], div[role="listitem"]'
+      'div[data-selenium="saved-hotel-item"], div[data-selenium="hotel-item"], li[data-selenium="hotel-item"], div.TripItem, div.SavedItem, div.SavedHotelCard, [data-selenium="trip-saved-card"], [data-selenium="saved-item"], div.PropertyCard, [data-element="hotel-card"], div[data-testid="saved-hotel-card"]'
     );
 
     for (const card of Array.from(cards)) {
-      if (card.dataset.ownlyCardInjected === 'true') continue;
+      if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) continue;
 
       const parsedPlace = parseAgodaCard(card);
       if (!parsedPlace || !parsedPlace.title) continue;
@@ -218,3 +244,4 @@ export class AgodaAdapter implements PageAdapter {
     }
   }
 }
+

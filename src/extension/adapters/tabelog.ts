@@ -11,6 +11,10 @@ import { injectInlineCaptureButton } from '../ui/inline-capture-button';
 
 export function extractTabelogPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
+  if (/rstLst/i.test(sourceUrl) || Boolean(document.querySelector('div.list-rst, div.js-rst-cassette'))) {
+    return null;
+  }
+
   const titleEl = document.querySelector<HTMLElement>('h2.display-name, h1.rstinfo-table__name, .rdheader-rst-name');
   const rawTitle = titleEl?.textContent?.trim() || '';
   if (!rawTitle) return null;
@@ -96,12 +100,33 @@ export class TabelogAdapter implements PageAdapter {
   initInlineButtons(): void {
     if (typeof document === 'undefined' || !document.body) return;
 
+    // 1. Single Restaurant Detail Page: inject next to restaurant title
+    const detailTitleEl = document.querySelector<HTMLElement>(
+      'h2.display-name, h1.rst-name, [data-name="rst-name"], .rst-header__name'
+    );
+    if (detailTitleEl && !document.querySelector('div.list-rst')) {
+      const container = (detailTitleEl.parentElement || detailTitleEl) as HTMLElement;
+      if (container.dataset.ownlyCardInjected !== 'true' && !container.querySelector('.ownly-inline-fab-root')) {
+        const place = this.extractPlace();
+        if (place && place.title) {
+          injectInlineCaptureButton({
+            container,
+            anchor: detailTitleEl,
+            position: 'before',
+            customStyle: 'margin-right: 10px; margin-bottom: 4px;',
+            getPlace: () => this.extractPlace() || place,
+          });
+        }
+      }
+    }
+
+    // 2. Search Result List
     const cards = document.querySelectorAll<HTMLElement>(
       'div.list-rst, li.list-rst, div.js-rst-cassette'
     );
 
     for (const card of Array.from(cards)) {
-      if (card.dataset.ownlyCardInjected === 'true') continue;
+      if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) continue;
 
       const parsedPlace = parseTabelogCard(card);
       if (!parsedPlace || !parsedPlace.title) continue;
@@ -120,3 +145,4 @@ export class TabelogAdapter implements PageAdapter {
     }
   }
 }
+

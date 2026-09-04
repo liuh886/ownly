@@ -8,6 +8,7 @@ export interface InlineCaptureButtonOptions {
   buttonText?: string;
   loadingText?: string;
   successText?: string;
+  existsText?: string;
   errorText?: string;
   injectedAttribute?: string;
   customStyle?: string;
@@ -15,7 +16,8 @@ export interface InlineCaptureButtonOptions {
 
 /**
  * Creates and injects an encapsulated Shadow-DOM "📌 放入案板" quick capture button.
- * Ensures zero style bleed, micro-animations, and atomic messaging to the background worker.
+ * Ensures zero style bleed, micro-animations, atomic messaging to background worker,
+ * and resilient in-place deduplication feedback.
  */
 export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): HTMLElement | null {
   const {
@@ -26,16 +28,18 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
     buttonText = '放入案板',
     loadingText = '采集中...',
     successText = '已放入案板',
+    existsText = '已在案板中',
     errorText = '保存失败',
     injectedAttribute = 'ownlyCardInjected',
     customStyle = '',
   } = options;
 
-  if (container.dataset[injectedAttribute] === 'true') {
+  if (container.dataset[injectedAttribute] === 'true' || anchor.dataset[injectedAttribute] === 'true') {
     return null;
   }
 
   container.dataset[injectedAttribute] = 'true';
+  anchor.dataset[injectedAttribute] = 'true';
 
   const btnContainer = document.createElement('div');
   btnContainer.className = 'ownly-inline-fab-root';
@@ -43,12 +47,29 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
     'display: inline-flex',
     'align-items: center',
     'margin-right: 8px',
-    'margin-bottom: 4px',
+    'margin-bottom: 2px',
     'vertical-align: middle',
     'user-select: none',
-    'z-index: 10',
+    'pointer-events: auto',
+    'position: relative',
+    'z-index: 100',
     customStyle,
   ].filter(Boolean).join(';');
+
+  // Prevent all mouse/pointer events from bubbling to ancestor links or card containers
+  const isolateEvent = (ev: Event) => {
+    ev.stopPropagation();
+    if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    if (ev.type === 'click' || ev.type === 'mousedown' || ev.type === 'pointerdown') {
+      ev.preventDefault();
+    }
+  };
+
+  btnContainer.addEventListener('click', isolateEvent, true);
+  btnContainer.addEventListener('mousedown', isolateEvent, true);
+  btnContainer.addEventListener('mouseup', isolateEvent, true);
+  btnContainer.addEventListener('pointerdown', isolateEvent, true);
+  btnContainer.addEventListener('pointerup', isolateEvent, true);
 
   const shadow = btnContainer.attachShadow ? btnContainer.attachShadow({ mode: 'open' }) : null;
   const root = shadow || btnContainer;
@@ -73,6 +94,8 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
       outline: none;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-decoration: none;
+      white-space: nowrap;
     }
     .card-fab-btn:hover {
       transform: translateY(-1px) scale(1.02);
@@ -83,6 +106,11 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
       background: linear-gradient(135deg, #10b981 0%, #047857 100%);
       border-color: #6ee7b7;
       box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+    }
+    .card-fab-btn.is-exists {
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      border-color: #7dd3fc;
+      box-shadow: 0 0 12px rgba(2, 132, 199, 0.45);
     }
     .card-fab-btn.is-loading {
       opacity: 0.85;
@@ -104,13 +132,17 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
   btn.setAttribute('title', '一键采集到 Ownly 案板 (Inbox)');
   btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
 
+  btn.addEventListener('click', isolateEvent, true);
+  btn.addEventListener('mousedown', isolateEvent, true);
+  btn.addEventListener('pointerdown', isolateEvent, true);
+
   let isSaving = false;
   btn.addEventListener('click', async (ev) => {
-    ev.stopPropagation();
-    ev.preventDefault();
+    isolateEvent(ev);
     if (isSaving) return;
 
     isSaving = true;
+    btn.classList.remove('is-success', 'is-exists');
     btn.classList.add('is-loading');
     btn.innerHTML = `<span class="card-fab-icon">⏳</span><span class="card-fab-text">${loadingText}</span>`;
 
@@ -131,10 +163,23 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
       const resp = (await chrome.runtime.sendMessage({
         type: 'OWNLY_QUICK_SAVE_PLACE',
         place,
-      }).catch((err: unknown) => ({ ok: false, error: String(err) }))) as { ok?: boolean; placeId?: string; error?: string } | undefined;
+      }).catch((err: unknown) => ({ ok: false, error: String(err) }))) as {
+        ok?: boolean;
+        placeId?: string;
+        alreadyExists?: boolean;
+        error?: string;
+      } | undefined;
 
       btn.classList.remove('is-loading');
-      if (resp?.ok) {
+      if (resp?.alreadyExists) {
+        btn.classList.add('is-exists');
+        btn.innerHTML = `<span class="card-fab-icon">ℹ️</span><span class="card-fab-text">${existsText}</span>`;
+        setTimeout(() => {
+          btn.classList.remove('is-exists');
+          btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
+          isSaving = false;
+        }, 2500);
+      } else if (resp?.ok) {
         btn.classList.add('is-success');
         btn.innerHTML = `<span class="card-fab-icon">✓</span><span class="card-fab-text">${successText}</span>`;
         setTimeout(() => {
@@ -170,6 +215,10 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
       anchor.parentNode.appendChild(btnContainer);
     }
   } else if (position === 'prepend') {
+    anchor.insertBefore(btnContainer, anchor.firstChild);
+  } else if (position === 'append') {
+    anchor.appendChild(btnContainer);
+  } else if (container.firstChild) {
     container.insertBefore(btnContainer, container.firstChild);
   } else {
     container.appendChild(btnContainer);
@@ -177,3 +226,4 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
 
   return btnContainer;
 }
+

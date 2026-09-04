@@ -840,6 +840,53 @@ export class PlannerRepository {
     return written;
   }
 
+  /**
+   * Swaps the entire scheduled day itinerary (visits) between two dates in a trip.
+   * Atomically transfers all visits on dateA to dateB and all visits on dateB to dateA,
+   * fully preserving each stop's sort_order, start_time, duration_minutes, and locked status.
+   */
+  async swapTripDays(tripId: string, dateA: string, dateB: string): Promise<{ swappedCount: number }> {
+    if (!tripId) throw new Error('Planner swap trip days requires a valid tripId.');
+    if (!dateA || !dateB) throw new Error('Planner swap trip days requires two valid dates.');
+    if (dateA === dateB) return { swappedCount: 0 };
+
+    const trip = (await this.listTrips()).find((t) => t.id === tripId);
+    if (!trip) throw new Error(`Planner trip "${tripId}" was not found.`);
+    assertTripDates(trip, [dateA, dateB]);
+
+    const visits = await this.listVisits();
+    const tripVisits = visits.filter((v) => v.trip_id === tripId);
+    const visitsA = tripVisits.filter((v) => v.date === dateA);
+    const visitsB = tripVisits.filter((v) => v.date === dateB);
+
+    if (visitsA.length === 0 && visitsB.length === 0) {
+      return { swappedCount: 0 };
+    }
+
+    const now = new Date().toISOString();
+    let swappedCount = 0;
+
+    for (const visit of visitsA) {
+      await this.upsertVisit({
+        ...visit,
+        date: dateB,
+        updated_at: now,
+      });
+      swappedCount += 1;
+    }
+
+    for (const visit of visitsB) {
+      await this.upsertVisit({
+        ...visit,
+        date: dateA,
+        updated_at: now,
+      });
+      swappedCount += 1;
+    }
+
+    return { swappedCount };
+  }
+
   async setStaySpan(hotelPlaceId: string, dates: string[]): Promise<PlannerTripVisit[]> {
     const place = (await this.listPlaces()).find((item) => item.id === hotelPlaceId && item.kind === 'stay' && item.state !== 'dropped');
     if (!place) throw new Error(`Planner stay place was not found: ${hotelPlaceId}`);

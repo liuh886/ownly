@@ -270,6 +270,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [poolSearch, setPoolSearch] = useState('');
   const [isBatchOperating, setIsBatchOperating] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
+  const [draggingDate, setDraggingDate] = useState<string | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const [isSwapDaysModalOpen, setIsSwapDaysModalOpen] = useState(false);
+  const [swapTargetDate, setSwapTargetDate] = useState<string>('');
   const dateNavRef = useRef<HTMLDivElement>(null);
 
   let isPro = true;
@@ -1268,6 +1272,29 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     }
   }, [load, selectedTripId, trips, zh]);
 
+  const handleSwapDays = useCallback(
+    async (dateA: string, dateB: string) => {
+      if (!selectedTripId || !dateA || !dateB || dateA === dateB) return;
+      try {
+        const result = await plannerRepository.swapTripDays(selectedTripId, dateA, dateB);
+        await load();
+        const indexA = tripDates.indexOf(dateA);
+        const indexB = tripDates.indexOf(dateB);
+        const labelA = indexA >= 0 ? (zh ? `第${indexA + 1}天` : `Day ${indexA + 1}`) : dateA;
+        const labelB = indexB >= 0 ? (zh ? `第${indexB + 1}天` : `Day ${indexB + 1}`) : dateB;
+        setNotice(
+          zh
+            ? `✅ 已将 ${labelA} 与 ${labelB} 的全部行程路线完整互换 (${result.swappedCount} 个地点顺位与时间已平移)`
+            : `✅ Swapped itinerary between ${labelA} and ${labelB} (${result.swappedCount} visits moved)`,
+        );
+      } catch (err) {
+        console.warn('[Planner] Failed to swap days:', err);
+        setNotice(zh ? '互换日程失败，请重试。' : 'Failed to swap day itineraries.');
+      }
+    },
+    [selectedTripId, tripDates, zh, load],
+  );
+
   if (disabled) {
     return (
       <section className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-500 shadow-sm">
@@ -1400,21 +1427,57 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
       {notice ? <div aria-live="polite" className="rounded-xl bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 shadow-2xs animate-in fade-in">{notice}</div> : null}
 
-      <nav ref={dateNavRef} className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label={zh ? '日期导航' : 'Date navigation'}>
+      <nav ref={dateNavRef} className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label={zh ? '日期导航' : 'Date navigation'}>
         {tripDates.map((date, index) => {
           const isSelected = activeDate === date;
+          const isDragOver = dragOverDate === date;
+          const isDraggingThis = draggingDate === date;
           const dayPlacesCount = placesByDate[date]?.length || 0;
           return (
             <button
               key={date}
               type="button"
               data-date={date}
+              draggable={tripDates.length > 1}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('text/plain', date);
+                e.dataTransfer.effectAllowed = 'move';
+                setDraggingDate(date);
+              }}
+              onDragOver={(e) => {
+                if (draggingDate && draggingDate !== date) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverDate !== date) setDragOverDate(date);
+                }
+              }}
+              onDragLeave={() => {
+                if (dragOverDate === date) setDragOverDate(null);
+              }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                const sourceDate = e.dataTransfer.getData('text/plain') || draggingDate;
+                setDraggingDate(null);
+                setDragOverDate(null);
+                if (sourceDate && sourceDate !== date) {
+                  await handleSwapDays(sourceDate, date);
+                }
+              }}
+              onDragEnd={() => {
+                setDraggingDate(null);
+                setDragOverDate(null);
+              }}
               onClick={() => setSelectedDate(date)}
-              className={`group shrink-0 flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition shadow-2xs ${
-                isSelected
-                  ? 'bg-stone-900 text-white shadow-xs'
-                  : 'border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900'
+              className={`group shrink-0 flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all shadow-2xs cursor-grab active:cursor-grabbing select-none ${
+                isDragOver
+                  ? 'ring-2 ring-emerald-500 bg-emerald-50 text-emerald-900 border-emerald-400 scale-105 shadow-md z-10'
+                  : isDraggingThis
+                    ? 'opacity-40 border-dashed border-stone-400 bg-stone-100 text-stone-400'
+                    : isSelected
+                      ? 'bg-stone-900 text-white shadow-xs'
+                      : 'border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900'
               }`}
+              title={zh ? '点击切换视图；按住可拖拽至其它天整体互换路线日程' : 'Click to select; drag to swap day itinerary with another day'}
             >
               <span>{zh ? `第${index + 1}天` : `Day ${index + 1}`}</span>
               <span className={`text-[11px] ${isSelected ? 'text-stone-300' : 'text-stone-400 group-hover:text-stone-500'}`}>
@@ -1430,6 +1493,23 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             </button>
           );
         })}
+
+        {tripDates.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => {
+              const currentIndex = tripDates.indexOf(activeDate);
+              const defaultTarget = tripDates[currentIndex + 1] || tripDates[currentIndex - 1] || tripDates[0];
+              setSwapTargetDate(defaultTarget);
+              setIsSwapDaysModalOpen(true);
+            }}
+            className="group shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50/80 px-2.5 py-2 text-xs font-semibold text-stone-700 hover:border-stone-300 hover:bg-stone-100 hover:text-stone-900 transition shadow-2xs"
+            title={zh ? '整体互换某两天的路线日程（也可直接拖动上方标签）' : 'Swap itinerary between two days'}
+          >
+            <span className="text-stone-500 group-hover:text-stone-900">⇄</span>
+            <span>{zh ? '互换' : 'Swap'}</span>
+          </button>
+        ) : null}
       </nav>
 
       {/* Departure Intelligence Bar */}
@@ -2840,6 +2920,86 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 className="rounded-md border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 transition"
               >
                 {zh ? '暂不处理' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Accessible Day Swap Modal */}
+      {isSwapDaysModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <span>⇄</span>
+                <span>{zh ? '互换行程日程' : 'Swap Day Itineraries'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsSwapDaysModalOpen(false)}
+                className="rounded-lg p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-stone-500 leading-relaxed">
+              {zh
+                ? '将当前选中日期的全部排期路线与目标日期整体对调。两天的游览先后顺位、时间设定与锁定标记将 100% 完整平移。'
+                : 'Atomically swap all scheduled visits between the active day and a target day. Sequence orders, custom timings, and pinned locks are preserved.'}
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 items-center rounded-xl bg-stone-50 p-3 border border-stone-200">
+              <div className="space-y-1">
+                <span className="text-[11px] font-bold text-stone-500">{zh ? '当前日期 (源)' : 'Source Day'}</span>
+                <div className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-900">
+                  {zh ? `第${tripDates.indexOf(activeDate) + 1}天` : `Day ${tripDates.indexOf(activeDate) + 1}`} ({formatDay(activeDate, language)})
+                  <div className="text-[10.5px] font-normal text-stone-500 mt-0.5">
+                    {placesByDate[activeDate]?.length || 0} {zh ? '个地点' : 'places'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[11px] font-bold text-stone-500">{zh ? '目标互换日期' : 'Target Day'}</span>
+                <select
+                  value={swapTargetDate}
+                  onChange={(e) => setSwapTargetDate(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-2 text-xs font-semibold text-stone-900 focus:border-stone-900 focus:outline-hidden"
+                >
+                  {tripDates.map((d, i) => {
+                    if (d === activeDate) return null;
+                    const count = placesByDate[d]?.length || 0;
+                    return (
+                      <option key={d} value={d}>
+                        {zh ? `第${i + 1}天 (${formatDay(d, language)}) · ${count}个地点` : `Day ${i + 1} (${formatDay(d, language)}) · ${count} places`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsSwapDaysModalOpen(false)}
+                className="rounded-lg border border-stone-200 px-3.5 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50 transition"
+              >
+                {zh ? '取消' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={!swapTargetDate || swapTargetDate === activeDate}
+                onClick={async () => {
+                  if (!swapTargetDate || swapTargetDate === activeDate) return;
+                  setIsSwapDaysModalOpen(false);
+                  await handleSwapDays(activeDate, swapTargetDate);
+                }}
+                className="rounded-lg bg-stone-900 px-4 py-2 text-xs font-semibold text-white hover:bg-stone-800 transition disabled:opacity-40"
+              >
+                {zh ? '确认互换' : 'Confirm Swap'}
               </button>
             </div>
           </div>

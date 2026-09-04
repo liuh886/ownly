@@ -1,5 +1,61 @@
 # Ownly — Task Progress & Review
 
+## Completed: Planner Date Tabs Drag-and-Drop Itinerary Day Swapping (2026-09-05)
+- [x] **1. Add `swapTripDays` to `PlannerRepository` & Pure Domain Logic**
+  - Implemented atomic date swapping for all `PlannerTripVisit`s belonging to `(trip_id, dateA)` and `(trip_id, dateB)`.
+  - Preserved 100% of visit sort orders, start/end times, durations, and locked states.
+  - Asserted valid trip date boundaries and handled trips with no visits or single-sided visits cleanly.
+  - Added unit test suite in `src/services/PlannerRepository.schedule.test.ts` (all 22 tests passing).
+- [x] **2. Implement Drag-and-Drop & Accessible Swap Modal in `PlannerHome.tsx`**
+  - Added HTML5 `draggable` and drag event handlers (`onDragStart`, `onDragOver`, `onDragLeave`, `onDrop`, `onDragEnd`) to Day Tabs.
+  - Provided visual drop target indicator with scale and ring highlights when hovering over a target day tab.
+  - Added an accessible `⇄ 互换` button and quick picker modal in the date navigation bar for mobile/touch screens.
+  - Provided instant UI update and feedback notification on successful swap.
+- [x] **3. Verification and Testing**
+  - `npm run validate:fast`: 0 errors.
+  - `npm run validate:extension`: 161 tests passing, clean build.
+  - `npm run build`: Next.js production build succeeded.
+## Completed: Universal In-Page "📌 放入案板", Google Maps Detail Pane Integration & Inbox Deduplication (2026-09-05)
+- [x] **1. Fix Inline Capture Button Visibility & Absolute Event Isolation (`src/extension/ui/inline-capture-button.ts`)**
+  - Resolved button displacement: Directly inserted before/within anchor without breaking parent flex/grid layouts.
+  - Complete pointer event suppression (`preventDefault` + `stopPropagation` on `click`, `mousedown`, `pointerdown`) so buttons inside or near `<a>` never trigger navigation.
+  - Added state styling for existing items: `.is-exists` displaying `ℹ️ 该地点已在案板中` with distinct teal/blue feedback.
+- [x] **2. Unify Google Maps Detail Pane & Search Results with In-Page "放入案板" (`src/extension/adapters/google-maps.ts`)**
+  - Injected inline "📌 放入案板" button directly on Google Maps single POI detail pane header (`h1.DUwDvf`, `.fontHeadlineLarge`, action bar).
+  - Injected inline "📌 放入案板" button on Google Maps search result cards (`div.Nv2PK`, `div.THOPZb`).
+  - Automatically queries `extractGoogleMapsPlace()` with automatic URL/pushState change detection.
+- [x] **3. Fix & Refine In-Page Buttons Across Google Travel, Agoda, Booking, Tabelog, Xiaohongshu**
+  - Google Travel: Refined card title selector to iterate over actual hotel names without over-marking sibling `<c-wiz>` components. Added single entity page button injection (`/hotels/entity/...`).
+  - Agoda, Booking.com, Tabelog, Xiaohongshu: Injected inline button across both search/list items and single hotel/restaurant/note detail views.
+- [x] **4. Streamline Sidepanel: Focus on Inbox Collection & Saved Lists Batch Import**
+  - Retired noisy single-place auto-reading form in Sidepanel.
+  - Senses and displays Saved List batch sync card when viewing a list/collection, and keeps the Inbox collection drawer front and center when browsing single places.
+- [x] **5. Implement Robust Inbox Deduplication & Notifications (`src/extension/background.ts`)**
+  - When saving via "放入案板" or background worker, detects existing places via resilient identity (Place ID, CID, canonical URL, coordinates $< 150\text{m}$, title).
+  - If existing: merges new observations, returns `alreadyExists: true`, and triggers informative `ℹ️ 该地点已在案板中` feedback on the button and badge.
+  - If new: creates place, returns `alreadyExists: false`, and triggers background Google Maps resolution.
+- [x] **6. Multi-Target Automated Verification Pass**
+  - `npm run validate:extension` (161/161 tests passing, clean build).
+  - `npm run validate:fast` (0 errors, clean types & linter).
+  - `npm run validate:shared` (100% contracts & MCP passing).
+
+
+## Completed: Inline Capture Button Isolation, Deduplication & Interaction Architecture Alignment (2026-09-05)
+- [x] **1. Isolate In-Page Inline Capture Buttons from Enclosing Anchor Tags**
+  - In [`src/extension/ui/inline-capture-button.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/ui/inline-capture-button.ts), detect if the insertion anchor is inside an `<a>` link (`anchor.closest('a')`) and insert the button container outside/before the anchor element.
+  - Added full event propagation stops (`click`, `mousedown`, `mouseup`, `pointerdown`, `pointerup` with `e.stopPropagation()`).
+  - Added `margin-right: 12px` to prevent accidental misclicks on hotel titles.
+- [x] **2. Eliminate Duplicate Buttons on Google Travel Cards**
+  - In [`src/extension/adapters/google-travel.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/adapters/google-travel.ts), bind exclusively to outermost card containers (`c-wiz[data-hotel-id]`, `div.uaTTDe`, `div.nId1nc`, `[role="listitem"]`).
+  - Automatically mark cards and all descendant elements with `dataset.ownlyCardInjected = 'true'` upon injection to eliminate duplicate buttons caused by nested sub-`<c-wiz>` components.
+- [x] **3. Architectural Clarification & Separation: "当前识别地点" vs External In-Page Capture**
+  - On non-Google Maps search and list pages (Google Travel, Agoda, Booking.com, Tabelog), `extractPlace()` now cleanly returns `null`, disabling phantom top-card extraction.
+  - Established clear interaction boundary: Google Maps single POI detail pane $\rightarrow$ Auto "当前识别地点"; External travel lists/saved collections $\rightarrow$ Inline "📌 放入案板" + batch saved list import with asynchronous Google Maps entity resolution.
+- [x] **4. Full Multi-Target Validation Pass**
+  - `npm run validate:extension` (161/161 tests passing, clean extension build).
+  - `npm run validate:fast` (0 errors, clean types & linter).
+  - `npm run validate:shared` (100% contracts & MCP passing).
+
 ## Completed: Technical Debt Clearance & Universal Provider Adapter Architecture (2026-09-05)
 - [x] **1. Create Universal Inline Capture Button UI Component (`src/extension/ui/inline-capture-button.ts`)**
   - Extracted reusable Shadow-DOM encapsulated button injection helper with unified states (idle -> loading -> success -> error).

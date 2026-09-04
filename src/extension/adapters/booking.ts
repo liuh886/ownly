@@ -126,6 +126,11 @@ export class BookingAdapter implements PageAdapter {
 
   extractPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
     const sourceUrl = window.location.href;
+    const isListPage = /searchresults|wishlist/i.test(sourceUrl) || Boolean(document.querySelector('div[data-testid="property-card"]'));
+    if (isListPage) {
+      return null;
+    }
+
     const html = typeof document !== 'undefined' ? document.documentElement.outerHTML : '';
     const facts = extractGoogleMapsResearchFromHtml(html);
 
@@ -203,12 +208,33 @@ export class BookingAdapter implements PageAdapter {
   initInlineButtons(): void {
     if (typeof document === 'undefined' || !document.body) return;
 
+    // 1. Single Hotel Detail Page: inject next to main title
+    const detailTitleEl = document.querySelector<HTMLElement>(
+      'h2.d2fee87e0b, h2.pp-header__title, h1, [data-testid="header-title"]'
+    );
+    if (detailTitleEl && !document.querySelector('div[data-testid="property-card"]')) {
+      const container = (detailTitleEl.parentElement || detailTitleEl) as HTMLElement;
+      if (container.dataset.ownlyCardInjected !== 'true' && !container.querySelector('.ownly-inline-fab-root')) {
+        const place = this.extractPlace();
+        if (place && place.title) {
+          injectInlineCaptureButton({
+            container,
+            anchor: detailTitleEl,
+            position: 'before',
+            customStyle: 'margin-right: 10px; margin-bottom: 4px;',
+            getPlace: () => this.extractPlace() || place,
+          });
+        }
+      }
+    }
+
+    // 2. Search Result Cards
     const cards = document.querySelectorAll<HTMLElement>(
-      'div[data-testid="property-card"], div.sr_item, div[role="listitem"]'
+      'div[data-testid="property-card"], div.sr_item'
     );
 
     for (const card of Array.from(cards)) {
-      if (card.dataset.ownlyCardInjected === 'true') continue;
+      if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) continue;
 
       const parsedPlace = parseBookingCard(card);
       if (!parsedPlace || !parsedPlace.title) continue;
@@ -228,3 +254,4 @@ export class BookingAdapter implements PageAdapter {
     }
   }
 }
+

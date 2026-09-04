@@ -7,6 +7,7 @@ import {
   isJunkNavigationText,
 } from '../utils';
 import { detectCurrencyFromPage } from '../currency-detector';
+import { injectInlineCaptureButton } from '../ui/inline-capture-button';
 
 export function extractXiaohongshuPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
@@ -101,4 +102,26 @@ export class XiaohongshuAdapter implements PageAdapter {
   detectSavedList(): DetectedSavedList | null {
     return detectXiaohongshuNoteList();
   }
+
+  initInlineButtons(): void {
+    if (typeof document === 'undefined' || !document.body) return;
+
+    const titleEl = document.querySelector<HTMLElement>('#detail-title, .title, .note-detail-mask .title');
+    if (titleEl) {
+      const container = (titleEl.parentElement || titleEl) as HTMLElement;
+      if (container.dataset.ownlyCardInjected !== 'true' && !container.querySelector('.ownly-inline-fab-root')) {
+        const place = this.extractPlace();
+        if (place && place.title) {
+          injectInlineCaptureButton({
+            container,
+            anchor: titleEl,
+            position: 'before',
+            customStyle: 'margin-right: 8px; margin-bottom: 4px;',
+            getPlace: () => this.extractPlace() || place,
+          });
+        }
+      }
+    }
+  }
 }
+

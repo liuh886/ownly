@@ -9,6 +9,7 @@ import {
   extractFeatureIdFromUrl,
   extractHotelPropertyFacts,
   extractPlaceCoordinates,
+  isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
   isValidExtractedPriceCandidate,
@@ -20,6 +21,7 @@ import { SELECTORS, driftCheck } from '../selectors';
 import { PLACE_PARSER } from '../place-parser';
 import { detectPageCurrency } from '../currency-detector';
 import { extractGoogleMapsSavedListId } from '../saved-list-match';
+import { injectInlineCaptureButton } from '../ui/inline-capture-button';
 import { logger } from '../logger';
 import {
   buildFromEntityList,
@@ -639,4 +641,75 @@ export class GoogleMapsAdapter implements PageAdapter {
   async detectSavedList(overrideCurrency?: string): Promise<DetectedSavedList | null> {
     return await resolveGoogleMapsList(overrideCurrency);
   }
+
+  initInlineButtons(): void {
+    if (typeof document === 'undefined' || !document.body) return;
+
+    // 1. Single POI Detail Pane: inject "📌 放入案板" button next to main place title
+    const detailTitleEl = document.querySelector<HTMLElement>(
+      'h1.DUwDvf, h1.fontHeadlineLarge, div.lMbq3e h1, div.TIH9bg h1, div[role="main"] h1'
+    );
+    if (detailTitleEl) {
+      const paneContainer = (detailTitleEl.closest<HTMLElement>('div[role="main"], div.m6QErb, div.lMbq3e') || detailTitleEl.parentElement) as HTMLElement;
+      if (paneContainer && paneContainer.dataset.ownlyCardInjected !== 'true' && !paneContainer.querySelector('.ownly-inline-fab-root')) {
+        injectInlineCaptureButton({
+          container: paneContainer,
+          anchor: detailTitleEl,
+          position: 'before',
+          customStyle: 'margin-right: 10px; margin-bottom: 4px;',
+          getPlace: () => extractGoogleMapsPlace(),
+        });
+      }
+    }
+
+    // 2. Search Result List items: inject next to each search result item title
+    const searchCards = document.querySelectorAll<HTMLElement>(
+      'div.Nv2PK, div.THOPZb, div[role="feed"] div[role="article"]'
+    );
+    for (const card of Array.from(searchCards)) {
+      if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) continue;
+      const titleEl = card.querySelector<HTMLElement>('div.qBF1Pd, div.fontHeadlineSmall, [role="heading"]');
+      if (!titleEl || !titleEl.textContent?.trim()) continue;
+
+      const rawTitle = cleanExtractedText(titleEl.textContent);
+      if (!rawTitle || isFakePlaceLabel(rawTitle) || isJunkNavigationText(rawTitle)) continue;
+
+      const anchorEl = card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[href*="/maps/place/"], a[data-item-id]');
+      const href = anchorEl?.href || window.location.href;
+
+      injectInlineCaptureButton({
+        container: card,
+        anchor: titleEl,
+        position: 'before',
+        getPlace: () => {
+          const ratingEl = card.querySelector<HTMLElement>('span.MW4etd, span[aria-label*="星"]');
+          const rawRating = ratingEl?.getAttribute('aria-label') || ratingEl?.textContent;
+          const rating = PLACE_PARSER.parseRating(rawRating);
+
+          const reviewEl = card.querySelector<HTMLElement>('span.UY7F9');
+          const reviewCount = PLACE_PARSER.parseReviewCount(reviewEl?.textContent);
+
+          const subtitleEl = card.querySelector<HTMLElement>('div.W4Efsd:last-child, div.W4Efsd');
+          const subtitleText = subtitleEl?.textContent || '';
+
+          const priceEl = card.querySelector<HTMLElement>('span[aria-label*="$"], span[aria-label*="¥"], span[aria-label*="฿"]');
+          const priceLevel = priceEl ? extractCleanPriceText(priceEl.textContent || '') : undefined;
+
+          return {
+            title: rawTitle,
+            sourceUrl: href,
+            sourceProvider: 'google_maps',
+            kind: inferPlaceKind(rawTitle + ' ' + subtitleText),
+            rating,
+            reviewCount,
+            priceLevel,
+            address: subtitleText || undefined,
+            types: ['point_of_interest', 'establishment'],
+            summary: '来自 Google Maps 搜索列表',
+          };
+        },
+      });
+    }
+  }
 }
+

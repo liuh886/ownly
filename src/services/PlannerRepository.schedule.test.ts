@@ -344,4 +344,66 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(thipPlaces.find((p) => p.id === 'p-thip-new')?.source_place_id).toBe('0x30e2991678584ec5:0x698c069655046fbe');
     expect(thipPlaces.find((p) => p.id === 'p-thip-new')?.observed_rating).toBe(4.2);
   });
+
+  it('swaps scheduled day itineraries between two dates atomically preserving order, time and locks', async () => {
+    await seed([
+      place('p1', { title: 'Grand Palace' }),
+      place('p2', { title: 'Wat Pho' }),
+      place('p3', { title: 'ICONSIAM' }),
+    ]);
+
+    // Schedule p1 and p2 on Day 1 (2026-11-01)
+    const v1 = await plannerRepository.addVisit('p1', '2026-11-01');
+    await plannerRepository.addVisit('p2', '2026-11-01');
+    await plannerRepository.updateVisitTiming(v1!.id, { start: '09:00', duration_minutes: 120 });
+    await plannerRepository.toggleVisitLock(v1!.id);
+
+    // Schedule p3 on Day 2 (2026-11-02)
+    const v3 = await plannerRepository.addVisit('p3', '2026-11-02');
+    await plannerRepository.updateVisitTiming(v3!.id, { start: '14:00', duration_minutes: 180 });
+
+    // Execute swap between 2026-11-01 and 2026-11-02
+    const result = await plannerRepository.swapTripDays('trip-1', '2026-11-01', '2026-11-02');
+    expect(result.swappedCount).toBe(3);
+
+    const visits = await plannerRepository.listVisits();
+    const day1Visits = visits.filter((v) => v.date === '2026-11-01');
+    const day2Visits = visits.filter((v) => v.date === '2026-11-02');
+
+    // Day 1 now has p3 with preserved time & duration
+    expect(day1Visits).toHaveLength(1);
+    expect(day1Visits[0].place_id).toBe('p3');
+    expect(day1Visits[0].start).toBe('14:00');
+    expect(day1Visits[0].duration_minutes).toBe(180);
+
+    // Day 2 now has p1 and p2 with preserved order, time, duration, and locked status
+    expect(day2Visits).toHaveLength(2);
+    expect(day2Visits[0].place_id).toBe('p1');
+    expect(day2Visits[0].start).toBe('09:00');
+    expect(day2Visits[0].duration_minutes).toBe(120);
+    expect(day2Visits[0].locked).toBe(true);
+
+    expect(day2Visits[1].place_id).toBe('p2');
+    expect(day2Visits[1].sort_order).toBe(1);
+  });
+
+  it('handles swapping with an empty day gracefully', async () => {
+    await seed([place('p1', { title: 'Grand Palace' })]);
+    await plannerRepository.addVisit('p1', '2026-11-01');
+
+    // Swap Day 1 with empty Day 3 (2026-11-03)
+    const result = await plannerRepository.swapTripDays('trip-1', '2026-11-01', '2026-11-03');
+    expect(result.swappedCount).toBe(1);
+
+    const visits = await plannerRepository.listVisits();
+    expect(visits.filter((v) => v.date === '2026-11-01')).toHaveLength(0);
+    expect(visits.filter((v) => v.date === '2026-11-03')).toHaveLength(1);
+    expect(visits.find((v) => v.date === '2026-11-03')?.place_id).toBe('p1');
+  });
+
+  it('rejects swapping dates outside trip range', async () => {
+    await expect(
+      plannerRepository.swapTripDays('trip-1', '2026-11-01', '2026-12-01'),
+    ).rejects.toThrow();
+  });
 });

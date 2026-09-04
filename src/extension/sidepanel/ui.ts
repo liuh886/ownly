@@ -667,132 +667,129 @@ export function renderCurrentPlace() {
     el.placeProvider.style.display = 'none';
   }
 
-  if (!store.currentPlace) {
-    if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
-      const dictLocal = t();
-      el.lblCurrentPlace.textContent = store.lang === 'zh' ? '当前识别：📋 收藏列表' : 'Recognized List';
-      el.placeTitle.textContent = store.detectedSavedList.listName;
-      el.placeUrl.textContent = dictLocal.browsingListDesc(store.detectedSavedList.places.length);
-      el.placeCapturedBanner.style.display = 'none';
-
-      const bCount = document.createElement('span');
-      bCount.className = 'badge highlight';
-      bCount.textContent = `📋 ${store.detectedSavedList.places.length} 个地点`;
-      el.placeMetaBadges.append(bCount);
-
-      if (store.detectedSavedList.truncated) {
-        const bTrunc = document.createElement('span');
-        bTrunc.className = 'badge';
-        bTrunc.textContent = store.lang === 'zh' ? `⚠️ 列表已截断至 500 个` : `⚠️ Truncated to 500`;
-        el.placeMetaBadges.append(bTrunc);
-      }
-
-      el.smartListContainer.style.display = 'block';
-      el.btnSmartSyncAll.textContent = dict.syncAllBtn(store.detectedSavedList.places.length);
-      el.btnToggleListPreview.textContent = store.isListPreviewOpen ? dict.collapseList : dict.pickPlaces;
-      el.smartListPreviewContainer.style.display = store.isListPreviewOpen ? 'block' : 'none';
-
-      el.batchListContainer.innerHTML = '';
-      for (const item of store.detectedSavedList.places) {
-        const row = document.createElement('div');
-        row.className = 'batch-item';
-
-        const thumb = document.createElement('span');
-        thumb.className = 'batch-thumb';
-        thumb.textContent = KIND_ICONS[inferPlaceKind(item.category || item.title)] || '📍';
-
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.checked = true;
-        chk.dataset.url = item.sourceUrl;
-
-        const info = document.createElement('div');
-        info.className = 'batch-item-info';
-        const sub = [item.category, item.rating ? `★ ${item.rating}` : '', item.userNote ? `📝 ${item.userNote}` : ''].filter(Boolean).join(' · ');
-        const titleEl = document.createElement('div');
-        titleEl.className = 'batch-item-title';
-        titleEl.textContent = item.title;
-        const subEl = document.createElement('div');
-        subEl.className = 'batch-item-sub';
-        subEl.textContent = sub || item.address || '';
-        info.append(titleEl, subEl);
-
-        row.append(chk, thumb, info);
-        el.batchListContainer.append(row);
-      }
-
-      el.captureForm.style.display = 'none';
-      setStatus(dictLocal.listSensedStatus(store.detectedSavedList.places.length));
-      return;
-    } else {
-      el.lblCurrentPlace.textContent = dict.currentPlaceLabel;
-      el.placeTitle.textContent = dict.noPlaceTitle;
-      el.placeUrl.textContent = dict.noPlaceUrl;
-      el.smartListContainer.style.display = 'none';
-      el.captureForm.style.display = 'block';
-      setStatus(dict.noPlaceStatus);
-    }
+  if (store.detectedSavedList && store.detectedSavedList.places.length > 0) {
+    el.addPanel.style.display = 'block';
+    el.addPanel.open = true;
+    el.sumAddPanel.textContent = store.lang === 'zh' ? '📋 发现收藏列表' : '📋 Saved List Found';
+    el.lblCurrentPlace.textContent = store.lang === 'zh' ? '当前识别：📋 收藏列表' : 'Recognized List';
+    el.placeTitle.textContent = store.detectedSavedList.listName;
+    el.placeUrl.textContent = dict.browsingListDesc(store.detectedSavedList.places.length);
     el.placeCapturedBanner.style.display = 'none';
-    el.btnCaptureSubmit.textContent = dict.btnAddCandidate;
-    el.btnRemoveCandidate.style.display = 'none';
+
+    const bCount = document.createElement('span');
+    bCount.className = 'badge highlight';
+    bCount.textContent = `📋 ${store.detectedSavedList.places.length} 个地点`;
+    el.placeMetaBadges.append(bCount);
+
+    if (store.detectedSavedList.truncated) {
+      const bTrunc = document.createElement('span');
+      bTrunc.className = 'badge';
+      bTrunc.textContent = store.lang === 'zh' ? `⚠️ 列表已截断至 500 个` : `⚠️ Truncated to 500`;
+      el.placeMetaBadges.append(bTrunc);
+    }
+
+    el.smartListContainer.style.display = 'block';
+    el.btnSmartSyncAll.textContent = dict.syncAllBtn(store.detectedSavedList.places.length);
+    el.btnToggleListPreview.textContent = store.isListPreviewOpen ? dict.collapseList : dict.pickPlaces;
+    el.smartListPreviewContainer.style.display = store.isListPreviewOpen ? 'block' : 'none';
+
+    el.batchListContainer.innerHTML = '';
+    for (const item of store.detectedSavedList.places) {
+      const row = document.createElement('div');
+      row.className = 'batch-item';
+
+      const thumb = document.createElement('span');
+      thumb.className = 'batch-thumb';
+      thumb.textContent = KIND_ICONS[inferPlaceKind(item.category || item.title)] || '📍';
+
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = true;
+      chk.dataset.url = item.sourceUrl;
+
+      const info = document.createElement('div');
+      info.className = 'batch-item-info';
+      const sub = [item.category, item.rating ? `★ ${item.rating}` : '', item.userNote ? `📝 ${item.userNote}` : ''].filter(Boolean).join(' · ');
+      const titleEl = document.createElement('div');
+      titleEl.className = 'batch-item-title';
+      titleEl.textContent = item.title;
+      const subEl = document.createElement('div');
+      subEl.className = 'batch-item-sub';
+      subEl.textContent = sub || item.address || '';
+      info.append(titleEl, subEl);
+
+      row.append(chk, thumb, info);
+      el.batchListContainer.append(row);
+    }
+
+    el.captureForm.style.display = 'none';
+    setStatus(dict.listSensedStatus(store.detectedSavedList.places.length));
     return;
   }
 
-  el.lblCurrentPlace.textContent = store.lang === 'zh' ? '当前识别：📍 地点' : 'Recognized Place';
-  el.smartListContainer.style.display = 'none';
-  el.captureForm.style.display = 'block';
-  el.placeTitle.textContent = store.currentPlace.title;
-  el.placeUrl.textContent = store.currentPlace.sourceUrl;
+  if (store.currentPlace) {
+    el.addPanel.style.display = 'block';
+    el.sumAddPanel.textContent = store.lang === 'zh' ? '📍 当前识别地点' : '📍 Recognized Place';
+    el.lblCurrentPlace.textContent = store.lang === 'zh' ? '当前识别：📍 地点' : 'Recognized Place';
+    el.smartListContainer.style.display = 'none';
+    el.captureForm.style.display = 'block';
+    el.placeTitle.textContent = store.currentPlace.title;
+    el.placeUrl.textContent = store.currentPlace.sourceUrl;
 
-  const existing = getExistingPlaceForUrl(store.currentPlace.sourceUrl, store.currentPlace.sourcePlaceId);
-  if (existing) {
-    el.placeCapturedBanner.style.display = 'flex';
-    el.btnCaptureSubmit.textContent = dict.btnUpdateCandidate;
-    el.btnRemoveCandidate.style.display = 'inline-block';
-  } else {
-    el.placeCapturedBanner.style.display = 'none';
-    el.btnCaptureSubmit.textContent = dict.btnAddCandidate;
-    el.btnRemoveCandidate.style.display = 'none';
+    const existing = getExistingPlaceForUrl(store.currentPlace.sourceUrl, store.currentPlace.sourcePlaceId);
+    if (existing) {
+      el.placeCapturedBanner.style.display = 'flex';
+      el.btnCaptureSubmit.textContent = dict.btnUpdateCandidate;
+      el.btnRemoveCandidate.style.display = 'inline-block';
+    } else {
+      el.placeCapturedBanner.style.display = 'none';
+      el.btnCaptureSubmit.textContent = dict.btnAddCandidate;
+      el.btnRemoveCandidate.style.display = 'none';
+    }
+
+    if (store.currentPlace.rating) {
+      const b = document.createElement('span');
+      b.className = 'badge highlight';
+      b.textContent = `★ ${store.currentPlace.rating}${store.currentPlace.reviewCount ? ` (${store.currentPlace.reviewCount.toLocaleString()})` : ''}`;
+      el.placeMetaBadges.append(b);
+    }
+    if (store.currentPlace.category) {
+      const b = document.createElement('span');
+      b.className = 'badge';
+      b.textContent = `🏷️ ${store.currentPlace.category}`;
+      el.placeMetaBadges.append(b);
+    }
+    if (store.currentPlace.priceLevel) {
+      const b = document.createElement('span');
+      b.className = 'badge';
+      b.textContent = `💰 ${store.currentPlace.priceLevel}`;
+      el.placeMetaBadges.append(b);
+    } else if (store.currentPlace.detectedCurrency) {
+      const b = document.createElement('span');
+      b.className = 'badge highlight';
+      b.textContent = `💱 ${store.currentPlace.detectedCurrency}`;
+      el.placeMetaBadges.append(b);
+    }
+    if (store.currentPlace.openStatus) {
+      const b = document.createElement('span');
+      b.className = 'badge';
+      b.textContent = `⏰ ${store.currentPlace.openStatus}`;
+      el.placeMetaBadges.append(b);
+    }
+    if (store.currentPlace.address || store.currentPlace.coordinates) {
+      const b = document.createElement('span');
+      b.className = 'badge';
+      b.textContent = '📍';
+      b.title = store.currentPlace.address || `${store.currentPlace.coordinates?.lat}, ${store.currentPlace.coordinates?.lng}`;
+      el.placeMetaBadges.append(b);
+    }
+
+    setStatus(dict.readyToCapture);
+    return;
   }
 
-  if (store.currentPlace.rating) {
-    const b = document.createElement('span');
-    b.className = 'badge highlight';
-    b.textContent = `★ ${store.currentPlace.rating}${store.currentPlace.reviewCount ? ` (${store.currentPlace.reviewCount.toLocaleString()})` : ''}`;
-    el.placeMetaBadges.append(b);
-  }
-  if (store.currentPlace.category) {
-    const b = document.createElement('span');
-    b.className = 'badge';
-    b.textContent = `🏷️ ${store.currentPlace.category}`;
-    el.placeMetaBadges.append(b);
-  }
-  if (store.currentPlace.priceLevel) {
-    const b = document.createElement('span');
-    b.className = 'badge';
-    b.textContent = `💰 ${store.currentPlace.priceLevel}`;
-    el.placeMetaBadges.append(b);
-  } else if (store.currentPlace.detectedCurrency) {
-    const b = document.createElement('span');
-    b.className = 'badge highlight';
-    b.textContent = `💱 ${store.currentPlace.detectedCurrency}`;
-    el.placeMetaBadges.append(b);
-  }
-  if (store.currentPlace.openStatus) {
-    const b = document.createElement('span');
-    b.className = 'badge';
-    b.textContent = `⏰ ${store.currentPlace.openStatus}`;
-    el.placeMetaBadges.append(b);
-  }
-  if (store.currentPlace.address || store.currentPlace.coordinates) {
-    const b = document.createElement('span');
-    b.className = 'badge';
-    b.textContent = '📍';
-    b.title = store.currentPlace.address || `${store.currentPlace.coordinates?.lat}, ${store.currentPlace.coordinates?.lng}`;
-    el.placeMetaBadges.append(b);
-  }
-
-  setStatus(dict.readyToCapture);
+  // When no saved list and no current place, hide the recognition drawer so Inbox is prominent
+  el.addPanel.style.display = 'none';
 }
 
 function sanitizeSafeHref(url: string | undefined): string | null {

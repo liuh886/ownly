@@ -222,18 +222,11 @@ export class GoogleTravelAdapter implements PageAdapter {
 
   extractPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
     const sourceUrl = window.location.href;
-    const isSearchPage = /\/travel\/search|\/travel\/hotels(?:\?|$)/i.test(sourceUrl);
+    const isSingleEntityPage = /\/travel\/hotels\/entity\/|\/hotels\/entity\//i.test(sourceUrl);
 
-    if (isSearchPage) {
-      const activeCard = document.querySelector<HTMLElement>(
-        'c-wiz[data-hotel-id], [role="listitem"]:has(a[href*="/travel/hotels/entity/"]), div.uaTTDe, div.nId1nc'
-      );
-      if (activeCard) {
-        const parsed = parseGoogleTravelCard(activeCard, overrideCurrency, hintCurrency);
-        if (parsed && parsed.title && !isGenericNavigationTitle(parsed.title)) {
-          return convertToStandardGoogleMapsPlace(parsed);
-        }
-      }
+    // On search or list pages, do NOT auto-extract a single place. The user captures specific cards via inline buttons.
+    if (!isSingleEntityPage) {
+      return null;
     }
 
     const html = typeof document !== 'undefined' ? document.documentElement.outerHTML : '';
@@ -296,33 +289,60 @@ export class GoogleTravelAdapter implements PageAdapter {
   initInlineButtons(): void {
     if (typeof document === 'undefined' || !document.body) return;
 
-    const entityAnchors = document.querySelectorAll<HTMLAnchorElement>(
-      'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"], a[href*="/travel/hotels/s/"], a[data-hotel-id]'
+    // 1. Single Entity Page: inject next to main hotel title
+    const singleTitleEl = document.querySelector<HTMLElement>(
+      'h1, h2.fn, [data-attrid="title"], div.fn'
+    );
+    if (singleTitleEl && !document.querySelector('c-wiz[data-hotel-id]')) {
+      const container = (singleTitleEl.parentElement || singleTitleEl) as HTMLElement;
+      if (container.dataset.ownlyCardInjected !== 'true' && !container.querySelector('.ownly-inline-fab-root')) {
+        const rawPlace = this.extractPlace();
+        if (rawPlace && rawPlace.title) {
+          injectInlineCaptureButton({
+            container,
+            anchor: singleTitleEl,
+            position: 'before',
+            customStyle: 'margin-right: 10px; margin-bottom: 4px;',
+            getPlace: () => this.extractPlace() || rawPlace,
+          });
+        }
+      }
+    }
+
+    // 2. Search / List Cards: inject next to each hotel card title
+    const titleElements = document.querySelectorAll<HTMLElement>(
+      'h2.BgYkof, div.BgYkof, [role="heading"], div.w70Oqd, div.n7qZ7b, div.f5L0be, div.eUe7je'
     );
 
-    for (const anchor of Array.from(entityAnchors)) {
-      const card = (anchor.closest<HTMLElement>(
-        'c-wiz, [role="listitem"], div.uaTTDe, div.nId1nc, div.BWBWic, div.kDe2bf, div.P2h0Yb'
-      ) || anchor.parentElement?.parentElement) as HTMLElement | null;
+    for (const titleEl of Array.from(titleElements)) {
+      if (titleEl.dataset.ownlyCardInjected === 'true' || titleEl.parentElement?.querySelector('.ownly-inline-fab-root')) {
+        continue;
+      }
 
-      if (!card || card.dataset.ownlyCardInjected === 'true') continue;
+      const card = (titleEl.closest<HTMLElement>(
+        'c-wiz[data-hotel-id], div.uaTTDe, div.nId1nc, div.kDe2bf, div.BWBWic, div.kJk26d, [role="listitem"]'
+      ) || titleEl.parentElement) as HTMLElement;
+
+      if (!card || card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) {
+        continue;
+      }
+
+      const entityAnchor = card.querySelector<HTMLAnchorElement>(
+        'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"], a[href*="/travel/hotels/s/"], a[data-hotel-id]'
+      );
 
       const parsedPlace = parseGoogleTravelCard(card);
       if (!parsedPlace || !parsedPlace.title) continue;
 
-      const actionTarget = card.querySelector<HTMLElement>(
-        '.BgYkof, [role="heading"], div.w70Oqd, div.n7qZ7b, div.f5L0be, div.eUe7je'
-      ) || anchor;
-
       injectInlineCaptureButton({
         container: card,
-        anchor: actionTarget,
+        anchor: titleEl,
         position: 'before',
         loadingText: '解析采集中...',
         getPlace: async () => {
           const currentPlaceFacts = parseGoogleTravelCard(card);
           const rawPlace = currentPlaceFacts || parsedPlace;
-          const targetEntityUrl = anchor?.href || window.location.href;
+          const targetEntityUrl = entityAnchor?.href || window.location.href;
           if (targetEntityUrl && (targetEntityUrl.includes('/travel/hotels/entity/') || targetEntityUrl.includes('/hotels/entity/'))) {
             return await resolveGoogleTravelEntityToMapsPlace(targetEntityUrl, rawPlace);
           }

@@ -4,6 +4,12 @@
 1. **Single Source of Truth**: Trip、排期、锁定和用户决策只存在于 Planner/Vault；Capture 保持为轻量 Research Inbox。
 2. **MV3 Single Writer**: Chrome Extension 的 Capture 状态写入统一经过 background service worker，避免 sidepanel/content 并发写造成竞态。
 3. **Non-Destructive Research Merge**: Capture 或外部导入只能刷新 observation/source facts；已有 Planner 决策字段保持权威。
+# Lessons & Guidelines
+
+## Planner / Capture Architecture
+1. **Single Source of Truth**: Trip、排期、锁定和用户决策只存在于 Planner/Vault；Capture 保持为轻量 Research Inbox。
+2. **MV3 Single Writer**: Chrome Extension 的 Capture 状态写入统一经过 background service worker，避免 sidepanel/content 并发写造成竞态。
+3. **Non-Destructive Research Merge**: Capture 或外部导入只能刷新 observation/source facts；已有 Planner 决策字段保持权威。
 4. **Structured Price Authority**: 下游预算与比较优先消费 `price_currency / price_min / price_max / price_unit / price_level`；`observed_price` 保留原始证据。已有结构化币种时，不得重新根据裸 `$ / ¥` 猜币种；estimate 不得自动转成 actual ledger expense。
 5. **Robust Identity & Protobuf Decoding**:
    - Google Maps EntityList/Protobuf payloads frequently contain 64-bit signed integers (both positive and negative, e.g. `["3531552460148579037", "-6449251292864702433"]`).
@@ -12,3 +18,6 @@
    - Prevent unnecessary fallbacks to offscreen skeleton search HTML by maximizing in-tab provider metadata extraction.
 6. **Pre-Push CI Validation Integrity**:
    - Always verify `npm run validate:fast` before remote push to ensure ESLint errors (e.g. `prefer-const`) and type checks pass locally without breaking GitHub Actions CI pipelines.
+7. **Inline In-Page Capture Button Isolation & Platform Deduplication**:
+   - In-page inline capture buttons (e.g. '📌 放入案板') must NEVER be injected inside enclosing `<a>` tags. Always query `anchor.closest('a')` and insert the container before/outside the anchor with `margin-right: 12px` and stop all event propagation (`click`, `mousedown`, `mouseup`, `pointerdown`, `pointerup`) to prevent accidental misclicks on platform links.
+   - For complex DOMs like Google Travel with nested `<c-wiz>` components, always query the outermost card container, mark all descendant elements with the injected attribute (`dataset.ownlyCardInjected`), and deduplicate to guarantee exactly one button per card.

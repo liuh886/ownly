@@ -175,13 +175,14 @@ async function savePlaceIntoInboxDirectly(
   place: CurrentResearchPlace,
   tabId?: number,
   openSidepanel = false,
-): Promise<{ ok: boolean; placeId?: string; error?: string }> {
+): Promise<{ ok: boolean; placeId?: string; alreadyExists?: boolean; error?: string }> {
   if (!place?.title || !place.sourceUrl) {
     if (tabId) void flashBadge(tabId, '!', '#b91c1c');
     return { ok: false, error: 'no place detected' };
   }
   const started = Date.now();
   try {
+    let alreadyExists = false;
     const capturedId = await mutateCaptureStateV3InWorker((state) => {
       const collection = getDefaultCollection(state);
       const collectionPlaces = state.places.filter((p) => p.collection_id === collection.id);
@@ -198,6 +199,10 @@ async function savePlaceIntoInboxDirectly(
       }) ?? collectionPlaces.find(
         (p) => p.source.url === place.sourceUrl || (p.source.place_id && p.source.place_id === place.sourcePlaceId),
       );
+
+      if (existing) {
+        alreadyExists = true;
+      }
 
       const now = new Date().toISOString();
       const freshKind = inferPlaceKind([place.title, place.category, place.address, ...(place.types || [])].filter(Boolean).join(' '));
@@ -265,8 +270,14 @@ async function savePlaceIntoInboxDirectly(
       return { ok: false, error: 'failed to persist' };
     }
 
-    logger.info('Background', 'Quick save: persisted', { capturedId, tabId, ms: Date.now() - started });
-    if (tabId) void flashBadge(tabId, '✓', '#047857');
+    logger.info('Background', 'Quick save: persisted', { capturedId, alreadyExists, tabId, ms: Date.now() - started });
+    if (tabId) {
+      if (alreadyExists) {
+        void flashBadge(tabId, '✓', '#0284c7');
+      } else {
+        void flashBadge(tabId, '+1', '#047857');
+      }
+    }
 
     // Trigger asynchronous background Google Maps entity resolution & fact enrichment
     void resolveAndEnrichCapturedPlace(capturedId);
@@ -280,7 +291,7 @@ async function savePlaceIntoInboxDirectly(
       }
     }
 
-    return { ok: true, placeId: capturedId };
+    return { ok: true, placeId: capturedId, alreadyExists };
   } catch (error) {
     logger.error('Background', 'Quick save error', { error: error instanceof Error ? error.stack || error.message : String(error), tabId });
     if (tabId) void flashBadge(tabId, '!', '#b91c1c');
