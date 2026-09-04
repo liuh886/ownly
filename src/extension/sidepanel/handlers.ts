@@ -5,6 +5,7 @@ import {
   inferSourceProvider,
   normalizeDelimitedText,
   normalizeObservedPrice,
+  type PlannerPlaceKind,
 } from '../../domain/planner';
 import {
   findExistingPlace,
@@ -12,6 +13,7 @@ import {
   reorderPlaces,
   mergePlaceResearch,
   type CapturePlace,
+  type CapturePlacePriority,
 } from '../../domain/capture';
 import type { PlannerTripPlace } from '../../domain/planner';
 import { saveState, getActiveCollection, getActivePlaces, store, t, DEBUG_STORAGE_KEY, getExistingPlaceForUrl } from './store';
@@ -22,7 +24,6 @@ import { readCurrentPlace } from './capture';
 import { enrichCandidatePlacesBatch, isCandidateMissingData, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
 import {
   applyI18n,
-  autoFillPlaceForm,
   getVisibleFilteredPlaces,
   renderCandidatesList,
   renderCurrencyPill,
@@ -355,6 +356,58 @@ function initCandidateDelegation() {
     const placeId = target.dataset.placeId;
     if (!placeId) return;
 
+    if (action === 'save-inline-edit') {
+      const editor = (e.target as HTMLElement).closest('.candidate-inline-editor');
+      if (!editor) return;
+
+      const kindEl = editor.querySelector<HTMLSelectElement>('[data-field="kind"]');
+      const priorityEl = editor.querySelector<HTMLSelectElement>('[data-field="priority"]');
+      const priceEl = editor.querySelector<HTMLInputElement>('[data-field="price"]');
+      const ratingEl = editor.querySelector<HTMLInputElement>('[data-field="rating"]');
+      const tagsEl = editor.querySelector<HTMLInputElement>('[data-field="tags"]');
+      const whyEl = editor.querySelector<HTMLTextAreaElement>('[data-field="why"]');
+      const notesEl = editor.querySelector<HTMLTextAreaElement>('[data-field="notes"]');
+
+      const nextKind = (kindEl?.value as PlannerPlaceKind) || 'other';
+      const nextPriority = (priorityEl?.value as CapturePlacePriority) || 'want';
+      const rawPrice = priceEl?.value.trim();
+      const rawRating = ratingEl?.value ? parseFloat(ratingEl.value) : undefined;
+      const validRating = rawRating && !isNaN(rawRating) && rawRating >= 1 && rawRating <= 5 ? rawRating : undefined;
+      const parsedTags = normalizeDelimitedText(tagsEl?.value || '');
+      const finalTags = ensurePlaceKindTag(parsedTags, nextKind, store.lang);
+      const nextWhy = whyEl?.value.trim() || undefined;
+      const nextNotes = notesEl?.value.trim() || undefined;
+
+      store.updatePlace(placeId, (p) => ({
+        ...p,
+        inferred_kind: nextKind,
+        rating: validRating ?? p.rating,
+        price: rawPrice ? { ...p.price, raw: rawPrice } : p.price,
+        user: {
+          ...p.user,
+          priority: nextPriority,
+          tags: finalTags,
+          why: nextWhy,
+          notes: nextNotes,
+        },
+        updated_at: new Date().toISOString(),
+      }));
+
+      store.editingCandidateId = null;
+      await saveState();
+      setStatus(store.lang === 'zh' ? '✓ 地点修改已保存。' : '✓ Place changes saved.', 'success');
+      renderState();
+      renderCandidatesList();
+      return;
+    }
+
+    if (action === 'cancel-inline-edit') {
+      store.editingCandidateId = null;
+      renderCandidatesList();
+      setStatus(store.lang === 'zh' ? '已取消编辑。' : 'Edit cancelled.');
+      return;
+    }
+
     if (action === 'edit') {
       const isAlreadyEditing = store.editingCandidateId === placeId;
       if (isAlreadyEditing) {
@@ -363,43 +416,14 @@ function initCandidateDelegation() {
         setStatus(store.lang === 'zh' ? '已退出编辑模式。' : 'Exited edit mode.');
       } else {
         store.editingCandidateId = placeId;
+        renderCandidatesList();
         const editing = getActivePlaces().find((p) => p.id === placeId);
         if (editing) {
-          store.currentPlace = {
-            title: editing.title,
-            sourceUrl: editing.source.url,
-            sourceProvider: editing.source.provider,
-            sourcePlaceId: editing.source.place_id,
-            category: editing.source.category ?? editing.inferred_kind,
-            address: editing.address,
-            coordinates: editing.coordinates,
-            rating: editing.rating,
-            reviewCount: editing.review_count,
-            priceLevel: editing.price?.raw,
-            detectedCurrency: editing.price?.currency,
-            summary: editing.user?.why,
-            userNote: editing.user?.notes,
-            openHours: editing.open_hours,
-            phone: editing.phone,
-            plusCode: editing.plus_code,
-            menuUrl: editing.menu_url,
-            reservationUrl: editing.reservation_url,
-            reviewTopics: editing.review_topics,
-            types: editing.source.types,
-          };
-          renderCandidatesList();
-          renderCurrentPlace();
-          autoFillPlaceForm(store.currentPlace);
-          syncQuickChipStates();
-          const addPanel = document.getElementById('addPanel') as HTMLDetailsElement | null;
-          if (addPanel) {
-            addPanel.open = true;
-            addPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-          setStatus(store.lang === 'zh' ? `正在编辑「${editing.title}」，请在上方面板修改并保存。` : `Editing "${editing.title}", modify above and save.`);
+          setStatus(store.lang === 'zh' ? `正在编辑「${editing.title}」。` : `Editing "${editing.title}".`);
           if (editing.source.url) void revealPlaceInMaps(editing.source.url);
         }
       }
+      return;
     } else if (action === 'toggle-must') {
       const place = getActivePlaces().find((p) => p.id === placeId);
       if (place) {

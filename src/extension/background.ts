@@ -146,6 +146,13 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
         review_topics: enriched.review_topics || existingPlace.review_topics,
         hotel_facts: enriched.hotel_facts || existingPlace.hotel_facts,
         inferred_kind: enriched.kind && enriched.kind !== 'other' ? enriched.kind : existingPlace.inferred_kind,
+        user: existingPlace.user ? {
+          ...existingPlace.user,
+          tags: ensurePlaceKindTag(
+            existingPlace.user.tags || [],
+            enriched.kind && enriched.kind !== 'other' ? enriched.kind : existingPlace.inferred_kind,
+          ),
+        } : undefined,
         updated_at: new Date().toISOString(),
       };
 

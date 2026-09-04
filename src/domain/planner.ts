@@ -726,14 +726,17 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
   if (/\b(?:ski\s*resort|golf\s*resort|spa\s*resort)\b|滑雪场|滑雪度假村|温泉度假区/i.test(lower)) {
     return 'experience';
   }
-  if (/\b(?:beach|waterfall|viewpoint|lookout|mountain|peak|island)\b|海滩|沙滩|瀑布|观景台|展望台/i.test(lower) && !/\b(?:resort|hotel|hostel|villas?|suites?|inn|ryokan|homestay)\b|度假村|度假酒店|酒店|旅馆|民宿/i.test(lower)) {
+  if (
+    /\b(?:beach|waterfall|viewpoint|lookout|mountain|peak|island)\b|海滩|沙滩|瀑布|观景台|展望台/i.test(lower) &&
+    !/(?:\b(?:resort|hotel|hostel|villas?|suites?|inn|ryokan|homestay)\b|度假村|度假酒店|酒店|旅馆|民宿)/i.test(lower)
+  ) {
     return 'attraction';
   }
 
   // 1. Lodging & Stays (Hotels, Resorts, Villas, Hostels, Ryokans, Serviced Apartments, Brands like Oakwood/IHG/Marriott/UHG/Avani, etc.)
   // Evaluated before generic dining so hotels with in-house restaurants/bars (tagged with 'restaurant' in Google Maps types) are not misclassified as food
   if (
-    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|avani|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|ji\s*hotel|citadines|somerset|ascott|dusit|six\s*senses|belmond|outrigger|centara|centre\s*point|chatrium|sindhorn|salil|asai|the\s*quarter|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|doubletree|waldorf\s*astoria|conrad|curio|canopy|tapestry|mgallery|swissotel|adagio|oakwood|pan\s*pacific|parkroyal|fraser|mandarin\s*oriental|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|m[oö]venpick|le\s*m[eé]ridien|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|love\s*hotel|machiya|hanok|riad|agriturismo|campground|rv\s*park|\d\s*[-–—]?\s*stars?\s*hotel)\b|호텔|리조트|게스트하우스|펜션|모텔|민박|호스텔|한옥|โรงแรม|ที่พัก|รีสอร์ท|โฮสเทล|เกสต์เฮาส์|วิลล่า|บังกะโล|ม่านรูด|ホテル|旅館|民宿|宿|ペンション|ゲストハウス|カプセルホテル|湯宿|坊|酒店|旅馆|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|星级酒店|精品酒店|宾馆|别馆|营地|庄园|驿站|招待所|万豪|希尔顿|凯悦|洲际|喜来登|香格里拉|四季酒店|丽思卡尔顿|瑞吉|文华东方|半岛酒店|悦榕庄|安纳塔拉|亚朵|全季|汉庭|如家|锦江之星|桔子酒店|khách\s*sạn|hôtel|albergue|posada|parador|pousada|albergo/i.test(lower)
+    /\b(?:hotel|resort|hostel|inn|ryokan|stay|motel|poshtel|chalet|lodge|cabin|glamping|pension|aparthotel|minshuku|ihg|uhg|marriott|hilton|hyatt|accor|sheraton|kempinski|intercontinental|novotel|ibis|mercure|aman|capella|rosewood|anantara|amari|avani|fairmont|peninsula|pullman|sofitel|aloft|moxy|atour|hanting|ji\s*hotel|citadines|somerset|ascott|dusit|six\s*senses|belmond|outrigger|centara|centre\s*point|chatrium|sindhorn|salil|asai|cross|regency|the\s*quarter|quarter\s*hotel|holiday\s*inn|crowne\s*plaza|doubletree|waldorf\s*astoria|conrad|curio|canopy|tapestry|mgallery|swissotel|adagio|oakwood|pan\s*pacific|parkroyal|fraser|mandarin\s*oriental|shangri-la|four\s*seasons|ritz-carlton|st\.\s*regis|w\s*hotel|westin|radisson|banyan\s*tree|m[oö]venpick|le\s*m[eé]ridien|arawana|guesthouse|guest\s*house|lodging|accommodation|suites?|villas?|residence|homestay|serviced\s*apartment|b&b|bed\s*(&|and)\s*breakfast|capsule\s*hotel|love\s*hotel|machiya|hanok|riad|agriturismo|campground|rv\s*park|\d\s*[-–—]?\s*stars?\s*hotel)\b|호텔|리조트|게스트하우스|펜션|모텔|민박|호스텔|한옥|โรงแรม|ที่พัก|รีสอร์ท|โฮสเทล|เกสต์เฮาส์|วิลล่า|บังกะโล|ม่านรูด|ホテル|旅館|民宿|宿|ペンション|ゲストハウス|カプセルホテル|湯宿|坊|酒店|旅馆|民宿|客栈|青旅|青年旅舍|度假村|度假酒店|温泉旅馆|公寓式酒店|服务式公寓|长住型酒店|星级酒店|精品酒店|商务酒店|宾馆|别馆|营地|露营地|庄园|驿站|招待所|木屋|小木屋|万豪|希尔顿|凯悦|洲际|喜来登|香格里拉|四季酒店|丽思卡尔顿|瑞吉|文华东方|半岛酒店|悦榕庄|安纳塔拉|亚朵|全季|汉庭|如家|锦江之星|桔子酒店|khách\s*sạn|hôtel|albergue|posada|parador|pousada|albergo/i.test(lower)
   ) {
     return 'stay';
   }
@@ -1942,16 +1945,24 @@ export function ensurePlaceKindTag(
   const isMatchThisKind = (t: string) => {
     const lower = t.toLowerCase();
     if (lower === kindZh.toLowerCase() || lower === kindEn.toLowerCase()) return true;
-    if (kind === 'stay' && (lower === '酒店' || lower === '酒店住宿' || lower === 'hotel' || lower === 'stay')) return true;
-    if (kind === 'food' && (lower === '餐厅' || lower === '餐厅美食' || lower === '美食' || lower === 'food' || lower === 'dining')) return true;
-    if (kind === 'cafe' && (lower === '咖啡馆' || lower === '咖啡甜品' || lower === '咖啡' || lower === 'cafe' || lower === 'coffee')) return true;
+    if (kind === 'stay' && (lower === '酒店' || lower === '酒店住宿' || lower === '住宿' || lower === 'hotel' || lower === 'stay' || lower === 'resort' || lower === '民宿' || lower === '宾馆' || lower === '度假村')) return true;
+    if (kind === 'food' && (lower === '餐厅' || lower === '餐厅美食' || lower === '美食' || lower === 'food' || lower === 'dining' || lower === 'restaurant')) return true;
+    if (kind === 'cafe' && (lower === '咖啡馆' || lower === '咖啡甜品' || lower === '咖啡' || lower === 'cafe' || lower === 'coffee' || lower === 'dessert' || lower === '甜品')) return true;
     if (kind === 'attraction' && (lower === '观光景点' || lower === '景点' || lower === 'attraction' || lower === 'sightseeing')) return true;
     if (kind === 'shopping' && (lower === '购物商场' || lower === '购物' || lower === 'shopping' || lower === 'mall')) return true;
     if (kind === 'transit' && (lower === '交通中转' || lower === '交通' || lower === 'transit' || lower === 'station')) return true;
     if (kind === 'experience' && (lower === '体验活动' || lower === '体验' || lower === 'experience' || lower === 'activity')) return true;
+    if (kind === 'service' && (lower === '便民服务' || lower === '服务' || lower === 'service')) return true;
     if (kind === 'other' && (lower === '其他' || lower === '其它' || lower === 'other')) return true;
     return false;
   };
+
+  const GENERIC_OTHER_TAGS = new Set(['其它', '其他', 'other']);
+  const ALL_KIND_CANONICAL_TAGS = new Set([
+    '住宿', '美食', '咖啡', '景点', '购物', '交通', '体验', '服务', '其它', '其他',
+    'stay', 'food', 'cafe', 'attraction', 'shopping', 'transit', 'experience', 'service', 'other',
+    '观光景点', '餐厅美食', '咖啡甜品', '酒店住宿', '购物商场', '交通中转', '体验活动', '便民服务',
+  ]);
 
   const hasKindTag = rawTags.some(isMatchThisKind);
 
@@ -1965,6 +1976,14 @@ export function ensurePlaceKindTag(
 
   for (const tag of rawTags) {
     const lower = tag.toLowerCase();
+    // If kind is specific (not 'other'), remove generic fallback tags ('其它'/'其他'/'Other')
+    if (kind !== 'other' && GENERIC_OTHER_TAGS.has(lower)) {
+      continue;
+    }
+    // If tag is an obsolete kind primary tag from a different kind, drop it
+    if (kind !== 'other' && ALL_KIND_CANONICAL_TAGS.has(lower) && !isMatchThisKind(tag)) {
+      continue;
+    }
     if (!seen.has(lower)) {
       seen.add(lower);
       result.push(tag);

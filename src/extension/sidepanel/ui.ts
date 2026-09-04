@@ -1159,7 +1159,83 @@ function buildCandidateDetails(
   btnGroup.append(editBtn, mustBtn, addToTripBtn, delBtn);
   actions.append(btnGroup);
 
-  if (extraParts.length) wrapper.append(details, extra, actions);
-  else wrapper.append(details, actions);
+  const isEditing = store.editingCandidateId === place.id;
+  if (isEditing) {
+    wrapper.append(details, buildCandidateInlineEditor(place), actions);
+  } else if (extraParts.length) {
+    wrapper.append(details, extra, actions);
+  } else {
+    wrapper.append(details, actions);
+  }
   return wrapper;
+}
+
+function buildCandidateInlineEditor(
+  place: V2FacadePlace,
+): HTMLDivElement {
+  const isZh = store.lang === 'zh';
+  const editor = document.createElement('div');
+  editor.className = 'candidate-inline-editor';
+  editor.dataset.placeId = place.id;
+
+  editor.innerHTML = `
+    <div class="inline-row">
+      <label>
+        ${isZh ? '类别' : 'Kind'}
+        <select data-field="kind">
+          <option value="stay" ${place.kind === 'stay' ? 'selected' : ''}>🏨 ${isZh ? '住宿' : 'Stay'}</option>
+          <option value="food" ${place.kind === 'food' ? 'selected' : ''}>🍜 ${isZh ? '美食' : 'Food'}</option>
+          <option value="cafe" ${place.kind === 'cafe' ? 'selected' : ''}>☕ ${isZh ? '咖啡' : 'Cafe'}</option>
+          <option value="attraction" ${place.kind === 'attraction' ? 'selected' : ''}>🏛️ ${isZh ? '景点' : 'Attraction'}</option>
+          <option value="shopping" ${place.kind === 'shopping' ? 'selected' : ''}>🛍️ ${isZh ? '购物' : 'Shopping'}</option>
+          <option value="transit" ${place.kind === 'transit' ? 'selected' : ''}>🚗 ${isZh ? '交通' : 'Transit'}</option>
+          <option value="experience" ${place.kind === 'experience' ? 'selected' : ''}>💆 ${isZh ? '体验' : 'Experience'}</option>
+          <option value="service" ${place.kind === 'service' ? 'selected' : ''}>🛠️ ${isZh ? '服务' : 'Service'}</option>
+          <option value="other" ${place.kind === 'other' ? 'selected' : ''}>❓ ${isZh ? '其它' : 'Other'}</option>
+        </select>
+      </label>
+      <label>
+        ${isZh ? '优先级' : 'Priority'}
+        <select data-field="priority">
+          <option value="must" ${place.priority === 'must' ? 'selected' : ''}>⭐ ${isZh ? '必去' : 'Must'}</option>
+          <option value="want" ${place.priority === 'want' || !place.priority ? 'selected' : ''}>👍 ${isZh ? '想去' : 'Want'}</option>
+          <option value="optional" ${place.priority === 'optional' || place.priority === 'spare' ? 'selected' : ''}>💡 ${isZh ? '备选' : 'Optional'}</option>
+        </select>
+      </label>
+    </div>
+    <div class="inline-row">
+      <label>
+        ${isZh ? '价格' : 'Price'}
+        <input type="text" data-field="price" value="${escapeHtml(place.observed_price || '')}" placeholder="${isZh ? '如 ฿1,200 或 $85' : 'e.g. $85'}" />
+      </label>
+      <label>
+        ${isZh ? '评分' : 'Rating'}
+        <input type="number" step="0.1" min="1" max="5" data-field="rating" value="${place.observed_rating || ''}" placeholder="4.8" />
+      </label>
+    </div>
+    <div class="inline-row">
+      <label style="flex: 1;">
+        ${isZh ? '标签 (逗号分隔)' : 'Tags (comma separated)'}
+        <input type="text" data-field="tags" value="${escapeHtml((place.tags || []).join(', '))}" placeholder="${isZh ? '如 芭提雅, 海景房, 网红' : 'e.g. Beachfront, Luxury'}" />
+      </label>
+    </div>
+    <div class="inline-row">
+      <label style="flex: 1;">
+        ${isZh ? '种草理由 / 推荐原因' : 'Why'}
+        <textarea data-field="why" rows="2" placeholder="${isZh ? '为什么想去？' : 'Why visit?'}">${escapeHtml(place.why || '')}</textarea>
+      </label>
+    </div>
+    <div class="inline-row">
+      <label style="flex: 1;">
+        ${isZh ? '备注 / 备忘' : 'Notes'}
+        <textarea data-field="notes" rows="2" placeholder="${isZh ? '预订提醒、打卡须知等' : 'Notes / reminders'}">${escapeHtml(place.notes || '')}</textarea>
+      </label>
+    </div>
+    <div class="inline-actions">
+      <button type="button" class="btn-cancel-inline" data-action="cancel-inline-edit" data-place-id="${place.id}">${isZh ? '✕ 取消' : '✕ Cancel'}</button>
+      <button type="button" class="btn-save-inline" data-action="save-inline-edit" data-place-id="${place.id}">${isZh ? '✓ 保存修改' : '✓ Save'}</button>
+    </div>
+  `;
+
+  return editor;
 }

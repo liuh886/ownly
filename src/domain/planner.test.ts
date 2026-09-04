@@ -419,7 +419,7 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('Châteraisé Pâtisserie & Bakery')).toBe('cafe');
     expect(inferPlaceKind('喜茶 奶茶店 (Heytea)')).toBe('cafe');
 
-    // 3. Stays & Lodgings (酒店 / 住宿 / 民宿 / 度假村)
+    // 3. Stays & Lodgings (酒店 / 住宿 / 民宿 / 度假村 / 宾馆)
     expect(inferPlaceKind('Luxury Hotel & Resort')).toBe('stay');
     expect(inferPlaceKind('Oakwood Studios Sukhumvit Bangkok')).toBe('stay');
     expect(inferPlaceKind('โรงแรมโอ๊ควูด สตูดิโอ สุขุมวิท แบงค็อก')).toBe('stay');
@@ -436,6 +436,11 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('全季酒店 (Ji Hotel)')).toBe('stay');
     expect(inferPlaceKind('Avani Sukhumvit Bangkok')).toBe('stay');
     expect(inferPlaceKind('民宿·青木川客栈')).toBe('stay');
+    expect(inferPlaceKind('Cross Pattaya Pratamnak')).toBe('stay');
+    expect(inferPlaceKind('Arawana Regency North Pattaya')).toBe('stay');
+    expect(inferPlaceKind('度假村')).toBe('stay');
+    expect(inferPlaceKind('宾馆')).toBe('stay');
+    expect(inferPlaceKind('服务式公寓')).toBe('stay');
 
     // 4. Shopping (购物 / 商场 / 药妆 / 夜市集市)
     expect(inferPlaceKind('Outlet Shopping Mall')).toBe('shopping');
@@ -523,6 +528,10 @@ describe('Ownly Planner domain', () => {
     expect(ensurePlaceKindTag([], 'cafe', 'zh')).toEqual(['咖啡']);
     expect(ensurePlaceKindTag([], 'experience', 'zh')).toEqual(['体验']);
     expect(ensurePlaceKindTag(['咖啡馆'], 'cafe', 'zh')).toEqual(['咖啡馆']);
+    expect(ensurePlaceKindTag(['其它'], 'stay', 'zh')).toEqual(['住宿']);
+    expect(ensurePlaceKindTag(['其它', '海景'], 'stay', 'zh')).toEqual(['住宿', '海景']);
+    expect(ensurePlaceKindTag(['Other', 'Beachfront'], 'stay', 'en')).toEqual(['Stay', 'Beachfront']);
+    expect(ensurePlaceKindTag(['美食', '米其林'], 'cafe', 'zh')).toEqual(['咖啡', '米其林']);
   });
 
   it('filters out place titles, addresses, and invalid strings from custom tag chips', () => {

@@ -1,5 +1,23 @@
 # Ownly — Task Progress & Review
 
+## Active: In-Page Capture Feedback, Category Inference & Inbox In-Place Candidate Editor (2026-09-05)
+- [ ] **1. Fix In-Page "放入案板" Button Click Execution (`src/extension/ui/inline-capture-button.ts`)**
+  - Fix event isolation: Remove `stopImmediatePropagation()` from `isolateEvent` so button click listener executes cleanly.
+  - Retain `stopPropagation()` and `preventDefault()` to prevent outer anchor clicks and navigation.
+  - Verify live button feedback transitions: `⏳ 采集中...` -> `✓ 已放入案板` / `ℹ️ 该地点已在案板中`.
+- [ ] **2. Fix Place Kind Inference & Tag Cleaning for Lodging ("宾馆", "度假村" -> stay)**
+  - In [`src/domain/planner.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/planner.ts), fix regex grouping bug on line 729 and expand Chinese/multilingual lodging patterns (`度假村`, `宾馆`, `旅馆`, `客栈`, `民宿`, `服务式公寓`, `长住型酒店`, `度假酒店`, `精品酒店`, `商务酒店`, `温泉旅馆`, `青旅`, `青年旅舍`, `招待所`, etc.).
+  - In `ensurePlaceKindTag()`, filter out generic `'其它'` / `'其他'` / `'Other'` and obsolete primary kind tags when kind is specific (e.g. `stay`), eliminating dual tags like `['住宿', '其它']`.
+  - In `resolveAndEnrichCapturedPlace` (`background.ts`), refresh `user.tags` when kind is enriched/updated.
+- [ ] **3. Implement In-Place Candidate Place Editor Directly in Inbox List (`src/extension/sidepanel/ui.ts` & `handlers.ts`)**
+  - Inside candidate card rendering, when `store.editingCandidateId === place.id`, expand a dedicated in-place edit drawer.
+  - Support direct editing of `kind` (dropdown), `priority` (must/want/spare), `price`, `rating`, `why`, `notes`, and `tags`.
+  - Wire inline `✓ 保存` and `✕ 取消` buttons to update `store.stateV3.places`, persist to storage, and exit edit mode.
+  - Add clean, modern CSS styling for `.candidate-inline-editor` in `extension/sidepanel.css`.
+- [ ] **4. Comprehensive Multi-Target Automated Verification**
+  - Run unit tests in `planner.test.ts` covering `宾馆`, `度假村`, and all category kinds.
+  - Run `npm run validate:extension`, `npm run validate:fast`, and `npm run validate:shared`.
+
 ## Completed: Planner Date Tabs Drag-and-Drop Itinerary Day Swapping (2026-09-05)
 - [x] **1. Add `swapTripDays` to `PlannerRepository` & Pure Domain Logic**
   - Implemented atomic date swapping for all `PlannerTripVisit`s belonging to `(trip_id, dateA)` and `(trip_id, dateB)`.

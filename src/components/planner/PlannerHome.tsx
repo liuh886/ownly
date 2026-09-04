@@ -1806,173 +1806,165 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                         </div>
 
                         {/* Stop Content Body */}
-                        <div className="min-w-0 flex-1 space-y-1">
-                          {/* Title & 4-Action Controls Header */}
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          {/* Row 1: Title (left, 1-2 lines) & Time Trigger (right) */}
                           <div className="flex items-start justify-between gap-2">
-                            {/* Full Title (No truncate) */}
+                            {/* Title (tries 1 line, max 2 lines) */}
                             <div className="min-w-0 flex-1">
-                              <h3 className="text-sm font-bold text-stone-900 break-words leading-snug">
+                              <h3 className="line-clamp-2 text-sm font-bold text-stone-900 break-words leading-snug" title={place.title}>
                                 {place.title}
                               </h3>
                             </div>
 
-                            {/* Timing Trigger & 4-Action Controls Toolbar */}
-                            <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                              <button
-                                type="button"
-                                onClick={() => setTimingModalPlace(place)}
-                                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition hover:scale-102 ${
-                                  timelineStop?.start
-                                    ? 'bg-stone-100 text-stone-800 hover:bg-stone-200 ring-1 ring-stone-300/70 font-mono'
-                                    : 'border border-dashed border-stone-300 bg-white text-stone-400 hover:border-stone-400 hover:text-stone-700'
-                                }`}
-                                title={zh ? '设置开始时间与停留时长' : 'Set start time and duration'}
-                              >
-                                <span>🕒</span>
-                                <span>{timelineStop?.start ? `${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}` : (zh ? '设时间' : 'Time')}</span>
-                              </button>
-
-                              {/* Grouped 4 Actions: 固定、上、下、移除 */}
-                              <div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50/90 p-0.5 shadow-2xs shrink-0">
-                                <button
-                                  type="button"
-                                  aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
-                                  onClick={async () => {
-                                    await plannerRepository.toggleVisitLock(place.visit_id);
-                                    await load();
-                                  }}
-                                  className={`flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] transition ${
-                                    place.locked
-                                      ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
-                                      : 'text-stone-400 hover:bg-white hover:text-stone-700'
-                                  }`}
-                                  title={place.locked ? (zh ? '已固定顺位（交通优化不移动此站）' : 'Pinned') : (zh ? '固定在当前顺位' : 'Pin stop')}
-                                >
-                                  {place.locked ? '📌' : '📍'}
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={zh ? '上移' : 'Move up'}
-                                  disabled={index === 0}
-                                  onClick={() => void moveScheduled(index, -1)}
-                                  className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
-                                  title={zh ? '上移一站' : 'Move up'}
-                                >
-                                  ↑
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={zh ? '下移' : 'Move down'}
-                                  disabled={index === scheduled.length - 1}
-                                  onClick={() => void moveScheduled(index, 1)}
-                                  className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
-                                  title={zh ? '下移一站' : 'Move down'}
-                                >
-                                  ↓
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={zh ? '从当天日程移除' : 'Remove stop'}
-                                  onClick={() => void removeVisit(place)}
-                                  className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                                  title={zh ? '从当天日程移除（回到待安排候选池）' : 'Remove stop'}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            </div>
+                            {/* Timing Trigger (Top Right) */}
+                            <button
+                              type="button"
+                              onClick={() => setTimingModalPlace(place)}
+                              className={`shrink-0 self-start inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition hover:scale-102 ${
+                                timelineStop?.start
+                                  ? 'bg-stone-100 text-stone-800 hover:bg-stone-200 ring-1 ring-stone-300/70 font-mono'
+                                  : 'border border-dashed border-stone-300 bg-white text-stone-400 hover:border-stone-400 hover:text-stone-700'
+                              }`}
+                              title={zh ? '设置开始时间与停留时长' : 'Set start time and duration'}
+                            >
+                              <span>🕒</span>
+                              <span>{timelineStop?.start ? `${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}` : (zh ? '设时间' : 'Time')}</span>
+                            </button>
                           </div>
 
-                          {/* Sub-line: Left-aligned Quick Action Emojis (交通/导航, 电话, 地图) + Meta & Price */}
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-stone-500 pt-0.5">
-                            {/* Emojis 居左排列: 交通/导航、电话、地图、菜单、预订 */}
-                            <div className="flex items-center gap-1 shrink-0">
-                              {/* 交通 / 导航 */}
-                              <a
-                                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.address || place.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
-                                title={zh ? '导航到此地' : 'Directions'}
+                          {/* Row 2: Bottom-Left Actions [ 📍 | ↑ | ↓ | ✕ ] & Bottom-Right Attributes/Emojis */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                            {/* Bottom-Left: Grouped 4 Actions */}
+                            <div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50/90 p-0.5 shadow-2xs shrink-0">
+                              <button
+                                type="button"
+                                aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
+                                onClick={async () => {
+                                  await plannerRepository.toggleVisitLock(place.visit_id);
+                                  await load();
+                                }}
+                                className={`flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] transition ${
+                                  place.locked
+                                    ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
+                                    : 'text-stone-400 hover:bg-white hover:text-stone-700'
+                                }`}
+                                title={place.locked ? (zh ? '已固定顺位（交通优化不移动此站）' : 'Pinned') : (zh ? '固定在当前顺位' : 'Pin stop')}
                               >
-                                🧭
-                              </a>
-                              {/* 电话 */}
-                              {place.phone ? (
-                                <a
-                                  href={`tel:${place.phone}`}
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-stone-200 transition"
-                                  title={zh ? `拨打电话: ${place.phone}` : `Call: ${place.phone}`}
-                                >
-                                  📞
-                                </a>
-                              ) : null}
-                              {/* 地图 */}
-                              {place.source_url ? (
-                                <a
-                                  href={place.source_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
-                                  title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
-                                >
-                                  🗺️
-                                </a>
-                              ) : (
-                                <a
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address || place.title)}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
-                                  title={zh ? '在 Google Maps 中搜索' : 'Search on Maps'}
-                                >
-                                  🗺️
-                                </a>
-                              )}
-                              {/* 菜单 */}
-                              {place.menu_url ? (
-                                <a
-                                  href={place.menu_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-stone-200 transition"
-                                  title={zh ? '查看菜单' : 'Menu'}
-                                >
-                                  📖
-                                </a>
-                              ) : null}
-                              {/* 预订 */}
-                              {place.reservation_url ? (
-                                <a
-                                  href={place.reservation_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition shadow-2xs"
-                                  title={zh ? '官方预订' : 'Reserve'}
-                                >
-                                  🎟️
-                                </a>
-                              ) : null}
+                                {place.locked ? '📌' : '📍'}
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '上移' : 'Move up'}
+                                disabled={index === 0}
+                                onClick={() => void moveScheduled(index, -1)}
+                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                title={zh ? '上移一站' : 'Move up'}
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '下移' : 'Move down'}
+                                disabled={index === scheduled.length - 1}
+                                onClick={() => void moveScheduled(index, 1)}
+                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                title={zh ? '下移一站' : 'Move down'}
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '从当天日程移除' : 'Remove stop'}
+                                onClick={() => void removeVisit(place)}
+                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                title={zh ? '从当天日程移除（回到待安排候选池）' : 'Remove stop'}
+                              >
+                                ✕
+                              </button>
                             </div>
 
-                            {/* Meta tags & Price (Area, Duration, Window, Price in Trip Currency) */}
-                            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                              {place.area ? <span className="text-stone-600 font-medium">{place.area}</span> : null}
-                              {place.duration_minutes ? <span className="text-stone-500">{place.duration_minutes} min</span> : null}
-                              {place.preferred_window ? (
-                                <span className="text-stone-500">
-                                  {place.preferred_window === 'morning' ? (zh ? '上午' : 'Morning')
-                                    : place.preferred_window === 'afternoon' ? (zh ? '下午' : 'Afternoon')
-                                    : place.preferred_window === 'evening' ? (zh ? '傍晚' : 'Evening')
-                                    : place.preferred_window === 'night' ? (zh ? '夜间' : 'Night')
-                                    : place.preferred_window}
-                                </span>
-                              ) : null}
-                              {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
-                                <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[10px] font-semibold text-stone-700">
-                                  {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
-                                </span>
-                              ) : null}
+                            {/* Bottom-Right: Meta info (Area, Duration, Price) + Quick Emojis (🧭, 📞, 🗺️, 📖, 🎟️) */}
+                            <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-stone-500 min-w-0">
+                              {/* Meta Details */}
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {place.area ? <span className="text-stone-600 font-medium truncate max-w-[120px]">{place.area}</span> : null}
+                                {place.duration_minutes ? <span className="text-stone-500 shrink-0">{place.duration_minutes} min</span> : null}
+                                {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
+                                  <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[10px] font-semibold text-stone-700 shrink-0">
+                                    {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              {/* Quick Action Emoji Buttons */}
+                              <div className="flex items-center gap-1 shrink-0">
+                                {/* 交通 / 导航 */}
+                                <a
+                                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.address || place.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                  title={zh ? '导航到此地' : 'Directions'}
+                                >
+                                  🧭
+                                </a>
+                                {/* 电话 */}
+                                {place.phone ? (
+                                  <a
+                                    href={`tel:${place.phone}`}
+                                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-stone-200 transition"
+                                    title={zh ? `拨打电话: ${place.phone}` : `Call: ${place.phone}`}
+                                  >
+                                    📞
+                                  </a>
+                                ) : null}
+                                {/* 地图 */}
+                                {place.source_url ? (
+                                  <a
+                                    href={place.source_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                    title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
+                                  >
+                                    🗺️
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address || place.title)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                    title={zh ? '在 Google Maps 中搜索' : 'Search on Maps'}
+                                  >
+                                    🗺️
+                                  </a>
+                                )}
+                                {/* 菜单 */}
+                                {place.menu_url ? (
+                                  <a
+                                    href={place.menu_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-stone-200 transition"
+                                    title={zh ? '查看菜单' : 'Menu'}
+                                  >
+                                    📖
+                                  </a>
+                                ) : null}
+                                {/* 预订 */}
+                                {place.reservation_url ? (
+                                  <a
+                                    href={place.reservation_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex h-5 w-5 items-center justify-center rounded border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition shadow-2xs"
+                                    title={zh ? '官方预订' : 'Reserve'}
+                                  >
+                                    🎟️
+                                  </a>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
 
@@ -1984,13 +1976,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             </div>
                           ) : null}
 
-                          {/* Research Note / Why Insight */}
+                          {/* Deduplicated Research Note / Why Insight (Only 1 block displayed) */}
                           {place.why ? (
                             <p className="line-clamp-2 rounded bg-stone-50 px-2 py-0.5 text-[11px] text-stone-700 leading-snug">
                               💡 <strong>{zh ? '推荐理由:' : 'Why:'}</strong> {place.why}
                             </p>
-                          ) : null}
-                          {place.notes ? (
+                          ) : place.notes ? (
                             <p className="line-clamp-2 text-[11px] text-stone-500 italic pl-0.5 leading-snug">
                               📝 {place.notes}
                             </p>

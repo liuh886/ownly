@@ -59,17 +59,16 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
   // Prevent all mouse/pointer events from bubbling to ancestor links or card containers
   const isolateEvent = (ev: Event) => {
     ev.stopPropagation();
-    if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
     if (ev.type === 'click' || ev.type === 'mousedown' || ev.type === 'pointerdown') {
       ev.preventDefault();
     }
   };
 
-  btnContainer.addEventListener('click', isolateEvent, true);
-  btnContainer.addEventListener('mousedown', isolateEvent, true);
-  btnContainer.addEventListener('mouseup', isolateEvent, true);
-  btnContainer.addEventListener('pointerdown', isolateEvent, true);
-  btnContainer.addEventListener('pointerup', isolateEvent, true);
+  btnContainer.addEventListener('click', isolateEvent);
+  btnContainer.addEventListener('mousedown', isolateEvent);
+  btnContainer.addEventListener('mouseup', isolateEvent);
+  btnContainer.addEventListener('pointerdown', isolateEvent);
+  btnContainer.addEventListener('pointerup', isolateEvent);
 
   const shadow = btnContainer.attachShadow ? btnContainer.attachShadow({ mode: 'open' }) : null;
   const root = shadow || btnContainer;
@@ -132,9 +131,8 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
   btn.setAttribute('title', '一键采集到 Ownly 案板 (Inbox)');
   btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
 
-  btn.addEventListener('click', isolateEvent, true);
-  btn.addEventListener('mousedown', isolateEvent, true);
-  btn.addEventListener('pointerdown', isolateEvent, true);
+  btn.addEventListener('mousedown', isolateEvent);
+  btn.addEventListener('pointerdown', isolateEvent);
 
   let isSaving = false;
   btn.addEventListener('click', async (ev) => {
