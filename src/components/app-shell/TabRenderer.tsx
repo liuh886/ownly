@@ -72,7 +72,6 @@ export function TabRenderer({
   } | null>(null);
 
   const [composerFocusTarget, setComposerFocusTarget] = useState<'quickLine' | 'title' | undefined>(undefined);
-  const [plannerRevision, setPlannerRevision] = useState(0);
 
   useEffect(() => {
     const routeSharedTrip = () => {
@@ -194,7 +193,7 @@ export function TabRenderer({
   if (activeTab === 'planner') {
     return (
       <div className="space-y-2">
-        <PlannerHome key={plannerRevision} disabled={!isConnected} />
+        <PlannerHome disabled={!isConnected} />
       </div>
     );
   }

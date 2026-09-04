@@ -15,6 +15,9 @@ import {
   extractPriceCurrency,
   findExistingTripPlace,
   formatPlacePriceInTripCurrency,
+  getMapPointsForFilter,
+  getPlaceConvertedNumericPrice,
+  calculateBounds,
   haversineDistanceKm,
   inferPlaceCity,
   inferPlaceKind,
@@ -1369,6 +1372,119 @@ describe('exportTripToMarkdown', () => {
     it('falls back to area if no known city matched', () => {
       const p = { area: '日落海滩', address: 'Some remote road', title: 'Cliff Resort' };
       expect(inferPlaceCity(p)).toBe('日落海滩');
+    });
+  });
+
+  describe('getPlaceConvertedNumericPrice', () => {
+    it('returns structured min/max/avg when price_currency matches trip currency', () => {
+      const p = { price_min: 200, price_max: 300, price_currency: 'CNY' };
+      const res = getPlaceConvertedNumericPrice(p, 'CNY');
+      expect(res).toEqual({ min: 200, max: 300, avg: 250 });
+    });
+
+    it('converts foreign currency to trip currency with FX rate', () => {
+      const p = { price_min: 2000, price_max: 2000, price_currency: 'THB' };
+      // Default THB -> CNY rate ≈ 0.208
+      const res = getPlaceConvertedNumericPrice(p, 'CNY');
+      expect(res).not.toBeNull();
+      expect(res!.avg).toBeGreaterThan(300);
+      expect(res!.avg).toBeLessThan(600);
+    });
+
+    it('correctly parses raw observed_price string when price_min/max missing', () => {
+      const p = { observed_price: '฿100–200' };
+      const res = getPlaceConvertedNumericPrice(p, 'CNY');
+      expect(res).not.toBeNull();
+      expect(res!.min).toBeGreaterThan(15);
+      expect(res!.max).toBeGreaterThan(res!.min!);
+    });
+
+    it('returns null when no price is available', () => {
+      expect(getPlaceConvertedNumericPrice({}, 'CNY')).toBeNull();
+    });
+  });
+
+  describe('getMapPointsForFilter', () => {
+    const pts = [
+      { lat: 13.75, lng: 100.5, isScheduled: true },
+      { lat: 13.76, lng: 100.51, isScheduled: false },
+    ];
+
+    it('returns all points for all mode', () => {
+      expect(getMapPointsForFilter(pts, 'all')).toHaveLength(2);
+    });
+
+    it('returns only scheduled points for scheduled mode', () => {
+      const filtered = getMapPointsForFilter(pts, 'scheduled');
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].isScheduled).toBe(true);
+    });
+
+    it('returns only candidates for candidates mode', () => {
+      const filtered = getMapPointsForFilter(pts, 'candidates');
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].isScheduled).toBe(false);
+    });
+  });
+
+  describe('calculateBounds', () => {
+    it('handles empty points array gracefully', () => {
+      const res = calculateBounds([]);
+      expect(res.center).toEqual({ lat: 35.6762, lng: 139.6503 });
+      expect(res.zoom).toBe(13);
+    });
+
+    it('handles single valid point', () => {
+      const res = calculateBounds([{ lat: 13.7563, lng: 100.5018 }]);
+      expect(res.center).toEqual({ lat: 13.7563, lng: 100.5018 });
+      expect(res.zoom).toBe(14);
+    });
+
+    it('filters out invalid or (0,0) coordinates', () => {
+      const res = calculateBounds([
+        { lat: 0, lng: 0 },
+        { lat: 13.7563, lng: 100.5018 },
+      ]);
+      expect(res.center).toEqual({ lat: 13.7563, lng: 100.5018 });
+    });
+
+    it('calculates bounding box for tightly clustered city points', () => {
+      const bkkPoints = [
+        { lat: 13.746, lng: 100.534 }, // Siam
+        { lat: 13.756, lng: 100.501 }, // Grand Palace
+        { lat: 13.727, lng: 100.528 }, // Silom
+      ];
+      const res = calculateBounds(bkkPoints);
+      expect(res.center.lat).toBeGreaterThan(13.7);
+      expect(res.center.lat).toBeLessThan(13.8);
+      expect(res.zoom).toBeGreaterThanOrEqual(12);
+    });
+
+    it('preserves multi-city itinerary points (e.g. Bangkok + Pattaya)', () => {
+      const multiCityPoints = [
+        { lat: 13.756, lng: 100.501 }, // Bangkok
+        { lat: 13.746, lng: 100.534 }, // Bangkok
+        { lat: 12.925, lng: 100.878 }, // Pattaya (~100km away)
+      ];
+      const res = calculateBounds(multiCityPoints);
+      // Both Bangkok and Pattaya should be encompassed in the center
+      expect(res.center.lat).toBeLessThan(13.756);
+      expect(res.center.lat).toBeGreaterThan(12.925);
+    });
+
+    it('prunes extreme global outliers (e.g. 1 London point in a Bangkok trip)', () => {
+      const tripPointsWithOutlier = [
+        { lat: 13.756, lng: 100.501 }, // Bangkok
+        { lat: 13.746, lng: 100.534 }, // Bangkok
+        { lat: 13.727, lng: 100.528 }, // Bangkok
+        { lat: 51.5074, lng: -0.1278 }, // London (outlier 9500km away)
+      ];
+      const res = calculateBounds(tripPointsWithOutlier);
+      // Viewport must remain centered in Thailand, not Middle East/Indian Ocean
+      expect(res.center.lat).toBeGreaterThan(13.0);
+      expect(res.center.lat).toBeLessThan(14.0);
+      expect(res.center.lng).toBeGreaterThan(99.0);
+      expect(res.center.lng).toBeLessThan(102.0);
     });
   });
 });

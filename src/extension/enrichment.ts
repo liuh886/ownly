@@ -499,8 +499,6 @@ export async function enrichCandidatePlacesBatch(
   const concurrency = Math.max(1, Math.min(options?.concurrency ?? 3, 5));
   // Priority queue: A (0x/ChIJ) before B (query), stable for same priority
   const sorted = [...places].sort((a, b) => priorityOf(a) - priorityOf(b));
-  // Map back to original indices for result placement
-  const indexById = new Map(sorted.map((p, i) => [`${p.id}:${i}`, places.indexOf(p)]));
   // Use sorted order for processing but keep results in original order
   const results = [...places];
   let totalEnriched = 0;

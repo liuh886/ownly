@@ -33,7 +33,6 @@ import {
   buildFromEntityList,
   createSnapshot,
   interpretDomBatch,
-  interpretRawDomCard,
   type ExtractionSnapshot,
   type SavedListResult,
 } from './maps/saved-list-parser';
@@ -648,30 +647,6 @@ function cardToRaw(title: string, href: string, card: HTMLElement | null): impor
   const addressRaw = card?.querySelector<HTMLElement>(SELECTORS.address)?.textContent?.trim();
   const noteRaw = card?.querySelector<HTMLElement>(SELECTORS.cardNote)?.textContent?.trim();
   return { rawTitle: title, href: href || '', ratingText, infoTexts, addressRaw, noteRaw };
-}
-
-function rememberScavengedPlace(rawTitle: string, sourceUrl: string, card: HTMLElement | null): void {
-  const raw = cardToRaw(rawTitle, sourceUrl, card);
-  const { candidate } = interpretRawDomCard(raw);
-  if (!candidate) return;
-  const key = candidate.featureId || candidate.url || `unresolved:${candidate.title.toLowerCase()}`;
-  if (scannedListPlaces.has(key)) return;
-  scannedListPlaces.set(key, {
-    title: candidate.title,
-    sourceUrl: candidate.url,
-    sourceProvider: 'google_maps',
-    kind: (candidate.kind as PlannerPlaceKind) || inferPlaceKind((candidate.category || '') + ' ' + candidate.title + ' ' + (candidate.address || '')),
-    rating: candidate.rating,
-    reviewCount: candidate.reviewCount,
-    category: candidate.category,
-    priceLevel: candidate.priceLevel,
-    address: candidate.address,
-    detectedCurrency: candidate.detectedCurrency,
-    summary: candidate.summary,
-    userNote: candidate.userNote,
-    coordinates: candidate.coordinates ?? extractPlaceCoordinates(candidate.url) ?? undefined,
-    sourcePlaceId: candidate.sourcePlaceId,
-  });
 }
 
 const PLACE_LINK = 'a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]';

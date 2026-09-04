@@ -11,7 +11,7 @@ import type { WYQDMembershipState } from '@/core/membership';
 import { parseScore, todayISO } from '@/lib/format';
 import { useFormatMoney } from '@/lib/use-format';
 import { TravelInsightsPanel } from '@/components/travel/TravelInsightsPanel';
-import { FIELD_CLASS, CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
+import { FIELD_CLASS, CARD_CLASS } from '@/lib/ui-constants';
 
 function getExperienceAmount(object: WYQDObject): number {
   if (object.object_type !== 'one_time_experience') return 0;
@@ -442,8 +442,6 @@ export function ReviewHome({
       review.experience_score ? `${t('experienceRank')} ${review.experience_score}分` : null,
     ].filter((item): item is string => Boolean(item));
   }
-
-  const rankingBoardSuffix = t('rankingBoard').replace('{label}', '');
 
   const rankingBoards = useMemo(() => {
     const scoreDimensions: Array<{

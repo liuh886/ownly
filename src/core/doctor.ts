@@ -514,8 +514,7 @@ export async function applyReviewRefRepairs(
     const ref = obj?.entity.review_ref;
     // Double-check: ref still dangling?
     if (obj && ref && !reviewIds.has(ref)) {
-      const { review_ref: _, ...rest } = obj.entity as WYQDObject & { review_ref?: string | null };
-      const fixed = { ...rest, review_ref: null, updated_at: new Date().toISOString() } as WYQDObject;
+      const fixed = { ...obj.entity, review_ref: null, updated_at: new Date().toISOString() } as WYQDObject;
       await adapter.updateObject(obj.fileName, fixed, obj.body);
       clearedDangling++;
     }

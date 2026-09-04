@@ -38,7 +38,7 @@ export function WebShell() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
   const [membership] = useState<WYQDMembershipState>(WEB_PRO_MEMBERSHIP);
-  const [recoveryState, setRecoveryState] = useState<RecoveryState | null>(null);
+  const [, setRecoveryState] = useState<RecoveryState | null>(null);
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);

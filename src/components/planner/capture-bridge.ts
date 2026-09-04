@@ -93,14 +93,17 @@ export async function pullCaptureState(): Promise<OwnlyCaptureState | null> {
   // V3 state shape
   if (rawObj.version === 3 || Array.isArray(rawObj.places)) {
     const v3 = raw as OwnlyCaptureStateV3;
-    const targetTripId = v3.planner_target?.trip_id || v3.active_collection_id || '';
-    const activeCollection = v3.collections?.find((c) => c.id === v3.active_collection_id) || v3.collections?.[0];
+    const targetCollectionId = v3.planner_target?.collection_id || v3.active_collection_id || v3.collections?.[0]?.id || 'inbox';
+    const activeCollection = v3.collections?.find((c) => c.id === targetCollectionId) || v3.collections?.[0];
+    const targetTripId = v3.planner_target?.trip_id || activeCollection?.id || v3.active_collection_id || '';
     const activeContext: CaptureContext | null = v3.planner_target
       ? { tripId: v3.planner_target.trip_id, title: v3.planner_target.title }
       : (activeCollection ? { tripId: activeCollection.id, title: activeCollection.title, currency: activeCollection.currency } : null);
 
-    const places = Array.isArray(v3.places) ? v3.places : [];
-    const pendingPlaces: CaptureCandidate[] = places.map((place: CapturePlace) =>
+    const allPlaces = Array.isArray(v3.places) ? v3.places : [];
+    // Strictly isolate places belonging to the active/target collection to prevent cross-collection contamination and destructive deletion
+    const scopedPlaces = allPlaces.filter((place: CapturePlace) => (place.collection_id || 'inbox') === targetCollectionId);
+    const pendingPlaces: CaptureCandidate[] = scopedPlaces.map((place: CapturePlace) =>
       asCaptureCandidate(capturePlaceToPlannerPlace(place, targetTripId, undefined, { preserveId: true }) as never)
     );
 

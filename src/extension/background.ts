@@ -2,10 +2,8 @@ import {
   DEFAULT_USD_PIVOT,
   ensurePlaceKindTag,
   inferPlaceKind,
-  type PlannerTripPlace,
 } from '../domain/planner';
 import {
-  EMPTY_CAPTURE_STATE_V3,
   findExistingPlaceByIdentity,
   findExistingPlaceByResilientIdentity,
   type CaptureCollection,

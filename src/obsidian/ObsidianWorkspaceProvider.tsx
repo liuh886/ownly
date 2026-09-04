@@ -13,7 +13,6 @@ export function ObsidianWorkspaceProvider({
   membership,
   language,
   onLanguageChange,
-  onRefresh,
   withSuppressedRefresh,
   children,
 }: {
@@ -94,7 +93,7 @@ export function ObsidianWorkspaceProvider({
           notice,
           showNotice,
           membership,
-          activateLicenseKey: (_key: string) => {
+          activateLicenseKey: () => {
             setLicenseModalOpen(false);
           },
           clearLicenseKey: () => {

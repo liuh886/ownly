@@ -11,7 +11,6 @@ import {
   ensureInboxCollection,
   migrateV2ToV3,
   type OwnlyCaptureStateV3,
-  type OwnlyCollectionExportV1,
   type CaptureCollection,
   type CapturePlace,
 } from '../domain/capture';
@@ -122,9 +121,23 @@ function normalizePlace(value: unknown): CapturePlace | null {
       types: Array.isArray(src.types) ? src.types.filter((t): t is string => typeof t === 'string') : undefined,
     },
     address: p.address,
-    coordinates: p.coordinates && typeof p.coordinates === 'object'
-      ? { lat: Number(p.coordinates.lat) || 0, lng: Number(p.coordinates.lng) || 0 }
-      : undefined,
+    coordinates: (() => {
+      if (!p.coordinates || typeof p.coordinates !== 'object') return undefined;
+      const lat = Number((p.coordinates as { lat?: unknown }).lat);
+      const lng = Number((p.coordinates as { lng?: unknown }).lng);
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180 &&
+        (Math.abs(lat) > 0.0001 || Math.abs(lng) > 0.0001)
+      ) {
+        return { lat, lng };
+      }
+      return undefined;
+    })(),
     rating: typeof p.rating === 'number' ? p.rating : undefined,
     review_count: typeof p.review_count === 'number' ? p.review_count : undefined,
     price: p.price && typeof p.price === 'object' ? {

@@ -489,12 +489,13 @@ export function findExistingTripPlace(
   tripId: string,
   sourceUrl: string,
   sourcePlaceId?: string,
-  _coordinates?: { lat: number; lng: number },
+  coordinates?: { lat: number; lng: number },
 ): PlannerTripPlace | undefined {
   const probeKeys = new Set(getStrongPlaceIdentityKeys({
     source_provider: inferSourceProvider(sourceUrl),
     source_place_id: sourcePlaceId,
     source_url: sourceUrl,
+    coordinates,
   }));
   if (probeKeys.size === 0) return undefined;
 
@@ -1157,6 +1158,123 @@ export function haversineDistanceKm(
   return Math.round(R * c * 100) / 100;
 }
 
+export interface MapBoundingResult {
+  center: { lat: number; lng: number };
+  zoom: number;
+}
+
+export interface MapPointLike {
+  lat: number;
+  lng: number;
+  isScheduled?: boolean;
+}
+
+export function getMapPointsForFilter<T extends MapPointLike>(
+  points: T[],
+  filterMode: 'all' | 'candidates' | 'scheduled',
+): T[] {
+  if (filterMode === 'scheduled') {
+    return points.filter((p) => Boolean(p.isScheduled));
+  }
+  if (filterMode === 'candidates') {
+    return points.filter((p) => !p.isScheduled);
+  }
+  return points;
+}
+
+/**
+ * Robust map viewport bounding calculation:
+ * - Filters invalid or (0, 0) coordinates
+ * - Applies cosine latitude projection to handle spherical distortion
+ * - Prunes extreme global outliers (> 800km away when majority are tightly clustered)
+ *   while preserving multi-city itineraries (e.g. Bangkok + Pattaya, Tokyo + Hakone).
+ */
+export function calculateBounds(pts: Array<{ lat: number; lng: number }>): MapBoundingResult {
+  if (!pts || pts.length === 0) {
+    return { center: { lat: 35.6762, lng: 139.6503 }, zoom: 13 };
+  }
+
+  // Filter out invalid or near-zero coordinates
+  const validPts = pts.filter(
+    (p) =>
+      Number.isFinite(p.lat) &&
+      Number.isFinite(p.lng) &&
+      p.lat >= -90 &&
+      p.lat <= 90 &&
+      p.lng >= -180 &&
+      p.lng <= 180 &&
+      (Math.abs(p.lat) > 0.01 || Math.abs(p.lng) > 0.01),
+  );
+
+  if (validPts.length === 0) {
+    const fallbackLat = Number.isFinite(pts[0]?.lat) ? pts[0].lat : 35.6762;
+    const fallbackLng = Number.isFinite(pts[0]?.lng) ? pts[0].lng : 139.6503;
+    return { center: { lat: fallbackLat, lng: fallbackLng }, zoom: 13 };
+  }
+  if (validPts.length === 1) {
+    return { center: { lat: validPts[0].lat, lng: validPts[0].lng }, zoom: 14 };
+  }
+
+  // Calculate median center
+  const sortedLats = [...validPts.map((p) => p.lat)].sort((a, b) => a - b);
+  const sortedLngs = [...validPts.map((p) => p.lng)].sort((a, b) => a - b);
+  const mid = Math.floor(sortedLats.length / 2);
+  const medianLat = sortedLats.length % 2 === 0 ? (sortedLats[mid - 1] + sortedLats[mid]) / 2 : sortedLats[mid];
+  const medianLng = sortedLngs.length % 2 === 0 ? (sortedLngs[mid - 1] + sortedLngs[mid]) / 2 : sortedLngs[mid];
+
+  // Weighted distance with cosine latitude scaling to account for spherical geometry
+  const midLatRad = (medianLat * Math.PI) / 180;
+  const cosLat = Math.cos(midLatRad);
+
+  const pointsWithDist = validPts.map((p) => {
+    const dLat = (p.lat - medianLat) * 111.32; // km
+    const dLng = (p.lng - medianLng) * 111.32 * cosLat; // km
+    const distKm = Math.sqrt(dLat * dLat + dLng * dLng);
+    return { p, distKm };
+  });
+
+  pointsWithDist.sort((a, b) => a.distKm - b.distKm);
+
+  // Regional threshold: retain all points within normal travel radius (e.g. 500km or 4x median),
+  // only pruning extreme isolated global anomalies.
+  const medianDist = pointsWithDist[Math.floor(pointsWithDist.length / 2)].distKm;
+  const maxReasonableRadius = Math.max(500, medianDist * 4);
+
+  const filteredPts = pointsWithDist
+    .filter((item) => item.distKm <= maxReasonableRadius)
+    .map((item) => item.p);
+
+  const targetPts = filteredPts.length > 0 ? filteredPts : validPts;
+
+  let minLat = targetPts[0].lat;
+  let maxLat = targetPts[0].lat;
+  let minLng = targetPts[0].lng;
+  let maxLng = targetPts[0].lng;
+
+  targetPts.forEach((p) => {
+    minLat = Math.min(minLat, p.lat);
+    maxLat = Math.max(maxLat, p.lat);
+    minLng = Math.min(minLng, p.lng);
+    maxLng = Math.max(maxLng, p.lng);
+  });
+
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+  const maxSpan = Math.max(maxLat - minLat, (maxLng - minLng) * Math.abs(cosLat));
+
+  let z = 14;
+  if (maxSpan > 15) z = 5;
+  else if (maxSpan > 8) z = 7;
+  else if (maxSpan > 3.5) z = 9;
+  else if (maxSpan > 1.2) z = 11;
+  else if (maxSpan > 0.5) z = 12;
+  else if (maxSpan > 0.15) z = 13;
+  else if (maxSpan > 0.04) z = 14;
+  else z = 15;
+
+  return { center: { lat: centerLat, lng: centerLng }, zoom: z };
+}
+
 export interface HotelProximityMetrics {
   hasCoordinates: boolean;
   avgDistanceKm: number;
@@ -1642,6 +1760,61 @@ export function formatPlacePriceInTripCurrency(
   }
 
   return raw || '';
+}
+
+/**
+ * Returns a normalized numeric representation ({ min, max, avg }) converted to target trip currency.
+ * Used for accurate multi-currency price comparison and sorting in HotelComparisonModal.
+ */
+export function getPlaceConvertedNumericPrice(
+  place: {
+    observed_price?: string;
+    price_currency?: string;
+    price_min?: number;
+    price_max?: number;
+  },
+  tripCurrency = 'CNY',
+  fxOverrides?: Record<string, number>,
+): { min?: number; max?: number; avg?: number } | null {
+  const raw = place.observed_price?.trim();
+  const base = (tripCurrency || 'CNY').trim().toUpperCase();
+  const sourceCurrency = (place.price_currency || (raw ? extractPriceCurrency(raw) : null) || base).trim().toUpperCase();
+
+  const rate = sourceCurrency === base ? 1 : effectiveFxRate(sourceCurrency, { base, overrides: fxOverrides });
+  if (rate === null || rate <= 0) return null;
+
+  if (typeof place.price_min === 'number' || typeof place.price_max === 'number') {
+    const minVal = place.price_min ?? place.price_max;
+    const maxVal = place.price_max ?? place.price_min;
+    if (minVal !== undefined && maxVal !== undefined) {
+      const minConverted = Math.round(minVal * rate * 100) / 100;
+      const maxConverted = Math.round(maxVal * rate * 100) / 100;
+      return { min: minConverted, max: maxConverted, avg: (minConverted + maxConverted) / 2 };
+    }
+  }
+
+  if (raw) {
+    const matchRange = /(\d[\d.,]*)\s*[-–—〜~至到]\s*(\d[\d.,]*)/.exec(raw);
+    if (matchRange) {
+      const n1 = parseFloat(matchRange[1].replace(/,/g, ''));
+      const n2 = parseFloat(matchRange[2].replace(/,/g, ''));
+      if (Number.isFinite(n1) && Number.isFinite(n2)) {
+        const minConverted = Math.round(n1 * rate * 100) / 100;
+        const maxConverted = Math.round(n2 * rate * 100) / 100;
+        return { min: minConverted, max: maxConverted, avg: (minConverted + maxConverted) / 2 };
+      }
+    }
+    const matchSingle = /(\d[\d.,]*)/.exec(raw);
+    if (matchSingle) {
+      const n = parseFloat(matchSingle[1].replace(/,/g, ''));
+      if (Number.isFinite(n)) {
+        const converted = Math.round(n * rate * 100) / 100;
+        return { min: converted, max: converted, avg: converted };
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -2188,7 +2361,7 @@ export function calculateTripSettlement(
 
     const rawSplits = (exp.split_members || []).map((m) => m?.trim()).filter(Boolean) as string[];
     const splits = rawSplits.length > 0 ? rawSplits : members;
-    const perShare = amt / splits.length;
+    const perShare = splits.length > 0 ? amt / splits.length : 0;
     splits.forEach((sm) => {
       if (shareMap[sm] !== undefined) {
         shareMap[sm] += perShare;

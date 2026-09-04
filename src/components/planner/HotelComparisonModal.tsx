@@ -6,6 +6,7 @@ import {
   calculateHotelProximity,
   calculateMultiDayHotelProximity,
   formatPlacePriceInTripCurrency,
+  getPlaceConvertedNumericPrice,
   inferPlaceCity,
 } from '@/domain/planner';
 
@@ -144,8 +145,8 @@ export function HotelComparisonModal({
         return da - db;
       }
       if (sortBy === 'price') {
-        const pa = typeof a.price_min === 'number' ? a.price_min : (typeof a.price_max === 'number' ? a.price_max : 999999);
-        const pb = typeof b.price_min === 'number' ? b.price_min : (typeof b.price_max === 'number' ? b.price_max : 999999);
+        const pa = getPlaceConvertedNumericPrice(a, tripCurrency, fxRates)?.avg ?? 99999999;
+        const pb = getPlaceConvertedNumericPrice(b, tripCurrency, fxRates)?.avg ?? 99999999;
         return pa - pb;
       }
       if (sortBy === 'rating') {
@@ -157,7 +158,7 @@ export function HotelComparisonModal({
     });
 
     return list;
-  }, [candidateHotels, selectedCity, searchQuery, sortBy, hotelCityMap, multiDayMetricsMap]);
+  }, [candidateHotels, selectedCity, searchQuery, sortBy, hotelCityMap, multiDayMetricsMap, tripCurrency, fxRates]);
 
   if (!open) return null;
 

@@ -112,4 +112,28 @@ describe('Capture import release regression', () => {
     expect(report.created.length + report.updated.length + report.failed.length).toBe(report.received);
     expect(await repo.listPlaces()).toHaveLength(45);
   });
+
+  it('guarantees multi-collection isolation during capture import', async () => {
+    // Simulating multiple collections in capture state
+    const thailandPlaces = [
+      candidate('th-1', 'Wat Pho', 'attraction', 'trip-release'),
+      candidate('th-2', 'Chatuchak', 'shopping', 'trip-release'),
+    ];
+    const japanPlaces = [
+      candidate('jp-1', 'Sensoji', 'attraction', 'trip-release'),
+      candidate('jp-2', 'Shinjuku Gyoen', 'attraction', 'trip-release'),
+    ];
+
+    // Only import the Thailand collection places
+    const report = await repo.importCapturedPlaces(thailandPlaces);
+    expect(report.received).toBe(2);
+    expect(report.created.length).toBe(2);
+
+    const imported = await repo.listPlaces();
+    expect(imported).toHaveLength(2);
+    expect(imported.map((p) => p.title)).toEqual(expect.arrayContaining(['Wat Pho', 'Chatuchak']));
+    japanPlaces.forEach((jp) => {
+      expect(imported.map((p) => p.title)).not.toContain(jp.title);
+    });
+  });
 });

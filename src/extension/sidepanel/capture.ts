@@ -5,7 +5,6 @@ import { matchesSavedListContext } from '../saved-list-match';
 import { logger } from '../logger';
 import { store, t, saveState, getActiveCollection, getActivePlaces } from './store';
 import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartListCard, setStatus } from './ui';
-import type { CapturePlace } from '../../domain/capture';
 
 const PRICE_RETRY_DELAYS = [1500, 3000, 5000];
 let priceRetryCount = 0;

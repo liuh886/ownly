@@ -1,5 +1,32 @@
 # Ownly — Task Progress & Review
 
+## Completed: Full-Codebase Quality Elevation & Technical Debt Clearance (2026-09-04)
+- [x] **Phase 1: Remove Dead Files & Unreferenced Stubs**
+  - [x] Deleted orphaned `src/domain/entities/` (`Place.ts`, `Trip.ts`, `Capture.ts`, `index.ts`)
+  - [x] Deleted unreferenced stub re-exports: `src/domain/budget.ts`, `src/domain/stay.ts`
+  - [x] Deleted unreferenced stubs: `src/services/PlannerFormatter.ts`, `src/services/PlannerDomainService.ts`, `src/domain/ownly-health.ts`
+  - [x] Updated `eslint.config.mjs` to ignore `packages/*/dist/**`
+- [x] **Phase 2: Latent Bug Fixes & Edge-Case Arithmetic Safety**
+  - [x] **P0 Fix**: Fixed Multi-Collection Sync data contamination and accidental ACK deletions in `src/components/planner/capture-bridge.ts`
+  - [x] **P1 Fix**: Fixed `syncCapture` stale closure on `selectedTripId` / `trips` in `PlannerHome.tsx`
+  - [x] **P1 Fix**: Fixed Map auto-zoom filter inconsistency and missing `filterModeChanged` trigger in `PlannerMap.tsx`
+  - [x] **P1 Fix**: Extracted pure spherical `calculateBounds` with cosine latitude scaling and multi-city tolerance
+  - [x] **P1 Fix**: Fixed multi-currency price sorting bug in `HotelComparisonModal.tsx` (`getPlaceConvertedNumericPrice`)
+  - [x] **P1 Fix**: Fixed coordinates normalization fallback `(0, 0)` bug in `src/extension/capture-state.ts`
+  - [x] **P2 Fix**: Added partial-success reporting (`succeededIds`, `failedIds`) for Planner batch operations
+  - [x] Guarded against division-by-zero in `src/domain/expense-payments.ts` and `src/domain/planner.ts`
+- [x] **Phase 3: Clean Up Unused Imports & ESLint Warnings**
+  - [x] Cleaned up unused variables and imports across domain, extension, services, obsidian, and components
+  - [x] Cleaned up test files and unused variables
+- [x] **Phase 4: Full Multi-Target Verification**
+  - [x] `npm run validate:fast` (TypeScript + ESLint 0 errors + Terminology + Membership)
+  - [x] `npm run validate:extension` (Manifest + Extension build + 153 tests)
+  - [x] `npm run validate:shared` (Data portability + MCP + CLI + Parity)
+  - [x] `npm run validate:obsidian` (Obsidian plugin build & package)
+  - [x] `npm run build` (Next.js full production build)
+
+---
+
 ## Completed: Interactive Buttons & UI Defect Fixes (2026-09-04)
 - [x] **Fix 1: Deduplicate Sidepanel Click Listeners** (`src/extension/sidepanel/handlers.ts`, `src/extension/sidepanel/import-export.ts`)
   - Removed redundant 2nd registration of `btnSelectAllCandidates`, `btnBulkEnrich`, `btnEnrichCandidates`, `btnImportToPlanner`.

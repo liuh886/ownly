@@ -104,6 +104,7 @@ export interface OwnlyCaptureStateV3 {
   planner_target?: {
     trip_id: string;
     title: string;
+    collection_id?: string;
   };
   last_export_at?: string;
 }
@@ -186,7 +187,8 @@ export function buildCollectionExport(
 
 /** P0: 分享用净化 — 剥离费用/私人备注等禁止字段 */
 export function sanitizePlaceForShare(place: CapturePlace): CapturePlace {
-  const { price: _price, ...rest } = place;
+  const rest = { ...place };
+  delete rest.price;
   const user = place.user ? { ...place.user } : undefined;
   if (user) {
     delete user.notes; // 私人备注禁止外泄
@@ -279,11 +281,6 @@ export interface OwnlyCaptureStateV2 {
   activeContext?: CaptureContextV2 | null;
   pendingPlaces?: CaptureCandidateV2[];
   [key: string]: unknown;
-}
-
-function randomId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return `cap-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function mapProvider(raw?: string): CaptureSourceProvider {

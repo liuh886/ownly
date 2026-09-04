@@ -11,7 +11,6 @@ import {
   findExistingPlaceByIdentity,
   reorderPlaces,
   mergePlaceResearch,
-  buildShareableCollectionExport,
   type CapturePlace,
 } from '../../domain/capture';
 import type { PlannerTripPlace } from '../../domain/planner';

@@ -131,7 +131,7 @@ export function calculateTripSettlementWithPayments(
 
     const splits = (expense.split_members ?? []).map((member) => member?.trim()).filter(Boolean) as string[];
     const effectiveSplits = splits.length > 0 ? splits : members;
-    const perShare = amount / effectiveSplits.length;
+    const perShare = effectiveSplits.length > 0 ? amount / effectiveSplits.length : 0;
     effectiveSplits.forEach((member) => {
       shareMap[member] = (shareMap[member] ?? 0) + perShare;
     });

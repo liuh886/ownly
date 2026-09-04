@@ -14,7 +14,6 @@ import { PLACE_PARSER } from '../place-parser';
 import { detectPageCurrency } from '../currency-detector';
 import { inferPlaceKind } from '../../domain/planner';
 import {
-  extractGoogleMapsResearchFromHtml,
   googleMapsDetailUrlFromSourceId,
   type GoogleMapsResearchFacts,
 } from '../google-maps-research';

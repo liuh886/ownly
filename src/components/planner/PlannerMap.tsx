@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerTripPlace } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
-import { extractPlaceCoordinates, PLANNER_KIND_ICONS } from '@/domain/planner';
+import {
+  calculateBounds,
+  extractPlaceCoordinates,
+  getMapPointsForFilter,
+  PLANNER_KIND_ICONS,
+} from '@/domain/planner';
 import { searchCities } from '@/domain/travel';
 
 interface PlannerMapProps {
@@ -98,71 +103,6 @@ function projectLatToY(lat: number, zoom: number): number {
   );
 }
 
-function calculateBounds(pts: Point[]) {
-  if (pts.length === 0) {
-    return { center: { lat: 35.6762, lng: 139.6503 }, zoom: 13 };
-  }
-
-  // Filter out invalid or near-zero coordinates
-  const validPts = pts.filter(
-    (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && (Math.abs(p.lat) > 0.01 || Math.abs(p.lng) > 0.01),
-  );
-
-  if (validPts.length === 0) {
-    return { center: { lat: pts[0].lat, lng: pts[0].lng }, zoom: 13 };
-  }
-  if (validPts.length === 1) {
-    return { center: { lat: validPts[0].lat, lng: validPts[0].lng }, zoom: 14 };
-  }
-
-  // Focus on the dominant cluster (majority >= 80% of points) to avoid outlier distortion
-  const sortedLats = [...validPts.map((p) => p.lat)].sort((a, b) => a - b);
-  const sortedLngs = [...validPts.map((p) => p.lng)].sort((a, b) => a - b);
-  const mid = Math.floor(sortedLats.length / 2);
-  const medianLat = sortedLats.length % 2 === 0 ? (sortedLats[mid - 1] + sortedLats[mid]) / 2 : sortedLats[mid];
-  const medianLng = sortedLngs.length % 2 === 0 ? (sortedLngs[mid - 1] + sortedLngs[mid]) / 2 : sortedLngs[mid];
-
-  const pointsWithDist = validPts.map((p) => {
-    const dLat = p.lat - medianLat;
-    const dLng = p.lng - medianLng;
-    return { p, distSq: dLat * dLat + dLng * dLng };
-  });
-
-  pointsWithDist.sort((a, b) => a.distSq - b.distSq);
-
-  // Take the closest 85% of points (at least 1, max all)
-  const coreCount = Math.max(1, Math.ceil(validPts.length * 0.85));
-  const corePts = pointsWithDist.slice(0, coreCount).map((item) => item.p);
-
-  let minLat = corePts[0].lat;
-  let maxLat = corePts[0].lat;
-  let minLng = corePts[0].lng;
-  let maxLng = corePts[0].lng;
-
-  corePts.forEach((p) => {
-    minLat = Math.min(minLat, p.lat);
-    maxLat = Math.max(maxLat, p.lat);
-    minLng = Math.min(minLng, p.lng);
-    maxLng = Math.max(maxLng, p.lng);
-  });
-
-  const centerLat = (minLat + maxLat) / 2;
-  const centerLng = (minLng + maxLng) / 2;
-  const maxSpan = Math.max(maxLat - minLat, maxLng - minLng);
-
-  let z = 14;
-  if (maxSpan > 15) z = 5;
-  else if (maxSpan > 8) z = 7;
-  else if (maxSpan > 3.5) z = 9;
-  else if (maxSpan > 1.2) z = 11;
-  else if (maxSpan > 0.5) z = 12;
-  else if (maxSpan > 0.15) z = 13;
-  else if (maxSpan > 0.04) z = 14;
-  else z = 15;
-
-  return { center: { lat: centerLat, lng: centerLng }, zoom: z };
-}
-
 const MIN_ZOOM = 3;
 const MAX_ZOOM = 18;
 const ZOOM_STEP_BUTTON = 1;
@@ -246,28 +186,29 @@ export function PlannerMap({
   const [center, setCenter] = useState<{ lat: number; lng: number }>(initial.center);
   const [zoom, setZoom] = useState(initial.zoom);
 
-  // Auto-fit to points when points become available or active day/points change
+  // Auto-fit to points when points become available, active day changes, or filter mode changes
   const lastPointsCountRef = useRef<number>(0);
   const lastActiveDayRef = useRef<number>(activeDayIndex);
+  const lastFilterModeRef = useRef<string>(filterMode);
 
   useEffect(() => {
     if (points.length === 0) return;
     const dayChanged = lastActiveDayRef.current !== activeDayIndex;
+    const filterChanged = lastFilterModeRef.current !== filterMode;
     const pointsAppeared = lastPointsCountRef.current === 0 && points.length > 0;
     const pointsCountChanged = Math.abs(points.length - lastPointsCountRef.current) >= 2;
 
-    if (pointsAppeared || dayChanged || pointsCountChanged) {
-      const activePoints = filterMode === 'scheduled'
-        ? points.filter((p) => p.isScheduled)
-        : (points.some((p) => p.isScheduled) ? points.filter((p) => p.isScheduled) : points);
-
-      const computed = calculateBounds(activePoints.length > 0 ? activePoints : points);
+    if (pointsAppeared || dayChanged || pointsCountChanged || filterChanged) {
+      const activePoints = getMapPointsForFilter(points, filterMode);
+      const pointsToFit = activePoints.length > 0 ? activePoints : points;
+      const computed = calculateBounds(pointsToFit);
       setCenter(computed.center);
       setZoom(computed.zoom);
     }
 
     lastPointsCountRef.current = points.length;
     lastActiveDayRef.current = activeDayIndex;
+    lastFilterModeRef.current = filterMode;
   }, [points, activeDayIndex, filterMode]);
 
   // Fallback geocode destination using Ownly's cities.json database
@@ -287,10 +228,7 @@ export function PlannerMap({
 
   // Fit bounds helper on user button click
   const fitBounds = useCallback(() => {
-    const activePoints = filterMode === 'scheduled'
-      ? points.filter((p) => p.isScheduled)
-      : points;
-
+    const activePoints = getMapPointsForFilter(points, filterMode);
     if (activePoints.length === 0) return;
     const computed = calculateBounds(activePoints);
     setCenter(computed.center);

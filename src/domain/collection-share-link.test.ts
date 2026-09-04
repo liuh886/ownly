@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { createShareableTripBundle } from './trip-bundle';
 import {
   buildCollectionShareUrl,
   decodeCollectionSharePayload,
@@ -7,14 +6,7 @@ import {
   extractCollectionSharePayload,
   parseCollectionShareHash,
 } from './collection-share-link';
-import type { PlannerTrip, PlannerTripPlace } from './planner';
 import type { OwnlyCollectionExportV1 } from './capture';
-
-const TRIP: PlannerTrip = {
-  schema_version: '0.1', type: 'trip', id: 'share-trip', title: 'Share Test', status: 'planning',
-  start_date: '2026-10-05', end_date: '2026-10-07', destinations: ['Bangkok'], currency: 'THB',
-  members: ['Alice'], transport_mode: 'transit', tags: [], created_at: '2026-09-01T00:00:00.000Z',
-};
 
 function makeExport(overrides: Partial<OwnlyCollectionExportV1['collection']> = {}): OwnlyCollectionExportV1 {
   return {

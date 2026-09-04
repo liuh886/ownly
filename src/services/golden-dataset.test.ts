@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PlannerTrip, PlannerTripPlace, PlannerTripLeg, TripExpenseItem } from '@/domain/planner';
+import type { PlannerTrip, PlannerTripPlace, PlannerTripLeg } from '@/domain/planner';
 import { materializePlannerScheduledPlaces } from '@/domain/planner-visits';
 import { evaluatePlannerDay } from '@/domain/planner-schedule';
 import { createShareableTripBundle, parseTripBundle, instantiateTripBundle } from '@/domain/trip-bundle';
@@ -17,7 +17,6 @@ import { createShareableTripBundle, parseTripBundle, instantiateTripBundle } fro
 const fixtureDir = resolve(import.meta.dirname, '../../examples/thailand-2026');
 const TRIP = JSON.parse(readFileSync(resolve(fixtureDir, 'trip.json'), 'utf-8')) as PlannerTrip;
 const PLACES = JSON.parse(readFileSync(resolve(fixtureDir, 'places.json'), 'utf-8')) as PlannerTripPlace[];
-const EXPENSES = JSON.parse(readFileSync(resolve(fixtureDir, 'expenses.json'), 'utf-8')) as TripExpenseItem[];
 
 const files = vi.hoisted(() => new Map<string, Map<string, string>>());
 
@@ -182,7 +181,6 @@ describe('Golden Dataset Regression — Thailand 2026', () => {
     const mapScheduled = scheduled.filter((place, index, self) =>
       index === self.findIndex((p) => p.place_id === place.place_id),
     );
-    const uniquePlaceIds = new Set(scheduled.filter((p) => p.scheduled_date === '2026-10-05').map((p) => p.place_id));
     expect(mapScheduled.length).toBeLessThanOrEqual(scheduled.length);
   });
 });

@@ -12,7 +12,6 @@ import {
   migrateV2ToV3,
   type CapturePlace,
   type CaptureCollection,
-  type OwnlyCaptureStateV3,
   type OwnlyCaptureStateV2,
 } from './capture';
 

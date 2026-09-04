@@ -594,10 +594,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       return true;
     });
   }, [scheduled]);
-  const mapScheduledPlaceIds = useMemo(
-    () => new Set(mapScheduled.map((place) => place.place_id)),
-    [mapScheduled],
-  );
 
   const tripLegs = useMemo(
     () => legs.filter((leg) => leg.trip_id === selectedTripId),
@@ -821,18 +817,34 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       : `Are you sure you want to permanently delete ${count} selected places?`;
     if (!window.confirm(confirmMsg)) return;
     setIsBatchOperating(true);
+    const succeededIds: string[] = [];
+    const failedIds: string[] = [];
     try {
       for (const id of selectedCandidateIds) {
-        await plannerRepository.deletePlace(id);
+        try {
+          await plannerRepository.deletePlace(id);
+          succeededIds.push(id);
+        } catch {
+          failedIds.push(id);
+        }
       }
       await load();
-      setSelectedCandidateIds(new Set());
-      setIsMultiSelectMode(false);
-      setNotice(zh ? `已彻底删除 ${count} 个地点` : `Deleted ${count} places`);
-      setTimeout(() => setNotice(''), 3000);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
-      setTimeout(() => setNotice(''), 4000);
+      setSelectedCandidateIds((prev) => {
+        const next = new Set(prev);
+        succeededIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      if (failedIds.length === 0) {
+        setIsMultiSelectMode(false);
+        setNotice(zh ? `已彻底删除 ${succeededIds.length} 个地点` : `Deleted ${succeededIds.length} places`);
+      } else {
+        setNotice(
+          zh
+            ? `已删除 ${succeededIds.length} 个地点，${failedIds.length} 个删除失败`
+            : `Deleted ${succeededIds.length} places, ${failedIds.length} failed`,
+        );
+      }
+      setTimeout(() => setNotice(''), 3500);
     } finally {
       setIsBatchOperating(false);
     }
@@ -840,20 +852,35 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const handleBatchShelveCandidates = useCallback(async () => {
     if (selectedCandidateIds.size === 0 || disabled || isBatchOperating) return;
-    const count = selectedCandidateIds.size;
     setIsBatchOperating(true);
+    const succeededIds: string[] = [];
+    const failedIds: string[] = [];
     try {
       for (const id of selectedCandidateIds) {
-        await plannerRepository.dropPlace(id);
+        try {
+          await plannerRepository.dropPlace(id);
+          succeededIds.push(id);
+        } catch {
+          failedIds.push(id);
+        }
       }
       await load();
-      setSelectedCandidateIds(new Set());
-      setIsMultiSelectMode(false);
-      setNotice(zh ? `已将 ${count} 个地点设为暂不考虑` : `Shelved ${count} places`);
-      setTimeout(() => setNotice(''), 3000);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
-      setTimeout(() => setNotice(''), 4000);
+      setSelectedCandidateIds((prev) => {
+        const next = new Set(prev);
+        succeededIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      if (failedIds.length === 0) {
+        setIsMultiSelectMode(false);
+        setNotice(zh ? `已将 ${succeededIds.length} 个地点设为暂不考虑` : `Shelved ${succeededIds.length} places`);
+      } else {
+        setNotice(
+          zh
+            ? `已将 ${succeededIds.length} 个地点设为暂不考虑，${failedIds.length} 个失败`
+            : `Shelved ${succeededIds.length} places, ${failedIds.length} failed`,
+        );
+      }
+      setTimeout(() => setNotice(''), 3500);
     } finally {
       setIsBatchOperating(false);
     }
@@ -861,20 +888,35 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
   const handleBatchScheduleCandidates = useCallback(async () => {
     if (selectedCandidateIds.size === 0 || !activeDate || disabled || isBatchOperating) return;
-    const count = selectedCandidateIds.size;
     setIsBatchOperating(true);
+    const succeededIds: string[] = [];
+    const failedIds: string[] = [];
     try {
       for (const id of selectedCandidateIds) {
-        await plannerRepository.addVisit(id, activeDate);
+        try {
+          await plannerRepository.addVisit(id, activeDate);
+          succeededIds.push(id);
+        } catch {
+          failedIds.push(id);
+        }
       }
       await load();
-      setSelectedCandidateIds(new Set());
-      setIsMultiSelectMode(false);
-      setNotice(zh ? `已将 ${count} 个地点排入 ${activeDate}` : `Scheduled ${count} places to ${activeDate}`);
-      setTimeout(() => setNotice(''), 3000);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
-      setTimeout(() => setNotice(''), 4000);
+      setSelectedCandidateIds((prev) => {
+        const next = new Set(prev);
+        succeededIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      if (failedIds.length === 0) {
+        setIsMultiSelectMode(false);
+        setNotice(zh ? `已将 ${succeededIds.length} 个地点排入 ${activeDate}` : `Scheduled ${succeededIds.length} places to ${activeDate}`);
+      } else {
+        setNotice(
+          zh
+            ? `已将 ${succeededIds.length} 个地点排入 ${activeDate}，${failedIds.length} 个失败`
+            : `Scheduled ${succeededIds.length} places to ${activeDate}, ${failedIds.length} failed`,
+        );
+      }
+      setTimeout(() => setNotice(''), 3500);
     } finally {
       setIsBatchOperating(false);
     }
@@ -1186,7 +1228,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
         setCapturePending(report.failed.length);
         const importedCount = report.created.length + report.updated.length;
-        const survivingCount = importedCount - report.deduped.length;
         const parts: string[] = [];
         if (importedCount > 0) {
           const detailParts: string[] = [];
@@ -1227,7 +1268,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     } finally {
       setBusy(false);
     }
-  }, [load, zh]);
+  }, [load, selectedTripId, trips, zh]);
 
   if (disabled) {
     return (

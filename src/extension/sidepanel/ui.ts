@@ -58,7 +58,6 @@ export function setStatus(message: string, tone: 'muted' | 'success' | 'error' =
 }
 
 export function showImportReport(report: { received: number; created: string[]; updated: string[]; deduped: string[]; failed: { title: string; reason: string }[] }) {
-  const dict = t();
   const banner = el.importReportBanner;
   const stats = el.importReportStats;
   const failedBox = el.importReportFailed;
@@ -255,7 +254,6 @@ function renderChips() {
   const dict = t();
   el.quickChips.innerHTML = '';
 
-  const activeTrip = store.state.activeContext;
   const customTags: string[] = [];
 
   // Render custom trip sub-tags first (e.g. 曼谷, 清迈, 普吉)

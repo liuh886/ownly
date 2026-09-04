@@ -7,12 +7,10 @@
  */
 import type { Migration } from './index';
 
-export const expenseV0_1_to_V0_2: Migration<unknown> = {
+export const expenseV0_1_to_V0_2: Migration = {
   from: '0.1',
   to: '0.2',
-  transform: (entity) => {
-    // Future: convert member strings to IDs
-    // Future: restructure payments array
+  transform: (entity: Record<string, unknown>) => {
     return {
       ...entity,
       schema_version: '0.2',

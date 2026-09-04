@@ -8,7 +8,6 @@ import {
   plannerTripLegFileName,
   stablePlannerHash,
   type ImportReport,
-  type ImportFailure,
   type PlannerTrip,
   type PlannerTripLeg,
   type PlannerTripPlace,

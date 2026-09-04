@@ -12,17 +12,19 @@ import { expenseV0_1_to_V0_2 } from './expense_v0.1_to_v0.2';
 
 export type MigrationVersion = '0.1' | '0.2' | '1.0';
 
-export interface Migration<T> {
+export type MigrationEntity = Record<string, unknown>;
+
+export interface Migration {
   readonly from: MigrationVersion;
   readonly to: MigrationVersion;
-  readonly transform: (entity: Record<string, unknown>) => Record<string, unknown>;
+  readonly transform: (entity: MigrationEntity) => MigrationEntity;
 }
 
 /**
  * Ordered list of all migrations. Each entry transforms one version step.
  * Add new migrations at the end.
  */
-export const MIGRATIONS: Migration<unknown>[] = [
+export const MIGRATIONS: Migration[] = [
   placeV0_1_to_V0_2,
   tripV0_1_to_V0_2,
   expenseV0_1_to_V0_2,
@@ -35,8 +37,8 @@ export const MIGRATIONS: Migration<unknown>[] = [
 export function getMigrationPath(
   fromVersion: string,
   toVersion: string,
-): Migration<unknown>[] {
-  const path: Migration<unknown>[] = [];
+): Migration[] {
+  const path: Migration[] = [];
   let current = fromVersion;
   for (const migration of MIGRATIONS) {
     if (current === toVersion) break;

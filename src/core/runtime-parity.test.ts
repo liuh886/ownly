@@ -281,7 +281,11 @@ describe('Ownly runtime parity contract', () => {
 
   it('produces equivalent facts, lifecycle outcomes, Doctor findings, and backups', async () => {
     const results = await Promise.all(OWNLY_PRODUCT_SURFACES.map(evaluateSurface));
-    const normalized = results.map(({ surface: _surface, ...result }) => result);
+    const normalized = results.map((result) => {
+      const copy = { ...result };
+      delete (copy as { surface?: unknown }).surface;
+      return copy;
+    });
     expect(normalized[1]).toEqual(normalized[0]);
     expect(normalized[2]).toEqual(normalized[0]);
   });
