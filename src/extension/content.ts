@@ -1268,10 +1268,215 @@ function extractBookingPlace(overrideCurrency?: string, hintCurrency?: string): 
   };
 }
 
+function parseGoogleTravelCard(
+  cardEl: HTMLElement,
+  overrideCurrency?: string,
+  hintCurrency?: string,
+): CurrentResearchPlace | null {
+  if (!cardEl) return null;
+
+  // 1. Entity Link & Source URL
+  const anchor = cardEl.querySelector<HTMLAnchorElement>(
+    'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"]'
+  ) || (cardEl.tagName === 'A' && (cardEl as HTMLAnchorElement).href.includes('/hotels/entity/') ? (cardEl as HTMLAnchorElement) : null);
+
+  const entityHref = anchor?.href || window.location.href;
+
+  // 2. Title Extraction
+  const titleEl = cardEl.querySelector<HTMLElement>(
+    'h2.BgYkof, h2[role="heading"], h3[role="heading"], div.BgYkof, div.k2879c, span.B4NdKc, div.fpNxPd, h1.Q2A6Id, a.kDe2bf'
+  );
+
+  const rawTitle = titleEl?.textContent?.trim() ||
+    anchor?.getAttribute('aria-label')?.trim() ||
+    cardEl.getAttribute('aria-label')?.trim() ||
+    anchor?.textContent?.trim() ||
+    '';
+
+  let title = cleanExtractedText(rawTitle);
+
+  // If title inside anchor has subheadings or multiple lines, take the first valid line
+  if (title.includes('\n')) {
+    title = title.split('\n').map((s) => s.trim()).filter(Boolean)[0] || title;
+  }
+
+  if (
+    !title ||
+    title.length < 2 ||
+    isFakePlaceLabel(title) ||
+    isGenericNavigationTitleLocal(title) ||
+    isJunkNavigationText(title)
+  ) {
+    return null;
+  }
+
+  // 3. Rating & Review Count
+  let rating: number | undefined;
+  let reviewCount: number | undefined;
+  const ratingEl = cardEl.querySelector<HTMLElement>(
+    'span.kJyTrb, span.MWDdpd, span.zvDXA, span[aria-label*="star" i], span[aria-label*="星" i]'
+  );
+  if (ratingEl) {
+    rating = PLACE_PARSER.parseRating(ratingEl.getAttribute('aria-label') || ratingEl.textContent);
+  }
+
+  const reviewEl = cardEl.querySelector<HTMLElement>(
+    'span.kJyTrb ~ span, span.wV9y8c, span.k5tQ5d, span.iP206b, span.w0f50b, div.TT9eId span:nth-of-type(2)'
+  );
+  if (reviewEl) {
+    reviewCount = PLACE_PARSER.parseReviewCount(reviewEl.getAttribute('aria-label') || reviewEl.textContent);
+  }
+
+  // 4. Category / Class
+  let category: string | undefined;
+  const classEl = cardEl.querySelector<HTMLElement>(
+    'div.Adn9Eb, span.CPm6me, span.k5tQ5d, div.k5tQ5d, span.I39tAc'
+  );
+  if (classEl?.textContent) {
+    const text = cleanExtractedText(classEl.textContent);
+    if (text && /(hotel|resort|inn|hostel|lodging|stay|酒店|旅馆|民宿|度假村|星级|star)/i.test(text)) {
+      category = text;
+    }
+  }
+  if (!category) {
+    category = 'Google Travel 住宿';
+  }
+
+  // 5. Price & Currency
+  let priceLevel: string | undefined;
+  const priceSelectors = [
+    'span.MWDdpd',
+    'span.F9iKBc',
+    'span.l5fa0b',
+    'div.w70Oqd',
+    'div.taTOhd',
+    'span.nD4Sfe',
+    'span[aria-label*="每晚" i]',
+    'span[aria-label*="per night" i]',
+    'span[aria-label*="night" i]',
+    'span[data-price]',
+    'div.I8ZJze',
+  ];
+  for (const sel of priceSelectors) {
+    const el = cardEl.querySelector<HTMLElement>(sel);
+    const text = el?.getAttribute('aria-label') || el?.textContent || '';
+    if (text && isPlausiblePriceText(text)) {
+      const clean = extractCleanPriceText(text);
+      if (clean && isValidExtractedPriceCandidate(clean)) {
+        priceLevel = clean;
+        break;
+      }
+    }
+  }
+
+  if (!priceLevel) {
+    for (const el of Array.from(cardEl.querySelectorAll<HTMLElement>('span, div, button')).slice(0, 30)) {
+      const text = cleanExtractedText(el.textContent || '');
+      if (!text || text.length > 40) continue;
+      if (/[¥฿$€£₩]|JP¥|CN¥|S\$|HK\$/.test(text)) {
+        const clean = extractCleanPriceText(text);
+        if (clean && isValidExtractedPriceCandidate(clean) && !isZeroOrPlaceholderPrice(clean)) {
+          priceLevel = clean;
+          break;
+        }
+      }
+    }
+  }
+
+  const detectedCurrency = detectCurrencyFromPage(entityHref, priceLevel, hintCurrency, overrideCurrency);
+
+  // 6. Address & Area
+  let address: string | undefined;
+  let area: string | undefined;
+  const addrEl = cardEl.querySelector<HTMLElement>(
+    'div.K4nuhf, span.I39tAc, div.R61m2e, div.d6vP1c, div.CFG7A, div.c9bXce, span.YwN01b'
+  );
+  if (addrEl?.textContent) {
+    const rawAddr = cleanExtractedText(addrEl.textContent);
+    if (rawAddr && rawAddr.length > 3) {
+      address = rawAddr;
+      const parts = rawAddr.split(/[,，·]/).map((s) => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        area = parts[parts.length - 2] || parts[0];
+      }
+    }
+  }
+
+  // 7. Coordinates & Source Place ID
+  const coordinates = extractPlaceCoordinates(entityHref) ?? undefined;
+  let sourcePlaceId: string | undefined;
+  const entityMatch = /\/hotels\/entity\/([^/?#]+)/.exec(entityHref) || /[?&]entity=([^&#]+)/.exec(entityHref);
+  if (entityMatch && entityMatch[1]) {
+    sourcePlaceId = safeDecodeUri(entityMatch[1]);
+  }
+
+  // 8. Summary & Hotel Facts
+  const amenities: string[] = [];
+  for (const el of Array.from(cardEl.querySelectorAll<HTMLElement>('div.P3g0Ub, div.I6rF8e, span.Z1asvd, div.j7L08d, div.iNpWBb'))) {
+    const text = cleanExtractedText(el.textContent || '');
+    if (text && text.length > 1 && text.length < 30 && !amenities.includes(text)) {
+      amenities.push(text);
+      if (amenities.length >= 4) break;
+    }
+  }
+  const summary = amenities.length > 0 ? amenities.join(' · ') : undefined;
+  const hotelFacts = extractHotelPropertyFacts(summary || cardEl.textContent, cardEl);
+
+  return {
+    title,
+    sourceUrl: entityHref,
+    sourceProvider: 'google_travel',
+    kind: 'stay',
+    rating: Number.isFinite(rating) && rating ? rating : undefined,
+    reviewCount: Number.isFinite(reviewCount) && reviewCount ? reviewCount : undefined,
+    category,
+    priceLevel,
+    detectedCurrency,
+    address,
+    area,
+    coordinates,
+    sourcePlaceId,
+    summary,
+    hotelFacts,
+  };
+}
+
 function extractGoogleTravelPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
   const sourceUrl = window.location.href;
+  const isSearchPage = /\/travel\/search|\/travel\/hotels[?#]/.test(sourceUrl) && !/\/hotels\/entity\//.test(sourceUrl);
 
-  // 1. Title Extraction
+  // If on search / list page, scan for the active / focused card or top entity card
+  if (isSearchPage) {
+    // 1. Check open modal / drawer
+    const openModal = document.querySelector<HTMLElement>('div[role="dialog"], div.uaTTDe.is-active, div.fpNxPd');
+    if (openModal) {
+      const modalPlace = parseGoogleTravelCard(openModal, overrideCurrency, hintCurrency);
+      if (modalPlace && modalPlace.title) return modalPlace;
+    }
+
+    // 2. Scan hotel cards on page
+    const cardSelectors = [
+      'c-wiz[data-entity-id]',
+      'div[data-hotel-id]',
+      'div.uaTTDe',
+      'div.nId1nc',
+      'div.BWBWic',
+      'div.kDe2bf',
+      'div[role="listitem"]',
+      'a[href*="/hotels/entity/"]',
+    ];
+    for (const sel of cardSelectors) {
+      const cards = document.querySelectorAll<HTMLElement>(sel);
+      for (const card of Array.from(cards)) {
+        const place = parseGoogleTravelCard(card, overrideCurrency, hintCurrency);
+        if (place && place.title) {
+          return place;
+        }
+      }
+    }
+  }
+
+  // 1. Title Extraction for Entity Detail Page
   const titleSelectors = [
     'h1.Q2A6Id',
     'h1.fpNxPd',
@@ -1285,7 +1490,7 @@ function extractGoogleTravelPlace(overrideCurrency?: string, hintCurrency?: stri
   for (const sel of titleSelectors) {
     const el = document.querySelector<HTMLElement>(sel);
     const text = el?.textContent?.trim();
-    if (text && text.length > 1 && !isGenericNavigationTitleLocal(text) && !isJunkNavigationText(text)) {
+    if (text && text.length > 1 && !isGenericNavigationTitleLocal(text) && !isJunkNavigationText(text) && !isFakePlaceLabel(text)) {
       title = cleanExtractedText(text);
       break;
     }
@@ -1293,16 +1498,19 @@ function extractGoogleTravelPlace(overrideCurrency?: string, hintCurrency?: stri
   if (!title) {
     const metaTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.content;
     if (metaTitle) {
-      title = cleanExtractedText(metaTitle.replace(/\s*[-–—|]\s*Google\s*(Travel|Hotels|Flights|旅行|酒店|机票).*$/i, ''));
+      const cleaned = cleanExtractedText(metaTitle.replace(/\s*[-–—|]\s*Google\s*(Travel|Hotels|Flights|旅行|酒店|机票).*$/i, ''));
+      if (!isGenericNavigationTitleLocal(cleaned) && !isFakePlaceLabel(cleaned) && !isJunkNavigationText(cleaned)) {
+        title = cleaned;
+      }
     }
   }
   if (!title) {
     const docTitle = document.title.replace(/\s*[-–—|]\s*Google\s*(Travel|Hotels|Flights|旅行|酒店|机票).*$/i, '');
-    if (docTitle && !/^(google|google travel|google hotels|hotels|travel)$/i.test(docTitle.trim())) {
+    if (docTitle && !isGenericNavigationTitleLocal(docTitle) && !isFakePlaceLabel(docTitle) && !isJunkNavigationText(docTitle)) {
       title = cleanExtractedText(docTitle);
     }
   }
-  if (!title) return null;
+  if (!title || isGenericNavigationTitleLocal(title) || isFakePlaceLabel(title)) return null;
 
   // 2. Rating & Review Count Extraction
   let rating: number | undefined;
@@ -1447,7 +1655,19 @@ export interface SavedListCardSummary {
 
 function isGenericNavigationTitleLocal(text: string): boolean {
   const norm = text.trim().toLowerCase();
-  return /^(google|google maps|google 地图|directions|路线|保存|已保存|saved|share|分享|搜索|search|返回|back|菜单|menu|overview|概览|reviews|评价|photos|照片|about|关于)$/i.test(norm);
+  if (/^(google|google maps|google 地图|google travel|google hotels|google flights|directions|路线|保存|已保存|saved|share|分享|搜索|search|返回|back|菜单|menu|overview|概览|reviews|评价|photos|照片|about|关于)$/i.test(norm)) {
+    return true;
+  }
+  if (/^google\s*(travel|hotels?|flights?)(\s*\d+\s*(results?|处(搜索)?结果))?$/i.test(norm)) {
+    return true;
+  }
+  if (/^\d+\s*(results?|处(搜索)?结果)$/i.test(norm)) {
+    return true;
+  }
+  if (/^(search\s*results?|搜索结果|all\s*filters|全部筛选|sort\s*by|排序方式)$/i.test(norm)) {
+    return true;
+  }
+  return false;
 }
 function scanAllSavedListsOnPage(): SavedListCardSummary[] {
   const listsMap = new Map<string, SavedListCardSummary>();
@@ -1798,8 +2018,163 @@ function initQuickCaptureFab(): void {
   document.body.appendChild(container);
 }
 
+function initGoogleTravelInlineButtons(): void {
+  if (typeof document === 'undefined' || !document.body) return;
+  const isGoogleTravel = /google\.[a-z.]+\/travel/i.test(window.location.href);
+  if (!isGoogleTravel) return;
+
+  const entityAnchors = document.querySelectorAll<HTMLAnchorElement>(
+    'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"]'
+  );
+
+  for (const anchor of Array.from(entityAnchors)) {
+    const card = (anchor.closest<HTMLElement>(
+      'c-wiz, [role="listitem"], div.uaTTDe, div.nId1nc, div.BWBWic, div.kDe2bf, div.P2h0Yb'
+    ) || anchor.parentElement?.parentElement) as HTMLElement | null;
+
+    if (!card || card.dataset.ownlyCardInjected === 'true') continue;
+
+    const parsedPlace = parseGoogleTravelCard(card);
+    if (!parsedPlace || !parsedPlace.title) continue;
+
+    card.dataset.ownlyCardInjected = 'true';
+
+    const btnContainer = document.createElement('div');
+    btnContainer.className = 'ownly-travel-inline-fab';
+    btnContainer.style.cssText = [
+      'display: inline-flex',
+      'align-items: center',
+      'margin: 6px 0',
+      'user-select: none',
+      'z-index: 10',
+    ].join(';');
+
+    const shadow = btnContainer.attachShadow ? btnContainer.attachShadow({ mode: 'open' }) : null;
+    const root = shadow || btnContainer;
+
+    const styleEl = document.createElement('style');
+    styleEl.textContent = `
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      .card-fab-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 12px;
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.2;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 9999px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+        cursor: pointer;
+        outline: none;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .card-fab-btn:hover {
+        transform: translateY(-1px) scale(1.02);
+        box-shadow: 0 4px 14px rgba(4, 120, 87, 0.38);
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      }
+      .card-fab-btn.is-success {
+        background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+        border-color: #6ee7b7;
+        box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+      }
+      .card-fab-btn.is-loading {
+        opacity: 0.85;
+        cursor: wait;
+      }
+      .card-fab-icon {
+        font-size: 13px;
+        display: inline-flex;
+      }
+      .card-fab-text {
+        white-space: nowrap;
+      }
+    `;
+    root.appendChild(styleEl);
+
+    const btn = document.createElement('button');
+    btn.className = 'card-fab-btn';
+    btn.setAttribute('type', 'button');
+    btn.setAttribute('title', `一键采集「${parsedPlace.title}」到 Ownly 案板 (Inbox)`);
+    btn.innerHTML = '<span class="card-fab-icon">📌</span><span class="card-fab-text">放入案板</span>';
+
+    let isSaving = false;
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      if (isSaving) return;
+
+      isSaving = true;
+      btn.classList.add('is-loading');
+      btn.innerHTML = '<span class="card-fab-icon">⏳</span><span class="card-fab-text">采集中...</span>';
+
+      try {
+        const currentPlaceFacts = parseGoogleTravelCard(card);
+        const placeToSave = currentPlaceFacts || parsedPlace;
+
+        const resp = (await chrome.runtime.sendMessage({
+          type: 'OWNLY_QUICK_SAVE_PLACE',
+          place: placeToSave,
+        }).catch((err: unknown) => ({ ok: false, error: String(err) }))) as { ok?: boolean; placeId?: string; error?: string } | undefined;
+
+        btn.classList.remove('is-loading');
+        if (resp?.ok) {
+          btn.classList.add('is-success');
+          btn.innerHTML = '<span class="card-fab-icon">✓</span><span class="card-fab-text">已放入案板</span>';
+          setTimeout(() => {
+            btn.classList.remove('is-success');
+            btn.innerHTML = '<span class="card-fab-icon">📌</span><span class="card-fab-text">放入案板</span>';
+            isSaving = false;
+          }, 2500);
+        } else {
+          btn.innerHTML = '<span class="card-fab-icon">⚠️</span><span class="card-fab-text">保存失败</span>';
+          setTimeout(() => {
+            btn.innerHTML = '<span class="card-fab-icon">📌</span><span class="card-fab-text">放入案板</span>';
+            isSaving = false;
+          }, 2000);
+        }
+      } catch {
+        btn.classList.remove('is-loading');
+        btn.innerHTML = '<span class="card-fab-icon">⚠️</span><span class="card-fab-text">错误</span>';
+        setTimeout(() => {
+          btn.innerHTML = '<span class="card-fab-icon">📌</span><span class="card-fab-text">放入案板</span>';
+          isSaving = false;
+        }, 2000);
+      }
+    });
+
+    root.appendChild(btn);
+
+    const actionTarget = card.querySelector<HTMLElement>(
+      '.BgYkof, [role="heading"], div.w70Oqd, div.n7qZ7b, div.f5L0be, div.eUe7je'
+    ) || anchor;
+
+    if (actionTarget && actionTarget.parentNode) {
+      if (actionTarget.nextSibling) {
+        actionTarget.parentNode.insertBefore(btnContainer, actionTarget.nextSibling);
+      } else {
+        actionTarget.parentNode.appendChild(btnContainer);
+      }
+    } else {
+      card.appendChild(btnContainer);
+    }
+  }
+}
+
+function initPageQuickCapture(): void {
+  initQuickCaptureFab();
+  initGoogleTravelInlineButtons();
+}
+
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const isGoogleMaps = /google\.[a-z.]+\/maps|maps\.google\.[a-z.]+/i.test(window.location.href);
+  const isGoogleTravel = /google\.[a-z.]+\/travel/i.test(window.location.href);
+
   if (isGoogleMaps) {
     const SCAN_DEBOUNCE_MS = 400;
     let scanTimer: number | undefined;
@@ -1819,15 +2194,34 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     } catch {}
   }
 
-  // Initialize in-page quick capture floating ball (FAB)
-  if (document.readyState !== 'loading') {
-    initQuickCaptureFab();
-  } else {
-    document.addEventListener('DOMContentLoaded', initQuickCaptureFab, { once: true });
+  if (isGoogleTravel) {
+    const TRAVEL_DEBOUNCE_MS = 300;
+    let travelTimer: number | undefined;
+    const scheduleTravelScan = () => {
+      if (travelTimer !== undefined) window.clearTimeout(travelTimer);
+      travelTimer = window.setTimeout(() => {
+        travelTimer = undefined;
+        initGoogleTravelInlineButtons();
+      }, TRAVEL_DEBOUNCE_MS);
+    };
+    window.addEventListener('scroll', scheduleTravelScan, { passive: true });
+    try {
+      const observer = new MutationObserver(scheduleTravelScan);
+      if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    } catch {}
   }
 
-  // Re-check FAB on SPA navigations
+  // Initialize in-page quick capture floating ball & inline buttons
+  if (document.readyState !== 'loading') {
+    initPageQuickCapture();
+  } else {
+    document.addEventListener('DOMContentLoaded', initPageQuickCapture, { once: true });
+  }
+
+  // Re-check on SPA navigations
   window.addEventListener('popstate', () => {
-    setTimeout(initQuickCaptureFab, 500);
+    setTimeout(initPageQuickCapture, 500);
   });
 }

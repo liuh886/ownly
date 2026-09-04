@@ -1,5 +1,20 @@
 # Ownly — Task Progress & Review
 
+## Completed: Google Travel Search List Extraction & Inline Card Quick Capture (2026-09-04)
+- [x] **1. Filter Out Generic Search Titles in Place Detection**
+  - Extended `FAKE_PLACE_PATTERNS` and `isGenericNavigationTitleLocal` in [`src/extension/utils.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/utils.ts) and [`src/extension/content.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/content.ts) to reject `Google Travel \d+ results`, `\d+ 处搜索结果`, `Search results`, and generic search headers.
+- [x] **2. Implement Card-Level Parser `parseGoogleTravelCard(cardEl)`**
+  - Implemented card-level parser in [`src/extension/content.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/content.ts) parsing hotel title, entity URL (`/travel/hotels/entity/...`), rating, reviews, nightly pricing, currency, address, and hotel property facts from individual Google Travel hotel cards.
+- [x] **3. Upgrade `extractGoogleTravelPlace()` for Search/List Pages**
+  - On `/travel/search` or hotel search views, dynamically detects the active/focused hotel card or entity card to extract the concrete hotel (e.g. Mayana Beach Resort) rather than the page query title.
+- [x] **4. Inject Inline Quick Capture Buttons on Google Travel Hotel Cards**
+  - Injected an encapsulated "📌 放入案板" button directly on every hotel card on Google Travel search pages.
+  - Wired to `OWNLY_QUICK_SAVE_PLACE` with live loading and `✓ 已放入案板` success feedback.
+  - Setup `MutationObserver` and scroll listener to automatically attach inline buttons to newly scrolled/loaded hotel cards.
+- [x] **5. Unit Tests & Verification**
+  - Added test cases in [`src/extension/utils.test.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/utils.test.ts) for Google Travel search titles rejection and entity URL extraction.
+  - Validated with `npm run validate:extension` (160/160 tests passed, extension build clean) and `npm run validate:fast` (0 errors, clean lint & types).
+
 ## Completed: Hotel Opening Year & Renovation Facts Extraction (2026-09-04)
 - [x] **1. DOM Extraction & Multilingual Pattern Matching**
   - Analyzed DOM structures across Google Maps (About tab, editorial summaries, JSON-LD), Google Travel (Property overview chips & amenities), and Booking.com (Description fine print & facilities).

@@ -7,6 +7,7 @@ import {
   extractHotelPropertyFacts,
   findEntityListCategory,
   findEntityListPlaceId,
+  isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
   isZeroOrPlaceholderPrice,
@@ -234,6 +235,19 @@ describe('extractFeatureIdFromUrl & normalizePhoneDisplay', () => {
     expect(normalizePhoneDisplay('tel:+66812345678')).toBe('+66812345678');
     expect(normalizePhoneDisplay('abc')).toBeUndefined();
     expect(normalizePhoneDisplay(null)).toBeUndefined();
+  });
+
+  it('rejects Google Travel generic search query headers in isFakePlaceLabel', () => {
+    expect(isFakePlaceLabel('Google Travel 9 results')).toBe(true);
+    expect(isFakePlaceLabel('Google Travel 9 处搜索结果')).toBe(true);
+    expect(isFakePlaceLabel('Google Travel')).toBe(true);
+    expect(isFakePlaceLabel('Google Hotels')).toBe(true);
+    expect(isFakePlaceLabel('9 results')).toBe(true);
+    expect(isFakePlaceLabel('9 处搜索结果')).toBe(true);
+    expect(isFakePlaceLabel('Search results')).toBe(true);
+    expect(isFakePlaceLabel('View prices')).toBe(true);
+    expect(isFakePlaceLabel('Mayana Beach Resort')).toBe(false);
+    expect(isFakePlaceLabel('Cross Pattaya Pratamnak')).toBe(false);
   });
 });
 

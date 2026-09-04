@@ -309,6 +309,10 @@ const FAKE_PLACE_PATTERNS: RegExp[] = [
   /^reviews?$/i, /^questions?$/i, /^hotel\s+details$/i,
   /^check\s*[-–]?in$/i, /^check\s*[-–]?out$/i,
   /^\d+\s*(stars?|★)$/i, /^\$\{?[\d,]+\}?$/,
+  /^google\s*(travel|hotels?|flights?)(\s*\d+\s*(results?|处(搜索)?结果))?$/i,
+  /^\d+\s*(results?|处(搜索)?结果)$/i,
+  /^(search\s*results?|搜索结果|all\s*filters|全部筛选|sort\s*by|排序方式)$/i,
+  /^(view\s*prices?|查看价格|check\s*availability|查询空房|check\s*rates|book\s*now|立即预订)$/i,
 ];
 
 export function isFakePlaceLabel(text?: string | null): boolean {
