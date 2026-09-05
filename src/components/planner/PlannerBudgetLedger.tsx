@@ -1,7 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { PlannerScheduledPlace, PlannerTrip, TripExpenseCategory, TripExpenseItem } from '@/domain/planner';
+import type {
+  PlannerScheduledPlace,
+  PlannerTrip,
+  PlannerTripPlace,
+  TripExpenseCategory,
+  TripExpenseItem,
+} from '@/domain/planner';
 import {
   effectiveFxRate,
   estimateTripBudget,
@@ -16,6 +22,10 @@ import {
 interface PlannerBudgetLedgerProps {
   trip: PlannerTrip;
   scheduledPlaces: PlannerScheduledPlace[];
+  allPlaces?: PlannerTripPlace[];
+  activeDate?: string;
+  initialPlaceId?: string | null;
+  onClearInitialPlaceId?: () => void;
   expenses: TripExpenseItem[];
   onAddExpense: (expense: Omit<TripExpenseItem, 'id' | 'created_at'>) => void;
   onDeleteExpense: (expenseId: string) => void;
@@ -43,6 +53,10 @@ function roundMoney(value: number): number {
 export function PlannerBudgetLedger({
   trip,
   scheduledPlaces,
+  allPlaces,
+  activeDate,
+  initialPlaceId,
+  onClearInitialPlaceId,
   expenses,
   onAddExpense,
   onDeleteExpense,
@@ -57,7 +71,16 @@ export function PlannerBudgetLedger({
     return Array.from(new Set([baseCurrency, ...COMMON_CURRENCIES]));
   }, [baseCurrency]);
 
+  const selectablePlaces = useMemo(() => {
+    if (allPlaces && allPlaces.length > 0) {
+      return allPlaces.filter((p) => p.state !== 'dropped');
+    }
+    return scheduledPlaces;
+  }, [allPlaces, scheduledPlaces]);
+
   const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string>(initialPlaceId ?? '');
+  const [expenseDate, setExpenseDate] = useState<string>(activeDate ?? '');
   const [title, setTitle] = useState('');
   const [amountStr, setAmountStr] = useState('');
   const [currencyOverride, setCurrencyOverride] = useState<string | null>(null);
@@ -82,6 +105,66 @@ export function PlannerBudgetLedger({
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
+
+  const [prevInitialPlaceId, setPrevInitialPlaceId] = useState<string | null>(initialPlaceId ?? null);
+  if (initialPlaceId && initialPlaceId !== prevInitialPlaceId) {
+    setPrevInitialPlaceId(initialPlaceId);
+    setSelectedPlaceId(initialPlaceId);
+    setIsAddingExpense(true);
+    if (activeDate) {
+      setExpenseDate(activeDate);
+    }
+    const found = selectablePlaces.find((p) => p.id === initialPlaceId);
+    if (found) {
+      setTitle(found.title);
+      const kind = found.kind?.toLowerCase();
+      if (kind === 'stay' || kind === 'hotel') setCategory('stay');
+      else if (kind === 'restaurant' || kind === 'food' || kind === 'cafe' || kind === 'dining') setCategory('food');
+      else if (kind === 'transit' || kind === 'station' || kind === 'transport') setCategory('transit');
+      else if (kind === 'attraction' || kind === 'sightseeing' || kind === 'activity') setCategory('ticket');
+      else if (kind === 'shopping' || kind === 'mall') setCategory('shopping');
+    }
+  } else if (!initialPlaceId && prevInitialPlaceId !== null) {
+    setPrevInitialPlaceId(null);
+  }
+
+  const handlePlaceSelect = (placeId: string) => {
+    setSelectedPlaceId(placeId);
+    if (placeId) {
+      const found = selectablePlaces.find((p) => p.id === placeId);
+      if (found) {
+        if (!title.trim()) {
+          setTitle(found.title);
+        }
+        const kind = found.kind?.toLowerCase();
+        if (kind === 'stay' || kind === 'hotel') setCategory('stay');
+        else if (kind === 'restaurant' || kind === 'food' || kind === 'cafe' || kind === 'dining') setCategory('food');
+        else if (kind === 'transit' || kind === 'station' || kind === 'transport') setCategory('transit');
+        else if (kind === 'attraction' || kind === 'sightseeing' || kind === 'activity') setCategory('ticket');
+        else if (kind === 'shopping' || kind === 'mall') setCategory('shopping');
+      }
+    }
+  };
+
+  const startAddExpense = () => {
+    setIsAddingExpense(true);
+    if (!expenseDate && activeDate) {
+      setExpenseDate(activeDate);
+    }
+  };
+
+  const handleCancelAddExpense = () => {
+    setIsAddingExpense(false);
+    setSelectedPlaceId('');
+    setExpenseDate(activeDate ?? '');
+    setTitle('');
+    setAmountStr('');
+    setNotes('');
+    setPaidByOverride(null);
+    setSplitOverride(null);
+    setPaymentDraft(null);
+    onClearInitialPlaceId?.();
+  };
 
   const fx = useMemo<FxSettings>(
     () => ({ base: (trip.currency || 'CNY').trim().toUpperCase(), overrides: trip.fx_rates }),
@@ -193,10 +276,12 @@ export function PlannerBudgetLedger({
 
     const item: Omit<TripExpenseWithPayments, 'id' | 'created_at'> = {
       trip_id: trip.id,
+      place_id: selectedPlaceId ? selectedPlaceId : undefined,
       title: title.trim(),
       category,
       amount: parsedExpenseAmount,
       currency,
+      date: expenseDate.trim() || activeDate || undefined,
       paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
       split_members: selectedSplits.length > 0 ? selectedSplits : members,
       notes: notes.trim() || undefined,
@@ -207,10 +292,13 @@ export function PlannerBudgetLedger({
     setTitle('');
     setAmountStr('');
     setNotes('');
+    setSelectedPlaceId('');
+    setExpenseDate(activeDate ?? '');
     setPaidByOverride(null);
     setSplitOverride(null);
     setPaymentDraft(null);
     setIsAddingExpense(false);
+    onClearInitialPlaceId?.();
   };
 
   const copySettlementText = async () => {
@@ -256,6 +344,7 @@ export function PlannerBudgetLedger({
   const renderExpenseItem = (item: TripExpenseWithPayments) => {
     const cat = CATEGORY_MAP[item.category] || CATEGORY_MAP.other;
     const payments = resolveExpensePayments(item);
+    const boundPlace = item.place_id ? selectablePlaces.find((p) => p.id === item.place_id) : undefined;
     return (
       <div
         key={item.id}
@@ -264,7 +353,26 @@ export function PlannerBudgetLedger({
         <div className="flex min-w-0 items-center gap-2">
           <span className="shrink-0 text-sm">{cat.icon}</span>
           <div className="min-w-0">
-            <div className="truncate font-semibold text-stone-900">{item.title}</div>
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="truncate font-semibold text-stone-900">{item.title}</span>
+              {boundPlace ? (
+                <span
+                  className="shrink-0 rounded bg-emerald-50 px-1 py-0.2 text-[9.5px] font-medium text-emerald-700 border border-emerald-200"
+                  title={boundPlace.title}
+                >
+                  📍 {boundPlace.title}
+                </span>
+              ) : item.place_id ? (
+                <span className="shrink-0 rounded bg-stone-100 px-1 py-0.2 text-[9.5px] text-stone-500">
+                  📍 {zh ? '已关联地点' : 'Linked Place'}
+                </span>
+              ) : null}
+              {item.date ? (
+                <span className="shrink-0 rounded bg-stone-100 px-1 py-0.2 text-[9.5px] text-stone-500 font-mono">
+                  {item.date}
+                </span>
+              ) : null}
+            </div>
             <div className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 text-[10px] text-stone-500">
               <span>{item.split_members.length}{zh ? '人分摊' : ' split'}</span>
               <span>·</span>
@@ -274,6 +382,12 @@ export function PlannerBudgetLedger({
                   {payment.member} {item.currency} {payment.amount.toLocaleString()}
                 </span>
               ))}
+              {item.notes ? (
+                <>
+                  <span>·</span>
+                  <span className="italic text-stone-400">💬 {item.notes}</span>
+                </>
+              ) : null}
             </div>
           </div>
         </div>
@@ -492,7 +606,13 @@ export function PlannerBudgetLedger({
           </span>
           <button
             type="button"
-            onClick={() => setIsAddingExpense(!isAddingExpense)}
+            onClick={() => {
+              if (isAddingExpense) {
+                handleCancelAddExpense();
+              } else {
+                startAddExpense();
+              }
+            }}
             className="rounded-lg bg-stone-950 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-stone-800"
           >
             {isAddingExpense ? (zh ? '✕ 收起' : '✕ Close') : (zh ? '+ 记一笔' : '+ Add Expense')}
@@ -563,6 +683,38 @@ export function PlannerBudgetLedger({
                     required
                   />
                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-500">
+                  {zh ? '关联地点 (可选)' : 'Linked Place (Optional)'}
+                </label>
+                <select
+                  value={selectedPlaceId}
+                  onChange={(e) => handlePlaceSelect(e.target.value)}
+                  className="mt-1 w-full truncate rounded-lg border border-stone-300 bg-white p-1.5 text-xs font-medium outline-hidden focus:border-emerald-500"
+                >
+                  <option value="">{zh ? '（无关联地点）' : '(No linked place)'}</option>
+                  {selectablePlaces.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title} {p.area ? `(${p.area})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-500">
+                  {zh ? '消费日期 (可选)' : 'Date (Optional)'}
+                </label>
+                <input
+                  type="date"
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white p-1.5 text-xs font-medium outline-hidden focus:border-emerald-500"
+                />
               </div>
             </div>
 
@@ -676,6 +828,19 @@ export function PlannerBudgetLedger({
                   </div>
                 </div>
               )}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500">
+                {zh ? '备注 / 账目说明 (可选)' : 'Notes / Remarks (Optional)'}
+              </label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={zh ? '如: 含服务费、打车小费等' : 'e.g. Service fee included'}
+                className="mt-1 w-full rounded-lg border border-stone-300 p-1.5 text-xs outline-hidden focus:border-emerald-500"
+              />
             </div>
 
             <button

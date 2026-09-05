@@ -273,6 +273,9 @@ export function validateTripExpense(expense: TripExpenseItem & { schema_version?
   if (!expense.id || typeof expense.id !== 'string') issues.push({ field: 'id', message: 'Missing ID', severity: 'error' });
   if (!expense.trip_id || typeof expense.trip_id !== 'string') issues.push({ field: 'trip_id', message: 'Missing trip_id', severity: 'error' });
   if (!expense.title || typeof expense.title !== 'string') issues.push({ field: 'title', message: 'Missing title', severity: 'error' });
+  if (expense.place_id !== undefined && (typeof expense.place_id !== 'string' || !expense.place_id.trim())) {
+    issues.push({ field: 'place_id', message: 'Invalid place_id', severity: 'error' });
+  }
   if (!expense.category) {
     issues.push({ field: 'category', message: 'Missing category', severity: 'error' });
   } else if (!['stay', 'food', 'transit', 'ticket', 'shopping', 'other'].includes(expense.category)) {

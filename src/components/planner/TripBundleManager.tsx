@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
-import type { PlannerTrip } from '@/domain/planner';
+import { exportTripToMarkdown, type PlannerTrip } from '@/domain/planner';
+import { materializePlannerScheduledPlaces } from '@/domain/planner-visits';
 import {
   createShareableTripBundle,
   instantiateTripBundle,
@@ -223,6 +224,30 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
     }
   };
 
+  const handleCopyMarkdown = async () => {
+    resetMessages();
+    setBusy(true);
+    try {
+      if (!selectedTrip) throw new Error(zh ? '请先选择一个行程。' : 'Select a trip first.');
+      const [places, visits, expenses] = await Promise.all([
+        plannerRepository.listPlaces(),
+        plannerRepository.listVisits(),
+        plannerRepository.listExpenses(),
+      ]);
+      const tripPlaces = places.filter((p) => p.trip_id === selectedTrip.id);
+      const tripVisits = visits.filter((v) => v.trip_id === selectedTrip.id);
+      const tripExpenses = expenses.filter((e) => e.trip_id === selectedTrip.id);
+      const scheduledPlaces = materializePlannerScheduledPlaces(tripPlaces, tripVisits);
+      const md = exportTripToMarkdown(selectedTrip, tripPlaces, scheduledPlaces, tripExpenses, language);
+      await copyText(md);
+      setNotice(zh ? '✓ 行程 Markdown 文本已复制到剪贴板。' : '✓ Itinerary Markdown copied to clipboard.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleImportBundle = async () => {
     resetMessages();
     if (!importPreview.bundle) {
@@ -330,7 +355,7 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
                   <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3"><div className="text-xs font-bold text-sky-900">🛡️ {zh ? '自动排除私人账本信息' : 'Private ledger data is excluded'}</div><p className="mt-1.5 text-[10px] leading-4 text-sky-700">{zh ? '费用、付款、AA、同行成员和日历 token 不会进入分享内容；地点、日程、路线、标签和备注会保留。链接数据位于 URL fragment。' : 'Expenses, payments, member names and calendar tokens are excluded. Places, schedule, routes, tags and notes remain in the URL fragment.'}</p></div>
                   <div className="grid gap-2 sm:grid-cols-2"><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleGenerateShareLink(false)} className="rounded-xl bg-stone-950 px-3 py-3 text-xs font-bold text-white disabled:opacity-40">{busy ? '…' : (zh ? '🔗 生成并复制分享链接' : '🔗 Generate & copy link')}</button><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleGenerateShareLink(true)} className="rounded-xl border border-stone-300 bg-white px-3 py-3 text-xs font-bold text-stone-700 disabled:opacity-40">{zh ? '📲 系统分享链接' : '📲 Share link'}</button></div>
                   {shareUrl ? <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3"><div className="flex items-center justify-between"><span className="text-[10px] font-bold text-emerald-800">✓ {zh ? '链接已生成' : 'Link ready'}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${shareUrl.length > 18000 ? 'bg-amber-100 text-amber-800' : 'bg-white text-stone-500'}`}>{Math.ceil(shareUrl.length / 1024)} KB</span></div><div className="mt-2 flex gap-2"><input readOnly value={shareUrl} className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 font-mono text-[9px] text-stone-500"/><button type="button" onClick={() => void copyText(shareUrl)} className="shrink-0 rounded-lg bg-emerald-700 px-3 py-1.5 text-[10px] font-bold text-white">{zh ? '复制' : 'Copy'}</button></div>{shareUrl.length > 18000 ? <p className="mt-2 text-[9.5px] text-amber-700">{zh ? '链接较长，部分聊天应用可能截断；遇到这种情况请使用 Bundle 文件。' : 'Some chat apps may truncate this long URL; use the Bundle file fallback.'}</p> : null}</div> : null}
-                  <details className="rounded-xl border border-stone-200 bg-stone-50/60 p-3"><summary className="cursor-pointer text-[11px] font-bold text-stone-600">{zh ? '更多方式 / 离线兜底' : 'More / offline fallback'}</summary><div className="mt-3 grid gap-2 sm:grid-cols-2"><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleDownloadBundle()} className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-700">{zh ? '⬇️ 下载 Bundle' : '⬇️ Download Bundle'}</button><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleCopyBundle()} className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-700">{zh ? '📋 复制 JSON' : '📋 Copy JSON'}</button></div></details>
+                  <details className="rounded-xl border border-stone-200 bg-stone-50/60 p-3"><summary className="cursor-pointer text-[11px] font-bold text-stone-600">{zh ? '更多方式 / 离线兜底' : 'More / offline fallback'}</summary><div className="mt-3 grid gap-2 sm:grid-cols-3"><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleDownloadBundle()} className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-700 hover:bg-stone-50">{zh ? '⬇️ 下载 Bundle' : '⬇️ Download Bundle'}</button><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleCopyBundle()} className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-700 hover:bg-stone-50">{zh ? '📋 复制 JSON' : '📋 Copy JSON'}</button><button type="button" disabled={busy || !selectedTrip} onClick={() => void handleCopyMarkdown()} className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-700 hover:bg-stone-50">{zh ? '📝 复制 Markdown' : '📝 Copy Markdown'}</button></div></details>
                 </div>
               ) : (
                 <div className="space-y-4">

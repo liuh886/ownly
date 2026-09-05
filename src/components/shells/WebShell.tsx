@@ -16,6 +16,12 @@ import { checkWorkspaceRecovery, type RecoveryState } from '@/core/workspace-rec
 const ONBOARDING_DISMISSED_KEY = 'ownly_web_onboarding_dismissed';
 const basePath = process.env.NEXT_PUBLIC_OWNLY_BASE_PATH ?? '';
 
+function requestStoragePersistence(): void {
+  if (typeof navigator !== 'undefined' && navigator.storage?.persist) {
+    navigator.storage.persist().catch(() => {});
+  }
+}
+
 type LocalDataAction = 'create' | 'open';
 
 export function WebShell() {
@@ -76,6 +82,7 @@ export function WebShell() {
       if (!connected) return false;
 
       await markdownEntityRepository.initialize();
+      requestStoragePersistence();
       setIsConnected(true);
       setOnboardingOpen(false);
       window.localStorage.removeItem(ONBOARDING_DISMISSED_KEY);
@@ -112,6 +119,7 @@ export function WebShell() {
         if (!isMounted) return;
         if (connected) {
           await markdownEntityRepository.initialize();
+          requestStoragePersistence();
           setRecoveryState('CONNECTED');
         } else {
           // Check recovery state for detailed UX (permission / missing)

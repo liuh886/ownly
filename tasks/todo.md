@@ -1,5 +1,35 @@
 # Ownly — Task Progress & Review
 
+## Completed: High-Leverage Usability, Expense-to-Place Binding & Commute Clearing (2026-09-05)
+- [x] **1. Share URL Truncation Guard with Friendly Diagnostics (`src/domain/trip-share-link.ts`)**
+  - Added try-catch truncation guard in `decodeTripSharePayload` detecting corrupted or cut-off base64/gzip data strings from chat/IM apps.
+  - Returns friendly, actionable diagnostic error messages pointing users to the full URL or Markdown/JSON export fallback.
+  - Added unit test in `src/domain/trip-share-link.test.ts`.
+- [x] **2. Browser Storage Persistence Rail (`src/components/shells/WebShell.tsx`)**
+  - Added `requestStoragePersistence()` calling `navigator.storage?.persist()` when local storage connection is established.
+  - Protects IndexedDB and Origin Private File System data from eviction during browser disk cleanup.
+- [x] **3. Multi-Day Itinerary Keyboard Switching (`src/components/planner/PlannerHome.tsx`)**
+  - Implemented keyboard shortcuts (`[` / `]` and `ArrowLeft` / `ArrowRight`) to quickly switch between itinerary days.
+  - Safely ignores events originating inside text inputs, textareas, selects, or when modals are active.
+- [x] **4. Expense-to-Place Binding & Actual Cost Accounting**
+  - Updated `TripExpenseItem` schema in `src/domain/planner.ts` & `src/domain/schema.ts` to include optional `place_id?: string;`.
+  - Upgraded `src/components/planner/PlannerBudgetLedger.tsx` with linked place dropdown and date selector in the expense creation form.
+  - Auto-prefills title and infers expense category from place kind (`stay` -> 住宿, `food`/`dining` -> 餐饮, `transit` -> 交通, `attraction` -> 门票, `shopping` -> 购物).
+  - Renders `📍 {placeTitle}` badge and `📅 {date}` badge on ledger expense items.
+  - In `src/components/planner/PlannerHome.tsx`, aggregated expenses per place (`expensesByPlace`) and rendered `💳 实记: ¥{total}` badge on place cards.
+  - Added a quick `💳` button on timeline cards to open the ledger prefilled with that place.
+  - Updated `dayActualCost` in `usePlannerData.ts` to include place-linked expenses scheduled on that day even without explicit date strings.
+- [x] **5. Commute Time Estimate Clearing ("无需交通预估")**
+  - Added `handleClearTravelEstimate(from, to)` in `usePlannerActions.ts` upserting a `duration_minutes: 0` manual leg.
+  - Timeline renders a neat `🚫 无需交通预估` badge and provides a popover option `🚫 清除预估（无需交通）` to toggle/restore travel estimates.
+  - Added unit test in `src/domain/planner-schedule.test.ts` ensuring `duration_minutes: 0` is recognized as feasible without raising missing travel warnings.
+- [x] **6. 1-Click "复制 Markdown 行程单" in Share Modal (`src/components/planner/TripBundleManager.tsx`)**
+  - Integrated `exportTripToMarkdown` with `materializePlannerScheduledPlaces` directly inside the share dialog.
+  - Added `📝 复制 Markdown` button providing instant clipboard export for offline reading, printing, or sharing in chat.
+- [x] **7. Full Quality Gate Verification & Smoke Test Reliability**
+  - Increased timeout in `scripts/mcp/ownly-mcp.process.test.ts` to prevent test flakiness under high-concurrency test runs.
+  - Verified 100% green across all quality gates: `validate:fast`, `validate:shared` (59 suites / 537 tests), `validate:web` (Next.js export build), `validate:extension` (172 tests).
+
 ## Completed: Pragmatic Code Quality Hardening & Zero-Warning Gate Alignment (2026-09-05)
 - [x] 1. Fix React Hook dependencies in `src/components/objects/ObjectComposer.tsx` and `src/core/i18n-context.tsx` (wrapped `applyQuickLineToForm`, `defaultGet`, `defaultSet` in `useCallback` to stabilize references).
 - [x] 2. Annotate native img elements in `src/components/marketing/MarketingHome.tsx` for Next.js static export compatibility (`output: 'export'`).

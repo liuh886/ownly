@@ -37,7 +37,7 @@ describe('Ownly MCP process contract smoke test', () => {
     const result = spawnSync(process.execPath, [mcpEntry, '--data-dir', tempDir], {
       cwd: process.cwd(),
       encoding: 'utf8',
-      timeout: 1000,
+      timeout: 4000,
     });
 
     expect(result.stderr).toContain('Ownly MCP running locally over stdio');

@@ -375,4 +375,42 @@ describe('schema validation', () => {
     const result = validateEntity(expense);
     expect(result.valid).toBe(true);
   });
+
+  it('validates a trip expense bound to a place_id', () => {
+    const expense = {
+      id: 'exp-2',
+      schema_version: '0.1',
+      type: 'trip_expense',
+      trip_id: 'trip-1',
+      place_id: 'place-somtum-der',
+      title: 'Somtum Der Lunch',
+      amount: 850,
+      currency: 'THB',
+      category: 'food',
+      date: '2026-10-05',
+      paid_by: 'Bob',
+      created_at: '2026-09-01T00:00:00Z',
+    };
+    const result = validateEntity(expense);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects a trip expense with invalid non-string place_id', () => {
+    const expense = {
+      id: 'exp-3',
+      schema_version: '0.1',
+      type: 'trip_expense',
+      trip_id: 'trip-1',
+      place_id: 12345 as unknown as string,
+      title: 'Invalid place expense',
+      amount: 100,
+      currency: 'THB',
+      category: 'food',
+      paid_by: 'Bob',
+      created_at: '2026-09-01T00:00:00Z',
+    };
+    const result = validateEntity(expense);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.message.includes('Invalid place_id'))).toBe(true);
+  });
 });

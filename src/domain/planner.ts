@@ -1635,6 +1635,7 @@ export type TripExpenseCategory = 'stay' | 'food' | 'transit' | 'ticket' | 'shop
 export interface TripExpenseItem {
   id: string;
   trip_id: string;
+  place_id?: string;
   title: string;
   category: TripExpenseCategory;
   amount: number;

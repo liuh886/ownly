@@ -637,15 +637,20 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     const fx = { base: tripCurrency, overrides: selectedTrip.fx_rates };
     let total = 0;
     let unconverted = 0;
+    const scheduledPlaceIds = new Set(scheduled.map((s) => s.id));
     currentExpenses
-      .filter((expense) => expense.date === activeDate)
+      .filter(
+        (expense) =>
+          expense.date === activeDate ||
+          (expense.place_id && scheduledPlaceIds.has(expense.place_id) && !expense.date),
+      )
       .forEach((expense) => {
         const rate = effectiveFxRate(expense.currency, fx);
         if (rate === null) unconverted += 1;
         else total += expense.amount * rate;
       });
     return { total: Math.round(total * 100) / 100, unconverted };
-  }, [currentExpenses, activeDate, selectedTrip]);
+  }, [currentExpenses, activeDate, selectedTrip, scheduled]);
 
   return {
     language,

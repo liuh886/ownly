@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import type {
   PlannerTravelMode,
   PlannerTrip,
+  PlannerTripLeg,
   PlannerTripPlace,
   TripExpenseItem,
 } from '@/domain/planner';
@@ -13,6 +14,7 @@ import {
   exportPlacesToCSV,
   exportPlacesToKML,
   exportTripToMarkdown,
+  plannerTripLegId,
 } from '@/domain/planner';
 import { buildTripCalendarIcs, buildDayCalendarIcs } from '@/domain/calendar-feed';
 import { plannerRepository } from '@/services/PlannerRepository';
@@ -151,6 +153,34 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       }
     },
     [selectedTrip, load],
+  );
+
+  const handleClearTravelEstimate = useCallback(
+    async (from: PlannerScheduledPlace, to: PlannerScheduledPlace) => {
+      if (!selectedTrip) return;
+      const fromPlaceId = from.place_id || from.id;
+      const toPlaceId = to.place_id || to.id;
+      const nowIso = new Date().toISOString();
+      const clearedLeg: PlannerTripLeg = {
+        schema_version: '0.1',
+        type: 'trip_leg',
+        id: plannerTripLegId(selectedTrip.id, fromPlaceId, toPlaceId),
+        trip_id: selectedTrip.id,
+        from_place_id: fromPlaceId,
+        to_place_id: toPlaceId,
+        mode: selectedTrip.transport_mode ?? 'driving',
+        duration_minutes: 0,
+        distance_meters: 0,
+        source: 'manual',
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+      await plannerRepository.upsertLeg(clearedLeg);
+      await load();
+      setNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.');
+      setTimeout(() => setNotice(''), 3000);
+    },
+    [selectedTrip, load, setNotice, zh],
   );
 
   const handleSelectHotelForStaySpan = useCallback(
@@ -732,6 +762,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleDeleteExpense,
     handleUpdateMembers,
     handleSwitchTravelMode,
+    handleClearTravelEstimate,
     handleSelectHotelForStaySpan,
     handleUpdateFxRates,
     handleDropPlace,

@@ -60,12 +60,19 @@ export async function decodeTripSharePayload(payload: string): Promise<OwnlyTrip
   const normalized = payload.trim();
   if (!normalized) throw new Error('Trip 分享链接缺少数据。');
   let bytes: Uint8Array;
-  if (normalized.startsWith(GZIP_PREFIX)) {
-    bytes = await gunzip(base64UrlToBytes(normalized.slice(GZIP_PREFIX.length)));
-  } else if (normalized.startsWith(RAW_PREFIX)) {
-    bytes = base64UrlToBytes(normalized.slice(RAW_PREFIX.length));
-  } else {
-    throw new Error('不支持的 Ownly Trip 分享链接版本。');
+  try {
+    if (normalized.startsWith(GZIP_PREFIX)) {
+      bytes = await gunzip(base64UrlToBytes(normalized.slice(GZIP_PREFIX.length)));
+    } else if (normalized.startsWith(RAW_PREFIX)) {
+      bytes = base64UrlToBytes(normalized.slice(RAW_PREFIX.length));
+    } else {
+      throw new Error('不支持的 Ownly Trip 分享链接版本。');
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('不支持的 Ownly Trip 分享链接版本')) {
+      throw error;
+    }
+    throw new Error('Trip 分享链接数据损坏或疑似在聊天软件中被截断（请检查链接是否完整，或改用导出 .ownly-trip.json 文件分享）。');
   }
   return parseTripBundle(new TextDecoder().decode(bytes));
 }

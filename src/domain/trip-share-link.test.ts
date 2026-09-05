@@ -78,4 +78,11 @@ describe('Trip social share links', () => {
   it('returns null for ordinary app hashes', async () => {
     expect(await parseTripShareHash('#section=planner')).toBeNull();
   });
+
+  it('throws friendly truncation error when payload is cut short', async () => {
+    const bundle = fixtureBundle();
+    const payload = await encodeTripSharePayload(bundle);
+    const truncated = payload.slice(0, Math.floor(payload.length / 2));
+    await expect(decodeTripSharePayload(truncated)).rejects.toThrow('截断');
+  });
 });

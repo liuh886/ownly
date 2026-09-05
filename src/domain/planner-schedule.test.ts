@@ -306,5 +306,23 @@ describe('evaluatePlannerDay canonical assessment', () => {
     const assessment = evaluatePlannerDay(trip, scheduled(places, visits), [], '2026-10-05');
     expect(assessment.missing_facts.some((f) => f.reason === 'travel_time_missing')).toBe(false);
   });
+
+  it('supports cleared commute estimate (duration_minutes: 0) without flagging travel_time_missing', () => {
+    const places = [place('cafe-a', { duration_minutes: 45 }), place('cafe-b', { duration_minutes: 60 })];
+    const visits = [
+      visit('v:ca', 'cafe-a', { start: '10:00', duration_minutes: 45, sort_order: 0 }),
+      visit('v:cb', 'cafe-b', { start: '11:00', duration_minutes: 60, sort_order: 1 }),
+    ];
+    // Cleared leg with 0 duration minutes
+    const clearedLeg = travelLeg('cafe-a', 'cafe-b', 0);
+    const assessment = evaluatePlannerDay(trip, scheduled(places, visits), [clearedLeg], '2026-10-05');
+    expect(assessment.status).toBe('feasible');
+    expect(assessment.missing_facts).toHaveLength(0);
+
+    const timeline = buildPlannerDayExecutionTimeline(trip, scheduled(places, visits), [clearedLeg], '2026-10-05');
+    const travelItem = timeline.items.find((item) => item.type === 'travel');
+    expect(travelItem).toBeDefined();
+    expect(travelItem?.duration_minutes).toBe(0);
+  });
 });
 

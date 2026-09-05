@@ -25,3 +25,9 @@
    - Do NOT re-introduce heavy multi-version migration frameworks (`src/domain/migrations/`). Keep domain schemas clean and lightweight at `schema_version: '0.1'`.
    - Do NOT turn `Trip.members: string[]` into standalone relational graph entities in Local-First single-user context.
    - Do NOT build massive DOM-mocking React unit tests (rely on deterministic domain/service contracts and Playwright E2E).
+11. **Explicit Zero / Sentinel Overwrite in Fallback Heuristics**:
+   - When domain calculations automatically synthesize heuristic defaults (e.g. `effectiveDayLegs` generating commute time estimates between stops when no leg is stored), a user's action to "clear" or "suppress" that estimate cannot be implemented simply by deleting the leg record, because the fallback heuristic would immediately regenerate it on the next render.
+   - Instead, persist an explicit record with a designated sentinel (e.g. `duration_minutes: 0, source: 'manual'`). Downstream feasibility evaluators and timeline views then recognize the deliberate omission (`🚫 无需交通预估`) and avoid false-positive schedule warnings.
+12. **Synchronous Render-Time State Adjustment (Avoid `set-state-in-effect`)**:
+   - When a parent triggers form prefill/reset via incoming props (e.g. `initialPlaceId`), never update internal state in `useEffect` (triggers ESLint warnings and extra re-renders).
+   - Track `prevInitialPlaceId` during render and adjust state synchronously before committing to DOM, adhering to idiomatic React guidelines.

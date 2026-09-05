@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   PlannerTravelMode,
   PlannerTripPlace,
@@ -10,6 +10,7 @@ import {
   buildGoogleMapsRouteUrl,
   calculateDefaultTripLeg,
   currencySymbolFor,
+  effectiveFxRate,
   formatPlacePriceInTripCurrency,
   isTransitHubPlace,
   PLANNER_KIND_LABELS,
@@ -97,6 +98,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [isSwapDaysModalOpen, setIsSwapDaysModalOpen] = useState(false);
   const [swapTargetDate, setSwapTargetDate] = useState<string>('');
+  const [budgetInitialPlaceId, setBudgetInitialPlaceId] = useState<string | null>(null);
 
   const {
     language,
@@ -167,6 +169,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     handleDeleteExpense,
     handleUpdateMembers,
     handleSwitchTravelMode,
+    handleClearTravelEstimate,
     handleSelectHotelForStaySpan,
     handleUpdateFxRates,
     handleDropPlace,
@@ -199,6 +202,88 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     handleDisableFeed,
     copyItineraryText,
   } = ctrl;
+
+  // Multi-day keyboard navigation: [ / ] or ArrowLeft / ArrowRight to switch days
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (
+        isHotelModalOpen ||
+        isImportModalOpen ||
+        isCalendarModalOpen ||
+        isSuspectedModalOpen ||
+        timingModalPlace !== null ||
+        isSwapDaysModalOpen ||
+        isCreateTripOpen ||
+        guideOpen
+      ) {
+        return;
+      }
+      if (!tripDates || tripDates.length <= 1) return;
+
+      if (e.key === '[' || e.key === 'ArrowLeft') {
+        if (activeDayIndex > 0) {
+          e.preventDefault();
+          setSelectedDate(tripDates[activeDayIndex - 1]);
+        }
+      } else if (e.key === ']' || e.key === 'ArrowRight') {
+        if (activeDayIndex < tripDates.length - 1) {
+          e.preventDefault();
+          setSelectedDate(tripDates[activeDayIndex + 1]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    activeDayIndex,
+    tripDates,
+    setSelectedDate,
+    isHotelModalOpen,
+    isImportModalOpen,
+    isCalendarModalOpen,
+    isSuspectedModalOpen,
+    timingModalPlace,
+    isSwapDaysModalOpen,
+    isCreateTripOpen,
+    guideOpen,
+  ]);
+
+  const expensesByPlace = useMemo(() => {
+    const map = new Map<string, { total: number; count: number }>();
+    if (!selectedTrip) return map;
+    const fx = { base: selectedTrip.currency || 'USD', overrides: selectedTrip.fx_rates };
+    for (const exp of currentExpenses) {
+      const rate = effectiveFxRate(exp.currency, fx);
+      const amountInBase = rate === null ? exp.amount : exp.amount * rate;
+      if (exp.place_id) {
+        const prev = map.get(exp.place_id) ?? { total: 0, count: 0 };
+        map.set(exp.place_id, {
+          total: Math.round((prev.total + amountInBase) * 100) / 100,
+          count: prev.count + 1,
+        });
+      }
+      const titleKey = exp.title.trim().toLowerCase();
+      if (titleKey) {
+        const prevTitle = map.get(titleKey) ?? { total: 0, count: 0 };
+        map.set(titleKey, {
+          total: Math.round((prevTitle.total + amountInBase) * 100) / 100,
+          count: prevTitle.count + 1,
+        });
+      }
+    }
+    return map;
+  }, [currentExpenses, selectedTrip]);
 
   if (disabled) {
     return (
@@ -752,6 +837,23 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
                                   </span>
                                 ) : null}
+                                {(() => {
+                                  const placeExpense = expensesByPlace.get(place.id) || expensesByPlace.get(place.title.trim().toLowerCase());
+                                  if (!placeExpense || placeExpense.total <= 0) return null;
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setBudgetInitialPlaceId(place.id);
+                                        setRightTab('budget');
+                                      }}
+                                      className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-semibold shrink-0 transition hover:bg-emerald-100"
+                                      title={zh ? `实记 ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total}（共 ${placeExpense.count} 笔），点击前往账本查看` : `Actual: ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total} (${placeExpense.count} expenses), click to view in budget`}
+                                    >
+                                      💳 {zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip?.currency)}{placeExpense.total}
+                                    </button>
+                                  );
+                                })()}
                               </div>
 
                               {/* Quick Action Emoji Buttons */}
@@ -822,6 +924,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     🎟️
                                   </a>
                                 ) : null}
+                                {/* 记账 */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBudgetInitialPlaceId(place.id);
+                                    setRightTab('budget');
+                                  }}
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 transition"
+                                  title={zh ? '为此地点记一笔账' : 'Record expense for this place'}
+                                >
+                                  💳
+                                </button>
                               </div>
                             </div>
 
@@ -941,9 +1055,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     </a>
                                   </div>
 
-                                  {/* Mode Switch Popover */}
+                                   {/* Mode Switch Popover */}
                                   {isPairSwitching ? (
-                                    <div className="absolute top-full left-0 mt-1 z-30 flex flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 min-w-[170px]">
+                                    <div className="absolute top-full left-0 mt-1 z-30 flex flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 min-w-[190px]">
                                       <div className="px-2 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
                                         {zh ? '切换交通方式' : 'Switch Travel Mode'}
                                       </div>
@@ -956,7 +1070,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                           <button
                                             key={m}
                                             type="button"
-                                            onClick={() => void handleSwitchTravelMode(place, nextPlace, m)}
+                                            onClick={() => {
+                                              setActiveModeSwitchPair(null);
+                                              void handleSwitchTravelMode(place, nextPlace, m);
+                                            }}
                                             className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition ${
                                               isCurrent
                                                 ? 'bg-sky-50 font-bold text-sky-900 ring-1 ring-sky-300/60'
@@ -973,6 +1090,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                           </button>
                                         );
                                       })}
+                                      <div className="my-0.5 border-t border-stone-100" />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveModeSwitchPair(null);
+                                          void handleClearTravelEstimate(place, nextPlace);
+                                        }}
+                                        className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left text-stone-600 hover:bg-rose-50 hover:text-rose-700 transition"
+                                        title={zh ? '两站之间不计入交通路程时间' : 'Do not calculate commute time between these stops'}
+                                      >
+                                        <span className="inline-flex items-center gap-1.5">
+                                          <span>🚫</span>
+                                          <span>{zh ? '清除预估（无需交通）' : 'Clear estimate (No commute)'}</span>
+                                        </span>
+                                      </button>
                                     </div>
                                   ) : null}
                                 </div>
@@ -981,6 +1113,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           ) : transitionItems.map((item) => {
                             if (item.type === 'travel') {
                               const isPairSwitching = activeModeSwitchPair === `${place.id}->${nextPlace.id}`;
+                              const isCleared = item.duration_minutes === 0;
                               const modeKey = (item.mode as PlannerTravelMode) || 'driving';
                               const modeConfig = PLANNER_TRAVEL_MODE_CONFIG[modeKey] ?? PLANNER_TRAVEL_MODE_CONFIG.driving;
                               const icon = modeConfig.emoji;
@@ -989,43 +1122,68 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 : item.distance_meters < 1000 ? ` · ${item.distance_meters} m` : ` · ${(item.distance_meters / 1000).toFixed(1)} km`;
                               return (
                                 <div key={item.id} className="relative inline-flex flex-wrap items-center gap-2">
-                                  <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-3 py-1 text-[10.5px] font-semibold text-sky-900 shadow-2xs">
-                                    <button
-                                      type="button"
-                                      onClick={() => setActiveModeSwitchPair(isPairSwitching ? null : `${place.id}->${nextPlace.id}`)}
-                                      className="inline-flex items-center gap-1 hover:text-sky-700 hover:underline cursor-pointer transition font-medium"
-                                      title={zh ? '点击切换出行方式' : 'Click to change travel mode'}
-                                    >
-                                      <span>{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS' : ''}</span>
-                                      <span className="text-[9px] opacity-70">▾</span>
-                                    </button>
-                                    {item.start && item.end ? <span className="text-sky-700 font-mono">⏱ {item.start}-{item.end}</span> : null}
-                                    <a
-                                      href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${item.mode === 'motorcycle' ? 'two_wheeler' : (item.mode ?? selectedTrip.transport_mode ?? 'transit')}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9.5px] font-bold text-sky-800 transition"
-                                    >
-                                      Google 导航 ↗
-                                    </a>
-                                  </div>
+                                  {isCleared ? (
+                                    <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-dashed border-stone-300 bg-stone-50 px-2.5 py-0.5 text-[10.5px] font-medium text-stone-500 shadow-2xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveModeSwitchPair(isPairSwitching ? null : `${place.id}->${nextPlace.id}`)}
+                                        className="inline-flex items-center gap-1 hover:text-stone-800 hover:underline cursor-pointer transition font-medium"
+                                        title={zh ? '当前无需交通时间预估，点击可恢复或切换' : 'No travel estimate. Click to switch or restore'}
+                                      >
+                                        <span>🚫 {zh ? '无需交通预估' : 'No commute estimate'}</span>
+                                        <span className="text-[9px] opacity-70">▾</span>
+                                      </button>
+                                      <a
+                                        href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="rounded-full bg-stone-200/80 hover:bg-stone-300 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-700 transition"
+                                      >
+                                        Google 导航 ↗
+                                      </a>
+                                    </div>
+                                  ) : (
+                                    <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-3 py-1 text-[10.5px] font-semibold text-sky-900 shadow-2xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveModeSwitchPair(isPairSwitching ? null : `${place.id}->${nextPlace.id}`)}
+                                        className="inline-flex items-center gap-1 hover:text-sky-700 hover:underline cursor-pointer transition font-medium"
+                                        title={zh ? '点击切换出行方式或清除预估' : 'Click to change travel mode or clear estimate'}
+                                      >
+                                        <span>{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS' : ''}</span>
+                                        <span className="text-[9px] opacity-70">▾</span>
+                                      </button>
+                                      {item.start && item.end ? <span className="text-sky-700 font-mono">⏱ {item.start}-{item.end}</span> : null}
+                                      <a
+                                        href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${item.mode === 'motorcycle' ? 'two_wheeler' : (item.mode ?? selectedTrip.transport_mode ?? 'transit')}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9.5px] font-bold text-sky-800 transition"
+                                      >
+                                        Google 导航 ↗
+                                      </a>
+                                    </div>
+                                  )}
 
                                   {/* Mode Switch Popover */}
                                   {isPairSwitching ? (
-                                    <div className="absolute top-full left-0 mt-1 z-30 flex flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 min-w-[170px]">
+                                    <div className="absolute top-full left-0 mt-1 z-30 flex flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 min-w-[190px]">
                                       <div className="px-2 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                                        {zh ? '切换交通方式' : 'Switch Travel Mode'}
+                                        {zh ? '交通方式与预估' : 'Travel Mode & Estimate'}
                                       </div>
                                       {(['driving', 'walking', 'motorcycle', 'bicycling', 'transit'] as PlannerTravelMode[]).map((m) => {
                                         const cfg = PLANNER_TRAVEL_MODE_CONFIG[m];
-                                        const isCurrent = item.mode === m;
+                                        const isCurrent = !isCleared && item.mode === m;
                                         const previewLeg = calculateDefaultTripLeg(selectedTrip, place, nextPlace, m);
                                         const previewDuration = previewLeg?.duration_minutes ?? cfg.defaultDuration;
                                         return (
                                           <button
                                             key={m}
                                             type="button"
-                                            onClick={() => void handleSwitchTravelMode(place, nextPlace, m)}
+                                            onClick={() => {
+                                              setActiveModeSwitchPair(null);
+                                              void handleSwitchTravelMode(place, nextPlace, m);
+                                            }}
                                             className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition ${
                                               isCurrent
                                                 ? 'bg-sky-50 font-bold text-sky-900 ring-1 ring-sky-300/60'
@@ -1042,6 +1200,26 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                           </button>
                                         );
                                       })}
+                                      <div className="my-0.5 border-t border-stone-100" />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveModeSwitchPair(null);
+                                          void handleClearTravelEstimate(place, nextPlace);
+                                        }}
+                                        className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition ${
+                                          isCleared
+                                            ? 'bg-stone-100 font-bold text-stone-900 ring-1 ring-stone-300'
+                                            : 'text-stone-600 hover:bg-rose-50 hover:text-rose-700'
+                                        }`}
+                                        title={zh ? '两站之间不计入交通路程时间' : 'Do not calculate commute time between these stops'}
+                                      >
+                                        <span className="inline-flex items-center gap-1.5">
+                                          <span>🚫</span>
+                                          <span>{zh ? '清除预估（无需交通）' : 'Clear estimate (No commute)'}</span>
+                                        </span>
+                                        {isCleared ? <span className="text-[10.5px] font-bold text-stone-900">✓</span> : null}
+                                      </button>
                                     </div>
                                   ) : null}
                                 </div>
@@ -1155,12 +1333,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               key={selectedTrip.id}
               trip={selectedTrip}
               scheduledPlaces={scheduled}
+              allPlaces={tripPlaces}
+              activeDate={activeDate}
+              initialPlaceId={budgetInitialPlaceId}
+              onClearInitialPlaceId={() => setBudgetInitialPlaceId(null)}
               expenses={currentExpenses}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
-        members={currentMembers}
-        onUpdateMembers={handleUpdateMembers}
-        onUpdateFxRates={handleUpdateFxRates}
+              members={currentMembers}
+              onUpdateMembers={handleUpdateMembers}
+              onUpdateFxRates={handleUpdateFxRates}
               language={language}
             />
           ) : (
