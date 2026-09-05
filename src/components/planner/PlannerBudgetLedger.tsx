@@ -50,6 +50,16 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function matchesExpenseCategory(place: PlannerTripPlace | PlannerScheduledPlace, cat: TripExpenseCategory): boolean {
+  const kind = place.kind?.toLowerCase() || '';
+  if (cat === 'stay') return kind === 'stay' || kind === 'hotel';
+  if (cat === 'food') return kind === 'food' || kind === 'restaurant' || kind === 'cafe' || kind === 'dining';
+  if (cat === 'transit') return kind === 'transit' || kind === 'transition' || kind === 'station' || kind === 'transport';
+  if (cat === 'ticket') return kind === 'attraction' || kind === 'sightseeing' || kind === 'activity';
+  if (cat === 'shopping') return kind === 'shopping' || kind === 'mall';
+  return true;
+}
+
 export function PlannerBudgetLedger({
   trip,
   scheduledPlaces,
@@ -86,6 +96,7 @@ export function PlannerBudgetLedger({
   const [currencyOverride, setCurrencyOverride] = useState<string | null>(null);
   const currency = currencyOverride ?? baseCurrency;
   const [category, setCategory] = useState<TripExpenseCategory>('food');
+  const [filterPlacesByCategory, setFilterPlacesByCategory] = useState(true);
   const [paidByOverride, setPaidByOverride] = useState<string | null>(null);
   const [splitOverride, setSplitOverride] = useState<string[] | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<Record<string, string> | null>(null);
@@ -104,7 +115,19 @@ export function PlannerBudgetLedger({
   const [memberNotice, setMemberNotice] = useState('');
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
+  const [isAddingInlinePayer, setIsAddingInlinePayer] = useState(false);
+  const [inlinePayerName, setInlinePayerName] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
+
+  const filteredSelectablePlaces = useMemo(() => {
+    if (!filterPlacesByCategory) return selectablePlaces;
+    const matched = selectablePlaces.filter((p) => matchesExpenseCategory(p, category));
+    if (selectedPlaceId && !matched.some((p) => p.id === selectedPlaceId)) {
+      const current = selectablePlaces.find((p) => p.id === selectedPlaceId);
+      if (current) return [current, ...matched];
+    }
+    return matched;
+  }, [selectablePlaces, filterPlacesByCategory, category, selectedPlaceId]);
 
   const [prevInitialPlaceId, setPrevInitialPlaceId] = useState<string | null>(initialPlaceId ?? null);
   if (initialPlaceId && initialPlaceId !== prevInitialPlaceId) {
@@ -163,7 +186,29 @@ export function PlannerBudgetLedger({
     setPaidByOverride(null);
     setSplitOverride(null);
     setPaymentDraft(null);
+    setIsAddingInlinePayer(false);
+    setInlinePayerName('');
     onClearInitialPlaceId?.();
+  };
+
+  const handleAddInlineMember = () => {
+    const trimmed = inlinePayerName.trim();
+    if (!trimmed) return;
+    if (members.includes(trimmed)) {
+      setPaidByOverride(trimmed);
+      setInlinePayerName('');
+      setIsAddingInlinePayer(false);
+      return;
+    }
+    const next = [...members, trimmed];
+    onUpdateMembers(next);
+    setSelectedSplits((prev) => (prev.length === members.length ? next : [...prev, trimmed]));
+    if (paymentDraft) {
+      setPaymentDraft({ ...paymentDraft, [trimmed]: '' });
+    }
+    setPaidByOverride(trimmed);
+    setInlinePayerName('');
+    setIsAddingInlinePayer(false);
   };
 
   const fx = useMemo<FxSettings>(
@@ -297,6 +342,8 @@ export function PlannerBudgetLedger({
     setPaidByOverride(null);
     setSplitOverride(null);
     setPaymentDraft(null);
+    setIsAddingInlinePayer(false);
+    setInlinePayerName('');
     setIsAddingExpense(false);
     onClearInitialPlaceId?.();
   };
@@ -688,16 +735,33 @@ export function PlannerBudgetLedger({
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[11px] font-semibold text-stone-500">
-                  {zh ? '关联地点 (可选)' : 'Linked Place (Optional)'}
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-semibold text-stone-500">
+                    {zh ? '关联地点 (可选)' : 'Linked Place (Optional)'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setFilterPlacesByCategory((prev) => !prev)}
+                    className="text-[10px] font-medium text-emerald-700 hover:underline"
+                    title={zh ? '切换仅看分类相关地点或全部地点' : 'Toggle category filter'}
+                  >
+                    {filterPlacesByCategory
+                      ? (zh ? `仅${CATEGORY_MAP[category].zh} (${filteredSelectablePlaces.length}/${selectablePlaces.length}) ⇄ 全部` : `Filtered (${filteredSelectablePlaces.length}/${selectablePlaces.length}) ⇄ All`)
+                      : (zh ? `全部 (${selectablePlaces.length}) ⇄ 仅${CATEGORY_MAP[category].zh}` : `All (${selectablePlaces.length}) ⇄ Filtered`)}
+                  </button>
+                </div>
                 <select
                   value={selectedPlaceId}
                   onChange={(e) => handlePlaceSelect(e.target.value)}
                   className="mt-1 w-full truncate rounded-lg border border-stone-300 bg-white p-1.5 text-xs font-medium outline-hidden focus:border-emerald-500"
                 >
                   <option value="">{zh ? '（无关联地点）' : '(No linked place)'}</option>
-                  {selectablePlaces.map((p) => (
+                  {filteredSelectablePlaces.length === 0 ? (
+                    <option value="" disabled>
+                      {zh ? `（无与「${CATEGORY_MAP[category].zh}」相关的地点）` : `(No matching ${CATEGORY_MAP[category].en} places)`}
+                    </option>
+                  ) : null}
+                  {filteredSelectablePlaces.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.title} {p.area ? `(${p.area})` : ''}
                     </option>
@@ -720,16 +784,63 @@ export function PlannerBudgetLedger({
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[11px] font-semibold text-stone-500">
-                  {zh ? '主要垫付人' : 'Primary Payer'}
-                </label>
-                <select
-                  value={paidBy}
-                  onChange={(e) => setPaidByOverride(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-stone-300 p-1.5 text-xs font-medium"
-                >
-                  {members.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-semibold text-stone-500">
+                    {zh ? '主要垫付人' : 'Primary Payer'}
+                  </label>
+                  {!isAddingInlinePayer ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingInlinePayer(true)}
+                      className="text-[10px] font-medium text-emerald-700 hover:underline"
+                    >
+                      {zh ? '+ 新增支付人' : '+ Add Payer'}
+                    </button>
+                  ) : null}
+                </div>
+                {isAddingInlinePayer ? (
+                  <div className="mt-1 flex gap-1">
+                    <input
+                      type="text"
+                      value={inlinePayerName}
+                      onChange={(e) => setInlinePayerName(e.target.value)}
+                      placeholder={zh ? '新支付人昵称' : 'Payer name'}
+                      className="flex-1 rounded-lg border border-stone-300 px-2 py-1 text-xs outline-hidden focus:border-emerald-500"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddInlineMember();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddInlineMember}
+                      className="rounded-lg bg-stone-900 px-2 py-1 text-xs font-semibold text-white hover:bg-stone-800"
+                    >
+                      {zh ? '添加' : 'Add'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingInlinePayer(false);
+                        setInlinePayerName('');
+                      }}
+                      className="rounded-lg border border-stone-200 px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={paidBy}
+                    onChange={(e) => setPaidByOverride(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 p-1.5 text-xs font-medium"
+                  >
+                    {members.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -793,6 +904,41 @@ export function PlannerBudgetLedger({
                 </div>
               ) : (
                 <div className="mt-2 space-y-2">
+                  {isAddingInlinePayer ? (
+                    <div className="flex items-center gap-1 rounded-md border border-stone-200 bg-white p-1.5">
+                      <input
+                        type="text"
+                        value={inlinePayerName}
+                        onChange={(e) => setInlinePayerName(e.target.value)}
+                        placeholder={zh ? '新支付人昵称' : 'Payer name'}
+                        className="flex-1 rounded border border-stone-300 px-2 py-1 text-xs outline-hidden focus:border-emerald-500"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddInlineMember();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddInlineMember}
+                        className="rounded bg-stone-900 px-2.5 py-1 text-xs font-semibold text-white hover:bg-stone-800"
+                      >
+                        {zh ? '添加' : 'Add'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingInlinePayer(false);
+                          setInlinePayerName('');
+                        }}
+                        className="rounded border border-stone-200 px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                     {members.map((member) => (
                       <label key={member} className="rounded-md border border-stone-200 bg-white p-1.5">
@@ -814,13 +960,24 @@ export function PlannerBudgetLedger({
                     ))}
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-1.5">
-                    <button
-                      type="button"
-                      onClick={fillEqualPayments}
-                      className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
-                    >
-                      {zh ? '按分摊成员均分已付' : 'Fill equal contributions'}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={fillEqualPayments}
+                        className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                      >
+                        {zh ? '按分摊成员均分已付' : 'Fill equal contributions'}
+                      </button>
+                      {!isAddingInlinePayer ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingInlinePayer(true)}
+                          className="rounded-md border border-stone-300 bg-white px-2 py-1 text-[10px] font-semibold text-stone-700 hover:bg-stone-100"
+                        >
+                          + {zh ? '新增支付人' : 'Add payer'}
+                        </button>
+                      ) : null}
+                    </div>
                     <span className={`text-[10px] font-semibold ${paymentDraftValid ? 'text-emerald-700' : 'text-rose-600'}`}>
                       {zh ? '已录入' : 'Recorded'} {currency} {paymentTotal.toLocaleString()} / {parsedExpenseAmount.toLocaleString()}
                       {!paymentDraftValid ? ` · ${paymentDifference > 0 ? (zh ? '还差' : 'missing') : (zh ? '超出' : 'over')} ${Math.abs(paymentDifference).toLocaleString()}` : ' ✓'}

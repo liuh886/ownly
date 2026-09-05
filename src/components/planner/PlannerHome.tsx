@@ -1057,8 +1057,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
                                    {/* Mode Switch Popover */}
                                   {isPairSwitching ? (
-                                    <div className="absolute top-full left-0 mt-1 z-30 flex flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 min-w-[190px]">
-                                      <div className="px-2 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                    <div className="absolute top-full left-0 mt-1 z-50 flex flex-col gap-0.5 rounded-lg border border-stone-200 bg-white p-1 shadow-xl ring-1 ring-black/5 min-w-[175px] max-w-[240px]">
+                                      <div className="px-2 py-0.5 text-[9.5px] font-bold text-stone-400 uppercase tracking-wider">
                                         {zh ? '切换交通方式' : 'Switch Travel Mode'}
                                       </div>
                                       {(['driving', 'walking', 'motorcycle', 'bicycling', 'transit'] as PlannerTravelMode[]).map((m) => {
@@ -1074,7 +1074,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                               setActiveModeSwitchPair(null);
                                               void handleSwitchTravelMode(place, nextPlace, m);
                                             }}
-                                            className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition ${
+                                            className={`flex items-center justify-between rounded-md px-2 py-1 text-[11px] text-left transition ${
                                               isCurrent
                                                 ? 'bg-sky-50 font-bold text-sky-900 ring-1 ring-sky-300/60'
                                                 : 'text-stone-700 hover:bg-stone-50 hover:text-stone-900'
@@ -1084,7 +1084,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                               <span>{cfg.emoji}</span>
                                               <span>{zh ? cfg.labelZh : cfg.labelEn}</span>
                                             </span>
-                                            <span className="text-[10.5px] text-stone-400 font-mono">
+                                            <span className="text-[10px] text-stone-400 font-mono">
                                               ~{previewDuration}m {isCurrent ? '✓' : ''}
                                             </span>
                                           </button>
@@ -1097,7 +1097,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                           setActiveModeSwitchPair(null);
                                           void handleClearTravelEstimate(place, nextPlace);
                                         }}
-                                        className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left text-stone-600 hover:bg-rose-50 hover:text-rose-700 transition"
+                                        className="flex items-center justify-between rounded-md px-2 py-1 text-[11px] text-left text-stone-600 hover:bg-rose-50 hover:text-rose-700 transition"
                                         title={zh ? '两站之间不计入交通路程时间' : 'Do not calculate commute time between these stops'}
                                       >
                                         <span className="inline-flex items-center gap-1.5">
@@ -1167,8 +1167,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
                                   {/* Mode Switch Popover */}
                                   {isPairSwitching ? (
-                                    <div className="absolute top-full left-0 mt-1 z-30 flex flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 min-w-[190px]">
-                                      <div className="px-2 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                    <div className="absolute top-full left-0 mt-1 z-50 flex flex-col gap-0.5 rounded-lg border border-stone-200 bg-white p-1 shadow-xl ring-1 ring-black/5 min-w-[175px] max-w-[240px]">
+                                      <div className="px-2 py-0.5 text-[9.5px] font-bold text-stone-400 uppercase tracking-wider">
                                         {zh ? '交通方式与预估' : 'Travel Mode & Estimate'}
                                       </div>
                                       {(['driving', 'walking', 'motorcycle', 'bicycling', 'transit'] as PlannerTravelMode[]).map((m) => {
@@ -1184,7 +1184,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                               setActiveModeSwitchPair(null);
                                               void handleSwitchTravelMode(place, nextPlace, m);
                                             }}
-                                            className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition ${
+                                            className={`flex items-center justify-between rounded-md px-2 py-1 text-[11px] text-left transition ${
                                               isCurrent
                                                 ? 'bg-sky-50 font-bold text-sky-900 ring-1 ring-sky-300/60'
                                                 : 'text-stone-700 hover:bg-stone-50 hover:text-stone-900'
@@ -1194,7 +1194,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                               <span>{cfg.emoji}</span>
                                               <span>{zh ? cfg.labelZh : cfg.labelEn}</span>
                                             </span>
-                                            <span className="text-[10.5px] text-stone-400 font-mono">
+                                            <span className="text-[10px] text-stone-400 font-mono">
                                               ~{previewDuration}m {isCurrent ? '✓' : ''}
                                             </span>
                                           </button>
@@ -1207,7 +1207,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                           setActiveModeSwitchPair(null);
                                           void handleClearTravelEstimate(place, nextPlace);
                                         }}
-                                        className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition ${
+                                        className={`flex items-center justify-between rounded-md px-2 py-1 text-[11px] text-left transition ${
                                           isCleared
                                             ? 'bg-stone-100 font-bold text-stone-900 ring-1 ring-stone-300'
                                             : 'text-stone-600 hover:bg-rose-50 hover:text-rose-700'
@@ -1218,7 +1218,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                           <span>🚫</span>
                                           <span>{zh ? '清除预估（无需交通）' : 'Clear estimate (No commute)'}</span>
                                         </span>
-                                        {isCleared ? <span className="text-[10.5px] font-bold text-stone-900">✓</span> : null}
+                                        {isCleared ? <span className="text-[10px] font-bold text-stone-900">✓</span> : null}
                                       </button>
                                     </div>
                                   ) : null}
@@ -1243,12 +1243,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 </div>
                               );
                             }
-                            return (
-                              <div key={item.id} className="inline-flex flex-wrap items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-0.5 text-[10px] font-semibold text-amber-800">
-                                <span>❔ {item.reason === 'travel_time_missing'
-                                  ? (zh ? '交通时间未确认' : 'Travel time unknown')
-                                  : (zh ? '时间不完整，无法判断衔接' : 'Schedule timing incomplete')}</span>
-                                {item.reason === 'travel_time_missing' ? (
+                            // Only render travel_time_missing (which has navigation link); hide "时间不完整" by default
+                            if (item.type === 'unknown' && item.reason === 'travel_time_missing') {
+                              return (
+                                <div key={item.id} className="inline-flex flex-wrap items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-0.5 text-[10px] font-semibold text-amber-800">
+                                  <span>❔ {zh ? '交通时间未确认' : 'Travel time unknown'}</span>
                                   <a
                                     href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                     target="_blank"
@@ -1257,9 +1256,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                   >
                                     Google 导航 ↗
                                   </a>
-                                ) : null}
-                              </div>
-                            );
+                                </div>
+                              );
+                            }
+                            return null;
                           })}
                         </div>
                       ) : null}
