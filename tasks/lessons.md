@@ -31,3 +31,6 @@
 12. **Synchronous Render-Time State Adjustment (Avoid `set-state-in-effect`)**:
    - When a parent triggers form prefill/reset via incoming props (e.g. `initialPlaceId`), never update internal state in `useEffect` (triggers ESLint warnings and extra re-renders).
    - Track `prevInitialPlaceId` during render and adjust state synchronously before committing to DOM, adhering to idiomatic React guidelines.
+13. **Isolated Package Subprocess Tests vs Monorepo Test Matrix**:
+   - In a multi-runtime monorepo where sub-packages (e.g. `packages/mcp`) maintain isolated dependencies (`package.json`) installed in scoped CI steps, root-level `vitest run` / `npm test` in `validate:shared` runs before those scoped dependencies are installed or binaries built.
+   - Process tests targeting sub-package compiled binaries must be guarded (`describe.skipIf(!hasDeps)`), auto-build on demand when dependencies are present, and run in the package's dedicated CI verification step (`Build and validate MCP package`).

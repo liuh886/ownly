@@ -61,7 +61,7 @@ jobs:
           if [[ "$full" == true ]] || grep -Eq '^(src/(core|services|types|domain|data)/|scripts/(cli|shared)/|scripts/wyqd-cli\.ts|tests/|docs/(DATA|WEB_RUNTIME|AGENT_CLI)|.*migration)' changed-files.txt; then
             shared=true
           fi
-          if grep -Eq '^(packages/mcp/|scripts/(mcp|shared)/)' changed-files.txt; then
+          if [[ "$full" == true ]] || grep -Eq '^(packages/mcp/|scripts/(mcp|shared)/)' changed-files.txt; then
             mcp=true
           fi
           if [[ "$full" == true || "$shared" == true ]] || grep -Eq '^(src/(app|components|hooks|lib)/|public/|next\.config|postcss\.config|scripts/(gen-git-sha|validate-static-export|validate-pwa|validate-membership)\.mjs)' changed-files.txt; then
@@ -119,6 +119,7 @@ jobs:
           set -euo pipefail
           npm run build --prefix packages/mcp
           node packages/mcp/dist/index.js --help | grep -F "Ownly MCP"
+          npx vitest run scripts/mcp/ownly-mcp.process.test.ts
           (cd packages/mcp && npm pack --dry-run)
 
       - name: Web and PWA validation

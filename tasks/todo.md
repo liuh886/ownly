@@ -1,5 +1,20 @@
 # Ownly — Task Progress & Review
 
+## Completed: Fix CI Subprocess Test Failure in GitHub Pages Workflow (2026-09-05)
+- [x] **1. Root Cause Analysis**:
+  - In `.github/workflows/pages.yml`, `validate:shared` runs root `npm test` before `packages/mcp` dependencies are installed and before `packages/mcp/dist/index.js` is built.
+  - Spawning the unbuilt `packages/mcp/dist/index.js` in `scripts/mcp/ownly-mcp.process.test.ts` caused `MODULE_NOT_FOUND` in CI.
+- [x] **2. Guard Process Test & Auto-Build (`scripts/mcp/ownly-mcp.process.test.ts`)**:
+  - Added `describe.skipIf(!hasMcpDeps)` checking if `@modelcontextprotocol/server` is resolvable.
+  - Added `beforeAll` building `packages/mcp` on demand if dependencies are present but binary is not yet compiled.
+- [x] **3. Workflow & Script Alignment**:
+  - In `package.json`, restored `test:mcp` to pure adapter unit contracts and added `test:mcp:process`.
+  - In `.github/workflows/pages.yml`, ensured `full=true` triggers `mcp=true`, and integrated `npx vitest run scripts/mcp/ownly-mcp.process.test.ts` into `Build and validate MCP package` step after dependencies and binary are prepared.
+- [x] **4. Full Automated Verification**:
+  - Passed `npm run validate:fast` (0 errors, clean types & lint).
+  - Passed `npm run validate:shared` (59 suites, 544 tests passed).
+  - Passed `npm run test:mcp:process` (3/3 tests passed).
+
 ## Completed: High-Leverage Usability, Expense-to-Place Binding & Commute Clearing (2026-09-05)
 - [x] **1. Share URL Truncation Guard with Friendly Diagnostics (`src/domain/trip-share-link.ts`)**
   - Added try-catch truncation guard in `decodeTripSharePayload` detecting corrupted or cut-off base64/gzip data strings from chat/IM apps.

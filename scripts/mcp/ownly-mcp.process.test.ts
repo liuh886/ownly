@@ -1,12 +1,36 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
-const mcpEntry = join(process.cwd(), 'packages', 'mcp', 'dist', 'index.js');
+const mcpDir = join(process.cwd(), 'packages', 'mcp');
+const mcpBuildScript = join(mcpDir, 'build.mjs');
+const mcpEntry = join(mcpDir, 'dist', 'index.js');
 
-describe('Ownly MCP process contract smoke test', () => {
+const require = createRequire(import.meta.url);
+let hasMcpDeps = false;
+try {
+  require.resolve('@modelcontextprotocol/server', { paths: [mcpDir] });
+  hasMcpDeps = true;
+} catch {
+  hasMcpDeps = false;
+}
+
+describe.skipIf(!hasMcpDeps)('Ownly MCP process contract smoke test', () => {
+  beforeAll(() => {
+    if (!existsSync(mcpEntry)) {
+      const buildResult = spawnSync(process.execPath, [mcpBuildScript], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+      });
+      if (buildResult.status !== 0) {
+        throw new Error(`Failed to build MCP package before test: ${buildResult.stderr || buildResult.stdout}`);
+      }
+    }
+  });
+
   it('prints help and exits with code 0 on --help', () => {
     const result = spawnSync(process.execPath, [mcpEntry, '--help'], {
       cwd: process.cwd(),
