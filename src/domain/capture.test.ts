@@ -6,6 +6,7 @@ import {
   capturePlaceToPlannerPlace,
   findExistingPlace,
   findExistingPlaceByIdentity,
+  findExistingPlaceByResilientIdentity,
   placesShareStrongIdentity,
   reorderPlaces,
   mergePlaceResearch,
@@ -329,5 +330,38 @@ describe('placesShareStrongIdentity', () => {
       source: { provider: 'google_maps', url: 'https://maps.google.com/place/b', place_id: 'ChIJ123' },
     });
     expect(placesShareStrongIdentity(a, b)).toBe(false);
+  });
+
+  it('keeps Agoda and Google identities isolated so numeric IDs never collide', () => {
+    const agodaPlace = makePlace({
+      source: { provider: 'agoda', url: 'https://agoda.com/hotel/1.html', place_id: '1234567890' },
+    });
+    const googlePlace = makePlace({
+      source: { provider: 'google_maps', url: 'https://maps.google.com/?cid=1234567890', place_id: '0x1234567890:0xabcdef' },
+    });
+    expect(placesShareStrongIdentity(agodaPlace, googlePlace)).toBe(false);
+
+    const match = findExistingPlaceByIdentity([googlePlace], {
+      source_provider: 'agoda',
+      source_place_id: '1234567890',
+    });
+    expect(match).toBeUndefined();
+  });
+
+  it('does not auto-merge different places or branches based on same title alone', () => {
+    const branch1 = makePlace({
+      id: 'branch-1',
+      title: 'Starbucks',
+      coordinates: { lat: 13.75, lng: 100.50 },
+      source: { provider: 'google_maps', url: 'https://maps.google.com/search?q=Starbucks' },
+    });
+    const branch2Candidate = {
+      title: 'Starbucks',
+      coordinates: { lat: 13.76, lng: 100.51 },
+      source_provider: 'google_maps',
+      source_url: 'https://maps.google.com/search?q=Starbucks+2',
+    };
+    const found = findExistingPlaceByResilientIdentity([branch1], branch2Candidate);
+    expect(found).toBeUndefined();
   });
 });

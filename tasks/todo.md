@@ -1,5 +1,26 @@
 # Ownly — Task Progress & Review
 
+## Completed: Identity Namespace Isolation & Safe Quick Capture Deduplication (2026-09-05)
+- [x] **1. Provider Identity Namespace Isolation (`src/domain/place-identity.ts`)**
+  - Isolated provider namespaces (`agoda`, `booking`, `tabelog`, `xiaohongshu`, `google_travel`, `google_maps`) so native IDs (such as Agoda hotel ID `78652960`) are never misclassified into the `google_maps` namespace or treated as Google CIDs.
+  - Formulated strong identity evidence keys with native prefixes (e.g. `agoda:source_place_id:78652960`, `booking:source_place_id:...`, `tabelog:source_place_id:...`, `xiaohongshu:source_place_id:...`).
+  - Restricted `toGooglePlaceIdentity()` to only produce Google identity objects when the provider is genuine `google_maps` / `google_travel` or verified Google metadata is present.
+- [x] **2. Update All Provider Adapters to Authoritative Source Providers**
+  - Updated [`src/extension/adapters/agoda.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/adapters/agoda.ts) (`sourceProvider: 'agoda'`).
+  - Updated [`src/extension/adapters/booking.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/adapters/booking.ts) (`sourceProvider: 'booking'`).
+  - Updated [`src/extension/adapters/tabelog.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/adapters/tabelog.ts) (`sourceProvider: 'tabelog'`).
+  - Updated [`src/extension/adapters/xiaohongshu.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/adapters/xiaohongshu.ts) (`sourceProvider: 'xiaohongshu'`).
+  - Updated [`src/extension/adapters/google-travel.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/adapters/google-travel.ts) (`sourceProvider: 'google_travel'`).
+- [x] **3. Safe Quick Capture Auto-Merge (Eliminate Weak Title/Proximity Auto-Merges)**
+  - In [`src/domain/capture.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/capture.ts) and [`src/extension/background.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/background.ts), stripped weak title + proximity auto-merges during Quick Capture.
+  - Enforced strict strong-identity matching (`findExistingPlaceByIdentity`) or exact matching non-search canonical URLs to prevent accidental data overwrites when capturing different branch locations or same-name venues.
+- [x] **4. Full Automated Verification Pipeline**
+  - Added unit test cases in `src/domain/place-identity.test.ts`, `src/domain/capture.test.ts`, and `src/extension/utils.test.ts`.
+  - Passed `npm run validate:fast` (0 errors).
+  - Passed `npm run validate:extension` (172/172 tests passed).
+  - Passed `npm run validate:shared` (58/58 test suites, 536/536 tests passed).
+  - Passed `npm run build` (Next.js production build succeeded).
+
 ## Completed: Full-Codebase Documentation Modernization & Architectural Alignment (2026-09-05)
 - [x] **1. Modernize Core Architecture & Boundary Documentation**
   - Updated [`docs/PLANNER.md`](file:///D:/Documents/GitHub/Ownly/docs/PLANNER.md): aligned MV3 background message-passing single writer architecture, documented all 6 supported provider adapters (Google Maps, Google Travel, Agoda, Booking.com, Xiaohongshu, Tabelog), automatic heuristic commute estimation (`calculateDefaultTripLeg`) with transit-hub skipping, and date drag-and-drop itinerary swapping (`swapTripDays`).

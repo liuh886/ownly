@@ -59,13 +59,21 @@ export function parseBookingCard(
   const detectedCurrency = detectCurrencyFromPage(window.location.href, priceLevel, hintCurrency, overrideCurrency);
   const hotelFacts = extractHotelPropertyFacts(cardEl.textContent, cardEl);
 
+  const hotelAnchor = cardEl.querySelector<HTMLAnchorElement>('a[href*="/hotel/"], a[data-testid="title-link"], a[data-testid="property-card-desktop-primary-image-wrapper"]');
+  const hotelUrl = hotelAnchor?.href;
+  const hotelId = cardEl.getAttribute('data-hotel-id')
+    || cardEl.getAttribute('data-property-id')
+    || cardEl.getAttribute('data-id')
+    || (hotelUrl ? /hotel\/[a-z0-9-]+\/([a-z0-9-]+)/i.exec(hotelUrl)?.[1] : undefined);
+
   const cleanPlaceTitle = cleanTitleForSearch(title);
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanPlaceTitle + (address ? ' ' + address : ''))}&hl=zh-CN`;
 
   return {
     title,
-    sourceUrl: mapsUrl,
-    sourceProvider: 'google_maps',
+    sourceUrl: hotelUrl || mapsUrl,
+    sourceProvider: 'booking',
+    sourcePlaceId: hotelId,
     kind: 'stay',
     category: 'Hotel',
     rating,
@@ -176,15 +184,14 @@ export class BookingAdapter implements PageAdapter {
     const hotelFacts = extractHotelPropertyFacts(html, typeof document !== 'undefined' ? document : null);
 
     const coords = facts.coordinates || extractPlaceCoordinates(sourceUrl) || undefined;
-    const cleanPlaceTitle = cleanTitleForSearch(title);
-    const mapsUrl = coords
-      ? `https://www.google.com/maps/place/${encodeURIComponent(cleanPlaceTitle)}/@${coords.lat},${coords.lng},17z?hl=zh-CN`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanPlaceTitle + (address ? ' ' + address : ''))}&hl=zh-CN`;
+    const hotelId = document.querySelector('[data-hotel-id]')?.getAttribute('data-hotel-id')
+      || (/hotel\/[a-z0-9-]+\/([a-z0-9-]+)/i.exec(sourceUrl)?.[1]);
 
     return {
       title,
-      sourceUrl: mapsUrl,
-      sourceProvider: 'google_maps',
+      sourceUrl,
+      sourceProvider: 'booking',
+      sourcePlaceId: hotelId,
       kind: 'stay',
       category: 'Hotel',
       rating,

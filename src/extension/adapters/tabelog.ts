@@ -35,12 +35,17 @@ export function extractTabelogPlace(overrideCurrency?: string, hintCurrency?: st
   const addrEl = document.querySelector<HTMLElement>('p.rstinfo-table__address, p.rdhead-subinfo__address');
   const address = addrEl?.textContent?.trim();
 
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title + (address ? ' ' + address : ''))}&hl=zh-CN`;
+  const rstId = /(\d{7,8})\/?/i.exec(sourceUrl)?.[1]
+    || document.querySelector('[data-rst-id]')?.getAttribute('data-rst-id');
+
+  const cleanPlaceTitle = cleanTitleForSearch(title);
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanPlaceTitle + (address ? ' ' + address : ''))}&hl=zh-CN`;
 
   return {
     title,
-    sourceUrl: mapsUrl,
-    sourceProvider: 'google_maps',
+    sourceUrl: sourceUrl || mapsUrl,
+    sourceProvider: 'tabelog',
+    sourcePlaceId: rstId || undefined,
     kind: 'food',
     rating: Number.isFinite(rating) && rating ? rating : undefined,
     category: `Tabelog: ${category}`,
@@ -58,6 +63,11 @@ export function parseTabelogCard(cardEl: HTMLElement, overrideCurrency?: string)
   const title = cleanTitleForSearch(cleanExtractedText(rawTitle));
   if (!title || isFakePlaceLabel(title) || isJunkNavigationText(title)) return null;
 
+  const cardAnchor = cardEl.querySelector<HTMLAnchorElement>('.list-rst__rst-name-target, a.list-rst__name');
+  const rstUrl = cardAnchor?.href;
+  const rstId = cardEl.getAttribute('data-rst-id')
+    || (rstUrl ? /(\d{7,8})\/?/i.exec(rstUrl)?.[1] : undefined);
+
   const ratingEl = cardEl.querySelector<HTMLElement>('.c-rating__val, .list-rst__rating-val');
   const ratingText = ratingEl?.textContent?.trim();
   const rating = ratingText ? parseFloat(ratingText) : undefined;
@@ -69,12 +79,14 @@ export function parseTabelogCard(cardEl: HTMLElement, overrideCurrency?: string)
   const rawPrice = priceEl?.textContent?.trim();
   const priceLevel = rawPrice && isPlausiblePriceText(rawPrice) ? rawPrice : undefined;
 
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}&hl=zh-CN`;
+  const cleanPlaceTitle = cleanTitleForSearch(title);
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanPlaceTitle)}&hl=zh-CN`;
 
   return {
     title,
-    sourceUrl: mapsUrl,
-    sourceProvider: 'google_maps',
+    sourceUrl: rstUrl || mapsUrl,
+    sourceProvider: 'tabelog',
+    sourcePlaceId: rstId,
     kind: 'food',
     rating: Number.isFinite(rating) && rating ? rating : undefined,
     category: `Tabelog: ${category}`,

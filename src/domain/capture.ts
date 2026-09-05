@@ -439,10 +439,6 @@ export function findExistingPlaceByIdentity(
   return undefined;
 }
 
-/**
- * Resilient duplicate check for B (query pin, no 0x) vs A (detail 0x) — e.g. Oakwood search vs Oakwood detail.
- * Uses weak keys (canonical_url / coord+name / name) when strong fails, plus title+coord proximity fallback.
- */
 export function findExistingPlaceByResilientIdentity(
   places: CapturePlace[],
   candidate: { source_provider?: string; source_place_id?: string; source_url?: string; title?: string; coordinates?: { lat: number; lng: number } | null },
@@ -450,31 +446,15 @@ export function findExistingPlaceByResilientIdentity(
   const strong = findExistingPlaceByIdentity(places, candidate);
   if (strong) return strong;
   const candLike = candidateToIdentityLike(candidate);
-  const probeResilient = new Set(PlaceIdentityService.getResilientKeys(candLike));
-  if (probeResilient.size > 0) {
-    const found = places.find((p) => {
-      const keys = new Set(PlaceIdentityService.getResilientKeys(captureToIdentityLike(p)));
-      for (const k of probeResilient) if (keys.has(k)) return true;
-      return false;
+  const normUrl = PlaceIdentityService.normalizeUrl(candLike.source_url);
+  if (normUrl && !normUrl.includes('/search')) {
+    const match = places.find((p) => {
+      const pNormUrl = PlaceIdentityService.normalizeUrl(p.source.url);
+      return pNormUrl === normUrl;
     });
-    if (found) return found;
+    if (match) return match;
   }
-  // Fallback: same provider + normalized title exact match + coordinates within 100m or one missing
-  // Handles B (name only) vs A (name+coord) like Oakwood search vs detail
-  const candTitle = PlaceIdentityService.normalizeTitle(candLike.title);
-  if (!candTitle) return undefined;
-  const candProvider = (candLike.source_provider || 'google_maps').toLowerCase();
-  return places.find((p) => {
-    const pLike = captureToIdentityLike(p);
-    if ((pLike.source_provider || 'google_maps').toLowerCase() !== candProvider) return false;
-    const pTitle = PlaceIdentityService.normalizeTitle(pLike.title);
-    if (pTitle !== candTitle) return false;
-    const aCoord = candLike.coordinates;
-    const bCoord = pLike.coordinates;
-    if (!aCoord || !bCoord) return true; // one missing, title match is enough for same provider
-    const distKm = Math.hypot(aCoord.lat - bCoord.lat, aCoord.lng - bCoord.lng) * 111; // approx
-    return distKm < 0.2; // 200m
-  });
+  return undefined;
 }
 
 /**

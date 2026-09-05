@@ -34,12 +34,21 @@ export function toGooglePlaceIdentity(place: PlaceIdentityLike): GooglePlaceIden
   if (place.googlePlaceIdentity && (place.googlePlaceIdentity.featureId || place.googlePlaceIdentity.placeId || place.googlePlaceIdentity.cid)) {
     return normalizeGooglePlaceIdentity(place.googlePlaceIdentity);
   }
+  const provider = inferProvider(place);
+  const isGoogle = provider === 'google_maps' || provider === 'google_travel';
+  const url = place.source_url?.trim();
+  const urlIsGoogle = Boolean(url && /google\.[a-z.]+\/(maps|travel)/i.test(url));
+
+  // Do not manufacture Google identity from other providers unless the URL is explicitly a Google URL
+  if (!isGoogle && !urlIsGoogle) {
+    return {};
+  }
+
   const raw = place.source_place_id?.trim();
   const base: GooglePlaceIdentity = {};
   if (raw) Object.assign(base, classifyRawPlaceId(raw));
   // Derive from URL as fallback
-  const url = place.source_url?.trim();
-  if (url) {
+  if (url && urlIsGoogle) {
     try {
       const u = new URL(url);
       const cid = u.searchParams.get('cid');
@@ -114,6 +123,11 @@ function inferProvider(place: PlaceIdentityLike): string {
   if (explicit) return explicit;
   const url = place.source_url || '';
   if (/google\.[a-z.]+\/maps|maps\.google\./i.test(url)) return 'google_maps';
+  if (/google\.[a-z.]+\/travel/i.test(url)) return 'google_travel';
+  if (/agoda\.com/i.test(url)) return 'agoda';
+  if (/booking\.com/i.test(url)) return 'booking';
+  if (/tabelog\.com/i.test(url)) return 'tabelog';
+  if (/xiaohongshu\.com|xhslink\.com/i.test(url)) return 'xiaohongshu';
   return 'other';
 }
 
@@ -149,6 +163,7 @@ export function getStrongPlaceIdentityEvidence(place: PlaceIdentityLike): Strong
   const result: StrongPlaceIdentityEvidence[] = [];
   const sourceId = place.source_place_id?.trim();
 
+  // Native provider ID is always recorded under its native provider namespace
   if (sourceId) {
     pushEvidence(result, provider, 'source_place_id', sourceId);
     if (provider === 'google_maps') {
@@ -159,23 +174,34 @@ export function getStrongPlaceIdentityEvidence(place: PlaceIdentityLike): Strong
     }
   }
 
+  // Explicit verified GooglePlaceIdentity (if resolved or attached)
+  if (place.googlePlaceIdentity) {
+    if (place.googlePlaceIdentity.cid) pushEvidence(result, 'google_maps', 'google_cid', place.googlePlaceIdentity.cid);
+    if (place.googlePlaceIdentity.placeId) pushEvidence(result, 'google_maps', 'google_place_id', place.googlePlaceIdentity.placeId);
+    if (place.googlePlaceIdentity.featureId) {
+      pushEvidence(result, 'google_maps', 'source_place_id', place.googlePlaceIdentity.featureId);
+      const cid = cidFromHexFeatureId(place.googlePlaceIdentity.featureId);
+      if (cid) pushEvidence(result, 'google_maps', 'google_cid', cid);
+    }
+  }
+
   const rawUrl = place.source_url?.trim();
-  if (rawUrl && provider === 'google_maps') {
+  if (rawUrl && (provider === 'google_maps' || /google\.[a-z.]+\/(maps|travel)/i.test(rawUrl))) {
     try {
       const url = new URL(rawUrl);
       const cid = url.searchParams.get('cid');
-      if (cid && /^\d+$/.test(cid)) pushEvidence(result, provider, 'google_cid', cid);
+      if (cid && /^\d+$/.test(cid)) pushEvidence(result, 'google_maps', 'google_cid', cid);
       const queryPlaceId = url.searchParams.get('query_place_id');
-      if (queryPlaceId) pushEvidence(result, provider, 'google_place_id', queryPlaceId);
+      if (queryPlaceId) pushEvidence(result, 'google_maps', 'google_place_id', queryPlaceId);
     } catch {
       // Non-URL strings do not become identity evidence.
     }
 
     const featureId = /0x[0-9a-f]+:0x[0-9a-f]+/i.exec(rawUrl)?.[0];
     if (featureId) {
-      pushEvidence(result, provider, 'source_place_id', featureId);
+      pushEvidence(result, 'google_maps', 'source_place_id', featureId);
       const cid = cidFromHexFeatureId(featureId);
-      if (cid) pushEvidence(result, provider, 'google_cid', cid);
+      if (cid) pushEvidence(result, 'google_maps', 'google_cid', cid);
     }
   }
 

@@ -124,13 +124,14 @@ export function parseGoogleTravelCard(
   const detectedCurrency = detectCurrencyFromPage(window.location.href, priceLevel, hintCurrency, overrideCurrency);
   const hotelFacts = extractHotelPropertyFacts(cardEl.textContent, cardEl);
 
+  const entityUrl = findGoogleTravelHotelEntityUrl(cardEl);
   const cleanPlaceTitle = cleanTitleForSearch(title);
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanPlaceTitle + (address ? ' ' + address : ''))}&hl=zh-CN`;
 
   return {
     title,
-    sourceUrl: mapsUrl,
-    sourceProvider: 'google_maps',
+    sourceUrl: entityUrl || mapsUrl,
+    sourceProvider: 'google_travel',
     kind: 'stay',
     category: 'Hotel',
     rating,

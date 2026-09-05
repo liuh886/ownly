@@ -146,13 +146,14 @@ export function parseAgodaCard(
     || cardEl.getAttribute('data-id')
     || undefined;
 
+  const hotelUrl = findAgodaHotelUrl(cardEl);
   const cleanPlaceTitle = cleanTitleForSearch(title);
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanPlaceTitle + (address ? ' ' + address : ''))}&hl=zh-CN`;
 
   return {
     title,
-    sourceUrl: mapsUrl,
-    sourceProvider: 'google_maps',
+    sourceUrl: hotelUrl || mapsUrl,
+    sourceProvider: 'agoda',
     kind: 'stay',
     category: 'Hotel',
     rating,
@@ -210,8 +211,8 @@ export async function resolveAgodaHotelToMapsPlace(
 
     return {
       title,
-      sourceUrl: mapsUrl,
-      sourceProvider: 'google_maps',
+      sourceUrl: hotelUrl || mapsUrl,
+      sourceProvider: 'agoda',
       kind: 'stay',
       category: facts.category && facts.category !== 'Agoda 住宿' ? facts.category : (fallbackCardPlace.category || 'Hotel'),
       rating: facts.rating ?? fallbackCardPlace.rating,

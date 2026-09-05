@@ -26,14 +26,14 @@ export function extractXiaohongshuPlace(overrideCurrency?: string, hintCurrency?
   const summary = descEl?.textContent?.trim().slice(0, 200) || `来自小红书笔记「${noteTitle}」`;
 
   const address = locationTag && locationTag !== title ? locationTag : undefined;
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title + (address ? ' ' + address : ''))}&hl=zh-CN`;
-
+  const noteId = /(?:explore|discovery\/item)\/([a-zA-Z0-9_-]+)/.exec(sourceUrl)?.[1];
   const kind = inferPlaceKind([title, locationTag, summary].filter(Boolean).join(' '));
 
   return {
     title,
-    sourceUrl: mapsUrl,
-    sourceProvider: 'google_maps',
+    sourceUrl,
+    sourceProvider: 'xiaohongshu',
+    sourcePlaceId: noteId,
     kind,
     category: '小红书灵感',
     detectedCurrency: detectCurrencyFromPage(sourceUrl, undefined, hintCurrency, overrideCurrency) ?? 'CNY',
@@ -45,6 +45,7 @@ export function extractXiaohongshuPlace(overrideCurrency?: string, hintCurrency?
 
 export function detectXiaohongshuNoteList(): DetectedSavedList | null {
   const noteTitle = extractXiaohongshuPlace()?.title || document.title.replace(/ - 小红书$/, '');
+  const noteId = /(?:explore|discovery\/item)\/([a-zA-Z0-9_-]+)/.exec(window.location.href)?.[1];
   const found = new Map<string, CurrentResearchPlace>();
 
   const pushPlace = (rawTitle: string) => {
@@ -54,13 +55,13 @@ export function detectXiaohongshuNoteList(): DetectedSavedList | null {
     const key = title.toLowerCase();
     if (found.has(key)) return;
 
-    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}&hl=zh-CN`;
     const kind = inferPlaceKind(title);
 
     found.set(key, {
       title,
-      sourceUrl: mapsUrl,
-      sourceProvider: 'google_maps',
+      sourceUrl: window.location.href,
+      sourceProvider: 'xiaohongshu',
+      sourcePlaceId: noteId ? `${noteId}-${key}` : undefined,
       kind,
       category: '小红书笔记地点',
       summary: `来自笔记「${noteTitle}」`,

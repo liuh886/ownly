@@ -555,7 +555,7 @@ describe('Agoda Adapter & Card Parser', () => {
     const place = parseAgodaCard(cardEl);
     expect(place).not.toBeNull();
     expect(place?.title).toBe('Cross Pattaya Pratamnak');
-    expect(place?.sourceProvider).toBe('google_maps');
+    expect(place?.sourceProvider).toBe('agoda');
     expect(place?.kind).toBe('stay');
     expect(place?.category).toBe('Hotel');
     expect(place?.rating).toBe(4.4); // 8.8 / 2 = 4.4
@@ -563,7 +563,7 @@ describe('Agoda Adapter & Card Parser', () => {
     expect(place?.address).toBe('帕塔亚普拉塔纳克山, 芭堤雅');
     expect(place?.priceLevel).toBe('HK$ 680');
     expect(place?.sourcePlaceId).toBe('786529');
-    expect(place?.sourceUrl).toContain('Cross%20Pattaya%20Pratamnak');
+    expect(place?.sourceUrl).toContain('cross-pattaya-pratamnak');
   });
 
   it('extracts hotel URL from card with data-hotel-id or anchor link', () => {

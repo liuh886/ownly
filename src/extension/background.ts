@@ -6,7 +6,6 @@ import {
 } from '../domain/planner';
 import {
   findExistingPlaceByIdentity,
-  findExistingPlaceByResilientIdentity,
   type CaptureCollection,
   type CapturePlace,
   type OwnlyCaptureStateV3,
@@ -135,12 +134,13 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
       if (idx === -1) return { state: currentState, result: false };
 
       const existingPlace = currentState.places[idx];
+      const isResolvedGoogle = Boolean(enriched.source_place_id || (enriched.source_url && /google\.[a-z.]+\/maps\/place/i.test(enriched.source_url)));
       const updatedPlace: CapturePlace = {
         ...existingPlace,
         title: existingPlace.title,
         source: {
           ...existingPlace.source,
-          provider: 'google_maps',
+          provider: isResolvedGoogle ? 'google_maps' : existingPlace.source.provider,
           url: enriched.source_url || existingPlace.source.url,
           place_id: enriched.source_place_id || existingPlace.source.place_id,
           category: enriched.source_category || existingPlace.source.category,
@@ -206,18 +206,20 @@ async function savePlaceIntoInboxDirectly(
     const capturedId = await mutateCaptureStateV3InWorker((state) => {
       const collection = getDefaultCollection(state);
       const collectionPlaces = state.places.filter((p) => p.collection_id === collection.id);
-      const existing = findExistingPlaceByResilientIdentity(collectionPlaces, {
+      const existing = findExistingPlaceByIdentity(collectionPlaces, {
         source_provider: place.sourceProvider,
         source_place_id: place.sourcePlaceId,
         source_url: place.sourceUrl,
         title: place.title,
         coordinates: place.coordinates ?? null,
-      }) ?? findExistingPlaceByIdentity(collectionPlaces, {
-        source_provider: place.sourceProvider,
-        source_place_id: place.sourcePlaceId,
-        source_url: place.sourceUrl,
-      }) ?? collectionPlaces.find(
-        (p) => p.source.url === place.sourceUrl || (p.source.place_id && p.source.place_id === place.sourcePlaceId),
+      }) ?? (
+        place.sourceUrl && !place.sourceUrl.includes('/search')
+          ? collectionPlaces.find((p) => p.source.url === place.sourceUrl)
+          : undefined
+      ) ?? (
+        place.sourcePlaceId && place.sourceProvider
+          ? collectionPlaces.find((p) => p.source.provider === place.sourceProvider && p.source.place_id === place.sourcePlaceId)
+          : undefined
       );
 
       if (existing) {
