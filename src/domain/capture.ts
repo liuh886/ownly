@@ -439,22 +439,45 @@ export function findExistingPlaceByIdentity(
   return undefined;
 }
 
-export function findExistingPlaceByResilientIdentity(
+/**
+ * Find potential duplicate places based on strong identity, canonical URL, or weak evidence (e.g. title similarity).
+ *
+ * NOTE: This function is for UI duplicate suggestions / warning prompts ONLY
+ * and MUST NOT be used for automatic merge without explicit user confirmation.
+ */
+export function findPotentialDuplicatePlaces(
   places: CapturePlace[],
   candidate: { source_provider?: string; source_place_id?: string; source_url?: string; title?: string; coordinates?: { lat: number; lng: number } | null },
-): CapturePlace | undefined {
+): CapturePlace[] {
+  const matches: CapturePlace[] = [];
   const strong = findExistingPlaceByIdentity(places, candidate);
-  if (strong) return strong;
+  if (strong) {
+    matches.push(strong);
+  }
+
   const candLike = candidateToIdentityLike(candidate);
   const normUrl = PlaceIdentityService.normalizeUrl(candLike.source_url);
   if (normUrl && !normUrl.includes('/search')) {
-    const match = places.find((p) => {
+    for (const p of places) {
+      if (matches.includes(p)) continue;
       const pNormUrl = PlaceIdentityService.normalizeUrl(p.source.url);
-      return pNormUrl === normUrl;
-    });
-    if (match) return match;
+      if (pNormUrl === normUrl) {
+        matches.push(p);
+      }
+    }
   }
-  return undefined;
+
+  if (candidate.title && candidate.title.trim().length >= 2) {
+    const normTitle = candidate.title.trim().toLowerCase();
+    for (const p of places) {
+      if (matches.includes(p)) continue;
+      if (p.title.trim().toLowerCase() === normTitle) {
+        matches.push(p);
+      }
+    }
+  }
+
+  return matches;
 }
 
 /**

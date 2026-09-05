@@ -287,4 +287,24 @@ describe('evaluatePlannerDay canonical assessment', () => {
     expect(assessment.status).toBe('unknown');
     expect(assessment.missing_facts.some((f) => f.reason === 'travel_time_missing')).toBe(true);
   });
+
+  it('skips road travel calculation on timeline between two transit hubs (intercity ticketed)', () => {
+    const bkkAirport = place('bkk-airport', { title: 'Suvarnabhumi Airport (BKK)', kind: 'transit', duration_minutes: 120 });
+    const cnxAirport = place('cnx-airport', { title: 'Chiang Mai International Airport (CNX)', kind: 'transit', duration_minutes: 60 });
+    const places = [bkkAirport, cnxAirport];
+    const visits = [
+      visit('v:bkk', 'bkk-airport', { start: '08:00', duration_minutes: 120, sort_order: 0 }),
+      visit('v:cnx', 'cnx-airport', { start: '12:00', duration_minutes: 60, sort_order: 1 }),
+    ];
+
+    const timeline = buildPlannerDayExecutionTimeline(trip, scheduled(places, visits), [], '2026-10-05');
+    // Only two stop items, no road travel items or travel_time_missing unknown items
+    expect(timeline.items).toHaveLength(2);
+    expect(timeline.items[0].type).toBe('stop');
+    expect(timeline.items[1].type).toBe('stop');
+
+    const assessment = evaluatePlannerDay(trip, scheduled(places, visits), [], '2026-10-05');
+    expect(assessment.missing_facts.some((f) => f.reason === 'travel_time_missing')).toBe(false);
+  });
 });
+

@@ -1,5 +1,6 @@
 import {
   checkOpeningHoursCollision,
+  isTransitHubPlace,
   listTripDates,
   type PlannerTrip,
   type PlannerTripLeg,
@@ -286,6 +287,38 @@ export function evaluatePlannerDayFeasibility(
     const to = dayPlaces[index + 1];
     const leg = legByPair.get(transitionKey(from.place_id, to.place_id));
     if (!leg) {
+      if (isTransitHubPlace(from) && isTransitHubPlace(to)) {
+        // Intercity transit-to-transit: timing depends on ticket/schedule, omit local commute requirement
+        const departureTime = getScheduledEndTime(from.scheduled_start, from.duration_minutes);
+        const departureMinutes = plannerClockToMinutes(departureTime);
+        const nextStartMinutes = plannerClockToMinutes(to.scheduled_start);
+        if (departureMinutes !== null && nextStartMinutes !== null) {
+          const slack = nextStartMinutes - departureMinutes;
+          transitions.push({
+            from_id: from.id,
+            to_id: to.id,
+            from_title: from.title,
+            to_title: to.title,
+            status: slack < 0 ? 'conflict' : 'ok',
+            departure_time: departureTime ?? undefined,
+            earliest_arrival: formatClockWithinDay(departureMinutes),
+            next_start: to.scheduled_start,
+            slack_minutes: slack,
+            late_by_minutes: slack < 0 ? Math.abs(slack) : undefined,
+          });
+        } else {
+          transitions.push({
+            from_id: from.id,
+            to_id: to.id,
+            from_title: from.title,
+            to_title: to.title,
+            status: 'ok',
+            departure_time: departureTime ?? undefined,
+            next_start: to.scheduled_start,
+          });
+        }
+        continue;
+      }
       transitions.push({
         from_id: from.id,
         to_id: to.id,
@@ -376,6 +409,10 @@ export function buildPlannerDayExecutionTimeline(
 
     const next = dayPlaces[index + 1];
     if (!next) continue;
+    if (isTransitHubPlace(place) && isTransitHubPlace(next) && !transitionByPair.get(transitionKey(place.id, next.id))?.leg) {
+      // Intercity transit-to-transit: do not calculate road travel time, leave empty (ticket-based)
+      continue;
+    }
     const transition = transitionByPair.get(transitionKey(place.id, next.id));
     if (!transition) {
       items.push({

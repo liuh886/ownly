@@ -1,5 +1,34 @@
 # Ownly — Task Progress & Review
 
+## Completed: Final Identity Alignment, Documentation Terminology, Timeline Transit Omission & MCP Smoke Gate (2026-09-05)
+- [x] **1. Unify Identity Naming (`findPotentialDuplicatePlaces`)**
+  - Renamed `findExistingPlaceByResilientIdentity` to `findPotentialDuplicatePlaces` in [`src/domain/capture.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/capture.ts).
+  - Explicitly constrained `findPotentialDuplicatePlaces` to UI duplicate suggestions and warning prompts only, completely excluding it from automatic merge.
+  - Updated unit tests in [`src/domain/capture.test.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/capture.test.ts).
+- [x] **2. Documentation Terminology Alignment**
+  - Replaced outdated `resilient deduplication` references in [`docs/CAPTURE_SYNC_BOUNDARY.md`](file:///D:/Documents/GitHub/Ownly/docs/CAPTURE_SYNC_BOUNDARY.md) and [`docs/PLANNER.md`](file:///D:/Documents/GitHub/Ownly/docs/PLANNER.md) with precise architecture terms:
+    - **`provider-native identity based merge`** (automatic merge strictly limited to strong provider-native keys or Google Place ID/CID and exact canonical URLs).
+    - **`weak evidence based duplicate suggestion`** (weak signals like title similarity, geographic proximity, and query URLs used only for user review prompts).
+- [x] **3. Execution Timeline Transit Hub Leg Omission (`src/domain/planner-schedule.ts` & `planner.ts`)**
+  - Enhanced `isTransitHubPlace` to recognize `transit`/`transition` kinds, airports, stations, and passenger terminals.
+  - In `evaluatePlannerDayFeasibility` and `buildPlannerDayExecutionTimeline`, omitted road travel time calculation and missing travel time errors between consecutive transit hubs (times are ticket-based and remain unconstrained).
+  - Added test case in `src/domain/planner-schedule.test.ts`.
+- [x] **4. MCP Process Contract Smoke Test (`scripts/mcp/ownly-mcp.process.test.ts`)**
+  - Added subprocess execution tests verifying MCP binary entry (`packages/mcp/dist/index.js`), `--help` exit code 0, missing `--data-dir` exit code 1 (`DATA_DIR_NOT_CONFIGURED`), and valid data directory stdio initialization.
+  - Integrated into `"test:mcp"` in [`package.json`](file:///D:/Documents/GitHub/Ownly/package.json).
+- [x] **5. Architecture Governance & Explicit Deferrals (`tasks/lessons.md`)**
+  - Explicitly rejected/deferred 3 complex, low-ROI tasks:
+    1. Reintroducing heavy `src/domain/migrations/` multi-version framework (schemas stay lightweight at `0.1`).
+    2. Turning `Trip.members: string[]` into relational `TripMember` graph entities.
+    3. Writing 40+ DOM-mocking React component Vitest render tests (data contracts and Playwright E2E are superior).
+
+## Completed: Project Progress, Completion Assessment & Pragmatic Code Quality Check (2026-09-05)
+- [x] 1. Run all automated quality gates (validate:fast, validate:extension, validate:shared, validate:obsidian, build)
+- [x] 2. Deep-dive code quality inspection (ESLint, TS errors, error boundaries, async handling, architectural consistency)
+- [x] 3. Evaluate development progress & module completion across the 5 runtimes (Web/PWA, Obsidian, Extension, MCP, CLI)
+- [x] 4. Formulate pragmatic, high-ROI recommendations & fix solutions avoiding unnecessary complexity
+- [x] 5. Present structured report and aligned action roadmap
+
 ## Completed: Identity Namespace Isolation & Safe Quick Capture Deduplication (2026-09-05)
 - [x] **1. Provider Identity Namespace Isolation (`src/domain/place-identity.ts`)**
   - Isolated provider namespaces (`agoda`, `booking`, `tabelog`, `xiaohongshu`, `google_travel`, `google_maps`) so native IDs (such as Agoda hotel ID `78652960`) are never misclassified into the `google_maps` namespace or treated as Google CIDs.

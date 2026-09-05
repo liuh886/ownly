@@ -195,10 +195,10 @@ export const PLANNER_TRAVEL_MODE_CONFIG: Record<
   transit: { emoji: '🚇', labelZh: '公共交通', labelEn: 'Transit', defaultDuration: 20 },
 };
 
-export function isTransitHubPlace(place: { kind?: PlannerPlaceKind; title?: string }): boolean {
-  if (place.kind === 'transit') return true;
+export function isTransitHubPlace(place: { kind?: PlannerPlaceKind | string; title?: string }): boolean {
+  if (place.kind === 'transit' || place.kind === 'transition') return true;
   const title = (place.title ?? '').toLowerCase();
-  return /(airport|机场|空港|flughafen|aeropuerto|火车站|高铁站|railway|train station|bahnhof|gare)/i.test(title);
+  return /(airport|机场|空港|flughafen|aeropuerto|火车站|高铁站|railway|train station|bahnhof|gare|码头|ferry|port|客运站)/i.test(title);
 }
 
 export function estimateCommuteDurationMinutes(

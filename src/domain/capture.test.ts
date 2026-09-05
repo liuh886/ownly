@@ -6,7 +6,7 @@ import {
   capturePlaceToPlannerPlace,
   findExistingPlace,
   findExistingPlaceByIdentity,
-  findExistingPlaceByResilientIdentity,
+  findPotentialDuplicatePlaces,
   placesShareStrongIdentity,
   reorderPlaces,
   mergePlaceResearch,
@@ -348,7 +348,7 @@ describe('placesShareStrongIdentity', () => {
     expect(match).toBeUndefined();
   });
 
-  it('does not auto-merge different places or branches based on same title alone', () => {
+  it('does not auto-merge different places or branches based on same title alone, but flags for suggestion', () => {
     const branch1 = makePlace({
       id: 'branch-1',
       title: 'Starbucks',
@@ -361,7 +361,13 @@ describe('placesShareStrongIdentity', () => {
       source_provider: 'google_maps',
       source_url: 'https://maps.google.com/search?q=Starbucks+2',
     };
-    const found = findExistingPlaceByResilientIdentity([branch1], branch2Candidate);
-    expect(found).toBeUndefined();
+    // 1. Strict identity auto-merge returns undefined (no accidental merge)
+    const autoMerge = findExistingPlaceByIdentity([branch1], branch2Candidate);
+    expect(autoMerge).toBeUndefined();
+
+    // 2. Weak evidence duplicate suggestion flags it for user review only
+    const suggestions = findPotentialDuplicatePlaces([branch1], branch2Candidate);
+    expect(suggestions.length).toBe(1);
+    expect(suggestions[0].id).toBe('branch-1');
   });
 });
