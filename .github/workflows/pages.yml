@@ -58,7 +58,7 @@ jobs:
           if grep -Eq '^(package(-lock)?\.json|tsconfig.*\.json|eslint\.config\.|\.github/workflows/pages\.yml)' changed-files.txt; then
             full=true
           fi
-          if [[ "$full" == true ]] || grep -Eq '^(src/(core|services|types|domain)/|scripts/(cli|shared)/|scripts/wyqd-cli\.ts|tests/|docs/(DATA|WEB_RUNTIME|AGENT_CLI)|.*migration)' changed-files.txt; then
+          if [[ "$full" == true ]] || grep -Eq '^(src/(core|services|types|domain|data)/|scripts/(cli|shared)/|scripts/wyqd-cli\.ts|tests/|docs/(DATA|WEB_RUNTIME|AGENT_CLI)|.*migration)' changed-files.txt; then
             shared=true
           fi
           if grep -Eq '^(packages/mcp/|scripts/(mcp|shared)/)' changed-files.txt; then

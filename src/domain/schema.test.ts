@@ -207,4 +207,125 @@ describe('schema validation', () => {
       ])
     );
   });
+
+  it('validates a valid planner trip', () => {
+    const trip = {
+      ...baseEntity,
+      type: 'trip',
+      status: 'planning',
+      start_date: '2026-10-01',
+      end_date: '2026-10-10',
+      destinations: ['Bangkok', 'Pattaya'],
+    };
+    const result = validateEntity(trip);
+    expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(0);
+  });
+
+  it('rejects planner trip with end_date before start_date', () => {
+    const trip = {
+      ...baseEntity,
+      type: 'trip',
+      status: 'planning',
+      start_date: '2026-10-10',
+      end_date: '2026-10-01',
+      destinations: ['Bangkok'],
+    };
+    const result = validateEntity(trip);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.field === 'end_date')).toBe(true);
+  });
+
+  it('validates a valid planner trip place', () => {
+    const place = {
+      ...baseEntity,
+      type: 'trip_place',
+      trip_id: 'trip-1',
+      kind: 'food',
+      source_provider: 'google_maps',
+      source_url: 'https://maps.google.com/?cid=123',
+      state: 'candidate',
+      tags: ['food'],
+    };
+    const result = validateEntity(place);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects planner trip place with missing trip_id', () => {
+    const place = {
+      ...baseEntity,
+      type: 'trip_place',
+      kind: 'food',
+      source_provider: 'google_maps',
+      source_url: 'https://maps.google.com/?cid=123',
+    };
+    const result = validateEntity(place);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.field === 'trip_id')).toBe(true);
+  });
+
+  it('validates a valid planner trip visit', () => {
+    const visit = {
+      id: 'visit-1',
+      schema_version: '0.1',
+      type: 'trip_visit',
+      trip_id: 'trip-1',
+      place_id: 'place-1',
+      date: '2026-10-02',
+      sort_order: 0,
+      duration_minutes: 60,
+      created_at: '2026-09-01T00:00:00Z',
+    };
+    const result = validateEntity(visit);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects planner trip visit with negative sort_order or invalid date', () => {
+    const visit = {
+      id: 'visit-1',
+      schema_version: '0.1',
+      type: 'trip_visit',
+      trip_id: 'trip-1',
+      place_id: 'place-1',
+      date: 'invalid-date',
+      sort_order: -1,
+      created_at: '2026-09-01T00:00:00Z',
+    };
+    const result = validateEntity(visit);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.field === 'date')).toBe(true);
+    expect(result.issues.some((i) => i.field === 'sort_order')).toBe(true);
+  });
+
+  it('validates a valid planner trip leg', () => {
+    const leg = {
+      id: 'leg-1',
+      schema_version: '0.1',
+      type: 'trip_leg',
+      trip_id: 'trip-1',
+      from_place_id: 'place-1',
+      to_place_id: 'place-2',
+      travel_mode: 'driving',
+      duration_minutes: 15,
+      created_at: '2026-09-01T00:00:00Z',
+    };
+    const result = validateEntity(leg);
+    expect(result.valid).toBe(true);
+  });
+
+  it('validates a valid planner trip expense', () => {
+    const expense = {
+      id: 'exp-1',
+      schema_version: '0.1',
+      type: 'trip_expense',
+      trip_id: 'trip-1',
+      amount: 1500,
+      currency: 'THB',
+      category: 'food',
+      paid_by: 'Alice',
+      created_at: '2026-09-01T00:00:00Z',
+    };
+    const result = validateEntity(expense);
+    expect(result.valid).toBe(true);
+  });
 });

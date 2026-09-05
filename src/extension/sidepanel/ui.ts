@@ -220,7 +220,7 @@ export function updateDebugLogViewer() {
   const displayLogs = logs.slice(-300);
   const formatted = displayLogs.map((e) => logger.formatEntryText(e)).join('\n');
 
-  const report = store.state.lastImportReport;
+  const report = store.lastImportReport;
   const importDebug = report
     ? [
         'Capture Import Debug',
@@ -1058,10 +1058,10 @@ function buildCandidateDetails(
     mainParts.push(`<span>★ ${place.observed_rating}</span>`);
   }
   if (place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price)) {
-    const activeTrip = store.state.activeContext;
+    const activeCollection = store.getActiveCollection();
     const sourceCurrency = place.price_currency || store.mapCurrencyOverride || store.pageDetectedCurrency;
-    const converted = activeTrip?.currency
-      ? convertPriceRange(place.observed_price, activeTrip.currency, undefined, sourceCurrency)
+    const converted = activeCollection?.currency
+      ? convertPriceRange(place.observed_price, activeCollection.currency, undefined, sourceCurrency)
       : null;
     if (converted && converted.sourceCurrency !== converted.targetCurrency && converted.convertedMin > 0) {
       mainParts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);

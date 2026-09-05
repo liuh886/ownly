@@ -28,8 +28,11 @@ import {
 } from '@/domain/calendar-feed';
 import type { PlannerTripCalendarFeed } from '@/domain/planner';
 import { validatePlannerTiming } from '@/domain/planner-schedule';
-import { migrateEntity } from '@/domain/migrations';
+import { validateEntity } from '@/domain/schema';
+import { CURRENT_SCHEMA_VERSION } from '@/domain/schema/common';
 import { obsidianService } from './ObsidianFileSystemService';
+
+export { CURRENT_SCHEMA_VERSION };
 
 export interface PlannerFileStore {
   getDataFolder(): Promise<string>;
@@ -78,11 +81,10 @@ export interface ImportTraceEntry {
 
 function safeEntityId(id: string): string {
   const trimmed = id.trim();
-  const safe = trimmed.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
-  const hasNonAscii = /[^\x00-\x7F]/.test(trimmed);
-  if (!safe || hasNonAscii) {
+  const safe = trimmed.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'entity';
+  if (trimmed !== safe) {
     const hashStr = stablePlannerHash(trimmed);
-    return safe ? `${safe.slice(0, 30)}-${hashStr}` : `entity-${hashStr}`;
+    return `${safe}-${hashStr}`;
   }
   return safe;
 }
@@ -98,8 +100,110 @@ function expenseFileName(expenseId: string): string {
   return `expense--${safeEntityId(expenseId)}.md`;
 }
 
-/** Current schema version for all planner entities. Bump when making breaking changes. */
-export const CURRENT_SCHEMA_VERSION = '0.1';
+interface PlannerExecutedOp {
+  directory: string;
+  fileName: string;
+  originalContent: string | null;
+  newContent: string | null;
+}
+
+export class PlannerTransactionContext {
+  private executedOps: PlannerExecutedOp[] = [];
+
+  constructor(
+    private readonly store: PlannerFileStore,
+    private readonly resolveDirectory: (name: string) => string,
+  ) {}
+
+  private async readOriginal(directory: string, fileName: string): Promise<string | null> {
+    try {
+      const files = await this.store.readMarkdownFiles(this.resolveDirectory(directory));
+      const found = files.find((f) => f.fileName === fileName);
+      return found ? found.content : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async stageWrite(directory: string, fileName: string, content: string): Promise<void> {
+    const original = await this.readOriginal(directory, fileName);
+    await this.store.writeMarkdownFile(this.resolveDirectory(directory), fileName, content);
+    this.executedOps.push({
+      directory,
+      fileName,
+      originalContent: original,
+      newContent: content,
+    });
+  }
+
+  async stageDelete(directory: string, fileName: string): Promise<void> {
+    const original = await this.readOriginal(directory, fileName);
+    if (original === null) return;
+    await this.store.deleteMarkdownFile(this.resolveDirectory(directory), fileName);
+    this.executedOps.push({
+      directory,
+      fileName,
+      originalContent: original,
+      newContent: null,
+    });
+  }
+
+  async stageUpsertEntity(entity: PlannerEntity): Promise<void> {
+    const dir = entity.type === 'trip'
+      ? PLANNER_DIRECTORIES.trips
+      : entity.type === 'trip_place'
+        ? PLANNER_DIRECTORIES.places
+        : entity.type === 'trip_visit'
+          ? PLANNER_DIRECTORIES.visits
+          : PLANNER_DIRECTORIES.legs;
+    const content = serializeMarkdownEntity(
+      entity.type === 'trip_place'
+        ? { ...entity, tags: ensurePlaceKindTag(entity.tags, entity.kind) }
+        : entity,
+      '',
+    );
+    await this.stageWrite(dir, entityFileName(entity), content);
+  }
+
+  async stageDeleteEntity(entity: PlannerEntity): Promise<void> {
+    const dir = entity.type === 'trip'
+      ? PLANNER_DIRECTORIES.trips
+      : entity.type === 'trip_place'
+        ? PLANNER_DIRECTORIES.places
+        : entity.type === 'trip_visit'
+          ? PLANNER_DIRECTORIES.visits
+          : PLANNER_DIRECTORIES.legs;
+    await this.stageDelete(dir, entityFileName(entity));
+  }
+
+  async stageUpsertExpense(expense: TripExpenseItem): Promise<void> {
+    const content = serializeMarkdownEntity(toRepoExpense(expense), '');
+    await this.stageWrite(PLANNER_DIRECTORIES.expenses, expenseFileName(expense.id), content);
+  }
+
+  async stageDeleteExpense(expenseId: string): Promise<void> {
+    await this.stageDelete(PLANNER_DIRECTORIES.expenses, expenseFileName(expenseId));
+  }
+
+  async rollback(): Promise<{ rolledBackCount: number; errors: string[] }> {
+    const errors: string[] = [];
+    let rolledBackCount = 0;
+    for (let i = this.executedOps.length - 1; i >= 0; i--) {
+      const op = this.executedOps[i];
+      try {
+        if (op.originalContent === null) {
+          await this.store.deleteMarkdownFile(this.resolveDirectory(op.directory), op.fileName);
+        } else {
+          await this.store.writeMarkdownFile(this.resolveDirectory(op.directory), op.fileName, op.originalContent);
+        }
+        rolledBackCount++;
+      } catch (err) {
+        errors.push(`Failed to rollback ${op.directory}/${op.fileName}: ${String(err)}`);
+      }
+    }
+    return { rolledBackCount, errors };
+  }
+}
 
 export class PlannerRepository {
   private root = '';
@@ -114,50 +218,100 @@ export class PlannerRepository {
     return this.root ? `${this.root}/${name}` : name;
   }
 
-  private async list<T extends PlannerEntity>(directory: string, type: PlannerEntityType): Promise<T[]> {
+  async executeTransaction<R>(fn: (tx: PlannerTransactionContext) => Promise<R>): Promise<R> {
+    await this.initialize();
+    const tx = new PlannerTransactionContext(this.store, (name) => this.directory(name));
+    try {
+      return await fn(tx);
+    } catch (error) {
+      const rollbackResult = await tx.rollback();
+      const cause = error instanceof Error ? error.message : String(error);
+      if (rollbackResult.errors.length > 0) {
+        throw new Error(`Transaction failed (${cause}) and rollback had errors: ${rollbackResult.errors.join(' | ')}`);
+      }
+      throw new Error(`Transaction failed and was rolled back: ${cause}`);
+    }
+  }
+
+  private async list<T extends PlannerEntity>(
+    directory: string,
+    type: PlannerEntityType,
+    options?: { strict?: boolean },
+  ): Promise<T[]> {
     await this.initialize();
     const files = await this.store.readMarkdownFiles(this.directory(directory));
     const result: T[] = [];
     for (const file of files) {
       try {
         const parsed = parseMarkdownEntity<Record<string, unknown>>(file.content);
-        if (parsed.frontmatter.type !== type) continue;
-        const migrated = migrateEntity(parsed.frontmatter, CURRENT_SCHEMA_VERSION) as unknown as T;
-        result.push(migrated);
-      } catch {
+        if (parsed.frontmatter.type !== type) {
+          if (options?.strict) {
+            throw new Error(`Mismatched entity type in ${file.fileName}: expected ${type}, got ${parsed.frontmatter.type}`);
+          }
+          continue;
+        }
+        const validation = validateEntity(parsed.frontmatter);
+        if (!validation.valid) {
+          const issues = validation.issues.map((i) => `${i.field}: ${i.message}`).join(', ');
+          if (options?.strict) {
+            throw new Error(`Schema validation error in ${file.fileName}: ${issues}`);
+          }
+          console.warn(`[PlannerRepository] Invalid schema in ${file.fileName}: ${issues}`);
+        }
+        result.push(parsed.frontmatter as unknown as T);
+      } catch (err) {
+        if (options?.strict) {
+          throw new Error(`Strict read failed for ${this.directory(directory)}/${file.fileName}: ${err instanceof Error ? err.message : String(err)}`);
+        }
         console.warn(`Skipping invalid Ownly planner file: ${file.fileName}`);
       }
     }
     return result;
   }
 
-  async listTrips(): Promise<PlannerTrip[]> {
-    return this.list<PlannerTrip>(PLANNER_DIRECTORIES.trips, 'trip');
+  async listTrips(options?: { strict?: boolean }): Promise<PlannerTrip[]> {
+    return this.list<PlannerTrip>(PLANNER_DIRECTORIES.trips, 'trip', options);
   }
 
-  async listPlaces(): Promise<PlannerTripPlace[]> {
-    const places = await this.list<PlannerTripPlace>(PLANNER_DIRECTORIES.places, 'trip_place');
+  async listPlaces(options?: { strict?: boolean }): Promise<PlannerTripPlace[]> {
+    const places = await this.list<PlannerTripPlace>(PLANNER_DIRECTORIES.places, 'trip_place', options);
     return places.map((place) => ({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) }));
   }
 
-  async listVisits(): Promise<PlannerTripVisit[]> {
-    return this.list<PlannerTripVisit>(PLANNER_DIRECTORIES.visits, 'trip_visit');
+  async listVisits(options?: { strict?: boolean }): Promise<PlannerTripVisit[]> {
+    return this.list<PlannerTripVisit>(PLANNER_DIRECTORIES.visits, 'trip_visit', options);
   }
 
-  async listLegs(): Promise<PlannerTripLeg[]> {
-    return this.list<PlannerTripLeg>(PLANNER_DIRECTORIES.legs, 'trip_leg');
+  async listLegs(options?: { strict?: boolean }): Promise<PlannerTripLeg[]> {
+    return this.list<PlannerTripLeg>(PLANNER_DIRECTORIES.legs, 'trip_leg', options);
   }
 
-  async listExpenses(): Promise<TripExpenseItem[]> {
+  async listExpenses(options?: { strict?: boolean }): Promise<TripExpenseItem[]> {
     await this.initialize();
     const files = await this.store.readMarkdownFiles(this.directory(PLANNER_DIRECTORIES.expenses));
     const result: TripExpenseItem[] = [];
     for (const file of files) {
       try {
         const parsed = parseMarkdownEntity<Record<string, unknown>>(file.content);
-        if (parsed.frontmatter.type !== 'trip_expense') continue;
+        if (parsed.frontmatter.type !== 'trip_expense') {
+          if (options?.strict) {
+            throw new Error(`Mismatched entity type in expense file ${file.fileName}: ${parsed.frontmatter.type}`);
+          }
+          continue;
+        }
+        const validation = validateEntity(parsed.frontmatter);
+        if (!validation.valid) {
+          const issues = validation.issues.map((i) => `${i.field}: ${i.message}`).join(', ');
+          if (options?.strict) {
+            throw new Error(`Schema validation error in expense file ${file.fileName}: ${issues}`);
+          }
+          console.warn(`[PlannerRepository] Invalid schema in expense file ${file.fileName}: ${issues}`);
+        }
         result.push(fromRepoExpense(parsed.frontmatter));
-      } catch {
+      } catch (err) {
+        if (options?.strict) {
+          throw new Error(`Strict read failed for expense file ${file.fileName}: ${err instanceof Error ? err.message : String(err)}`);
+        }
         console.warn(`Skipping invalid Ownly planner expense file: ${file.fileName}`);
       }
     }
@@ -629,29 +783,32 @@ export class PlannerRepository {
 
   async deleteTrip(tripId: string): Promise<boolean> {
     await this.initialize();
-    const trip = (await this.listTrips()).find((t) => t.id === tripId);
+    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === tripId);
     if (!trip) return false;
     // cascade: places / visits / legs / expenses
     const [places, visits, legs, expenses] = await Promise.all([
-      this.listPlaces(),
-      this.listVisits(),
-      this.listLegs(),
-      this.listExpenses(),
+      this.listPlaces({ strict: true }),
+      this.listVisits({ strict: true }),
+      this.listLegs({ strict: true }),
+      this.listExpenses({ strict: true }),
     ]);
-    for (const p of places.filter((x) => x.trip_id === tripId)) {
-      await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.places), entityFileName(p));
-    }
-    for (const v of visits.filter((x) => x.trip_id === tripId)) {
-      await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.visits), entityFileName(v));
-    }
-    for (const l of legs.filter((x) => x.trip_id === tripId)) {
-      await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.legs), entityFileName(l));
-    }
-    for (const e of expenses.filter((x) => x.trip_id === tripId)) {
-      await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.expenses), expenseFileName(e.id ?? (e as unknown as Record<string, string>).expense_id));
-    }
-    await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.trips), entityFileName(trip));
-    return true;
+
+    return this.executeTransaction(async (tx) => {
+      for (const p of places.filter((x) => x.trip_id === tripId)) {
+        await tx.stageDeleteEntity(p);
+      }
+      for (const v of visits.filter((x) => x.trip_id === tripId)) {
+        await tx.stageDeleteEntity(v);
+      }
+      for (const l of legs.filter((x) => x.trip_id === tripId)) {
+        await tx.stageDeleteEntity(l);
+      }
+      for (const e of expenses.filter((x) => x.trip_id === tripId)) {
+        await tx.stageDeleteExpense(e.id ?? (e as unknown as Record<string, string>).expense_id);
+      }
+      await tx.stageDeleteEntity(trip);
+      return true;
+    });
   }
 
   /**
@@ -669,7 +826,7 @@ export class PlannerRepository {
   async mergePlaces(primaryPlaceId: string, secondaryPlaceId: string): Promise<PlannerTripPlace> {
     await this.initialize();
     if (primaryPlaceId === secondaryPlaceId) throw new Error('Cannot merge a place into itself.');
-    const places = await this.listPlaces();
+    const places = await this.listPlaces({ strict: true });
     const primary = places.find((p) => p.id === primaryPlaceId);
     const secondary = places.find((p) => p.id === secondaryPlaceId);
     if (!primary || !secondary) {
@@ -680,44 +837,17 @@ export class PlannerRepository {
     }
 
     const merged = mergeCapturedPlaceResearch(primary, secondary);
-    const secondaryVisits = (await this.listVisits()).filter((visit) => visit.place_id === secondaryPlaceId);
-    const reassignedVisits: PlannerTripVisit[] = [];
-    let primaryWritten = false;
+    const visits = await this.listVisits({ strict: true });
+    const secondaryVisits = visits.filter((visit) => visit.place_id === secondaryPlaceId);
 
-    try {
-      await this.upsert(merged);
-      primaryWritten = true;
+    return this.executeTransaction(async (tx) => {
+      await tx.stageUpsertEntity(merged);
       for (const visit of secondaryVisits) {
-        await this.upsert({ ...visit, place_id: primary.id, updated_at: new Date().toISOString() });
-        reassignedVisits.push(visit);
+        await tx.stageUpsertEntity({ ...visit, place_id: primary.id, updated_at: new Date().toISOString() });
       }
-      await this.store.deleteMarkdownFile(
-        this.directory(PLANNER_DIRECTORIES.places),
-        entityFileName(secondary),
-      );
+      await tx.stageDeleteEntity(secondary);
       return merged;
-    } catch (error) {
-      const rollbackErrors: string[] = [];
-      for (const visit of reassignedVisits.reverse()) {
-        try {
-          await this.upsert(visit);
-        } catch (rollbackError) {
-          rollbackErrors.push(`visit ${visit.id}: ${String(rollbackError)}`);
-        }
-      }
-      if (primaryWritten) {
-        try {
-          await this.upsert(primary);
-        } catch (rollbackError) {
-          rollbackErrors.push(`primary ${primary.id}: ${String(rollbackError)}`);
-        }
-      }
-      const cause = error instanceof Error ? error.message : String(error);
-      if (rollbackErrors.length > 0) {
-        throw new Error(`Merge failed (${cause}) and rollback was incomplete: ${rollbackErrors.join(' | ')}`);
-      }
-      throw new Error(`Merge failed and was rolled back: ${cause}`);
-    }
+    });
   }
 
   async addVisit(
@@ -733,65 +863,73 @@ export class PlannerRepository {
     } = {},
   ): Promise<PlannerTripVisit | null> {
     await this.initialize();
-    const place = (await this.listPlaces()).find((item) => item.id === placeId && item.state !== 'dropped');
+    const place = (await this.listPlaces({ strict: true })).find((item) => item.id === placeId && item.state !== 'dropped');
     if (!place) return null;
-    const trip = (await this.listTrips()).find((t) => t.id === place.trip_id);
+    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === place.trip_id);
     if (!trip) {
       throw new Error(`Planner trip "${place.trip_id}" was not found for place ${place.id}.`);
     }
     assertTripDate(trip, date);
 
-    const visits = await this.listVisits();
-    const dayVisits = visits
-      .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
-      .sort((left, right) => left.sort_order - right.sort_order);
-
-    let order: number;
-    if (options.sort_order !== undefined) {
-      order = Math.max(0, Math.min(options.sort_order, dayVisits.length));
-      const toShift = dayVisits.filter((v) => v.sort_order >= order);
-      for (const v of toShift) {
-        await this.upsert({ ...v, sort_order: v.sort_order + 1, updated_at: new Date().toISOString() });
-      }
-    } else {
-      order = dayVisits.length;
-    }
-
+    // Validate timing BEFORE performing any mutation
     const start = options.start?.trim() || undefined;
     const duration = options.duration_minutes ?? place.duration_minutes;
     const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: Boolean(options.is_anchor) })
       .filter((issue) => issue.severity === 'error');
     if (errors.length > 0) throw new Error(errors.map((issue) => issue.message).join(' | '));
-    const visit = createPlannerTripVisit(place, date, order, {
-      start,
-      duration_minutes: duration,
-      locked: options.locked,
-      is_anchor: options.is_anchor,
-      anchor_type: options.anchor_type,
+
+    return this.executeTransaction(async (tx) => {
+      const visits = await this.listVisits({ strict: true });
+      const dayVisits = visits
+        .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
+        .sort((left, right) => left.sort_order - right.sort_order);
+
+      let order: number;
+      if (options.sort_order !== undefined) {
+        order = Math.max(0, Math.min(options.sort_order, dayVisits.length));
+        const toShift = dayVisits.filter((v) => v.sort_order >= order);
+        for (const v of toShift) {
+          await tx.stageUpsertEntity({ ...v, sort_order: v.sort_order + 1, updated_at: new Date().toISOString() });
+        }
+      } else {
+        order = dayVisits.length;
+      }
+
+      const visit = createPlannerTripVisit(place, date, order, {
+        start,
+        duration_minutes: duration,
+        locked: options.locked,
+        is_anchor: options.is_anchor,
+        anchor_type: options.anchor_type,
+      });
+      await tx.stageUpsertEntity(visit);
+      return visit;
     });
-    await this.upsertVisit(visit);
-    return visit;
   }
 
   async removeVisit(visitId: string): Promise<boolean> {
     await this.initialize();
-    const visit = (await this.listVisits()).find((item) => item.id === visitId);
-    if (!visit) return false;
-    await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.visits), plannerTripVisitFileName(visit.id));
-    const remaining = (await this.listVisits())
-      .filter((item) => item.trip_id === visit.trip_id && item.date === visit.date && item.id !== visit.id)
-      .sort((left, right) => left.sort_order - right.sort_order);
-    for (let index = 0; index < remaining.length; index += 1) {
-      const item = remaining[index];
-      if (item.sort_order !== index) {
-        await this.upsert({ ...item, sort_order: index, updated_at: new Date().toISOString() });
+    return this.executeTransaction(async (tx) => {
+      const visits = await this.listVisits({ strict: true });
+      const visit = visits.find((item) => item.id === visitId);
+      if (!visit) return false;
+
+      await tx.stageDeleteEntity(visit);
+      const remaining = visits
+        .filter((item) => item.trip_id === visit.trip_id && item.date === visit.date && item.id !== visit.id)
+        .sort((left, right) => left.sort_order - right.sort_order);
+      for (let index = 0; index < remaining.length; index += 1) {
+        const item = remaining[index];
+        if (item.sort_order !== index) {
+          await tx.stageUpsertEntity({ ...item, sort_order: index, updated_at: new Date().toISOString() });
+        }
       }
-    }
-    return true;
+      return true;
+    });
   }
 
   async toggleVisitLock(visitId: string): Promise<PlannerTripVisit | null> {
-    const visit = (await this.listVisits()).find((item) => item.id === visitId);
+    const visit = (await this.listVisits({ strict: true })).find((item) => item.id === visitId);
     if (!visit) return null;
     const next = { ...visit, locked: !visit.locked, updated_at: new Date().toISOString() };
     await this.upsertVisit(next);
@@ -802,7 +940,7 @@ export class PlannerRepository {
     visitId: string,
     timing: { start?: string | null; duration_minutes?: number | null },
   ): Promise<PlannerTripVisit | null> {
-    const visit = (await this.listVisits()).find((item) => item.id === visitId);
+    const visit = (await this.listVisits({ strict: true })).find((item) => item.id === visitId);
     if (!visit) return null;
     const start = timing.start?.trim() || undefined;
     const duration = timing.duration_minutes ?? undefined;
@@ -816,7 +954,7 @@ export class PlannerRepository {
 
   async reorderVisits(date: string, orderedVisitIds: string[]): Promise<number> {
     if (orderedVisitIds.length === 0) return 0;
-    const visits = await this.listVisits();
+    const visits = await this.listVisits({ strict: true });
     const byId = new Map(visits.map((visit) => [visit.id, visit] as const));
     const resolved = orderedVisitIds.map((id) => byId.get(id));
     if (resolved.some((visit) => !visit)) throw new Error('Planner reorder contains an unknown visit.');
@@ -830,14 +968,17 @@ export class PlannerRepository {
     if (dayVisits.length !== ordered.length || dayVisits.some((visit) => !requestedIds.has(visit.id))) {
       throw new Error('Planner reorder must contain every visit in the trip day exactly once.');
     }
-    let written = 0;
-    for (let index = 0; index < ordered.length; index += 1) {
-      const visit = ordered[index];
-      if (visit.sort_order === index) continue;
-      await this.upsertVisit({ ...visit, sort_order: index, updated_at: new Date().toISOString() });
-      written += 1;
-    }
-    return written;
+
+    return this.executeTransaction(async (tx) => {
+      let written = 0;
+      for (let index = 0; index < ordered.length; index += 1) {
+        const visit = ordered[index];
+        if (visit.sort_order === index) continue;
+        await tx.stageUpsertEntity({ ...visit, sort_order: index, updated_at: new Date().toISOString() });
+        written += 1;
+      }
+      return written;
+    });
   }
 
   /**
@@ -850,11 +991,11 @@ export class PlannerRepository {
     if (!dateA || !dateB) throw new Error('Planner swap trip days requires two valid dates.');
     if (dateA === dateB) return { swappedCount: 0 };
 
-    const trip = (await this.listTrips()).find((t) => t.id === tripId);
+    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === tripId);
     if (!trip) throw new Error(`Planner trip "${tripId}" was not found.`);
     assertTripDates(trip, [dateA, dateB]);
 
-    const visits = await this.listVisits();
+    const visits = await this.listVisits({ strict: true });
     const tripVisits = visits.filter((v) => v.trip_id === tripId);
     const visitsA = tripVisits.filter((v) => v.date === dateA);
     const visitsB = tripVisits.filter((v) => v.date === dateB);
@@ -864,43 +1005,34 @@ export class PlannerRepository {
     }
 
     const now = new Date().toISOString();
-    let swappedCount = 0;
-
-    for (const visit of visitsA) {
-      await this.upsertVisit({
-        ...visit,
-        date: dateB,
-        updated_at: now,
-      });
-      swappedCount += 1;
-    }
-
-    for (const visit of visitsB) {
-      await this.upsertVisit({
-        ...visit,
-        date: dateA,
-        updated_at: now,
-      });
-      swappedCount += 1;
-    }
-
-    return { swappedCount };
+    return this.executeTransaction(async (tx) => {
+      let swappedCount = 0;
+      for (const visit of visitsA) {
+        await tx.stageUpsertEntity({ ...visit, date: dateB, updated_at: now });
+        swappedCount += 1;
+      }
+      for (const visit of visitsB) {
+        await tx.stageUpsertEntity({ ...visit, date: dateA, updated_at: now });
+        swappedCount += 1;
+      }
+      return { swappedCount };
+    });
   }
 
   async setStaySpan(hotelPlaceId: string, dates: string[]): Promise<PlannerTripVisit[]> {
-    const place = (await this.listPlaces()).find((item) => item.id === hotelPlaceId && item.kind === 'stay' && item.state !== 'dropped');
+    const place = (await this.listPlaces({ strict: true })).find((item) => item.id === hotelPlaceId && item.kind === 'stay' && item.state !== 'dropped');
     if (!place) throw new Error(`Planner stay place was not found: ${hotelPlaceId}`);
     const targetDates = [...new Set(dates)].sort();
     if (targetDates.length === 0) throw new Error('Planner stay span requires at least one date.');
-    const trip = (await this.listTrips()).find((t) => t.id === place.trip_id);
+    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === place.trip_id);
     if (!trip) {
       throw new Error(`Planner trip "${place.trip_id}" was not found for stay place.`);
     }
     assertTripDates(trip, targetDates);
     const dateSet = new Set(targetDates);
-    const visits = await this.listVisits();
+    const visits = await this.listVisits({ strict: true });
     const tripPlaces = new Map(
-      (await this.listPlaces())
+      (await this.listPlaces({ strict: true }))
         .filter((item) => item.trip_id === place.trip_id)
         .map((item) => [item.id, item] as const),
     );
@@ -926,23 +1058,28 @@ export class PlannerRepository {
       }
       return dateSet.has(visit.date);
     });
-    for (const visit of stale) await this.removeVisit(visit.id);
-    const result: PlannerTripVisit[] = [];
-    for (const date of targetDates) {
-      const existing = keepByDate.get(date);
-      if (existing) {
-        result.push(existing);
-        continue;
+
+    return this.executeTransaction(async (tx) => {
+      for (const visit of stale) {
+        await tx.stageDeleteEntity(visit);
       }
-      const visit = await this.addVisit(hotelPlaceId, date, {
-        sort_order: 0,
-        locked: true,
-        is_anchor: true,
-        anchor_type: 'stay_checkin',
-      });
-      if (visit) result.push(visit);
-    }
-    return result;
+      const result: PlannerTripVisit[] = [];
+      for (const date of targetDates) {
+        const existing = keepByDate.get(date);
+        if (existing) {
+          result.push(existing);
+          continue;
+        }
+        const visit = createPlannerTripVisit(place, date, 0, {
+          locked: true,
+          is_anchor: true,
+          anchor_type: 'stay_checkin',
+        });
+        await tx.stageUpsertEntity(visit);
+        result.push(visit);
+      }
+      return result;
+    });
   }
 
   async upsertExpense(expense: TripExpenseItem): Promise<void> {

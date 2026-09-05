@@ -533,53 +533,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // ─── Legacy V2 Handlers (kept during transition) ───────────────────────────
-
-  if (type === 'CAPTURE_SAVE_STATE' || type === 'CAPTURE_REPLACE_STATE' || type === 'CAPTURE_SET_CONTEXT') {
-    // Forward V2 messages to V3 by migrating on the fly
-    if (type === 'CAPTURE_SET_CONTEXT') {
-      const context = (message as { context?: unknown }) as { context?: { tripId?: string; title?: string; currency?: string } };
-      if (context.context?.tripId && context.context?.title) {
-        void mutateCaptureStateV3InWorker((current) => {
-          const target = { trip_id: context.context!.tripId!, title: context.context!.title! };
-          if (context.context?.currency) {
-            // Update active collection currency if it matches
-            const activeCol = current.collections.find((c) => c.id === current.active_collection_id);
-            if (activeCol) {
-              return {
-                state: {
-                  ...current,
-                  planner_target: target,
-                  collections: current.collections.map((c) =>
-                    c.id === activeCol.id ? { ...c, currency: context.context!.currency!.toUpperCase() } : c
-                  ),
-                },
-                result: undefined,
-              };
-            }
-          }
-          return {
-            state: { ...current, planner_target: target },
-            result: undefined,
-          };
-        })
-          .then(() => sendResponse({ ok: true }))
-          .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
-      } else {
-        // Clear planner target
-        void mutateCaptureStateV3InWorker((current) => ({
-          state: { ...current, planner_target: undefined },
-          result: undefined,
-        }))
-          .then(() => sendResponse({ ok: true }))
-          .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
-      }
-      return true;
-    }
-
-    sendResponse({ ok: true });
-    return true;
-  }
 
   // ─── FX Handlers ───────────────────────────────────────────────────────────
 

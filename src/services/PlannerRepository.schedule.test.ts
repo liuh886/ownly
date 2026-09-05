@@ -406,4 +406,64 @@ describe('PlannerRepository visit lifecycle', () => {
       plannerRepository.swapTripDays('trip-1', '2026-11-01', '2026-12-01'),
     ).rejects.toThrow();
   });
+
+  it('validates timing before shifting sort_orders in addVisit', async () => {
+    // Seed visits at 0 and 1
+    const v1 = await plannerRepository.addVisit('a', '2026-11-01');
+    const v2 = await plannerRepository.addVisit('b', '2026-11-01');
+    expect(v1?.sort_order).toBe(0);
+    expect(v2?.sort_order).toBe(1);
+
+    // Try adding a visit with invalid timing (e.g. invalid start time "99:99") at sort_order 0
+    await expect(
+      plannerRepository.addVisit('pool', '2026-11-01', { sort_order: 0, start: '99:99' }),
+    ).rejects.toThrow();
+
+    // Verify sort_orders were NOT shifted before timing check failed
+    const visits = await plannerRepository.listVisits();
+    const dayVisits = visits.filter((v) => v.date === '2026-11-01').sort((a, b) => a.sort_order - b.sort_order);
+    expect(dayVisits).toHaveLength(2);
+    expect(dayVisits[0].place_id).toBe('a');
+    expect(dayVisits[0].sort_order).toBe(0);
+    expect(dayVisits[1].place_id).toBe('b');
+    expect(dayVisits[1].sort_order).toBe(1);
+  });
+
+  it('rolls back a swap if an error occurs midway through writing', async () => {
+    const v1 = await plannerRepository.addVisit('a', '2026-11-01');
+    const v2 = await plannerRepository.addVisit('b', '2026-11-02');
+
+    // Mock failure during write
+    const originalWrite = (await import('./ObsidianFileSystemService')).obsidianService.writeMarkdownFile;
+    let writeCount = 0;
+    (await import('./ObsidianFileSystemService')).obsidianService.writeMarkdownFile = async (dir, name, content) => {
+      writeCount++;
+      if (writeCount === 2) {
+        throw new Error('disk_failure_midway');
+      }
+      return originalWrite(dir, name, content);
+    };
+
+    try {
+      await expect(plannerRepository.swapTripDays('trip-1', '2026-11-01', '2026-11-02')).rejects.toThrow('rolled back');
+      const visits = await plannerRepository.listVisits();
+      expect(visits.find((v) => v.id === v1!.id)?.date).toBe('2026-11-01');
+      expect(visits.find((v) => v.id === v2!.id)?.date).toBe('2026-11-02');
+    } finally {
+      (await import('./ObsidianFileSystemService')).obsidianService.writeMarkdownFile = originalWrite;
+    }
+  });
+
+  it('fails closed in strict mode on corrupted YAML but tolerates in non-strict mode', async () => {
+    const bucket = files.get('vault/Trip Places') ?? new Map<string, string>();
+    files.set('vault/Trip Places', bucket);
+    bucket.set('corrupted.md', '---\ninvalid: [unclosed\n---');
+
+    // Tolerant read skips corrupted file
+    const tolerant = await plannerRepository.listPlaces({ strict: false });
+    expect(tolerant.length).toBeGreaterThan(0);
+
+    // Strict read throws
+    await expect(plannerRepository.listPlaces({ strict: true })).rejects.toThrow('Strict read failed');
+  });
 });

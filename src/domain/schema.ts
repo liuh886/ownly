@@ -8,12 +8,21 @@ import type {
   ReviewEntry,
   ObjectLogEntry,
   ObjectLogEventType,
-  BaseEntity
 } from './types';
+import type {
+  PlannerTrip,
+  PlannerTripPlace,
+  PlannerTripLeg,
+  TripExpenseItem,
+} from './planner';
+import type { PlannerTripVisit } from './planner-visits';
+import { CURRENT_SCHEMA_VERSION } from './schema/common';
 
 export const VALID_OBJECT_LOG_EVENT_TYPES: readonly ObjectLogEventType[] = [
   'usage', 'issue', 'maintenance', 'regret', 'lesson', 'comparison', 'exit_note',
 ];
+
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 export type ValidationSeverity = 'warning' | 'error';
 
@@ -35,14 +44,14 @@ function createResult(issues: ValidationIssue[]): ValidationResult {
   };
 }
 
-export function validateBaseEntity(entity: BaseEntity): ValidationIssue[] {
+export function validateBaseEntity(entity: { id?: string; title?: string; created_at?: string; schema_version?: string }): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (!entity.id) issues.push({ field: 'id', message: 'Missing ID', severity: 'error' });
   if (!entity.title) issues.push({ field: 'title', message: 'Missing title', severity: 'error' });
   if (!entity.created_at) issues.push({ field: 'created_at', message: 'Missing created_at', severity: 'error' });
   if (!entity.schema_version) {
     issues.push({ field: 'schema_version', message: 'Missing schema_version', severity: 'error' });
-  } else if (entity.schema_version !== '0.1') {
+  } else if (entity.schema_version !== CURRENT_SCHEMA_VERSION) {
     issues.push({ field: 'schema_version', message: `Unsupported schema version: ${entity.schema_version}`, severity: 'warning' });
   }
   return issues;
@@ -147,6 +156,114 @@ export function validateObjectLog(log: ObjectLogEntry): ValidationResult {
   return createResult(issues);
 }
 
+export function validateTrip(trip: PlannerTrip): ValidationResult {
+  const issues = validateBaseEntity(trip);
+  if (trip.status && !['planning', 'active', 'completed', 'archived'].includes(trip.status)) {
+    issues.push({ field: 'status', message: `Invalid trip status: ${trip.status}`, severity: 'error' });
+  }
+  if (trip.start_date && !DATE_REGEX.test(trip.start_date)) {
+    issues.push({ field: 'start_date', message: `Invalid start_date format (must be YYYY-MM-DD): ${trip.start_date}`, severity: 'error' });
+  }
+  if (trip.end_date && !DATE_REGEX.test(trip.end_date)) {
+    issues.push({ field: 'end_date', message: `Invalid end_date format (must be YYYY-MM-DD): ${trip.end_date}`, severity: 'error' });
+  }
+  if (trip.start_date && trip.end_date && trip.start_date > trip.end_date) {
+    issues.push({ field: 'end_date', message: `Trip end_date (${trip.end_date}) cannot be before start_date (${trip.start_date})`, severity: 'error' });
+  }
+  if (trip.destinations !== undefined && !Array.isArray(trip.destinations)) {
+    issues.push({ field: 'destinations', message: 'Trip destinations must be an array', severity: 'error' });
+  }
+  return createResult(issues);
+}
+
+export function validateTripPlace(place: PlannerTripPlace): ValidationResult {
+  const issues = validateBaseEntity(place);
+  if (!place.trip_id) {
+    issues.push({ field: 'trip_id', message: 'Missing trip_id', severity: 'error' });
+  }
+  if (!place.kind) {
+    issues.push({ field: 'kind', message: 'Missing kind', severity: 'error' });
+  }
+  if (!place.source_provider) {
+    issues.push({ field: 'source_provider', message: 'Missing source_provider', severity: 'error' });
+  }
+  if (place.source_url === undefined || typeof place.source_url !== 'string') {
+    issues.push({ field: 'source_url', message: 'Missing or invalid source_url', severity: 'error' });
+  }
+  if (place.state && !['candidate', 'scheduled', 'shelved', 'dropped', 'duplicate', 'ignored'].includes(place.state)) {
+    issues.push({ field: 'state', message: `Invalid place state: ${place.state}`, severity: 'error' });
+  }
+  return createResult(issues);
+}
+
+export function validateTripVisit(visit: PlannerTripVisit): ValidationResult {
+  const issues: ValidationIssue[] = [];
+  if (!visit.id) issues.push({ field: 'id', message: 'Missing ID', severity: 'error' });
+  if (!visit.trip_id) issues.push({ field: 'trip_id', message: 'Missing trip_id', severity: 'error' });
+  if (!visit.place_id) issues.push({ field: 'place_id', message: 'Missing place_id', severity: 'error' });
+  if (!visit.date) {
+    issues.push({ field: 'date', message: 'Missing date', severity: 'error' });
+  } else if (!DATE_REGEX.test(visit.date)) {
+    issues.push({ field: 'date', message: `Invalid date format (must be YYYY-MM-DD): ${visit.date}`, severity: 'error' });
+  }
+  if (typeof visit.sort_order !== 'number' || visit.sort_order < 0) {
+    issues.push({ field: 'sort_order', message: 'Missing or negative sort_order', severity: 'error' });
+  }
+  if (visit.duration_minutes !== undefined && (typeof visit.duration_minutes !== 'number' || visit.duration_minutes < 0)) {
+    issues.push({ field: 'duration_minutes', message: 'Invalid duration_minutes', severity: 'error' });
+  }
+  if (!visit.created_at) issues.push({ field: 'created_at', message: 'Missing created_at', severity: 'error' });
+  if (!visit.schema_version) {
+    issues.push({ field: 'schema_version', message: 'Missing schema_version', severity: 'error' });
+  } else if (visit.schema_version !== CURRENT_SCHEMA_VERSION) {
+    issues.push({ field: 'schema_version', message: `Unsupported schema version: ${visit.schema_version}`, severity: 'warning' });
+  }
+  return createResult(issues);
+}
+
+export function validateTripLeg(leg: PlannerTripLeg): ValidationResult {
+  const issues: ValidationIssue[] = [];
+  if (!leg.id) issues.push({ field: 'id', message: 'Missing ID', severity: 'error' });
+  if (!leg.trip_id) issues.push({ field: 'trip_id', message: 'Missing trip_id', severity: 'error' });
+  if (!leg.from_place_id) issues.push({ field: 'from_place_id', message: 'Missing from_place_id', severity: 'error' });
+  if (!leg.to_place_id) issues.push({ field: 'to_place_id', message: 'Missing to_place_id', severity: 'error' });
+  if (leg.mode && !['driving', 'motorcycle', 'walking', 'bicycling', 'transit'].includes(leg.mode)) {
+    issues.push({ field: 'mode', message: `Invalid mode: ${leg.mode}`, severity: 'error' });
+  }
+  if (typeof leg.duration_minutes !== 'number' || leg.duration_minutes < 0) {
+    issues.push({ field: 'duration_minutes', message: 'Missing or negative duration_minutes', severity: 'error' });
+  }
+  if (!leg.created_at) issues.push({ field: 'created_at', message: 'Missing created_at', severity: 'error' });
+  if (!leg.schema_version) {
+    issues.push({ field: 'schema_version', message: 'Missing schema_version', severity: 'error' });
+  } else if (leg.schema_version !== CURRENT_SCHEMA_VERSION) {
+    issues.push({ field: 'schema_version', message: `Unsupported schema version: ${leg.schema_version}`, severity: 'warning' });
+  }
+  return createResult(issues);
+}
+
+export function validateTripExpense(expense: TripExpenseItem & { schema_version?: string }): ValidationResult {
+  const issues: ValidationIssue[] = [];
+  if (!expense.id) issues.push({ field: 'id', message: 'Missing ID', severity: 'error' });
+  if (!expense.trip_id) issues.push({ field: 'trip_id', message: 'Missing trip_id', severity: 'error' });
+  if (typeof expense.amount !== 'number' || expense.amount < 0 || Number.isNaN(expense.amount)) {
+    issues.push({ field: 'amount', message: 'Missing or invalid amount', severity: 'error' });
+  }
+  if (!expense.currency || typeof expense.currency !== 'string') {
+    issues.push({ field: 'currency', message: 'Missing currency', severity: 'error' });
+  }
+  if (!expense.category || typeof expense.category !== 'string') {
+    issues.push({ field: 'category', message: 'Missing category', severity: 'error' });
+  }
+  if (!expense.paid_by || typeof expense.paid_by !== 'string') {
+    issues.push({ field: 'paid_by', message: 'Missing paid_by', severity: 'error' });
+  }
+  if (expense.schema_version && expense.schema_version !== CURRENT_SCHEMA_VERSION) {
+    issues.push({ field: 'schema_version', message: `Unsupported schema version: ${expense.schema_version}`, severity: 'warning' });
+  }
+  return createResult(issues);
+}
+
 export function validateEntity(entity: unknown): ValidationResult {
   if (!entity || typeof entity !== 'object') {
     return createResult([{ message: 'Entity is not an object', severity: 'error' }]);
@@ -160,6 +277,11 @@ export function validateEntity(entity: unknown): ValidationResult {
     case 'snapshot': return validateSnapshot(entity as AccountSnapshot);
     case 'review': return validateReview(entity as ReviewEntry);
     case 'object_log': return validateObjectLog(entity as ObjectLogEntry);
+    case 'trip': return validateTrip(entity as PlannerTrip);
+    case 'trip_place': return validateTripPlace(entity as PlannerTripPlace);
+    case 'trip_visit': return validateTripVisit(entity as PlannerTripVisit);
+    case 'trip_leg': return validateTripLeg(entity as PlannerTripLeg);
+    case 'trip_expense': return validateTripExpense(entity as TripExpenseItem);
     default:
       return createResult([{ field: 'type', message: `Unknown entity type: ${entityRecord.type}`, severity: 'error' }]);
   }

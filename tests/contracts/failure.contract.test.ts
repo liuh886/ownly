@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { migrateEntity } from '@/domain/migrations';
 import { parseMarkdownEntity } from '@/data/frontmatter';
+import { validateEntity } from '@/domain/schema';
 
 describe('P1-⑤ runtime failure — 异常路径', () => {
-  it('Case1 旧 schema 可升级', () => {
-    const old = { id: 'x', type: 'trip_place', schema_version: '0.1', title: 'Old' };
-    const migrated = migrateEntity(old as unknown as Record<string, unknown>, '0.2');
-    expect(migrated.schema_version).toBeDefined();
+  it('Case1 schema 0.1 实体校验通过', () => {
+    const valid = { id: 'x', type: 'trip_place', trip_id: 't1', kind: 'food', source_provider: 'other', source_url: 'https://x', schema_version: '0.1', title: 'Old', created_at: '2026-01-01T00:00:00.000Z' };
+    const result = validateEntity(valid);
+    expect(result.valid).toBe(true);
   });
 
   it('Case2 文件损坏 yaml invalid 跳过', () => {

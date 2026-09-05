@@ -8,6 +8,7 @@ import {
   type PlannerPlaceKind,
 } from '../../domain/planner';
 import {
+  capturePlaceToPlannerPlace,
   findExistingPlace,
   findExistingPlaceByIdentity,
   reorderPlaces,
@@ -124,14 +125,14 @@ async function strengthenCandidatesThroughMaps(
   }) as { savedList?: DetectedSavedList | null; attempted?: number; enriched?: number; failed?: number } | undefined;
 
   const targetIds = new Set(eligible.map((place) => place.id));
-  const facadePlaces = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
+  const collection = getActiveCollection();
+  const facadePlaces = eligible.map((p) => capturePlaceToPlannerPlace(p, collection?.id || 'inbox', undefined, { preserveId: true }) as PlannerTripPlace);
   const merged = mergeDetectedResearchIntoPlannerPlaces(
     facadePlaces,
     response?.savedList?.places ?? [],
     store.mapCurrencyOverride || store.pageDetectedCurrency,
   );
   const mergedById = new Map(merged.map((place) => [place.id, place] as const));
-  const collection = getActiveCollection();
   if (collection) {
     const otherPlaces = store.stateV3.places.filter((p) => p.collection_id !== collection.id);
     const activePlaces = getActivePlaces().map((p) => {
@@ -862,8 +863,8 @@ export function initHandlers(): void {
         }
 
         // Phase 2: Run batch enrichment for any candidates still missing facts
-        const targetIds = new Set(targetCandidates.map((c) => c.id));
-        const facadeForEnrich = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
+        const col = getActiveCollection();
+        const facadeForEnrich = targetCandidates.map((c) => capturePlaceToPlannerPlace(c, col?.id || 'inbox', undefined, { preserveId: true }) as PlannerTripPlace);
         const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
         logger.info('EnrichCandidates', `Phase 2: ${needEnrichment.length} candidates need background fetch`);
 
@@ -988,7 +989,8 @@ export function initHandlers(): void {
         let batchEnrichedCount = 0;
         if (targetCandidates.length > 0) {
           const targetIds = new Set(targetCandidates.map((c) => c.id));
-          const facadeForEnrich = store.state.pendingPlaces.filter((p) => targetIds.has(p.id)) as unknown as PlannerTripPlace[];
+          const targetPlaces = getActivePlaces().filter((p) => targetIds.has(p.id));
+          const facadeForEnrich = targetPlaces.map((p) => capturePlaceToPlannerPlace(p, collection.id, undefined, { preserveId: true }) as PlannerTripPlace);
           const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
           const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
             needEnrichment,
@@ -1218,8 +1220,7 @@ export function initHandlers(): void {
 
       // Auto-enrich any synced candidates missing facts immediately in one smooth pass
       const syncedPlaces = getActivePlaces().filter((p) => syncedIds.has(p.id));
-      const syncedIdsForEnrich = new Set(syncedPlaces.map((p) => p.id));
-      const needsPass = store.state.pendingPlaces.filter((p) => syncedIdsForEnrich.has(p.id)) as unknown as PlannerTripPlace[];
+      const needsPass = syncedPlaces.map((p) => capturePlaceToPlannerPlace(p, collection.id, undefined, { preserveId: true }) as PlannerTripPlace);
       const needsPassMissing = needsPass.filter(isCandidateMissingData);
       if (needsPassMissing.length > 0) {
         setStatus(store.lang === 'zh' ? `正在自动补全 ${needsPassMissing.length} 个地点的 Place ID、评分与分类…` : `Auto-enriching ${needsPassMissing.length} places…`);
@@ -1368,8 +1369,7 @@ export function initHandlers(): void {
       // Asynchronously enrich newly imported places
       if (newlyAdded.length > 0) {
         void (async () => {
-          const newlyAddedIds = new Set(newlyAdded.map((p) => p.id));
-          const facadeForEnrich = store.state.pendingPlaces.filter((p) => newlyAddedIds.has(p.id)) as unknown as PlannerTripPlace[];
+          const facadeForEnrich = newlyAdded.map((p) => capturePlaceToPlannerPlace(p, collection.id, undefined, { preserveId: true }) as PlannerTripPlace);
           const needEnrichment = facadeForEnrich.filter(isCandidateMissingData);
           const { enrichedPlaces, totalEnriched } = await enrichCandidatePlacesBatch(
             needEnrichment,

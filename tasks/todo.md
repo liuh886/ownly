@@ -1,5 +1,31 @@
 # Ownly — Task Progress & Review
 
+## Completed: Core Architectural Technical Debt Clearance & P1/P2 Robustness Remediation (2026-09-05)
+- [x] **1. Planner Multi-File Mutation Transaction & Rollback Primitive (P1)**
+  - Implemented transactional execution primitive with rollback checkpoints in [`src/services/PlannerRepository.ts`](file:///D:/Documents/GitHub/Ownly/src/services/PlannerRepository.ts).
+  - Refactored `addVisit`, `removeVisit`, `reorderVisits`, `swapTripDays`, `setStaySpan`, `mergePlaces`, `deleteTrip` to execute atomically.
+  - Fixed `addVisit` validation order (validated timing & parameters BEFORE mutating/shifting existing visits).
+  - Added atomicity failure & rollback unit tests in `src/services/PlannerRepository.schedule.test.ts`.
+- [x] **2. Fail-Closed Mutation Reads vs Tolerant Diagnostic Scans (P1)**
+  - Added `{ strict?: boolean }` to `PlannerRepository.list()`; default to fail-closed on mutations and tolerant on Doctor diagnostic scans.
+- [x] **3. CI Pipeline & Test Gate Coverage (P1)**
+  - Added `src/data/**` to `affected-runtime` regex in [`.github/workflows/pages.yml`](file:///D:/Documents/GitHub/Ownly/.github/workflows/pages.yml).
+  - Ensured all repository tests are executed during CI validation gates via `"validate:shared"`.
+- [x] **4. Comprehensive Runtime Schema Validation for Planner Entities (P1/P2)**
+  - Expanded `validateEntity()` in [`src/domain/schema.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/schema.ts) to validate `trip`, `trip_place`, `trip_visit`, `trip_leg`, `trip_expense`.
+  - Wired runtime validation into `PlannerRepository` parser to reject corrupted/invalid YAML fields.
+- [x] **5. Consolidate Single Source of Truth for Schema Version (P2)**
+  - Consolidated `CURRENT_SCHEMA_VERSION = '0.1'` into a single authority and updated all imports.
+- [x] **6. Remove Dead Migration Framework & Legacy Capture V2 Compatibility (P2)**
+  - Deleted `src/domain/migrations/` and updated test contracts.
+  - Removed legacy V2 storage key, normalizers, facade, and dummy no-op handlers in `src/extension/capture-state.ts`, `src/extension/sidepanel/store.ts`, `src/extension/background.ts`.
+- [x] **7. Guarantee Injective Entity Filename Mapping (P2)**
+  - Updated `entityFileName` to use `stablePlannerHash(id)` for all entities, preventing collisions on non-alphanumeric IDs.
+- [x] **8. Extract Planner Mutation Coordinator & Controller (P2)**
+  - Extracted `usePlannerController.ts` from `PlannerHome.tsx` to prevent async mutation race conditions and snapshot overwrites.
+- [x] **9. Full Multi-Target Verification & Testing**
+  - Ran `npm test`, `npm run test:mcp`, `npm run validate:fast`, `npm run validate:extension`, `npm run validate:shared`, `npm run build`, and `npm run validate` (100% passing across all 58 test suites / 533 tests).
+
 ## Completed: Agoda Saved Trips & Collections Inline Buttons, Hotel Entity Resolution & Google Maps Standardization (2026-09-05)
 - [x] **1. Upgrade Agoda Card & Title Selectors for Modern Trips / Saved Lists (`src/extension/adapters/agoda.ts`)**
   - Supported all Agoda saved list containers: `div[data-selenium="saved-hotel-item"]`, `div[data-selenium="trip-saved-card"]`, `div[data-selenium="saved-item"]`, `div[class*="TripItem"]`, `div[class*="SavedItem"]`, `div[class*="SavedHotel"]`, `div[class*="TripCard"]`, `div[class*="PropertyCard"]`, `[data-element="saved-hotel-card"]`, `[data-element="hotel-card"]`, `[role="listitem"]`.

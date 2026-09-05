@@ -81,8 +81,10 @@ describe('PlannerRepository expenses', () => {
   it('sanitizes risky ids into safe filenames', async () => {
     await repo.upsertExpense(expense('../evil id/1'));
     const files = await store.readMarkdownFiles('Trip Expenses');
-    expect(files[0].fileName).toBe('expense--evil-id-1.md');
+    expect(files[0].fileName).toBe('expense--evil-id-1-mfd7cl.md');
     expect(files[0].fileName).not.toContain('..');
+    expect(files[0].fileName).not.toContain('/');
+    expect(files[0].fileName).not.toContain(' ');
   });
 
   it('ignores foreign entity files and deletes by id', async () => {

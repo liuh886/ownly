@@ -24,64 +24,10 @@ function detectDefaultLanguage(): Lang {
   }
 }
 
-/** Build a V2-compatible facade from V3 state for backward compat during transition. */
-function buildV2Facade(v3: OwnlyCaptureStateV3) {
-  const activeCollection = v3.collections.find((c) => c.id === v3.active_collection_id) || v3.collections[0] || null;
-  const places = activeCollection ? v3.places.filter((p) => p.collection_id === activeCollection.id) : [];
-  return {
-    version: 2 as const,
-    activeContext: v3.planner_target
-      ? { tripId: v3.planner_target.trip_id, title: v3.planner_target.title, currency: activeCollection?.currency }
-      : (activeCollection ? { tripId: activeCollection.id, title: activeCollection.title, currency: activeCollection.currency } : null),
-    pendingPlaces: places.map((p) => ({
-      id: p.id,
-      trip_id: p.collection_id,
-      title: p.title,
-      source_provider: p.source.provider,
-      source_url: p.source.url,
-      source_place_id: p.source.place_id,
-      source_category: p.source.category,
-      types: p.source.types,
-      kind: p.inferred_kind || 'other',
-      area: p.address?.split(/[,，·]/)[0]?.trim() || undefined,
-      priority: p.user?.priority,
-      tags: p.user?.tags || [],
-      why: p.user?.why,
-      notes: p.user?.notes,
-      observed_rating: p.rating,
-      observed_review_count: p.review_count,
-      observed_price: p.price?.raw,
-      price_currency: p.price?.currency,
-      price_min: p.price?.min,
-      price_max: p.price?.max,
-      price_unit: p.price?.unit,
-      price_level: p.price?.level,
-      open_hours: p.open_hours,
-      address: p.address,
-      coordinates: p.coordinates,
-      phone: p.phone,
-      plus_code: p.plus_code,
-      preferred_window: p.user?.preferred_window,
-      duration_minutes: p.user?.duration_minutes,
-      menu_url: p.menu_url,
-      reservation_url: p.reservation_url,
-      review_topics: p.review_topics,
-      signals: [],
-      risks: [],
-      reservation_status: 'none' as const,
-      state: 'candidate' as const,
-      created_at: p.captured_at,
-      updated_at: p.updated_at,
-    })),
-    lastImportReport: undefined as import('../../domain/planner').ImportReport | undefined,
-  };
-}
-
 export const store = {
   lang: detectDefaultLanguage(),
   stateV3: { ...EMPTY_CAPTURE_STATE_V3 } as OwnlyCaptureStateV3,
-  /** V2-compatible facade — mutable, updated whenever stateV3 changes. */
-  state: buildV2Facade(EMPTY_CAPTURE_STATE_V3),
+  lastImportReport: undefined as import('../../domain/planner').ImportReport | undefined,
   currentPlace: null as CurrentResearchPlace | null,
   detectedSavedList: null as DetectedSavedList | null,
   detectedListPlaces: [] as CurrentResearchPlace[],
@@ -101,10 +47,9 @@ export const store = {
   bulkSelected: new Set<string>(),
   debugModeEnabled: false,
 
-  /** Update V3 state and rebuild V2 facade. */
+  /** Update V3 state. */
   setState(next: OwnlyCaptureStateV3) {
     this.stateV3 = next;
-    this.state = buildV2Facade(next);
   },
 
   /** Get the active collection. */

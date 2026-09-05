@@ -4,7 +4,9 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const CLI = 'npx tsx scripts/wyqd-cli.ts';
+const tsxCli = join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
+const cliEntry = join(process.cwd(), 'scripts', 'wyqd-cli.ts');
+const CLI = `"${process.execPath}" "${tsxCli}" "${cliEntry}"`;
 let vaultDir: string;
 
 function wyqd(args: string): string {

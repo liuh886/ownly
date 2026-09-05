@@ -1,4 +1,3 @@
-import YAML from 'yaml';
 import { get, set } from 'idb-keyval';
 import {
   OWNLY_DATA_ROOT_NAME,
@@ -24,17 +23,6 @@ declare global {
   interface Window {
     showDirectoryPicker?(options?: { mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>;
   }
-}
-
-export interface WishlistItem {
-  name: string;
-  price_estimated: number;
-  status: 'wishlist' | 'cooling' | 'purchased' | 'archived';
-  date_added: string;
-  cooling_days: number;
-  date_purchased?: string;
-  fileName?: string;
-  [key: string]: unknown;
 }
 
 const HANDLE_KEY = 'wyqd_obsidian_handle';
@@ -127,7 +115,14 @@ export class ObsidianFileSystemService {
       const picker = window.showDirectoryPicker;
       if (!picker) return false;
       const selectedDirectory = await picker({ mode: 'readwrite' });
-      await this.persistDirectoryHandle(selectedDirectory, null);
+      const hasObsidianConfig = await this.hasDirectory(selectedDirectory, OBSIDIAN_CONFIG_DIR);
+      if (hasObsidianConfig) {
+        const dataFolder = await this.resolvePluginDataFolder(selectedDirectory);
+        await this.persistDirectoryHandle(selectedDirectory, dataFolder);
+      } else {
+        await this.persistDirectoryHandle(selectedDirectory, null);
+      }
+      await this.ensureDataStructure();
       return true;
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return false;
@@ -138,57 +133,6 @@ export class ObsidianFileSystemService {
 
   async requestAccess(): Promise<boolean> {
     return this.openLocalData();
-  }
-
-  get isConnected(): boolean {
-    return this.directoryHandle !== null;
-  }
-
-  async getDataFolder(): Promise<string> {
-    if (this.cachedDataFolder !== null) return this.cachedDataFolder;
-
-    const fallback = OWNLY_DATA_ROOT_NAME;
-    if (!this.directoryHandle) return fallback;
-
-    // 1. The selected directory is already an initialized Ownly data root.
-    try {
-      await this.directoryHandle.getDirectoryHandle('Objects');
-      this.cachedDataFolder = '';
-      return this.cachedDataFolder;
-    } catch {
-      // Continue with empty-folder and Vault detection.
-    }
-
-    // 2. An empty standalone directory named Ownly is also the data root.
-    const hasObsidianConfig = await this.hasDirectory(this.directoryHandle, OBSIDIAN_CONFIG_DIR);
-    if (shouldUseSelectedDirectoryAsDataRoot(this.directoryHandle.name, hasObsidianConfig)) {
-      this.cachedDataFolder = '';
-      return this.cachedDataFolder;
-    }
-
-    // 3. The selected directory contains an Ownly child folder (typically a Vault root).
-    try {
-      await this.directoryHandle.getDirectoryHandle(OWNLY_DATA_ROOT_NAME);
-      this.cachedDataFolder = OWNLY_DATA_ROOT_NAME;
-      return this.cachedDataFolder;
-    } catch {
-      // Not here either, continue.
-    }
-
-    // 4. Try Obsidian plugin settings lookup for custom data folders.
-    try {
-      const pluginDir = await this.getNestedDirectoryHandle([OBSIDIAN_CONFIG_DIR, 'plugins', 'wyqd']);
-      const dataFile = await pluginDir.getFileHandle('data.json');
-      const file = await dataFile.getFile();
-      const text = await file.text();
-      const settings = JSON.parse(text) as PluginSettings;
-      this.cachedDataFolder = settings.dataFolder || fallback;
-      return this.cachedDataFolder;
-    } catch (e) {
-      console.warn('[Ownly] Failed to read plugin settings for data folder detection', e);
-      this.cachedDataFolder = fallback;
-      return this.cachedDataFolder;
-    }
   }
 
   async getPortableDataRootHandle(): Promise<FileSystemDirectoryHandle> {
@@ -204,148 +148,67 @@ export class ObsidianFileSystemService {
     return dataRoot;
   }
 
-  async ensureDataStructure(): Promise<void> {
-    const dataFolder = await this.getDataFolder();
-    for (const directory of OWNLY_REQUIRED_DIRECTORIES) {
-      const path = dataFolder ? `${dataFolder}/${directory}` : directory;
-      await this.getDirHandle(path, true);
+  async connectVault(): Promise<boolean> {
+    return this.openLocalData();
+  }
+
+  private async ensureDataStructure(): Promise<void> {
+    if (!this.directoryHandle) return;
+
+    for (const folder of OWNLY_REQUIRED_DIRECTORIES) {
+      await this.getDirHandle(this.getRelativePath(folder), true);
     }
   }
 
-  private async getNestedDirectoryHandle(parts: string[]): Promise<FileSystemDirectoryHandle> {
-    if (!this.directoryHandle) throw new Error('Not connected to local data');
+  private async resolvePluginDataFolder(vaultHandle: FileSystemDirectoryHandle): Promise<string> {
+    try {
+      const obsidianDir = await vaultHandle.getDirectoryHandle(OBSIDIAN_CONFIG_DIR);
+      const pluginsDir = await obsidianDir.getDirectoryHandle('plugins');
+      const ownlyPluginDir = await pluginsDir.getDirectoryHandle('ownly');
+      const dataFileHandle = await ownlyPluginDir.getFileHandle('data.json');
+      const dataFile = await dataFileHandle.getFile();
+      const content = await dataFile.text();
+      const parsed = JSON.parse(content) as PluginSettings;
 
-    let current = this.directoryHandle;
-    for (const part of parts) {
-      current = await current.getDirectoryHandle(part);
-    }
+      if (typeof parsed.dataFolder === 'string' && parsed.dataFolder.trim()) {
+        return parsed.dataFolder.trim().replace(/^\/+|\/+$/g, '');
+      }
+    } catch {}
 
-    return current;
+    return OWNLY_DATA_ROOT_NAME;
   }
 
-  async getItems(): Promise<WishlistItem[]> {
-    if (!this.directoryHandle) throw new Error('Not connected to local data');
+  async disconnect(): Promise<void> {
+    this.directoryHandle = null;
+    this.cachedDataFolder = null;
+    await set(HANDLE_KEY, null);
+  }
 
-    const items: WishlistItem[] = [];
+  isConnected(): boolean {
+    return this.directoryHandle !== null;
+  }
 
-    for await (const entry of this.directoryHandle.values()) {
-      if (entry.kind === 'file' && entry.name.endsWith('.md')) {
-        const file = await entry.getFile();
-        const text = await file.text();
+  async getDataFolder(): Promise<string> {
+    if (this.cachedDataFolder !== null) {
+      return this.cachedDataFolder;
+    }
 
-        const match = text.match(/^---\n([\s\S]*?)\n---/);
-        if (match && match[1]) {
-          try {
-            const data = YAML.parse(match[1]) as WishlistItem;
-            if (data.status && data.price_estimated !== undefined) {
-              data.fileName = entry.name;
-              items.push(data);
-            }
-          } catch {
-            console.warn('Failed to parse YAML for', entry.name);
-          }
-        }
+    if (this.directoryHandle) {
+      const hasObsidianConfig = await this.hasDirectory(this.directoryHandle, OBSIDIAN_CONFIG_DIR);
+      if (hasObsidianConfig) {
+        this.cachedDataFolder = await this.resolvePluginDataFolder(this.directoryHandle);
+        return this.cachedDataFolder;
       }
     }
 
-    return items;
+    return '';
   }
 
-  async addItem(item: Partial<WishlistItem>): Promise<void> {
-    if (!this.directoryHandle) throw new Error('Not connected to local data');
-
-    const now = new Date().toISOString().split('T')[0];
-
-    let coolingDays = 1;
-    if (item.price_estimated) {
-      if (item.price_estimated < 100) coolingDays = 1;
-      else if (item.price_estimated < 1000) coolingDays = 3;
-      else if (item.price_estimated < 10000) coolingDays = 7;
-      else coolingDays = 30;
-    }
-
-    const fullItem: WishlistItem = {
-      name: item.name || 'Untitled',
-      price_estimated: item.price_estimated || 0,
-      status: 'cooling',
-      date_added: now,
-      cooling_days: coolingDays,
-      ...item
-    };
-
-    const yamlStr = YAML.stringify(fullItem);
-    const content = `---\n${yamlStr}---\n`;
-
-    const fileName = `Ownly-${now}-${Date.now()}.md`;
-    const fileHandle = await this.directoryHandle.getFileHandle(fileName, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(content);
-    await writable.close();
+  private getRelativePath(path: string): string {
+    if (!this.cachedDataFolder) return path;
+    return `${this.cachedDataFolder}/${path}`;
   }
 
-  async updateItemStatus(fileName: string, newStatus: 'purchased' | 'archived'): Promise<void> {
-    if (!this.directoryHandle) throw new Error('Not connected to local data');
-    this.sanitizeFileName(fileName);
-
-    const fileHandle = await this.directoryHandle.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    const text = await file.text();
-
-    const match = text.match(/^---\n([\s\S]*?)\n---/);
-    if (match && match[1]) {
-      const data = YAML.parse(match[1]) as WishlistItem;
-      data.status = newStatus;
-
-      if (newStatus === 'purchased' && !data.date_purchased) {
-        data.date_purchased = new Date().toISOString().split('T')[0];
-      }
-
-      delete data.fileName;
-
-      const yamlStr = YAML.stringify(data);
-      const restOfContent = text.substring(match[0].length);
-      const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
-
-      const writable = await fileHandle.createWritable();
-      await writable.write(newContent);
-      await writable.close();
-    }
-  }
-
-  async updateItem(fileName: string, updates: Partial<WishlistItem>): Promise<void> {
-    if (!this.directoryHandle) throw new Error('Not connected to local data');
-    this.sanitizeFileName(fileName);
-
-    const fileHandle = await this.directoryHandle.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    const text = await file.text();
-
-    const match = text.match(/^---\n([\s\S]*?)\n---/);
-    if (match && match[1]) {
-      const data = YAML.parse(match[1]) as WishlistItem;
-
-      if (updates.name !== undefined) data.name = updates.name;
-      if (updates.price_estimated !== undefined) {
-        data.price_estimated = updates.price_estimated;
-        if (data.status === 'cooling') {
-            if (data.price_estimated < 100) data.cooling_days = 1;
-            else if (data.price_estimated < 1000) data.cooling_days = 3;
-            else if (data.price_estimated < 10000) data.cooling_days = 7;
-            else data.cooling_days = 30;
-        }
-      }
-
-      delete data.fileName;
-
-      const yamlStr = YAML.stringify(data);
-      const restOfContent = text.substring(match[0].length);
-      const newContent = `---\n${yamlStr}\n--- \n${restOfContent}`;
-
-      const writable = await fileHandle.createWritable();
-      await writable.write(newContent);
-      await writable.close();
-    }
-  }
   private sanitizeFileName = (fileName: string): string => {
     // Reject path traversal attempts
     if (fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) {

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  CAPTURE_STORAGE_KEY_V2,
-  mutateCaptureStateInWorker,
-  normalizeCaptureState,
-  readCaptureState,
+  CAPTURE_STORAGE_KEY,
+  mutateCaptureStateV3InWorker,
+  normalizeCaptureStateV3,
+  readCaptureStateV3,
 } from './capture-state';
-import { asCaptureCandidate, type PlannerTripPlace } from '../domain/planner';
+import type { CapturePlace } from '../domain/capture';
 
 const storage = new Map<string, unknown>();
 
@@ -20,71 +20,72 @@ vi.stubGlobal('chrome', {
   },
 });
 
-function place(id: string): PlannerTripPlace {
+function createTestPlace(id: string, collectionId = 'inbox'): CapturePlace {
   return {
-    schema_version: '0.1', type: 'trip_place', id, trip_id: 'trip-1', title: `Place ${id}`,
-    source_provider: 'google_maps', source_url: `https://www.google.com/maps/place/${id}`,
-    kind: 'attraction', priority: 'want', tags: [], signals: [], risks: [], reservation_status: 'none',
-    state: 'candidate', created_at: '2026-08-23T00:00:00.000Z',
+    id,
+    collection_id: collectionId,
+    title: `Place ${id}`,
+    source: {
+      provider: 'google_maps',
+      url: `https://www.google.com/maps/place/${id}`,
+    },
+    inferred_kind: 'attraction',
+    captured_at: '2026-08-23T00:00:00.000Z',
   };
 }
 
 beforeEach(() => storage.clear());
 
-describe('normalizeCaptureState', () => {
-  it('does not migrate V1 and only accepts the V2 inbox contract', () => {
-    expect(normalizeCaptureState(undefined)).toEqual({ version: 2, activeContext: null, pendingPlaces: [] });
-    expect(normalizeCaptureState({ version: 1, trips: [], pendingPlaces: [place('legacy')] })).toEqual({
-      version: 2, activeContext: null, pendingPlaces: [],
+describe('normalizeCaptureStateV3', () => {
+  it('initializes default inbox collection when given undefined', () => {
+    const state = normalizeCaptureStateV3(undefined);
+    expect(state.version).toBe(3);
+    expect(state.collections.length).toBeGreaterThanOrEqual(1);
+    expect(state.places).toEqual([]);
+  });
+
+  it('normalizes valid places and assigns active collection', () => {
+    const state = normalizeCaptureStateV3({
+      version: 3,
+      active_collection_id: 'col-1',
+      collections: [{ id: 'col-1', title: 'Tokyo', created_at: '2026-09-01T00:00:00Z' }],
+      places: [createTestPlace('p-1', 'col-1')],
     });
-    const state = normalizeCaptureState({
-      version: 2,
-      activeContext: { tripId: 'trip-1', title: 'Tokyo', currency: 'jpy', tags: ['food'] },
-      pendingPlaces: [{ ...place('a'), state: 'scheduled', scheduled_date: '2026-10-01', locked: true }],
-    });
-    expect(state.activeContext).toMatchObject({ tripId: 'trip-1', currency: 'JPY' });
-    expect(state.pendingPlaces[0]).toMatchObject({ state: 'candidate' });
-    for (const key of ['scheduled_date', 'scheduled_start', 'sort_order', 'locked', 'is_anchor', 'anchor_type']) {
-      expect(state.pendingPlaces[0]).not.toHaveProperty(key);
-    }
+    expect(state.version).toBe(3);
+    expect(state.active_collection_id).toBe('col-1');
+    expect(state.places).toHaveLength(1);
+    expect(state.places[0].id).toBe('p-1');
   });
 });
 
-describe('mutateCaptureStateInWorker', () => {
-  it('persists failed candidates and their import report across a fresh read', async () => {
-    await mutateCaptureStateInWorker((current) => ({
+describe('mutateCaptureStateV3InWorker', () => {
+  it('persists places across a fresh read', async () => {
+    await mutateCaptureStateV3InWorker((current) => ({
       state: {
         ...current,
-        pendingPlaces: [{ ...asCaptureCandidate(place('failed')), status: 'failed', reason: 'missing_place_identity', lastAttempt: '2026-09-02' }],
-        lastImportReport: {
-          received: 1,
-          created: [],
-          updated: [],
-          deduped: [],
-          failed: [{ id: 'failed', title: 'Place failed', reason: 'missing_place_identity' }],
-        },
+        places: [createTestPlace('p-new', current.active_collection_id || 'inbox')],
       },
       result: undefined,
     }));
 
-    const restored = await readCaptureState();
-    expect(restored.pendingPlaces[0]).toMatchObject({ id: 'failed', status: 'failed', reason: 'missing_place_identity', lastAttempt: '2026-09-02' });
-    expect(restored.lastImportReport).toEqual({
-      received: 1,
-      created: [],
-      updated: [],
-      deduped: [],
-      failed: [{ id: 'failed', title: 'Place failed', reason: 'missing_place_identity' }],
-    });
+    const restored = await readCaptureStateV3();
+    expect(restored.places).toHaveLength(1);
+    expect(restored.places[0].id).toBe('p-new');
   });
 
   it('serializes concurrent background mutations', async () => {
     await Promise.all([
-      mutateCaptureStateInWorker((current) => ({ state: { ...current, pendingPlaces: [...current.pendingPlaces, place('a')] }, result: 'a' })),
-      mutateCaptureStateInWorker((current) => ({ state: { ...current, pendingPlaces: [...current.pendingPlaces, place('b')] }, result: 'b' })),
+      mutateCaptureStateV3InWorker((current) => ({
+        state: { ...current, places: [...current.places, createTestPlace('a', current.active_collection_id || 'inbox')] },
+        result: 'a',
+      })),
+      mutateCaptureStateV3InWorker((current) => ({
+        state: { ...current, places: [...current.places, createTestPlace('b', current.active_collection_id || 'inbox')] },
+        result: 'b',
+      })),
     ]);
-    const final = await readCaptureState();
-    expect(final.pendingPlaces.map((p) => p.id).sort()).toEqual(['a', 'b']);
-    expect(storage.get(CAPTURE_STORAGE_KEY_V2)).toMatchObject({ version: 2 });
+    const final = await readCaptureStateV3();
+    expect(final.places.map((p) => p.id).sort()).toEqual(['a', 'b']);
+    expect(storage.get(CAPTURE_STORAGE_KEY)).toMatchObject({ version: 3 });
   });
 });
