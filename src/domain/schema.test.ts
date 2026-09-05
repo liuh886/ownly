@@ -305,12 +305,58 @@ describe('schema validation', () => {
       trip_id: 'trip-1',
       from_place_id: 'place-1',
       to_place_id: 'place-2',
-      travel_mode: 'driving',
+      mode: 'driving',
       duration_minutes: 15,
+      source: 'heuristic',
       created_at: '2026-09-01T00:00:00Z',
     };
     const result = validateEntity(leg);
     expect(result.valid).toBe(true);
+  });
+
+  it('rejects planner trip leg with missing mode', () => {
+    const leg = {
+      id: 'leg-1',
+      schema_version: '0.1',
+      type: 'trip_leg',
+      trip_id: 'trip-1',
+      from_place_id: 'place-1',
+      to_place_id: 'place-2',
+      duration_minutes: 15,
+      created_at: '2026-09-01T00:00:00Z',
+    };
+    const result = validateEntity(leg);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.field === 'mode')).toBe(true);
+  });
+
+  it('rejects planner trip with unknown status', () => {
+    const trip = {
+      ...baseEntity,
+      type: 'trip',
+      status: 'archived',
+      start_date: '2026-10-01',
+      end_date: '2026-10-10',
+      destinations: ['Bangkok'],
+    };
+    const result = validateEntity(trip);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.field === 'status')).toBe(true);
+  });
+
+  it('rejects unknown schema version with error severity', () => {
+    const trip = {
+      ...baseEntity,
+      schema_version: '9.9',
+      type: 'trip',
+      status: 'planning',
+      start_date: '2026-10-01',
+      end_date: '2026-10-10',
+      destinations: ['Bangkok'],
+    };
+    const result = validateEntity(trip);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.field === 'schema_version' && i.severity === 'error')).toBe(true);
   });
 
   it('validates a valid planner trip expense', () => {
@@ -319,6 +365,7 @@ describe('schema validation', () => {
       schema_version: '0.1',
       type: 'trip_expense',
       trip_id: 'trip-1',
+      title: 'Dinner at Somtum Der',
       amount: 1500,
       currency: 'THB',
       category: 'food',

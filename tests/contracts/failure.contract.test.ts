@@ -4,7 +4,7 @@ import { validateEntity } from '@/domain/schema';
 
 describe('P1-⑤ runtime failure — 异常路径', () => {
   it('Case1 schema 0.1 实体校验通过', () => {
-    const valid = { id: 'x', type: 'trip_place', trip_id: 't1', kind: 'food', source_provider: 'other', source_url: 'https://x', schema_version: '0.1', title: 'Old', created_at: '2026-01-01T00:00:00.000Z' };
+    const valid = { id: 'x', type: 'trip_place', trip_id: 't1', kind: 'food', source_provider: 'other', source_url: 'https://x', state: 'candidate', schema_version: '0.1', title: 'Old', created_at: '2026-01-01T00:00:00.000Z' };
     const result = validateEntity(valid);
     expect(result.valid).toBe(true);
   });

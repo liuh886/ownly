@@ -2,7 +2,7 @@ import { getStrongPlaceIdentityKeys, haveConflictingStrongPlaceIdentity, shareSt
 
 export type PlannerTripStatus = 'planning' | 'active' | 'completed';
 export type PlannerTravelMode = 'driving' | 'walking' | 'bicycling' | 'transit' | 'motorcycle';
-export type PlannerTripLegSource = 'manual' | 'openrouteservice';
+export type PlannerTripLegSource = 'heuristic' | 'manual' | 'openrouteservice';
 export type PlannerPlaceState = 'candidate' | 'done' | 'dropped';
 export type PlannerPlacePriority = 'must' | 'want' | 'optional';
 export type PlannerReservationStatus = 'none' | 'needed' | 'booked';
@@ -266,7 +266,7 @@ export function calculateDefaultTripLeg(
     mode,
     duration_minutes,
     distance_meters: roadDistMeters,
-    source: 'manual',
+    source: 'heuristic',
     created_at: timestamp,
     updated_at: timestamp,
   };
@@ -303,14 +303,12 @@ export type CaptureCandidate = PlannerTripPlace & {
 };
 
 export interface OwnlyCaptureState {
-  version: 2;
   activeContext: CaptureContext | null;
   pendingPlaces: CaptureCandidate[];
   lastImportReport?: ImportReport;
 }
 
 export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
-  version: 2,
   activeContext: null,
   pendingPlaces: [],
 };
@@ -367,7 +365,6 @@ export function mergeCaptureState(
     (place) => !localPlaceIds.has(place.id) && !(tombstones && tombstones.has(place.id)),
   );
   return {
-    version: 2,
     activeContext: fresh.activeContext,
     pendingPlaces: [...localPlaces, ...backgroundOnly],
     lastImportReport: local.lastImportReport ?? fresh.lastImportReport,

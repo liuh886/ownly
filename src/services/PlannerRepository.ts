@@ -116,13 +116,9 @@ export class PlannerTransactionContext {
   ) {}
 
   private async readOriginal(directory: string, fileName: string): Promise<string | null> {
-    try {
-      const files = await this.store.readMarkdownFiles(this.resolveDirectory(directory));
-      const found = files.find((f) => f.fileName === fileName);
-      return found ? found.content : null;
-    } catch {
-      return null;
-    }
+    const files = await this.store.readMarkdownFiles(this.resolveDirectory(directory));
+    const found = files.find((f) => f.fileName === fileName);
+    return found ? found.content : null;
   }
 
   async stageWrite(directory: string, fileName: string, content: string): Promise<void> {
@@ -207,6 +203,7 @@ export class PlannerTransactionContext {
 
 export class PlannerRepository {
   private root = '';
+  private mutationChain: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly store: PlannerFileStore = obsidianService as PlannerFileStore) {}
 
@@ -220,17 +217,23 @@ export class PlannerRepository {
 
   async executeTransaction<R>(fn: (tx: PlannerTransactionContext) => Promise<R>): Promise<R> {
     await this.initialize();
-    const tx = new PlannerTransactionContext(this.store, (name) => this.directory(name));
-    try {
-      return await fn(tx);
-    } catch (error) {
-      const rollbackResult = await tx.rollback();
-      const cause = error instanceof Error ? error.message : String(error);
-      if (rollbackResult.errors.length > 0) {
-        throw new Error(`Transaction failed (${cause}) and rollback had errors: ${rollbackResult.errors.join(' | ')}`);
+    const run = async (): Promise<R> => {
+      const tx = new PlannerTransactionContext(this.store, (name) => this.directory(name));
+      try {
+        return await fn(tx);
+      } catch (error) {
+        const rollbackResult = await tx.rollback();
+        const cause = error instanceof Error ? error.message : String(error);
+        if (rollbackResult.errors.length > 0) {
+          throw new Error(`Transaction failed (${cause}) and rollback had errors: ${rollbackResult.errors.join(' | ')}`);
+        }
+        throw new Error(`Transaction failed and was rolled back: ${cause}`);
       }
-      throw new Error(`Transaction failed and was rolled back: ${cause}`);
-    }
+    };
+
+    const nextPromise = this.mutationChain.then(run, run);
+    this.mutationChain = nextPromise.catch(() => {});
+    return nextPromise;
   }
 
   private async list<T extends PlannerEntity>(
@@ -319,15 +322,9 @@ export class PlannerRepository {
   }
 
   private async upsert(entity: PlannerEntity): Promise<void> {
-    await this.initialize();
-    const directory = entity.type === 'trip'
-      ? PLANNER_DIRECTORIES.trips
-      : entity.type === 'trip_place'
-        ? PLANNER_DIRECTORIES.places
-        : entity.type === 'trip_visit'
-          ? PLANNER_DIRECTORIES.visits
-          : PLANNER_DIRECTORIES.legs;
-    await this.store.writeMarkdownFile(this.directory(directory), entityFileName(entity), serializeMarkdownEntity(entity, ''));
+    await this.executeTransaction(async (tx) => {
+      await tx.stageUpsertEntity(entity);
+    });
   }
 
   async upsertTrip(trip: PlannerTrip): Promise<void> { await this.upsert(trip); }
@@ -335,7 +332,7 @@ export class PlannerRepository {
     await this.upsert({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) });
   }
   async upsertVisit(visit: PlannerTripVisit): Promise<void> {
-    const trip = (await this.listTrips()).find((t) => t.id === visit.trip_id);
+    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === visit.trip_id);
     if (!trip) {
       throw new Error(`Planner trip "${visit.trip_id}" was not found for visit.`);
     }
@@ -345,7 +342,11 @@ export class PlannerRepository {
   async upsertLeg(leg: PlannerTripLeg): Promise<void> { await this.upsert(leg); }
 
   async upsertPlaces(places: PlannerTripPlace[]): Promise<void> {
-    for (const place of places) await this.upsertPlace(place);
+    await this.executeTransaction(async (tx) => {
+      for (const place of places) {
+        await tx.stageUpsertEntity({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) });
+      }
+    });
   }
 
   private async importResearchPlaces(places: PlannerTripPlace[]): Promise<ImportReport> {
@@ -735,50 +736,47 @@ export class PlannerRepository {
   }
 
   async dropPlace(placeId: string): Promise<boolean> {
-    await this.initialize();
-    const existing = (await this.listPlaces()).find((place) => place.id === placeId);
-    if (!existing) return false;
-    const blockingVisits = (await this.listVisits()).filter(
-      (visit) => visit.trip_id === existing.trip_id && visit.place_id === placeId,
-    );
-    if (blockingVisits.length > 0) {
-      throw new Error(`Cannot drop ${existing.title}: remove ${blockingVisits.length} scheduled visit(s) first.`);
-    }
-    await this.store.writeMarkdownFile(
-      this.directory(PLANNER_DIRECTORIES.places),
-      entityFileName(existing),
-      serializeMarkdownEntity({ ...existing, state: 'dropped', updated_at: new Date().toISOString() }, ''),
-    );
-    return true;
+    return this.executeTransaction(async (tx) => {
+      const places = await this.listPlaces({ strict: true });
+      const existing = places.find((place) => place.id === placeId);
+      if (!existing) return false;
+      const visits = await this.listVisits({ strict: true });
+      const blockingVisits = visits.filter(
+        (visit) => visit.trip_id === existing.trip_id && visit.place_id === placeId,
+      );
+      if (blockingVisits.length > 0) {
+        throw new Error(`Cannot drop ${existing.title}: remove ${blockingVisits.length} scheduled visit(s) first.`);
+      }
+      await tx.stageUpsertEntity({ ...existing, state: 'dropped', updated_at: new Date().toISOString() });
+      return true;
+    });
   }
 
   async restorePlace(placeId: string): Promise<boolean> {
-    await this.initialize();
-    const existing = (await this.listPlaces()).find((place) => place.id === placeId);
-    if (!existing) return false;
-    await this.store.writeMarkdownFile(
-      this.directory(PLANNER_DIRECTORIES.places),
-      entityFileName(existing),
-      serializeMarkdownEntity({ ...existing, state: 'candidate', updated_at: new Date().toISOString() }, ''),
-    );
-    return true;
+    return this.executeTransaction(async (tx) => {
+      const places = await this.listPlaces({ strict: true });
+      const existing = places.find((place) => place.id === placeId);
+      if (!existing) return false;
+      await tx.stageUpsertEntity({ ...existing, state: 'candidate', updated_at: new Date().toISOString() });
+      return true;
+    });
   }
 
   async deletePlace(placeId: string): Promise<boolean> {
-    await this.initialize();
-    const existing = (await this.listPlaces()).find((place) => place.id === placeId);
-    if (!existing) return false;
-    const blockingVisits = (await this.listVisits()).filter(
-      (visit) => visit.trip_id === existing.trip_id && visit.place_id === placeId,
-    );
-    if (blockingVisits.length > 0) {
-      throw new Error(`Cannot delete ${existing.title}: remove ${blockingVisits.length} scheduled visit(s) first.`);
-    }
-    await this.store.deleteMarkdownFile(
-      this.directory(PLANNER_DIRECTORIES.places),
-      entityFileName(existing),
-    );
-    return true;
+    return this.executeTransaction(async (tx) => {
+      const places = await this.listPlaces({ strict: true });
+      const existing = places.find((place) => place.id === placeId);
+      if (!existing) return false;
+      const visits = await this.listVisits({ strict: true });
+      const blockingVisits = visits.filter(
+        (visit) => visit.trip_id === existing.trip_id && visit.place_id === placeId,
+      );
+      if (blockingVisits.length > 0) {
+        throw new Error(`Cannot delete ${existing.title}: remove ${blockingVisits.length} scheduled visit(s) first.`);
+      }
+      await tx.stageDeleteEntity(existing);
+      return true;
+    });
   }
 
   async deleteTrip(tripId: string): Promise<boolean> {
@@ -1083,13 +1081,15 @@ export class PlannerRepository {
   }
 
   async upsertExpense(expense: TripExpenseItem): Promise<void> {
-    await this.initialize();
-    await this.store.writeMarkdownFile(this.directory(PLANNER_DIRECTORIES.expenses), expenseFileName(expense.id), serializeMarkdownEntity(toRepoExpense(expense), ''));
+    await this.executeTransaction(async (tx) => {
+      await tx.stageUpsertExpense(expense);
+    });
   }
 
   async deleteExpense(expenseId: string): Promise<void> {
-    await this.initialize();
-    await this.store.deleteMarkdownFile(this.directory(PLANNER_DIRECTORIES.expenses), expenseFileName(expenseId));
+    await this.executeTransaction(async (tx) => {
+      await tx.stageDeleteExpense(expenseId);
+    });
   }
 
   async exportTripIcs(tripId: string): Promise<string> {

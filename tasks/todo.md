@@ -1,5 +1,25 @@
 # Ownly — Task Progress & Review
 
+## Completed: Deep Architectural Robustness & Schema/Concurrency Fixes (2026-09-05)
+- [x] **1. True Fail-Closed Reads & Diagnostic Scan Separation (P1)**
+  - Made `ObsidianFileSystemService.readMarkdownFiles()` fail-closed (throws on individual file read failure); provided `scanMarkdownFilesBestEffort()` / `{ tolerant?: boolean }` for Doctor and non-blocking diagnostic scans.
+  - Ensured all mutation methods in `PlannerRepository.ts` (`dropPlace`, `deletePlace`, `upsert`, etc.) use strict fail-closed reads.
+- [x] **2. Transaction ReadOriginal Distinction & Global Mutation Queue (P1)**
+  - In `PlannerRepository.ts`, distinguished file-not-found from read errors in `readOriginal()` so read errors abort the transaction and propagate instead of returning `null` (preventing accidental deletion on rollback).
+  - Added serialized `private mutationChain: Promise<unknown> = Promise.resolve();` queue to `PlannerRepository.executeTransaction()` to serialize concurrent mutations and prevent transaction rollback race conditions.
+- [x] **3. Strict Runtime Schema Validator Alignment with Domain Models (P1)**
+  - In [`src/domain/schema.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/schema.ts), strictly validated entities against real Domain interfaces (`PlannerTripStatus = 'planning' | 'active' | 'completed'`, `PlannerPlaceState = 'candidate' | 'done' | 'dropped'`, required `mode: PlannerTravelMode` on `PlannerTripLeg`, required `destinations` array and date fields on `PlannerTrip`, and reject unknown `schema_version` with error).
+  - Updated `src/domain/schema.test.ts` and `tests/contracts/failure.contract.test.ts` with valid Domain fixtures.
+- [x] **4. Extract `usePlannerData` & `usePlannerActions` with Request Epoch (P2)**
+  - Modularized `usePlannerController.ts` into [`usePlannerData.ts`](file:///D:/Documents/GitHub/Ownly/src/components/planner/usePlannerData.ts) (state, selectors, metrics, and `loadEpochRef` request counter to drop out-of-order stale responses) and [`usePlannerActions.ts`](file:///D:/Documents/GitHub/Ownly/src/components/planner/usePlannerActions.ts) (encapsulating all mutations and UI action authority).
+  - Updated `PlannerHome.tsx` to delegate 100% of trip mutations (`upsertTrip`, `deleteTrip`, `toggleVisitLock`) to the controller, removing direct repository calls.
+- [x] **5. Clean Remaining Capture V2 Legacy Types (P2)**
+  - Removed all remaining V2 migration functions, interfaces (`CaptureContextV2`, `CaptureCandidateV2`, `migrateV2ToV3`), and V2 version tags in `src/domain/capture.ts`, `src/extension/capture-state.ts`, and `src/domain/planner.ts`.
+- [x] **6. Differentiate Heuristic vs Manual Leg Sources (P2)**
+  - Expanded `PlannerTripLeg.source` to `'heuristic' | 'manual' | 'openrouteservice'` and updated `calculateDefaultTripLeg` to assign `source: 'heuristic'`.
+- [x] **7. Comprehensive Multi-Target Verification**
+  - Ran `validate:fast`, `validate:extension` (172/172 tests passed), `validate:shared` (58/58 test suites, 533/533 tests passed), `npm run build` (Next.js full production build), and full `validate` (100% clean).
+
 ## Completed: Core Architectural Technical Debt Clearance & P1/P2 Robustness Remediation (2026-09-05)
 - [x] **1. Planner Multi-File Mutation Transaction & Rollback Primitive (P1)**
   - Implemented transactional execution primitive with rollback checkpoints in [`src/services/PlannerRepository.ts`](file:///D:/Documents/GitHub/Ownly/src/services/PlannerRepository.ts).

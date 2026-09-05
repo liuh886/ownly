@@ -108,19 +108,17 @@ export async function pullCaptureState(): Promise<OwnlyCaptureState | null> {
     );
 
     return {
-      version: 2,
       activeContext,
       pendingPlaces,
     };
   }
 
-  // V2 state shape
-  const v2 = raw as Partial<OwnlyCaptureState>;
+  // Fallback state shape
+  const fallback = raw as Partial<OwnlyCaptureState>;
   return {
-    version: 2,
-    activeContext: v2.activeContext ?? null,
-    pendingPlaces: Array.isArray(v2.pendingPlaces) ? v2.pendingPlaces : [],
-    lastImportReport: v2.lastImportReport,
+    activeContext: fallback.activeContext ?? null,
+    pendingPlaces: Array.isArray(fallback.pendingPlaces) ? fallback.pendingPlaces : [],
+    lastImportReport: fallback.lastImportReport,
   };
 }
 

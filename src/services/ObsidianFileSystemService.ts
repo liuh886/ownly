@@ -232,11 +232,14 @@ export class ObsidianFileSystemService {
     return current;
   }
 
-  async readMarkdownFiles(directory: string): Promise<{fileName: string, content: string}[]> {
+  async readMarkdownFiles(
+    directory: string,
+    options?: { tolerant?: boolean },
+  ): Promise<{ fileName: string; content: string }[]> {
     const dirHandle = await this.getDirHandle(directory);
     if (!dirHandle) return [];
 
-    const files: {fileName: string, content: string}[] = [];
+    const files: { fileName: string; content: string }[] = [];
     for await (const entry of dirHandle.values()) {
       if (entry.kind === 'file' && entry.name.endsWith('.md')) {
         try {
@@ -244,11 +247,19 @@ export class ObsidianFileSystemService {
           const content = await file.text();
           files.push({ fileName: entry.name, content });
         } catch (e) {
-          console.warn(`Failed to read file ${entry.name}`, e);
+          if (options?.tolerant) {
+            console.warn(`[ObsidianFileSystemService] Failed to read file ${entry.name} in ${directory}`, e);
+          } else {
+            throw new Error(`Failed to read markdown file "${entry.name}" in "${directory}": ${e instanceof Error ? e.message : String(e)}`);
+          }
         }
       }
     }
     return files;
+  }
+
+  async scanMarkdownFilesBestEffort(directory: string): Promise<{ fileName: string; content: string }[]> {
+    return this.readMarkdownFiles(directory, { tolerant: true });
   }
 
   async writeMarkdownFile(directory: string, fileName: string, content: string): Promise<void> {

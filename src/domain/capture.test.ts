@@ -9,10 +9,8 @@ import {
   placesShareStrongIdentity,
   reorderPlaces,
   mergePlaceResearch,
-  migrateV2ToV3,
   type CapturePlace,
   type CaptureCollection,
-  type OwnlyCaptureStateV2,
 } from './capture';
 
 function makePlace(overrides: Partial<CapturePlace> = {}): CapturePlace {
@@ -226,70 +224,6 @@ describe('mergePlaceResearch', () => {
     const merged = mergePlaceResearch(existing, incoming);
     expect(merged.source.types).toEqual(expect.arrayContaining(['restaurant', 'thai', 'noodle']));
     expect(merged.source.types).toHaveLength(3);
-  });
-});
-
-describe('migrateV2ToV3', () => {
-  it('converts V2 state with activeContext and pendingPlaces', () => {
-    const v2: OwnlyCaptureStateV2 = {
-      version: 2,
-      activeContext: { tripId: 'trip-1', title: 'Bangkok Trip', currency: 'THB' },
-      pendingPlaces: [
-        {
-          id: 'pl-1',
-          trip_id: 'trip-1',
-          title: 'Grand Palace',
-          source_provider: 'google_maps',
-          source_url: 'https://maps.example.com/1',
-          kind: 'attraction',
-          tags: ['temple'],
-          priority: 'must',
-          state: 'candidate',
-          reservation_status: 'none',
-          created_at: '2025-01-15T10:00:00.000Z',
-        },
-      ],
-    };
-
-    const v3 = migrateV2ToV3(v2);
-    expect(v3.version).toBe(3);
-    expect(v3.collections).toHaveLength(1);
-    expect(v3.collections[0].title).toBe('Bangkok Trip');
-    expect(v3.collections[0].currency).toBe('THB');
-    expect(v3.places).toHaveLength(1);
-    expect(v3.places[0].title).toBe('Grand Palace');
-    expect(v3.places[0].inferred_kind).toBe('attraction');
-    expect(v3.places[0].user?.tags).toEqual(['temple']);
-    expect(v3.places[0].user?.priority).toBe('must');
-  });
-
-  it('creates empty state when no activeContext', () => {
-    const v2: OwnlyCaptureStateV2 = { version: 2 };
-    const v3 = migrateV2ToV3(v2);
-    expect(v3.version).toBe(3);
-    expect(v3.collections).toHaveLength(0);
-    expect(v3.places).toHaveLength(0);
-  });
-
-  it('handles V2 with places but no activeContext', () => {
-    const v2: OwnlyCaptureStateV2 = {
-      version: 2,
-      pendingPlaces: [
-        {
-          id: 'pl-1',
-          trip_id: 'orphan',
-          title: 'Orphan Place',
-          source_provider: 'other',
-          source_url: '',
-          state: 'candidate',
-          reservation_status: 'none',
-        },
-      ],
-    };
-    const v3 = migrateV2ToV3(v2);
-    // Without activeContext, V2 places are not migrated (they belong to no trip)
-    expect(v3.places).toHaveLength(0);
-    expect(v3.collections).toHaveLength(0);
   });
 });
 

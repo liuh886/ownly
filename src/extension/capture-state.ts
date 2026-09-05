@@ -1,7 +1,6 @@
 import {
   EMPTY_CAPTURE_STATE_V3,
   ensureInboxCollection,
-  migrateV2ToV3,
   type OwnlyCaptureStateV3,
   type CaptureCollection,
   type CapturePlace,
@@ -100,11 +99,6 @@ export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
   if (!value || typeof value !== 'object') return ensureInboxCollection({ ...EMPTY_CAPTURE_STATE_V3 });
   const raw = value as Record<string, unknown>;
   const version = raw.version;
-
-  // V2 detected → auto-migrate → ensure inbox
-  if (version === 2) {
-    return ensureInboxCollection(migrateV2ToV3(value as Parameters<typeof migrateV2ToV3>[0]));
-  }
 
   if (version !== 3) return ensureInboxCollection({ ...EMPTY_CAPTURE_STATE_V3 });
 

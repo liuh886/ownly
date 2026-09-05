@@ -10,7 +10,6 @@ const place = (id: string, title = id): PlannerTripPlace => ({
 describe('Capture import report application', () => {
   it('keeps failed candidates retryable and removes only imported candidates', () => {
     const state: OwnlyCaptureState = {
-      version: 2,
       activeContext: { tripId: 'trip-1', title: 'Thailand' },
       pendingPlaces: [asCaptureCandidate(place('ok')), asCaptureCandidate(place('bkk', 'Suvarnabhumi Airport'))],
     };

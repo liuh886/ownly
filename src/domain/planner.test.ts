@@ -374,12 +374,10 @@ describe('Ownly Planner domain', () => {
 
   it('mergeCaptureState keeps background quick-captures and honors local tombstones', () => {
     const fresh: OwnlyCaptureState = {
-      version: 2,
       activeContext: { tripId: 'trip-1', title: 'Tokyo' },
       pendingPlaces: [place('bg-quick'), place('acked-gone')],
     };
     const local: OwnlyCaptureState = {
-      version: 2,
       activeContext: null,
       pendingPlaces: [place('edited-local'), place('locally-deleted')],
     };
@@ -714,8 +712,7 @@ describe('Ownly Planner domain', () => {
   });
 
   it('applies import reports without touching unrelated queue entries', () => {
-    const state = {
-      version: 2 as const,
+    const state: OwnlyCaptureState = {
       activeContext: { tripId: 'trip-1', title: 'Tokyo' },
       pendingPlaces: [place('keep'), place('drop')],
     };
@@ -1570,7 +1567,7 @@ describe('exportTripToMarkdown', () => {
       expect(leg?.mode).toBe('driving');
       expect(leg?.duration_minutes).toBeGreaterThanOrEqual(3);
       expect(leg?.distance_meters).toBeGreaterThan(0);
-      expect(leg?.source).toBe('manual');
+      expect(leg?.source).toBe('heuristic');
     });
 
     it('allows overriding the mode to walking, motorcycle, or bicycling', () => {

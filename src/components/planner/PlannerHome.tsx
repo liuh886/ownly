@@ -16,7 +16,6 @@ import {
   PLANNER_TRAVEL_MODE_CONFIG,
 } from '@/domain/planner';
 import type { PlannerExecutionTransitionItem, PlannerTimelineStopItem } from '@/domain/planner-schedule';
-import { plannerRepository } from '@/services/PlannerRepository';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
@@ -161,6 +160,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     setPoolSearch,
     isBatchOperating,
     load,
+    handleUpsertTrip,
+    handleDeleteTrip,
+    handleToggleVisitLock,
     handleAddExpense,
     handleDeleteExpense,
     handleUpdateMembers,
@@ -237,22 +239,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           open={isCreateTripOpen}
           onClose={() => setIsCreateTripOpen(false)}
           trips={trips}
-          onCreate={async (newTrip) => {
-            await plannerRepository.upsertTrip(newTrip);
-            await load();
-            setSelectedTripId(newTrip.id);
-            setNotice(zh ? `已创建行程「${newTrip.title}」` : `Created trip "${newTrip.title}"`);
-          }}
+          onCreate={handleUpsertTrip}
           onImported={(tripId) => {
             void load();
             setSelectedTripId(tripId);
           }}
-          onDeleteTrip={async (tripId) => {
-            await plannerRepository.deleteTrip(tripId);
-            await load();
-            setNotice(zh ? '已删除行程' : 'Trip deleted');
-            if (selectedTripId === tripId) setSelectedTripId(trips.find((t) => t.id !== tripId)?.id ?? '');
-          }}
+          onDeleteTrip={handleDeleteTrip}
           language={language}
           disabled={disabled}
         />
@@ -838,10 +830,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               <button
                                 type="button"
                                 aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
-                                onClick={async () => {
-                                  await plannerRepository.toggleVisitLock(place.visit_id);
-                                  await load();
-                                }}
+                                onClick={() => void handleToggleVisitLock(place.visit_id)}
                                 className={`flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] transition ${
                                   place.locked
                                     ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
@@ -1783,23 +1772,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         open={isCreateTripOpen}
         onClose={() => setIsCreateTripOpen(false)}
         trips={trips}
-        onCreate={async (newTrip) => {
-          await plannerRepository.upsertTrip(newTrip);
-          await load();
-          setSelectedTripId(newTrip.id);
-          setNotice(zh ? `已创建行程「${newTrip.title}」` : `Created trip "${newTrip.title}"`);
-        }}
+        onCreate={handleUpsertTrip}
         onImported={(tripId) => {
           void load();
           setSelectedTripId(tripId);
         }}
-        onDeleteTrip={async (tripId) => {
-          await plannerRepository.deleteTrip(tripId);
-          await load();
-          setNotice(zh ? '已删除行程' : 'Trip deleted');
-          // Use functional update to avoid stale trips closure when deleting current trip
-          setSelectedTripId((prev) => (prev === tripId ? '' : prev));
-        }}
+        onDeleteTrip={handleDeleteTrip}
         language={language}
         disabled={disabled}
       />
