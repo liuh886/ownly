@@ -1,7 +1,7 @@
 import { getStrongPlaceIdentityKeys, haveConflictingStrongPlaceIdentity, shareStrongPlaceIdentity } from './place-identity';
 
 export type PlannerTripStatus = 'planning' | 'active' | 'completed';
-export type PlannerTravelMode = 'driving' | 'walking' | 'bicycling' | 'transit';
+export type PlannerTravelMode = 'driving' | 'walking' | 'bicycling' | 'transit' | 'motorcycle';
 export type PlannerTripLegSource = 'manual' | 'openrouteservice';
 export type PlannerPlaceState = 'candidate' | 'done' | 'dropped';
 export type PlannerPlacePriority = 'must' | 'want' | 'optional';
@@ -182,6 +182,94 @@ export function plannerTripLegId(tripId: string, fromPlaceId: string, toPlaceId:
 export function plannerTripLegFileName(id: string): string {
   const safe = id.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72) || 'travel-leg';
   return `leg--${safe}-${stablePlannerHash(id)}.md`;
+}
+
+export const PLANNER_TRAVEL_MODE_CONFIG: Record<
+  PlannerTravelMode,
+  { emoji: string; labelZh: string; labelEn: string; defaultDuration: number }
+> = {
+  driving: { emoji: '🚗', labelZh: '自驾/打车', labelEn: 'Driving / Taxi', defaultDuration: 15 },
+  motorcycle: { emoji: '🛵', labelZh: '摩托车', labelEn: 'Motorcycle', defaultDuration: 10 },
+  walking: { emoji: '🚶', labelZh: '步行', labelEn: 'Walking', defaultDuration: 12 },
+  bicycling: { emoji: '🚲', labelZh: '自行车', labelEn: 'Bicycling', defaultDuration: 15 },
+  transit: { emoji: '🚇', labelZh: '公共交通', labelEn: 'Transit', defaultDuration: 20 },
+};
+
+export function isTransitHubPlace(place: { kind?: PlannerPlaceKind; title?: string }): boolean {
+  if (place.kind === 'transit') return true;
+  const title = (place.title ?? '').toLowerCase();
+  return /(airport|机场|空港|flughafen|aeropuerto|火车站|高铁站|railway|train station|bahnhof|gare)/i.test(title);
+}
+
+export function estimateCommuteDurationMinutes(
+  mode: PlannerTravelMode,
+  roadDistMeters?: number,
+): number {
+  if (roadDistMeters === undefined || !Number.isFinite(roadDistMeters)) {
+    return PLANNER_TRAVEL_MODE_CONFIG[mode]?.defaultDuration ?? 15;
+  }
+
+  const distKm = roadDistMeters / 1000;
+  switch (mode) {
+    case 'walking':
+      return Math.max(1, Math.round(distKm * 13.3));
+    case 'bicycling':
+      return Math.max(2, Math.round(distKm * 4.0));
+    case 'motorcycle':
+      return Math.max(2, Math.round(2 + distKm * 1.8));
+    case 'driving':
+      return Math.max(3, Math.round(3 + distKm * 2.2));
+    case 'transit':
+    default:
+      return Math.max(5, Math.round(6 + distKm * 3.0));
+  }
+}
+
+export function calculateDefaultTripLeg(
+  trip: PlannerTrip,
+  from: { id?: string; place_id?: string; title: string; kind?: PlannerPlaceKind; coordinates?: { lat: number; lng: number } | null },
+  to: { id?: string; place_id?: string; title: string; kind?: PlannerPlaceKind; coordinates?: { lat: number; lng: number } | null },
+  modeOverride?: PlannerTravelMode,
+  now = new Date(),
+): PlannerTripLeg | null {
+  // If both from and to are transit hubs (e.g. airport to airport, train station to train station), skip default local commute
+  if (isTransitHubPlace(from) && isTransitHubPlace(to)) {
+    return null;
+  }
+
+  const fromPlaceId = from.place_id || from.id || '';
+  const toPlaceId = to.place_id || to.id || '';
+  if (!fromPlaceId || !toPlaceId) return null;
+
+  const mode: PlannerTravelMode = modeOverride ?? trip.transport_mode ?? 'driving';
+  let roadDistMeters: number | undefined = undefined;
+
+  if (
+    from.coordinates && to.coordinates
+    && typeof from.coordinates.lat === 'number' && typeof from.coordinates.lng === 'number'
+    && typeof to.coordinates.lat === 'number' && typeof to.coordinates.lng === 'number'
+  ) {
+    const straightDistKm = haversineDistanceKm(from.coordinates, to.coordinates);
+    roadDistMeters = Math.round(straightDistKm * 1.3 * 1000);
+  }
+
+  const duration_minutes = estimateCommuteDurationMinutes(mode, roadDistMeters);
+  const timestamp = now.toISOString();
+
+  return {
+    schema_version: '0.1',
+    type: 'trip_leg',
+    id: plannerTripLegId(trip.id, fromPlaceId, toPlaceId),
+    trip_id: trip.id,
+    from_place_id: fromPlaceId,
+    to_place_id: toPlaceId,
+    mode,
+    duration_minutes,
+    distance_meters: roadDistMeters,
+    source: 'manual',
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
 }
 
 export interface CaptureContext {
@@ -681,7 +769,7 @@ function directionsUrl(stops: Array<PlannerTripPlace | PlannerScheduledPlace>, t
     api: '1',
     origin: stops[0].title,
     destination: stops[stops.length - 1].title,
-    travelmode: travelMode ?? 'transit',
+    travelmode: travelMode === 'motorcycle' ? 'two_wheeler' : (travelMode ?? 'transit'),
   });
   if (waypoints) params.set('waypoints', waypoints);
   return `https://www.google.com/maps/dir/?${params.toString()}`;

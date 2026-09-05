@@ -439,6 +439,7 @@ export function CreateTripModal({
                   >
                     <option value="transit">{zh ? '🚇 公共交通 / 打车' : '🚇 Transit'}</option>
                     <option value="driving">{zh ? '🚗 自驾租车' : '🚗 Driving'}</option>
+                    <option value="motorcycle">{zh ? '🛵 摩托车 / 电瓶车' : '🛵 Motorcycle'}</option>
                     <option value="walking">{zh ? '🚶 步行慢游' : '🚶 Walking'}</option>
                     <option value="bicycling">{zh ? '🚲 骑行' : '🚲 Bicycling'}</option>
                   </select>

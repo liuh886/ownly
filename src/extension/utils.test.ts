@@ -16,6 +16,226 @@ import {
   parseEntityListCoordinates,
   safeDecodeUri,
 } from './utils';
+import {
+  findAgodaHotelUrl,
+  parseAgodaCard,
+  detectAgodaSavedList,
+  AgodaAdapter,
+} from './adapters/agoda';
+
+// Lightweight Mock DOM for Node environment tests
+class MockElement {
+  tagName: string;
+  attributes = new Map<string, string>();
+  children: MockElement[] = [];
+  parentElement: MockElement | null = null;
+  _textContent: string = '';
+  href: string = '';
+  dataset: Record<string, string> = {};
+
+  constructor(tagName = 'div') {
+    this.tagName = tagName.toUpperCase();
+  }
+
+  get textContent(): string {
+    if (this.children.length === 0) return this._textContent;
+    return extractMockText(this);
+  }
+
+  set textContent(val: string) {
+    this._textContent = val;
+  }
+
+  setAttribute(name: string, value: string) {
+    this.attributes.set(name.toLowerCase(), value);
+    if (name.toLowerCase() === 'href') {
+      this.href = value;
+    }
+    if (name.startsWith('data-')) {
+      const prop = name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      this.dataset[prop] = value;
+    }
+  }
+
+  getAttribute(name: string): string | null {
+    if (name.toLowerCase() === 'href') return this.href || this.attributes.get('href') || null;
+    return this.attributes.get(name.toLowerCase()) ?? null;
+  }
+
+  appendChild(child: MockElement) {
+    child.parentElement = this;
+    this.children.push(child);
+  }
+
+  set innerHTML(html: string) {
+    this.children = parseHtmlToMockElements(html, this);
+    this.textContent = extractMockText(this);
+  }
+
+  get innerHTML(): string {
+    return this.children.map((c) => c.outerHTML).join('');
+  }
+
+  get outerHTML(): string {
+    return `<${this.tagName.toLowerCase()}>${this.innerHTML}</${this.tagName.toLowerCase()}>`;
+  }
+
+  querySelector<T = MockElement>(selector: string): T | null {
+    const list = this.querySelectorAll<T>(selector);
+    return list.length > 0 ? list[0] : null;
+  }
+
+  querySelectorAll<T = MockElement>(selector: string): T[] {
+    const selectors = selector.split(',').map((s) => s.trim());
+    const matches: MockElement[] = [];
+    const walk = (node: MockElement) => {
+      for (const sel of selectors) {
+        if (mockMatchesSelector(node, sel)) {
+          matches.push(node);
+          break;
+        }
+      }
+      for (const child of node.children) {
+        walk(child);
+      }
+    };
+    for (const child of this.children) {
+      walk(child);
+    }
+    return matches as unknown as T[];
+  }
+
+  closest<T = MockElement>(selector: string): T | null {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let curr: MockElement | null = this;
+    const selectors = selector.split(',').map((s) => s.trim());
+    while (curr) {
+      for (const sel of selectors) {
+        if (mockMatchesSelector(curr, sel)) {
+          return curr as unknown as T;
+        }
+      }
+      curr = curr.parentElement;
+    }
+    return null;
+  }
+}
+
+function mockMatchesSelector(node: MockElement, selector: string): boolean {
+  if (!selector) return false;
+  let sel = selector.trim();
+  if (sel === '*') return true;
+
+  const tagMatch = /^([a-zA-Z0-9]+)/.exec(sel);
+  if (tagMatch) {
+    if (node.tagName.toLowerCase() !== tagMatch[1].toLowerCase()) return false;
+    sel = sel.slice(tagMatch[0].length);
+  }
+
+  while (sel.length > 0) {
+    if (sel.startsWith('.')) {
+      const clsMatch = /^\.([a-zA-Z0-9_-]+)/.exec(sel);
+      if (!clsMatch) break;
+      const cls = clsMatch[1];
+      const classAttr = node.getAttribute('class') || '';
+      if (!classAttr.split(/\s+/).includes(cls) && !classAttr.includes(cls)) return false;
+      sel = sel.slice(clsMatch[0].length);
+    } else if (sel.startsWith('[')) {
+      const attrMatch = /^\[([a-zA-Z0-9_-]+)([*^$]?=)?(["']?)([^"'\]]*)\3\]/.exec(sel);
+      if (!attrMatch) break;
+      const [, attrName, op, , attrVal] = attrMatch;
+      const actualVal = node.getAttribute(attrName);
+      if (actualVal === null) return false;
+      if (op === '=') {
+        if (actualVal !== attrVal) return false;
+      } else if (op === '*=') {
+        if (!actualVal.includes(attrVal)) return false;
+      } else if (op === '^=') {
+        if (!actualVal.startsWith(attrVal)) return false;
+      } else if (op === '$=') {
+        if (!actualVal.endsWith(attrVal)) return false;
+      }
+      sel = sel.slice(attrMatch[0].length);
+    } else {
+      break;
+    }
+  }
+
+  return true;
+}
+
+function parseHtmlToMockElements(html: string, parent: MockElement): MockElement[] {
+  const root = new MockElement('root');
+  const stack: MockElement[] = [root];
+  const tagTokenRegex = /<!--[\s\S]*?-->|<(\/)?([a-zA-Z0-9_-]+)((?:\s+[a-zA-Z0-9_-]+(?:=(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/)?>|([^<]+)/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = tagTokenRegex.exec(html)) !== null) {
+    const [full, isClosing, tagName, attrsStr, isSelfClosing, text] = match;
+    if (full.startsWith('<!--')) continue;
+    if (text) {
+      const trimmed = text.trim();
+      if (trimmed && stack.length > 0) {
+        const top = stack[stack.length - 1];
+        top.textContent = (top.textContent ? top.textContent + ' ' : '') + trimmed;
+      }
+      continue;
+    }
+
+    if (isClosing) {
+      if (stack.length > 1 && stack[stack.length - 1].tagName.toLowerCase() === tagName.toLowerCase()) {
+        stack.pop();
+      }
+    } else if (tagName) {
+      const el = new MockElement(tagName);
+      if (attrsStr) {
+        const attrRegex = /([a-zA-Z0-9_-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+        let attrMatch: RegExpExecArray | null;
+        while ((attrMatch = attrRegex.exec(attrsStr)) !== null) {
+          const val = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? '';
+          el.setAttribute(attrMatch[1], val);
+        }
+      }
+      const currentParent = stack[stack.length - 1];
+      currentParent.appendChild(el);
+
+      const isVoid = Boolean(isSelfClosing) || /^(img|br|hr|input|meta|link)$/i.test(tagName);
+      if (!isVoid) {
+        stack.push(el);
+      }
+    }
+  }
+
+  for (const child of root.children) {
+    child.parentElement = parent;
+  }
+  return root.children;
+}
+
+function extractMockText(el: MockElement): string {
+  if (el.children.length === 0) return el.textContent;
+  return el.children.map((c) => extractMockText(c)).filter(Boolean).join(' ').trim();
+}
+
+if (typeof globalThis.document === 'undefined') {
+  const body = new MockElement('body');
+  (globalThis as unknown as { document: unknown }).document = {
+    createElement: (tag: string) => new MockElement(tag),
+    querySelector: (sel: string) => body.querySelector(sel),
+    querySelectorAll: (sel: string) => body.querySelectorAll(sel),
+    body,
+    title: '芭提雅度假精选 2026 | Agoda',
+  };
+}
+
+if (typeof globalThis.window === 'undefined') {
+  (globalThis as unknown as { window: unknown }).window = {
+    location: {
+      href: 'https://www.agoda.com/trips/detail?navBack=true&id=78652960&tab=saved',
+    },
+    document: (globalThis as unknown as { document: unknown }).document,
+  };
+}
 
 describe('cleanExtractedText & safeDecodeUri', () => {
   it('decodes HTML entities properly', () => {
@@ -308,5 +528,103 @@ describe('cleanTitleForSearch', () => {
     expect(cleanTitleForSearch('🍜 合成發 • 潮州魚蛋粉')).toBe('合成發 • 潮州魚蛋粉');
     expect(cleanTitleForSearch('📍 Cross Pattaya Pratamnak ⭐')).toBe('Cross Pattaya Pratamnak');
     expect(cleanTitleForSearch('  Oakwood Studios Bangkok  ')).toBe('Oakwood Studios Bangkok');
+  });
+});
+
+describe('Agoda Adapter & Card Parser', () => {
+  it('parses Agoda saved trip list card and normalizes to standard Google Maps format', () => {
+    const cardEl = document.createElement('div');
+    cardEl.setAttribute('data-selenium', 'saved-hotel-item');
+    cardEl.setAttribute('data-hotel-id', '786529');
+    cardEl.innerHTML = `
+      <div class="TripItem__Header">
+        <h3 data-selenium="hotel-name">
+          <a href="https://www.agoda.com/zh-cn/cross-pattaya-pratamnak/hotel/pattaya-th.html?id=786529">
+            Cross Pattaya Pratamnak
+          </a>
+        </h3>
+      </div>
+      <div class="TripItem__Details">
+        <div data-selenium="review-score">8.8</div>
+        <span data-selenium="review-count">1,240 篇评价</span>
+        <span data-selenium="area-city-name">帕塔亚普拉塔纳克山, 芭堤雅</span>
+        <span data-selenium="display-price">HK$ 680</span>
+      </div>
+    `;
+
+    const place = parseAgodaCard(cardEl);
+    expect(place).not.toBeNull();
+    expect(place?.title).toBe('Cross Pattaya Pratamnak');
+    expect(place?.sourceProvider).toBe('google_maps');
+    expect(place?.kind).toBe('stay');
+    expect(place?.category).toBe('Hotel');
+    expect(place?.rating).toBe(4.4); // 8.8 / 2 = 4.4
+    expect(place?.reviewCount).toBe(1240);
+    expect(place?.address).toBe('帕塔亚普拉塔纳克山, 芭堤雅');
+    expect(place?.priceLevel).toBe('HK$ 680');
+    expect(place?.sourcePlaceId).toBe('786529');
+    expect(place?.sourceUrl).toContain('Cross%20Pattaya%20Pratamnak');
+  });
+
+  it('extracts hotel URL from card with data-hotel-id or anchor link', () => {
+    const cardWithLink = document.createElement('div');
+    cardWithLink.innerHTML = `
+      <a href="/zh-cn/arawana-regency-north-pattaya/hotel/pattaya-th.html?id=123456" data-selenium="hotel-name">
+        Arawana Regency North Pattaya
+      </a>
+    `;
+    expect(findAgodaHotelUrl(cardWithLink)).toBe('/zh-cn/arawana-regency-north-pattaya/hotel/pattaya-th.html?id=123456');
+
+    const cardWithId = document.createElement('div');
+    cardWithId.setAttribute('data-hotel-id', '998877');
+    expect(findAgodaHotelUrl(cardWithId)).toBe('https://www.agoda.com/hotel/hotel.html?id=998877');
+  });
+
+  it('detects Agoda saved collection / trips page and extracts batch list', () => {
+    const savedListHtml = `
+      <div class="TripDetailHeader">
+        <h1 data-selenium="trip-name">芭提雅度假精选 2026</h1>
+      </div>
+      <div class="TripDetailList">
+        <div data-selenium="saved-hotel-item" data-hotel-id="101">
+          <h3 data-selenium="hotel-name">Cross Pattaya Pratamnak</h3>
+          <div data-selenium="review-score">9.0</div>
+          <span data-selenium="review-count">2,300 篇评价</span>
+          <span data-selenium="area-city-name">芭堤雅</span>
+          <span data-selenium="display-price">THB 3,200</span>
+        </div>
+        <div data-selenium="trip-saved-card" data-hotel-id="102">
+          <h3 data-selenium="hotel-name">Arawana Regency North Pattaya</h3>
+          <div data-selenium="review-score">8.4</div>
+          <span data-selenium="review-count">850 篇评价</span>
+          <span data-selenium="area-city-name">北芭堤雅</span>
+          <span data-selenium="display-price">THB 1,800</span>
+        </div>
+      </div>
+    `;
+
+    document.body.innerHTML = savedListHtml;
+
+    Object.defineProperty(window, 'location', {
+      value: new URL('https://www.agoda.com/trips/detail?navBack=true&id=78652960&tab=saved'),
+      writable: true,
+    });
+
+    const savedList = detectAgodaSavedList();
+    expect(savedList).not.toBeNull();
+    expect(savedList?.listName).toContain('芭提雅度假精选 2026');
+    expect(savedList?.places.length).toBe(2);
+    expect(savedList?.places[0].title).toBe('Cross Pattaya Pratamnak');
+    expect(savedList?.places[0].rating).toBe(4.5); // 9.0 / 2 = 4.5
+    expect(savedList?.places[0].priceLevel).toBe('THB 3,200');
+    expect(savedList?.places[1].title).toBe('Arawana Regency North Pattaya');
+    expect(savedList?.places[1].rating).toBe(4.2); // 8.4 / 2 = 4.2
+  });
+
+  it('matches Agoda domain correctly in adapter', () => {
+    const adapter = new AgodaAdapter();
+    expect(adapter.matches('https://www.agoda.com/trips/detail?navBack=true&id=78652960&tab=saved')).toBe(true);
+    expect(adapter.matches('https://www.agoda.com/zh-cn/hotel/pattaya-th.html')).toBe(true);
+    expect(adapter.matches('https://www.google.com/travel/')).toBe(false);
   });
 });

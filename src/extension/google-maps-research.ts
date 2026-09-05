@@ -77,8 +77,53 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
   const result: GoogleMapsResearchFacts = {};
   if (!Array.isArray(data)) return result;
 
-  const placeNode = (data as unknown[])[6];
-  if (!Array.isArray(placeNode)) return result;
+  let placeNode: unknown[] | undefined;
+  const rawNode = (data as unknown[])[6];
+  if (Array.isArray(rawNode)) {
+    placeNode = rawNode;
+  } else if (Array.isArray((data as unknown[])[13]) || Array.isArray((data as unknown[])[4]) || Array.isArray((data as unknown[])[9]) || Array.isArray((data as unknown[])[2])) {
+    placeNode = data as unknown[];
+  } else {
+    // Search for any array in data that resembles a placeNode
+    const arr = data as unknown[];
+    for (const item of arr) {
+      if (Array.isArray(item)) {
+        if (Array.isArray(item[6])) {
+          placeNode = item[6] as unknown[];
+          break;
+        }
+        if (Array.isArray(item[13]) || Array.isArray(item[4]) || Array.isArray(item[9])) {
+          placeNode = item as unknown[];
+          break;
+        }
+      }
+    }
+    if (!placeNode) return result;
+  }
+
+  // Feature ID extraction
+  const fidQueue: unknown[] = [data, placeNode];
+  let scannedFid = 0;
+  while (fidQueue.length > 0 && scannedFid < 40) {
+    const cur = fidQueue.shift();
+    scannedFid++;
+    if (typeof cur === 'string') {
+      const m = /^0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{6,}$/i.exec(cur.trim())
+        || /!1s(0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{6,})/i.exec(cur.trim())
+        || /"(0x[0-9a-fA-F]{8,}:0x[0-9a-fA-F]{6,})"/i.exec(cur.trim());
+      if (m) {
+        result.sourcePlaceId = m[1] || m[0];
+        break;
+      }
+      if (!result.sourcePlaceId && /^ChIJ[A-Za-z0-9_-]{15,}$/.test(cur.trim())) {
+        result.sourcePlaceId = cur.trim();
+      }
+    } else if (Array.isArray(cur)) {
+      for (const el of cur) {
+        if (el) fidQueue.push(el);
+      }
+    }
+  }
 
   // Categories / Types from placeNode[13]
   if (Array.isArray(placeNode[13])) {
@@ -472,9 +517,26 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
             const rawJson = html.slice(arrayStart, arrayEnd);
             const state = JSON.parse(rawJson);
             if (Array.isArray(state)) {
+              const mergeFacts = (facts: GoogleMapsResearchFacts) => {
+                if (facts.rating !== undefined && result.rating === undefined) result.rating = facts.rating;
+                if (facts.reviewCount !== undefined && result.reviewCount === undefined) result.reviewCount = facts.reviewCount;
+                if (facts.category && !result.category) result.category = facts.category;
+                if (facts.address && !result.address) result.address = facts.address;
+                if (facts.phone && !result.phone) result.phone = facts.phone;
+                if (facts.coordinates && !result.coordinates) result.coordinates = facts.coordinates;
+                if (facts.priceLevel && !result.priceLevel) result.priceLevel = facts.priceLevel;
+                if (facts.priceCurrency && !result.priceCurrency) result.priceCurrency = facts.priceCurrency;
+                if (facts.open_hours && !result.open_hours) result.open_hours = facts.open_hours;
+                if (facts.sourcePlaceId && !result.sourcePlaceId) result.sourcePlaceId = facts.sourcePlaceId;
+                if (facts.website && !result.website) result.website = facts.website;
+                if (facts.types && facts.types.length > 0) {
+                  facts.types.forEach((t) => types.add(t));
+                }
+              };
+
               const queue: unknown[] = [...state];
               let scannedState = 0;
-              while (queue.length > 0 && scannedState < 200) {
+              while (queue.length > 0 && scannedState < 300) {
                 const item = queue.shift();
                 scannedState += 1;
                 if (typeof item === 'string') {
@@ -482,21 +544,11 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
                   try {
                     const parsed = JSON.parse(clean);
                     const facts = extractGoogleMapsPreviewFacts(parsed);
-                    if (facts.rating !== undefined && result.rating === undefined) result.rating = facts.rating;
-                    if (facts.reviewCount !== undefined && result.reviewCount === undefined) result.reviewCount = facts.reviewCount;
-                    if (facts.category && !result.category) result.category = facts.category;
-                    if (facts.address && !result.address) result.address = facts.address;
-                    if (facts.phone && !result.phone) result.phone = facts.phone;
-                    if (facts.coordinates && !result.coordinates) result.coordinates = facts.coordinates;
-                    if (facts.priceLevel && !result.priceLevel) result.priceLevel = facts.priceLevel;
-                    if (facts.priceCurrency && !result.priceCurrency) result.priceCurrency = facts.priceCurrency;
-                    if (facts.open_hours && !result.open_hours) result.open_hours = facts.open_hours;
-                    if (facts.sourcePlaceId && !result.sourcePlaceId) result.sourcePlaceId = facts.sourcePlaceId;
-                    if (facts.types && facts.types.length > 0) {
-                      facts.types.forEach((t) => types.add(t));
-                    }
+                    mergeFacts(facts);
                   } catch {}
                 } else if (Array.isArray(item)) {
+                  const facts = extractGoogleMapsPreviewFacts(item);
+                  mergeFacts(facts);
                   queue.push(...item.slice(0, 30));
                 }
               }

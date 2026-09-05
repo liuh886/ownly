@@ -14,7 +14,7 @@ const ORS_BASE_URL = 'https://api.heigit.org/openrouteservice/v2/directions';
 const ORS_MATRIX_BASE_URL = 'https://api.heigit.org/openrouteservice/v2/matrix';
 
 export function openRouteServiceProfile(mode: PlannerTravelMode): string | null {
-  if (mode === 'driving') return 'driving-car';
+  if (mode === 'driving' || mode === 'motorcycle') return 'driving-car';
   if (mode === 'walking') return 'foot-walking';
   if (mode === 'bicycling') return 'cycling-regular';
   return null;

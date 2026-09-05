@@ -34,6 +34,35 @@ function isGenericNavigationTitle(text: string): boolean {
   return false;
 }
 
+export function findGoogleTravelHotelEntityUrl(cardEl: HTMLElement): string | null {
+  // 1. Explicit entity href inside the card
+  const anchor = cardEl.querySelector<HTMLAnchorElement>(
+    'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"], a[href*="/travel/hotels/s/"], a[href*="/travel/hotels/"]'
+  );
+  if (anchor?.href && (anchor.href.includes('/hotels/entity/') || anchor.href.includes('/travel/hotels/s/'))) {
+    return anchor.href;
+  }
+
+  // 2. data-hotel-id or data-travel-entity-id on card or ancestors/descendants
+  const hotelId = cardEl.getAttribute('data-hotel-id')
+    || cardEl.getAttribute('data-travel-entity-id')
+    || cardEl.getAttribute('data-entity-id')
+    || cardEl.closest('[data-hotel-id]')?.getAttribute('data-hotel-id')
+    || cardEl.closest('[data-travel-entity-id]')?.getAttribute('data-travel-entity-id')
+    || cardEl.querySelector('[data-hotel-id]')?.getAttribute('data-hotel-id')
+    || cardEl.querySelector('[data-travel-entity-id]')?.getAttribute('data-travel-entity-id');
+
+  if (hotelId) {
+    return `https://www.google.com/travel/hotels/entity/${encodeURIComponent(hotelId)}?hl=zh-CN`;
+  }
+
+  if (anchor?.href && anchor.href.includes('/travel/hotels/')) {
+    return anchor.href;
+  }
+
+  return null;
+}
+
 export function parseGoogleTravelCard(
   cardEl: HTMLElement,
   overrideCurrency?: string,
@@ -74,14 +103,17 @@ export function parseGoogleTravelCard(
     }
   }
 
-  const entityAnchor = cardEl.querySelector<HTMLAnchorElement>(
-    'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"], a[href*="/travel/hotels/s/"], a[data-hotel-id]'
-  );
-  const entityHref = entityAnchor?.href;
+  const targetEntityUrl = findGoogleTravelHotelEntityUrl(cardEl);
   let sourcePlaceId: string | undefined;
-  if (entityHref) {
-    const m = /\/hotels\/entity\/([A-Za-z0-9_-]+)/.exec(entityHref);
+  if (targetEntityUrl) {
+    const m = /\/hotels\/entity\/([A-Za-z0-9_-]+)/.exec(targetEntityUrl);
     if (m?.[1]) sourcePlaceId = m[1];
+  }
+  if (!sourcePlaceId) {
+    sourcePlaceId = cardEl.getAttribute('data-hotel-id')
+      || cardEl.getAttribute('data-travel-entity-id')
+      || cardEl.getAttribute('data-entity-id')
+      || undefined;
   }
 
   const addrEl = cardEl.querySelector<HTMLElement>(
@@ -327,10 +359,6 @@ export class GoogleTravelAdapter implements PageAdapter {
         continue;
       }
 
-      const entityAnchor = card.querySelector<HTMLAnchorElement>(
-        'a[href*="/travel/hotels/entity/"], a[href*="/hotels/entity/"], a[href*="/travel/hotels/s/"], a[data-hotel-id]'
-      );
-
       const parsedPlace = parseGoogleTravelCard(card);
       if (!parsedPlace || !parsedPlace.title) continue;
 
@@ -342,8 +370,8 @@ export class GoogleTravelAdapter implements PageAdapter {
         getPlace: async () => {
           const currentPlaceFacts = parseGoogleTravelCard(card);
           const rawPlace = currentPlaceFacts || parsedPlace;
-          const targetEntityUrl = entityAnchor?.href || window.location.href;
-          if (targetEntityUrl && (targetEntityUrl.includes('/travel/hotels/entity/') || targetEntityUrl.includes('/hotels/entity/'))) {
+          const targetEntityUrl = findGoogleTravelHotelEntityUrl(card);
+          if (targetEntityUrl) {
             return await resolveGoogleTravelEntityToMapsPlace(targetEntityUrl, rawPlace);
           }
           return convertToStandardGoogleMapsPlace(rawPlace);

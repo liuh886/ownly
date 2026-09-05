@@ -212,7 +212,11 @@ async function savePlaceIntoInboxDirectly(
       }
 
       const now = new Date().toISOString();
-      const freshKind = inferPlaceKind([place.title, place.category, place.address, ...(place.types || [])].filter(Boolean).join(' '));
+      const freshKind = place.kind && place.kind !== 'other'
+        ? place.kind
+        : (place.category
+          ? inferPlaceKind(place.category)
+          : inferPlaceKind([place.title, ...(place.types || [])].filter(Boolean).join(' ')));
       const isGeneric = existing?.inferred_kind === 'attraction' || existing?.inferred_kind === 'other' || !existing?.inferred_kind;
       const hasSpecific = freshKind !== 'attraction' && freshKind !== 'other';
       const effectiveKind = existing && !isGeneric ? existing.inferred_kind : (hasSpecific ? freshKind : (existing?.inferred_kind ?? freshKind));

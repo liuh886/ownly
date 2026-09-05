@@ -495,7 +495,9 @@ export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?:
   const rating = extractRating() || jsonLd.rating;
   const reviewCount = extractReviewCount() || jsonLd.reviewCount;
   const category = extractCategory() || jsonLd.category;
-  const kind = inferPlaceKind((category || '') + ' ' + title + ' ' + (address || '') + ' ' + ((stateSignals?.types || []).join(' ')));
+  const kind = category
+    ? inferPlaceKind(category)
+    : (stateSignals?.types?.length ? inferPlaceKind(stateSignals.types.join(' ')) : inferPlaceKind(title));
 
   return {
     title,
@@ -695,16 +697,42 @@ export class GoogleMapsAdapter implements PageAdapter {
           const priceEl = card.querySelector<HTMLElement>('span[aria-label*="$"], span[aria-label*="¥"], span[aria-label*="฿"]');
           const priceLevel = priceEl ? extractCleanPriceText(priceEl.textContent || '') : undefined;
 
+          let category: string | undefined;
+          const catEl = card.querySelector<HTMLElement>('span.mgr77e, span[class*="category"], button.DkEaL');
+          if (catEl?.textContent) {
+            const text = cleanExtractedText(catEl.textContent);
+            if (text && text.length < 40 && !/^(\d|★|·|路线|保存|分享|附近)/.test(text)) {
+              category = text.replace(/^[·•\s]+/, '').trim();
+            }
+          }
+          if (!category) {
+            const allSpans = card.querySelectorAll<HTMLElement>('div.W4Efsd span');
+            for (const span of Array.from(allSpans)) {
+              const text = cleanExtractedText(span.textContent || '').replace(/^[·•\s]+/, '').trim();
+              if (!text || text.length > 30 || text.length < 2) continue;
+              if (/^(\d|★|\$|¥|฿|€|£|₩|路线|保存|分享|附近|http|营业|关门|距离|已打卡|去过)/i.test(text)) continue;
+              if (/(hotel|resort|inn|hostel|restaurant|cafe|coffee|bar|food|shop|store|station|spa|massage|museum|park|temple|lodge|stay|度假村|度假酒店|宾馆|酒店|旅馆|民宿|客栈|青旅|餐厅|餐馆|饭店|面馆|海鲜馆|小吃|美食|料理|咖啡|甜品|茶|奶茶|景点|公园|寺|神社|博物馆|商场|超市|市场|车站|地铁|机场|码头|按摩|水疗|体验|便民)/i.test(text)) {
+                category = text;
+                break;
+              }
+            }
+          }
+
+          const kind = category
+            ? inferPlaceKind(category)
+            : inferPlaceKind(rawTitle + ' ' + subtitleText);
+
           return {
             title: rawTitle,
             sourceUrl: href,
             sourceProvider: 'google_maps',
-            kind: inferPlaceKind(rawTitle + ' ' + subtitleText),
+            kind,
             rating,
             reviewCount,
+            category,
             priceLevel,
             address: subtitleText || undefined,
-            types: ['point_of_interest', 'establishment'],
+            types: category ? [category, 'point_of_interest', 'establishment'] : ['point_of_interest', 'establishment'],
             summary: '来自 Google Maps 搜索列表',
           };
         },

@@ -3,11 +3,13 @@ import {
   applyCaptureImportReport,
   buildGoogleMapsDirectionsSegments,
   buildGoogleMapsRouteUrl,
+  calculateDefaultTripLeg,
   checkOpeningHoursCollision,
   checkDayScheduleCollisions,
   classifyResearchChip,
   detectSuspectedDuplicatePlaces,
   ensurePlaceKindTag,
+  estimateCommuteDurationMinutes,
   exportPlacesToCSV,
   exportPlacesToKML,
   exportTripToMarkdown,
@@ -22,8 +24,10 @@ import {
   inferPlaceCity,
   inferPlaceKind,
   inferSourceProvider,
+  isTransitHubPlace,
   mapGoogleTypesToOwnlyKind,
   isPlausibleCustomTag,
+  PLANNER_TRAVEL_MODE_CONFIG,
   listTripDates,
   mergeCapturedPlaceResearch,
   mergeCaptureState,
@@ -1497,6 +1501,93 @@ describe('exportTripToMarkdown', () => {
       expect(res.center.lat).toBeLessThan(14.0);
       expect(res.center.lng).toBeGreaterThan(99.0);
       expect(res.center.lng).toBeLessThan(102.0);
+    });
+  });
+
+  describe('Automatic Commute Estimation & Transit Hub Handling', () => {
+    const dummyTrip: PlannerTrip = {
+      schema_version: '0.1',
+      type: 'trip',
+      id: 'trip-bkk',
+      title: 'Bangkok Explorer',
+      status: 'planning',
+      start_date: '2026-10-01',
+      end_date: '2026-10-05',
+      destinations: ['Bangkok'],
+      transport_mode: 'driving',
+      created_at: '2026-09-01T00:00:00Z',
+    };
+
+    it('identifies transit hub places by kind and keywords', () => {
+      expect(isTransitHubPlace({ kind: 'transit', title: 'Suvarnabhumi Airport' })).toBe(true);
+      expect(isTransitHubPlace({ kind: 'attraction', title: 'Don Mueang International Airport (DMK)' })).toBe(true);
+      expect(isTransitHubPlace({ title: 'Bangkok Railway Station (Hua Lamphong)' })).toBe(true);
+      expect(isTransitHubPlace({ title: '东京羽田空港' })).toBe(true);
+      expect(isTransitHubPlace({ kind: 'food', title: 'Jay Fai Street Food' })).toBe(false);
+      expect(isTransitHubPlace({ kind: 'attraction', title: 'Wat Arun' })).toBe(false);
+      expect(isTransitHubPlace({ kind: 'stay', title: 'The Peninsula Bangkok' })).toBe(false);
+    });
+
+    it('estimates commute duration accurately across all modes', () => {
+      // 3000m road distance (~3km)
+      expect(estimateCommuteDurationMinutes('walking', 3000)).toBe(40); // 3 * 13.3
+      expect(estimateCommuteDurationMinutes('bicycling', 3000)).toBe(12); // 3 * 4.0
+      expect(estimateCommuteDurationMinutes('motorcycle', 3000)).toBe(7); // 2 + 3 * 1.8 = 7.4 -> 7
+      expect(estimateCommuteDurationMinutes('driving', 3000)).toBe(10); // 3 + 3 * 2.2 = 9.6 -> 10
+      expect(estimateCommuteDurationMinutes('transit', 3000)).toBe(15); // 6 + 3 * 3.0 = 15
+
+      // Fallback durations when coordinates are missing
+      expect(estimateCommuteDurationMinutes('walking', undefined)).toBe(12);
+      expect(estimateCommuteDurationMinutes('motorcycle', undefined)).toBe(10);
+      expect(estimateCommuteDurationMinutes('driving', undefined)).toBe(15);
+      expect(estimateCommuteDurationMinutes('transit', undefined)).toBe(20);
+    });
+
+    it('skips default commute calculation when both from and to are transit hubs', () => {
+      const airport1 = place('dmk', { kind: 'transit', title: 'Don Mueang Airport', coordinates: { lat: 13.9126, lng: 100.6067 } });
+      const airport2 = place('bkk', { kind: 'transit', title: 'Suvarnabhumi Airport', coordinates: { lat: 13.6900, lng: 100.7501 } });
+
+      const leg = calculateDefaultTripLeg(dummyTrip, airport1, airport2);
+      expect(leg).toBeNull();
+    });
+
+    it('calculates default commute leg when at least one side is a regular place', () => {
+      const watPho = place('wat-pho', {
+        kind: 'attraction',
+        title: 'Wat Pho',
+        coordinates: { lat: 13.7465, lng: 100.4930 },
+      });
+      const grandPalace = place('grand-palace', {
+        kind: 'attraction',
+        title: 'The Grand Palace',
+        coordinates: { lat: 13.7500, lng: 100.4915 },
+      });
+
+      const leg = calculateDefaultTripLeg(dummyTrip, watPho, grandPalace);
+      expect(leg).not.toBeNull();
+      expect(leg?.from_place_id).toBe('wat-pho');
+      expect(leg?.to_place_id).toBe('grand-palace');
+      expect(leg?.mode).toBe('driving');
+      expect(leg?.duration_minutes).toBeGreaterThanOrEqual(3);
+      expect(leg?.distance_meters).toBeGreaterThan(0);
+      expect(leg?.source).toBe('manual');
+    });
+
+    it('allows overriding the mode to walking, motorcycle, or bicycling', () => {
+      const p1 = place('cafe-1', { coordinates: { lat: 13.7465, lng: 100.4930 } });
+      const p2 = place('cafe-2', { coordinates: { lat: 13.7470, lng: 100.4940 } });
+
+      const walkLeg = calculateDefaultTripLeg(dummyTrip, p1, p2, 'walking');
+      expect(walkLeg?.mode).toBe('walking');
+
+      const motoLeg = calculateDefaultTripLeg(dummyTrip, p1, p2, 'motorcycle');
+      expect(motoLeg?.mode).toBe('motorcycle');
+
+      expect(PLANNER_TRAVEL_MODE_CONFIG.motorcycle.emoji).toBe('🛵');
+      expect(PLANNER_TRAVEL_MODE_CONFIG.driving.emoji).toBe('🚗');
+      expect(PLANNER_TRAVEL_MODE_CONFIG.walking.emoji).toBe('🚶');
+      expect(PLANNER_TRAVEL_MODE_CONFIG.bicycling.emoji).toBe('🚲');
+      expect(PLANNER_TRAVEL_MODE_CONFIG.transit.emoji).toBe('🚇');
     });
   });
 });

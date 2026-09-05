@@ -1,22 +1,76 @@
 # Ownly — Task Progress & Review
 
-## Active: In-Page Capture Feedback, Category Inference & Inbox In-Place Candidate Editor (2026-09-05)
-- [ ] **1. Fix In-Page "放入案板" Button Click Execution (`src/extension/ui/inline-capture-button.ts`)**
-  - Fix event isolation: Remove `stopImmediatePropagation()` from `isolateEvent` so button click listener executes cleanly.
-  - Retain `stopPropagation()` and `preventDefault()` to prevent outer anchor clicks and navigation.
-  - Verify live button feedback transitions: `⏳ 采集中...` -> `✓ 已放入案板` / `ℹ️ 该地点已在案板中`.
-- [ ] **2. Fix Place Kind Inference & Tag Cleaning for Lodging ("宾馆", "度假村" -> stay)**
-  - In [`src/domain/planner.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/planner.ts), fix regex grouping bug on line 729 and expand Chinese/multilingual lodging patterns (`度假村`, `宾馆`, `旅馆`, `客栈`, `民宿`, `服务式公寓`, `长住型酒店`, `度假酒店`, `精品酒店`, `商务酒店`, `温泉旅馆`, `青旅`, `青年旅舍`, `招待所`, etc.).
-  - In `ensurePlaceKindTag()`, filter out generic `'其它'` / `'其他'` / `'Other'` and obsolete primary kind tags when kind is specific (e.g. `stay`), eliminating dual tags like `['住宿', '其它']`.
-  - In `resolveAndEnrichCapturedPlace` (`background.ts`), refresh `user.tags` when kind is enriched/updated.
-- [ ] **3. Implement In-Place Candidate Place Editor Directly in Inbox List (`src/extension/sidepanel/ui.ts` & `handlers.ts`)**
-  - Inside candidate card rendering, when `store.editingCandidateId === place.id`, expand a dedicated in-place edit drawer.
-  - Support direct editing of `kind` (dropdown), `priority` (must/want/spare), `price`, `rating`, `why`, `notes`, and `tags`.
-  - Wire inline `✓ 保存` and `✕ 取消` buttons to update `store.stateV3.places`, persist to storage, and exit edit mode.
-  - Add clean, modern CSS styling for `.candidate-inline-editor` in `extension/sidepanel.css`.
-- [ ] **4. Comprehensive Multi-Target Automated Verification**
-  - Run unit tests in `planner.test.ts` covering `宾馆`, `度假村`, and all category kinds.
-  - Run `npm run validate:extension`, `npm run validate:fast`, and `npm run validate:shared`.
+## Completed: Agoda Saved Trips & Collections Inline Buttons, Hotel Entity Resolution & Google Maps Standardization (2026-09-05)
+- [x] **1. Upgrade Agoda Card & Title Selectors for Modern Trips / Saved Lists (`src/extension/adapters/agoda.ts`)**
+  - Supported all Agoda saved list containers: `div[data-selenium="saved-hotel-item"]`, `div[data-selenium="trip-saved-card"]`, `div[data-selenium="saved-item"]`, `div[class*="TripItem"]`, `div[class*="SavedItem"]`, `div[class*="SavedHotel"]`, `div[class*="TripCard"]`, `div[class*="PropertyCard"]`, `[data-element="saved-hotel-card"]`, `[data-element="hotel-card"]`, `[role="listitem"]`.
+  - Implemented bidirectional matching in `initInlineButtons`: matching both by card containers AND by candidate title elements (`[data-selenium="hotel-name"]`, `a[href*="/hotel/"]`, `div[class*="HotelName"]`, `h2`, `h3`) with `titleEl.closest(...)`.
+- [x] **2. Deep Agoda Hotel Entity Page & JSON-LD Resolution (`resolveAgodaHotelToMapsPlace`)**
+  - When clicking "📌 放入案板", extracts hotel URL (`a[href*="/hotel/"]`, `data-hotel-id`, `data-property-id`) and fetches hotel detail page in background.
+  - Extracts Schema.org JSON-LD microdata (`@type: "Hotel"`, `name`, `aggregateRating`, `geo` coordinates, `address`, `telephone`, `priceRange`), hotel property facts (`opened_year`, `renovated_year`, `room_count`).
+  - Standardizes output into Google Maps object (`sourceProvider: 'google_maps'`), `kind: 'stay'`, `types: ['lodging', 'hotel', 'establishment']`, and canonical Google Maps URL (`/maps/place/.../@lat,lng,17z` or search fallback).
+- [x] **3. Upgrade Agoda Saved List Batch Detection (`detectAgodaSavedList`)**
+  - Senses Agoda Trips & Saved list pages (`/trips/detail?navBack=true&id=...&tab=saved`), parsing all hotel cards into a clean batch list for 1-click import in Sidepanel.
+- [x] **4. Unit Tests & Automated Verification**
+  - Added unit tests for Agoda card parsing, hotel entity resolution, and saved list detection in `src/extension/utils.test.ts`.
+  - Validated with `npm run validate:extension` (171/171 tests passed), `npm run validate:fast` (0 errors), and `npm run validate:shared` (100% contracts & parity passing).
+
+
+
+
+## Completed: Automatic Commute Calculation, Transit-to-Transit Skip & Travel Mode Switching (2026-09-05)
+- [x] **1. Domain Model: `calculateDefaultTripLeg`, Transit Hub Skip & Motorcycle Mode Support (`src/domain/planner.ts`)**
+  - Added `'motorcycle'` to `PlannerTravelMode` and configured `PLANNER_TRAVEL_MODE_CONFIG` with emojis (`🚗`, `🚶`, `🛵`, `🚲`, `🚇`) and labels.
+  - Implemented `isTransitHubPlace` checking `kind === 'transit'` and airport/station patterns.
+  - Implemented `estimateCommuteDurationMinutes` and `calculateDefaultTripLeg`:
+    - Skips inter-transit legs when both `from` and `to` are transit hubs.
+    - Uses default `trip.transport_mode` and estimates distance & duration from Haversine coordinates with city road factor ($1.3\times$).
+- [x] **2. MCP & Modal Travel Mode Extensions (`scripts/mcp/openrouteservice.ts` & `src/components/planner/CreateTripModal.tsx`)**
+  - Updated `openRouteServiceProfile` to support `'motorcycle'` mapping to `driving-car`.
+  - Added 🛵 摩托车 / 电瓶车 option to `CreateTripModal.tsx`.
+- [x] **3. Automatic Day Leg Calculation & Interactive Mode Switcher in Planner (`src/components/planner/PlannerHome.tsx`)**
+  - Synthesized `effectiveDayLegs` on the fly for all adjacent stops on active day (omitting transit-to-transit pairs).
+  - Rendered rich travel badge with mode emoji (`🚗 15 min · 3.2 km`), duration, distance, and direct Google Maps route link.
+  - Rendered `✈️ / 🚆 跨城交通 · 依据票务时间` for transit-to-transit pairs.
+  - Implemented click-to-switch mode Popover allowing user to toggle between `🚗 打车/自驾`, `🚶 步行`, `🛵 摩托车`, `🚲 自行车`, `🚇 公共交通` with instant recalculation & persistence.
+- [x] **4. Comprehensive Unit Tests & Build Verification**
+  - Added unit tests for `calculateDefaultTripLeg`, `isTransitHubPlace`, and mode switching in `src/domain/planner.test.ts` (89/89 tests passing).
+  - Validated with `npm run validate:fast` (0 errors, clean types & linter) and `npm run build` (Next.js production build succeeded).
+
+## Completed: Google Travel Deep Entity Resolution & Google Maps Query Pin Auto-Enrichment (2026-09-05)
+- [x] **1. Deep Hotel Entity Resolution on Google Travel (`src/extension/adapters/google-travel.ts`)**
+  - Added `findGoogleTravelHotelEntityUrl` checking `data-hotel-id`, `data-travel-entity-id`, `data-entity-id`, `c-wiz` containers, and entity links to formulate canonical entity URLs (`https://www.google.com/travel/hotels/entity/${hotelId}`).
+  - Upgraded `parseGoogleTravelCard` and `resolveGoogleTravelEntityToMapsPlace` to extract JSON-LD microdata, exact postal address, coordinates, verified ratings, nightly room pricing, and hotel property facts (`opened_year`, `renovated_year`, `room_count`).
+  - Standardized captured entities to Google Maps places (`sourceProvider: 'google_maps'`) with `kind: 'stay'` and canonical Maps URLs.
+- [x] **2. Authoritative Google Maps Query Pin Resolution with `tbm=map` & PB Array Extraction (`src/extension/enrichment.ts` & `src/extension/google-maps-research.ts`)**
+  - Upgraded `extractGoogleMapsPreviewFacts` to parse both direct place nodes and nested array elements from Google Search/Maps protobuf structures.
+  - Added recursive protobuf tree scanning in `extractGoogleMapsResearchFromHtml` for `APP_INITIALIZATION_STATE` search result lists.
+  - Added `googleMapsSearchTbmUrl` (`/search?tbm=map&q=...`) to Step 1 search candidates in `enrichPlaceMetadata` and `resolveGoogleMapsEntity`, providing direct, fast entity resolution from Google Maps backend.
+  - Cleaned up failed resolve cache upon successful mutation to avoid 15m cooldown lockouts.
+- [x] **3. Automated Verification & Regression Testing**
+  - Added unit test in [`src/extension/enrichment.test.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/enrichment.test.ts) covering Pattaya Discovery Beach Hotel resolution via `tbm=map` JSON response.
+  - Validated with `npm run validate:extension` (162/162 tests passed, clean extension build).
+  - Validated with `npm run validate:fast` (0 errors, clean lint, types & terminology).
+  - Validated with `npm run validate:shared` (100% contract, parity & MCP tests passing).
+
+## Completed: In-Page Capture Feedback, Category Inference & Inbox In-Place Candidate Editor (2026-09-05)
+- [x] **1. Fix In-Page "放入案板" Button Click Execution (`src/extension/ui/inline-capture-button.ts`)**
+  - Fix event isolation: Removed `stopImmediatePropagation()` from `isolateEvent` so button click listener executes cleanly.
+  - Retained `stopPropagation()` and `preventDefault()` to prevent outer anchor clicks and navigation.
+  - Verified live button feedback transitions: `⏳ 采集中...` -> `✓ 已放入案板` / `ℹ️ 该地点已在案板中`.
+- [x] **2. Fix Place Kind Inference & Tag Cleaning for Lodging ("宾馆", "度假村" -> stay)**
+  - In [`src/domain/planner.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/planner.ts), fixed regex grouping bug on line 729 and expanded Chinese/multilingual lodging patterns (`度假村`, `宾馆`, `旅馆`, `客栈`, `民宿`, `服务式公寓`, `长住型酒店`, `度假酒店`, `精品酒店`, `商务酒店`, `温泉旅馆`, `青旅`, `青年旅舍`, `招待所`, etc.).
+  - In `ensurePlaceKindTag()`, filtered out generic `'其它'` / `'其他'` / `'Other'` and obsolete primary kind tags when kind is specific (e.g. `stay`), eliminating dual tags like `['住宿', '其它']`.
+  - In `resolveAndEnrichCapturedPlace` (`background.ts`), refreshed `user.tags` when kind is enriched/updated.
+- [x] **3. Implement In-Place Candidate Place Editor Directly in Inbox List (`src/extension/sidepanel/ui.ts` & `handlers.ts`)**
+  - Inside candidate card rendering, when `store.editingCandidateId === place.id`, expanded a dedicated in-place edit drawer.
+  - Supported direct editing of `kind` (dropdown), `priority` (must/want/optional), `price`, `rating`, `why`, `notes`, and `tags`.
+  - Wired inline `✓ 保存` and `✕ 取消` buttons to update `store.stateV3.places`, persist to storage, and exit edit mode.
+  - Reused clean, modern CSS styling for `.candidate-inline-editor` in `extension/sidepanel.css`.
+- [x] **4. Comprehensive Multi-Target Automated Verification**
+  - Ran unit tests in `planner.test.ts` covering `宾馆`, `度假村`, and all category kinds (84/84 tests passed).
+  - Ran `npm run validate:extension` (161/161 tests passed, clean extension build).
+  - Ran `npm run validate:fast` (0 errors, clean lint and types).
+  - Ran `npm run validate:shared` (100% contracts & MCP passing).
 
 ## Completed: Planner Date Tabs Drag-and-Drop Itinerary Day Swapping (2026-09-05)
 - [x] **1. Add `swapTripDays` to `PlannerRepository` & Pure Domain Logic**

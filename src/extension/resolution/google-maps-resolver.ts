@@ -12,6 +12,7 @@ import {
   extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
   googleMapsPreviewPlaceUrl,
+  googleMapsSearchTbmUrl,
   type GoogleMapsResearchFacts,
 } from '../google-maps-research';
 import { detectPageCurrency } from '../currency-detector';
@@ -57,7 +58,11 @@ export async function resolveGoogleMapsEntity(
   }
 
   const addrSuffix = options?.address ? ' ' + options.address.trim() : '';
+  const cleanSearchQuery = cleanTitle + addrSuffix;
   const searchCandidates: string[] = [];
+
+  // 0. Google Search tbm=map API (fastest, direct structured results)
+  searchCandidates.push(googleMapsSearchTbmUrl(cleanSearchQuery));
 
   // 1. If coordinates exist, try place/@lat,lng coordinate pin first
   if (options?.coordinates) {
@@ -71,10 +76,10 @@ export async function resolveGoogleMapsEntity(
 
   // 2. Query pin search with title + address
   searchCandidates.push(
-    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanTitle + addrSuffix)}&hl=zh-CN`
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanSearchQuery)}&hl=zh-CN`
   );
   searchCandidates.push(
-    `https://www.google.com/maps/search/${encodeURIComponent(cleanTitle + addrSuffix)}?hl=zh-CN`
+    `https://www.google.com/maps/search/${encodeURIComponent(cleanSearchQuery)}?hl=zh-CN`
   );
 
   for (const candidateUrl of searchCandidates) {
@@ -97,15 +102,25 @@ export async function resolveGoogleMapsEntity(
       if (!res.ok) continue;
 
       const finalUrl = res.url || candidateUrl;
-      const html = (await res.text()).slice(0, 3_000_000);
+      const rawText = (await res.text()).slice(0, 3_000_000);
 
-      // Extract research facts from HTML
-      const facts = extractGoogleMapsResearchFromHtml(html);
+      // Extract research facts from JSON or HTML
+      let facts: GoogleMapsResearchFacts = {};
+      if (rawText.startsWith(")]}'")) {
+        try {
+          const clean = rawText.replace(/^\)\]\}'\s*/, '');
+          facts = extractGoogleMapsPreviewFacts(JSON.parse(clean));
+        } catch {}
+      }
+      if (!facts.sourcePlaceId && !facts.coordinates && !facts.category) {
+        const htmlFacts = extractGoogleMapsResearchFromHtml(rawText);
+        facts = { ...htmlFacts, ...facts };
+      }
 
-      // Check for 0x or ChIJ in final redirected URL
+      // Check for 0x or ChIJ in final redirected URL or raw text
       let sourcePlaceId = facts.sourcePlaceId || options?.sourcePlaceId;
       if (!sourcePlaceId) {
-        sourcePlaceId = extractFeatureIdFromUrl(finalUrl) || extractFeatureIdFromHtml(html) || undefined;
+        sourcePlaceId = extractFeatureIdFromUrl(finalUrl) || extractFeatureIdFromHtml(rawText) || undefined;
       }
 
       // If we have a 0x...:0x... ID, fetch preview facts for highest precision

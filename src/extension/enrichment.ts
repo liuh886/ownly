@@ -16,6 +16,8 @@ import {
   featureIdToCid,
   googleMapsDetailUrlFromSourceId,
   googleMapsPreviewPlaceUrl,
+  googleMapsSearchTbmUrl,
+  type GoogleMapsResearchFacts,
 } from './google-maps-research';
 
 export interface EnrichmentResult {
@@ -68,7 +70,7 @@ export async function enrichPlaceMetadata(
     }
   }
 
-  // 1.5 If feature ID is still missing (e.g. search/?query=... pin), resolve it via Google Maps search HTML
+  // 1.5 If feature ID is still missing (e.g. search/?query=... pin), resolve it via Google Maps search HTML/JSON
   // Two-hop: search page -> extract ChIJ/0x -> preview. Prevent empty {} infinite loop + slow multi-round.
   if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
     const cacheKey = `${next.source_place_id || next.source_url || next.title}`;
@@ -77,7 +79,10 @@ export async function enrichPlaceMetadata(
       logger.debug('BackgroundEnrich', `Skip recently failed query pin: ${next.title}`);
       return { place: next, enriched: false, error: 'Recently failed, cooldown' };
     }
+    const cleanSearchQuery = cleanTitleForSearch(next.title) + (next.address ? ' ' + next.address : '');
     const candidates: string[] = [];
+    // 0. Google Search tbm=map API (fast, returns structured entities with Place IDs & facts directly)
+    candidates.push(googleMapsSearchTbmUrl(cleanSearchQuery));
     if (next.source_url?.includes('/maps/search/')) candidates.push(next.source_url);
     // 1. Lat/Lng targeted place link (direct 302s to single entity page)
     if (next.coordinates) {
@@ -85,7 +90,6 @@ export async function enrichPlaceMetadata(
       candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanTitleForSearch(next.title))}/@${next.coordinates.lat},${next.coordinates.lng},14z?hl=zh-CN`);
     }
     // 2. Desktop query search (renders APP_INITIALIZATION_STATE with entities)
-    const cleanSearchQuery = cleanTitleForSearch(next.title) + (next.address ? ' ' + next.address : '');
     candidates.push(`https://www.google.com/maps/search/${encodeURIComponent(cleanSearchQuery)}?hl=zh-CN`);
     // 3. Fallback: query API search
     candidates.push(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanSearchQuery)}&hl=zh-CN`);
@@ -107,12 +111,24 @@ export async function enrichPlaceMetadata(
           next.source_url = finalUrl;
           mutated = true;
         }
-        const html = (await res.text()).slice(0, 3_000_000);
+        const rawText = (await res.text()).slice(0, 3_000_000);
+        let facts: GoogleMapsResearchFacts = {};
+        if (rawText.startsWith(")]}'")) {
+          try {
+            const clean = rawText.replace(/^\)\]\}'\s*/, '');
+            const parsed = JSON.parse(clean);
+            facts = extractGoogleMapsPreviewFacts(parsed);
+          } catch {}
+        }
+        if (!facts.sourcePlaceId && !facts.coordinates && !facts.category) {
+          const htmlFacts = extractGoogleMapsResearchFromHtml(rawText);
+          facts = { ...htmlFacts, ...facts };
+        }
+
         // Direct ChIJ / 0x extraction before HTML parser (skeleton pages have them in APP_INITIALIZATION_STATE)
-        const chijMatch = /"(ChIJ[A-Za-z0-9_-]{15,})"/.exec(html)?.[1];
-        const featureMatch = /0x[0-9a-f]+:0x[0-9a-f]+/i.exec(html)?.[0];
-        const facts = extractGoogleMapsResearchFromHtml(html);
-        const candidateId = urlId || chijMatch || featureMatch || facts.sourcePlaceId;
+        const chijMatch = /"(ChIJ[A-Za-z0-9_-]{15,})"/.exec(rawText)?.[1];
+        const featureMatch = /0x[0-9a-f]+:0x[0-9a-f]+/i.exec(rawText)?.[0];
+        const candidateId = urlId || facts.sourcePlaceId || chijMatch || featureMatch;
         if (candidateId) {
           // Prefer 0x for preview; keep ChIJ as source_place_id if only ChIJ found (preview supports ChIJ via query_place_id)
           if (/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(candidateId)) resolvedFeatureId = candidateId;
@@ -153,7 +169,7 @@ export async function enrichPlaceMetadata(
     if (!resolvedFromSearch && !mutated) {
       failedResolveCache.set(cacheKey, Date.now());
       logger.warn('BackgroundEnrich', `Query pin unresolved (cooldown 15m): ${next.title}`);
-    } else if (resolvedFromSearch) {
+    } else if (resolvedFromSearch || mutated) {
       failedResolveCache.delete(cacheKey);
     }
   }
@@ -219,8 +235,9 @@ export async function enrichPlaceMetadata(
             }
           }
           if (facts.category || (facts.types && facts.types.length > 0)) {
-            const categoryStr = [facts.category, ...(facts.types || []), next.title].filter(Boolean).join(' ');
-            const freshKind = inferPlaceKind(categoryStr);
+            const freshKind = facts.category
+              ? inferPlaceKind(facts.category)
+              : inferPlaceKind([next.title, ...(facts.types || [])].filter(Boolean).join(' '));
             if (freshKind && freshKind !== 'other' && (next.kind === 'other' || freshKind !== next.kind)) {
               next.kind = freshKind;
               mutated = true;

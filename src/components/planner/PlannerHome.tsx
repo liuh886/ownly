@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
-import type { PlannerPlaceKind, PlannerScheduledPlace as PlannerScheduledPlaceDomain, PlannerTrip, PlannerTripLeg, PlannerTripPlace, TripExpenseItem } from '@/domain/planner';
+import type {
+  PlannerPlaceKind,
+  PlannerScheduledPlace as PlannerScheduledPlaceDomain,
+  PlannerTravelMode,
+  PlannerTrip,
+  PlannerTripLeg,
+  PlannerTripPlace,
+  TripExpenseItem,
+} from '@/domain/planner';
 import { materializePlannerScheduledPlaces, sortPlannerScheduledPlaces, type PlannerScheduledPlace, type PlannerTripVisit } from '@/domain/planner-visits';
 import {
   computeUrgencies,
@@ -13,6 +21,7 @@ import {
 } from '@/domain/departure';
 import {
   buildGoogleMapsRouteUrl,
+  calculateDefaultTripLeg,
   currencySymbolFor,
   effectiveFxRate,
   ensurePlaceKindTag,
@@ -24,6 +33,7 @@ import {
   getPlannerKindLabel,
   getTripAreaCounts,
   haversineDistanceKm,
+  isTransitHubPlace,
   detectHotelTransferDays,
   detectSuspectedDuplicatePlaces,
   isPlausibleCustomTag,
@@ -31,6 +41,7 @@ import {
   parsePlaceExpenseEstimate,
   PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
+  PLANNER_TRAVEL_MODE_CONFIG,
 } from '@/domain/planner';
 import { buildTripCalendarIcs, buildDayCalendarIcs } from '@/domain/calendar-feed';
 import { evaluatePlannerDay, type PlannerExecutionTransitionItem, type PlannerTimelineStopItem } from '@/domain/planner-schedule';
@@ -194,6 +205,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [capturePending, setCapturePending] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => {
+      setNotice('');
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
   const [highlightedPlaceId, setHighlightedPlaceId] = useState<string | null>(null);
@@ -201,6 +221,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
   const [expensesByTrip, setExpensesByTrip] = useState<Record<string, TripExpenseItem[]>>({});
   const [membersByTrip, setMembersByTrip] = useState<Record<string, string[]>>({});
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
+  const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
 
 
   const currentExpenses = useMemo(() => {
@@ -602,9 +623,30 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     [legs, selectedTripId],
   );
 
+  const effectiveDayLegs = useMemo(() => {
+    if (!selectedTrip) return tripLegs;
+    const existingPairs = new Map<string, PlannerTripLeg>(
+      tripLegs.map((l) => [`${l.from_place_id}→${l.to_place_id}`, l]),
+    );
+    const result = [...tripLegs];
+    for (let i = 0; i < scheduled.length - 1; i += 1) {
+      const from = scheduled[i];
+      const to = scheduled[i + 1];
+      const pairKey = `${from.place_id}→${to.place_id}`;
+      if (!existingPairs.has(pairKey)) {
+        const defaultLeg = calculateDefaultTripLeg(selectedTrip, from, to);
+        if (defaultLeg) {
+          result.push(defaultLeg);
+          existingPairs.set(pairKey, defaultLeg);
+        }
+      }
+    }
+    return result;
+  }, [selectedTrip, tripLegs, scheduled]);
+
   const dayAssessment = useMemo(
     () => (selectedTrip
-      ? evaluatePlannerDay(selectedTrip, scheduledAll, tripLegs, activeDate)
+      ? evaluatePlannerDay(selectedTrip, scheduledAll, effectiveDayLegs, activeDate)
       : {
           date: activeDate,
           status: 'unknown' as const,
@@ -617,7 +659,24 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
           total_activity_minutes: 0,
           scheduled_places: [],
         }),
-    [activeDate, selectedTrip, scheduledAll, tripLegs],
+    [activeDate, selectedTrip, scheduledAll, effectiveDayLegs],
+  );
+
+  const handleSwitchTravelMode = useCallback(
+    async (
+      from: PlannerScheduledPlace,
+      to: PlannerScheduledPlace,
+      mode: PlannerTravelMode,
+    ) => {
+      if (!selectedTrip) return;
+      const leg = calculateDefaultTripLeg(selectedTrip, from, to, mode);
+      if (leg) {
+        await plannerRepository.upsertLeg(leg);
+        await load();
+      }
+      setActiveModeSwitchPair(null);
+    },
+    [selectedTrip, load],
   );
 
   const dayTimeline = dayAssessment.timeline;
@@ -1425,7 +1484,19 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         </div>
       </header>
 
-      {notice ? <div aria-live="polite" className="rounded-xl bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 shadow-2xs animate-in fade-in">{notice}</div> : null}
+      {notice ? (
+        <div aria-live="polite" className="flex items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 shadow-2xs animate-in fade-in duration-150">
+          <span className="min-w-0 flex-1">{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice('')}
+            className="shrink-0 rounded p-0.5 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-900 transition"
+            title={zh ? '关闭提示' : 'Dismiss'}
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
 
       <nav ref={dateNavRef} className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label={zh ? '日期导航' : 'Date navigation'}>
         {tripDates.map((date, index) => {
@@ -1832,59 +1903,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             </button>
                           </div>
 
-                          {/* Row 2: Bottom-Left Actions [ 📍 | ↑ | ↓ | ✕ ] & Bottom-Right Attributes/Emojis */}
+                          {/* Row 2: Bottom-Left Meta/Emojis & Bottom-Right Actions [ 📍 | ↑ | ↓ | ✕ ] */}
                           <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                            {/* Bottom-Left: Grouped 4 Actions */}
-                            <div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50/90 p-0.5 shadow-2xs shrink-0">
-                              <button
-                                type="button"
-                                aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
-                                onClick={async () => {
-                                  await plannerRepository.toggleVisitLock(place.visit_id);
-                                  await load();
-                                }}
-                                className={`flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] transition ${
-                                  place.locked
-                                    ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
-                                    : 'text-stone-400 hover:bg-white hover:text-stone-700'
-                                }`}
-                                title={place.locked ? (zh ? '已固定顺位（交通优化不移动此站）' : 'Pinned') : (zh ? '固定在当前顺位' : 'Pin stop')}
-                              >
-                                {place.locked ? '📌' : '📍'}
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={zh ? '上移' : 'Move up'}
-                                disabled={index === 0}
-                                onClick={() => void moveScheduled(index, -1)}
-                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
-                                title={zh ? '上移一站' : 'Move up'}
-                              >
-                                ↑
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={zh ? '下移' : 'Move down'}
-                                disabled={index === scheduled.length - 1}
-                                onClick={() => void moveScheduled(index, 1)}
-                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
-                                title={zh ? '下移一站' : 'Move down'}
-                              >
-                                ↓
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={zh ? '从当天日程移除' : 'Remove stop'}
-                                onClick={() => void removeVisit(place)}
-                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                                title={zh ? '从当天日程移除（回到待安排候选池）' : 'Remove stop'}
-                              >
-                                ✕
-                              </button>
-                            </div>
-
-                            {/* Bottom-Right: Meta info (Area, Duration, Price) + Quick Emojis (🧭, 📞, 🗺️, 📖, 🎟️) */}
-                            <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-stone-500 min-w-0">
+                            {/* Bottom-Left: Meta info (Area, Duration, Price) + Quick Emojis (🧭, 📞, 🗺️, 📖, 🎟️) */}
+                            <div className="flex flex-wrap items-center justify-start gap-x-2 gap-y-1 text-[11px] text-stone-500 min-w-0">
                               {/* Meta Details */}
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {place.area ? <span className="text-stone-600 font-medium truncate max-w-[120px]">{place.area}</span> : null}
@@ -1966,6 +1988,55 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 ) : null}
                               </div>
                             </div>
+
+                            {/* Bottom-Right: Grouped 4 Actions */}
+                            <div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50/90 p-0.5 shadow-2xs shrink-0">
+                              <button
+                                type="button"
+                                aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
+                                onClick={async () => {
+                                  await plannerRepository.toggleVisitLock(place.visit_id);
+                                  await load();
+                                }}
+                                className={`flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] transition ${
+                                  place.locked
+                                    ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
+                                    : 'text-stone-400 hover:bg-white hover:text-stone-700'
+                                }`}
+                                title={place.locked ? (zh ? '已固定顺位（交通优化不移动此站）' : 'Pinned') : (zh ? '固定在当前顺位' : 'Pin stop')}
+                              >
+                                {place.locked ? '📌' : '📍'}
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '上移' : 'Move up'}
+                                disabled={index === 0}
+                                onClick={() => void moveScheduled(index, -1)}
+                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                title={zh ? '上移一站' : 'Move up'}
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '下移' : 'Move down'}
+                                disabled={index === scheduled.length - 1}
+                                onClick={() => void moveScheduled(index, 1)}
+                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                title={zh ? '下移一站' : 'Move down'}
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={zh ? '从当天日程移除' : 'Remove stop'}
+                                onClick={() => void removeVisit(place)}
+                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                title={zh ? '从当天日程移除（回到待安排候选池）' : 'Remove stop'}
+                              >
+                                ✕
+                              </button>
+                            </div>
                           </div>
 
                           {/* Warning / Conflict Alerts */}
@@ -1992,29 +2063,154 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       {/* Travel Transition Rail (Between Stops) */}
                       {index < scheduled.length - 1 ? (
                         <div className="relative ml-3.5 border-l-2 border-dashed border-stone-200 py-2 pl-5 space-y-1.5">
-                          {transitionItems.length === 0 ? (
-                            <div className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[10px] font-medium text-stone-500">
-                              <span>❔</span>
-                              <span>{zh ? '交通时间未确认' : 'Travel time unknown'}</span>
+                          {isTransitHubPlace(place) && isTransitHubPlace(nextPlace) ? (
+                            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-stone-200 bg-stone-100/90 px-3 py-1 text-[10.5px] font-semibold text-stone-700 shadow-2xs">
+                              <span>✈️ {zh ? '跨城交通 · 依据票务时间' : 'Intercity Transit (Ticket-based)'}</span>
+                              <a
+                                href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-full bg-stone-200 hover:bg-stone-300 px-1.5 py-0.2 text-[9.5px] font-bold text-stone-800 transition"
+                              >
+                                Google 路线 ↗
+                              </a>
                             </div>
+                          ) : transitionItems.length === 0 ? (
+                            (() => {
+                              const isPairSwitching = activeModeSwitchPair === `${place.id}->${nextPlace.id}`;
+                              const defaultLeg = calculateDefaultTripLeg(selectedTrip, place, nextPlace);
+                              const modeKey = defaultLeg?.mode ?? (selectedTrip.transport_mode ?? 'driving');
+                              const modeConfig = PLANNER_TRAVEL_MODE_CONFIG[modeKey] ?? PLANNER_TRAVEL_MODE_CONFIG.driving;
+                              const icon = modeConfig.emoji;
+                              const dur = defaultLeg?.duration_minutes ?? modeConfig.defaultDuration;
+                              const distance = defaultLeg?.distance_meters === undefined
+                                ? ''
+                                : defaultLeg.distance_meters < 1000 ? ` · ${defaultLeg.distance_meters} m` : ` · ${(defaultLeg.distance_meters / 1000).toFixed(1)} km`;
+                              return (
+                                <div className="relative inline-flex flex-wrap items-center gap-2">
+                                  <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-3 py-1 text-[10.5px] font-semibold text-sky-900 shadow-2xs">
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveModeSwitchPair(isPairSwitching ? null : `${place.id}->${nextPlace.id}`)}
+                                      className="inline-flex items-center gap-1 hover:text-sky-700 hover:underline cursor-pointer transition font-medium"
+                                      title={zh ? '点击切换出行方式' : 'Click to change travel mode'}
+                                    >
+                                      <span>{icon} {dur} min{distance}</span>
+                                      <span className="text-[9px] opacity-70">▾</span>
+                                    </button>
+                                    <a
+                                      href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${modeKey === 'motorcycle' ? 'two_wheeler' : (modeKey ?? 'transit')}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9.5px] font-bold text-sky-800 transition"
+                                    >
+                                      Google 导航 ↗
+                                    </a>
+                                  </div>
+
+                                  {/* Mode Switch Popover */}
+                                  {isPairSwitching ? (
+                                    <div className="absolute top-full left-0 mt-1 z-30 flex flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 min-w-[170px]">
+                                      <div className="px-2 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                        {zh ? '切换交通方式' : 'Switch Travel Mode'}
+                                      </div>
+                                      {(['driving', 'walking', 'motorcycle', 'bicycling', 'transit'] as PlannerTravelMode[]).map((m) => {
+                                        const cfg = PLANNER_TRAVEL_MODE_CONFIG[m];
+                                        const isCurrent = modeKey === m;
+                                        const previewLeg = calculateDefaultTripLeg(selectedTrip, place, nextPlace, m);
+                                        const previewDuration = previewLeg?.duration_minutes ?? cfg.defaultDuration;
+                                        return (
+                                          <button
+                                            key={m}
+                                            type="button"
+                                            onClick={() => void handleSwitchTravelMode(place, nextPlace, m)}
+                                            className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition ${
+                                              isCurrent
+                                                ? 'bg-sky-50 font-bold text-sky-900 ring-1 ring-sky-300/60'
+                                                : 'text-stone-700 hover:bg-stone-50 hover:text-stone-900'
+                                            }`}
+                                          >
+                                            <span className="inline-flex items-center gap-1.5">
+                                              <span>{cfg.emoji}</span>
+                                              <span>{zh ? cfg.labelZh : cfg.labelEn}</span>
+                                            </span>
+                                            <span className="text-[10.5px] text-stone-400 font-mono">
+                                              ~{previewDuration}m {isCurrent ? '✓' : ''}
+                                            </span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })()
                           ) : transitionItems.map((item) => {
                             if (item.type === 'travel') {
-                              const icon = item.mode === 'walking' ? '🚶' : item.mode === 'driving' ? '🚗' : item.mode === 'bicycling' ? '🚲' : '🚇';
+                              const isPairSwitching = activeModeSwitchPair === `${place.id}->${nextPlace.id}`;
+                              const modeKey = (item.mode as PlannerTravelMode) || 'driving';
+                              const modeConfig = PLANNER_TRAVEL_MODE_CONFIG[modeKey] ?? PLANNER_TRAVEL_MODE_CONFIG.driving;
+                              const icon = modeConfig.emoji;
                               const distance = item.distance_meters === undefined
                                 ? ''
                                 : item.distance_meters < 1000 ? ` · ${item.distance_meters} m` : ` · ${(item.distance_meters / 1000).toFixed(1)} km`;
                               return (
-                                <div key={item.id} className="inline-flex flex-wrap items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-3 py-1 text-[10.5px] font-semibold text-sky-900 shadow-2xs">
-                                  <span>{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS' : ''}</span>
-                                  {item.start && item.end ? <span className="text-sky-700 font-mono">⏱ {item.start}-{item.end}</span> : null}
-                                  <a
-                                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9.5px] font-bold text-sky-800 transition"
-                                  >
-                                    Google 导航 ↗
-                                  </a>
+                                <div key={item.id} className="relative inline-flex flex-wrap items-center gap-2">
+                                  <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-3 py-1 text-[10.5px] font-semibold text-sky-900 shadow-2xs">
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveModeSwitchPair(isPairSwitching ? null : `${place.id}->${nextPlace.id}`)}
+                                      className="inline-flex items-center gap-1 hover:text-sky-700 hover:underline cursor-pointer transition font-medium"
+                                      title={zh ? '点击切换出行方式' : 'Click to change travel mode'}
+                                    >
+                                      <span>{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS' : ''}</span>
+                                      <span className="text-[9px] opacity-70">▾</span>
+                                    </button>
+                                    {item.start && item.end ? <span className="text-sky-700 font-mono">⏱ {item.start}-{item.end}</span> : null}
+                                    <a
+                                      href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${item.mode === 'motorcycle' ? 'two_wheeler' : (item.mode ?? selectedTrip.transport_mode ?? 'transit')}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9.5px] font-bold text-sky-800 transition"
+                                    >
+                                      Google 导航 ↗
+                                    </a>
+                                  </div>
+
+                                  {/* Mode Switch Popover */}
+                                  {isPairSwitching ? (
+                                    <div className="absolute top-full left-0 mt-1 z-30 flex flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 min-w-[170px]">
+                                      <div className="px-2 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                        {zh ? '切换交通方式' : 'Switch Travel Mode'}
+                                      </div>
+                                      {(['driving', 'walking', 'motorcycle', 'bicycling', 'transit'] as PlannerTravelMode[]).map((m) => {
+                                        const cfg = PLANNER_TRAVEL_MODE_CONFIG[m];
+                                        const isCurrent = item.mode === m;
+                                        const previewLeg = calculateDefaultTripLeg(selectedTrip, place, nextPlace, m);
+                                        const previewDuration = previewLeg?.duration_minutes ?? cfg.defaultDuration;
+                                        return (
+                                          <button
+                                            key={m}
+                                            type="button"
+                                            onClick={() => void handleSwitchTravelMode(place, nextPlace, m)}
+                                            className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition ${
+                                              isCurrent
+                                                ? 'bg-sky-50 font-bold text-sky-900 ring-1 ring-sky-300/60'
+                                                : 'text-stone-700 hover:bg-stone-50 hover:text-stone-900'
+                                            }`}
+                                          >
+                                            <span className="inline-flex items-center gap-1.5">
+                                              <span>{cfg.emoji}</span>
+                                              <span>{zh ? cfg.labelZh : cfg.labelEn}</span>
+                                            </span>
+                                            <span className="text-[10.5px] text-stone-400 font-mono">
+                                              ~{previewDuration}m {isCurrent ? '✓' : ''}
+                                            </span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : null}
                                 </div>
                               );
                             }
@@ -2043,7 +2239,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                   : (zh ? '时间不完整，无法判断衔接' : 'Schedule timing incomplete')}</span>
                                 {item.reason === 'travel_time_missing' ? (
                                   <a
-                                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
+                                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="rounded-full bg-amber-100 hover:bg-amber-200 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-900 transition"

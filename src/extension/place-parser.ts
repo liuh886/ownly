@@ -101,8 +101,8 @@ export function parseReviewCount(raw?: string | null): number | undefined {
     if (Number.isFinite(base) && base > 0) return Math.round(base * multiplier);
   }
 
-  // Handle structured review count text: "1,234 reviews", "580 条评价", "(1,234)"
-  const match = /(?:([\d,.\s]+)\s*(?:条评价|条评论|件の口コミ|reviews?|rezensionen|avis|avaliações))|\(([\d,.]+)\)/i.exec(text);
+  // Handle structured review count text: "1,240 篇评价", "1,234 reviews", "580 条评价", "(1,234)"
+  const match = /(?:([\d,.\s]+)\s*(?:[条篇则个]\s*(?:评价|评论|点评)|件の口コミ|건의\s*(?:이용)?후기|reviews?|rezensionen|avis|avaliações))|\(([\d,.]+)\)/i.exec(text);
   if (match) {
     const rawNum = match[1] || match[2];
     const cleaned = rawNum.replace(/[^0-9]/g, '');
