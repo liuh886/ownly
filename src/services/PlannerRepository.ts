@@ -332,12 +332,14 @@ export class PlannerRepository {
     await this.upsert({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) });
   }
   async upsertVisit(visit: PlannerTripVisit): Promise<void> {
-    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === visit.trip_id);
-    if (!trip) {
-      throw new Error(`Planner trip "${visit.trip_id}" was not found for visit.`);
-    }
-    assertTripDate(trip, visit.date);
-    await this.upsert(visit);
+    await this.executeTransaction(async (tx) => {
+      const trip = (await this.listTrips({ strict: true })).find((t) => t.id === visit.trip_id);
+      if (!trip) {
+        throw new Error(`Planner trip "${visit.trip_id}" was not found for visit.`);
+      }
+      assertTripDate(trip, visit.date);
+      await tx.stageUpsertEntity(visit);
+    });
   }
   async upsertLeg(leg: PlannerTripLeg): Promise<void> { await this.upsert(leg); }
 
@@ -353,79 +355,82 @@ export class PlannerRepository {
     const report: ImportReport = { received: places.length, created: [], updated: [], deduped: [], failed: [] };
     if (places.length === 0) return report;
     await this.initialize();
-    const existingTrips = new Set((await this.listTrips()).map((t) => t.id));
-    const existing = await this.listPlaces();
-    const byId = new Map(existing.map((place) => [place.id, place] as const));
-    const byStrongIdentity = new Map<string, PlannerTripPlace>();
-
-    const indexPlace = (place: PlannerTripPlace) => {
-      byId.set(place.id, place);
-      const keys = getStrongPlaceIdentityKeys(place);
-      const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place as unknown as import('@/domain/place-identity').PlaceIdentityLike);
-      for (const key of effective) {
-        byStrongIdentity.set(`${place.trip_id}::${key}`, place);
-      }
-    };
-    existing.forEach(indexPlace);
     const touchedTripIds = new Set<string>();
 
-    for (const rawPlace of places) {
-      if (!rawPlace.id) {
-        report.failed.push({ id: '', title: rawPlace.title || '(unknown)', reason: 'missing_id' });
-        continue;
-      }
-      if (!rawPlace.trip_id) {
-        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'missing_trip_id' });
-        continue;
-      }
-      if (!existingTrips.has(rawPlace.trip_id)) {
-        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'unknown_trip', detail: rawPlace.trip_id });
-        continue;
-      }
-      touchedTripIds.add(rawPlace.trip_id);
-      const plannerFields: PlannerTripPlace = { ...rawPlace };
-      delete (plannerFields as unknown as Record<string, unknown>).status;
-      delete (plannerFields as unknown as Record<string, unknown>).reason;
-      delete (plannerFields as unknown as Record<string, unknown>).lastAttempt;
-      const incoming: PlannerTripPlace = {
-        ...plannerFields,
-        tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
-        reservation_status: rawPlace.reservation_status ?? 'none',
-        state: 'candidate',
-      };
-      let existingPlace = byId.get(incoming.id);
-      if (!existingPlace) {
-        const sKeys = getStrongPlaceIdentityKeys(incoming);
-        const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming as unknown as import('@/domain/place-identity').PlaceIdentityLike);
-        for (const key of effective) {
-          const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
-          if (match) { existingPlace = match; break; }
-        }
-      }
+    await this.executeTransaction(async (tx) => {
+      const existingTrips = new Set((await this.listTrips({ strict: true })).map((t) => t.id));
+      const existing = await this.listPlaces({ strict: true });
+      const byId = new Map(existing.map((place) => [place.id, place] as const));
+      const byStrongIdentity = new Map<string, PlannerTripPlace>();
 
-      try {
-        if (existingPlace) {
-          const persisted = mergeCapturedPlaceResearch(existingPlace, incoming);
-          await this.upsert(persisted);
-          indexPlace(persisted);
-          report.updated.push(rawPlace.id);
-        } else {
-          await this.upsert(incoming);
-          indexPlace(incoming);
-          report.created.push(rawPlace.id);
+      const indexPlace = (place: PlannerTripPlace) => {
+        byId.set(place.id, place);
+        const keys = getStrongPlaceIdentityKeys(place);
+        const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+        for (const key of effective) {
+          byStrongIdentity.set(`${place.trip_id}::${key}`, place);
         }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, error);
-        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'write_error', detail: msg });
+      };
+      existing.forEach(indexPlace);
+
+      for (const rawPlace of places) {
+        if (!rawPlace.id) {
+          report.failed.push({ id: '', title: rawPlace.title || '(unknown)', reason: 'missing_id' });
+          continue;
+        }
+        if (!rawPlace.trip_id) {
+          report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'missing_trip_id' });
+          continue;
+        }
+        if (!existingTrips.has(rawPlace.trip_id)) {
+          report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'unknown_trip', detail: rawPlace.trip_id });
+          continue;
+        }
+        touchedTripIds.add(rawPlace.trip_id);
+        const plannerFields: PlannerTripPlace = { ...rawPlace };
+        delete (plannerFields as unknown as Record<string, unknown>).status;
+        delete (plannerFields as unknown as Record<string, unknown>).reason;
+        delete (plannerFields as unknown as Record<string, unknown>).lastAttempt;
+        const incoming: PlannerTripPlace = {
+          ...plannerFields,
+          tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
+          reservation_status: rawPlace.reservation_status ?? 'none',
+          state: 'candidate',
+        };
+        let existingPlace = byId.get(incoming.id);
+        if (!existingPlace) {
+          const sKeys = getStrongPlaceIdentityKeys(incoming);
+          const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+          for (const key of effective) {
+            const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
+            if (match) { existingPlace = match; break; }
+          }
+        }
+
+        try {
+          if (existingPlace) {
+            const persisted = mergeCapturedPlaceResearch(existingPlace, incoming);
+            await tx.stageUpsertEntity(persisted);
+            indexPlace(persisted);
+            report.updated.push(rawPlace.id);
+          } else {
+            await tx.stageUpsertEntity(incoming);
+            indexPlace(incoming);
+            report.created.push(rawPlace.id);
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.warn(`[PlannerRepository] Failed to stage research place ${rawPlace.id} (${rawPlace.title}):`, error);
+          report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'write_error', detail: msg });
+        }
       }
-    }
+    });
 
     for (const tripId of touchedTripIds) {
       try {
         const dedupResult = await this.deduplicateTripPlaces(tripId);
         if (dedupResult.removedCount > 0) {
-          const allPlacesAfter = await this.listPlaces();
+          const allPlacesAfter = await this.listPlaces({ strict: true });
           const survivingIds = new Set(allPlacesAfter.map((p) => p.id));
           for (const id of [...report.created, ...report.updated]) {
             if (!survivingIds.has(id)) {
@@ -451,58 +456,68 @@ export class PlannerRepository {
    */
   async deduplicateTripPlaces(tripId: string): Promise<{ mergedCount: number; removedCount: number }> {
     await this.initialize();
-    const allPlaces = (await this.listPlaces()).filter((p) => p.trip_id === tripId);
-    if (allPlaces.length <= 1) return { mergedCount: 0, removedCount: 0 };
+    return this.executeTransaction(async (tx) => {
+      const allPlaces = (await this.listPlaces({ strict: true })).filter((p) => p.trip_id === tripId);
+      if (allPlaces.length <= 1) return { mergedCount: 0, removedCount: 0 };
 
-    const visits = (await this.listVisits()).filter((v) => v.trip_id === tripId);
-    const visitPlaceIds = new Set(visits.map((v) => v.place_id));
+      const visits = (await this.listVisits({ strict: true })).filter((v) => v.trip_id === tripId);
+      const visitPlaceIds = new Set(visits.map((v) => v.place_id));
 
-    const clusters: PlannerTripPlace[][] = [];
-    const assigned = new Set<string>();
+      const clusters: PlannerTripPlace[][] = [];
+      const assigned = new Set<string>();
 
-    for (let i = 0; i < allPlaces.length; i++) {
-      const p1 = allPlaces[i];
-      if (assigned.has(p1.id)) continue;
-      const cluster = [p1];
-      assigned.add(p1.id);
+      for (let i = 0; i < allPlaces.length; i++) {
+        const p1 = allPlaces[i];
+        if (assigned.has(p1.id)) continue;
+        const cluster = [p1];
+        assigned.add(p1.id);
 
-      for (let j = i + 1; j < allPlaces.length; j++) {
-        const p2 = allPlaces[j];
-        if (assigned.has(p2.id)) continue;
-        const isMatch = shareStrongPlaceIdentity(p1, p2);
+        for (let j = i + 1; j < allPlaces.length; j++) {
+          const p2 = allPlaces[j];
+          if (assigned.has(p2.id)) continue;
+          const isMatch = shareStrongPlaceIdentity(p1, p2);
 
-        if (isMatch) {
-          cluster.push(p2);
-          assigned.add(p2.id);
+          if (isMatch) {
+            cluster.push(p2);
+            assigned.add(p2.id);
+          }
+        }
+        if (cluster.length > 1) {
+          clusters.push(cluster);
         }
       }
-      if (cluster.length > 1) {
-        clusters.push(cluster);
+
+      let mergedCount = 0;
+      let removedCount = 0;
+
+      for (const cluster of clusters) {
+        cluster.sort((a, b) => {
+          const aScheduled = visitPlaceIds.has(a.id) ? 1 : 0;
+          const bScheduled = visitPlaceIds.has(b.id) ? 1 : 0;
+          if (aScheduled !== bScheduled) return bScheduled - aScheduled;
+          return a.created_at.localeCompare(b.created_at);
+        });
+
+        const primary = cluster[0];
+        let currentPrimary = primary;
+        let clusterMerged = false;
+        for (let k = 1; k < cluster.length; k++) {
+          const secondary = cluster[k];
+          currentPrimary = mergeCapturedPlaceResearch(currentPrimary, secondary);
+          const secondaryVisits = visits.filter((visit) => visit.place_id === secondary.id);
+          await tx.stageUpsertEntity(currentPrimary);
+          for (const visit of secondaryVisits) {
+            await tx.stageUpsertEntity({ ...visit, place_id: currentPrimary.id, updated_at: new Date().toISOString() });
+          }
+          await tx.stageDeleteEntity(secondary);
+          removedCount += 1;
+          clusterMerged = true;
+        }
+        if (clusterMerged) mergedCount += 1;
       }
-    }
 
-    let mergedCount = 0;
-    let removedCount = 0;
-
-    for (const cluster of clusters) {
-      cluster.sort((a, b) => {
-        const aScheduled = visitPlaceIds.has(a.id) ? 1 : 0;
-        const bScheduled = visitPlaceIds.has(b.id) ? 1 : 0;
-        if (aScheduled !== bScheduled) return bScheduled - aScheduled;
-        return a.created_at.localeCompare(b.created_at);
-      });
-
-      const primary = cluster[0];
-      let clusterMerged = false;
-      for (let k = 1; k < cluster.length; k++) {
-        await this.mergePlaces(primary.id, cluster[k].id);
-        removedCount += 1;
-        clusterMerged = true;
-      }
-      if (clusterMerged) mergedCount += 1;
-    }
-
-    return { mergedCount, removedCount };
+      return { mergedCount, removedCount };
+    });
   }
 
   async importCapturedPlaces(places: PlannerTripPlace[]): Promise<ImportReport> { return this.importResearchPlaces(places); }
@@ -517,102 +532,109 @@ export class PlannerRepository {
     const report: ImportReport = { received: places.length, created: [], updated: [], deduped: [], failed: [] };
     if (places.length === 0) return { ...report, trace };
     await this.initialize();
-    const existingTrips = new Set((await this.listTrips()).map((t) => t.id));
-    const existing = await this.listPlaces();
-    const byId = new Map(existing.map((place) => [place.id, place] as const));
-    const byStrongIdentity = new Map<string, PlannerTripPlace>();
 
-    const indexPlace = (place: PlannerTripPlace) => {
-      byId.set(place.id, place);
-      const keys = getStrongPlaceIdentityKeys(place);
-      const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place as unknown as import('@/domain/place-identity').PlaceIdentityLike);
-      for (const key of effective) {
-        byStrongIdentity.set(`${place.trip_id}::${key}`, place);
-      }
-    };
-    existing.forEach(indexPlace);
-    const touchedTripIds = new Set<string>();
+    await this.executeTransaction(async (tx) => {
+      const existingTrips = new Set((await this.listTrips({ strict: true })).map((t) => t.id));
+      const existing = await this.listPlaces({ strict: true });
+      const byId = new Map(existing.map((place) => [place.id, place] as const));
+      const byStrongIdentity = new Map<string, PlannerTripPlace>();
 
-    for (const rawPlace of places) {
-      const traceEntry: ImportTraceEntry = {
-        input_id: rawPlace.id,
-        title: rawPlace.title || '(unknown)',
-        action: 'unknown',
-        reason: '',
-      };
-
-      if (!rawPlace.id) {
-        traceEntry.action = 'failed';
-        traceEntry.reason = 'missing_id';
-        report.failed.push({ id: '', title: rawPlace.title || '(unknown)', reason: 'missing_id' });
-        trace.push(traceEntry);
-        continue;
-      }
-      if (!rawPlace.trip_id) {
-        traceEntry.action = 'failed';
-        traceEntry.reason = 'missing_trip_id';
-        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'missing_trip_id' });
-        trace.push(traceEntry);
-        continue;
-      }
-      if (!existingTrips.has(rawPlace.trip_id)) {
-        traceEntry.action = 'failed';
-        traceEntry.reason = `unknown_trip: ${rawPlace.trip_id}`;
-        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'unknown_trip', detail: rawPlace.trip_id });
-        trace.push(traceEntry);
-        continue;
-      }
-      touchedTripIds.add(rawPlace.trip_id);
-      const plannerFields: PlannerTripPlace = { ...rawPlace };
-      delete (plannerFields as unknown as Record<string, unknown>).status;
-      delete (plannerFields as unknown as Record<string, unknown>).reason;
-      delete (plannerFields as unknown as Record<string, unknown>).lastAttempt;
-      const incoming: PlannerTripPlace = {
-        ...plannerFields,
-        tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
-        reservation_status: rawPlace.reservation_status ?? 'none',
-        state: 'candidate',
-      };
-
-      // Check for exact ID match to update if re-importing the same place
-      let existingPlace: PlannerTripPlace | undefined = byId.get(incoming.id);
-      if (existingPlace) {
-        traceEntry.match_type = 'id';
-        traceEntry.matched_id = existingPlace.id;
-        traceEntry.matched_title = existingPlace.title;
-      } else {
-        const sKeys = getStrongPlaceIdentityKeys(incoming);
-        const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+      const indexPlace = (place: PlannerTripPlace) => {
+        byId.set(place.id, place);
+        const keys = getStrongPlaceIdentityKeys(place);
+        const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place as unknown as import('@/domain/place-identity').PlaceIdentityLike);
         for (const key of effective) {
-          const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
-          if (match) { existingPlace = match; traceEntry.match_type = 'strong_identity'; traceEntry.matched_id = match.id; traceEntry.matched_title = match.title; traceEntry.identity_key = key; break; }
+          byStrongIdentity.set(`${place.trip_id}::${key}`, place);
         }
-      }
+      };
+      existing.forEach(indexPlace);
 
-      try {
-        if (existingPlace) {
-          const persisted = mergeCapturedPlaceResearch(existingPlace, incoming);
-          await this.upsert(persisted);
-          indexPlace(persisted);
-          traceEntry.action = 'updated';
-          traceEntry.reason = `updated existing place ${existingPlace.id}`;
-          report.updated.push(rawPlace.id);
-        } else {
-          await this.upsert(incoming);
-          indexPlace(incoming);
-          traceEntry.action = 'created';
-          traceEntry.reason = 'new place imported';
-          report.created.push(rawPlace.id);
+      for (const rawPlace of places) {
+        const traceEntry: ImportTraceEntry = {
+          input_id: rawPlace.id,
+          title: rawPlace.title || '(unknown)',
+          action: 'unknown',
+          reason: '',
+        };
+
+        if (!rawPlace.id) {
+          traceEntry.action = 'failed';
+          traceEntry.reason = 'missing_id';
+          report.failed.push({ id: '', title: rawPlace.title || '(unknown)', reason: 'missing_id' });
+          trace.push(traceEntry);
+          continue;
         }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        traceEntry.action = 'failed';
-        traceEntry.reason = `write_error: ${msg}`;
-        console.warn(`[PlannerRepository] Failed to import research place ${rawPlace.id} (${rawPlace.title}):`, error);
-        report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'write_error', detail: msg });
+        if (!rawPlace.trip_id) {
+          traceEntry.action = 'failed';
+          traceEntry.reason = 'missing_trip_id';
+          report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'missing_trip_id' });
+          trace.push(traceEntry);
+          continue;
+        }
+        if (!existingTrips.has(rawPlace.trip_id)) {
+          traceEntry.action = 'failed';
+          traceEntry.reason = `unknown_trip: ${rawPlace.trip_id}`;
+          report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'unknown_trip', detail: rawPlace.trip_id });
+          trace.push(traceEntry);
+          continue;
+        }
+        const plannerFields: PlannerTripPlace = { ...rawPlace };
+        delete (plannerFields as unknown as Record<string, unknown>).status;
+        delete (plannerFields as unknown as Record<string, unknown>).reason;
+        delete (plannerFields as unknown as Record<string, unknown>).lastAttempt;
+        const incoming: PlannerTripPlace = {
+          ...plannerFields,
+          tags: ensurePlaceKindTag(rawPlace.tags, rawPlace.kind),
+          reservation_status: rawPlace.reservation_status ?? 'none',
+          state: 'candidate',
+        };
+
+        let existingPlace: PlannerTripPlace | undefined = byId.get(incoming.id);
+        if (existingPlace) {
+          traceEntry.match_type = 'id';
+          traceEntry.matched_id = existingPlace.id;
+          traceEntry.matched_title = existingPlace.title;
+        } else {
+          const sKeys = getStrongPlaceIdentityKeys(incoming);
+          const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+          for (const key of effective) {
+            const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
+            if (match) {
+              existingPlace = match;
+              traceEntry.match_type = 'strong_identity';
+              traceEntry.matched_id = match.id;
+              traceEntry.matched_title = match.title;
+              traceEntry.identity_key = key;
+              break;
+            }
+          }
+        }
+
+        try {
+          if (existingPlace) {
+            const persisted = mergeCapturedPlaceResearch(existingPlace, incoming);
+            await tx.stageUpsertEntity(persisted);
+            indexPlace(persisted);
+            traceEntry.action = 'updated';
+            traceEntry.reason = `updated existing place ${existingPlace.id}`;
+            report.updated.push(rawPlace.id);
+          } else {
+            await tx.stageUpsertEntity(incoming);
+            indexPlace(incoming);
+            traceEntry.action = 'created';
+            traceEntry.reason = 'new place imported';
+            report.created.push(rawPlace.id);
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          traceEntry.action = 'failed';
+          traceEntry.reason = `write_error: ${msg}`;
+          console.warn(`[PlannerRepository] Failed to stage research place ${rawPlace.id} (${rawPlace.title}):`, error);
+          report.failed.push({ id: rawPlace.id, title: rawPlace.title || '(unknown)', reason: 'write_error', detail: msg });
+        }
+        trace.push(traceEntry);
       }
-      trace.push(traceEntry);
-    }
+    });
 
     return { ...report, trace };
   }
@@ -628,111 +650,89 @@ export class PlannerRepository {
     reconstructed: { placeId: string; visitId: string; title: string }[];
     failed: { visitId: string; reason: string }[];
   }> {
-    await this.initialize();
-    const allVisits = await this.listVisits();
-    const allPlaces = await this.listPlaces();
-    const placeIds = new Set(allPlaces.map((p) => p.id));
+    return this.executeTransaction(async (tx) => {
+      const allVisits = await this.listVisits({ strict: true });
+      const allPlaces = await this.listPlaces({ strict: true });
+      const placeIds = new Set(allPlaces.map((p) => p.id));
 
-    // Filter orphan visits
-    let orphanVisits = allVisits.filter((v) => v.place_id && !placeIds.has(v.place_id));
-    if (tripId) {
-      orphanVisits = orphanVisits.filter((v) => v.trip_id === tripId);
-    }
-
-    const reconstructed: { placeId: string; visitId: string; title: string }[] = [];
-    const failed: { visitId: string; reason: string }[] = [];
-
-    for (const visit of orphanVisits) {
-      try {
-        // Create a placeholder place based on the visit
-        const placeId = `reconstructed-${visit.id}`;
-        const now = new Date().toISOString();
-        
-        const placeholderPlace: PlannerTripPlace = {
-          schema_version: '0.1',
-          type: 'trip_place',
-          id: placeId,
-          trip_id: visit.trip_id,
-          title: `Orphan Place (${visit.date})`,
-          source_provider: 'other',
-          source_url: '',
-          kind: 'other',
-          priority: 'want',
-          tags: ['reconstructed'],
-          state: 'candidate',
-          reservation_status: 'none',
-          signals: [],
-          risks: [],
-          created_at: now,
-          updated_at: now,
-        };
-
-        await this.upsertPlace(placeholderPlace);
-
-        // Update the visit to reference the new place
-        const updatedVisit = {
-          ...visit,
-          place_id: placeId,
-          updated_at: now,
-        };
-        await this.upsert(updatedVisit);
-
-        reconstructed.push({ placeId, visitId: visit.id, title: placeholderPlace.title });
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        failed.push({ visitId: visit.id, reason: msg });
-        console.warn(`[PlannerRepository] Failed to reconstruct place for visit ${visit.id}:`, error);
+      // Filter orphan visits
+      let orphanVisits = allVisits.filter((v) => v.place_id && !placeIds.has(v.place_id));
+      if (tripId) {
+        orphanVisits = orphanVisits.filter((v) => v.trip_id === tripId);
       }
-    }
 
-    return { reconstructed, failed };
+      const reconstructed: { placeId: string; visitId: string; title: string }[] = [];
+      const failed: { visitId: string; reason: string }[] = [];
+
+      for (const visit of orphanVisits) {
+        try {
+          // Create a placeholder place based on the visit
+          const placeId = `reconstructed-${visit.id}`;
+          const now = new Date().toISOString();
+
+          const placeholderPlace: PlannerTripPlace = {
+            schema_version: '0.1',
+            type: 'trip_place',
+            id: placeId,
+            trip_id: visit.trip_id,
+            title: `Orphan Place (${visit.date})`,
+            source_provider: 'other',
+            source_url: '',
+            kind: 'other',
+            priority: 'want',
+            tags: ['reconstructed'],
+            state: 'candidate',
+            reservation_status: 'none',
+            signals: [],
+            risks: [],
+            created_at: now,
+            updated_at: now,
+          };
+
+          await tx.stageUpsertEntity(placeholderPlace);
+
+          // Update the visit to reference the new place
+          const updatedVisit = {
+            ...visit,
+            place_id: placeId,
+            updated_at: now,
+          };
+          await tx.stageUpsertEntity(updatedVisit);
+
+          reconstructed.push({ placeId, visitId: visit.id, title: placeholderPlace.title });
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          failed.push({ visitId: visit.id, reason: msg });
+          console.warn(`[PlannerRepository] Failed to reconstruct place for visit ${visit.id}:`, error);
+        }
+      }
+
+      return { reconstructed, failed };
+    });
   }
 
   async importBundle(bundle: { trip: PlannerTrip; places: PlannerTripPlace[]; visits: PlannerTripVisit[]; legs: PlannerTripLeg[] }): Promise<ImportReport> {
-    await this.initialize();
     const report: ImportReport = { received: bundle.places.length, created: [], updated: [], deduped: [], failed: [] };
 
-    try {
-      await this.upsertTrip(bundle.trip);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      report.failed.push({ id: bundle.trip.id, title: bundle.trip.title, reason: 'write_error', detail: msg });
-      return report;
-    }
+    return this.executeTransaction(async (tx) => {
+      await tx.stageUpsertEntity(bundle.trip);
 
-    for (const place of bundle.places) {
-      try {
-        await this.upsertPlace(place);
+      for (const place of bundle.places) {
+        await tx.stageUpsertEntity({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) });
         report.created.push(place.id);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        report.failed.push({ id: place.id, title: place.title || '(unknown)', reason: 'write_error', detail: msg });
       }
-    }
 
-    for (const visit of bundle.visits) {
-      try {
-        await this.upsertVisit(visit);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        report.failed.push({ id: visit.id, title: `Visit ${visit.place_id}`, reason: 'write_error', detail: msg });
+      for (const visit of bundle.visits) {
+        assertTripDate(bundle.trip, visit.date);
+        await tx.stageUpsertEntity(visit);
       }
-    }
 
-    for (const leg of bundle.legs) {
-      try {
-        await this.upsertLeg(leg);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        report.failed.push({ id: leg.id, title: `Leg ${leg.from_place_id}→${leg.to_place_id}`, reason: 'write_error', detail: msg });
+      for (const leg of bundle.legs) {
+        await tx.stageUpsertEntity(leg);
       }
-    }
 
-    if (report.failed.length > 0) {
-      console.warn(`[PlannerRepository] Bundle import: ${report.created.length}/${report.received} created, ${report.failed.length} failed`, report.failed);
-    }
-
-    return report;
+      return report;
+    });
   }
 
   async dropPlace(placeId: string): Promise<boolean> {
@@ -780,18 +780,17 @@ export class PlannerRepository {
   }
 
   async deleteTrip(tripId: string): Promise<boolean> {
-    await this.initialize();
-    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === tripId);
-    if (!trip) return false;
-    // cascade: places / visits / legs / expenses
-    const [places, visits, legs, expenses] = await Promise.all([
-      this.listPlaces({ strict: true }),
-      this.listVisits({ strict: true }),
-      this.listLegs({ strict: true }),
-      this.listExpenses({ strict: true }),
-    ]);
-
     return this.executeTransaction(async (tx) => {
+      const trip = (await this.listTrips({ strict: true })).find((t) => t.id === tripId);
+      if (!trip) return false;
+      // cascade: places / visits / legs / expenses
+      const [places, visits, legs, expenses] = await Promise.all([
+        this.listPlaces({ strict: true }),
+        this.listVisits({ strict: true }),
+        this.listLegs({ strict: true }),
+        this.listExpenses({ strict: true }),
+      ]);
+
       for (const p of places.filter((x) => x.trip_id === tripId)) {
         await tx.stageDeleteEntity(p);
       }
@@ -822,23 +821,23 @@ export class PlannerRepository {
    * Merges a secondary place into a primary place, reassigning visits and deleting the secondary entity.
    */
   async mergePlaces(primaryPlaceId: string, secondaryPlaceId: string): Promise<PlannerTripPlace> {
-    await this.initialize();
     if (primaryPlaceId === secondaryPlaceId) throw new Error('Cannot merge a place into itself.');
-    const places = await this.listPlaces({ strict: true });
-    const primary = places.find((p) => p.id === primaryPlaceId);
-    const secondary = places.find((p) => p.id === secondaryPlaceId);
-    if (!primary || !secondary) {
-      throw new Error(`Cannot merge: place not found (primary: ${primaryPlaceId}, secondary: ${secondaryPlaceId})`);
-    }
-    if (primary.trip_id !== secondary.trip_id) {
-      throw new Error('Cannot merge places from different trips.');
-    }
-
-    const merged = mergeCapturedPlaceResearch(primary, secondary);
-    const visits = await this.listVisits({ strict: true });
-    const secondaryVisits = visits.filter((visit) => visit.place_id === secondaryPlaceId);
 
     return this.executeTransaction(async (tx) => {
+      const places = await this.listPlaces({ strict: true });
+      const primary = places.find((p) => p.id === primaryPlaceId);
+      const secondary = places.find((p) => p.id === secondaryPlaceId);
+      if (!primary || !secondary) {
+        throw new Error(`Cannot merge: place not found (primary: ${primaryPlaceId}, secondary: ${secondaryPlaceId})`);
+      }
+      if (primary.trip_id !== secondary.trip_id) {
+        throw new Error('Cannot merge places from different trips.');
+      }
+
+      const merged = mergeCapturedPlaceResearch(primary, secondary);
+      const visits = await this.listVisits({ strict: true });
+      const secondaryVisits = visits.filter((visit) => visit.place_id === secondaryPlaceId);
+
       await tx.stageUpsertEntity(merged);
       for (const visit of secondaryVisits) {
         await tx.stageUpsertEntity({ ...visit, place_id: primary.id, updated_at: new Date().toISOString() });
@@ -860,23 +859,22 @@ export class PlannerRepository {
       anchor_type?: PlannerTripVisit['anchor_type'];
     } = {},
   ): Promise<PlannerTripVisit | null> {
-    await this.initialize();
-    const place = (await this.listPlaces({ strict: true })).find((item) => item.id === placeId && item.state !== 'dropped');
-    if (!place) return null;
-    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === place.trip_id);
-    if (!trip) {
-      throw new Error(`Planner trip "${place.trip_id}" was not found for place ${place.id}.`);
-    }
-    assertTripDate(trip, date);
-
-    // Validate timing BEFORE performing any mutation
-    const start = options.start?.trim() || undefined;
-    const duration = options.duration_minutes ?? place.duration_minutes;
-    const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: Boolean(options.is_anchor) })
-      .filter((issue) => issue.severity === 'error');
-    if (errors.length > 0) throw new Error(errors.map((issue) => issue.message).join(' | '));
-
     return this.executeTransaction(async (tx) => {
+      const place = (await this.listPlaces({ strict: true })).find((item) => item.id === placeId && item.state !== 'dropped');
+      if (!place) return null;
+      const trip = (await this.listTrips({ strict: true })).find((t) => t.id === place.trip_id);
+      if (!trip) {
+        throw new Error(`Planner trip "${place.trip_id}" was not found for place ${place.id}.`);
+      }
+      assertTripDate(trip, date);
+
+      // Validate timing BEFORE performing any mutation
+      const start = options.start?.trim() || undefined;
+      const duration = options.duration_minutes ?? place.duration_minutes;
+      const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: Boolean(options.is_anchor) })
+        .filter((issue) => issue.severity === 'error');
+      if (errors.length > 0) throw new Error(errors.map((issue) => issue.message).join(' | '));
+
       const visits = await this.listVisits({ strict: true });
       const dayVisits = visits
         .filter((visit) => visit.trip_id === place.trip_id && visit.date === date)
@@ -906,7 +904,6 @@ export class PlannerRepository {
   }
 
   async removeVisit(visitId: string): Promise<boolean> {
-    await this.initialize();
     return this.executeTransaction(async (tx) => {
       const visits = await this.listVisits({ strict: true });
       const visit = visits.find((item) => item.id === visitId);
@@ -927,47 +924,61 @@ export class PlannerRepository {
   }
 
   async toggleVisitLock(visitId: string): Promise<PlannerTripVisit | null> {
-    const visit = (await this.listVisits({ strict: true })).find((item) => item.id === visitId);
-    if (!visit) return null;
-    const next = { ...visit, locked: !visit.locked, updated_at: new Date().toISOString() };
-    await this.upsertVisit(next);
-    return next;
+    return this.executeTransaction(async (tx) => {
+      const visit = (await this.listVisits({ strict: true })).find((item) => item.id === visitId);
+      if (!visit) return null;
+      const trip = (await this.listTrips({ strict: true })).find((t) => t.id === visit.trip_id);
+      if (!trip) {
+        throw new Error(`Planner trip "${visit.trip_id}" was not found for visit.`);
+      }
+      assertTripDate(trip, visit.date);
+      const next = { ...visit, locked: !visit.locked, updated_at: new Date().toISOString() };
+      await tx.stageUpsertEntity(next);
+      return next;
+    });
   }
 
   async updateVisitTiming(
     visitId: string,
     timing: { start?: string | null; duration_minutes?: number | null },
   ): Promise<PlannerTripVisit | null> {
-    const visit = (await this.listVisits({ strict: true })).find((item) => item.id === visitId);
-    if (!visit) return null;
-    const start = timing.start?.trim() || undefined;
-    const duration = timing.duration_minutes ?? undefined;
-    const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: visit.is_anchor })
-      .filter((issue) => issue.severity === 'error');
-    if (errors.length > 0) throw new Error(errors.map((issue) => issue.message).join(' | '));
-    const next: PlannerTripVisit = { ...visit, start, duration_minutes: duration, updated_at: new Date().toISOString() };
-    await this.upsertVisit(next);
-    return next;
+    return this.executeTransaction(async (tx) => {
+      const visit = (await this.listVisits({ strict: true })).find((item) => item.id === visitId);
+      if (!visit) return null;
+      const trip = (await this.listTrips({ strict: true })).find((t) => t.id === visit.trip_id);
+      if (!trip) {
+        throw new Error(`Planner trip "${visit.trip_id}" was not found for visit.`);
+      }
+      assertTripDate(trip, visit.date);
+      const start = timing.start?.trim() || undefined;
+      const duration = timing.duration_minutes ?? undefined;
+      const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: visit.is_anchor })
+        .filter((issue) => issue.severity === 'error');
+      if (errors.length > 0) throw new Error(errors.map((issue) => issue.message).join(' | '));
+      const next: PlannerTripVisit = { ...visit, start, duration_minutes: duration, updated_at: new Date().toISOString() };
+      await tx.stageUpsertEntity(next);
+      return next;
+    });
   }
 
   async reorderVisits(date: string, orderedVisitIds: string[]): Promise<number> {
     if (orderedVisitIds.length === 0) return 0;
-    const visits = await this.listVisits({ strict: true });
-    const byId = new Map(visits.map((visit) => [visit.id, visit] as const));
-    const resolved = orderedVisitIds.map((id) => byId.get(id));
-    if (resolved.some((visit) => !visit)) throw new Error('Planner reorder contains an unknown visit.');
-    const ordered = resolved as PlannerTripVisit[];
-    const tripId = ordered[0].trip_id;
-    if (ordered.some((visit) => visit.trip_id !== tripId || visit.date !== date)) {
-      throw new Error('Planner reorder must stay within one trip and one day.');
-    }
-    const dayVisits = visits.filter((visit) => visit.trip_id === tripId && visit.date === date);
-    const requestedIds = new Set(orderedVisitIds);
-    if (dayVisits.length !== ordered.length || dayVisits.some((visit) => !requestedIds.has(visit.id))) {
-      throw new Error('Planner reorder must contain every visit in the trip day exactly once.');
-    }
-
     return this.executeTransaction(async (tx) => {
+      const visits = await this.listVisits({ strict: true });
+      const byId = new Map(visits.map((visit) => [visit.id, visit] as const));
+      const resolved = orderedVisitIds.map((id) => byId.get(id));
+      if (resolved.some((visit) => !visit)) throw new Error('Planner reorder contains an unknown visit.');
+      const ordered = resolved as PlannerTripVisit[];
+      const tripId = ordered[0].trip_id;
+      if (ordered.some((visit) => visit.trip_id !== tripId || visit.date !== date)) {
+        throw new Error('Planner reorder must stay within one trip and one day.');
+      }
+      const dayVisits = visits.filter((visit) => visit.trip_id === tripId && visit.date === date);
+      const requestedIds = new Set(orderedVisitIds);
+      if (dayVisits.length !== ordered.length || dayVisits.some((visit) => !requestedIds.has(visit.id))) {
+        throw new Error('Planner reorder must contain every visit in the trip day exactly once.');
+      }
+
       let written = 0;
       for (let index = 0; index < ordered.length; index += 1) {
         const visit = ordered[index];
@@ -989,21 +1000,21 @@ export class PlannerRepository {
     if (!dateA || !dateB) throw new Error('Planner swap trip days requires two valid dates.');
     if (dateA === dateB) return { swappedCount: 0 };
 
-    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === tripId);
-    if (!trip) throw new Error(`Planner trip "${tripId}" was not found.`);
-    assertTripDates(trip, [dateA, dateB]);
-
-    const visits = await this.listVisits({ strict: true });
-    const tripVisits = visits.filter((v) => v.trip_id === tripId);
-    const visitsA = tripVisits.filter((v) => v.date === dateA);
-    const visitsB = tripVisits.filter((v) => v.date === dateB);
-
-    if (visitsA.length === 0 && visitsB.length === 0) {
-      return { swappedCount: 0 };
-    }
-
-    const now = new Date().toISOString();
     return this.executeTransaction(async (tx) => {
+      const trip = (await this.listTrips({ strict: true })).find((t) => t.id === tripId);
+      if (!trip) throw new Error(`Planner trip "${tripId}" was not found.`);
+      assertTripDates(trip, [dateA, dateB]);
+
+      const visits = await this.listVisits({ strict: true });
+      const tripVisits = visits.filter((v) => v.trip_id === tripId);
+      const visitsA = tripVisits.filter((v) => v.date === dateA);
+      const visitsB = tripVisits.filter((v) => v.date === dateB);
+
+      if (visitsA.length === 0 && visitsB.length === 0) {
+        return { swappedCount: 0 };
+      }
+
+      const now = new Date().toISOString();
       let swappedCount = 0;
       for (const visit of visitsA) {
         await tx.stageUpsertEntity({ ...visit, date: dateB, updated_at: now });
@@ -1018,46 +1029,47 @@ export class PlannerRepository {
   }
 
   async setStaySpan(hotelPlaceId: string, dates: string[]): Promise<PlannerTripVisit[]> {
-    const place = (await this.listPlaces({ strict: true })).find((item) => item.id === hotelPlaceId && item.kind === 'stay' && item.state !== 'dropped');
-    if (!place) throw new Error(`Planner stay place was not found: ${hotelPlaceId}`);
     const targetDates = [...new Set(dates)].sort();
     if (targetDates.length === 0) throw new Error('Planner stay span requires at least one date.');
-    const trip = (await this.listTrips({ strict: true })).find((t) => t.id === place.trip_id);
-    if (!trip) {
-      throw new Error(`Planner trip "${place.trip_id}" was not found for stay place.`);
-    }
-    assertTripDates(trip, targetDates);
-    const dateSet = new Set(targetDates);
-    const visits = await this.listVisits({ strict: true });
-    const tripPlaces = new Map(
-      (await this.listPlaces({ strict: true }))
-        .filter((item) => item.trip_id === place.trip_id)
-        .map((item) => [item.id, item] as const),
-    );
-    const existingHotelVisits = visits
-      .filter((visit) => visit.trip_id === place.trip_id && visit.place_id === place.id)
-      .sort((left, right) => left.date.localeCompare(right.date) || left.sort_order - right.sort_order || left.id.localeCompare(right.id));
-    const keepByDate = new Map<string, PlannerTripVisit>();
-    for (const visit of existingHotelVisits) {
-      if (
-        dateSet.has(visit.date)
-        && !keepByDate.has(visit.date)
-        && visit.locked
-        && visit.is_anchor
-        && visit.anchor_type === 'stay_checkin'
-      ) {
-        keepByDate.set(visit.date, visit);
-      }
-    }
-    const stale = visits.filter((visit) => {
-      if (visit.trip_id !== place.trip_id || tripPlaces.get(visit.place_id)?.kind !== 'stay') return false;
-      if (visit.place_id === place.id) {
-        return !dateSet.has(visit.date) || keepByDate.get(visit.date)?.id !== visit.id;
-      }
-      return dateSet.has(visit.date);
-    });
 
     return this.executeTransaction(async (tx) => {
+      const place = (await this.listPlaces({ strict: true })).find((item) => item.id === hotelPlaceId && item.kind === 'stay' && item.state !== 'dropped');
+      if (!place) throw new Error(`Planner stay place was not found: ${hotelPlaceId}`);
+      const trip = (await this.listTrips({ strict: true })).find((t) => t.id === place.trip_id);
+      if (!trip) {
+        throw new Error(`Planner trip "${place.trip_id}" was not found for stay place.`);
+      }
+      assertTripDates(trip, targetDates);
+      const dateSet = new Set(targetDates);
+      const visits = await this.listVisits({ strict: true });
+      const tripPlaces = new Map(
+        (await this.listPlaces({ strict: true }))
+          .filter((item) => item.trip_id === place.trip_id)
+          .map((item) => [item.id, item] as const),
+      );
+      const existingHotelVisits = visits
+        .filter((visit) => visit.trip_id === place.trip_id && visit.place_id === place.id)
+        .sort((left, right) => left.date.localeCompare(right.date) || left.sort_order - right.sort_order || left.id.localeCompare(right.id));
+      const keepByDate = new Map<string, PlannerTripVisit>();
+      for (const visit of existingHotelVisits) {
+        if (
+          dateSet.has(visit.date)
+          && !keepByDate.has(visit.date)
+          && visit.locked
+          && visit.is_anchor
+          && visit.anchor_type === 'stay_checkin'
+        ) {
+          keepByDate.set(visit.date, visit);
+        }
+      }
+      const stale = visits.filter((visit) => {
+        if (visit.trip_id !== place.trip_id || tripPlaces.get(visit.place_id)?.kind !== 'stay') return false;
+        if (visit.place_id === place.id) {
+          return !dateSet.has(visit.date) || keepByDate.get(visit.date)?.id !== visit.id;
+        }
+        return dateSet.has(visit.date);
+      });
+
       for (const visit of stale) {
         await tx.stageDeleteEntity(visit);
       }
@@ -1111,54 +1123,57 @@ export class PlannerRepository {
   }
 
   async createOrUpdateCalendarFeed(tripId: string): Promise<PlannerTripCalendarFeed> {
-    await this.initialize();
-    const trip = (await this.listTrips()).find((item) => item.id === tripId);
-    if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+    return this.executeTransaction(async (tx) => {
+      const trip = (await this.listTrips({ strict: true })).find((item) => item.id === tripId);
+      if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
 
-    const feed: PlannerTripCalendarFeed = trip.calendar_feed
-      ? { ...trip.calendar_feed, updated_at: new Date().toISOString(), enabled: true }
-      : createTripCalendarFeed(tripId);
+      const feed: PlannerTripCalendarFeed = trip.calendar_feed
+        ? { ...trip.calendar_feed, updated_at: new Date().toISOString(), enabled: true }
+        : createTripCalendarFeed(tripId);
 
-    const updatedTrip: PlannerTrip = {
-      ...trip,
-      calendar_feed: feed,
-      updated_at: new Date().toISOString(),
-    };
-    await this.upsertTrip(updatedTrip);
-    return feed;
+      const updatedTrip: PlannerTrip = {
+        ...trip,
+        calendar_feed: feed,
+        updated_at: new Date().toISOString(),
+      };
+      await tx.stageUpsertEntity(updatedTrip);
+      return feed;
+    });
   }
 
   async rotateCalendarFeed(tripId: string): Promise<PlannerTripCalendarFeed> {
-    await this.initialize();
-    const trip = (await this.listTrips()).find((item) => item.id === tripId);
-    if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
-    const currentFeed = trip.calendar_feed || createTripCalendarFeed(tripId);
-    const rotated = rotateTripCalendarFeed(currentFeed);
-    const updatedTrip: PlannerTrip = {
-      ...trip,
-      calendar_feed: rotated,
-      updated_at: new Date().toISOString(),
-    };
-    await this.upsertTrip(updatedTrip);
-    return rotated;
+    return this.executeTransaction(async (tx) => {
+      const trip = (await this.listTrips({ strict: true })).find((item) => item.id === tripId);
+      if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+      const currentFeed = trip.calendar_feed || createTripCalendarFeed(tripId);
+      const rotated = rotateTripCalendarFeed(currentFeed);
+      const updatedTrip: PlannerTrip = {
+        ...trip,
+        calendar_feed: rotated,
+        updated_at: new Date().toISOString(),
+      };
+      await tx.stageUpsertEntity(updatedTrip);
+      return rotated;
+    });
   }
 
   async disableCalendarFeed(tripId: string): Promise<boolean> {
-    await this.initialize();
-    const trip = (await this.listTrips()).find((item) => item.id === tripId);
-    if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
-    if (!trip.calendar_feed) return false;
-    const disabledFeed: PlannerTripCalendarFeed = {
-      ...trip.calendar_feed,
-      enabled: false,
-      updated_at: new Date().toISOString(),
-    };
-    await this.upsertTrip({
-      ...trip,
-      calendar_feed: disabledFeed,
-      updated_at: new Date().toISOString(),
+    return this.executeTransaction(async (tx) => {
+      const trip = (await this.listTrips({ strict: true })).find((item) => item.id === tripId);
+      if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+      if (!trip.calendar_feed) return false;
+      const disabledFeed: PlannerTripCalendarFeed = {
+        ...trip.calendar_feed,
+        enabled: false,
+        updated_at: new Date().toISOString(),
+      };
+      await tx.stageUpsertEntity({
+        ...trip,
+        calendar_feed: disabledFeed,
+        updated_at: new Date().toISOString(),
+      });
+      return true;
     });
-    return true;
   }
 }
 

@@ -225,7 +225,14 @@ export class ObsidianFileSystemService {
       try {
         current = await current.getDirectoryHandle(part, { create });
       } catch (e) {
-        if (!create) return null;
+        if (!create) {
+          const isNotFound =
+            (e instanceof DOMException && e.name === 'NotFoundError') ||
+            (e instanceof Error && (e.name === 'NotFoundError' || e.message.includes('NotFoundError') || e.message.toLowerCase().includes('not found')));
+          if (isNotFound) {
+            return null;
+          }
+        }
         throw e;
       }
     }
@@ -240,20 +247,28 @@ export class ObsidianFileSystemService {
     if (!dirHandle) return [];
 
     const files: { fileName: string; content: string }[] = [];
-    for await (const entry of dirHandle.values()) {
-      if (entry.kind === 'file' && entry.name.endsWith('.md')) {
-        try {
-          const file = await entry.getFile();
-          const content = await file.text();
-          files.push({ fileName: entry.name, content });
-        } catch (e) {
-          if (options?.tolerant) {
-            console.warn(`[ObsidianFileSystemService] Failed to read file ${entry.name} in ${directory}`, e);
-          } else {
-            throw new Error(`Failed to read markdown file "${entry.name}" in "${directory}": ${e instanceof Error ? e.message : String(e)}`);
+    try {
+      for await (const entry of dirHandle.values()) {
+        if (entry.kind === 'file' && entry.name.endsWith('.md')) {
+          try {
+            const file = await entry.getFile();
+            const content = await file.text();
+            files.push({ fileName: entry.name, content });
+          } catch (e) {
+            if (options?.tolerant) {
+              console.warn(`[ObsidianFileSystemService] Failed to read file ${entry.name} in ${directory}`, e);
+            } else {
+              throw new Error(`Failed to read markdown file "${entry.name}" in "${directory}": ${e instanceof Error ? e.message : String(e)}`);
+            }
           }
         }
       }
+    } catch (e) {
+      if (options?.tolerant) {
+        console.warn(`[ObsidianFileSystemService] Failed to iterate directory ${directory}`, e);
+        return files;
+      }
+      throw e;
     }
     return files;
   }

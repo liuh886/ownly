@@ -1,5 +1,16 @@
 # Ownly — Task Progress & Review
 
+## Completed: Read-Modify-Write in Mutation Queue & Fail-Closed Directory Handling (2026-09-05)
+- [x] **1. Atomize Read-Modify-Write Inside Serialized Mutation Queue**
+  - Moved all pre-mutation state reads (`listPlaces`, `listVisits`, `listTrips`, `listLegs`, `listExpenses`) directly inside `executeTransaction()` callbacks in [`src/services/PlannerRepository.ts`](file:///D:/Documents/GitHub/Ownly/src/services/PlannerRepository.ts) across `deleteTrip`, `mergePlaces`, `addVisit`, `removeVisit`, `toggleVisitLock`, `updateVisitTiming`, `reorderVisits`, `swapTripDays`, `setStaySpan`, `importBundle`, `reconstructOrphanPlaces`, `importResearchPlaces`, `deduplicateTripPlaces`, and calendar feed operations.
+  - Eliminated race conditions and stale snapshot read-modify-write conflicts during rapid user interactions.
+- [x] **2. Distinguish Directory Not Found from Directory Read Failures**
+  - In [`src/services/ObsidianFileSystemService.ts`](file:///D:/Documents/GitHub/Ownly/src/services/ObsidianFileSystemService.ts), updated `getDirHandle` so only `NotFoundError` returns `null` when `create === false`; all permission, security, or I/O errors are re-thrown.
+  - In `readMarkdownFiles`, wrapped directory iteration in `try ... catch` to fail closed unless `{ tolerant: true }` is explicitly provided.
+  - Added `'Trip Visits'` and `'Trip Expenses'` to `OWNLY_REQUIRED_DIRECTORIES` in [`src/services/ownly-data-layout.ts`](file:///D:/Documents/GitHub/Ownly/src/services/ownly-data-layout.ts) and updated assertions in `src/services/ownly-data-layout.test.ts`.
+- [x] **3. Complete Verification Pipeline**
+  - Passed `npm run validate:fast`, `npm run validate:extension` (172/172 tests), `npm run validate:shared` (58/58 test suites, 533/533 tests), `npm run build` (Next.js production build), and full `npm run validate` (100% clean).
+
 ## Completed: Deep Architectural Robustness & Schema/Concurrency Fixes (2026-09-05)
 - [x] **1. True Fail-Closed Reads & Diagnostic Scan Separation (P1)**
   - Made `ObsidianFileSystemService.readMarkdownFiles()` fail-closed (throws on individual file read failure); provided `scanMarkdownFilesBestEffort()` / `{ tolerant?: boolean }` for Doctor and non-blocking diagnostic scans.

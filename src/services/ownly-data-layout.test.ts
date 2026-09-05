@@ -21,7 +21,9 @@ describe('Ownly local data layout', () => {
     expect(OWNLY_REQUIRED_DIRECTORIES).toContain('Reviews');
     expect(OWNLY_REQUIRED_DIRECTORIES).toContain('Trips');
     expect(OWNLY_REQUIRED_DIRECTORIES).toContain('Trip Places');
+    expect(OWNLY_REQUIRED_DIRECTORIES).toContain('Trip Visits');
     expect(OWNLY_REQUIRED_DIRECTORIES).toContain('Trip Legs');
+    expect(OWNLY_REQUIRED_DIRECTORIES).toContain('Trip Expenses');
     expect(OWNLY_REQUIRED_DIRECTORIES).toContain('Logs/Object Experiences');
     expect(OWNLY_REQUIRED_DIRECTORIES).toContain('Archive/Object Logs');
   });
