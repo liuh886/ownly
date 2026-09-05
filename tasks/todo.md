@@ -1,5 +1,23 @@
 # Ownly — Task Progress & Review
 
+## Completed: Capture Extension Technical Debt Clearance, Outdated Documentation Corrections & Quality Hardening (2026-09-05)
+- [x] **1. Modernize Outdated Capture Documentation & RFCs**
+  - Updated [`docs/CAPTURE_PRODUCT_RFC.md`](file:///D:/Documents/GitHub/Ownly/docs/CAPTURE_PRODUCT_RFC.md): marked status as "Adopted & Implemented". Replaced legacy floating ball (FAB) references with current encapsulated inline button architecture (`injectInlineCaptureButton`), modular provider adapters (Google Maps, Google Travel, Agoda, Booking.com, Xiaohongshu, Tabelog), and asynchronous Google Maps entity resolution. Updated issue trackers #CAPTURE-RFC-01 ~ 04.
+  - Updated [`docs/CAPTURE_SYNC_BOUNDARY.md`](file:///D:/Documents/GitHub/Ownly/docs/CAPTURE_SYNC_BOUNDARY.md): upgraded state model from `V2` (`pendingPlaces`) to `V3` (`ownlyCaptureStateV3` with multi-collection support), added all supported providers (Agoda, Google Travel, Booking.com, Xiaohongshu, Tabelog), and detailed the 3-Layer Quick Capture Pipeline & identity deduplication.
+  - Updated [`docs/PLANNER_CAPTURE_RELEASE_READINESS.md`](file:///D:/Documents/GitHub/Ownly/docs/PLANNER_CAPTURE_RELEASE_READINESS.md): aligned capture provider coverage and inbox deduplication status.
+- [x] **2. Eliminate Silent Error Catches & Improve Logging Across `src/extension/`**
+  - In `background.ts`, `adapters/google-maps.ts`, `currency-detector.ts`, `enrichment.ts`, `sidepanel/capture.ts`, and `sidepanel/handlers.ts`: replaced unlogged empty catches with structured `logger.debug` / `logger.warn` calls.
+  - Ensured failed network requests or JSON parse errors in background research provide actionable diagnostic logs.
+- [x] **3. Hardening Timers, Memory Management & Loose Assertions**
+  - In [`src/extension/sidepanel/capture.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/sidepanel/capture.ts): tracked and cleared `priceRetryTimer` (`cancelPriceRetry()`) when navigating or switching places/tabs to prevent orphan background polls.
+  - In [`src/extension/background.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/background.ts): tracked and debounced `flashBadge` timeout via `badgeTimers: Map<number, Timeout>` to avoid badge race conditions on rapid multi-captures.
+  - In [`src/extension/sidepanel/handlers.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/sidepanel/handlers.ts) & [`capture.ts`](file:///D:/Documents/GitHub/Ownly/src/extension/sidepanel/capture.ts): safely scoped `store.currentPlace` locally, eliminating unchecked non-null assertions (`!`) on nullable state.
+- [x] **4. Comprehensive Automated Verification & Regression Testing**
+  - `npm run validate:extension` (172/172 tests passed, clean extension build).
+  - `npm run validate:fast` (0 errors, clean lint, types, terminology & membership).
+  - `npm run validate:shared` (100% contracts & parity passing across 58 test suites / 533 tests).
+  - `npm run build` (Next.js full production build compiled successfully).
+
 ## Completed: Read-Modify-Write in Mutation Queue & Fail-Closed Directory Handling (2026-09-05)
 - [x] **1. Atomize Read-Modify-Write Inside Serialized Mutation Queue**
   - Moved all pre-mutation state reads (`listPlaces`, `listVisits`, `listTrips`, `listLegs`, `listExpenses`) directly inside `executeTransaction()` callbacks in [`src/services/PlannerRepository.ts`](file:///D:/Documents/GitHub/Ownly/src/services/PlannerRepository.ts) across `deleteTrip`, `mergePlaces`, `addVisit`, `removeVisit`, `toggleVisitLock`, `updateVisitTiming`, `reorderVisits`, `swapTripDays`, `setStaySpan`, `importBundle`, `reconstructOrphanPlaces`, `importResearchPlaces`, `deduplicateTripPlaces`, and calendar feed operations.

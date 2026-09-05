@@ -4,6 +4,8 @@
  * the currency of prices on any webpage or travel platform.
  */
 
+import { logger } from './logger';
+
 export interface CurrencySignal {
   currency: string;
   source:
@@ -205,16 +207,18 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
           break;
         }
       }
-    } catch {}
+    } catch (err) {
+      logger.debug('CurrencyDetector', 'Failed to inspect meta tags for currency', { error: String(err) });
+    }
   }
 
   // Priority 2: Website Built-in Currency Switcher & Active DOM/Storage State
   if (doc) {
     try {
       // A. Root HTML/Body data attributes (e.g. <html data-currency="SGD">)
-      const rootCurrency = doc.documentElement.getAttribute('data-currency') ||
-        doc.documentElement.getAttribute('data-site-currency') ||
-        doc.body?.getAttribute('data-currency');
+      const rootCurrency = doc.documentElement?.getAttribute?.('data-currency') ||
+        doc.documentElement?.getAttribute?.('data-site-currency') ||
+        doc.body?.getAttribute?.('data-currency');
       if (rootCurrency) {
         const code = rootCurrency.trim().toUpperCase();
         if (UNAMBIGUOUS_SYMBOLS[code]) {
@@ -233,7 +237,9 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
           signals.push({ currency: extracted, source: 'site_switcher', confidence: 92, detail: 'Site Currency Switcher / Picker' });
         }
       }
-    } catch {}
+    } catch (err) {
+      logger.debug('CurrencyDetector', 'Failed to inspect site currency switcher', { error: String(err) });
+    }
   }
 
   // C. Storage active currency
@@ -247,7 +253,9 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
           break;
         }
       }
-    } catch {}
+    } catch (err) {
+      logger.debug('CurrencyDetector', 'Failed to inspect storage currency keys', { error: String(err) });
+    }
   }
 
   // Priority 3: Explicit Currency Symbol in Target Price / Selected Text
@@ -378,7 +386,9 @@ export function detectPageCurrency(ctx: DetectionContext): CurrencyDetectionResu
     else if (/\.kr$/i.test(host)) signals.push({ currency: 'KRW', source: 'domain_tld', confidence: 80, detail: '.kr South Korea' });
     else if (/\.vn$/i.test(host)) signals.push({ currency: 'VND', source: 'domain_tld', confidence: 80, detail: '.vn Vietnam' });
     else if (/\.my$/i.test(host)) signals.push({ currency: 'MYR', source: 'domain_tld', confidence: 80, detail: '.my Malaysia' });
-  } catch {}
+  } catch (err) {
+    logger.debug('CurrencyDetector', 'Failed to parse hostname for TLD currency signal', { url: rawUrl, error: String(err) });
+  }
 
   // Active Trip Currency Context
   if (ctx.hintCurrency) {

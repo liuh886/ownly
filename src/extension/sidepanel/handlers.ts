@@ -1488,10 +1488,11 @@ export function initHandlers(): void {
 
   el.btnRemoveCandidate.addEventListener('click', () => {
     const dict = t();
-    if (!store.currentPlace) return;
+    const currentPlace = store.currentPlace;
+    if (!currentPlace) return;
     const collection = getActiveCollection();
     if (!collection) return;
-    const existing = getExistingPlaceForUrl(store.currentPlace.sourceUrl, store.currentPlace.sourcePlaceId);
+    const existing = getExistingPlaceForUrl(currentPlace.sourceUrl, currentPlace.sourcePlaceId);
     if (!existing) return;
 
     store.locallyDeletedIds.add(existing.id);
@@ -1507,14 +1508,15 @@ export function initHandlers(): void {
   el.captureForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const dict = t();
-    logger.info('CaptureForm', 'submit', { title: store.currentPlace?.title, url: store.currentPlace?.sourceUrl?.slice(0, 60), kind: el.kind.value, targetCollection: store.getActiveCollection()?.title });
+    const currentPlace = store.currentPlace;
+    logger.info('CaptureForm', 'submit', { title: currentPlace?.title, url: currentPlace?.sourceUrl?.slice(0, 60), kind: el.kind.value, targetCollection: store.getActiveCollection()?.title });
     const collection = store.getActiveCollection() ?? store.ensureDefaultCollection();
     if (!collection) {
       logger.error('CaptureForm', 'no collection');
       setStatus(dict.tripRequiredError, 'error');
       return;
     }
-    if (!store.currentPlace) {
+    if (!currentPlace) {
       logger.warn('CaptureForm', 'no currentPlace on submit');
       setStatus(dict.placeRequiredError, 'error');
       return;
@@ -1525,33 +1527,33 @@ export function initHandlers(): void {
     const activePlaces = getActivePlaces();
     const existing = findExistingPlace(
       activePlaces,
-      store.currentPlace.sourceUrl,
-      store.currentPlace.sourcePlaceId,
-      store.currentPlace.coordinates,
+      currentPlace.sourceUrl,
+      currentPlace.sourcePlaceId,
+      currentPlace.coordinates,
     );
     const kind = (el.kind.value as CapturePlace['inferred_kind']) || 'other';
     const tags = ensurePlaceKindTag(normalizeDelimitedText(el.tags.value), kind, store.lang);
     const rawPrice = el.price.value.trim() || undefined;
     const normalizedPrice = normalizeObservedPrice(
       rawPrice,
-      store.mapCurrencyOverride || store.currentPlace.detectedCurrency || existing?.price?.currency || store.pageDetectedCurrency,
+      store.mapCurrencyOverride || currentPlace.detectedCurrency || existing?.price?.currency || store.pageDetectedCurrency,
     );
     const id = existing?.id ?? crypto.randomUUID();
     const place: CapturePlace = {
       id,
       collection_id: collection.id,
-      title: cleanExtractedText(store.currentPlace.title),
+      title: cleanExtractedText(currentPlace.title),
       source: {
-        provider: store.currentPlace.sourceProvider || 'google_maps',
-        url: store.currentPlace.sourceUrl,
-        place_id: store.currentPlace.sourcePlaceId ?? existing?.source.place_id,
-        category: store.currentPlace.category ? cleanExtractedText(store.currentPlace.category) : existing?.source.category,
-        types: Array.from(new Set([...(store.currentPlace.types ?? []), ...(existing?.source.types ?? [])])),
+        provider: currentPlace.sourceProvider || 'google_maps',
+        url: currentPlace.sourceUrl,
+        place_id: currentPlace.sourcePlaceId ?? existing?.source.place_id,
+        category: currentPlace.category ? cleanExtractedText(currentPlace.category) : existing?.source.category,
+        types: Array.from(new Set([...(currentPlace.types ?? []), ...(existing?.source.types ?? [])])),
       },
       inferred_kind: kind,
-      address: cleanExtractedText(el.area.value.trim()) || cleanExtractedText(store.currentPlace.address ?? existing?.address) || undefined,
+      address: cleanExtractedText(el.area.value.trim()) || cleanExtractedText(currentPlace.address ?? existing?.address) || undefined,
       rating: Number.isFinite(rating) && rating >= 1 && rating <= 5 ? rating : undefined,
-      review_count: store.currentPlace.reviewCount ?? existing?.review_count,
+      review_count: currentPlace.reviewCount ?? existing?.review_count,
       price: normalizedPrice ? {
         raw: rawPrice,
         currency: normalizedPrice.currency,
@@ -1560,12 +1562,12 @@ export function initHandlers(): void {
         unit: normalizedPrice.unit,
         level: normalizedPrice.level,
       } : (rawPrice ? { raw: rawPrice } : undefined),
-      open_hours: cleanExtractedText(store.currentPlace.openHours ?? existing?.open_hours) || undefined,
-      phone: store.currentPlace.phone ?? existing?.phone,
-      plus_code: store.currentPlace.plusCode ?? existing?.plus_code,
-      menu_url: store.currentPlace.menuUrl ?? existing?.menu_url,
-      reservation_url: store.currentPlace.reservationUrl ?? existing?.reservation_url,
-      review_topics: store.currentPlace.reviewTopics ?? existing?.review_topics,
+      open_hours: cleanExtractedText(currentPlace.openHours ?? existing?.open_hours) || undefined,
+      phone: currentPlace.phone ?? existing?.phone,
+      plus_code: currentPlace.plusCode ?? existing?.plus_code,
+      menu_url: currentPlace.menuUrl ?? existing?.menu_url,
+      reservation_url: currentPlace.reservationUrl ?? existing?.reservation_url,
+      review_topics: currentPlace.reviewTopics ?? existing?.review_topics,
       user: {
         priority: existing?.user?.priority ?? 'want',
         tags,

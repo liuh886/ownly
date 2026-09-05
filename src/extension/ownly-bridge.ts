@@ -27,22 +27,14 @@ window.addEventListener('message', (event) => {
       if (message.type === 'APPLY_CAPTURE_IMPORT_REPORT') {
         const payload = message.payload as { report?: { created?: string[]; updated?: string[]; deduped?: string[] } } | undefined;
         if (payload?.report) {
-          const importedIds = new Set([
-            ...(payload.report.created || []),
-            ...(payload.report.updated || []),
-            ...(payload.report.deduped || []),
-          ].filter(Boolean));
-          if (importedIds.size > 0) {
-            const { mutateCaptureStateV3InWorker } = await import('./capture-state');
-            await mutateCaptureStateV3InWorker((current) => ({
-              state: {
-                ...current,
-                places: current.places.filter((p) => !importedIds.has(p.id)),
-              },
-              result: undefined,
-            }));
-            logger.info('Bridge', 'APPLY_CAPTURE_IMPORT_REPORT → removed imported places', { count: importedIds.size });
+          const res = await chrome.runtime.sendMessage({
+            type: 'CAPTURE_APPLY_IMPORT_REPORT',
+            report: payload.report,
+          }) as { ok?: boolean; error?: string } | undefined;
+          if (res?.ok === false) {
+            throw new Error(res.error || 'Failed to apply import report in background worker');
           }
+          logger.info('Bridge', 'APPLY_CAPTURE_IMPORT_REPORT → dispatched to background worker', payload.report);
         }
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'APPLY_CAPTURE_IMPORT_REPORT_RESULT', payload: { ok: true } }, getTargetOrigin());
         return;
@@ -51,12 +43,18 @@ window.addEventListener('message', (event) => {
         // V3: Convert context to planner_target
         const payload = message.payload as { context?: { tripId?: string; title?: string; currency?: string } | null } | undefined;
         logger.info('Bridge', 'SET_CAPTURE_CONTEXT', payload?.context);
-        const { setPlannerTargetViaWorker } = await import('./capture-state');
         const target = payload?.context?.tripId && payload?.context?.title
           ? { trip_id: payload.context.tripId, title: payload.context.title }
           : null;
-        await setPlannerTargetViaWorker(target);
+        const res = await chrome.runtime.sendMessage({
+          type: 'CAPTURE_SET_PLANNER_TARGET',
+          target,
+        }) as { ok?: boolean; error?: string } | undefined;
+        if (res?.ok === false) {
+          throw new Error(res.error || 'Failed to set planner target in background worker');
+        }
         window.postMessage({ source: RESPONSE_SOURCE, requestId: message.requestId, type: 'SET_CAPTURE_CONTEXT_RESULT', payload: { ok: true } }, getTargetOrigin());
+        return;
       }
     } catch (error) {
       logger.error('Bridge', 'ownly-bridge error', error instanceof Error ? error.stack || error.message : String(error));

@@ -9,6 +9,14 @@ import { autoFillPlaceForm, renderCurrencyPill, renderCurrentPlace, renderSmartL
 const PRICE_RETRY_DELAYS = [1500, 3000, 5000];
 let priceRetryCount = 0;
 let lastPriceRetryUrl = '';
+let priceRetryTimer: number | undefined;
+
+export function cancelPriceRetry(): void {
+  if (priceRetryTimer !== undefined) {
+    window.clearTimeout(priceRetryTimer);
+    priceRetryTimer = undefined;
+  }
+}
 
 function needsPriceRetry(): boolean {
   const place = store.currentPlace;
@@ -21,6 +29,7 @@ function needsPriceRetry(): boolean {
 }
 
 function clearPageState(): void {
+  cancelPriceRetry();
   store.currentPlace = null;
   store.detectedSavedList = null;
   store.detectedListPlaces = [];
@@ -224,16 +233,17 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
   });
 
   // Auto-capture price from page if place exists in collection
-  if (store.currentPlace?.priceLevel) {
+  const activePlace = store.currentPlace;
+  if (activePlace?.priceLevel) {
     const places = getActivePlaces();
     const match = places.find(
-      (p) => p.source.url === store.currentPlace!.sourceUrl ||
-        (store.currentPlace!.sourcePlaceId && p.source.place_id === store.currentPlace!.sourcePlaceId),
+      (p) => p.source.url === activePlace.sourceUrl ||
+        (activePlace.sourcePlaceId && p.source.place_id === activePlace.sourcePlaceId),
     );
     if (match && !match.price?.raw) {
-      const price = store.currentPlace.priceLevel;
-      logger.info('Capture', 'Auto-capturing price for existing place', { title: match.title, price, currency: store.currentPlace.detectedCurrency });
-      const normalizedPrice = normalizeObservedPrice(price, store.currentPlace.detectedCurrency || store.pageDetectedCurrency);
+      const price = activePlace.priceLevel;
+      logger.info('Capture', 'Auto-capturing price for existing place', { title: match.title, price, currency: activePlace.detectedCurrency });
+      const normalizedPrice = normalizeObservedPrice(price, activePlace.detectedCurrency || store.pageDetectedCurrency);
       store.updatePlace(match.id, (p) => ({
         ...p,
         price: {
@@ -262,13 +272,15 @@ export async function readCurrentPlace(options?: { soft?: boolean }): Promise<vo
     autoFillPlaceForm(store.currentPlace);
   }
 
-  if (needsPriceRetry()) {
+  cancelPriceRetry();
+  if (needsPriceRetry() && store.currentPlace) {
     const delay = PRICE_RETRY_DELAYS[Math.min(priceRetryCount, PRICE_RETRY_DELAYS.length - 1)];
     priceRetryCount += 1;
-    lastPriceRetryUrl = store.currentPlace!.sourceUrl;
+    lastPriceRetryUrl = store.currentPlace.sourceUrl;
     const retryUrl = lastPriceRetryUrl;
     logger.info('Capture', 'Scheduling price retry', { delay, retryCount: priceRetryCount, url: retryUrl.slice(0, 60) });
-    window.setTimeout(() => {
+    priceRetryTimer = window.setTimeout(() => {
+      priceRetryTimer = undefined;
       if (store.currentPlace?.sourceUrl === retryUrl) void readCurrentPlace({ soft: true });
     }, delay);
   } else {

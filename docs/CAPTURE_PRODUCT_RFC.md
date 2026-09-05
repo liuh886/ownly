@@ -1,8 +1,8 @@
 # RFC: Next-Stage Capture Architecture & Product Form
 
-**Status:** Proposed / Under Review  
-**Date:** 2026-09-04  
-**Scope:** Capture Extension (`src/extension/`), Web Planner Bridge, Google Travel, In-Page FAB  
+**Status:** Adopted & Implemented  
+**Date:** 2026-09-05  
+**Scope:** Capture Extension (`src/extension/`), Modular Provider Adapters, Universal In-Page Inline Capture, Asynchronous Google Maps Entity Resolution, Web Planner Bridge  
 
 ---
 
@@ -12,13 +12,13 @@
 
 ```
                  【 广袤网络情报源 】
-     Google Maps · Google Travel · Booking · Tabelog · 小红书
+     Google Maps · Google Travel · Agoda · Booking · Tabelog · 小红书
                            │
-                           ▼ （一键小浮球 / 侧面板快捷采集）
+                           ▼ （行内『📌 放入案板』/ 收藏夹批量导入）
        ┌─────────────────────────────────────────┐
        │             📥 INBOX（案板）             │
-       │   - 零心智负担的临时暂存与收集区             │
-       │   - 快速打标、客观事实补强（价格/营业时间）  │
+       │   - 零心智负担的轻量暂存与收集区             │
+       │   - 快速打标、就地编辑、客观事实自动补强     │
        │   - 粗选与整理，支持多合集分类（如京都/芭提雅） │
        └─────────────────────────────────────────┘
                            │
@@ -37,12 +37,23 @@
 
 ---
 
-## 2. 核心架构议题与数据所有权边界（Single Source of Truth）
+## 2. 核心架构设计与数据所有权边界（Single Source of Truth）
 
-### 议题一：数据究竟存储在何处？以谁为准？
+### 2.1 三层采集与解析架构（3-Layer Capture & Resolution Pipeline）
+1. **第一层：卡片/详情页行内注入（In-Page Inline Capture Button）**：
+   - 采用 Shadow-DOM 封装样式，在各平台卡片或标题前端注入 `📌 放入案板` 按钮。
+   - 绝对事件隔离（`stopPropagation` + `preventDefault`），防止误触父级 `<a>` 链接引发跳转。
+2. **第二层：Service Worker 瞬时存储（0ms 交互延迟）**：
+   - 点击后直接发送 `OWNLY_QUICK_SAVE_PLACE` 至 background worker 写入 `chrome.storage.local`（`ownlyCaptureStateV3`）。
+   - 按钮即时呈现 `✓ 已放入案板` 或 `ℹ️ 该地点已在案板中`。
+3. **第三层：后台异步 Google Maps 标准化解析（Background Entity Resolution）**：
+   - 后台 Worker 触发 `resolveAndEnrichCapturedPlace`，自动查询 Google Maps `tbm=map` / protobuf 接口，补全 Place ID、精确坐标、星级评分、营业时间与标准分类。
+   - 将所有外部来源（Agoda, Booking, Google Travel, Xiaohongshu）标准化为统一的 Google Maps 实体格式（`sourceProvider: 'google_maps'`）。
+
+### 2.2 数据存储分层
 1. **案板阶段（Inbox Collections）**：
    - 存储在浏览器扩展本地存储（`chrome.storage.local`），以 Collection 为单位（如 `Inbox-default`, `Tokyo-Food`）。
-   - 具备高度的轻量性与便携性，无需强制打开 Web Planner 即可独立完成收集与分享。
+   - 具备高度的轻量性与便携性，无需强制打开 Web Planner 即可独立完成收集与整理。
 2. **下锅阶段（Planner Trip Vault）**：
    - 存储在本地文件系统（Obsidian Markdown Vault）或 Web 端 IndexedDB/Trip Bundle。
    - 具备强 schema 版本控制（`Place` + `Visit` + `Expense`）。
@@ -52,13 +63,12 @@
 
 ---
 
-## 3. 浏览已收录地点时的智能鲜活度同步（Live Freshness Engine）
+## 3. 智能鲜活度同步与非破坏性合并原则（Non-Destructive Update）
 
 当用户在浏览器中再次打开已经位于案板（Inbox）或已下锅（Planner）的地点网页时：
 
-### 非破坏性合并原则（Non-Destructive Update）
 * **自动/一键更新项（客观事实 Objective Facts）**：
-  * 最新价格（如在 Google Travel 选定日期后的每晚房费与税费）
+  * 最新价格（如在 Google Travel / Agoda 选定日期后的每晚房费与税费）
   * 评分与评论数（Rating & Review Count）
   * 营业时间与法定闭馆日（Opening Hours）
   * 电话、Plus Code、官方预订/菜单链接
@@ -70,9 +80,9 @@
 
 ---
 
-## 4. 跟踪 Issue 列表（下一阶段技术任务）
+## 4. 跟踪 Issue 状态与里程碑
 
-* **#CAPTURE-RFC-01**: 确立 Inbox 案板与 Planner Trip 的单向晋升与双向身份对齐协议。
-* **#CAPTURE-RFC-02**: Google Travel (`google.com/travel/*`, `google.*/travel/*`) 结构化数据解析器开发。
-* **#CAPTURE-RFC-03**: 页面内快捷采集小浮球（In-Page Quick Capture Ball / FAB）的轻量注入与状态交互。
-* **#CAPTURE-RFC-04**: 浏览已收录地点时的鲜活度对比（Diff Badge）与一键静默同步能力。
+* **#CAPTURE-RFC-01**: [x] 确立 Inbox 案板与 Planner Trip 的单向晋升与双向身份对齐协议。
+* **#CAPTURE-RFC-02**: [x] Google Travel (`google.com/travel/*`) 与 Agoda (`agoda.com/*`) 结构化数据解析与深度实体解析器开发。
+* **#CAPTURE-RFC-03**: [x] 页面内行内快捷采集按钮（In-Page Inline Capture Button）与 Shadow-DOM 样式封装。
+* **#CAPTURE-RFC-04**: [x] 跨平台地点严格规范化为 Google Maps 实体标准（统一坐标、分类与导航链接）。

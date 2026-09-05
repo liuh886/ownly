@@ -31,12 +31,25 @@ async function configureSidePanel() {
   }
 }
 
+const badgeTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
 async function flashBadge(tabId: number, text: string, color: string) {
   try {
+    const existingTimer = badgeTimers.get(tabId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      badgeTimers.delete(tabId);
+    }
     await chrome.action.setBadgeText({ tabId, text });
     await chrome.action.setBadgeBackgroundColor({ tabId, color });
-    setTimeout(() => void chrome.action.setBadgeText({ tabId, text: '' }), 2000);
-  } catch {}
+    const timer = setTimeout(() => {
+      badgeTimers.delete(tabId);
+      void chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
+    }, 2000);
+    badgeTimers.set(tabId, timer);
+  } catch (error) {
+    logger.debug('Background', 'Failed to flash badge', { tabId, text, error: String(error) });
+  }
 }
 
 function getDefaultCollection(state: OwnlyCaptureStateV3): CaptureCollection {
@@ -418,12 +431,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       const mergedCollections = Array.from(colMap.values());
 
-      // 2. Places: incoming edits take precedence; keep non-incoming current places (excluding deleted)
+      // 2. Places: non-destructively merge incoming edits with existing places (preserving background enrichment)
       const incomingMap = new Map(incoming.places.map((p) => [p.id, p]));
+      const currentPlaceMap = new Map(current.places.map((p) => [p.id, p]));
       const preservedCurrent = current.places
         .filter((p) => (!deletedIds || !deletedIds.has(p.id)) && !incomingMap.has(p.id) && (!deletedColIds || !deletedColIds.has(p.collection_id)));
       const validIncoming = incoming.places
-        .filter((p) => (!deletedIds || !deletedIds.has(p.id)) && (!deletedColIds || !deletedColIds.has(p.collection_id)));
+        .filter((p) => (!deletedIds || !deletedIds.has(p.id)) && (!deletedColIds || !deletedColIds.has(p.collection_id)))
+        .map((incomingPlace) => {
+          const existing = currentPlaceMap.get(incomingPlace.id);
+          if (!existing) return incomingPlace;
+          return {
+            ...existing,
+            ...incomingPlace,
+            source: {
+              ...existing.source,
+              ...incomingPlace.source,
+              place_id: incomingPlace.source.place_id || existing.source.place_id,
+              url: (incomingPlace.source.url && !incomingPlace.source.url.includes('/search')) ? incomingPlace.source.url : (existing.source.url || incomingPlace.source.url),
+              category: incomingPlace.source.category || existing.source.category,
+              types: Array.from(new Set([...(existing.source.types || []), ...(incomingPlace.source.types || [])])),
+            },
+            address: incomingPlace.address || existing.address,
+            coordinates: incomingPlace.coordinates || existing.coordinates,
+            rating: incomingPlace.rating ?? existing.rating,
+            review_count: incomingPlace.review_count ?? existing.review_count,
+            open_hours: incomingPlace.open_hours || existing.open_hours,
+            phone: incomingPlace.phone || existing.phone,
+            plus_code: incomingPlace.plus_code || existing.plus_code,
+            menu_url: incomingPlace.menu_url || existing.menu_url,
+            reservation_url: incomingPlace.reservation_url || existing.reservation_url,
+            review_topics: incomingPlace.review_topics || existing.review_topics,
+            hotel_facts: incomingPlace.hotel_facts || existing.hotel_facts,
+            inferred_kind: incomingPlace.inferred_kind || existing.inferred_kind,
+            user: incomingPlace.user !== undefined ? incomingPlace.user : existing.user,
+          };
+        });
 
       const mergedPlaces = [...preservedCurrent, ...validIncoming];
       // Ensure active_collection_id points to existing collection
@@ -447,6 +490,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         logger.error('Background', 'CAPTURE_SAVE_STATE_V3 failed', String(error));
         sendResponse({ ok: false, error: String(error) });
       });
+    return true;
+  }
+
+  if (type === 'CAPTURE_UPSERT_PLACE') {
+    const place = (message as { place?: CapturePlace }).place;
+    if (!place || !place.id) {
+      sendResponse({ ok: false, error: 'invalid place' });
+      return;
+    }
+    void mutateCaptureStateV3InWorker((current) => {
+      const idx = current.places.findIndex((p) => p.id === place.id);
+      let updatedPlaces: CapturePlace[];
+      if (idx === -1) {
+        updatedPlaces = [...current.places, place];
+      } else {
+        const existing = current.places[idx];
+        const merged: CapturePlace = {
+          ...existing,
+          ...place,
+          source: {
+            ...existing.source,
+            ...place.source,
+            place_id: place.source.place_id || existing.source.place_id,
+            url: (place.source.url && !place.source.url.includes('/search')) ? place.source.url : (existing.source.url || place.source.url),
+            category: place.source.category || existing.source.category,
+            types: Array.from(new Set([...(existing.source.types || []), ...(place.source.types || [])])),
+          },
+          address: place.address || existing.address,
+          coordinates: place.coordinates || existing.coordinates,
+          rating: place.rating ?? existing.rating,
+          review_count: place.review_count ?? existing.review_count,
+          open_hours: place.open_hours || existing.open_hours,
+          phone: place.phone || existing.phone,
+          plus_code: place.plus_code || existing.plus_code,
+          menu_url: place.menu_url || existing.menu_url,
+          reservation_url: place.reservation_url || existing.reservation_url,
+          review_topics: place.review_topics || existing.review_topics,
+          hotel_facts: place.hotel_facts || existing.hotel_facts,
+          inferred_kind: place.inferred_kind || existing.inferred_kind,
+          user: place.user !== undefined ? place.user : existing.user,
+          updated_at: new Date().toISOString(),
+        };
+        updatedPlaces = [...current.places];
+        updatedPlaces[idx] = merged;
+      }
+      return {
+        state: { ...current, places: updatedPlaces },
+        result: true,
+      };
+    })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
     return true;
   }
 
@@ -612,7 +707,8 @@ async function getCachedFxRates(): Promise<Record<string, number>> {
     if (cachedRates && Date.now() - lastUpdated < FX_CACHE_MAX_AGE_MS) return cachedRates;
     void refreshFxRates();
     return cachedRates || DEFAULT_USD_PIVOT;
-  } catch {
+  } catch (error) {
+    logger.debug('Background', 'Failed to read cached FX rates, falling back to default', { error: String(error) });
     return DEFAULT_USD_PIVOT;
   }
 }

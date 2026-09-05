@@ -77,7 +77,9 @@ function extractCategory(): string | undefined {
         return cleanExtractedText(type);
       }
     }
-  } catch {}
+  } catch (err) {
+    logger.debug('GoogleMaps', 'Failed to parse JSON-LD for category', { error: String(err) });
+  }
 
   const subSpans = document.querySelectorAll<HTMLElement>('div.fontBodyMedium button, div.fontBodyMedium span.mgr77e, div.LBgpqf span');
   for (const span of Array.from(subSpans).slice(0, 5)) {

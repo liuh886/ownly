@@ -20,18 +20,18 @@ Explicitly out of scope until after release: AI planner expansion, collaboration
 - [x] Remove bulk auto-merge of suspected duplicates. Suspected pairs require explicit per-pair Merge / Ignore review.
 - [x] Reject cross-trip manual merges.
 - [x] Keep shelved places visible and recoverable instead of silently removing them from the Planner surface.
-- [ ] Add sync reconciliation output: captured, created, updated, strong-ID merged, rejected.
-- [ ] Warn visibly if Capture acknowledgement count differs from Planner reconciliation count.
-- [ ] Add regression fixtures for airports, hotel branches, restaurant branches, same-title/different-ID, and same-CID/different-title.
+- [x] Add sync reconciliation output: captured, created, updated, strong-ID merged, rejected.
+- [x] Warn visibly if Capture acknowledgement count differs from Planner reconciliation count.
+- [x] Add regression fixtures for airports, hotel branches, restaurant branches, same-title/different-ID, and same-CID/different-title.
 
 ## P0 — Capture reliability
 
-- [ ] Verify single-place Capture and saved-list Capture emit the same canonical Planner fields.
-- [ ] Keep Place ID/CID provenance in diagnostics only; do not expose internal identity in normal cards.
+- [x] Verify single-place Capture and saved-list Capture emit the same canonical Planner fields.
+- [x] Keep Place ID/CID provenance in diagnostics only; do not expose internal identity in normal cards.
 - [x] Enrichment never resolves identity from titles or promotes free-form notes into objective identity/price facts.
 - [x] Price and other source extras remain optional; missing price no longer keeps food/stay in perpetual incomplete state.
 - [x] Verify retry/extension restart persistence does not lose pending or failed captures; provider/session read failures are recorded in Capture diagnostics.
-- [ ] Add real Google Maps regression fixtures for Bangkok/Chiang Mai hotel, food, cafe, attraction, transit, and airport entities.
+- [x] Add real Google Maps regression fixtures for Bangkok/Chiang Mai hotel, food, cafe, attraction, transit, and airport entities.
 - [x] Saved-list enrichment attaches returned facts only to verified feature IDs; title-keyed fact scavenging is removed.
 
 ## P0 — Planner state model and core interactions

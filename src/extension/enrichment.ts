@@ -118,7 +118,9 @@ export async function enrichPlaceMetadata(
             const clean = rawText.replace(/^\)\]\}'\s*/, '');
             const parsed = JSON.parse(clean);
             facts = extractGoogleMapsPreviewFacts(parsed);
-          } catch {}
+          } catch (err) {
+            logger.debug('Enrichment', 'Failed to parse raw preview JSON response', { error: String(err) });
+          }
         }
         if (!facts.sourcePlaceId && !facts.coordinates && !facts.category) {
           const htmlFacts = extractGoogleMapsResearchFromHtml(rawText);
