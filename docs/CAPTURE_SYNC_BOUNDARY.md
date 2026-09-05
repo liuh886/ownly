@@ -15,7 +15,7 @@ Capture does **not** store Trip objects, schedule state, lifecycle state, route 
 
 ## Direction of data
 
-1. Planner selects a trip and optionally syncs context (`activeContext`) to the extension bridge.
+1. Planner selects a trip and optionally syncs target trip info (`planner_target`) to the extension bridge.
 2. Capture extracts source facts and user notes into `places` within the target collection.
 3. Planner pulls candidates and calls `PlannerRepository.importCapturedPlaces()` or `importResearchPlaces()`.
 4. Existing canonical places keep Planner-owned decisions; Capture refreshes only source/observed facts.
@@ -27,7 +27,7 @@ There is no success-ID-only ACK, silent rejection, bidirectional database synchr
 ## Single writer (MV3 Architecture)
 
 Only the MV3 background service worker writes `ownlyCaptureStateV3` in `chrome.storage.local` via `mutateCaptureStateV3InWorker()`.
-Side panel and content scripts send message commands to the worker (`OWNLY_QUICK_SAVE_PLACE`, `CAPTURE_SAVE_STATE_V3`, `CAPTURE_SET_COLLECTION`). A failed worker write surfaces as an error instead of falling back to direct storage mutation.
+Side panel, content scripts, and the website bridge send message commands to the worker (`OWNLY_QUICK_SAVE_PLACE`, `CAPTURE_SAVE_STATE_V3`, `CAPTURE_SET_COLLECTION`, `CAPTURE_APPLY_IMPORT_REPORT`, `CAPTURE_SET_PLANNER_TARGET`, `CAPTURE_UPSERT_PLACE`). A failed worker write surfaces as an error instead of falling back to direct storage mutation.
 
 ## Scheduling ownership
 

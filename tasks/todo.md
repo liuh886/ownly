@@ -1,5 +1,22 @@
 # Ownly — Task Progress & Review
 
+## Completed: Full-Codebase Documentation Modernization & Architectural Alignment (2026-09-05)
+- [x] **1. Modernize Core Architecture & Boundary Documentation**
+  - Updated [`docs/PLANNER.md`](file:///D:/Documents/GitHub/Ownly/docs/PLANNER.md): aligned MV3 background message-passing single writer architecture, documented all 6 supported provider adapters (Google Maps, Google Travel, Agoda, Booking.com, Xiaohongshu, Tabelog), automatic heuristic commute estimation (`calculateDefaultTripLeg`) with transit-hub skipping, and date drag-and-drop itinerary swapping (`swapTripDays`).
+  - Updated [`docs/CAPTURE_SYNC_BOUNDARY.md`](file:///D:/Documents/GitHub/Ownly/docs/CAPTURE_SYNC_BOUNDARY.md): replaced legacy `activeContext` references with `planner_target`, documented message-passing writer actions (`CAPTURE_APPLY_IMPORT_REPORT`, `CAPTURE_SET_PLANNER_TARGET`, `CAPTURE_UPSERT_PLACE`).
+  - Updated [`docs/architecture/ENTITIES.md`](file:///D:/Documents/GitHub/Ownly/docs/architecture/ENTITIES.md): aligned entity models with domain schema `schema_version: '0.1'`, added `hotel_facts` (`opened_year`, `renovated_year`, `room_count`), expanded transport modes (`driving`, `walking`, `motorcycle`, `cycling`, `transit`), place kinds, states, and source providers.
+  - Updated [`docs/architecture/ARCHITECTURE.md`](file:///D:/Documents/GitHub/Ownly/docs/architecture/ARCHITECTURE.md): expanded Capture Sources diagram and matrix to cover Google Maps, Google Travel, Agoda, Booking.com, Xiaohongshu, and Tabelog.
+  - Updated [`docs/DATA_MODEL.md`](file:///D:/Documents/GitHub/Ownly/docs/DATA_MODEL.md): added all 5 Planner directory paths and entity definitions (`Trips/`, `Trip Places/`, `Trip Visits/`, `Trip Legs/`, `Trip Expenses/`).
+  - Updated [`docs/V2_FACADE_CLEANUP.md`](file:///D:/Documents/GitHub/Ownly/docs/V2_FACADE_CLEANUP.md): added archive status banner marking Phase 0-2 cleanups as 100% completed.
+- [x] **2. Modernize Root Guides & Readmes**
+  - Updated [`CLAUDE.md`](file:///D:/Documents/GitHub/Ownly/CLAUDE.md): updated root path to `D:\Documents\GitHub\Ownly`, added multi-runtime architecture summary (Web, Obsidian, Extension, MCP, CLI) and automated test gates.
+  - Updated [`README.md`](file:///D:/Documents/GitHub/Ownly/README.md) & [`README.zh.md`](file:///D:/Documents/GitHub/Ownly/README.zh.md): updated storage directory layout trees (15 canonical folders including all 5 Planner directories) and added links to Planner and Capture Boundary guides.
+- [x] **3. Comprehensive Automated Verification Pipeline**
+  - Ran `npm run validate:fast` (0 errors, clean types, linter, terminology & membership).
+  - Ran `npm run validate:extension` (172/172 tests passed, clean extension build).
+  - Ran `npm run validate:shared` (58/58 test suites, 533/533 tests passed).
+  - Ran `npm run build` (Next.js full production build compiled cleanly).
+
 ## Completed: Capture Extension Technical Debt Clearance, Outdated Documentation Corrections & Quality Hardening (2026-09-05)
 - [x] **1. Modernize Outdated Capture Documentation & RFCs**
   - Updated [`docs/CAPTURE_PRODUCT_RFC.md`](file:///D:/Documents/GitHub/Ownly/docs/CAPTURE_PRODUCT_RFC.md): marked status as "Adopted & Implemented". Replaced legacy floating ball (FAB) references with current encapsulated inline button architecture (`injectInlineCaptureButton`), modular provider adapters (Google Maps, Google Travel, Agoda, Booking.com, Xiaohongshu, Tabelog), and asynchronous Google Maps entity resolution. Updated issue trackers #CAPTURE-RFC-01 ~ 04.

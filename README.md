@@ -63,6 +63,11 @@ Ownly/
   Accounts/
   Snapshots/
   Reviews/
+  Trips/
+  Trip Places/
+  Trip Visits/
+  Trip Legs/
+  Trip Expenses/
   Logs/
     Object Experiences/
   Archive/
@@ -100,6 +105,11 @@ Standalone local use:
     Accounts/
     Snapshots/
     Reviews/
+    Trips/
+    Trip Places/
+    Trip Visits/
+    Trip Legs/
+    Trip Expenses/
     Logs/
     Archive/
 ```
@@ -113,6 +123,11 @@ Inside an Obsidian Vault:
     Accounts/
     Snapshots/
     Reviews/
+    Trips/
+    Trip Places/
+    Trip Visits/
+    Trip Legs/
+    Trip Expenses/
     Logs/
     Archive/
 ```
@@ -126,6 +141,11 @@ Inside a personal cloud-synced local folder:
     Accounts/
     Snapshots/
     Reviews/
+    Trips/
+    Trip Places/
+    Trip Visits/
+    Trip Legs/
+    Trip Expenses/
     Logs/
     Archive/
 ```
@@ -252,6 +272,8 @@ These checks operate on Ownly facts and filesystem accessibility. Doctor does no
 ## Documentation
 
 - [User Guide](docs/USER_GUIDE.md)
+- [Planner Guide](docs/PLANNER.md)
+- [Capture Sync Boundary](docs/CAPTURE_SYNC_BOUNDARY.md)
 - [Web Runtime](docs/WEB_RUNTIME.md)
 - [Terminology Contract](docs/TERMINOLOGY.md)
 - [Product Governance](docs/PRODUCT_GOVERNANCE.md)

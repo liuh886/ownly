@@ -17,6 +17,11 @@ Ownly/
   Accounts/
   Snapshots/
   Reviews/
+  Trips/
+  Trip Places/
+  Trip Visits/
+  Trip Legs/
+  Trip Expenses/
   Logs/
     Object Experiences/
   Archive/
@@ -31,11 +36,10 @@ Ownly/
 
 Every entity includes at least:
 
-- `schema_version`
+- `schema_version` (`'0.1'` for Planner entities)
 - `id`
 - `type`
-- `title`
-- `created_at`
+- `created_at` (or `title`)
 
 Optional shared fields include `updated_at`, `currency`, `tags`, and `notes`.
 
@@ -92,6 +96,41 @@ Archive metadata such as `archived_at`, `archived_from`, and `original_file_name
 - Entity type: `account`
 - Fields include account type, provider/name, status, net-worth inclusion, and asset or liability classification.
 - Runtime support may differ temporarily; capability differences must be explicit rather than represented by a separate schema.
+
+### 8. Travel Trips
+
+- Entity type: `trip`
+- Path: `Ownly/Trips/`
+- Container for a multi-day itinerary.
+- Stable fields include `id`, `title`, `status` (`planning`, `active`, `completed`), `start_date`, `end_date`, `destinations` (array of strings), `currency`, `members`, and `transport_mode`.
+
+### 9. Travel Places
+
+- Entity type: `trip_place`
+- Path: `Ownly/Trip Places/`
+- Reusable location entity referenced by multiple visits.
+- Stable fields include `id`, `trip_id`, `title`, `kind` (`stay`, `attraction`, `food`, `shopping`, `transit`, `flight`, `other`), `priority` (`must`, `want`, `optional`), `state` (`candidate`, `done`, `dropped`), `source_provider`, `source_place_id`, `source_url`, `coordinates`, `open_hours`, `duration_minutes`, `observed_price`, `observed_rating`, `hotel_facts`, and `reservation_status`.
+
+### 10. Travel Visits
+
+- Entity type: `trip_visit`
+- Path: `Ownly/Trip Visits/`
+- Scheduling atom representing a concrete occurrence of a Place on a specific date.
+- Stable fields include `id`, `place_id`, `trip_id`, `date`, `start_time`, `end_time`, `duration_minutes`, `sort_order`, `locked`, and `is_anchor`.
+
+### 11. Travel Legs
+
+- Entity type: `trip_leg`
+- Path: `Ownly/Trip Legs/`
+- Route segment connecting two adjacent Places on a given day.
+- Stable fields include `id`, `trip_id`, `from_place_id`, `to_place_id`, `mode` (`driving`, `walking`, `motorcycle`, `cycling`, `transit`), `duration_minutes`, `distance_meters`, and `source` (`heuristic`, `manual`, `openrouteservice`).
+
+### 12. Travel Expenses
+
+- Entity type: `trip_expense`
+- Path: `Ownly/Trip Expenses/`
+- Group expense record tied to a trip date with multi-member payment split ledger.
+- Stable fields include `id`, `trip_id`, `date`, `amount`, `currency`, `category`, `description`, `paid_by`, and `payments` (`member`, `amount`).
 
 ## Serialization rules
 

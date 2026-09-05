@@ -3,12 +3,12 @@
 ## Data Flow
 
 ```
-                    ┌─────────────────────────────────────────┐
-                    │              CAPTURE SOURCES             │
-                    │                                         │
-                    │   Google Maps    Booking.com    XHS     │
-                    │   Chrome Ext     Chrome Ext     Ext     │
-                    └──────────────┬──────────────────────────┘
+                    ┌──────────────────────────────────────────────┐
+                    │               CAPTURE SOURCES                │
+                    │                                              │
+                    │   Google Maps / Travel   Agoda / Booking.com │
+                    │   Xiaohongshu (XHS)      Tabelog             │
+                    └──────────────────────┬───────────────────────┘
                                    │
                                    ▼
                     ┌─────────────────────────────────────────┐

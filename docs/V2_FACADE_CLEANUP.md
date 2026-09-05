@@ -1,8 +1,9 @@
-# V2 Facade 清理清单（Phase 0-2）
+# [ARCHIVED] V2 Facade 清理清单（Phase 0-2）
 
-> 目标：从 V3-only 过渡，移除所有 `activeContext` / `pendingPlaces` / `CAPTURE_STORAGE_KEY_V2` 兼容代码
-> 现状：444 tests pass，V3 已成为主路径，V2 仅作为迁移桥接保留
-> 原则：按依赖顺序分 3 批移除，每批独立 PR + 回归测试
+> **Status: Completed & Archived (2026-09-05)**  
+> 目标：从 V3-only 过渡，移除所有 `activeContext` / `pendingPlaces` / `CAPTURE_STORAGE_KEY_V2` 兼容代码。  
+> 现状：**所有 3 个批次清理已 100% 完成**。V2 兼容层与 dead migrations 框架已彻底移除，当前系统 100% 运行于 `OwnlyCaptureStateV3` 规范。  
+> 本文档保留作为历史演进与迁移复盘记录。
 
 ---
 

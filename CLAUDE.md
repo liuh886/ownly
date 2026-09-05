@@ -4,59 +4,66 @@
 
 # Ownly 项目开发必读 (Developer Workflow)
 
+## 架构概览与多端运行时
+
+Ownly 是一个 Local-First 的所有物决策与旅行规划系统，由 5 个核心运行时组成：
+1. **Web App / PWA** (`src/app/`, `src/components/`) — 基于 Next.js Turbopack 构建的独立 Web 决策台与行程规划工作台。
+2. **Obsidian Plugin** (`src/obsidian/`) — 嵌入 Obsidian 的原生插件视图。
+3. **Capture Chrome Extension** (`src/extension/`, `extension/`) — MV3 Chromium 侧边栏与 6 大平台页面采集器。
+4. **Local MCP Server** (`packages/mcp/`) — 面向 Claude / Codex / 智能体系统的两阶段确认事实接口。
+5. **Agent CLI** (`scripts/cli/`) — 确定性本地 Markdown 操作终端工具。
+
 ## 路径别名
 
 | 别名 | 路径 | 说明 |
 |------|------|------|
-| `@repo` | `/mnt/GitHub/wyqd-app` | 源码仓库（开发环境） |
-| `@vault` | `/mnt/zhihaol` | Obsidian Vault（宿主机 `D:\Documents\zhihaol`） |
-| `@plugin` | `/mnt/zhihaol/.obsidian/plugins/ownly` | 插件运行时目录 |
+| `@repo` | `D:\Documents\GitHub\Ownly` | 源码仓库主目录 |
+| `@vault` | `D:\Documents\zhihaol` | 本地 Obsidian 测试 Vault |
+| `@plugin` | `D:\Documents\zhihaol\.obsidian\plugins\ownly` | Obsidian 插件运行时目录 |
 
-## 代码同步规则 (P0)
+## 开发与验证门禁 (Quality Gates)
 
-Ownly 是一个 Obsidian 插件。源码仓库（`@repo`）是开发的主战场，但用户的 Obsidian Vault（`@vault`）中 `.obsidian/plugins/ownly/` 下的文件才是实际运行的版本。
-
-**每次代码变更并构建完成后，必须将以下三个文件从仓库同步到 Vault 插件目录：**
-
-```
-@repo/main.js       → @plugin/main.js
-@repo/styles.css    → @plugin/styles.css
-@repo/manifest.json → @plugin/manifest.json
-```
-
-同步命令（在容器内执行）：
+在提交任何代码前，必须执行并通过以下对应校验门禁：
 
 ```bash
-cp /mnt/GitHub/wyqd-app/main.js /mnt/zhihaol/.obsidian/plugins/ownly/main.js
-cp /mnt/GitHub/wyqd-app/styles.css /mnt/zhihaol/.obsidian/plugins/ownly/styles.css
-cp /mnt/GitHub/wyqd-app/manifest.json /mnt/zhihaol/.obsidian/plugins/ownly/manifest.json
+# 1. 快速静态检查 (TypeScript + ESLint + Terminology + Membership)
+npm run validate:fast
+
+# 2. Chrome Extension 校验 (Manifest + Build + 单元测试)
+npm run validate:extension
+
+# 3. 共享契约与运行时对齐测试 (MCP + CLI + Planner + Parity)
+npm run validate:shared
+
+# 4. Next.js 生产环境构建校验
+npm run build
 ```
 
-> ⚠️ **不要忘记这一步。** 漏掉同步会导致用户在 Obsidian 中看到的仍是旧版本，造成困惑。
+## Obsidian 插件同步规则
+
+当开发涉及 Obsidian 插件相关代码（`src/obsidian/`）时，构建后需同步产物至本地测试 Vault：
+
+```bash
+# 构建 Obsidian 插件产物
+npm run build:obsidian
+
+# 同步至本地测试 Vault
+cp main.js /path/to/vault/.obsidian/plugins/ownly/main.js
+cp styles.css /path/to/vault/.obsidian/plugins/ownly/styles.css
+cp manifest.json /path/to/vault/.obsidian/plugins/ownly/manifest.json
+```
 
 ## Git 提交与推送规则 (P0)
 
-**每次集中完成功能代码更新后，必须：**
-
-1. `git add` 相关变更文件（避免包含无关文件）
-2. `git commit` — 提交信息应简洁描述本次变更内容
-3. `git push` — 推送到远程仓库
-
-```bash
-cd /mnt/GitHub/wyqd-app
-git add -A
-git commit -m "feat: <变更描述>"
-git push
-```
-
-> 目的是保持远程仓库与本地开发同步，避免积压大量未推送的变更。
+每次集中完成功能开发或缺陷修复后：
+1. `git add` 相关变更文件（避免夹带无关临时文件）
+2. `git commit -m "feat/fix/chore: <清晰描述>"`
+3. `git push origin <branch>` 保持远程同步
 
 ## 标准开发流程 (Checklist)
 
-完成一轮功能开发时，按顺序执行：
-
 1. ✅ 编写/修改源码 (`src/`)
-2. ✅ 构建项目 (`npm run build`)
-3. ✅ **同步产物到 Vault**（main.js / styles.css / manifest.json）
-4. ✅ **Git commit + push**
-5. ✅ 验证：让用户在 Obsidian 中刷新插件确认生效
+2. ✅ 执行对应自动化测试与验证门禁 (`npm run validate:fast` 等)
+3. ✅ 必要时构建多端产物 (`npm run build`, `npm run build:extension`)
+4. ✅ 更新文档与 `tasks/todo.md`
+5. ✅ Git commit + push

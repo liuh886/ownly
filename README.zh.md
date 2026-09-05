@@ -63,6 +63,11 @@ Ownly/
   Accounts/
   Snapshots/
   Reviews/
+  Trips/
+  Trip Places/
+  Trip Visits/
+  Trip Legs/
+  Trip Expenses/
   Logs/
     Object Experiences/
   Archive/
@@ -100,6 +105,11 @@ Ownly/
     Accounts/
     Snapshots/
     Reviews/
+    Trips/
+    Trip Places/
+    Trip Visits/
+    Trip Legs/
+    Trip Expenses/
     Logs/
     Archive/
 ```
@@ -113,6 +123,11 @@ Ownly/
     Accounts/
     Snapshots/
     Reviews/
+    Trips/
+    Trip Places/
+    Trip Visits/
+    Trip Legs/
+    Trip Expenses/
     Logs/
     Archive/
 ```
@@ -126,6 +141,11 @@ Ownly/
     Accounts/
     Snapshots/
     Reviews/
+    Trips/
+    Trip Places/
+    Trip Visits/
+    Trip Legs/
+    Trip Expenses/
     Logs/
     Archive/
 ```
@@ -215,6 +235,8 @@ Ownly 提供确定性的 Doctor 数据检查，包括：
 ## 文档
 
 - [用户指南](docs/USER_GUIDE.md)
+- [旅行规划指南 (Planner Guide)](docs/PLANNER.md)
+- [采集数据同步边界 (Capture Boundary)](docs/CAPTURE_SYNC_BOUNDARY.md)
 - [Web Runtime](docs/WEB_RUNTIME.md)
 - [术语契约](docs/TERMINOLOGY.md)
 - [产品治理](docs/PRODUCT_GOVERNANCE.md)
