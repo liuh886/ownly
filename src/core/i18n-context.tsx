@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   createWYQDTranslator,
   type WYQDLanguage,
@@ -48,12 +48,15 @@ export function I18nProvider({
   storageGet?: (key: string) => string | null;
   storageSet?: (key: string, value: string) => void;
 }) {
-  const get = storageGet ?? ((key: string) => (
+  const defaultGet = useCallback((key: string) => (
     typeof window === 'undefined' ? null : window.localStorage.getItem(key)
-  ));
-  const set = storageSet ?? ((key: string, value: string) => {
+  ), []);
+  const defaultSet = useCallback((key: string, value: string) => {
     if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
-  });
+  }, []);
+
+  const get = storageGet ?? defaultGet;
+  const set = storageSet ?? defaultSet;
 
   const detectedLanguage = useSyncExternalStore(
     () => () => undefined,
@@ -119,7 +122,7 @@ export function I18nProvider({
         set('ownly_currency', cur);
       },
     };
-  }, [language, currency, onLanguageChange]);
+  }, [language, currency, onLanguageChange, get, set]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

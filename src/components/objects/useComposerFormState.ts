@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type {
   BillingCycle,
@@ -131,7 +131,7 @@ export function useComposerFormState({
     return e
   }
 
-  function applyQuickLineToForm(next: string) {
+  const applyQuickLineToForm = useCallback((next: string) => {
     applyQuickLine(next, {
       setTitle,
       setAmount,
@@ -154,7 +154,7 @@ export function useComposerFormState({
       setLocationLatitude,
       setLocationLongitude,
     });
-  }
+  }, []);
 
   function handleKeyDown(event: React.KeyboardEvent) {
     if (event.key === 'Escape' && onCancel) {

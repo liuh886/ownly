@@ -204,6 +204,7 @@ function WindowChrome({ brandMarkHref, label, children, className = '' }: Window
       <div className="overflow-hidden rounded-[1.45rem] bg-[#faf8f2]">
         <div className="flex items-center justify-between border-b border-stone-200/90 bg-white/75 px-4 py-3.5 backdrop-blur sm:px-5">
           <div className="flex items-center gap-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element -- Native img used for SVG brand mark in Next.js static export (output: 'export') */}
             <img src={brandMarkHref} alt="" className="h-8 w-8 rounded-[0.65rem]" />
             <div>
               <p className="text-sm font-semibold tracking-[-0.02em]">Ownly</p>
@@ -385,6 +386,7 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
       <header className="fixed inset-x-0 top-0 z-50 border-b border-stone-900/[0.06] bg-[#f6f3ec]/84 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8 lg:px-10">
           <a href="#top" className="flex items-center gap-2.5" aria-label="Ownly home">
+            {/* eslint-disable-next-line @next/next/no-img-element -- Native img used for SVG brand mark in Next.js static export (output: 'export') */}
             <img src={brandMarkHref} alt="" className="h-9 w-9 rounded-[0.72rem]" />
             <span className="text-lg font-semibold tracking-[-0.04em]">Ownly</span>
           </a>

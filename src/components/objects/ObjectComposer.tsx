@@ -95,7 +95,7 @@ export function ObjectComposer({
     if (!quickEntryRequest) return;
     setQuickLine(quickEntryRequest.templateValue);
     applyQuickLineToForm(quickEntryRequest.templateValue);
-  }, [quickEntryRequest?.token, quickEntryRequest?.templateValue]);
+  }, [quickEntryRequest, applyQuickLineToForm, setQuickLine]);
 
   const parseResult = useMemo(() => {
     if (!quickLine.trim()) return null;

@@ -1,5 +1,11 @@
 # Ownly — Task Progress & Review
 
+## Completed: Pragmatic Code Quality Hardening & Zero-Warning Gate Alignment (2026-09-05)
+- [x] 1. Fix React Hook dependencies in `src/components/objects/ObjectComposer.tsx` and `src/core/i18n-context.tsx` (wrapped `applyQuickLineToForm`, `defaultGet`, `defaultSet` in `useCallback` to stabilize references).
+- [x] 2. Annotate native img elements in `src/components/marketing/MarketingHome.tsx` for Next.js static export compatibility (`output: 'export'`).
+- [x] 3. Remove duplicate task board entry in `TASKS.md` (retained single authoritative `Task: Systematic refactor of src/extension/sidepanel.ts`).
+- [x] 4. Validate with full quality gates (`validate:fast`, `validate:extension`, `validate:shared`, `validate:web`) ensuring 0 errors & 0 warnings across all 5 runtimes.
+
 ## Completed: Final Identity Alignment, Documentation Terminology, Timeline Transit Omission & MCP Smoke Gate (2026-09-05)
 - [x] **1. Unify Identity Naming (`findPotentialDuplicatePlaces`)**
   - Renamed `findExistingPlaceByResilientIdentity` to `findPotentialDuplicatePlaces` in [`src/domain/capture.ts`](file:///D:/Documents/GitHub/Ownly/src/domain/capture.ts).

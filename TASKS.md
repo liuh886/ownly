@@ -9,5 +9,4 @@
 - [x] Feature: Multi-list sync (robust DOM parsing and ID extraction)
 - [x] Feature: Auto-match Google Maps list to trip tags
 - [x] Feature: Cancel / Dismiss Place button
-- [ ] Task: Systematic refactor of src/extension/sidepanel.ts
 - [x] Task: Systematic refactor of src/extension/sidepanel.ts
