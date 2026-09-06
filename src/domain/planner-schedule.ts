@@ -190,6 +190,8 @@ export interface PlannerTimelineStopItem {
   crosses_midnight: boolean;
   locked: boolean;
   is_anchor: boolean;
+  is_inferred_start?: boolean;
+  inferred_start?: string;
 }
 
 export interface PlannerTimelineTravelItem {
@@ -266,6 +268,77 @@ function formatClockWithinDay(totalMinutes: number): string | undefined {
   return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
 }
 
+export interface PlannerEffectiveTiming {
+  start?: string;
+  end?: string;
+  duration_minutes?: number;
+  is_inferred_start: boolean;
+  inferred_start?: string;
+}
+
+export function calculateEffectiveDayTiming(
+  places: PlannerScheduledPlace[],
+  legs: PlannerTripLeg[],
+  tripId?: string,
+): Map<string, PlannerEffectiveTiming> {
+  const result = new Map<string, PlannerEffectiveTiming>();
+  const legByPair = new Map(
+    legs
+      .filter((leg) => !tripId || leg.trip_id === tripId)
+      .map((leg) => [transitionKey(leg.from_place_id, leg.to_place_id), leg] as const),
+  );
+
+  let prevEffectiveEnd: string | undefined = undefined;
+
+  for (let index = 0; index < places.length; index += 1) {
+    const place = places[index];
+    const prevPlace = index > 0 ? places[index - 1] : undefined;
+    const leg = prevPlace ? legByPair.get(transitionKey(prevPlace.place_id, place.place_id)) : undefined;
+
+    const hasManualStart = Boolean(place.scheduled_start && CLOCK_RE.test(place.scheduled_start));
+    let start: string | undefined = undefined;
+    let isInferred = false;
+    let inferredStart: string | undefined = undefined;
+
+    // 1. Calculate potential inferred start from previous stop + leg
+    if (prevEffectiveEnd && leg && Number.isInteger(leg.duration_minutes) && leg.duration_minutes >= 0) {
+      const prevEndMin = plannerClockToMinutes(prevEffectiveEnd);
+      if (prevEndMin !== null) {
+        const arrivalMin = prevEndMin + leg.duration_minutes;
+        inferredStart = formatClockWithinDay(arrivalMin);
+      }
+    }
+
+    // 2. Priority: Manual start overrides inferred start
+    if (hasManualStart) {
+      start = place.scheduled_start;
+      isInferred = false;
+    } else if (inferredStart) {
+      start = inferredStart;
+      isInferred = true;
+    }
+
+    const defaultDuration = isTransitHubPlace(place) ? 15 : 60;
+    const duration = Number.isInteger(place.duration_minutes) && place.duration_minutes && place.duration_minutes > 0
+      ? place.duration_minutes
+      : (start ? defaultDuration : undefined);
+
+    const end = start && duration ? getScheduledEndTime(start, duration) ?? undefined : undefined;
+
+    result.set(place.id, {
+      start,
+      end,
+      duration_minutes: duration,
+      is_inferred_start: isInferred,
+      inferred_start: inferredStart,
+    });
+
+    prevEffectiveEnd = end;
+  }
+
+  return result;
+}
+
 export function evaluatePlannerDayFeasibility(
   trip: PlannerTrip,
   places: PlannerScheduledPlace[],
@@ -275,6 +348,7 @@ export function evaluatePlannerDayFeasibility(
   const dayPlaces = sortPlannerScheduledPlaces(
     places.filter((place) => place.trip_id === trip.id && place.scheduled_date === date),
   );
+  const timingMap = calculateEffectiveDayTiming(dayPlaces, legs, trip.id);
   const legByPair = new Map(
     legs
       .filter((leg) => leg.trip_id === trip.id)
@@ -285,13 +359,16 @@ export function evaluatePlannerDayFeasibility(
   for (let index = 0; index < dayPlaces.length - 1; index += 1) {
     const from = dayPlaces[index];
     const to = dayPlaces[index + 1];
+    const fromTiming = timingMap.get(from.id);
+    const toTiming = timingMap.get(to.id);
     const leg = legByPair.get(transitionKey(from.place_id, to.place_id));
+
     if (!leg) {
       if (isTransitHubPlace(from) && isTransitHubPlace(to)) {
         // Intercity transit-to-transit: timing depends on ticket/schedule, omit local commute requirement
-        const departureTime = getScheduledEndTime(from.scheduled_start, from.duration_minutes);
+        const departureTime = fromTiming?.end;
         const departureMinutes = plannerClockToMinutes(departureTime);
-        const nextStartMinutes = plannerClockToMinutes(to.scheduled_start);
+        const nextStartMinutes = plannerClockToMinutes(toTiming?.start);
         if (departureMinutes !== null && nextStartMinutes !== null) {
           const slack = nextStartMinutes - departureMinutes;
           transitions.push({
@@ -302,7 +379,7 @@ export function evaluatePlannerDayFeasibility(
             status: slack < 0 ? 'conflict' : 'ok',
             departure_time: departureTime ?? undefined,
             earliest_arrival: formatClockWithinDay(departureMinutes),
-            next_start: to.scheduled_start,
+            next_start: toTiming?.start,
             slack_minutes: slack,
             late_by_minutes: slack < 0 ? Math.abs(slack) : undefined,
           });
@@ -314,7 +391,7 @@ export function evaluatePlannerDayFeasibility(
             to_title: to.title,
             status: 'ok',
             departure_time: departureTime ?? undefined,
-            next_start: to.scheduled_start,
+            next_start: toTiming?.start,
           });
         }
         continue;
@@ -330,9 +407,9 @@ export function evaluatePlannerDayFeasibility(
       continue;
     }
 
-    const departureTime = getScheduledEndTime(from.scheduled_start, from.duration_minutes);
+    const departureTime = fromTiming?.end;
     const departureMinutes = plannerClockToMinutes(departureTime);
-    const nextStartMinutes = plannerClockToMinutes(to.scheduled_start);
+    const nextStartMinutes = plannerClockToMinutes(toTiming?.start);
     if (departureMinutes === null || nextStartMinutes === null) {
       transitions.push({
         from_id: from.id,
@@ -343,7 +420,7 @@ export function evaluatePlannerDayFeasibility(
         unknown_reason: 'schedule_time_missing',
         leg,
         departure_time: departureTime ?? undefined,
-        next_start: to.scheduled_start,
+        next_start: toTiming?.start,
       });
       continue;
     }
@@ -359,7 +436,7 @@ export function evaluatePlannerDayFeasibility(
       leg,
       departure_time: departureTime ?? undefined,
       earliest_arrival: formatClockWithinDay(arrivalMinutes),
-      next_start: to.scheduled_start,
+      next_start: toTiming?.start,
       slack_minutes: slack,
       late_by_minutes: slack < 0 ? Math.abs(slack) : undefined,
     });
@@ -380,6 +457,7 @@ export function buildPlannerDayExecutionTimeline(
   const dayPlaces = sortPlannerScheduledPlaces(
     places.filter((place) => place.trip_id === trip.id && place.scheduled_date === date),
   );
+  const timingMap = calculateEffectiveDayTiming(dayPlaces, legs, trip.id);
   const feasibility = evaluatePlannerDayFeasibility(trip, places, legs, date);
   const transitionByPair = new Map(
     feasibility.transitions.map((transition) => [transitionKey(transition.from_id, transition.to_id), transition] as const),
@@ -388,23 +466,25 @@ export function buildPlannerDayExecutionTimeline(
 
   for (let index = 0; index < dayPlaces.length; index += 1) {
     const place = dayPlaces[index];
-    const startMinutes = plannerClockToMinutes(place.scheduled_start);
-    const duration = Number.isInteger(place.duration_minutes) && place.duration_minutes && place.duration_minutes > 0
-      ? place.duration_minutes
-      : undefined;
-    const end = getScheduledEndTime(place.scheduled_start, duration) ?? undefined;
+    const timing = timingMap.get(place.id);
+    const startMinutes = plannerClockToMinutes(timing?.start);
+    const duration = timing?.duration_minutes;
+    const end = timing?.end;
+
     items.push({
       type: 'stop',
       id: `stop:${place.id}`,
       visit_id: place.visit_id,
       place_id: place.place_id,
       title: place.title,
-      start: place.scheduled_start,
+      start: timing?.start,
       end,
       duration_minutes: duration,
       crosses_midnight: startMinutes !== null && duration !== undefined && startMinutes + duration > 24 * 60,
       locked: Boolean(place.locked),
       is_anchor: Boolean(place.is_anchor),
+      is_inferred_start: timing?.is_inferred_start,
+      inferred_start: timing?.inferred_start,
     });
 
     const next = dayPlaces[index + 1];

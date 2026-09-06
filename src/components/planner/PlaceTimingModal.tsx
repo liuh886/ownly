@@ -11,6 +11,7 @@ interface PlaceTimingModalProps {
   open: boolean;
   place: PlannerScheduledPlace | null;
   dayOtherPlaces?: PlannerScheduledPlace[];
+  inferredStartTime?: string;
   onClose: () => void;
   onSave: (visitId: string, timing: { scheduled_start?: string; duration_minutes?: number }) => Promise<void>;
   language?: 'zh' | 'en';
@@ -49,6 +50,7 @@ export function PlaceTimingModal({
   open,
   place,
   dayOtherPlaces = [],
+  inferredStartTime,
   onClose,
   onSave,
   language = 'zh',
@@ -148,6 +150,21 @@ export function PlaceTimingModal({
             <input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-800 shadow-2xs focus:border-stone-900 focus:outline-none" />
             {startTime ? <button type="button" onClick={() => setStartTime('')} className="rounded-lg border border-stone-200 px-2.5 py-2 text-xs font-medium text-stone-500 hover:bg-stone-50">{zh ? '清空' : 'Clear'}</button> : null}
           </div>
+          {inferredStartTime ? (
+            <div className="flex items-center justify-between rounded-lg bg-amber-50/90 border border-amber-200/80 px-2.5 py-1.5 text-xs text-amber-900">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-amber-600 font-semibold">⚡</span>
+                <span className="truncate text-[11px] font-medium">{zh ? `根据上一站及通勤推算: ${inferredStartTime}` : `Inferred arrival: ${inferredStartTime}`}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStartTime(inferredStartTime)}
+                className="shrink-0 rounded bg-amber-200/80 px-2 py-0.5 text-[11px] font-semibold text-amber-900 hover:bg-amber-300 transition"
+              >
+                {zh ? '填入推算时间' : 'Use Inferred'}
+              </button>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-1.5 pt-1">
             {QUICK_START_TIMES.map((item) => <button key={item.value} type="button" onClick={() => setStartTime(item.value)} className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${startTime === item.value ? 'bg-stone-900 font-semibold text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>{zh ? item.labelZh : item.labelEn}</button>)}
           </div>

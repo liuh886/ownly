@@ -1,5 +1,17 @@
 # Ownly — Task Progress & Review
 
+## Completed: Timeline Inferred Default Schedule Times with Manual Override (2026-09-06)
+- [x] **1. Effective Chained Timing Engine (`src/domain/planner-schedule.ts`)**:
+  - Implemented `calculateEffectiveDayTiming` chaining departure times and commute durations across stops.
+  - Prioritizes explicit manual `scheduled_start` over inferred default times.
+  - Updated `evaluatePlannerDayFeasibility` and `buildPlannerDayExecutionTimeline` to populate `is_inferred_start` and `inferred_start`.
+- [x] **2. Distinct Timeline Visuals & Timing Modal Quick-Fill (`PlannerHome.tsx` & `PlaceTimingModal.tsx`)**:
+  - Rendered inferred times with amber dashed styling (`🕒 ~10:15-11:45 推算`) vs solid for manual.
+  - Added 1-click `⚡ 填入推算时间` action inside `PlaceTimingModal` to effortlessly lock or adjust inferred times.
+- [x] **3. Automated Test Verification**:
+  - Added unit test in `src/domain/planner-schedule.test.ts` verifying chaining across multiple stops, manual overrides, and gap calculations.
+  - All quality gates passed (545 tests, 0 lint/type errors, static build succeeded).
+
 ## Completed: Fix CI Subprocess Test Failure in GitHub Pages Workflow (2026-09-05)
 - [x] **1. Root Cause Analysis**:
   - In `.github/workflows/pages.yml`, `validate:shared` runs root `npm test` before `packages/mcp` dependencies are installed and before `packages/mcp/dist/index.js` is built.

@@ -3,6 +3,7 @@ import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTr
 import { materializePlannerScheduledPlaces, type PlannerTripVisit } from './planner-visits';
 import {
   buildPlannerDayExecutionTimeline,
+  calculateEffectiveDayTiming,
   evaluatePlannerDay,
   evaluatePlannerDayFeasibility,
   evaluatePlannerScheduleProposal,
@@ -324,5 +325,70 @@ describe('evaluatePlannerDay canonical assessment', () => {
     expect(travelItem).toBeDefined();
     expect(travelItem?.duration_minutes).toBe(0);
   });
+
+  it('chains inferred default times across successive stops and allows manual overrides', () => {
+    const places = [
+      place('wat-arun', { duration_minutes: 60 }),
+      place('wat-pho', { duration_minutes: 90 }),
+      place('grand-palace', { duration_minutes: 60 }),
+      place('dinner', { duration_minutes: 90 }),
+    ];
+    // Wat Arun has manual start 09:00 -> ends at 10:00
+    // Wat Pho has no start -> inferred 10:00 + 15m leg = 10:15 -> ends at 11:45
+    // Grand Palace has no start -> inferred 11:45 + 15m leg = 12:00 -> ends at 13:00
+    // Dinner has explicit manual start 18:00 (manual override!) -> ends at 19:30
+    const visits = [
+      visit('v:arun', 'wat-arun', { start: '09:00', duration_minutes: 60, sort_order: 0 }),
+      visit('v:pho', 'wat-pho', { duration_minutes: 90, sort_order: 1 }),
+      visit('v:palace', 'grand-palace', { duration_minutes: 60, sort_order: 2 }),
+      visit('v:dinner', 'dinner', { start: '18:00', duration_minutes: 90, sort_order: 3 }),
+    ];
+    const legs = [
+      travelLeg('wat-arun', 'wat-pho', 15),
+      travelLeg('wat-pho', 'grand-palace', 15),
+      travelLeg('grand-palace', 'dinner', 30),
+    ];
+
+    const scheduledPlaces = scheduled(places, visits);
+    const timingMap = calculateEffectiveDayTiming(scheduledPlaces, legs, trip.id);
+
+    const arunTiming = timingMap.get(scheduledPlaces[0].id);
+    expect(arunTiming?.start).toBe('09:00');
+    expect(arunTiming?.end).toBe('10:00');
+    expect(arunTiming?.is_inferred_start).toBe(false);
+
+    const phoTiming = timingMap.get(scheduledPlaces[1].id);
+    expect(phoTiming?.start).toBe('10:15');
+    expect(phoTiming?.end).toBe('11:45');
+    expect(phoTiming?.is_inferred_start).toBe(true);
+
+    const palaceTiming = timingMap.get(scheduledPlaces[2].id);
+    expect(palaceTiming?.start).toBe('12:00');
+    expect(palaceTiming?.end).toBe('13:00');
+    expect(palaceTiming?.is_inferred_start).toBe(true);
+
+    const dinnerTiming = timingMap.get(scheduledPlaces[3].id);
+    expect(dinnerTiming?.start).toBe('18:00');
+    expect(dinnerTiming?.end).toBe('19:30');
+    expect(dinnerTiming?.is_inferred_start).toBe(false);
+    expect(dinnerTiming?.inferred_start).toBe('13:30'); // Palace end 13:00 + 30m leg = 13:30
+
+    // Build timeline and verify stop items
+    const timeline = buildPlannerDayExecutionTimeline(trip, scheduledPlaces, legs, '2026-10-05');
+    expect(timeline.status).toBe('feasible');
+
+    const stops = timeline.items.filter((item): item is PlannerTimelineStopItem => item.type === 'stop');
+    expect(stops).toHaveLength(4);
+    expect(stops[0]).toMatchObject({ visit_id: 'v:arun', start: '09:00', end: '10:00', is_inferred_start: false });
+    expect(stops[1]).toMatchObject({ visit_id: 'v:pho', start: '10:15', end: '11:45', is_inferred_start: true });
+    expect(stops[2]).toMatchObject({ visit_id: 'v:palace', start: '12:00', end: '13:00', is_inferred_start: true });
+    expect(stops[3]).toMatchObject({ visit_id: 'v:dinner', start: '18:00', end: '19:30', is_inferred_start: false, inferred_start: '13:30' });
+
+    // Verify afternoon gap exists between Grand Palace (13:00 + 30m = 13:30) and Dinner (18:00)
+    const gap = timeline.items.find((item) => item.type === 'gap');
+    expect(gap).toBeDefined();
+    expect(gap).toMatchObject({ start: '13:30', end: '18:00', duration_minutes: 270 });
+  });
 });
+
 

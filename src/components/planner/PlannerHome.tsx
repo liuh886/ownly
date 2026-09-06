@@ -845,13 +845,25 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               onClick={() => setTimingModalPlace(place)}
                               className={`shrink-0 self-start inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition hover:scale-102 ${
                                 timelineStop?.start
-                                  ? 'bg-stone-100 text-stone-800 hover:bg-stone-200 ring-1 ring-stone-300/70 font-mono'
+                                  ? timelineStop.is_inferred_start
+                                    ? 'bg-amber-50/90 text-amber-800 border border-dashed border-amber-300 hover:bg-amber-100 font-mono'
+                                    : 'bg-stone-100 text-stone-800 hover:bg-stone-200 ring-1 ring-stone-300/70 font-mono'
                                   : 'border border-dashed border-stone-300 bg-white text-stone-400 hover:border-stone-400 hover:text-stone-700'
                               }`}
-                              title={zh ? '设置开始时间与停留时长' : 'Set start time and duration'}
+                              title={
+                                timelineStop?.is_inferred_start
+                                  ? (zh ? '根据上一站游览与通勤时间自动推算；点击可手动调整或锁定' : 'Inferred arrival time; click to adjust or lock manually')
+                                  : timelineStop?.start
+                                    ? (zh ? '手动设置的游览时段；点击可修改' : 'Manual scheduled timing; click to edit')
+                                    : (zh ? '设置开始时间与停留时长' : 'Set start time and duration')
+                              }
                             >
                               <span>🕒</span>
-                              <span>{timelineStop?.start ? `${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}` : (zh ? '设时间' : 'Time')}</span>
+                              <span>
+                                {timelineStop?.start
+                                  ? `${timelineStop.is_inferred_start ? '~' : ''}${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}${timelineStop.is_inferred_start ? ` ${zh ? '推算' : 'est'}` : ''}`
+                                  : (zh ? '设时间' : 'Time')}
+                              </span>
                             </button>
                           </div>
 
@@ -2009,6 +2021,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
         open={Boolean(timingModalPlace)}
         place={timingModalPlace}
         dayOtherPlaces={scheduled.filter((p) => p.id !== timingModalPlace?.id)}
+        inferredStartTime={(() => {
+          if (!timingModalPlace) return undefined;
+          const stop = dayTimeline.items.find(
+            (item): item is PlannerTimelineStopItem =>
+              item.type === 'stop' && (item.visit_id === timingModalPlace.visit_id || item.place_id === timingModalPlace.place_id || item.id === `stop:${timingModalPlace.id}`),
+          );
+          return stop?.inferred_start || (stop?.is_inferred_start ? stop.start : undefined);
+        })()}
         onClose={() => setTimingModalPlace(null)}
         onSave={handleSavePlaceTiming}
         language={language}
