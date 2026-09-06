@@ -1630,7 +1630,17 @@ export function detectHotelTransferDays(
   return result;
 }
 
-export type TripExpenseCategory = 'stay' | 'food' | 'transit' | 'ticket' | 'shopping' | 'other';
+export type TripExpenseCategory =
+  | 'stay'
+  | 'food'
+  | 'cafe'
+  | 'transit'
+  | 'attraction'
+  | 'ticket'
+  | 'experience'
+  | 'shopping'
+  | 'service'
+  | 'other';
 
 export interface TripExpenseItem {
   id: string;
@@ -2842,12 +2852,13 @@ export function parsePlaceExpenseEstimate(
   let category: TripExpenseCategory = 'other';
   switch (place.kind) {
     case 'stay': category = 'stay'; break;
-    case 'food':
-    case 'cafe': category = 'food'; break;
-    case 'attraction':
-    case 'experience': category = 'ticket'; break;
+    case 'food': category = 'food'; break;
+    case 'cafe': category = 'cafe'; break;
+    case 'attraction': category = 'ticket'; break;
+    case 'experience': category = 'experience'; break;
     case 'shopping': category = 'shopping'; break;
     case 'transit': category = 'transit'; break;
+    case 'service': category = 'service'; break;
     default: category = 'other';
   }
 

@@ -131,6 +131,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     filterChips,
     candidateSortMode,
     setCandidateSortMode,
+    scheduledAll,
     scheduled,
     mapScheduled,
     dayAssessment,
@@ -166,6 +167,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     handleDeleteTrip,
     handleToggleVisitLock,
     handleAddExpense,
+    handleUpdateExpense,
     handleDeleteExpense,
     handleUpdateMembers,
     handleSwitchTravelMode,
@@ -284,6 +286,35 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     }
     return map;
   }, [currentExpenses, selectedTrip]);
+
+  const hotelStayDaysMap = useMemo(() => {
+    const datesByPlaceId = new Map<string, Set<string>>();
+    const datesByTitle = new Map<string, Set<string>>();
+    for (const sp of scheduledAll) {
+      if (sp.kind === 'stay') {
+        const placeId = sp.place_id || sp.id;
+        if (placeId) {
+          if (!datesByPlaceId.has(placeId)) datesByPlaceId.set(placeId, new Set());
+          datesByPlaceId.get(placeId)!.add(sp.scheduled_date);
+        }
+        const titleKey = sp.title?.trim().toLowerCase();
+        if (titleKey) {
+          if (!datesByTitle.has(titleKey)) datesByTitle.set(titleKey, new Set());
+          datesByTitle.get(titleKey)!.add(sp.scheduled_date);
+        }
+      }
+    }
+    return {
+      getDays: (place: { id: string; place_id?: string; title: string; kind?: string }): number => {
+        const pId = place.place_id || place.id;
+        const byId = datesByPlaceId.get(pId)?.size;
+        if (byId && byId > 0) return byId;
+        const byTitle = datesByTitle.get(place.title?.trim().toLowerCase())?.size;
+        if (byTitle && byTitle > 0) return byTitle;
+        return 1;
+      },
+    };
+  }, [scheduledAll]);
 
   if (disabled) {
     return (
@@ -832,26 +863,65 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {place.area ? <span className="text-stone-600 font-medium truncate max-w-[120px]">{place.area}</span> : null}
                                 {place.duration_minutes ? <span className="text-stone-500 shrink-0">{place.duration_minutes} min</span> : null}
-                                {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
-                                  <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[10px] font-semibold text-stone-700 shrink-0">
-                                    {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
-                                  </span>
-                                ) : null}
                                 {(() => {
-                                  const placeExpense = expensesByPlace.get(place.id) || expensesByPlace.get(place.title.trim().toLowerCase());
-                                  if (!placeExpense || placeExpense.total <= 0) return null;
+                                  const isHotel = place.kind === 'stay';
+                                  const placeExpense =
+                                    expensesByPlace.get(place.id) ||
+                                    (place.place_id ? expensesByPlace.get(place.place_id) : undefined) ||
+                                    expensesByPlace.get(place.title.trim().toLowerCase());
+
+                                  if (isHotel) {
+                                    // Hotel / Stay Card:
+                                    // 1. Do NOT display estimated price (only used for hotel comparison).
+                                    // 2. If there are recorded expenses, divide by stay days to get daily actual expense.
+                                    if (!placeExpense || placeExpense.total <= 0) return null;
+                                    const stayDays = hotelStayDaysMap.getDays(place);
+                                    const dailyActual = Math.round((placeExpense.total / stayDays) * 100) / 100;
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setBudgetInitialPlaceId(place.id);
+                                          setRightTab('budget');
+                                        }}
+                                        className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-semibold shrink-0 transition hover:bg-emerald-100"
+                                        title={
+                                          zh
+                                            ? `实记 ${currencySymbolFor(selectedTrip?.currency)}${dailyActual}/天（总计 ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total}，共 ${stayDays} 晚分摊，共 ${placeExpense.count} 笔），点击前往账本查看`
+                                            : `Actual: ${currencySymbolFor(selectedTrip?.currency)}${dailyActual}/day (Total ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total} across ${stayDays} nights, ${placeExpense.count} expenses), click to view in budget`
+                                        }
+                                      >
+                                        💳 {zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip?.currency)}{dailyActual}{stayDays > 1 ? (zh ? '/天' : '/day') : ''}
+                                      </button>
+                                    );
+                                  }
+
+                                  // Non-hotel place: show estimated price if present, and actual expense if recorded
                                   return (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setBudgetInitialPlaceId(place.id);
-                                        setRightTab('budget');
-                                      }}
-                                      className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-semibold shrink-0 transition hover:bg-emerald-100"
-                                      title={zh ? `实记 ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total}（共 ${placeExpense.count} 笔），点击前往账本查看` : `Actual: ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total} (${placeExpense.count} expenses), click to view in budget`}
-                                    >
-                                      💳 {zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip?.currency)}{placeExpense.total}
-                                    </button>
+                                    <>
+                                      {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
+                                        <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[10px] font-semibold text-stone-700 shrink-0">
+                                          {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
+                                        </span>
+                                      ) : null}
+                                      {placeExpense && placeExpense.total > 0 ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setBudgetInitialPlaceId(place.id);
+                                            setRightTab('budget');
+                                          }}
+                                          className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-semibold shrink-0 transition hover:bg-emerald-100"
+                                          title={
+                                            zh
+                                              ? `实记 ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total}（共 ${placeExpense.count} 笔），点击前往账本查看`
+                                              : `Actual: ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total} (${placeExpense.count} expenses), click to view in budget`
+                                          }
+                                        >
+                                          💳 {zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip?.currency)}{placeExpense.total}
+                                        </button>
+                                      ) : null}
+                                    </>
                                   );
                                 })()}
                               </div>
@@ -1339,6 +1409,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               onClearInitialPlaceId={() => setBudgetInitialPlaceId(null)}
               expenses={currentExpenses}
               onAddExpense={handleAddExpense}
+              onUpdateExpense={handleUpdateExpense}
               onDeleteExpense={handleDeleteExpense}
               members={currentMembers}
               onUpdateMembers={handleUpdateMembers}

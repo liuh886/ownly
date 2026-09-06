@@ -111,6 +111,23 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     [selectedTripId, setExpensesByTrip, setNotice, zh],
   );
 
+  const handleUpdateExpense = useCallback(
+    async (item: TripExpenseItem) => {
+      if (!selectedTripId) return;
+      try {
+        await plannerRepository.upsertExpense(item);
+        setExpensesByTrip((prev) => ({
+          ...prev,
+          [selectedTripId]: (prev[selectedTripId] ?? []).map((expense) => (expense.id === item.id ? item : expense)),
+        }));
+      } catch (error) {
+        console.warn('[Planner] Failed to update expense', error);
+        setNotice(zh ? '费用更新失败，原记录仍保留。' : 'Expense update failed; the original record is still present.');
+      }
+    },
+    [selectedTripId, setExpensesByTrip, setNotice, zh],
+  );
+
   const handleDeleteExpense = useCallback(
     async (id: string) => {
       if (!selectedTripId) return;
@@ -759,6 +776,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleDeleteTrip,
     handleToggleVisitLock,
     handleAddExpense,
+    handleUpdateExpense,
     handleDeleteExpense,
     handleUpdateMembers,
     handleSwitchTravelMode,

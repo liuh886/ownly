@@ -278,7 +278,19 @@ export function validateTripExpense(expense: TripExpenseItem & { schema_version?
   }
   if (!expense.category) {
     issues.push({ field: 'category', message: 'Missing category', severity: 'error' });
-  } else if (!['stay', 'food', 'transit', 'ticket', 'shopping', 'other'].includes(expense.category)) {
+  } else if (![
+    'stay',
+    'food',
+    'cafe',
+    'transit',
+    'transport',
+    'ticket',
+    'attraction',
+    'experience',
+    'shopping',
+    'service',
+    'other',
+  ].includes(expense.category)) {
     issues.push({ field: 'category', message: `Invalid category: ${expense.category}`, severity: 'error' });
   }
   if (typeof expense.amount !== 'number' || expense.amount < 0 || Number.isNaN(expense.amount) || !Number.isFinite(expense.amount)) {

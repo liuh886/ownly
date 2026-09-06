@@ -28,6 +28,7 @@ interface PlannerBudgetLedgerProps {
   onClearInitialPlaceId?: () => void;
   expenses: TripExpenseItem[];
   onAddExpense: (expense: Omit<TripExpenseItem, 'id' | 'created_at'>) => void;
+  onUpdateExpense?: (expense: TripExpenseItem) => void;
   onDeleteExpense: (expenseId: string) => void;
   members: string[];
   onUpdateMembers: (members: string[]) => void;
@@ -38,9 +39,13 @@ interface PlannerBudgetLedgerProps {
 const CATEGORY_MAP: Record<TripExpenseCategory, { icon: string; zh: string; en: string }> = {
   stay: { icon: '🏨', zh: '住宿', en: 'Stay' },
   food: { icon: '🍜', zh: '餐饮', en: 'Food' },
-  transit: { icon: '🚗', zh: '交通', en: 'Transit' },
+  cafe: { icon: '☕', zh: '咖啡', en: 'Cafe' },
+  attraction: { icon: '🏛️', zh: '景点', en: 'Attraction' },
   ticket: { icon: '🎟️', zh: '门票', en: 'Ticket' },
+  experience: { icon: '🏄', zh: '体验', en: 'Experience' },
   shopping: { icon: '🛍️', zh: '购物', en: 'Shopping' },
+  transit: { icon: '🚗', zh: '交通', en: 'Transit' },
+  service: { icon: '🔧', zh: '服务', en: 'Service' },
   other: { icon: '💡', zh: '其他', en: 'Other' },
 };
 
@@ -52,12 +57,29 @@ function roundMoney(value: number): number {
 
 function matchesExpenseCategory(place: PlannerTripPlace | PlannerScheduledPlace, cat: TripExpenseCategory): boolean {
   const kind = place.kind?.toLowerCase() || '';
-  if (cat === 'stay') return kind === 'stay' || kind === 'hotel';
-  if (cat === 'food') return kind === 'food' || kind === 'restaurant' || kind === 'cafe' || kind === 'dining';
-  if (cat === 'transit') return kind === 'transit' || kind === 'transition' || kind === 'station' || kind === 'transport';
-  if (cat === 'ticket') return kind === 'attraction' || kind === 'sightseeing' || kind === 'activity';
-  if (cat === 'shopping') return kind === 'shopping' || kind === 'mall';
+  if (cat === 'stay') return kind === 'stay' || kind === 'hotel' || kind === 'resort' || kind === 'lodging';
+  if (cat === 'food') return kind === 'food' || kind === 'restaurant' || kind === 'dining';
+  if (cat === 'cafe') return kind === 'cafe' || kind === 'coffee' || kind === 'dessert' || kind === 'bar';
+  if (cat === 'transit') return kind === 'transit' || kind === 'transition' || kind === 'station' || kind === 'transport' || kind === 'airport' || kind === 'flight';
+  if (cat === 'attraction' || cat === 'ticket') return kind === 'attraction' || kind === 'sightseeing' || kind === 'ticket';
+  if (cat === 'experience') return kind === 'experience' || kind === 'activity' || kind === 'tour' || kind === 'diving' || kind === 'surf';
+  if (cat === 'shopping') return kind === 'shopping' || kind === 'mall' || kind === 'market' || kind === 'store';
+  if (cat === 'service') return kind === 'service' || kind === 'spa' || kind === 'massage';
   return true;
+}
+
+function inferExpenseCategoryFromPlace(place: PlannerTripPlace | PlannerScheduledPlace): TripExpenseCategory {
+  const kind = place.kind?.toLowerCase() || '';
+  if (kind === 'stay' || kind === 'hotel' || kind === 'resort' || kind === 'lodging') return 'stay';
+  if (kind === 'food' || kind === 'restaurant' || kind === 'dining') return 'food';
+  if (kind === 'cafe' || kind === 'coffee' || kind === 'dessert' || kind === 'bar') return 'cafe';
+  if (kind === 'transit' || kind === 'station' || kind === 'transport' || kind === 'airport' || kind === 'flight') return 'transit';
+  if (kind === 'attraction' || kind === 'sightseeing') return 'attraction';
+  if (kind === 'ticket') return 'ticket';
+  if (kind === 'experience' || kind === 'activity' || kind === 'tour' || kind === 'diving' || kind === 'surf') return 'experience';
+  if (kind === 'shopping' || kind === 'mall' || kind === 'market' || kind === 'store') return 'shopping';
+  if (kind === 'service' || kind === 'spa' || kind === 'massage') return 'service';
+  return 'other';
 }
 
 export function PlannerBudgetLedger({
@@ -69,6 +91,7 @@ export function PlannerBudgetLedger({
   onClearInitialPlaceId,
   expenses,
   onAddExpense,
+  onUpdateExpense,
   onDeleteExpense,
   members,
   onUpdateMembers,
@@ -89,6 +112,7 @@ export function PlannerBudgetLedger({
   }, [allPlaces, scheduledPlaces]);
 
   const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string>(initialPlaceId ?? '');
   const [expenseDate, setExpenseDate] = useState<string>(activeDate ?? '');
   const [title, setTitle] = useState('');
@@ -140,12 +164,7 @@ export function PlannerBudgetLedger({
     const found = selectablePlaces.find((p) => p.id === initialPlaceId);
     if (found) {
       setTitle(found.title);
-      const kind = found.kind?.toLowerCase();
-      if (kind === 'stay' || kind === 'hotel') setCategory('stay');
-      else if (kind === 'restaurant' || kind === 'food' || kind === 'cafe' || kind === 'dining') setCategory('food');
-      else if (kind === 'transit' || kind === 'station' || kind === 'transport') setCategory('transit');
-      else if (kind === 'attraction' || kind === 'sightseeing' || kind === 'activity') setCategory('ticket');
-      else if (kind === 'shopping' || kind === 'mall') setCategory('shopping');
+      setCategory(inferExpenseCategoryFromPlace(found));
     }
   } else if (!initialPlaceId && prevInitialPlaceId !== null) {
     setPrevInitialPlaceId(null);
@@ -159,25 +178,46 @@ export function PlannerBudgetLedger({
         if (!title.trim()) {
           setTitle(found.title);
         }
-        const kind = found.kind?.toLowerCase();
-        if (kind === 'stay' || kind === 'hotel') setCategory('stay');
-        else if (kind === 'restaurant' || kind === 'food' || kind === 'cafe' || kind === 'dining') setCategory('food');
-        else if (kind === 'transit' || kind === 'station' || kind === 'transport') setCategory('transit');
-        else if (kind === 'attraction' || kind === 'sightseeing' || kind === 'activity') setCategory('ticket');
-        else if (kind === 'shopping' || kind === 'mall') setCategory('shopping');
+        setCategory(inferExpenseCategoryFromPlace(found));
       }
     }
   };
 
   const startAddExpense = () => {
+    setEditingExpenseId(null);
     setIsAddingExpense(true);
     if (!expenseDate && activeDate) {
       setExpenseDate(activeDate);
     }
   };
 
+  const startEditExpense = (item: TripExpenseWithPayments) => {
+    setEditingExpenseId(item.id);
+    setIsAddingExpense(true);
+    setTitle(item.title);
+    setAmountStr(String(item.amount));
+    setCurrencyOverride(item.currency);
+    setCategory(item.category);
+    setSelectedPlaceId(item.place_id || '');
+    setExpenseDate(item.date || '');
+    setPaidByOverride(item.paid_by);
+    setSplitOverride(item.split_members);
+    setNotes(item.notes || '');
+
+    const payments = resolveExpensePayments(item);
+    if (payments.length > 1 || (payments.length === 1 && payments[0].amount !== item.amount)) {
+      const draft: Record<string, string> = {};
+      members.forEach((m) => { draft[m] = ''; });
+      payments.forEach((p) => { draft[p.member] = String(p.amount); });
+      setPaymentDraft(draft);
+    } else {
+      setPaymentDraft(null);
+    }
+  };
+
   const handleCancelAddExpense = () => {
     setIsAddingExpense(false);
+    setEditingExpenseId(null);
     setSelectedPlaceId('');
     setExpenseDate(activeDate ?? '');
     setTitle('');
@@ -319,21 +359,46 @@ export function PlannerBudgetLedger({
     e.preventDefault();
     if (!title.trim() || parsedExpenseAmount <= 0 || !paymentDraftValid) return;
 
-    const item: Omit<TripExpenseWithPayments, 'id' | 'created_at'> = {
-      trip_id: trip.id,
-      place_id: selectedPlaceId ? selectedPlaceId : undefined,
-      title: title.trim(),
-      category,
-      amount: parsedExpenseAmount,
-      currency,
-      date: expenseDate.trim() || activeDate || undefined,
-      paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
-      split_members: selectedSplits.length > 0 ? selectedSplits : members,
-      notes: notes.trim() || undefined,
-      payments: explicitPayments,
-    };
-    onAddExpense(item);
+    if (editingExpenseId) {
+      const existing = expenses.find((item) => item.id === editingExpenseId);
+      const updatedItem: TripExpenseWithPayments = {
+        id: editingExpenseId,
+        trip_id: trip.id,
+        place_id: selectedPlaceId ? selectedPlaceId : undefined,
+        title: title.trim(),
+        category,
+        amount: parsedExpenseAmount,
+        currency,
+        date: expenseDate.trim() || activeDate || undefined,
+        paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
+        split_members: selectedSplits.length > 0 ? selectedSplits : members,
+        notes: notes.trim() || undefined,
+        payments: explicitPayments,
+        created_at: existing?.created_at || new Date().toISOString(),
+      };
+      if (onUpdateExpense) {
+        onUpdateExpense(updatedItem);
+      } else {
+        onAddExpense(updatedItem);
+      }
+    } else {
+      const item: Omit<TripExpenseWithPayments, 'id' | 'created_at'> = {
+        trip_id: trip.id,
+        place_id: selectedPlaceId ? selectedPlaceId : undefined,
+        title: title.trim(),
+        category,
+        amount: parsedExpenseAmount,
+        currency,
+        date: expenseDate.trim() || activeDate || undefined,
+        paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
+        split_members: selectedSplits.length > 0 ? selectedSplits : members,
+        notes: notes.trim() || undefined,
+        payments: explicitPayments,
+      };
+      onAddExpense(item);
+    }
 
+    setEditingExpenseId(null);
     setTitle('');
     setAmountStr('');
     setNotes('');
@@ -395,7 +460,11 @@ export function PlannerBudgetLedger({
     return (
       <div
         key={item.id}
-        className="flex items-center justify-between rounded-lg border border-stone-100 bg-stone-50/70 p-2 text-xs transition hover:bg-stone-100/60"
+        className={`flex items-center justify-between rounded-lg border p-2 text-xs transition ${
+          editingExpenseId === item.id
+            ? 'border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-400'
+            : 'border-stone-100 bg-stone-50/70 hover:bg-stone-100/60'
+        }`}
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className="shrink-0 text-sm">{cat.icon}</span>
@@ -439,14 +508,23 @@ export function PlannerBudgetLedger({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <strong className="font-bold text-stone-900">
             {item.currency} {item.amount.toLocaleString()}
           </strong>
           <button
             type="button"
+            onClick={() => startEditExpense(item)}
+            className="rounded p-1 text-stone-400 hover:bg-stone-200 hover:text-emerald-700"
+            title={zh ? '编辑该笔消费' : 'Edit expense'}
+          >
+            ✎
+          </button>
+          <button
+            type="button"
             onClick={() => onDeleteExpense(item.id)}
             className="rounded p-1 text-stone-400 hover:bg-stone-200 hover:text-rose-600"
+            title={zh ? '删除该笔消费' : 'Delete expense'}
           >
             ✕
           </button>
@@ -649,7 +727,7 @@ export function PlannerBudgetLedger({
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-2xs">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-stone-800">
-            {zh ? '📝 记账与付款流水' : 'Expense Ledger'}
+            {editingExpenseId ? (zh ? '✏️ 编辑账目' : '✏️ Edit Expense') : (zh ? '📝 记账与付款流水' : 'Expense Ledger')}
           </span>
           <button
             type="button"
@@ -662,7 +740,7 @@ export function PlannerBudgetLedger({
             }}
             className="rounded-lg bg-stone-950 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-stone-800"
           >
-            {isAddingExpense ? (zh ? '✕ 收起' : '✕ Close') : (zh ? '+ 记一笔' : '+ Add Expense')}
+            {editingExpenseId ? (zh ? '✕ 取消编辑' : '✕ Cancel') : isAddingExpense ? (zh ? '✕ 收起' : '✕ Close') : (zh ? '+ 记一笔' : '+ Add Expense')}
           </button>
         </div>
 
@@ -1005,7 +1083,7 @@ export function PlannerBudgetLedger({
               disabled={!paymentDraftValid}
               className="w-full rounded-lg bg-emerald-700 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-stone-300"
             >
-              ✓ {zh ? '保存该笔花费' : 'Save Expense'}
+              {editingExpenseId ? (zh ? '✓ 保存修改' : '✓ Save Changes') : (zh ? '✓ 保存该笔花费' : '✓ Save Expense')}
             </button>
           </form>
         ) : null}
