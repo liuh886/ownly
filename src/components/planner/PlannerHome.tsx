@@ -294,6 +294,45 @@ function DayLoadBadge({ zh, load }: { zh: boolean; load: PlannerDayLoad }) {
   );
 }
 
+function ConfirmDialog({ zh, title, message, confirmLabel, onConfirm, onClose }: {
+  zh: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs animate-in fade-in">
+      <div
+        className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl space-y-4"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <h2 className="text-sm font-bold text-stone-900">{title}</h2>
+        <p className="text-xs leading-relaxed text-stone-600">{message}</p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+          >
+            {zh ? '取消' : 'Cancel'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-800"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = usePlannerController({ disabled });
 
   const [guideOpen, setGuideOpen] = useState(false);
@@ -327,6 +366,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     busy,
     notice,
     setNotice,
+    noticeAction,
+    setNoticeAction,
+    confirmRequest,
+    setConfirmRequest,
     isPro,
     openLicenseModal,
     currentExpenses,
@@ -662,15 +705,47 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
       {notice ? (
         <div aria-live="polite" className="flex items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 shadow-2xs animate-in fade-in duration-150">
           <span className="min-w-0 flex-1">{notice}</span>
+          {noticeAction && noticeAction.text === notice ? (
+            <button
+              type="button"
+              onClick={() => {
+                const run = noticeAction.run;
+                setNotice('');
+                setNoticeAction(null);
+                run();
+              }}
+              className="shrink-0 rounded-lg bg-emerald-700 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-800 transition"
+            >
+              {noticeAction.label}
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => setNotice('')}
+            onClick={() => {
+              setNotice('');
+              setNoticeAction(null);
+            }}
             className="shrink-0 rounded p-0.5 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-900 transition"
             title={zh ? '关闭提示' : 'Dismiss'}
           >
             ✕
           </button>
         </div>
+      ) : null}
+
+      {confirmRequest ? (
+        <ConfirmDialog
+          zh={zh}
+          title={confirmRequest.title}
+          message={confirmRequest.message}
+          confirmLabel={confirmRequest.confirmLabel}
+          onConfirm={() => {
+            const run = confirmRequest.run;
+            setConfirmRequest(null);
+            void run();
+          }}
+          onClose={() => setConfirmRequest(null)}
+        />
       ) : null}
 
       <nav ref={dateNavRef} className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label={zh ? '日期导航' : 'Date navigation'}>

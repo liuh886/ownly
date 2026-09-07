@@ -8,7 +8,7 @@ import type {
   PlannerTripPlace,
   TripExpenseItem,
 } from '@/domain/planner';
-import type { PlannerScheduledPlace } from '@/domain/planner-visits';
+import type { PlannerScheduledPlace, PlannerTripVisit } from '@/domain/planner-visits';
 import {
   calculateDefaultTripLeg,
   exportPlacesToCSV,
@@ -31,6 +31,38 @@ function mergeLegs(prev: PlannerTripLeg[], next: PlannerTripLeg[]): PlannerTripL
   const byId = new Map(prev.map((leg) => [leg.id, leg] as const));
   for (const leg of next) byId.set(leg.id, leg);
   return [...byId.values()];
+}
+
+interface PlaceSnapshot {
+  place: PlannerTripPlace | undefined;
+  visits: PlannerTripVisit[];
+  legs: PlannerTripLeg[];
+}
+
+function snapshotPlace(
+  placeId: string,
+  places: PlannerTripPlace[],
+  visits: PlannerTripVisit[],
+  legs: PlannerTripLeg[],
+  tripId?: string,
+): PlaceSnapshot {
+  return {
+    place: places.find((p) => p.id === placeId),
+    visits: visits.filter((v) => v.place_id === placeId && (!tripId || v.trip_id === tripId)),
+    legs: legs.filter(
+      (l) => (!tripId || l.trip_id === tripId) && (l.from_place_id === placeId || l.to_place_id === placeId),
+    ),
+  };
+}
+
+async function restorePlaceSnapshot(snapshot: PlaceSnapshot): Promise<void> {
+  if (snapshot.place) await plannerRepository.upsertPlace(snapshot.place);
+  for (const visit of snapshot.visits) {
+    await plannerRepository.upsertVisit(visit);
+  }
+  for (const leg of snapshot.legs) {
+    await plannerRepository.upsertLeg(leg);
+  }
 }
 
 export interface UsePlannerActionsProps {
@@ -63,6 +95,8 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     currentExpenses,
     load,
     setNotice,
+    setNoticeAction,
+    setConfirmRequest,
     setBusy,
     setTrips,
     setVisits,
@@ -74,6 +108,24 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setIsMultiSelectMode,
     setCapturePending,
   } = data;
+
+  const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
+    setNoticeAction({
+      label: zh ? '撤销' : 'Undo',
+      text,
+      run: () => {
+        void (async () => {
+          try {
+            await restore();
+          } catch (error) {
+            console.warn('[Planner] Undo restore failed', error);
+          }
+          await load();
+        })();
+      },
+    });
+    setNotice(text);
+  }, [load, setNotice, setNoticeAction, zh]);
 
   const handleUpsertTrip = useCallback(
     async (newTrip: PlannerTrip) => {
@@ -245,16 +297,26 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         updated_at: nowIso,
       };
       setLegs((prev) => mergeLegs(prev, [clearedLeg]));
+      const previousLeg = legs.find(
+        (item) => item.trip_id === selectedTrip.id
+          && item.from_place_id === fromPlaceId && item.to_place_id === toPlaceId
+          && item.id !== clearedLeg.id,
+      );
       try {
         await plannerRepository.upsertLeg(clearedLeg);
       } catch (error) {
         console.warn('[Planner] Failed to clear commute estimate', error);
       }
       await load();
-      setNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.');
-      setTimeout(() => setNotice(''), 3000);
+      if (previousLeg && previousLeg.duration_minutes > 0) {
+        showUndoNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.', async () => {
+          await plannerRepository.upsertLeg(previousLeg);
+        });
+      } else {
+        setNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.');
+      }
     },
-    [selectedTrip, load, setLegs, setNotice, zh],
+    [legs, selectedTrip, load, setLegs, setNotice, showUndoNotice, zh],
   );
 
   const handleRecalculateTravelEstimate = useCallback(
@@ -318,14 +380,14 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       try {
         await plannerRepository.dropPlace(placeId);
         await load();
-        setNotice(zh ? '已将地点设为暂不考虑' : 'Place shelved');
-        setTimeout(() => setNotice(''), 3000);
+        showUndoNotice(zh ? '已将地点设为暂不考虑' : 'Place shelved', async () => {
+          await plannerRepository.restorePlace(placeId);
+        });
       } catch {
         setNotice(zh ? '该地点仍在行程中，请先从日程中移除已排访问。' : 'This place is still scheduled. Remove its visits first.');
-        setTimeout(() => setNotice(''), 4000);
       }
     },
-    [disabled, load, setNotice, zh],
+    [disabled, load, setNotice, showUndoNotice, zh],
   );
 
   const handleRestorePlace = useCallback(
@@ -347,21 +409,28 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   const handleDeletePlace = useCallback(
     async (placeId: string, placeTitle?: string) => {
       if (!placeId || disabled) return;
-      const confirmMsg = zh
-        ? `确定要彻底删除地点「${placeTitle || '该地点'}」吗？删除后对应文件将被移除。`
-        : `Are you sure you want to permanently delete "${placeTitle || 'this place'}"?`;
-      if (!window.confirm(confirmMsg)) return;
-      try {
-        await plannerRepository.deletePlace(placeId);
-        await load();
-        setNotice(zh ? '已彻底删除地点' : 'Place permanently deleted');
-        setTimeout(() => setNotice(''), 3000);
-      } catch (err) {
-        setNotice(err instanceof Error ? err.message : zh ? '删除失败，若已排入日程请先移除日程' : 'Delete failed');
-        setTimeout(() => setNotice(''), 4000);
-      }
+      const title = placeTitle || '该地点';
+      setConfirmRequest({
+        title: zh ? '彻底删除地点' : 'Delete place',
+        message: zh
+          ? `确定要彻底删除地点「${title}」吗？删除后对应文件将被移除，可在 8 秒内撤销。`
+          : `Permanently delete "${title}"? You can undo within 8 seconds.`,
+        confirmLabel: zh ? '彻底删除' : 'Delete',
+        run: async () => {
+          const snapshot = snapshotPlace(placeId, places, visits, legs, selectedTripId);
+          try {
+            await plannerRepository.deletePlace(placeId);
+            await load();
+            showUndoNotice(zh ? '已彻底删除地点' : 'Place permanently deleted', async () => {
+              await restorePlaceSnapshot(snapshot);
+            });
+          } catch (err) {
+            setNotice(err instanceof Error ? err.message : zh ? '删除失败，若已排入日程请先移除日程' : 'Delete failed');
+          }
+        },
+      });
     },
-    [disabled, load, setNotice, zh],
+    [disabled, legs, places, selectedTripId, setConfirmRequest, setNotice, showUndoNotice, visits, load, zh],
   );
 
   const handleDeduplicatePlaces = useCallback(async () => {
@@ -440,43 +509,53 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   const handleBatchDeleteCandidates = useCallback(async () => {
     if (selectedCandidateIds.size === 0 || disabled || isBatchOperating) return;
     const count = selectedCandidateIds.size;
-    const confirmMsg = zh
-      ? `确定要彻底删除已选中的 ${count} 个地点吗？`
-      : `Are you sure you want to permanently delete ${count} selected places?`;
-    if (!window.confirm(confirmMsg)) return;
-    setIsBatchOperating(true);
-    const succeededIds: string[] = [];
-    const failedIds: string[] = [];
-    try {
-      for (const id of selectedCandidateIds) {
+    const ids = [...selectedCandidateIds];
+    setConfirmRequest({
+      title: zh ? '彻底删除所选地点' : 'Delete selected places',
+      message: zh
+        ? `确定要彻底删除已选中的 ${count} 个地点吗？删除后可在 8 秒内撤销。`
+        : `Permanently delete ${count} selected places? You can undo within 8 seconds.`,
+      confirmLabel: zh ? '彻底删除' : 'Delete',
+      run: async () => {
+        const snapshots = ids.map((id) => snapshotPlace(id, places, visits, legs, selectedTripId));
+        setIsBatchOperating(true);
+        const succeededIds: string[] = [];
+        const failedIds: string[] = [];
         try {
-          await plannerRepository.deletePlace(id);
-          succeededIds.push(id);
-        } catch {
-          failedIds.push(id);
+          for (const id of ids) {
+            try {
+              await plannerRepository.deletePlace(id);
+              succeededIds.push(id);
+            } catch {
+              failedIds.push(id);
+            }
+          }
+          await load();
+          setSelectedCandidateIds((prev) => {
+            const next = new Set(prev);
+            succeededIds.forEach((id) => next.delete(id));
+            return next;
+          });
+          if (failedIds.length === 0) {
+            setIsMultiSelectMode(false);
+            showUndoNotice(zh ? `已彻底删除 ${succeededIds.length} 个地点` : `Deleted ${succeededIds.length} places`, async () => {
+              for (const snapshot of snapshots) {
+                await restorePlaceSnapshot(snapshot);
+              }
+            });
+          } else {
+            setNotice(
+              zh
+                ? `已删除 ${succeededIds.length} 个地点，${failedIds.length} 个删除失败`
+                : `Deleted ${succeededIds.length} places, ${failedIds.length} failed`,
+            );
+          }
+        } finally {
+          setIsBatchOperating(false);
         }
-      }
-      await load();
-      setSelectedCandidateIds((prev) => {
-        const next = new Set(prev);
-        succeededIds.forEach((id) => next.delete(id));
-        return next;
-      });
-      if (failedIds.length === 0) {
-        setIsMultiSelectMode(false);
-        setNotice(zh ? `已彻底删除 ${succeededIds.length} 个地点` : `Deleted ${succeededIds.length} places`);
-      } else {
-        setNotice(
-          zh
-            ? `已删除 ${succeededIds.length} 个地点，${failedIds.length} 个删除失败`
-            : `Deleted ${succeededIds.length} places, ${failedIds.length} failed`,
-        );
-      }
-      setTimeout(() => setNotice(''), 3500);
-    } finally {
-      setIsBatchOperating(false);
-    }
-  }, [disabled, isBatchOperating, load, selectedCandidateIds, setIsBatchOperating, setIsMultiSelectMode, setNotice, setSelectedCandidateIds, zh]);
+      },
+    });
+  }, [disabled, isBatchOperating, legs, load, places, selectedCandidateIds, selectedTripId, setConfirmRequest, setIsBatchOperating, setIsMultiSelectMode, setNotice, setSelectedCandidateIds, showUndoNotice, visits, zh]);
 
   const handleBatchShelveCandidates = useCallback(async () => {
     if (selectedCandidateIds.size === 0 || disabled || isBatchOperating) return;
@@ -555,27 +634,31 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const selectedPlaces = sortedPendingCandidates.filter((p) => selectedCandidateIds.has(p.id));
     if (selectedPlaces.length < 2) return;
     const primary = selectedPlaces[0];
-    const confirmMsg = zh
-      ? `确定将选中的 ${selectedPlaces.length} 个地点合并为「${primary.title}」吗？`
-      : `Merge ${selectedPlaces.length} selected places into "${primary.title}"?`;
-    if (!window.confirm(confirmMsg)) return;
-    setIsBatchOperating(true);
-    try {
-      for (let i = 1; i < selectedPlaces.length; i++) {
-        await plannerRepository.mergePlaces(primary.id, selectedPlaces[i].id);
-      }
-      await load();
-      setSelectedCandidateIds(new Set());
-      setIsMultiSelectMode(false);
-      setNotice(zh ? `已成功合并为「${primary.title}」！` : `Merged into "${primary.title}"!`);
-      setTimeout(() => setNotice(''), 3000);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
-      setTimeout(() => setNotice(''), 4000);
-    } finally {
-      setIsBatchOperating(false);
-    }
-  }, [disabled, isBatchOperating, load, selectedCandidateIds, setIsBatchOperating, setIsMultiSelectMode, setNotice, setSelectedCandidateIds, sortedPendingCandidates, zh]);
+    const mergeCount = selectedPlaces.length;
+    setConfirmRequest({
+      title: zh ? '合并地点' : 'Merge places',
+      message: zh
+        ? `确定将选中的 ${mergeCount} 个地点合并为「${primary.title}」吗？合并不可撤销。`
+        : `Merge ${mergeCount} selected places into "${primary.title}"? This cannot be undone.`,
+      confirmLabel: zh ? '合并' : 'Merge',
+      run: async () => {
+        setIsBatchOperating(true);
+        try {
+          for (let i = 1; i < selectedPlaces.length; i++) {
+            await plannerRepository.mergePlaces(primary.id, selectedPlaces[i].id);
+          }
+          await load();
+          setSelectedCandidateIds(new Set());
+          setIsMultiSelectMode(false);
+          setNotice(zh ? `已成功合并为「${primary.title}」！` : `Merged into "${primary.title}"!`);
+        } catch (err) {
+          setNotice(err instanceof Error ? err.message : String(err));
+        } finally {
+          setIsBatchOperating(false);
+        }
+      },
+    });
+  }, [disabled, isBatchOperating, load, selectedCandidateIds, setConfirmRequest, setIsBatchOperating, setIsMultiSelectMode, setNotice, setSelectedCandidateIds, sortedPendingCandidates, zh]);
 
   const handleSavePlaceTiming = useCallback(
     async (
@@ -632,6 +715,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
 
   const removeVisit = useCallback(
     async (place: PlannerScheduledPlace) => {
+      const snapshot = visits.find((visit) => visit.id === place.visit_id);
       setVisits((prev) => prev.filter((visit) => visit.id !== place.visit_id));
       try {
         await plannerRepository.removeVisit(place.visit_id);
@@ -639,8 +723,13 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         console.warn('[Planner] Failed to remove visit', error);
       }
       await load();
+      if (snapshot) {
+        showUndoNotice(zh ? `已将「${place.title}」移出当天` : `Removed "${place.title}" from the day`, async () => {
+          await plannerRepository.upsertVisit(snapshot);
+        });
+      }
     },
-    [load, setVisits],
+    [load, setVisits, showUndoNotice, visits, zh],
   );
 
   const moveScheduled = useCallback(

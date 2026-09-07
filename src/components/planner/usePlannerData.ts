@@ -146,12 +146,20 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
   const [capturePending, setCapturePending] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [noticeAction, setNoticeAction] = useState<{ label: string; text: string; run: () => void } | null>(null);
+  const [confirmRequest, setConfirmRequest] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    run: () => void;
+  } | null>(null);
 
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => {
       setNotice('');
-    }, 6000);
+      setNoticeAction(null);
+    }, 8000);
     return () => clearTimeout(timer);
   }, [notice]);
 
@@ -688,6 +696,10 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     setBusy,
     notice,
     setNotice,
+    noticeAction,
+    setNoticeAction,
+    confirmRequest,
+    setConfirmRequest,
     isPro,
     openLicenseModal,
     currentUserId,
