@@ -117,6 +117,14 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
   },
 ];
 
+// One identity color per trip day (cycles every 8 days) for markers and routes.
+export const PLANNER_DAY_COLORS = ['#047857', '#0284c7', '#b45309', '#7c3aed', '#e11d48', '#0f766e', '#ea580c', '#4f46e5'];
+
+export function plannerDayColor(dayIndex?: number): string {
+  const index = dayIndex ?? 0;
+  return PLANNER_DAY_COLORS[((index % PLANNER_DAY_COLORS.length) + PLANNER_DAY_COLORS.length) % PLANNER_DAY_COLORS.length];
+}
+
 // Web Mercator projection
 function projectLngToX(lng: number, zoom: number): number {
   return ((lng + 180) / 360) * Math.pow(2, zoom) * 256;
@@ -723,7 +731,7 @@ export function PlannerMap({
                   key={r.date}
                   points={r.screenPoints.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke="#64748b"
+                  stroke={plannerDayColor(r.dayIndex)}
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -732,7 +740,7 @@ export function PlannerMap({
                 />
               ))}
 
-            {/* Active day's polyline (rendered on top with prominent emerald green styling) */}
+            {/* Active day's polyline (rendered on top with the day identity color) */}
             {allDaysRoutes
               .filter((r) => r.isActiveDay)
               .map((r) => (
@@ -740,7 +748,7 @@ export function PlannerMap({
                   key={r.date}
                   points={r.screenPoints.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke="#047857"
+                  stroke={plannerDayColor(r.dayIndex)}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -754,7 +762,7 @@ export function PlannerMap({
             <polyline
               points={scheduledRoutePoints.map((p) => `${p.x},${p.y}`).join(' ')}
               fill="none"
-              stroke="#047857"
+              stroke={plannerDayColor(activeDayIndex)}
               strokeWidth="3.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -776,6 +784,7 @@ export function PlannerMap({
 
           const isHighlighted = highlightedPlaceId === p.place.id || selectedPlaceId === p.place.id;
           const isOtherDayStop = p.isScheduled && p.isActiveDay === false;
+          const dayColor = plannerDayColor(p.dayIndex ?? activeDayIndex);
           // Candidates already scheduled on some day get a light-green marker to stand out from plain white ones.
           const scheduledCount = visitCountByPlaceId?.get(p.place.id) ?? 0;
 
@@ -804,21 +813,24 @@ export function PlannerMap({
             >
               {p.isScheduled ? (
                 isOtherDayStop ? (
-                  // Other Day Stop Marker (Subtle dimmed pill)
+                  // Other Day Stop Marker (day identity color, dimmed)
                   <div
-                    className={`flex h-5 items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all ${
-                      isHighlighted ? 'bg-slate-700 ring-2 ring-slate-400 scale-110' : 'bg-slate-500/80 hover:bg-slate-600'
+                    className={`flex h-5 items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all hover:brightness-110 ${
+                      isHighlighted ? 'ring-2 ring-white scale-110' : ''
                     }`}
+                    style={{ backgroundColor: `${dayColor}CC` }}
                     title={markerTitle(`Day ${(p.dayIndex ?? 0) + 1} #${p.order}. ${p.place.title}`, p.place.why)}
                   >
                     D{(p.dayIndex ?? 0) + 1}·{p.order}
                   </div>
                 ) : (
-                  // Numbered Scheduled Marker
+                  // Numbered Scheduled Marker (day identity color)
                   <div
-                    className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md text-xs font-bold text-white transition-all ${
-                      isHighlighted ? 'bg-emerald-600 ring-3 ring-emerald-300' : 'bg-emerald-800'
-                    }`}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md text-xs font-bold text-white transition-all"
+                    style={{
+                      backgroundColor: dayColor,
+                      boxShadow: isHighlighted ? `0 0 0 3px ${dayColor}66, 0 4px 6px -1px rgb(0 0 0 / 0.3)` : undefined,
+                    }}
                     title={markerTitle(`${p.order}. ${p.place.title}`, p.place.why)}
                   >
                     {p.order}
