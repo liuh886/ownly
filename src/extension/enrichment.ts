@@ -10,6 +10,7 @@ import type { CurrentResearchPlace } from './content';
 import { cleanTitleForSearch, extractFeatureIdFromUrl } from './utils';
 export { cleanTitleForSearch };
 import { logger } from './logger';
+import { sessionStorage } from './session-storage';
 import {
   extractGoogleMapsPreviewFacts,
   extractGoogleMapsResearchFromHtml,
@@ -26,8 +27,40 @@ export interface EnrichmentResult {
   error?: string;
 }
 
-const failedResolveCache = new Map<string, number>();
+const ENRICH_COOLDOWN_PREFIX = 'enrichCooldown:';
 const FAILED_COOLDOWN_MS = 15 * 60 * 1000;
+
+/** Terminal resolve failure marker; the background worker counts anything else as a failure. */
+export const ENRICH_COOLDOWN_ERROR = 'Recently failed, cooldown';
+
+/**
+ * Query-pin resolve cooldown, persisted in chrome.storage.session so it
+ * survives service-worker restarts (memory fallback keeps tests/contexts working).
+ */
+async function getResolveCooldown(cacheKey: string): Promise<number | undefined> {
+  try {
+    const value = (await sessionStorage.get(ENRICH_COOLDOWN_PREFIX + cacheKey))[ENRICH_COOLDOWN_PREFIX + cacheKey];
+    return typeof value === 'number' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function setResolveCooldown(cacheKey: string): Promise<void> {
+  try {
+    await sessionStorage.set({ [ENRICH_COOLDOWN_PREFIX + cacheKey]: Date.now() });
+  } catch {
+    // Cooldown is best-effort; a failed write just means one extra retry.
+  }
+}
+
+async function clearResolveCooldown(cacheKey: string): Promise<void> {
+  try {
+    await sessionStorage.remove(ENRICH_COOLDOWN_PREFIX + cacheKey);
+  } catch {
+    // Best-effort, see above.
+  }
+}
 
 /**
  * Determines whether a candidate place is missing essential objective facts.
@@ -74,10 +107,10 @@ export async function enrichPlaceMetadata(
   // Two-hop: search page -> extract ChIJ/0x -> preview. Prevent empty {} infinite loop + slow multi-round.
   if (!resolvedFeatureId || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(resolvedFeatureId.trim())) {
     const cacheKey = `${next.source_place_id || next.source_url || next.title}`;
-    const lastFail = failedResolveCache.get(cacheKey);
+    const lastFail = await getResolveCooldown(cacheKey);
     if (lastFail && Date.now() - lastFail < FAILED_COOLDOWN_MS) {
       logger.debug('BackgroundEnrich', `Skip recently failed query pin: ${next.title}`);
-      return { place: next, enriched: false, error: 'Recently failed, cooldown' };
+      return { place: next, enriched: false, error: ENRICH_COOLDOWN_ERROR };
     }
     const cleanSearchQuery = cleanTitleForSearch(next.title) + (next.address ? ' ' + next.address : '');
     const candidates: string[] = [];
@@ -169,10 +202,10 @@ export async function enrichPlaceMetadata(
     }
     // If still no ID and no facts, do not loop forever: mark as non-retryable this run + cooldown
     if (!resolvedFromSearch && !mutated) {
-      failedResolveCache.set(cacheKey, Date.now());
+      await setResolveCooldown(cacheKey);
       logger.warn('BackgroundEnrich', `Query pin unresolved (cooldown 15m): ${next.title}`);
     } else if (resolvedFromSearch || mutated) {
-      failedResolveCache.delete(cacheKey);
+      await clearResolveCooldown(cacheKey);
     }
   }
 

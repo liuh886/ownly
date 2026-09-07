@@ -110,6 +110,8 @@ function normalizePlace(value: unknown): CapturePlace | null {
     }) : undefined,
     captured_at: p.captured_at || new Date().toISOString(),
     updated_at: p.updated_at,
+    enrich_failures: typeof p.enrich_failures === 'number' ? p.enrich_failures : undefined,
+    enrich_last_failed_at: typeof p.enrich_last_failed_at === 'string' ? p.enrich_last_failed_at : undefined,
   });
 }
 
@@ -296,6 +298,44 @@ export function mergeUserByFreshness(
   if (incoming.user === undefined) return existing.user;
   if (existing.user === undefined) return incoming.user;
   return isNewer(existing.updated_at, incoming.updated_at) ? existing.user : incoming.user;
+}
+
+// ─── Enrichment resume policy ────────────────────────────────────────────────
+
+/** Places at this many consecutive enrich failures are left alone until edited. */
+export const MAX_ENRICH_FAILURES = 3;
+
+/** Mirrors the background auto-resolve entry gate in CapturePlace terms. */
+export function capturePlaceNeedsEnrich(place: CapturePlace): boolean {
+  const url = place.source.url ?? '';
+  const isSearchQuery = url.includes('/maps/search/') || !url.includes('/maps/place/');
+  const id = (place.source.place_id ?? '').trim();
+  const isMissingId = !id || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(id);
+  return isSearchQuery || isMissingId || !place.coordinates || place.rating === undefined;
+}
+
+/** Oldest-needy-first resume batch for service-worker restarts. Pure; tested. */
+export function selectEnrichResumeCandidates(places: CapturePlace[], limit = 5): CapturePlace[] {
+  return places
+    .filter((p) => capturePlaceNeedsEnrich(p) && !isEnrichExhausted(p))
+    .sort((a, b) => (a.captured_at ?? '').localeCompare(b.captured_at ?? ''))
+    .slice(0, Math.max(0, limit));
+}
+
+/**
+ * Exhaustion check: at MAX failures the place stays quiet — unless the user
+ * edited it after the last failure (updated_at is never bumped by failure
+ * writes), which re-arms exactly one retry.
+ */
+export function isEnrichExhausted(place: CapturePlace): boolean {
+  if ((place.enrich_failures ?? 0) < MAX_ENRICH_FAILURES) return false;
+  return !(place.updated_at && place.enrich_last_failed_at && place.updated_at > place.enrich_last_failed_at);
+}
+
+/** Failure counter transition. Success clears; the counter write never bumps updated_at. */
+export function nextEnrichFailures(current: number | undefined, succeeded: boolean): number | undefined {
+  if (succeeded) return undefined;
+  return (current ?? 0) + 1;
 }
 
 // ─── V3 Worker Mutator ──────────────────────────────────────────────────────

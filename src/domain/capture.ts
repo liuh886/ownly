@@ -96,6 +96,10 @@ export interface CapturePlace {
 
   captured_at: string;
   updated_at?: string;
+  /** Consecutive background-enrich failures; resume skips places at MAX. Reset on success. */
+  enrich_failures?: number;
+  /** Last failure timestamp; a newer user edit re-arms exactly one retry. */
+  enrich_last_failed_at?: string;
 }
 
 // ─── Extension State V3 ──────────────────────────────────────────────────────

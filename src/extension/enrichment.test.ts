@@ -510,6 +510,46 @@ describe('enrichPlaceMetadata', () => {
 });
 
 
+describe('enrich query-pin cooldown', () => {
+  it('short-circuits repeated failures without refetching', async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = vi.fn().mockRejectedValue(new Error('offline'));
+    global.fetch = fetchMock;
+    try {
+      const place: PlannerTripPlace = {
+        schema_version: '0.1',
+        type: 'trip_place',
+        id: 'cooldown-probe',
+        trip_id: 'trip-1',
+        title: 'Cooldown Probe Noodle Shop 深夜食堂',
+        source_provider: 'google_maps',
+        source_url: 'https://www.google.com/maps/search/?api=1&query=CooldownProbeNoodle',
+        kind: 'other',
+        priority: 'want',
+        tags: [],
+        signals: [],
+        risks: [],
+        reservation_status: 'none',
+        state: 'candidate',
+        created_at: '2026-08-30T00:00:00Z',
+        updated_at: '2026-08-30T00:00:00Z',
+      };
+
+      const first = await enrichPlaceMetadata(place, { force: true });
+      expect(first.enriched).toBe(false);
+      const callsAfterFirst = fetchMock.mock.calls.length;
+      expect(callsAfterFirst).toBeGreaterThan(0);
+
+      const second = await enrichPlaceMetadata(place, { force: true });
+      expect(second.enriched).toBe(false);
+      expect(second.error).toMatch(/cooldown/);
+      expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
+
 describe('mergeDetectedResearchIntoPlannerPlaces', () => {
   it('adds Google Maps facts without overwriting Planner-owned decisions', () => {
     const current: PlannerTripPlace = {

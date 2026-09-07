@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CAPTURE_STORAGE_KEY,
+  MAX_ENRICH_FAILURES,
+  capturePlaceNeedsEnrich,
   mergeUserByFreshness,
   mutateCaptureStateV3InWorker,
+  nextEnrichFailures,
   normalizeCaptureStateV3,
   readCaptureStateV3,
   rebaseOntoTruth,
+  selectEnrichResumeCandidates,
 } from './capture-state';
 import type { CapturePlace, OwnlyCaptureStateV3 } from '../domain/capture';
 
@@ -270,5 +274,77 @@ describe('mergeUserByFreshness', () => {
     const withUser = placeWith('p', '2026-09-01T10:00:00Z', 'why');
     expect(mergeUserByFreshness(noUser, withUser)?.why).toBe('why');
     expect(mergeUserByFreshness(withUser, noUser)?.why).toBe('why');
+  });
+});
+
+describe('capturePlaceNeedsEnrich', () => {
+  it('flags search-query pins and missing identity/coords/rating', () => {
+    const searchPin = {
+      ...createTestPlace('p-search'),
+      source: { provider: 'google_maps' as const, url: 'https://www.google.com/maps/search/?api=1&query ramen' },
+    };
+    expect(capturePlaceNeedsEnrich(searchPin)).toBe(true);
+
+    const missingRating = {
+      ...createTestPlace('p-norating'),
+      source: { provider: 'google_maps' as const, url: 'https://www.google.com/maps/place/Foo', place_id: '0x1234:0x5678' },
+      coordinates: { lat: 35.6, lng: 139.7 },
+    };
+    expect(capturePlaceNeedsEnrich(missingRating)).toBe(true);
+
+    const complete = {
+      ...missingRating,
+      rating: 4.5,
+    };
+    expect(capturePlaceNeedsEnrich(complete)).toBe(false);
+  });
+});
+
+describe('selectEnrichResumeCandidates', () => {
+  it('skips exhausted places, sorts oldest first, and caps the batch', () => {
+    const needy = (id: string, capturedAt: string, failures?: number): CapturePlace => ({
+      ...createTestPlace(id),
+      source: { provider: 'google_maps', url: 'https://www.google.com/maps/search/?api=1&query=' + id },
+      captured_at: capturedAt,
+      enrich_failures: failures,
+    });
+    const places = [
+      needy('new', '2026-09-03T00:00:00Z'),
+      needy('old', '2026-09-01T00:00:00Z'),
+      needy('dead', '2026-08-01T00:00:00Z', MAX_ENRICH_FAILURES),
+      { ...createTestPlace('complete'), source: { provider: 'google_maps' as const, url: 'https://www.google.com/maps/place/X', place_id: '0x1:0x2' }, coordinates: { lat: 1, lng: 1 }, rating: 5 },
+    ];
+
+    const picked = selectEnrichResumeCandidates(places, 1);
+    expect(picked.map((p) => p.id)).toEqual(['old']);
+
+    const all = selectEnrichResumeCandidates(places, 10);
+    expect(all.map((p) => p.id)).toEqual(['old', 'new']);
+  });
+
+  it('re-arms an exhausted place after a newer user edit', () => {
+    const exhaustedEdited: CapturePlace = {
+      ...createTestPlace('rearmed'),
+      source: { provider: 'google_maps', url: 'https://www.google.com/maps/search/?api=1&query=x' },
+      captured_at: '2026-09-01T00:00:00Z',
+      updated_at: '2026-09-02T00:00:00Z',
+      enrich_failures: MAX_ENRICH_FAILURES,
+      enrich_last_failed_at: '2026-09-01T12:00:00Z',
+    };
+    const exhaustedQuiet: CapturePlace = {
+      ...exhaustedEdited,
+      id: 'quiet',
+      updated_at: '2026-09-01T10:00:00Z',
+    };
+    const picked = selectEnrichResumeCandidates([exhaustedQuiet, exhaustedEdited], 10);
+    expect(picked.map((p) => p.id)).toEqual(['rearmed']);
+  });
+});
+
+describe('nextEnrichFailures', () => {
+  it('counts failures and clears on success', () => {
+    expect(nextEnrichFailures(undefined, false)).toBe(1);
+    expect(nextEnrichFailures(2, false)).toBe(3);
+    expect(nextEnrichFailures(2, true)).toBeUndefined();
   });
 });

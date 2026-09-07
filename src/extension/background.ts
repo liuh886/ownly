@@ -13,12 +13,14 @@ import {
 import {
   mergeUserByFreshness,
   mutateCaptureStateV3InWorker,
+  nextEnrichFailures,
   normalizeCaptureStateV3,
   readCaptureStateV3,
+  selectEnrichResumeCandidates,
 } from './capture-state';
 import type { CurrentResearchPlace } from './content';
 import { resolveWhyNotes, sanitizeExtractedSummary } from './utils';
-import { enrichPlaceMetadata } from './enrichment';
+import { ENRICH_COOLDOWN_ERROR, enrichPlaceMetadata } from './enrichment';
 import { sessionStorage } from './session-storage';
 import { logger } from './logger';
 
@@ -126,6 +128,9 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
     const enrichmentResult = await enrichPlaceMetadata(adapterPlace, { force: true });
     if (!enrichmentResult.enriched) {
       logger.debug('Background', `Entity auto-resolution did not mutate place: ${place.title}`);
+      if (enrichmentResult.error && enrichmentResult.error !== ENRICH_COOLDOWN_ERROR) {
+        await recordEnrichFailure(placeId);
+      }
       return;
     }
 
@@ -168,6 +173,8 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
             enriched.kind && enriched.kind !== 'other' ? enriched.kind : existingPlace.inferred_kind,
           ),
         } : undefined,
+        enrich_failures: nextEnrichFailures(existingPlace.enrich_failures, true),
+        enrich_last_failed_at: undefined,
         updated_at: new Date().toISOString(),
       };
 
@@ -190,6 +197,48 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
     void chrome.runtime.sendMessage({ type: 'OWNLY_STORAGE_CHANGED', placeId }).catch(() => {});
   } catch (err) {
     logger.warn('Background', `Auto-resolution failed for place ${placeId}:`, err instanceof Error ? err.message : String(err));
+    await recordEnrichFailure(placeId);
+  }
+}
+
+/** Bump the persistent enrich-failure counter. Never throws; counter writes skip updated_at. */
+async function recordEnrichFailure(placeId: string): Promise<void> {
+  try {
+    await mutateCaptureStateV3InWorker((currentState) => {
+      const idx = currentState.places.findIndex((p) => p.id === placeId);
+      if (idx === -1) return { state: currentState, result: false };
+      const target = currentState.places[idx];
+      const updated = [...currentState.places];
+      updated[idx] = {
+        ...target,
+        enrich_failures: nextEnrichFailures(target.enrich_failures, false),
+        enrich_last_failed_at: new Date().toISOString(),
+      };
+      return { state: { ...currentState, places: updated }, result: true };
+    });
+  } catch (err) {
+    logger.warn('Background', `Failed to record enrich failure for ${placeId}`, String(err));
+  }
+}
+
+/**
+ * Re-run enrichment for places left behind by a killed service worker.
+ * Oldest-needy-first, bounded per run; exhausted places stay quiet unless
+ * the user edited them after the last failure (see isEnrichExhausted).
+ */
+async function resumePendingEnrichment(limit = 5): Promise<number> {
+  try {
+    const state = await readCaptureStateV3();
+    const candidates = selectEnrichResumeCandidates(state.places, limit);
+    if (candidates.length === 0) return 0;
+    logger.info('Background', `Resuming enrichment for ${candidates.length} places`, { ids: candidates.map((p) => p.id) });
+    for (const candidate of candidates) {
+      await resolveAndEnrichCapturedPlace(candidate.id);
+    }
+    return candidates.length;
+  } catch (err) {
+    logger.warn('Background', 'Enrichment resume failed', String(err));
+    return 0;
   }
 }
 
@@ -409,6 +458,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   // ─── V3 Handlers ───────────────────────────────────────────────────────────
+
+  if (type === 'CAPTURE_RESUME_ENRICH') {
+    const limit = (message as { limit?: unknown }).limit;
+    void resumePendingEnrichment(typeof limit === 'number' ? limit : 5)
+      .then((resumed) => sendResponse({ ok: true, resumed }));
+    return true;
+  }
 
   if (type === 'CAPTURE_SAVE_STATE_V3') {
     const incoming = normalizeCaptureStateV3((message as { state?: unknown }).state);
@@ -745,9 +801,11 @@ async function refreshFxRates(): Promise<Record<string, number>> {
 chrome.runtime.onInstalled.addListener(() => {
   void configureSidePanel();
   void refreshFxRates();
+  void resumePendingEnrichment();
 });
 chrome.runtime.onStartup.addListener(() => {
   void configureSidePanel();
   void refreshFxRates();
+  void resumePendingEnrichment();
 });
 void configureSidePanel();
