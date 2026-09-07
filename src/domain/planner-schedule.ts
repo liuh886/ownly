@@ -556,6 +556,172 @@ export function buildPlannerDayExecutionTimeline(
 
 export type PlannerDayOverallStatus = 'feasible' | 'warning' | 'conflict' | 'unknown';
 
+export type PlannerLoadLevel = 'easy' | 'moderate' | 'tight' | 'heavy';
+
+export interface PlannerDayLoadTopContributor {
+  kind: 'stop' | 'transit';
+  title: string;
+  minutes: number;
+}
+
+export interface PlannerDayLoad {
+  score: number;
+  level: PlannerLoadLevel;
+  activity_minutes: number;
+  transit_minutes: number;
+  stop_count: number;
+  span_minutes: number | null;
+  longest_stretch_minutes: number | null;
+  lunch_ok: boolean;
+  dinner_ok: boolean;
+  top_contributor: PlannerDayLoadTopContributor | null;
+  suggestion: string | null;
+}
+
+// Load weights: activity dominates, transit/stops/span share the rest.
+// activity > 600min floors the score at 80 to preserve the legacy overload rule.
+const LOAD_WEIGHTS = { activity: 50, transit: 20, stops: 15, span: 15 };
+const LOAD_MEAL_WINDOWS = { lunch: [11 * 60 + 30, 13 * 60 + 30], dinner: [17 * 60 + 30, 19 * 60 + 30] } as const;
+const LOAD_MEAL_MIN_FREE = 45;
+const LOAD_STRETCH_TOLERANCE = 20;
+
+export const PLANNER_LOAD_LEVEL_LABEL: Record<PlannerLoadLevel, string> = {
+  easy: '宽松',
+  moderate: '适中',
+  tight: '紧凑',
+  heavy: '超载',
+};
+
+function freeOverlapMinutes(free: Array<{ s: number; e: number }>, from: number, to: number): number {
+  let total = 0;
+  for (const gap of free) {
+    total += Math.max(0, Math.min(gap.e, to) - Math.max(gap.s, from));
+  }
+  return total;
+}
+
+export function calculateDayLoad(
+  dayPlaces: PlannerScheduledPlace[],
+  legs: PlannerTripLeg[],
+  tripId: string,
+  timeline: PlannerDayExecutionTimeline,
+): PlannerDayLoad {
+  const ordered = sortPlannerScheduledPlaces(dayPlaces);
+  const activity = ordered.reduce(
+    (sum, p) => sum + (Number.isInteger(p.duration_minutes) && (p.duration_minutes ?? 0) > 0 ? (p.duration_minutes ?? 0) : 0),
+    0,
+  );
+
+  const legByPair = new Map(
+    legs.filter((leg) => leg.trip_id === tripId)
+      .map((leg) => [transitionKey(leg.from_place_id, leg.to_place_id), leg] as const),
+  );
+  let transit = 0;
+  let topTransit: PlannerDayLoadTopContributor | null = null;
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const leg = legByPair.get(transitionKey(ordered[index].place_id, ordered[index + 1].place_id));
+    const minutes = leg && Number.isInteger(leg.duration_minutes) && leg.duration_minutes > 0 ? leg.duration_minutes : 0;
+    transit += minutes;
+    if (minutes > 0 && (!topTransit || minutes > topTransit.minutes)) {
+      topTransit = { kind: 'transit', title: `${ordered[index].title} → ${ordered[index + 1].title}`, minutes };
+    }
+  }
+
+  // Busy intervals from effective timeline times (stops + travel).
+  const busy: Array<{ s: number; e: number }> = [];
+  for (const item of timeline.items) {
+    if (item.type !== 'stop' && item.type !== 'travel') continue;
+    const s = plannerClockToMinutes(item.start);
+    const e = plannerClockToMinutes(item.end);
+    if (s !== null && e !== null && e > s) busy.push({ s, e });
+  }
+  busy.sort((a, b) => a.s - b.s);
+  const merged: Array<{ s: number; e: number }> = [];
+  for (const interval of busy) {
+    const last = merged[merged.length - 1];
+    if (last && interval.s <= last.e) last.e = Math.max(last.e, interval.e);
+    else merged.push({ ...interval });
+  }
+  const free: Array<{ s: number; e: number }> = [];
+  for (let index = 0; index + 1 < merged.length; index += 1) {
+    if (merged[index + 1].s > merged[index].e) free.push({ s: merged[index].e, e: merged[index + 1].s });
+  }
+  const span = merged.length > 0 ? merged[merged.length - 1].e - merged[0].s : null;
+
+  let longestStretch: number | null = merged.length > 0 ? 0 : null;
+  let runStart: number | null = null;
+  let runEnd: number | null = null;
+  for (const interval of merged) {
+    if (runStart === null || interval.s - (runEnd ?? 0) >= LOAD_STRETCH_TOLERANCE) {
+      if (runStart !== null && longestStretch !== null) {
+        longestStretch = Math.max(longestStretch, (runEnd ?? 0) - runStart);
+      }
+      runStart = interval.s;
+      runEnd = interval.e;
+    } else {
+      runEnd = Math.max(runEnd ?? 0, interval.e);
+    }
+  }
+  if (runStart !== null && longestStretch !== null) {
+    longestStretch = Math.max(longestStretch, (runEnd ?? 0) - runStart);
+  }
+
+  let lunchOk = true;
+  let dinnerOk = true;
+  if (span !== null && merged.length > 0) {
+    // Only call out a meal when the day actually spans the whole meal window;
+    // a morning-only half day ending at noon needs no lunch warning.
+    const dayStart = merged[0].s;
+    const dayEnd = merged[merged.length - 1].e;
+    if (dayStart <= LOAD_MEAL_WINDOWS.lunch[0] && dayEnd >= LOAD_MEAL_WINDOWS.lunch[1]) {
+      lunchOk = freeOverlapMinutes(free, ...LOAD_MEAL_WINDOWS.lunch) >= LOAD_MEAL_MIN_FREE;
+    }
+    if (dayStart <= LOAD_MEAL_WINDOWS.dinner[0] && dayEnd >= LOAD_MEAL_WINDOWS.dinner[1]) {
+      dinnerOk = freeOverlapMinutes(free, ...LOAD_MEAL_WINDOWS.dinner) >= LOAD_MEAL_MIN_FREE;
+    }
+  }
+
+  let topStop: PlannerDayLoadTopContributor | null = null;
+  for (const place of ordered) {
+    const minutes = place.duration_minutes ?? 0;
+    if (minutes > 0 && (!topStop || minutes > topStop.minutes)) {
+      topStop = { kind: 'stop', title: place.title, minutes };
+    }
+  }
+  const top = topTransit && (!topStop || topTransit.minutes >= topStop.minutes) ? topTransit : topStop;
+
+  let score = (Math.min(activity, 900) / 600) * LOAD_WEIGHTS.activity
+    + (Math.min(transit, 300) / 180) * LOAD_WEIGHTS.transit
+    + (Math.min(ordered.length, 12) / 8) * LOAD_WEIGHTS.stops
+    + (span !== null ? (Math.min(span, 960) / 720) * LOAD_WEIGHTS.span : 0);
+  score = Math.min(100, Math.round(score));
+  if (activity > 600) score = Math.max(score, 80);
+  const level: PlannerLoadLevel = score >= 80 ? 'heavy' : score >= 60 ? 'tight' : score >= 35 ? 'moderate' : 'easy';
+
+  const notes: string[] = [];
+  if ((level === 'tight' || level === 'heavy') && top) {
+    notes.push(top.kind === 'stop'
+      ? `「${top.title}」约 ${top.minutes} 分钟占全天最高，移出当天或缩短停留可明显减负`
+      : `「${top.title}」交通约 ${top.minutes} 分钟，考虑调整顺序或更换交通方式`);
+  }
+  if (!lunchOk) notes.push('午餐时段缺少 45 分钟以上空闲');
+  if (!dinnerOk) notes.push('晚餐时段缺少 45 分钟以上空闲');
+
+  return {
+    score,
+    level,
+    activity_minutes: activity,
+    transit_minutes: transit,
+    stop_count: ordered.length,
+    span_minutes: span,
+    longest_stretch_minutes: longestStretch,
+    lunch_ok: lunchOk,
+    dinner_ok: dinnerOk,
+    top_contributor: top,
+    suggestion: notes.length > 0 ? notes.join('；') : null,
+  };
+}
+
 export interface PlannerOpeningHoursIssue {
   visit_id: string;
   place_id: string;
@@ -580,6 +746,7 @@ export interface PlannerDayAssessment {
   travel_conflicts: PlannerTimelineConflictItem[];
   opening_hours_warnings: PlannerOpeningHoursIssue[];
   missing_facts: PlannerDayMissingFact[];
+  load: PlannerDayLoad;
   is_overloaded: boolean;
   overload_reason?: string;
   total_activity_minutes: number;
@@ -645,9 +812,10 @@ export function evaluatePlannerDay(
     }
   }
 
-  const is_overloaded = total_activity_minutes > 600; // > 10 hours
+  const load = calculateDayLoad(dayPlaces, legs, trip.id, timeline);
+  const is_overloaded = load.level === 'heavy';
   const overload_reason = is_overloaded
-    ? `单日预估活动耗时约 ${(total_activity_minutes / 60).toFixed(1)} 小时，日程可能过紧`
+    ? `全天负荷 ${load.score} 分（${PLANNER_LOAD_LEVEL_LABEL[load.level]}）：游览约 ${(load.activity_minutes / 60).toFixed(1)} 小时，交通约 ${load.transit_minutes} 分钟，共 ${load.stop_count} 站${load.suggestion ? `；${load.suggestion}` : ''}`
     : undefined;
 
   let status: PlannerDayOverallStatus = 'feasible';
@@ -669,6 +837,7 @@ export function evaluatePlannerDay(
     travel_conflicts,
     opening_hours_warnings,
     missing_facts,
+    load,
     is_overloaded,
     overload_reason,
     total_activity_minutes,

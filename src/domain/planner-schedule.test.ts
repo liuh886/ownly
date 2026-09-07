@@ -3,6 +3,7 @@ import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTr
 import { materializePlannerScheduledPlaces, type PlannerTripVisit } from './planner-visits';
 import {
   buildPlannerDayExecutionTimeline,
+  calculateDayLoad,
   calculateEffectiveDayTiming,
   evaluatePlannerDay,
   evaluatePlannerDayFeasibility,
@@ -388,6 +389,92 @@ describe('evaluatePlannerDay canonical assessment', () => {
     const gap = timeline.items.find((item) => item.type === 'gap');
     expect(gap).toBeDefined();
     expect(gap).toMatchObject({ start: '13:30', end: '18:00', duration_minutes: 270 });
+  });
+});
+
+describe('calculateDayLoad', () => {
+  it('scores a light morning as easy without meal warnings', () => {
+    const places = [
+      place('a', { duration_minutes: 60 }),
+      place('b', { duration_minutes: 90 }),
+    ];
+    const visits = [
+      visit('v:a', 'a', { start: '09:00', duration_minutes: 60, sort_order: 0 }),
+      visit('v:b', 'b', { start: '10:30', duration_minutes: 90, sort_order: 1 }),
+    ];
+    const legs = [travelLeg('a', 'b', 15)];
+    const list = scheduled(places, visits);
+    const timeline = buildPlannerDayExecutionTimeline(trip, list, legs, '2026-10-05');
+    const load = calculateDayLoad(list, legs, trip.id, timeline);
+
+    expect(load.level).toBe('easy');
+    expect(load.score).toBeLessThan(35);
+    expect(load.activity_minutes).toBe(150);
+    expect(load.transit_minutes).toBe(15);
+    expect(load.stop_count).toBe(2);
+    expect(load.lunch_ok).toBe(true);
+    expect(load.dinner_ok).toBe(true);
+    expect(load.suggestion).toBeNull();
+  });
+
+  it('flags a packed full day as heavy with a top contributor', () => {
+    const ids = ['s1', 's2', 's3', 's4', 's5'];
+    const starts = ['08:00', '10:30', '13:00', '15:30', '18:00'];
+    const places = ids.map((id) => place(id, { duration_minutes: 120 }));
+    const visits = ids.map((id, index) => visit(`v:${id}`, id, { start: starts[index], duration_minutes: 120, sort_order: index }));
+    const legs = ids.slice(0, -1).map((id, index) => travelLeg(id, ids[index + 1], 30));
+    const list = scheduled(places, visits);
+    const assessment = evaluatePlannerDay(trip, list, legs, '2026-10-05');
+
+    expect(assessment.load.level).toBe('heavy');
+    expect(assessment.load.score).toBeGreaterThanOrEqual(80);
+    expect(assessment.is_overloaded).toBe(true);
+    expect(assessment.status).toBe('warning');
+    expect(assessment.load.top_contributor).not.toBeNull();
+    expect(assessment.load.suggestion).toContain('s1');
+    expect(assessment.overload_reason).toContain('负荷');
+  });
+
+  it('detects missing meal breaks on a day spanning meal windows', () => {
+    const places = [
+      place('m1', { duration_minutes: 120 }),
+      place('m2', { duration_minutes: 120 }),
+      place('m3', { duration_minutes: 120 }),
+      place('m4', { duration_minutes: 180 }),
+    ];
+    const visits = [
+      visit('v:m1', 'm1', { start: '09:00', duration_minutes: 120, sort_order: 0 }),
+      visit('v:m2', 'm2', { start: '11:30', duration_minutes: 120, sort_order: 1 }),
+      visit('v:m3', 'm3', { start: '14:00', duration_minutes: 120, sort_order: 2 }),
+      visit('v:m4', 'm4', { start: '16:30', duration_minutes: 180, sort_order: 3 }),
+    ];
+    const legs = [travelLeg('m1', 'm2', 15), travelLeg('m2', 'm3', 15), travelLeg('m3', 'm4', 15)];
+    const list = scheduled(places, visits);
+    const timeline = buildPlannerDayExecutionTimeline(trip, list, legs, '2026-10-05');
+    const load = calculateDayLoad(list, legs, trip.id, timeline);
+
+    expect(load.lunch_ok).toBe(false);
+    expect(load.dinner_ok).toBe(false);
+    expect(load.suggestion).toContain('午餐');
+    expect(load.suggestion).toContain('晚餐');
+    expect(load.longest_stretch_minutes).toBeGreaterThan(0);
+    expect(load.span_minutes).toBe(630);
+  });
+
+  it('stays quiet when times are unknown instead of guessing', () => {
+    const places = [place('u1', { duration_minutes: 60 }), place('u2', { duration_minutes: 60 })];
+    const visits = [
+      visit('v:u1', 'u1', { sort_order: 0 }),
+      visit('v:u2', 'u2', { sort_order: 1 }),
+    ];
+    const list = scheduled(places, visits);
+    const timeline = buildPlannerDayExecutionTimeline(trip, list, [], '2026-10-05');
+    const load = calculateDayLoad(list, [], trip.id, timeline);
+
+    expect(load.span_minutes).toBeNull();
+    expect(load.lunch_ok).toBe(true);
+    expect(load.dinner_ok).toBe(true);
+    expect(load.level).toBe('easy');
   });
 });
 
