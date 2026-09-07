@@ -49,11 +49,13 @@ const KIND_EMOJI = PLANNER_KIND_ICONS;
 const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_BASEMAP_KEY?.trim() || undefined;
 
 function cartoTile(path: string, z: number, x: number, y: number): string {
-  const url = `https://basemaps.cartocdn.com/${path}/${z}/${x}/${y}.png`;
+  // Retina screens fetch @2x tiles so text and roads stay crisp at fractional zooms.
+  const hidpi = typeof window !== 'undefined' && (window.devicePixelRatio ?? 1) > 1;
+  const url = `https://basemaps.cartocdn.com/${path}/${z}/${x}/${y}${hidpi ? '@2x' : ''}.png`;
   return CARTO_KEY ? `${url}?key=${encodeURIComponent(CARTO_KEY)}` : url;
 }
 
-export type BasemapStyle = 'carto_voyager' | 'carto_positron' | 'carto_dark' | 'osm_standard' | 'esri_satellite';
+export type BasemapStyle = 'carto_voyager' | 'carto_voyager_nolabels' | 'carto_positron' | 'carto_dark' | 'osm_standard' | 'esri_satellite';
 
 export interface BasemapOption {
   id: BasemapStyle;
@@ -70,6 +72,14 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     label: { zh: '淡彩旅行', en: 'Voyager' },
     icon: '🧭',
     getUrl: (z, x, y) => cartoTile('rastertiles/voyager', z, x, y),
+    fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+    bgColor: '#e5e7eb',
+  },
+  {
+    id: 'carto_voyager_nolabels',
+    label: { zh: '纯净无字', en: 'No Labels' },
+    icon: '◻️',
+    getUrl: (z, x, y) => cartoTile('rastertiles/voyager_nolabels', z, x, y),
     fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     bgColor: '#e5e7eb',
   },
