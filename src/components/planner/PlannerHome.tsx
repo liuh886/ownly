@@ -303,6 +303,17 @@ interface ResearchPoolSectionProps {
   className?: string;
 }
 
+function useEscapeKey(active: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [active, onClose]);
+}
+
 function ResearchPoolSection(props: ResearchPoolSectionProps) {
   const {
     zh,
@@ -355,6 +366,7 @@ function ResearchPoolSection(props: ResearchPoolSectionProps) {
     className = 'mt-4 w-full overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm flex flex-col transition-all',
   } = props;
   const [tidyMenuOpen, setTidyMenuOpen] = useState(false);
+  useEscapeKey(tidyMenuOpen, () => setTidyMenuOpen(false));
   return (
     <>
     {/* Horizontal Full-Width Candidate Research Pool below Day Skeleton and Map Workspace */}
@@ -883,6 +895,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  useEscapeKey(exportMenuOpen, () => setExportMenuOpen(false));
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -1118,6 +1131,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         isCalendarModalOpen ||
         isSuspectedModalOpen ||
         isMapExpanded ||
+        poolView ||
         optimizeComputation ||
         confirmRequest
       ) {
@@ -1153,6 +1167,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     isCalendarModalOpen,
     isSuspectedModalOpen,
     isMapExpanded,
+    poolView,
     optimizeComputation,
     confirmRequest,
   ]);
