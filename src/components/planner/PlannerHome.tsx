@@ -476,7 +476,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
       ) {
         return;
       }
-      if (timingModalPlace || isSwapDaysModalOpen || isCreateTripOpen || guideOpen) {
+      if (
+        timingModalPlace ||
+        isSwapDaysModalOpen ||
+        isCreateTripOpen ||
+        guideOpen ||
+        isHotelModalOpen ||
+        isImportModalOpen ||
+        isCalendarModalOpen ||
+        isSuspectedModalOpen ||
+        isMapExpanded ||
+        confirmRequest
+      ) {
         return;
       }
       if (!tripDates || tripDates.length <= 1) return;
@@ -504,6 +515,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     isSwapDaysModalOpen,
     isCreateTripOpen,
     guideOpen,
+    isHotelModalOpen,
+    isImportModalOpen,
+    isCalendarModalOpen,
+    isSuspectedModalOpen,
+    isMapExpanded,
+    confirmRequest,
   ]);
 
   const expensesByPlace = useMemo(() => {
