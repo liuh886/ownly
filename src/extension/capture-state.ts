@@ -8,12 +8,30 @@ import {
 
 export const CAPTURE_STORAGE_KEY = 'ownlyCaptureStateV3';
 
+/** Storage schema version this code understands. Never mutate storage holding a newer version. */
+export const SUPPORTED_CAPTURE_STATE_VERSION = 3;
+
+/**
+ * Forward-compat rule: normalize must never drop keys it doesn't recognize.
+ * Unknown fields ride along untouched so a future schema version's data
+ * survives read→mutate→write cycles performed by this version.
+ * (Outbound boundaries — share export, planner adapter — stay whitelist-based.)
+ */
+function carryUnknownKeys<T extends object>(source: unknown, known: T): T {
+  if (!source || typeof source !== 'object') return known;
+  const out = known as Record<string, unknown>;
+  for (const [key, value] of Object.entries(source as Record<string, unknown>)) {
+    if (!(key in out)) out[key] = value;
+  }
+  return known;
+}
+
 function normalizeCollection(value: unknown): CaptureCollection | null {
   if (!value || typeof value !== 'object') return null;
   const c = value as Partial<CaptureCollection>;
   if (typeof c.id !== 'string' || !c.id.trim()) return null;
   if (typeof c.title !== 'string' || !c.title.trim()) return null;
-  return {
+  return carryUnknownKeys(value, {
     id: c.id,
     title: c.title,
     source_provider: c.source_provider as CaptureCollection['source_provider'],
@@ -22,7 +40,7 @@ function normalizeCollection(value: unknown): CaptureCollection | null {
     currency: c.currency,
     created_at: c.created_at || new Date().toISOString(),
     updated_at: c.updated_at,
-  };
+  });
 }
 
 function normalizePlace(value: unknown): CapturePlace | null {
@@ -34,17 +52,17 @@ function normalizePlace(value: unknown): CapturePlace | null {
   if (!p.source || typeof p.source !== 'object') return null;
   const src = p.source as Partial<CapturePlace['source']>;
   if (typeof src.url !== 'string') return null;
-  return {
+  return carryUnknownKeys(value, {
     id: p.id,
     collection_id: p.collection_id,
     title: p.title,
-    source: {
+    source: carryUnknownKeys(p.source, {
       provider: (src.provider as CapturePlace['source']['provider']) || 'other',
       url: src.url,
       place_id: src.place_id,
       category: src.category,
       types: Array.isArray(src.types) ? src.types.filter((t): t is string => typeof t === 'string') : undefined,
-    },
+    }),
     address: p.address,
     coordinates: (() => {
       if (!p.coordinates || typeof p.coordinates !== 'object') return undefined;
@@ -65,14 +83,14 @@ function normalizePlace(value: unknown): CapturePlace | null {
     })(),
     rating: typeof p.rating === 'number' ? p.rating : undefined,
     review_count: typeof p.review_count === 'number' ? p.review_count : undefined,
-    price: p.price && typeof p.price === 'object' ? {
+    price: p.price && typeof p.price === 'object' ? carryUnknownKeys(p.price, {
       raw: (p.price as Record<string, unknown>).raw as string | undefined,
       currency: (p.price as Record<string, unknown>).currency as string | undefined,
       min: (p.price as Record<string, unknown>).min as number | undefined,
       max: (p.price as Record<string, unknown>).max as number | undefined,
       unit: (p.price as Record<string, unknown>).unit as string | undefined,
       level: (p.price as Record<string, unknown>).level as number | undefined,
-    } : undefined,
+    }) : undefined,
     open_hours: p.open_hours,
     phone: p.phone,
     plus_code: p.plus_code,
@@ -80,7 +98,7 @@ function normalizePlace(value: unknown): CapturePlace | null {
     reservation_url: p.reservation_url,
     review_topics: Array.isArray(p.review_topics) ? p.review_topics.filter((t): t is string => typeof t === 'string') : undefined,
     inferred_kind: p.inferred_kind as CapturePlace['inferred_kind'],
-    user: p.user && typeof p.user === 'object' ? {
+    user: p.user && typeof p.user === 'object' ? carryUnknownKeys(p.user, {
       priority: ((p.user as Record<string, unknown>).priority as string | undefined) as CapturePlace['user'] extends { priority?: infer P } ? P : never,
       tags: Array.isArray((p.user as Record<string, unknown>).tags)
         ? ((p.user as Record<string, unknown>).tags as unknown[]).filter((t): t is string => typeof t === 'string')
@@ -89,20 +107,17 @@ function normalizePlace(value: unknown): CapturePlace | null {
       notes: (p.user as Record<string, unknown>).notes as string | undefined,
       preferred_window: (p.user as Record<string, unknown>).preferred_window as string | undefined,
       duration_minutes: (p.user as Record<string, unknown>).duration_minutes as number | undefined,
-    } : undefined,
+    }) : undefined,
     captured_at: p.captured_at || new Date().toISOString(),
     updated_at: p.updated_at,
-  };
+  });
 }
 
 export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
   if (!value || typeof value !== 'object') return ensureInboxCollection({ ...EMPTY_CAPTURE_STATE_V3 });
-  const raw = value as Record<string, unknown>;
 
-  // Forward-compatible: even if version differs, preserve recognizable
-  // collections/places instead of wiping the user library.
-  void raw.version;
-
+  // Unknown fields ride along untouched. Writes to storage holding a newer
+  // version are refused outright in mutateCaptureStateV3InWorker.
   const state = value as Partial<OwnlyCaptureStateV3>;
 
   const collections = Array.isArray(state.collections)
@@ -120,7 +135,7 @@ export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
     ? state.active_collection_id
     : collections[0]?.id;
 
-  const normalized: OwnlyCaptureStateV3 = {
+  const normalized: OwnlyCaptureStateV3 = carryUnknownKeys(value, {
     version: 3,
     active_collection_id: activeCollectionId,
     collections,
@@ -132,7 +147,7 @@ export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
         }
       : undefined,
     last_export_at: typeof state.last_export_at === 'string' ? state.last_export_at : undefined,
-  };
+  });
   return ensureInboxCollection(normalized);
 }
 
@@ -204,7 +219,20 @@ export function mutateCaptureStateV3InWorker<R>(
   mutate: (current: OwnlyCaptureStateV3) => { state: OwnlyCaptureStateV3; result: R },
 ): Promise<R> {
   const run = workerOpChain.then(async () => {
-    const current = await readCaptureStateV3();
+    // Fail closed on newer schemas: this version must never strip-and-rewrite
+    // data it doesn't understand. Applies to every writer (save/merge/upsert/
+    // restore/target), since all of them funnel through here.
+    const stored = await chrome.storage.local.get(CAPTURE_STORAGE_KEY);
+    const raw = stored[CAPTURE_STORAGE_KEY];
+    const storedVersion = raw && typeof raw === 'object'
+      ? (raw as { version?: unknown }).version
+      : undefined;
+    if (storedVersion !== undefined && storedVersion !== SUPPORTED_CAPTURE_STATE_VERSION) {
+      throw new Error(
+        `[Ownly Capture] unsupported capture state version (${JSON.stringify(storedVersion)}); refusing to mutate to avoid data loss. Update the extension.`,
+      );
+    }
+    const current = normalizeCaptureStateV3(raw);
     const { state, result } = mutate(current);
     await chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: normalizeCaptureStateV3(state) });
     return result;
