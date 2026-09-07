@@ -287,8 +287,6 @@ interface ResearchPoolSectionProps {
   candidateDistances: PlannerControllerReturn['candidateDistances'];
   visitCountByPlaceId: PlannerControllerReturn['visitCountByPlaceId'];
   selectedTrip: PlannerControllerReturn['selectedTrip'];
-  tripDates: PlannerControllerReturn['tripDates'];
-  activeDate: PlannerControllerReturn['activeDate'];
   schedulePlace: PlannerControllerReturn['schedulePlace'];
   handleDropPlace: PlannerControllerReturn['handleDropPlace'];
   handleDeletePlace: PlannerControllerReturn['handleDeletePlace'];
@@ -296,8 +294,6 @@ interface ResearchPoolSectionProps {
   highlightedPlaceId: string | null;
   setHighlightedPlaceId: (value: string | null) => void;
   setDraggingPlaceId: (value: string | null) => void;
-  poolTargetDate: string;
-  setPoolTargetDate: (value: string) => void;
   setGuideOpen: (open: boolean) => void;
   setIsImportModalOpen: (open: boolean) => void;
   setIsHotelModalOpen: (open: boolean) => void;
@@ -343,8 +339,6 @@ function ResearchPoolSection(props: ResearchPoolSectionProps) {
     candidateDistances,
     visitCountByPlaceId,
     selectedTrip,
-    tripDates,
-    activeDate,
     schedulePlace,
     handleDropPlace,
     handleDeletePlace,
@@ -352,8 +346,6 @@ function ResearchPoolSection(props: ResearchPoolSectionProps) {
     highlightedPlaceId,
     setHighlightedPlaceId,
     setDraggingPlaceId,
-    poolTargetDate,
-    setPoolTargetDate,
     setGuideOpen,
     setIsImportModalOpen,
     setIsHotelModalOpen,
@@ -821,29 +813,11 @@ function ResearchPoolSection(props: ResearchPoolSectionProps) {
                           </button>
                         ) : (
                           <>
-                            {tripDates.length > 1 ? (
-                              <select
-                                value={poolTargetDate || activeDate}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  setPoolTargetDate(e.target.value);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-6 max-w-20 rounded-md border border-stone-200 bg-white px-1 text-[10px] font-semibold text-stone-600 focus:border-stone-400 focus:outline-hidden"
-                                title={zh ? '选择要排入的日期（触屏拖拽不可用时用此方式）' : 'Choose target day'}
-                              >
-                                {tripDates.map((date, index) => (
-                                  <option key={date} value={date}>
-                                    D{index + 1}·{formatDay(date, language)}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : null}
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                void schedulePlace(place.id, poolTargetDate || activeDate);
+                                void schedulePlace(place.id);
                               }}
                               className={`flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold transition shadow-2xs ${
                                 (visitCountByPlaceId.get(place.id) || 0) > 0
@@ -908,7 +882,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [poolTargetDate, setPoolTargetDate] = useState('');
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -931,6 +904,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     setSelectedDate,
     activeFilter,
     setActiveFilter,
+    tripDates,
+    activeDate,
     capturePending,
     busy,
     notice,
@@ -944,8 +919,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     currentExpenses,
     currentMembers,
     selectedTrip,
-    tripDates,
-    activeDate,
     activeDayIndex,
     dateNavRef,
     tripPlaces,
@@ -1069,8 +1042,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     candidateDistances,
     visitCountByPlaceId,
     selectedTrip,
-    tripDates,
-    activeDate,
     schedulePlace,
     handleDropPlace,
     handleDeletePlace,
@@ -1078,8 +1049,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     highlightedPlaceId,
     setHighlightedPlaceId,
     setDraggingPlaceId,
-    poolTargetDate,
-    setPoolTargetDate,
     setGuideOpen,
     setIsImportModalOpen,
     setIsHotelModalOpen,
@@ -1856,7 +1825,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                               <span>🕒</span>
                               <span>
                                 {timelineStop?.start
-                                  ? `${timelineStop.is_inferred_start ? '~' : ''}${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}${timelineStop.is_inferred_start ? ` ${zh ? '推算' : 'est'}` : ''}`
+                                  ? `${timelineStop.is_inferred_start ? '~' : ''}${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}${timelineStop.is_inferred_start ? ` ${zh ? '估' : 'est'}` : ''}`
                                   : (zh ? '设时间' : 'Time')}
                               </span>
                             </button>
