@@ -41,6 +41,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     trips,
     places,
     visits,
+    legs,
     tripDates,
     activeDate,
     scheduled,
@@ -166,10 +167,45 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       const leg = calculateDefaultTripLeg(selectedTrip, from, to, mode);
       if (leg) {
         await plannerRepository.upsertLeg(leg);
-        await load();
+      }
+      // Propagate forward: later legs of the same day that still follow the
+      // previous mode (or have no stored leg) inherit the new mode, so the
+      // user doesn't have to switch every leg one by one. Manually cleared
+      // legs (duration 0) and legs explicitly set to another mode are kept.
+      const fromPlaceId = from.place_id || from.id;
+      const toPlaceId = to.place_id || to.id;
+      const previousLeg = legs.find(
+        (item) => item.trip_id === selectedTrip.id
+          && item.from_place_id === fromPlaceId && item.to_place_id === toPlaceId,
+      );
+      const previousMode = previousLeg?.mode ?? selectedTrip.transport_mode ?? 'driving';
+      let propagated = 0;
+      const fromIndex = scheduled.findIndex((item) => item.id === from.id);
+      if (fromIndex >= 0) {
+        for (let index = fromIndex + 1; index < scheduled.length - 1; index += 1) {
+          const segFrom = scheduled[index];
+          const segTo = scheduled[index + 1];
+          const segFromId = segFrom.place_id || segFrom.id;
+          const segToId = segTo.place_id || segTo.id;
+          const stored = legs.find(
+            (item) => item.trip_id === selectedTrip.id
+              && item.from_place_id === segFromId && item.to_place_id === segToId,
+          );
+          if (stored && stored.source === 'manual' && stored.duration_minutes === 0) continue;
+          if (stored && stored.mode !== previousMode) continue;
+          const next = calculateDefaultTripLeg(selectedTrip, segFrom, segTo, mode);
+          if (!next) continue;
+          await plannerRepository.upsertLeg(next);
+          propagated += 1;
+        }
+      }
+      await load();
+      if (propagated > 0) {
+        setNotice(zh ? `已切换交通方式，并向后应用 ${propagated} 段。` : `Travel mode switched and applied to ${propagated} following legs.`);
+        setTimeout(() => setNotice(''), 3000);
       }
     },
-    [selectedTrip, load],
+    [selectedTrip, load, legs, scheduled, setNotice, zh],
   );
 
   const handleClearTravelEstimate = useCallback(
