@@ -471,16 +471,68 @@ function initCandidateDelegation() {
         setStatus(store.lang === 'zh' ? '未找到地点。' : 'Place not found.', 'error');
         return;
       }
-      // For now, copy single-place share JSON; Planner's Import modal can paste it
+      // One-click direct send: move the place into the active collection (the
+      // planner sync scope) and open the planner with ?capture-sync=1 so it
+      // imports automatically. Clipboard copy remains as the offline fallback.
       try {
-        const singleJson = JSON.stringify({ schema: 'ownly.capture.collection', version: 1, exported_at: new Date().toISOString(), collection: { id: place.collection_id, title: 'Inbox', place_count: 1 }, places: [place] }, null, 2);
-        await navigator.clipboard.writeText(singleJson);
-        setStatus(store.lang === 'zh' ? '已复制，去行程管理中导入即可加入行程。' : 'Copied — paste in Trip Management Import to add to trip.', 'success');
+        const active = getActiveCollection();
+        if (active && place.collection_id !== active.id) {
+          store.updatePlace(placeId, (p) => ({
+            ...p,
+            collection_id: active.id,
+            updated_at: new Date().toISOString(),
+          }));
+          await saveState();
+        }
+        await openPlannerWithCaptureSync();
+        setStatus(store.lang === 'zh' ? '已直送行程页，正在自动同步…' : 'Sent to planner — auto-syncing…', 'success');
+        renderState();
+        renderCandidatesList();
+        renderCurrentPlace();
       } catch {
-        window.prompt(store.lang === 'zh' ? '复制以下 JSON 并在行程管理导入：' : 'Copy JSON and import in Trip Management:', JSON.stringify(place));
+        try {
+          const singleJson = JSON.stringify({ schema: 'ownly.capture.collection', version: 1, exported_at: new Date().toISOString(), collection: { id: place.collection_id, title: 'Inbox', place_count: 1 }, places: [place] }, null, 2);
+          await navigator.clipboard.writeText(singleJson);
+          setStatus(store.lang === 'zh' ? '直送失败，已复制 JSON，去行程管理中导入即可。' : 'Direct send failed — JSON copied, paste in Trip Management Import.', 'error');
+        } catch {
+          window.prompt(store.lang === 'zh' ? '复制以下 JSON 并在行程管理导入：' : 'Copy JSON and import in Trip Management:', JSON.stringify(place));
+        }
       }
     }
   });
+}
+
+const DEFAULT_PLANNER_URL = 'https://liuh886.github.io/ownly/';
+
+function isPlannerTabUrl(url = ''): boolean {
+  try {
+    const parsed = new URL(url);
+    if (/liuh886\.github\.io\/ownly/i.test(`${parsed.hostname}${parsed.pathname}`)) return true;
+    if (/zhihaol\.eu\.org/i.test(parsed.hostname)) return true;
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Reuse an open planner tab when possible so self-hosted/local setups keep working. */
+async function openPlannerWithCaptureSync(): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+  const existing = tabs.find((t) => t.url && isPlannerTabUrl(t.url));
+  let base = DEFAULT_PLANNER_URL;
+  if (existing?.url) {
+    try {
+      const parsed = new URL(existing.url);
+      base = `${parsed.origin}${parsed.pathname}`;
+    } catch {}
+  }
+  const url = `${base}${base.includes('?') ? '&' : '?'}capture-sync=1`;
+  if (existing?.id !== undefined) {
+    await chrome.tabs.update(existing.id, { url, active: true });
+  } else {
+    await chrome.tabs.create({ url });
+  }
 }
 
 export function initHandlers(): void {

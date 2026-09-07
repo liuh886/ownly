@@ -261,7 +261,8 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
         plannerRepository.listPlaces(),
         plannerRepository.listVisits(),
         plannerRepository.listLegs(),
-        pullCaptureState(),
+        // Boot pull fails fast: a cold worker wake would otherwise stall first paint.
+        pullCaptureState({ retries: 0 }),
       ]);
       if (!active || epoch !== loadEpochRef.current) return;
       nextTrips.sort((left, right) => right.start_date.localeCompare(left.start_date));

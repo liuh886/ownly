@@ -1066,6 +1066,25 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     disabled,
   };
 
+  // One-click direct send from the Capture sidepanel (?capture-sync=1):
+  // run the standard sync once, then strip the param so reloads stay quiet.
+  const captureSyncRanRef = useRef(false);
+  useEffect(() => {
+    if (captureSyncRanRef.current || disabled) return;
+    let params: URLSearchParams | null = null;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch {
+      return;
+    }
+    if (params.get('capture-sync') !== '1') return;
+    captureSyncRanRef.current = true;
+    try {
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    } catch {}
+    void syncCapture();
+  }, [disabled, syncCapture]);
+
   // Multi-day keyboard navigation: [ / ] or ArrowLeft / ArrowRight to switch days
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

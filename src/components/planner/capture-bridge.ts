@@ -49,8 +49,7 @@ function getTargetOrigin(): string {
   return (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
 }
 
-function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 2500): Promise<T | null> {
-  if (typeof window === 'undefined') return Promise.resolve(null);
+function requestBridgeSingle<T>(type: string, payload: unknown, timeoutMs: number): Promise<{ timedOut: true } | { timedOut: false; value: T | null }> {
   return new Promise((resolve) => {
     const requestId = crypto.randomUUID();
     let settled = false;
@@ -59,7 +58,7 @@ function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 2500): Pr
       settled = true;
       window.removeEventListener('message', onMessage);
       window.clearTimeout(timer);
-      resolve(value);
+      resolve({ timedOut: false as const, value });
     };
     const onMessage = (event: MessageEvent<BridgeResponse<T>>) => {
       const isSameOrigin = !event.origin || event.origin === 'null' || event.origin === window.location.origin;
@@ -76,7 +75,10 @@ function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 2500): Pr
     };
     const timer = window.setTimeout(() => {
       addDebugLog({ type: 'timeout', requestId, messageType: type, detail: `timeout after ${timeoutMs}ms` });
-      finish(null);
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      resolve({ timedOut: true as const });
     }, timeoutMs);
     window.addEventListener('message', onMessage);
     addDebugLog({ type: 'send', requestId, messageType: type });
@@ -84,8 +86,26 @@ function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 2500): Pr
   });
 }
 
-export async function pullCaptureState(): Promise<OwnlyCaptureState | null> {
-  const raw = await requestBridge<unknown>('PULL_CAPTURE_STATE');
+/**
+ * postMessage bridge with timeout + retry. A cold extension service worker
+ * often needs >2.5s to wake, so the first attempt may time out while the
+ * worker was actually starting — retry with doubled timeout before giving up.
+ */
+export function requestBridge<T>(type: string, payload?: unknown, timeoutMs = 2500, retries = 1): Promise<T | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  return (async () => {
+    let timeout = timeoutMs;
+    for (let attempt = 0; ; attempt++) {
+      const result = await requestBridgeSingle<T>(type, payload, timeout);
+      if (!result.timedOut) return result.value;
+      if (attempt >= retries) return null;
+      timeout *= 2;
+    }
+  })();
+}
+
+export async function pullCaptureState(opts?: { timeoutMs?: number; retries?: number }): Promise<OwnlyCaptureState | null> {
+  const raw = await requestBridge<unknown>('PULL_CAPTURE_STATE', undefined, opts?.timeoutMs ?? 2500, opts?.retries ?? 1);
   if (!raw || typeof raw !== 'object') return null;
 
   const rawObj = raw as Record<string, unknown>;
