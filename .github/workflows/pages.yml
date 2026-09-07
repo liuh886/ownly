@@ -22,6 +22,7 @@ jobs:
       OWNLY_BASE_PATH: /ownly
       NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN: ${{ vars.CLOUDFLARE_WEB_ANALYTICS_TOKEN || '' }}
       NEXT_PUBLIC_CARTO_BASEMAP_KEY: ${{ secrets.CARTO_BASEMAP_KEY || '' }}
+      NEXT_PUBLIC_OPENROUTESERVICE_API_KEY: ${{ secrets.OPENROUTESERVICE_API_KEY || '' }}
     steps:
       - name: Checkout change history
         uses: actions/checkout@v6
