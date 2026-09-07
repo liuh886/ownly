@@ -294,44 +294,6 @@ export function PlannerMap({
   const [center, setCenter] = useState<{ lat: number; lng: number }>(() => defaultCenter ?? initial.center);
   const [zoom, setZoom] = useState(initial.zoom);
 
-  // Auto-fit only when necessary so user panning is never yanked away:
-  // first load, active day change, filter change, or new points outside view.
-  const lastPointsCountRef = useRef<number>(0);
-  const lastActiveDayRef = useRef<number>(activeDayIndex);
-  const lastFilterModeRef = useRef<string>(filterMode);
-
-  useEffect(() => {
-    if (points.length === 0) return;
-    const dayChanged = lastActiveDayRef.current !== activeDayIndex;
-    const filterChanged = lastFilterModeRef.current !== filterMode;
-    const pointsAppeared = lastPointsCountRef.current === 0 && points.length > 0;
-
-    let needFit = pointsAppeared || dayChanged || filterChanged;
-    if (!needFit && points.length !== lastPointsCountRef.current) {
-      const width = containerSize.width || 400;
-      const height = containerSize.height || 300;
-      const cx = projectLngToX(center.lng, zoom);
-      const cy = projectLatToY(center.lat, zoom);
-      needFit = points.some((p) => {
-        const x = projectLngToX(p.lng, zoom) - cx + width / 2;
-        const y = projectLatToY(p.lat, zoom) - cy + height / 2;
-        return x < -20 || x > width + 20 || y < -20 || y > height + 20;
-      });
-    }
-
-    if (needFit) {
-      const activePoints = getMapPointsForFilter(points, filterMode);
-      const pointsToFit = activePoints.length > 0 ? activePoints : points;
-      const computed = calculateBounds(pointsToFit);
-      setCenter(defaultCenter ?? computed.center);
-      setZoom(computed.zoom);
-    }
-
-    lastPointsCountRef.current = points.length;
-    lastActiveDayRef.current = activeDayIndex;
-    lastFilterModeRef.current = filterMode;
-  }, [points, activeDayIndex, filterMode, defaultCenter, center, zoom, containerSize]);
-
   // Fallback geocode destination using Ownly's cities.json database
   useEffect(() => {
     if (points.length === 0 && destinations && destinations.length > 0) {
@@ -391,6 +353,43 @@ export function PlannerMap({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+  // Auto-fit only when necessary so user panning is never yanked away:
+  // first load, active day change, filter change, or new points outside view.
+  const lastPointsCountRef = useRef<number>(0);
+  const lastActiveDayRef = useRef<number>(activeDayIndex);
+  const lastFilterModeRef = useRef<string>(filterMode);
+
+  useEffect(() => {
+    if (points.length === 0) return;
+    const dayChanged = lastActiveDayRef.current !== activeDayIndex;
+    const filterChanged = lastFilterModeRef.current !== filterMode;
+    const pointsAppeared = lastPointsCountRef.current === 0 && points.length > 0;
+
+    let needFit = pointsAppeared || dayChanged || filterChanged;
+    if (!needFit && points.length !== lastPointsCountRef.current) {
+      const width = containerSize.width || 400;
+      const height = containerSize.height || 300;
+      const cx = projectLngToX(center.lng, zoom);
+      const cy = projectLatToY(center.lat, zoom);
+      needFit = points.some((p) => {
+        const x = projectLngToX(p.lng, zoom) - cx + width / 2;
+        const y = projectLatToY(p.lat, zoom) - cy + height / 2;
+        return x < -20 || x > width + 20 || y < -20 || y > height + 20;
+      });
+    }
+
+    if (needFit) {
+      const activePoints = getMapPointsForFilter(points, filterMode);
+      const pointsToFit = activePoints.length > 0 ? activePoints : points;
+      const computed = calculateBounds(pointsToFit);
+      setCenter(defaultCenter ?? computed.center);
+      setZoom(computed.zoom);
+    }
+
+    lastPointsCountRef.current = points.length;
+    lastActiveDayRef.current = activeDayIndex;
+    lastFilterModeRef.current = filterMode;
+  }, [points, activeDayIndex, filterMode, defaultCenter, center, zoom, containerSize]);
   const clampZoom = useCallback((value: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value)), []);
 
   const viewportSize = useCallback(() => ({
