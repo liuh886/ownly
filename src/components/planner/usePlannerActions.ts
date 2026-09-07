@@ -270,7 +270,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       await load();
       if (propagated > 0) {
         setNotice(zh ? `已切换交通方式，并向后应用 ${propagated} 段。` : `Travel mode switched and applied to ${propagated} following legs.`);
-        setTimeout(() => setNotice(''), 3000);
       }
     },
     [selectedTrip, load, legs, scheduled, setLegs, setNotice, zh],
@@ -325,7 +324,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       const leg = calculateDefaultTripLeg(selectedTrip, from, to);
       if (!leg) {
         setNotice(zh ? '两站均为交通枢纽，无需本地交通预估。' : 'Both stops are transit hubs; no local commute estimate needed.');
-        setTimeout(() => setNotice(''), 3000);
         return;
       }
       setLegs((prev) => mergeLegs(prev, [leg]));
@@ -336,7 +334,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       }
       await load();
       setNotice(zh ? '已按当前行程默认交通方式重新计算。' : 'Commute estimate recalculated with the trip default mode.');
-      setTimeout(() => setNotice(''), 3000);
     },
     [selectedTrip, load, setLegs, setNotice, zh],
   );
@@ -353,7 +350,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
             ? `✓ 已将「${hotel.title}」设为 ${stayDates.length} 晚连住宿点 (${stayDates[0]} ~ ${stayDates[stayDates.length - 1]})！`
             : `✓ Set "${hotel.title}" as stay for ${stayDates.length} nights!`,
         );
-        setTimeout(() => setNotice(''), 4000);
       } finally {
         setBusy(false);
       }
@@ -397,10 +393,8 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         await plannerRepository.restorePlace(placeId);
         await load();
         setNotice(zh ? '已恢复为待考虑候选' : 'Place restored to candidates');
-        setTimeout(() => setNotice(''), 3000);
       } catch (err) {
         setNotice(err instanceof Error ? err.message : String(err));
-        setTimeout(() => setNotice(''), 4000);
       }
     },
     [disabled, load, setNotice, zh],
@@ -443,10 +437,8 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       } else {
         setNotice(zh ? '当前行程候选池未发现重复地点' : 'No duplicate places found in current trip');
       }
-      setTimeout(() => setNotice(''), 3500);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
-      setTimeout(() => setNotice(''), 4000);
     }
   }, [disabled, load, selectedTripId, setNotice, zh]);
 
@@ -457,10 +449,8 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         await plannerRepository.mergePlaces(primaryId, secondaryId);
         await load();
         setNotice(zh ? '已成功合并地点并更新关联日程！' : 'Places merged successfully!');
-        setTimeout(() => setNotice(''), 3000);
       } catch (err) {
         setNotice(err instanceof Error ? err.message : String(err));
-        setTimeout(() => setNotice(''), 4000);
       }
     },
     [disabled, load, setNotice, zh],
@@ -480,10 +470,8 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         await plannerRepository.upsertTrip(nextTrip);
         setTrips((prev) => prev.map((trip) => (trip.id === nextTrip.id ? nextTrip : trip)));
         setNotice(zh ? '已确认这两个地点应保持分开' : 'Kept these places separate');
-        setTimeout(() => setNotice(''), 2500);
       } catch (err) {
         setNotice(err instanceof Error ? err.message : String(err));
-        setTimeout(() => setNotice(''), 4000);
       }
     },
     [disabled, selectedTrip, setTrips, setNotice, zh],
@@ -587,7 +575,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
             : `Shelved ${succeededIds.length} places, ${failedIds.length} failed`,
         );
       }
-      setTimeout(() => setNotice(''), 3500);
     } finally {
       setIsBatchOperating(false);
     }
@@ -623,7 +610,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
             : `Scheduled ${succeededIds.length} places to ${activeDate}, ${failedIds.length} failed`,
         );
       }
-      setTimeout(() => setNotice(''), 3500);
     } finally {
       setIsBatchOperating(false);
     }
@@ -691,7 +677,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       }
       await load();
       setNotice(zh ? '已更新行程时段与停留时长！' : 'Updated schedule timing and duration!');
-      setTimeout(() => setNotice(''), 3000);
     },
     [load, setNotice, setVisits, zh],
   );
@@ -705,7 +690,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         await load();
       } catch (err) {
         setNotice(err instanceof Error ? err.message : String(err));
-        setTimeout(() => setNotice(''), 3500);
       } finally {
         setIsScheduling(false);
       }
@@ -878,7 +862,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const md = exportTripToMarkdown(selectedTrip, places, scheduledAll, currentExpenses, language);
     await navigator.clipboard.writeText(md);
     setNotice(zh ? '已复制 Markdown 完整行程单至剪贴板！' : 'Copied Markdown itinerary to clipboard!');
-    setTimeout(() => setNotice(''), 3000);
   }, [selectedTrip, places, scheduledAll, currentExpenses, language, zh, setNotice]);
 
   const downloadFullIcs = useCallback(() => {
@@ -892,7 +875,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     a.click();
     URL.revokeObjectURL(url);
     setNotice(zh ? '✓ 已下载全行程 .ics 日历文件！' : '✓ Downloaded full trip .ics file!');
-    setTimeout(() => setNotice(''), 3500);
   }, [selectedTrip, places, visits, language, zh, setNotice]);
 
   const downloadDayIcs = useCallback(
@@ -907,7 +889,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       a.click();
       URL.revokeObjectURL(url);
       setNotice(zh ? `✓ 已下载 ${date} 当天 .ics 日历文件！` : `✓ Downloaded day .ics file for ${date}!`);
-      setTimeout(() => setNotice(''), 3500);
     },
     [selectedTrip, places, visits, language, zh, setNotice],
   );
@@ -917,7 +898,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language });
     await navigator.clipboard.writeText(ics);
     setNotice(zh ? '✓ 已复制 RFC 5545 ICS 日历文本至剪贴板！' : '✓ Copied RFC 5545 ICS calendar text to clipboard!');
-    setTimeout(() => setNotice(''), 3500);
   }, [selectedTrip, places, visits, language, zh, setNotice]);
 
   const handleCreateOrUpdateFeed = useCallback(async () => {
