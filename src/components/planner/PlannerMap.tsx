@@ -755,6 +755,8 @@ export function PlannerMap({
 
           const isHighlighted = highlightedPlaceId === p.place.id || selectedPlaceId === p.place.id;
           const isOtherDayStop = p.isScheduled && p.isActiveDay === false;
+          // Candidates already scheduled on some day get a light-green marker to stand out from plain white ones.
+          const scheduledCount = visitCountByPlaceId?.get(p.place.id) ?? 0;
 
           return (
             <div
@@ -802,12 +804,17 @@ export function PlannerMap({
                   </div>
                 )
               ) : (
-                // Candidate POI Marker
+                // Candidate POI Marker (light green when already scheduled on some day)
                 <div
-                  className={`flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-white shadow-md text-[11px] transition-all ${
-                    isHighlighted ? 'ring-3 ring-blue-400 scale-110' : 'hover:scale-110'
+                  className={`flex h-6 w-6 items-center justify-center rounded-full border-2 shadow-md text-[11px] transition-all ${
+                    scheduledCount > 0
+                      ? `border-emerald-300 bg-emerald-50 ${isHighlighted ? 'ring-3 ring-emerald-400 scale-110' : 'hover:scale-110'}`
+                      : `border-white bg-white ${isHighlighted ? 'ring-3 ring-blue-400 scale-110' : 'hover:scale-110'}`
                   }`}
-                  title={markerTitle(p.place.title, p.place.why)}
+                  title={markerTitle(
+                    scheduledCount > 0 ? `${p.place.title} (已排 ${scheduledCount} 次)` : p.place.title,
+                    p.place.why,
+                  )}
                 >
                   <span className="leading-none">{KIND_EMOJI[p.place.kind] || '📍'}</span>
                 </div>
