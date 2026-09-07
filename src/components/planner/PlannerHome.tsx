@@ -90,6 +90,7 @@ interface TravelModeSwitchPopoverProps {
   isCleared: boolean;
   onSelectMode: (mode: PlannerTravelMode) => void;
   onClearEstimate: () => void;
+  onRecalculateEstimate: () => void;
   onClose: () => void;
 }
 
@@ -102,6 +103,7 @@ function TravelModeSwitchPopover({
   isCleared,
   onSelectMode,
   onClearEstimate,
+  onRecalculateEstimate,
   onClose,
 }: TravelModeSwitchPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -177,22 +179,31 @@ function TravelModeSwitchPopover({
         );
       })}
       <div className="my-0.5 border-t border-stone-100" />
-      <button
-        type="button"
-        onClick={onClearEstimate}
-        className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-[11px] text-left transition ${
-          isCleared
-            ? 'bg-stone-100 font-bold text-stone-900 ring-1 ring-stone-300'
-            : 'text-stone-600 hover:bg-rose-50 hover:text-rose-700'
-        }`}
-        title={zh ? '两站之间不计入交通路程时间' : 'Do not calculate commute time between these stops'}
-      >
-        <span className="inline-flex items-center gap-1.5">
+      <div className="grid grid-cols-2 gap-1">
+        <button
+          type="button"
+          onClick={onClearEstimate}
+          className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-left transition ${
+            isCleared
+              ? 'bg-stone-100 font-bold text-stone-900 ring-1 ring-stone-300'
+              : 'text-stone-600 hover:bg-rose-50 hover:text-rose-700'
+          }`}
+          title={zh ? '两站之间不计入交通路程时间' : 'Do not calculate commute time between these stops'}
+        >
           <span>🚫</span>
-          <span>{zh ? '清除预估（无需交通）' : 'Clear estimate (No commute)'}</span>
-        </span>
-        {isCleared ? <span className="text-[10px] font-bold text-stone-900">✓</span> : null}
-      </button>
+          <span>{zh ? '清除预估' : 'Clear'}</span>
+          {isCleared ? <span className="text-[10px] font-bold text-stone-900">✓</span> : null}
+        </button>
+        <button
+          type="button"
+          onClick={onRecalculateEstimate}
+          className="flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-stone-600 transition hover:bg-sky-50 hover:text-sky-800"
+          title={zh ? '按行程默认交通方式重新计算本段' : 'Recalculate this leg with the trip default mode'}
+        >
+          <span>↻</span>
+          <span>{zh ? '重新计算' : 'Recalc'}</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -291,6 +302,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     handleUpdateMembers,
     handleSwitchTravelMode,
     handleClearTravelEstimate,
+    handleRecalculateTravelEstimate,
     handleSelectHotelForStaySpan,
     handleUpdateFxRates,
     handleDropPlace,
@@ -1316,6 +1328,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                         setActiveModeSwitchPair(null);
                                         void handleClearTravelEstimate(place, nextPlace);
                                       }}
+                                      onRecalculateEstimate={() => {
+                                        setActiveModeSwitchPair(null);
+                                        void handleRecalculateTravelEstimate(place, nextPlace);
+                                      }}
                                       onClose={() => setActiveModeSwitchPair(null)}
                                     />
                                   ) : null}
@@ -1399,6 +1415,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                       onClearEstimate={() => {
                                         setActiveModeSwitchPair(null);
                                         void handleClearTravelEstimate(place, nextPlace);
+                                      }}
+                                      onRecalculateEstimate={() => {
+                                        setActiveModeSwitchPair(null);
+                                        void handleRecalculateTravelEstimate(place, nextPlace);
                                       }}
                                       onClose={() => setActiveModeSwitchPair(null)}
                                     />

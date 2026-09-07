@@ -236,6 +236,23 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     [selectedTrip, load, setNotice, zh],
   );
 
+  const handleRecalculateTravelEstimate = useCallback(
+    async (from: PlannerScheduledPlace, to: PlannerScheduledPlace) => {
+      if (!selectedTrip) return;
+      const leg = calculateDefaultTripLeg(selectedTrip, from, to);
+      if (!leg) {
+        setNotice(zh ? '两站均为交通枢纽，无需本地交通预估。' : 'Both stops are transit hubs; no local commute estimate needed.');
+        setTimeout(() => setNotice(''), 3000);
+        return;
+      }
+      await plannerRepository.upsertLeg(leg);
+      await load();
+      setNotice(zh ? '已按当前行程默认交通方式重新计算。' : 'Commute estimate recalculated with the trip default mode.');
+      setTimeout(() => setNotice(''), 3000);
+    },
+    [selectedTrip, load, setNotice, zh],
+  );
+
   const handleSelectHotelForStaySpan = useCallback(
     async (hotel: PlannerTripPlace, stayDates: string[]) => {
       if (disabled || stayDates.length === 0) return;
@@ -830,6 +847,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleUpdateMembers,
     handleSwitchTravelMode,
     handleClearTravelEstimate,
+    handleRecalculateTravelEstimate,
     handleSelectHotelForStaySpan,
     handleUpdateFxRates,
     handleDropPlace,
