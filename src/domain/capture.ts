@@ -100,6 +100,8 @@ export interface CapturePlace {
   enrich_failures?: number;
   /** Last failure timestamp; a newer user edit re-arms exactly one retry. */
   enrich_last_failed_at?: string;
+  /** Last attempt timestamp (any outcome); resume backs off within the retry interval. */
+  enrich_last_attempt_at?: string;
 }
 
 // ─── Extension State V3 ──────────────────────────────────────────────────────

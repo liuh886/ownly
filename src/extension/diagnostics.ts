@@ -7,7 +7,8 @@
  */
 
 import { logger } from './logger';
-import { readCaptureStateV3, CAPTURE_STORAGE_KEY } from './capture-state';
+import { readCaptureStateV3, capturePlaceNeedsEnrich, CAPTURE_STORAGE_KEY } from './capture-state';
+import type { CapturePlace } from '../domain/capture';
 import { sessionStorage } from './session-storage';
 import { inferSourceProvider } from '../domain/planner';
 
@@ -30,7 +31,7 @@ export interface OwnlyDiagnosticsBundleV2 {
     inbox: unknown | null;
     activeCollection: unknown | null;
     plannerTarget: unknown | null;
-    stats: { totalPlaces: number; inboxPlaces: number; collections: number; withCoordinates: number; withRating: number; withPrice: number };
+    stats: { totalPlaces: number; inboxPlaces: number; collections: number; withCoordinates: number; withRating: number; withPrice: number; enrichNeedy: number; enrichFailing: number };
   };
   tab: {
     url: string | null;
@@ -117,7 +118,7 @@ export async function buildDiagnosticsBundle(opts: {
   let inbox: unknown = null;
   let activeCollection: unknown = null;
   let plannerTarget: unknown = null;
-  let stats = { totalPlaces: 0, inboxPlaces: 0, collections: 0, withCoordinates: 0, withRating: 0, withPrice: 0 };
+  let stats = { totalPlaces: 0, inboxPlaces: 0, collections: 0, withCoordinates: 0, withRating: 0, withPrice: 0, enrichNeedy: 0, enrichFailing: 0 };
 
   try {
     const state = await readCaptureStateV3();
@@ -142,6 +143,8 @@ export async function buildDiagnosticsBundle(opts: {
         const pr = (p as { price?: { raw?: string } }).price;
         return Boolean(pr?.raw);
       }).length,
+      enrichNeedy: places.filter((p) => capturePlaceNeedsEnrich(p as unknown as CapturePlace)).length,
+      enrichFailing: places.filter((p) => ((p as { enrich_failures?: unknown }).enrich_failures as number ?? 0) > 0).length,
     };
   } catch (e) {
     captureState = { error: String(e) };

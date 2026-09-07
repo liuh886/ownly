@@ -339,6 +339,21 @@ describe('selectEnrichResumeCandidates', () => {
     const picked = selectEnrichResumeCandidates([exhaustedQuiet, exhaustedEdited], 10);
     expect(picked.map((p) => p.id)).toEqual(['rearmed']);
   });
+
+  it('backs off recently attempted places regardless of failure count', () => {
+    const now = new Date('2026-09-02T12:00:00Z').getTime();
+    const mk = (id: string, attemptAt?: string): CapturePlace => ({
+      ...createTestPlace(id),
+      source: { provider: 'google_maps' as const, url: 'https://www.google.com/maps/search/?api=1&query=' + id },
+      captured_at: '2026-09-01T00:00:00Z',
+      enrich_last_attempt_at: attemptAt,
+    });
+    const recent = mk('recent', '2026-09-02T11:30:00Z');
+    const stale = mk('stale', '2026-09-02T09:00:00Z');
+    const never = mk('never');
+    const picked = selectEnrichResumeCandidates([recent, stale, never], 10, now);
+    expect(picked.map((p) => p.id).sort()).toEqual(['never', 'stale']);
+  });
 });
 
 describe('nextEnrichFailures', () => {

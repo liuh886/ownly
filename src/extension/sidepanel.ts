@@ -72,6 +72,9 @@ void (async () => {
   initHandlers();
   await readCurrentPlace();
   logger.info('Sidepanel', 'initial readCurrentPlace done', { hasPlace: Boolean(store.currentPlace), hasList: Boolean(store.detectedSavedList) });
+  // Nudge the worker to resume enrichments orphaned by a killed service worker.
+  // Fire-and-forget: per-place retry interval + failure fuse bound the work.
+  void chrome.runtime.sendMessage({ type: 'CAPTURE_RESUME_ENRICH' }).catch(() => {});
 })();
 
 // Global error hook is in logger.ts; add sidepanel-specific unhandled

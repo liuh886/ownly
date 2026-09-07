@@ -112,6 +112,7 @@ function normalizePlace(value: unknown): CapturePlace | null {
     updated_at: p.updated_at,
     enrich_failures: typeof p.enrich_failures === 'number' ? p.enrich_failures : undefined,
     enrich_last_failed_at: typeof p.enrich_last_failed_at === 'string' ? p.enrich_last_failed_at : undefined,
+    enrich_last_attempt_at: typeof p.enrich_last_attempt_at === 'string' ? p.enrich_last_attempt_at : undefined,
   });
 }
 
@@ -305,6 +306,9 @@ export function mergeUserByFreshness(
 /** Places at this many consecutive enrich failures are left alone until edited. */
 export const MAX_ENRICH_FAILURES = 3;
 
+/** Minimum spacing between two enrich attempts of the same place. */
+export const ENRICH_RETRY_INTERVAL_MS = 60 * 60 * 1000;
+
 /** Mirrors the background auto-resolve entry gate in CapturePlace terms. */
 export function capturePlaceNeedsEnrich(place: CapturePlace): boolean {
   const url = place.source.url ?? '';
@@ -315,11 +319,22 @@ export function capturePlaceNeedsEnrich(place: CapturePlace): boolean {
 }
 
 /** Oldest-needy-first resume batch for service-worker restarts. Pure; tested. */
-export function selectEnrichResumeCandidates(places: CapturePlace[], limit = 5): CapturePlace[] {
+export function selectEnrichResumeCandidates(
+  places: CapturePlace[],
+  limit = 5,
+  now: number = Date.now(),
+): CapturePlace[] {
   return places
-    .filter((p) => capturePlaceNeedsEnrich(p) && !isEnrichExhausted(p))
+    .filter((p) => capturePlaceNeedsEnrich(p) && !isEnrichExhausted(p) && !isEnrichBackingOff(p, now))
     .sort((a, b) => (a.captured_at ?? '').localeCompare(b.captured_at ?? ''))
     .slice(0, Math.max(0, limit));
+}
+
+/** True when the place was attempted within the retry interval (any outcome). */
+export function isEnrichBackingOff(place: CapturePlace, now: number = Date.now()): boolean {
+  if (!place.enrich_last_attempt_at) return false;
+  const elapsed = now - Date.parse(place.enrich_last_attempt_at);
+  return Number.isFinite(elapsed) && elapsed >= 0 && elapsed < ENRICH_RETRY_INTERVAL_MS;
 }
 
 /**

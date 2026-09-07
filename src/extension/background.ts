@@ -11,6 +11,7 @@ import {
   type OwnlyCaptureStateV3,
 } from '../domain/capture';
 import {
+  capturePlaceNeedsEnrich,
   mergeUserByFreshness,
   mutateCaptureStateV3InWorker,
   nextEnrichFailures,
@@ -77,13 +78,8 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
     const place = state.places.find((p) => p.id === placeId);
     if (!place) return;
 
-    // Check if place needs Google Maps entity resolution or fact enrichment
-    const isSearchQuery = place.source.url?.includes('/maps/search/') || !place.source.url?.includes('/maps/place/');
-    const isMissingId = !place.source.place_id || !/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(place.source.place_id.trim());
-    const isMissingCoords = !place.coordinates;
-    const isMissingRating = place.rating === undefined;
-
-    if (!isSearchQuery && !isMissingId && !isMissingCoords && !isMissingRating) {
+    // Single entry gate — shared with the resume selector (capture-state.ts).
+    if (!capturePlaceNeedsEnrich(place)) {
       return;
     }
 
@@ -129,7 +125,10 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
     if (!enrichmentResult.enriched) {
       logger.debug('Background', `Entity auto-resolution did not mutate place: ${place.title}`);
       if (enrichmentResult.error && enrichmentResult.error !== ENRICH_COOLDOWN_ERROR) {
-        await recordEnrichFailure(placeId);
+        await recordEnrichAttempt(placeId, 'failed');
+      } else if (!enrichmentResult.error) {
+        // Ran but found nothing new: stamp the attempt so resume backs off instead of refetching.
+        await recordEnrichAttempt(placeId, 'noop');
       }
       return;
     }
@@ -175,6 +174,7 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
         } : undefined,
         enrich_failures: nextEnrichFailures(existingPlace.enrich_failures, true),
         enrich_last_failed_at: undefined,
+        enrich_last_attempt_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
@@ -197,27 +197,31 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
     void chrome.runtime.sendMessage({ type: 'OWNLY_STORAGE_CHANGED', placeId }).catch(() => {});
   } catch (err) {
     logger.warn('Background', `Auto-resolution failed for place ${placeId}:`, err instanceof Error ? err.message : String(err));
-    await recordEnrichFailure(placeId);
+    await recordEnrichAttempt(placeId, 'failed');
   }
 }
 
-/** Bump the persistent enrich-failure counter. Never throws; counter writes skip updated_at. */
-async function recordEnrichFailure(placeId: string): Promise<void> {
+/** Bump the persistent enrich-attempt ledger. Never throws; ledger writes skip updated_at. */
+async function recordEnrichAttempt(placeId: string, outcome: 'failed' | 'noop'): Promise<void> {
   try {
     await mutateCaptureStateV3InWorker((currentState) => {
       const idx = currentState.places.findIndex((p) => p.id === placeId);
       if (idx === -1) return { state: currentState, result: false };
       const target = currentState.places[idx];
+      const now = new Date().toISOString();
       const updated = [...currentState.places];
-      updated[idx] = {
-        ...target,
-        enrich_failures: nextEnrichFailures(target.enrich_failures, false),
-        enrich_last_failed_at: new Date().toISOString(),
-      };
+      updated[idx] = outcome === 'failed'
+        ? {
+            ...target,
+            enrich_failures: nextEnrichFailures(target.enrich_failures, false),
+            enrich_last_failed_at: now,
+            enrich_last_attempt_at: now,
+          }
+        : { ...target, enrich_last_attempt_at: now };
       return { state: { ...currentState, places: updated }, result: true };
     });
   } catch (err) {
-    logger.warn('Background', `Failed to record enrich failure for ${placeId}`, String(err));
+    logger.warn('Background', `Failed to record enrich attempt for ${placeId}`, String(err));
   }
 }
 
