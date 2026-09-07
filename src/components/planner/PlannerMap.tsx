@@ -7,6 +7,7 @@ import {
   calculateBounds,
   extractPlaceCoordinates,
   getMapPointsForFilter,
+  getPlannerMapDefaultCenter,
   PLANNER_KIND_ICONS,
 } from '@/domain/planner';
 import { searchCities } from '@/domain/travel';
@@ -181,9 +182,15 @@ export function PlannerMap({
     return result;
   }, [scheduledPlaces, candidatePlaces]);
 
+  // Default center based on active day schedule (last scheduled point) or candidate pool (last imported point)
+  const defaultCenter = useMemo(
+    () => getPlannerMapDefaultCenter(scheduledPlaces, candidatePlaces),
+    [scheduledPlaces, candidatePlaces],
+  );
+
   // Initial bounds
   const initial = useMemo(() => calculateBounds(points), [points]);
-  const [center, setCenter] = useState<{ lat: number; lng: number }>(initial.center);
+  const [center, setCenter] = useState<{ lat: number; lng: number }>(() => defaultCenter ?? initial.center);
   const [zoom, setZoom] = useState(initial.zoom);
 
   // Auto-fit to points when points become available, active day changes, or filter mode changes
@@ -202,14 +209,14 @@ export function PlannerMap({
       const activePoints = getMapPointsForFilter(points, filterMode);
       const pointsToFit = activePoints.length > 0 ? activePoints : points;
       const computed = calculateBounds(pointsToFit);
-      setCenter(computed.center);
+      setCenter(defaultCenter ?? computed.center);
       setZoom(computed.zoom);
     }
 
     lastPointsCountRef.current = points.length;
     lastActiveDayRef.current = activeDayIndex;
     lastFilterModeRef.current = filterMode;
-  }, [points, activeDayIndex, filterMode]);
+  }, [points, activeDayIndex, filterMode, defaultCenter]);
 
   // Fallback geocode destination using Ownly's cities.json database
   useEffect(() => {
@@ -231,9 +238,9 @@ export function PlannerMap({
     const activePoints = getMapPointsForFilter(points, filterMode);
     if (activePoints.length === 0) return;
     const computed = calculateBounds(activePoints);
-    setCenter(computed.center);
+    setCenter(defaultCenter ?? computed.center);
     setZoom(computed.zoom);
-  }, [filterMode, points]);
+  }, [filterMode, points, defaultCenter]);
 
   // Pan & pinch interaction (pointer events cover mouse, touch and pen)
   const activePointers = useRef(new Map<number, { x: number; y: number }>());

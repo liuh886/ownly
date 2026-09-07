@@ -1,5 +1,22 @@
 # Ownly — Task Progress & Review
 
+## Completed: Map Center Optimization & Timeline Place Card Compression (2026-09-07)
+- [x] **1. Map Default Center Optimization (`src/domain/planner.ts` & `src/components/planner/PlannerMap.tsx`)**:
+  - Implemented `getPlannerMapDefaultCenter`:
+    - If active day has scheduled places with valid coordinates: centers on the **last scheduled point of that day** (当日日程最后安排的一个点).
+    - If no schedule on active day: centers on the **last imported point in the candidate pool** (候选池最后一个导入的点, sorting by `import_provenance.imported_at` / `created_at`).
+  - Added unit test suite in `src/domain/planner.test.ts` covering empty, scheduled-only, candidate-only, and import provenance cases.
+  - Connected `getPlannerMapDefaultCenter` to `PlannerMap.tsx` state initialization, auto-fit `useEffect`, and `fitBounds` helper.
+- [x] **2. Timeline Place Card Vertical Compression & Density Improvement (`src/components/planner/PlannerHome.tsx`)**:
+  - Tightened outer card container padding (`px-2 py-1.5 sm:px-2.5 sm:py-2`), stop badge (`5x5`), and list gap (`space-y-1`).
+  - Streamlined Row 1: Single-line title with kind emoji + compact font-mono time pill.
+  - Unified Row 2: One-line flex layout for area / duration / price / actual expenses / quick emojis (🧭, 📞, 🗺️, 📖, 🎟️, 💳) and 4-action button group (📌, ↑, ↓, ✕) preventing multi-row wrapping.
+  - Compressed Why / Notes into an ultra-compact single line (`line-clamp-1 text-[10px] leading-tight`).
+  - Tightened inter-stop transition rails (`py-1 pl-3.5`).
+- [x] **3. Automated Testing & Verification**:
+  - `npm run validate:fast`: 0 lint/type errors, terminology & membership gates passed.
+  - `npm test`: 59 suites, 550 tests all passed.
+
 ## Completed: Timeline Inferred Default Schedule Times with Manual Override (2026-09-06)
 - [x] **1. Effective Chained Timing Engine (`src/domain/planner-schedule.ts`)**:
   - Implemented `calculateEffectiveDayTiming` chaining departure times and commute durations across stops.

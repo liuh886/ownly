@@ -13,6 +13,7 @@ import {
   effectiveFxRate,
   formatPlacePriceInTripCurrency,
   isTransitHubPlace,
+  PLANNER_KIND_ICONS,
   PLANNER_KIND_LABELS,
   PLANNER_TRAVEL_MODE_CONFIG,
 } from '@/domain/planner';
@@ -787,13 +788,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               ) : null}
             </div>
           ) : null}
-          <div className="p-3">
+          <div className="p-2 sm:p-2.5">
             {scheduled.length === 0 ? (
-              <div className={`rounded-xl border-2 border-dashed px-4 py-16 text-center text-sm ${draggingPlaceId ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700' : 'border-stone-200 text-stone-400'}`}>
+              <div className={`rounded-xl border-2 border-dashed px-4 py-12 text-center text-sm ${draggingPlaceId ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700' : 'border-stone-200 text-stone-400'}`}>
                 {zh ? '把 Research Pool 的候选拖进这一天，或点击“+ 当天”。' : 'Drag a researched candidate here, or use “+ Day”.'}
               </div>
             ) : (
-              <ol className="space-y-1.5">
+              <ol className="space-y-1">
                 {scheduled.map((place, index) => {
                   const timeOverlap = dayAssessment.time_overlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
                   const openHoursIssue = dayAssessment.opening_hours_warnings.find((issue) => issue.visit_id === place.visit_id || issue.place_id === place.place_id);
@@ -814,27 +815,28 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                     return (
                     <li
                       key={place.id}
-                      className="group space-y-2"
+                      className="group space-y-1"
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
                     >
-                      <div className={`relative flex items-start gap-2.5 rounded-xl border p-2 sm:p-2.5 transition-all duration-150 shadow-2xs ${
+                      <div className={`relative flex items-start gap-2 rounded-lg border px-2 py-1.5 sm:px-2.5 sm:py-2 transition-all duration-150 shadow-2xs ${
                         highlightedPlaceId === place.id
                           ? 'border-emerald-500 ring-2 ring-emerald-300/50 bg-emerald-50/30'
                           : 'border-stone-200/90 bg-white hover:border-stone-300'
                       }`}>
                         {/* Stop Number Circle */}
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-900 text-[11px] font-bold text-white shrink-0 shadow-2xs mt-0.5">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white shrink-0 shadow-2xs mt-0.5">
                           {index + 1}
                         </div>
 
                         {/* Stop Content Body */}
-                        <div className="min-w-0 flex-1 space-y-1.5">
-                          {/* Row 1: Title (left, 1-2 lines) & Time Trigger (right) */}
-                          <div className="flex items-start justify-between gap-2">
-                            {/* Title (tries 1 line, max 2 lines) */}
-                            <div className="min-w-0 flex-1">
-                              <h3 className="line-clamp-2 text-sm font-bold text-stone-900 break-words leading-snug" title={place.title}>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          {/* Row 1: Title (left, 1 line clamp) & Time Trigger (right) */}
+                          <div className="flex items-center justify-between gap-1.5">
+                            {/* Title with kind emoji */}
+                            <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                              <span className="text-xs shrink-0">{PLANNER_KIND_ICONS[place.kind] || '📍'}</span>
+                              <h3 className="truncate text-xs font-bold text-stone-900 leading-tight" title={place.title}>
                                 {place.title}
                               </h3>
                             </div>
@@ -843,7 +845,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             <button
                               type="button"
                               onClick={() => setTimingModalPlace(place)}
-                              className={`shrink-0 self-start inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition hover:scale-102 ${
+                              className={`shrink-0 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px] font-semibold transition hover:scale-102 ${
                                 timelineStop?.start
                                   ? timelineStop.is_inferred_start
                                     ? 'bg-amber-50/90 text-amber-800 border border-dashed border-amber-300 hover:bg-amber-100 font-mono'
@@ -868,13 +870,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                           </div>
 
                           {/* Row 2: Bottom-Left Meta/Emojis & Bottom-Right Actions [ 📍 | ↑ | ↓ | ✕ ] */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                            {/* Bottom-Left: Meta info (Area, Duration, Price) + Quick Emojis (🧭, 📞, 🗺️, 📖, 🎟️) */}
-                            <div className="flex flex-wrap items-center justify-start gap-x-2 gap-y-1 text-[11px] text-stone-500 min-w-0">
+                          <div className="flex items-center justify-between gap-1.5 min-w-0">
+                            {/* Bottom-Left: Meta info (Area, Duration, Price) + Quick Emojis (🧭, 📞, 🗺️, 📖, 🎟️, 💳) */}
+                            <div className="flex items-center gap-1.5 text-[10.5px] text-stone-500 min-w-0 overflow-hidden">
                               {/* Meta Details */}
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                {place.area ? <span className="text-stone-600 font-medium truncate max-w-[120px]">{place.area}</span> : null}
-                                {place.duration_minutes ? <span className="text-stone-500 shrink-0">{place.duration_minutes} min</span> : null}
+                              <div className="flex items-center gap-1 min-w-0 shrink-0">
+                                {place.area ? <span className="text-stone-600 font-medium truncate max-w-[80px] sm:max-w-[110px] text-[10.5px]">{place.area}</span> : null}
+                                {place.duration_minutes ? <span className="text-stone-400 shrink-0 text-[10px] font-mono">{place.duration_minutes}m</span> : null}
                                 {(() => {
                                   const isHotel = place.kind === 'stay';
                                   const placeExpense =
@@ -896,14 +898,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                           setBudgetInitialPlaceId(place.id);
                                           setRightTab('budget');
                                         }}
-                                        className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-semibold shrink-0 transition hover:bg-emerald-100"
+                                        className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1 py-0.2 text-[9.5px] font-semibold shrink-0 transition hover:bg-emerald-100"
                                         title={
                                           zh
                                             ? `实记 ${currencySymbolFor(selectedTrip?.currency)}${dailyActual}/天（总计 ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total}，共 ${stayDays} 晚分摊，共 ${placeExpense.count} 笔），点击前往账本查看`
                                             : `Actual: ${currencySymbolFor(selectedTrip?.currency)}${dailyActual}/day (Total ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total} across ${stayDays} nights, ${placeExpense.count} expenses), click to view in budget`
                                         }
                                       >
-                                        💳 {zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip?.currency)}{dailyActual}{stayDays > 1 ? (zh ? '/天' : '/day') : ''}
+                                        💳 {zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip?.currency)}{dailyActual}{stayDays > 1 ? (zh ? '/天' : '/d') : ''}
                                       </button>
                                     );
                                   }
@@ -912,7 +914,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                   return (
                                     <>
                                       {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
-                                        <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[10px] font-semibold text-stone-700 shrink-0">
+                                        <span className="rounded bg-stone-100 px-1 py-0.2 text-[9.5px] font-semibold text-stone-700 shrink-0">
                                           {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
                                         </span>
                                       ) : null}
@@ -923,7 +925,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                             setBudgetInitialPlaceId(place.id);
                                             setRightTab('budget');
                                           }}
-                                          className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-semibold shrink-0 transition hover:bg-emerald-100"
+                                          className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1 py-0.2 text-[9.5px] font-semibold shrink-0 transition hover:bg-emerald-100"
                                           title={
                                             zh
                                               ? `实记 ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total}（共 ${placeExpense.count} 笔），点击前往账本查看`
@@ -939,13 +941,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                               </div>
 
                               {/* Quick Action Emoji Buttons */}
-                              <div className="flex items-center gap-1 shrink-0">
+                              <div className="flex items-center gap-0.5 shrink-0">
                                 {/* 交通 / 导航 */}
                                 <a
                                   href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.address || place.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                  className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
                                   title={zh ? '导航到此地' : 'Directions'}
                                 >
                                   🧭
@@ -954,7 +956,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 {place.phone ? (
                                   <a
                                     href={`tel:${place.phone}`}
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-stone-200 transition"
+                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-stone-200 transition"
                                     title={zh ? `拨打电话: ${place.phone}` : `Call: ${place.phone}`}
                                   >
                                     📞
@@ -966,7 +968,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     href={place.source_url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
                                     title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
                                   >
                                     🗺️
@@ -976,7 +978,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address || place.title)}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
                                     title={zh ? '在 Google Maps 中搜索' : 'Search on Maps'}
                                   >
                                     🗺️
@@ -988,7 +990,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     href={place.menu_url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-stone-200 transition"
+                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-stone-200 transition"
                                     title={zh ? '查看菜单' : 'Menu'}
                                   >
                                     📖
@@ -1000,7 +1002,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     href={place.reservation_url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition shadow-2xs"
+                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded border border-amber-300 bg-amber-50 text-[10px] text-amber-900 hover:bg-amber-100 transition shadow-2xs"
                                     title={zh ? '官方预订' : 'Reserve'}
                                   >
                                     🎟️
@@ -1013,7 +1015,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                     setBudgetInitialPlaceId(place.id);
                                     setRightTab('budget');
                                   }}
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded bg-stone-100 text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 transition"
+                                  className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 transition"
                                   title={zh ? '为此地点记一笔账' : 'Record expense for this place'}
                                 >
                                   💳
@@ -1022,12 +1024,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                             </div>
 
                             {/* Bottom-Right: Grouped 4 Actions */}
-                            <div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50/90 p-0.5 shadow-2xs shrink-0">
+                            <div className="inline-flex items-center rounded border border-stone-200 bg-stone-50/90 p-0.5 shadow-2xs shrink-0">
                               <button
                                 type="button"
                                 aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
                                 onClick={() => void handleToggleVisitLock(place.visit_id)}
-                                className={`flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] transition ${
+                                className={`flex h-4.5 w-4.5 items-center justify-center rounded text-[10px] transition ${
                                   place.locked
                                     ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
                                     : 'text-stone-400 hover:bg-white hover:text-stone-700'
@@ -1041,7 +1043,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 aria-label={zh ? '上移' : 'Move up'}
                                 disabled={index === 0}
                                 onClick={() => void moveScheduled(index, -1)}
-                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                className="flex h-4.5 w-4.5 items-center justify-center rounded text-[10px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
                                 title={zh ? '上移一站' : 'Move up'}
                               >
                                 ↑
@@ -1051,7 +1053,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 aria-label={zh ? '下移' : 'Move down'}
                                 disabled={index === scheduled.length - 1}
                                 onClick={() => void moveScheduled(index, 1)}
-                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                className="flex h-4.5 w-4.5 items-center justify-center rounded text-[10px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
                                 title={zh ? '下移一站' : 'Move down'}
                               >
                                 ↓
@@ -1060,7 +1062,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 type="button"
                                 aria-label={zh ? '从当天日程移除' : 'Remove stop'}
                                 onClick={() => void removeVisit(place)}
-                                className="flex h-5.5 w-5.5 items-center justify-center rounded text-[11px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                className="flex h-4.5 w-4.5 items-center justify-center rounded text-[10px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
                                 title={zh ? '从当天日程移除（回到待安排候选池）' : 'Remove stop'}
                               >
                                 ✕
@@ -1070,7 +1072,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
                           {/* Warning / Conflict Alerts */}
                           {col?.isCollision ? (
-                            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                            <div className="flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200 leading-tight">
                               <span>⚠️</span>
                               <span>{col.reason}</span>
                             </div>
@@ -1078,11 +1080,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
                           {/* Deduplicated Research Note / Why Insight (Only 1 block displayed) */}
                           {place.why ? (
-                            <p className="line-clamp-2 rounded bg-stone-50 px-2 py-0.5 text-[11px] text-stone-700 leading-snug">
-                              💡 <strong>{zh ? '推荐理由:' : 'Why:'}</strong> {place.why}
+                            <p className="line-clamp-1 rounded bg-stone-50 px-1.5 py-0.5 text-[10px] text-stone-600 leading-tight">
+                              💡 <strong className="font-semibold text-stone-700">{zh ? '推荐理由:' : 'Why:'}</strong> {place.why}
                             </p>
                           ) : place.notes ? (
-                            <p className="line-clamp-2 text-[11px] text-stone-500 italic pl-0.5 leading-snug">
+                            <p className="line-clamp-1 text-[10px] text-stone-500 italic pl-0.5 leading-tight">
                               📝 {place.notes}
                             </p>
                           ) : null}
@@ -1091,15 +1093,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
                       {/* Travel Transition Rail (Between Stops) */}
                       {index < scheduled.length - 1 ? (
-                        <div className="relative ml-3.5 border-l-2 border-dashed border-stone-200 py-2 pl-5 space-y-1.5">
+                        <div className="relative ml-3 border-l-2 border-dashed border-stone-200 py-1 pl-3.5 space-y-1">
                           {isTransitHubPlace(place) && isTransitHubPlace(nextPlace) ? (
-                            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-stone-200 bg-stone-100/90 px-3 py-1 text-[10.5px] font-semibold text-stone-700 shadow-2xs">
+                            <div className="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-stone-200 bg-stone-100/90 px-2.5 py-0.5 text-[10px] font-semibold text-stone-700 shadow-2xs">
                               <span>✈️ {zh ? '跨城交通 · 依据票务时间' : 'Intercity Transit (Ticket-based)'}</span>
                               <a
                                 href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="rounded-full bg-stone-200 hover:bg-stone-300 px-1.5 py-0.2 text-[9.5px] font-bold text-stone-800 transition"
+                                className="rounded-full bg-stone-200 hover:bg-stone-300 px-1.5 py-0.2 text-[9px] font-bold text-stone-800 transition"
                               >
                                 Google 路线 ↗
                               </a>
@@ -1116,8 +1118,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                 ? ''
                                 : defaultLeg.distance_meters < 1000 ? ` · ${defaultLeg.distance_meters} m` : ` · ${(defaultLeg.distance_meters / 1000).toFixed(1)} km`;
                               return (
-                                <div className="relative inline-flex flex-wrap items-center gap-2">
-                                  <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-3 py-1 text-[10.5px] font-semibold text-sky-900 shadow-2xs">
+                                <div className="relative inline-flex flex-wrap items-center gap-1.5">
+                                  <div className="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-sky-200/90 bg-sky-50/90 px-2.5 py-0.5 text-[10px] font-semibold text-sky-900 shadow-2xs">
                                     <button
                                       type="button"
                                       onClick={() => setActiveModeSwitchPair(isPairSwitching ? null : `${place.id}->${nextPlace.id}`)}
@@ -1125,13 +1127,13 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                       title={zh ? '点击切换出行方式' : 'Click to change travel mode'}
                                     >
                                       <span>{icon} {dur} min{distance}</span>
-                                      <span className="text-[9px] opacity-70">▾</span>
+                                      <span className="text-[8.5px] opacity-70">▾</span>
                                     </button>
                                     <a
                                       href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${modeKey === 'motorcycle' ? 'two_wheeler' : (modeKey ?? 'transit')}`}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9.5px] font-bold text-sky-800 transition"
+                                      className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9px] font-bold text-sky-800 transition"
                                     >
                                       Google 导航 ↗
                                     </a>

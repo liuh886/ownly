@@ -1377,6 +1377,65 @@ export function calculateBounds(pts: Array<{ lat: number; lng: number }>): MapBo
   return { center: { lat: centerLat, lng: centerLng }, zoom: z };
 }
 
+/**
+ * Calculates the appropriate default center point for the planner map:
+ * 1. If the active day has scheduled places with valid coordinates, centers on the LAST scheduled point of that day.
+ * 2. If there are no scheduled places on the active day, centers on the LAST imported place in the candidate pool.
+ * 3. Returns null if neither has valid coordinates.
+ */
+export function getPlannerMapDefaultCenter(
+  scheduledPlaces: Array<Partial<PlannerScheduledPlace> | string | null | undefined>,
+  candidatePlaces: Array<Partial<PlannerTripPlace> | string | null | undefined>,
+): { lat: number; lng: number } | null {
+  // 1. If active day has scheduled places with valid coordinates
+  const validScheduled: Array<{ lat: number; lng: number }> = [];
+  for (const p of scheduledPlaces) {
+    const coords = extractPlaceCoordinates(p);
+    if (coords) validScheduled.push(coords);
+  }
+  if (validScheduled.length > 0) {
+    return validScheduled[validScheduled.length - 1];
+  }
+
+  // 2. If no scheduled places on active day, center on the last imported point in the candidate pool
+  const validCandidates: Array<{
+    coords: { lat: number; lng: number };
+    timestamp: number;
+    originalIndex: number;
+  }> = [];
+
+  candidatePlaces.forEach((p, idx) => {
+    const coords = extractPlaceCoordinates(p);
+    if (coords) {
+      let timestamp = 0;
+      if (typeof p === 'object' && p !== null) {
+        const timeStr = p.import_provenance?.imported_at || p.created_at || p.observed_at;
+        if (timeStr) {
+          const parsed = new Date(timeStr).getTime();
+          if (Number.isFinite(parsed)) timestamp = parsed;
+        }
+      }
+      validCandidates.push({
+        coords,
+        timestamp,
+        originalIndex: idx,
+      });
+    }
+  });
+
+  if (validCandidates.length > 0) {
+    validCandidates.sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      return a.originalIndex - b.originalIndex;
+    });
+    return validCandidates[validCandidates.length - 1].coords;
+  }
+
+  return null;
+}
+
 export interface HotelProximityMetrics {
   hasCoordinates: boolean;
   avgDistanceKm: number;

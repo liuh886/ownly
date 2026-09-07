@@ -20,6 +20,7 @@ import {
   getMapPointsForFilter,
   getPlaceConvertedNumericPrice,
   calculateBounds,
+  getPlannerMapDefaultCenter,
   haversineDistanceKm,
   inferPlaceCity,
   inferPlaceKind,
@@ -1498,6 +1499,77 @@ describe('exportTripToMarkdown', () => {
       expect(res.center.lat).toBeLessThan(14.0);
       expect(res.center.lng).toBeGreaterThan(99.0);
       expect(res.center.lng).toBeLessThan(102.0);
+    });
+  });
+
+  describe('getPlannerMapDefaultCenter', () => {
+    it('returns null when both scheduled and candidate places have no valid coordinates', () => {
+      const center = getPlannerMapDefaultCenter([], []);
+      expect(center).toBeNull();
+    });
+
+    it('centers on the LAST scheduled point of the active day when scheduled places exist', () => {
+      const scheduledPlaces = [
+        { id: 'v1', title: 'Grand Palace', coordinates: { lat: 13.7500, lng: 100.4914 } },
+        { id: 'v2', title: 'Wat Pho', coordinates: { lat: 13.7465, lng: 100.4933 } },
+        { id: 'v3', title: 'Wat Arun', coordinates: { lat: 13.7437, lng: 100.4888 } },
+      ];
+      const candidatePlaces = [
+        { id: 'c1', title: 'IconSiam', coordinates: { lat: 13.7267, lng: 100.5108 }, created_at: '2026-09-01T12:00:00Z' },
+      ];
+
+      const center = getPlannerMapDefaultCenter(scheduledPlaces, candidatePlaces);
+      // Must be Wat Arun (last scheduled stop)
+      expect(center).toEqual({ lat: 13.7437, lng: 100.4888 });
+    });
+
+    it('skips scheduled stops without valid coordinates and picks the last valid scheduled stop', () => {
+      const scheduledPlaces = [
+        { id: 'v1', title: 'Grand Palace', coordinates: { lat: 13.7500, lng: 100.4914 } },
+        { id: 'v2', title: 'Mystery Place', coordinates: undefined, source_url: '' },
+      ];
+      const candidatePlaces = [
+        { id: 'c1', title: 'IconSiam', coordinates: { lat: 13.7267, lng: 100.5108 } },
+      ];
+
+      const center = getPlannerMapDefaultCenter(scheduledPlaces, candidatePlaces);
+      expect(center).toEqual({ lat: 13.7500, lng: 100.4914 });
+    });
+
+    it('centers on the LAST imported point in the candidate pool when there are NO scheduled places', () => {
+      const scheduledPlaces: Array<{ id: string; title: string }> = [];
+      const candidatePlaces = [
+        { id: 'c1', title: 'Old Place', coordinates: { lat: 13.7100, lng: 100.5100 }, created_at: '2026-09-01T08:00:00Z' },
+        { id: 'c2', title: 'Middle Place', coordinates: { lat: 13.7200, lng: 100.5200 }, created_at: '2026-09-01T09:00:00Z' },
+        { id: 'c3', title: 'Latest Place', coordinates: { lat: 13.7300, lng: 100.5300 }, created_at: '2026-09-01T10:00:00Z' },
+      ];
+
+      const center = getPlannerMapDefaultCenter(scheduledPlaces, candidatePlaces);
+      // Must be c3 (last imported place)
+      expect(center).toEqual({ lat: 13.7300, lng: 100.5300 });
+    });
+
+    it('respects import_provenance.imported_at over created_at for imported candidate places', () => {
+      const scheduledPlaces: Array<{ id: string; title: string }> = [];
+      const candidatePlaces = [
+        {
+          id: 'c1',
+          title: 'Direct Created Place',
+          coordinates: { lat: 13.7100, lng: 100.5100 },
+          created_at: '2026-09-01T12:00:00Z',
+        },
+        {
+          id: 'c2',
+          title: 'Shared Collection Imported Place',
+          coordinates: { lat: 13.7400, lng: 100.5400 },
+          created_at: '2026-08-01T00:00:00Z',
+          import_provenance: { imported_at: '2026-09-01T14:00:00Z', collection_id: 'col-1', source_type: 'shared_collection' as const },
+        },
+      ];
+
+      const center = getPlannerMapDefaultCenter(scheduledPlaces, candidatePlaces);
+      // c2 was imported at 14:00 (latest)
+      expect(center).toEqual({ lat: 13.7400, lng: 100.5400 });
     });
   });
 
