@@ -26,7 +26,8 @@ export interface OrsMatrixFacts {
 export interface PlannerDayOptimizationComputation {
   date: string;
   originalPlaces: PlannerScheduledPlace[];
-  orderedPlaces: PlannerScheduledPlace[];  originalMinutes: number;
+  orderedPlaces: PlannerScheduledPlace[];
+  originalMinutes: number;
   optimizedMinutes: number;
   savedMinutes: number;
   matrixSource: PlannerDayMatrixSource;

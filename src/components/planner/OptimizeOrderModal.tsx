@@ -23,6 +23,15 @@ export function OptimizeOrderModal({
 }: OptimizeOrderModalProps) {
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   const [showKeyForm, setShowKeyForm] = useState(computation.orsFallback === 'missing_key');
+  const [lastFallback, setLastFallback] = useState(computation.orsFallback);
+
+  // Recompute swaps in a fresh computation object; auto-open the key form when
+  // the new result reports a missing key, but never auto-close a manually
+  // opened form. Render-phase sync (no effect) per React docs.
+  if (computation.orsFallback !== lastFallback) {
+    setLastFallback(computation.orsFallback);
+    if (computation.orsFallback === 'missing_key') setShowKeyForm(true);
+  }
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
