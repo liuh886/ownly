@@ -632,6 +632,21 @@ export function PlannerMap({
     return { x, y };
   }, [selectedPoint, zoom, centerX, centerY, containerSize.width, containerSize.height]);
 
+  // Scale bar: pick the largest 1/2/5-step distance fitting ~80px.
+  const scaleBar = useMemo(() => {
+    const metersPerPixel = (156543.03392 * Math.cos((center.lat * Math.PI) / 180)) / Math.pow(2, zoom);
+    if (!Number.isFinite(metersPerPixel) || metersPerPixel <= 0) return null;
+    const raw = metersPerPixel * 80;
+    const exp = Math.floor(Math.log10(raw));
+    const base = raw / Math.pow(10, exp);
+    const niceBase = base >= 5 ? 5 : base >= 2 ? 2 : 1;
+    const distance = niceBase * Math.pow(10, exp);
+    return {
+      widthPx: Math.round(distance / metersPerPixel),
+      label: distance >= 1000 ? `${distance / 1000} km` : `${distance} m`,
+    };
+  }, [center.lat, zoom]);
+
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xs">
       {/* Map Controls */}
@@ -892,6 +907,14 @@ export function PlannerMap({
             ⊙
           </button>
         </div>
+
+        {/* Scale Bar */}
+        {scaleBar ? (
+          <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded bg-white/85 px-1.5 py-0.5 shadow-xs backdrop-blur-sm">
+            <div className="text-[9px] font-semibold text-stone-600">{scaleBar.label}</div>
+            <div className="border-b-2 border-l-2 border-r-2 border-stone-600" style={{ width: `${scaleBar.widthPx}px`, height: '4px' }} />
+          </div>
+        ) : null}
 
         {/* Anchored Mini Popover on Clicked Marker with 3 Emoji Actions */}
         {selectedPlace && selectedPointScreen && selectedPointScreen.x >= -60 && selectedPointScreen.x <= containerSize.width + 60 && selectedPointScreen.y >= -60 && selectedPointScreen.y <= containerSize.height + 60 && (
