@@ -605,7 +605,10 @@ export function evaluatePlannerDay(
   let total_activity_minutes = 0;
 
   for (const place of dayPlaces) {
-    const col = checkOpeningHoursCollision(place.open_hours, date, place.preferred_window);
+    const stop = timeline.items.find(
+      (item): item is PlannerTimelineStopItem => item.type === 'stop' && (item.visit_id === place.visit_id || item.place_id === place.place_id),
+    );
+    const col = checkOpeningHoursCollision(place.open_hours, date, place.preferred_window, stop?.start, stop?.end);
     if (col.isCollision) {
       opening_hours_warnings.push({
         visit_id: place.visit_id,
@@ -793,6 +796,10 @@ export function evaluatePlannerScheduleProposal(
       scheduledVisit.open_hours,
       scheduledVisit.scheduled_date,
       scheduledVisit.preferred_window,
+      scheduledVisit.scheduled_start,
+      scheduledVisit.scheduled_start && scheduledVisit.duration_minutes
+        ? getScheduledEndTime(scheduledVisit.scheduled_start, scheduledVisit.duration_minutes) ?? undefined
+        : undefined,
     );
     if (hours.isCollision) {
       issues.push({

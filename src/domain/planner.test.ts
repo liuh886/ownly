@@ -1162,6 +1162,35 @@ describe('checkOpeningHoursCollision & checkDayScheduleCollisions', () => {
     expect(okCol.isCollision).toBe(false);
   });
 
+  it('detects precise scheduled-time collision against daily range', () => {
+    const beforeOpen = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '09:00', '09:45');
+    expect(beforeOpen.isCollision).toBe(true);
+    expect(beforeOpen.reason).toContain('闭门羹');
+
+    const inside = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '11:00', '12:00');
+    expect(inside.isCollision).toBe(false);
+
+    const afterClose = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '19:00');
+    expect(afterClose.isCollision).toBe(true);
+
+    const overnightOk = checkOpeningHoursCollision('18:00-02:00', '2026-10-20', undefined, '20:00', '21:00');
+    expect(overnightOk.isCollision).toBe(false);
+
+    const overnightBad = checkOpeningHoursCollision('18:00-02:00', '2026-10-20', undefined, '10:00', '11:00');
+    expect(overnightBad.isCollision).toBe(true);
+  });
+
+  it('fails open on day-specific or unparseable hours for precise check', () => {
+    const daySpecific = checkOpeningHoursCollision('Monday: Closed; Tue-Sun: 10:00-18:00', '2026-10-21', undefined, '08:00');
+    expect(daySpecific.isCollision).toBe(false);
+
+    const freeText = checkOpeningHoursCollision('朝9時から夜まで営業', '2026-10-20', undefined, '08:00');
+    expect(freeText.isCollision).toBe(false);
+
+    const badClock = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, 'not-a-time');
+    expect(badClock.isCollision).toBe(false);
+  });
+
   it('detects day overload and long distance transit from Visit projections', () => {
     const p1 = scheduledPlace(place('p1', { duration_minutes: 360, coordinates: { lat: 35.6895, lng: 139.6917 } }), '2026-10-20', 0);
     const p2 = scheduledPlace(place('p2', { duration_minutes: 300, coordinates: { lat: 35.4437, lng: 139.6380 } }), '2026-10-20', 1);

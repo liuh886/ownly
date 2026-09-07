@@ -928,10 +928,37 @@ export function inferSourceProvider(url: string): PlannerPlaceSourceProvider {
   return 'other';
 }
 
+function plannerClockToMinutesSafe(value?: string | null): number | null {
+  if (!value) return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function formatClockMinutes(minutes: number): string {
+  const v = ((minutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  return `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`;
+}
+
+// Parses a single unambiguous daily range like "10:00-18:00" / "09:00 ~ 22:00".
+// Returns null for day-specific / multi-range / 24h text to avoid false positives.
+function parseDailyOpeningRange(openHours: string): { open: number; close: number } | null {
+  if (!openHours || /24小时|24\s*hours|全天|24\/7/i.test(openHours)) return null;
+  if (/mon|tue|wed|thu|fri|sat|sun|周[一二三四五六日天]|星期[一二三四五六日天]|月曜|火曜|水曜|木曜|金曜|土曜|日曜/i.test(openHours)) return null;
+  const matches = [...openHours.matchAll(/([01]?\d|2[0-3]):([0-5]\d)\s*(?:~|-|–|—|至|到)\s*([01]?\d|2[0-3]):([0-5]\d)/g)];
+  if (matches.length !== 1) return null;
+  const open = Number(matches[0][1]) * 60 + Number(matches[0][2]);
+  const close = Number(matches[0][3]) * 60 + Number(matches[0][4]);
+  if (open === close) return null;
+  return { open, close };
+}
+
 export function checkOpeningHoursCollision(
   openHours?: string,
   scheduledDate?: string,
   preferredWindow?: string,
+  scheduledStart?: string,
+  scheduledEnd?: string,
 ): { isCollision: boolean; reason?: string } {
   if (!openHours) return { isCollision: false };
 
@@ -993,6 +1020,31 @@ export function checkOpeningHoursCollision(
     }
   }
 
+  // 3. Precise check: effective timeline time vs parseable daily range.
+  // Fail-open: any unparseable hours text yields no collision here.
+  if (scheduledStart) {
+    const startMin = plannerClockToMinutesSafe(scheduledStart);
+    const range = startMin !== null ? parseDailyOpeningRange(openHours) : null;
+    if (startMin !== null && range) {
+      const endMin = scheduledEnd ? plannerClockToMinutesSafe(scheduledEnd) : null;
+      const inside = (t: number): boolean =>
+        range.close > range.open
+          ? t >= range.open && t < range.close
+          : t >= range.open || t < range.close;
+      const startInside = inside(startMin);
+      // Sample just before visit end so back-to-back bookings at close time don't false-alarm.
+      const endInside = endMin !== null && endMin !== startMin ? inside((endMin + 24 * 60 - 1) % (24 * 60)) : false;
+      if (!startInside && !endInside) {
+        const rangeLabel = `${formatClockMinutes(range.open)}-${formatClockMinutes(range.close)}`;
+        const visitLabel = endMin !== null && endMin !== startMin ? `${scheduledStart.trim()}-${scheduledEnd!.trim()}` : scheduledStart.trim();
+        return {
+          isCollision: true,
+          reason: `预计 ${visitLabel} 到访，营业时间 ${rangeLabel}，可能吃闭门羹`,
+        };
+      }
+    }
+  }
+
   return { isCollision: false };
 }
 
@@ -1015,7 +1067,7 @@ export function checkDayScheduleCollisions(
   let totalDurationMinutes = 0;
 
   scheduled.forEach((p) => {
-    const col = checkOpeningHoursCollision(p.open_hours, date, p.preferred_window);
+    const col = checkOpeningHoursCollision(p.open_hours, date, p.preferred_window, p.scheduled_start);
     if (col.isCollision) {
       placeCollisions[p.id] = col;
       hasCollision = true;

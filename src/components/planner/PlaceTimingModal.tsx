@@ -88,9 +88,15 @@ export function PlaceTimingModal({
 
   const hoursWarning = useMemo(() => {
     if (!place?.open_hours || !place.scheduled_date) return null;
-    const result = checkOpeningHoursCollision(place.open_hours, place.scheduled_date, place.preferred_window);
+    const result = checkOpeningHoursCollision(
+      place.open_hours,
+      place.scheduled_date,
+      place.preferred_window,
+      startTime || place.scheduled_start,
+      computedEndTime ?? undefined,
+    );
     return result.isCollision ? result.reason : null;
-  }, [place]);
+  }, [computedEndTime, place, startTime]);
 
   const overlapWarning = useMemo(() => {
     if (!place?.scheduled_date || !startTime || !normalizedDuration) return null;
