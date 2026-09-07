@@ -19,6 +19,7 @@ import {
   PLANNER_TRAVEL_MODE_CONFIG,
 } from '@/domain/planner';
 import type { PlannerExecutionTransitionItem, PlannerTimelineStopItem } from '@/domain/planner-schedule';
+import { PLANNER_LOAD_LEVEL_LABEL, type PlannerDayLoad } from '@/domain/planner-schedule';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
@@ -208,8 +209,92 @@ function TravelModeSwitchPopover({
   );
 }
 
-export function PlannerHome({ disabled }: PlannerHomeProps) {
-  const ctrl = usePlannerController({ disabled });
+function DayLoadBadge({ zh, load }: { zh: boolean; load: PlannerDayLoad }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: MouseEvent | TouchEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open ]);
+
+  const levelStyle = load.level === 'heavy'
+    ? 'bg-rose-50 text-rose-800 ring-rose-200'
+    : load.level === 'tight'
+      ? 'bg-amber-50 text-amber-800 ring-amber-200'
+      : load.level === 'moderate'
+        ? 'bg-sky-50 text-sky-800 ring-sky-200'
+        : 'bg-stone-100 text-stone-600 ring-stone-200';
+  const rows: Array<{ label: string; text: string; ratio: number }> = [
+    { label: zh ? '游览' : 'Stops', text: `${Math.round(load.activity_minutes)} min`, ratio: Math.min(1, load.activity_minutes / 600) },
+    { label: zh ? '交通' : 'Transit', text: `${Math.round(load.transit_minutes)} min`, ratio: Math.min(1, load.transit_minutes / 180) },
+    { label: zh ? '站点' : 'Places', text: `${load.stop_count}`, ratio: Math.min(1, load.stop_count / 8) },
+    {
+      label: zh ? '跨度' : 'Span',
+      text: load.span_minutes !== null ? `${Math.floor(load.span_minutes / 60)}h${load.span_minutes % 60 > 0 ? `${load.span_minutes % 60}m` : ''}` : '—',
+      ratio: load.span_minutes !== null ? Math.min(1, load.span_minutes / 720) : 0,
+    },
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 transition hover:brightness-95 ${levelStyle}`}
+        title={zh ? '点击查看负荷构成' : 'Show load breakdown'}
+      >
+        <span>📊 {zh ? '负荷' : 'Load'} {load.score} · {PLANNER_LOAD_LEVEL_LABEL[load.level]}</span>
+        <span className="text-[8.5px] opacity-70">▾</span>
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-xl border border-stone-200 bg-white/95 p-2.5 shadow-xl backdrop-blur-md">
+          <div className="px-1 pb-1.5 text-[9.5px] font-bold uppercase tracking-wider text-stone-400">
+            {zh ? '负荷构成' : 'Load breakdown'}
+          </div>
+          <div className="space-y-1.5">
+            {rows.map((row) => (
+              <div key={row.label} className="flex items-center gap-2 text-[11px]">
+                <span className="w-8 shrink-0 font-semibold text-stone-500">{row.label}</span>
+                <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-100">
+                  <div className="h-full rounded-full bg-stone-500" style={{ width: `${Math.round(row.ratio * 100)}%` }} />
+                </div>
+                <span className="w-14 shrink-0 text-right font-mono text-[10px] text-stone-600">{row.text}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 px-1 pt-0.5 text-[10.5px] text-stone-600">
+              <span>{load.lunch_ok ? '✅' : '⚠️'} {zh ? '午餐' : 'Lunch'}</span>
+              <span>{load.dinner_ok ? '✅' : '⚠️'} {zh ? '晚餐' : 'Dinner'}</span>
+              {load.longest_stretch_minutes !== null ? (
+                <span className="ml-auto font-mono text-[10px] text-stone-500">
+                  {zh ? '最长连轴' : 'Stretch'} {Math.floor(load.longest_stretch_minutes / 60)}h{load.longest_stretch_minutes % 60 > 0 ? `${load.longest_stretch_minutes % 60}m` : ''}
+                </span>
+              ) : null}
+            </div>
+            {load.suggestion ? (
+              <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-[10.5px] leading-relaxed text-amber-900 ring-1 ring-amber-200">
+                💡 {load.suggestion}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = usePlannerController({ disabled });
 
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
@@ -751,6 +836,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                       : (zh ? '需注意' : 'Warning')}
                 </span>
               ) : null}
+              <DayLoadBadge zh={zh} load={dayAssessment.load} />
             </div>
             {activeDayWeather ? (
               <span
