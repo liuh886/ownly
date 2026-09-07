@@ -27,6 +27,7 @@ import { PlannerBudgetLedger } from './PlannerBudgetLedger';
 import { ImportCandidatesModal } from './ImportCandidatesModal';
 import { PlaceTimingModal } from './PlaceTimingModal';
 import { CreateTripModal } from './CreateTripModal';
+import { extractTripSharePayload } from '@/domain/trip-share-link';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
 import { OptimizeOrderModal } from './OptimizeOrderModal';
 import { DayLoadBreakdown, DayRiskList, DayRiskSummary } from './PlannerDayStatsPanel';
@@ -895,6 +896,25 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [optimizeBusy, setOptimizeBusy] = useState(false);
   const [optimizeComputation, setOptimizeComputation] = useState<PlannerDayOptimizationComputation | null>(null);
 
+  // Incoming trip share link: offer it once per hash value by opening the
+  // manage-trips modal on its import tab (the modal decodes + imports).
+  const [shareHash, setShareHash] = useState<string | null>(null);
+  const offeredShareHashRef = useRef<string | null>(null);
+  useEffect(() => {
+    const syncShareHash = () => {
+      if (typeof window === 'undefined') return;
+      const payload = extractTripSharePayload(window.location.hash);
+      if (payload && offeredShareHashRef.current !== payload) {
+        offeredShareHashRef.current = payload;
+        setShareHash(payload);
+        setIsCreateTripOpen(true);
+      }
+    };
+    syncShareHash();
+    window.addEventListener('hashchange', syncShareHash);
+    return () => window.removeEventListener('hashchange', syncShareHash);
+  }, []);
+
   const {
     language,
     zh,
@@ -1274,6 +1294,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           onDeleteTrip={handleDeleteTrip}
           language={language}
           disabled={disabled}
+          incomingShareHash={shareHash}
+          onDismissShare={() => setShareHash(null)}
         />
       </section>
     );
@@ -2564,6 +2586,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         onDeleteTrip={handleDeleteTrip}
         language={language}
         disabled={disabled}
+        incomingShareHash={shareHash}
+        onDismissShare={() => setShareHash(null)}
       />
 
       {selectedTrip ? (

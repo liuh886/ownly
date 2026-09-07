@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
 import { applyTripFormPatch } from '../../domain/planner';
 import {
@@ -8,7 +8,19 @@ import {
   tripBundleFileName,
   type OwnlyTripBundle,
 } from '../../domain/trip-bundle';
+import {
+  buildTripShareUrl,
+  clearTripShareHash,
+  OWNLY_TRIP_SHARE_HASH_KEY,
+  parseTripShareHash,
+} from '../../domain/trip-share-link';
 import { plannerRepository } from '../../services/PlannerRepository';
+
+/**
+ * Chat apps truncate very long URLs. Above this length a share link is likely
+ * to arrive broken, so we refuse to copy it and point at file export instead.
+ */
+export const TRIP_SHARE_URL_LENGTH_LIMIT = 8000;
 
 type TabMode = 'manage' | 'create' | 'import';
 
@@ -21,6 +33,9 @@ interface CreateTripModalProps {
   trips?: PlannerTrip[];
   language?: 'zh' | 'en';
   disabled?: boolean;
+  /** Raw `#ownly-trip=` payload from the location hash; decoded into the import tab. */
+  incomingShareHash?: string | null;
+  onDismissShare?: () => void;
 }
 
 const COMMON_CURRENCIES = ['THB', 'JPY', 'CNY', 'USD', 'EUR', 'GBP', 'SGD', 'MYR', 'KRW', 'TWD', 'HKD', 'AUD'];
@@ -34,6 +49,8 @@ export function CreateTripModal({
   trips = [],
   language = 'zh',
   disabled = false,
+  incomingShareHash = null,
+  onDismissShare,
 }: CreateTripModalProps) {
   const zh = language === 'zh';
   const [tab, setTab] = useState<TabMode>('manage');
@@ -53,6 +70,26 @@ export function CreateTripModal({
   // Import state
   const [rawImport, setRawImport] = useState('');
   const [importNotice, setImportNotice] = useState('');
+  const [sharedBundle, setSharedBundle] = useState<OwnlyTripBundle | null>(null);
+  const [sharedError, setSharedError] = useState('');
+  const decodedShareHashRef = useRef<string | null>(null);
+
+  // A share link in the URL pre-fills the import tab. Decoded once per hash;
+  // a decoded bundle takes precedence over the pasted textarea below.
+  useEffect(() => {
+    if (!open || !incomingShareHash || decodedShareHashRef.current === incomingShareHash) return;
+    decodedShareHashRef.current = incomingShareHash;
+    setTab('import');
+    setSharedError('');
+    void parseTripShareHash(`#${OWNLY_TRIP_SHARE_HASH_KEY}=${incomingShareHash}`)
+      .then((bundle) => {
+        if (bundle) setSharedBundle(bundle);
+        else setSharedError(zh ? '分享链接中没有行程数据。' : 'The share link carries no trip data.');
+      })
+      .catch((err) => {
+        setSharedError(err instanceof Error ? err.message : String(err));
+      });
+  }, [open, incomingShareHash, zh]);
 
   const importPreview = useMemo(() => {
     if (!rawImport.trim()) return { bundle: null as OwnlyTripBundle | null, error: '' };
@@ -138,10 +175,13 @@ export function CreateTripModal({
         plannerRepository.listLegs(),
       ]);
       const bundle = createShareableTripBundle(trip, allPlaces, allVisits, allLegs);
-      const json = JSON.stringify(bundle);
-      const b64 = typeof Buffer !== 'undefined' ? Buffer.from(json).toString('base64') : btoa(unescape(encodeURIComponent(json)));
-      const token = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      const url = `${window.location.origin}${window.location.pathname}#tripShare=${token}`;
+      const url = await buildTripShareUrl(bundle, window.location.href);
+      if (url.length > TRIP_SHARE_URL_LENGTH_LIMIT) {
+        setError(zh
+          ? `「${trip.title}」内容较多，分享链接过长（${(url.length / 1024).toFixed(1)}KB），在聊天软件中容易被截断。请改用 📤 导出文件分享，对方在导入页粘贴即可。`
+          : `"${trip.title}" is too large for a share link (${(url.length / 1024).toFixed(1)}KB) and may be truncated in chat apps. Export the file instead.`);
+        return;
+      }
       await navigator.clipboard.writeText(url);
       setImportNotice(zh ? `分享链接已复制「${trip.title}」` : `Share link copied for "${trip.title}"`);
     } catch (err) {
@@ -197,11 +237,21 @@ export function CreateTripModal({
     }
   };
 
+  const dismissShare = () => {
+    setSharedBundle(null);
+    setSharedError('');
+    decodedShareHashRef.current = null;
+    clearTripShareHash();
+    onDismissShare?.();
+  };
+
   const handleImport = async () => {
     setImportNotice('');
     setError(null);
-    if (!importPreview.bundle) {
-      setError(importPreview.error || (zh ? '请先粘贴有效的 Trip Bundle。' : 'Paste a valid Trip Bundle first.'));
+    // A decoded share link takes precedence over the pasted textarea.
+    const bundle = sharedBundle ?? importPreview.bundle;
+    if (!bundle) {
+      setError(importPreview.error || sharedError || (zh ? '请先粘贴有效的 Trip Bundle。' : 'Paste a valid Trip Bundle first.'));
       return;
     }
     if (disabled) {
@@ -210,7 +260,6 @@ export function CreateTripModal({
     }
     setBusy(true);
     try {
-      const bundle = importPreview.bundle;
       const copy = instantiateTripBundle(bundle);
       const report = await plannerRepository.importBundle(copy);
       if (report.failed.length > 0) {
@@ -225,6 +274,7 @@ export function CreateTripModal({
         setImportNotice(zh ? `✓ 已导入「${copy.trip.title}」；费用账本为空。` : `✓ Imported "${copy.trip.title}"; ledger is empty.`);
       }
       setRawImport('');
+      if (sharedBundle) dismissShare();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -503,6 +553,36 @@ export function CreateTripModal({
                 className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 p-3 font-mono text-[10px] leading-4 text-stone-700 focus:border-stone-950 focus:outline-hidden"
               />
 
+              {/* Shared link card */}
+              {sharedBundle ? (
+                <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-bold text-stone-900">🔗 {sharedBundle.trip.title}</div>
+                    <button
+                      type="button"
+                      onClick={dismissShare}
+                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-400 hover:bg-sky-100 hover:text-stone-600"
+                    >
+                      {zh ? '忽略链接' : 'Dismiss'}
+                    </button>
+                  </div>
+                  <div className="mt-1 text-[11px] text-sky-900">
+                    {zh ? '来自分享链接，可直接导入为你的行程。' : 'Shared via link; import it as your own trip.'}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                    <span className="rounded-full bg-white px-2 py-1">📍 {sharedBundle.places.length}</span>
+                    <span className="rounded-full bg-white px-2 py-1">📅 {sharedBundle.visits.length}</span>
+                    <span className="rounded-full bg-white px-2 py-1">🛣️ {sharedBundle.legs.length}</span>
+                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">💸 0</span>
+                  </div>
+                </div>
+              ) : null}
+              {sharedError && !sharedBundle ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+                  ⚠️ {sharedError}
+                </div>
+              ) : null}
+
               {/* Preview */}
               {rawImport ? (
                 importPreview.bundle ? (
@@ -533,7 +613,7 @@ export function CreateTripModal({
                 </button>
                 <button
                   type="button"
-                  disabled={busy || !importPreview.bundle || disabled}
+                  disabled={busy || (!sharedBundle && !importPreview.bundle) || disabled}
                   onClick={() => void handleImport()}
                   className="rounded-lg bg-emerald-700 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50 transition"
                 >
