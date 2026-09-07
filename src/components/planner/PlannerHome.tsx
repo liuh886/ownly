@@ -361,6 +361,7 @@ function ResearchPoolSection(props: ResearchPoolSectionProps) {
     disabled,
     className = 'mt-4 w-full overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm flex flex-col transition-all',
   } = props;
+  const [tidyMenuOpen, setTidyMenuOpen] = useState(false);
   return (
     <>
     {/* Horizontal Full-Width Candidate Research Pool below Day Skeleton and Map Workspace */}
@@ -513,40 +514,59 @@ function ResearchPoolSection(props: ResearchPoolSectionProps) {
                 </span>
               </h3>
               <div className="flex items-center gap-1.5">
-                {visibleSuspectedPairs.length > 0 ? (
+                <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setIsSuspectedModalOpen(true)}
-                    className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition flex items-center gap-1 shadow-2xs"
-                    title={zh ? '查看并合并疑似重复的同类地点' : 'Review and merge suspected duplicate places'}
+                    onClick={() => setTidyMenuOpen((prev) => !prev)}
+                    className={`rounded-md border px-2 py-1 text-[11px] font-medium transition flex items-center gap-1 shadow-2xs ${
+                      isMultiSelectMode
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-bold'
+                        : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
+                    }`}
+                    title={zh ? '整理：多选、去重与疑似合并' : 'Tidy up: multi-select, dedupe and merge'}
+                    aria-expanded={tidyMenuOpen}
                   >
-                    ✨ {zh ? `合并疑似同类 (${visibleSuspectedPairs.length})` : `Suspected Duplicates (${visibleSuspectedPairs.length})`}
+                    🧹 {zh ? '整理' : 'Tidy'} ▾
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={activeFilter === 'dropped'}
-                  onClick={() => {
-                    setIsMultiSelectMode((prev) => !prev);
-                    setSelectedCandidateIds(new Set());
-                  }}
-                  className={`rounded-md border px-2 py-1 text-[11px] font-medium transition flex items-center gap-1 shadow-2xs disabled:cursor-not-allowed disabled:opacity-35 ${
-                    isMultiSelectMode
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-bold'
-                      : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
-                  }`}
-                  title={zh ? '开启批量选择与删除模式' : 'Toggle multi-select mode'}
-                >
-                  ☑️ {isMultiSelectMode ? (zh ? '退出多选' : 'Exit Select') : (zh ? '批量多选' : 'Select')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDeduplicatePlaces()}
-                  className="rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition flex items-center gap-1 shadow-2xs"
-                  title={zh ? '扫描并清理当前行程的重复地点' : 'Scan and merge duplicate places'}
-                >
-                  🧹 {zh ? '一键去重' : 'Deduplicate'}
-                </button>
+                  {tidyMenuOpen ? (
+                    <>
+                      <div className="fixed inset-0 z-40 cursor-default" onClick={() => setTidyMenuOpen(false)} />
+                      <div className="absolute right-0 z-50 mt-1 w-48 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-xl">
+                        <button
+                          type="button"
+                          disabled={activeFilter === 'dropped'}
+                          onClick={() => {
+                            setIsMultiSelectMode((prev) => !prev);
+                            setSelectedCandidateIds(new Set());
+                            setTidyMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-35"
+                          title={zh ? '开启批量选择与删除模式' : 'Toggle multi-select mode'}
+                        >
+                          ☑️ {isMultiSelectMode ? (zh ? '退出多选' : 'Exit Select') : (zh ? '批量多选' : 'Select')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setTidyMenuOpen(false); void handleDeduplicatePlaces(); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '扫描并清理当前行程的重复地点' : 'Scan and merge duplicate places'}
+                        >
+                          🧹 {zh ? '一键去重' : 'Deduplicate'}
+                        </button>
+                        {visibleSuspectedPairs.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => { setTidyMenuOpen(false); setIsSuspectedModalOpen(true); }}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-bold text-amber-900 hover:bg-amber-50"
+                            title={zh ? '查看并合并疑似重复的同类地点' : 'Review and merge suspected duplicate places'}
+                          >
+                            ✨ {zh ? `合并疑似同类 (${visibleSuspectedPairs.length})` : `Suspected Duplicates (${visibleSuspectedPairs.length})`}
+                          </button>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
 
@@ -710,21 +730,21 @@ function ResearchPoolSection(props: ResearchPoolSectionProps) {
                             {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
                           </span>
                         ) : null}
-                        {place.source_category ? (
-                          <span className="rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.2 text-[9.5px] font-medium text-sky-800">
-                            {place.source_category}
-                          </span>
-                        ) : null}
+                          {place.source_category ? (
+                            <span className="rounded-full border border-stone-200 bg-stone-50 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
+                              {place.source_category}
+                            </span>
+                          ) : null}
                         {getDisplayTags(place.tags).map((tag) => (
                           <span key={tag} className="rounded-full border border-stone-200 bg-stone-50 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
                             🏷️ {tag}
                           </span>
                         ))}
-                        {place.signals?.map((signal) => (
-                          <span key={signal} className="rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.2 text-[9.5px] font-medium text-teal-800">
-                            ✅ {signal}
-                          </span>
-                        ))}
+                          {place.signals?.map((signal) => (
+                            <span key={signal} className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.2 text-[9.5px] font-medium text-emerald-800">
+                              ✅ {signal}
+                            </span>
+                          ))}
                         {place.risks?.map((risk) => (
                           <span key={risk} className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.2 text-[9.5px] font-medium text-amber-800">
                             ⚠️ {risk}
@@ -887,6 +907,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [poolTargetDate, setPoolTargetDate] = useState('');
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -1640,22 +1661,48 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 >
                   🚶
                 </a>
-                <button
-                  type="button"
-                  onClick={downloadKML}
-                  className="hidden sm:inline-flex rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
-                  title={zh ? '导出 KML (用于导入 Google 我的地图)' : 'Export KML for Google My Maps'}
-                >
-                  📍 KML
-                </button>
-                <button
-                  type="button"
-                  onClick={downloadCSV}
-                  className="hidden sm:inline-flex rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
-                  title={zh ? '导出 CSV (用于导入 Google 表格或自定义地图)' : 'Export CSV'}
-                >
-                  📊 CSV
-                </button>
+                <div className="relative hidden sm:block">
+                  <button
+                    type="button"
+                    onClick={() => setExportMenuOpen((prev) => !prev)}
+                    className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                    title={zh ? '导出存档（KML / CSV / 文本）' : 'Export archive (KML / CSV / text)'}
+                    aria-expanded={exportMenuOpen}
+                  >
+                    📦 {zh ? '导出' : 'Export'} ▾
+                  </button>
+                  {exportMenuOpen ? (
+                    <>
+                      <div className="fixed inset-0 z-40 cursor-default" onClick={() => setExportMenuOpen(false)} />
+                      <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-xl">
+                        <button
+                          type="button"
+                          onClick={() => { setExportMenuOpen(false); downloadKML(); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '导出 KML (用于导入 Google 我的地图)' : 'Export KML for Google My Maps'}
+                        >
+                          📍 KML
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setExportMenuOpen(false); downloadCSV(); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '导出 CSV (用于导入 Google 表格或自定义地图)' : 'Export CSV'}
+                        >
+                          📊 CSV
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setExportMenuOpen(false); void copyItineraryText(); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '复制路线文字清单' : 'Copy itinerary text'}
+                        >
+                          📋 {zh ? '复制文本' : 'Copy text'}
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   onClick={() => setIsCalendarModalOpen(true)}
@@ -1663,14 +1710,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                   title={zh ? '日历导出与订阅 (.ics / Feed)' : 'Calendar (.ics / Feed)'}
                 >
                   📅 {zh ? '日历' : 'Calendar'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void copyItineraryText()}
-                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
-                  title={zh ? '复制路线文字清单' : 'Copy itinerary text'}
-                >
-                  📋
                 </button>
               </div>
             ) : null}
@@ -1894,8 +1933,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                                 })()}
                               </div>
 
-                              {/* Quick Action Emoji Buttons */}
-                              <div className="flex items-center gap-0.5 shrink-0">
+                              {/* Quick Action Emoji Buttons (hover/focus-revealed on fine pointers) */}
+                              <div className="flex items-center gap-0.5 shrink-0 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
                                 {/* 交通 / 导航 */}
                                 <a
                                   href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.address || place.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
@@ -1977,8 +2016,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                               </div>
                             </div>
 
-                            {/* Bottom-Right: Grouped 4 Actions */}
-                            <div className="inline-flex items-center rounded border border-stone-200 bg-stone-50/90 p-0.5 shadow-2xs shrink-0">
+                            {/* Bottom-Right: Grouped 4 Actions (hover/focus-revealed on fine pointers) */}
+                            <div className="inline-flex items-center rounded border border-stone-200 bg-stone-50/90 p-0.5 shadow-2xs shrink-0 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
                               <button
                                 type="button"
                                 aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
@@ -2136,7 +2175,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                               return (
                                 <div key={item.id} className="relative inline-flex flex-wrap items-center gap-2">
                                   {isCleared ? (
-                                    <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-dashed border-stone-300 bg-stone-50 px-2.5 py-0.5 text-[10.5px] font-medium text-stone-500 shadow-2xs">
+                                    <div className="inline-flex flex-wrap items-center gap-2 px-1 py-0.5 text-[10.5px] text-stone-400">
                                       <button
                                         type="button"
                                         onClick={(e) => {
@@ -2153,7 +2192,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                                         href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="rounded-full bg-stone-200/80 hover:bg-stone-300 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-700 transition"
+                                        className="text-[9.5px] text-stone-400 hover:text-stone-700 underline underline-offset-2 transition"
                                       >
                                         Google 导航 ↗
                                       </a>
