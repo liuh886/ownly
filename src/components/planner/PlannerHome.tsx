@@ -736,34 +736,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 <h2 className="text-sm font-semibold text-stone-900">{zh ? '执行时间线' : 'Execution Timeline'}</h2>
                 <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
               </div>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                dayAssessment.status === 'feasible'
-                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                  : dayAssessment.status === 'conflict'
-                    ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
-                    : dayAssessment.status === 'warning'
-                      ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
-                      : 'bg-stone-100 text-stone-700 ring-1 ring-stone-200'
-              }`}>
-                {dayAssessment.status === 'feasible'
-                  ? (zh ? '可执行' : 'Feasible')
-                  : dayAssessment.status === 'conflict'
-                    ? (zh ? '有冲突' : 'Conflict')
-                    : dayAssessment.status === 'warning'
-                      ? (zh ? '需注意' : 'Warning')
-                      : (zh ? '待补信息' : 'Unknown')}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  document.getElementById('research-pool-section')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="ml-1 inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 transition shadow-2xs"
-                title={zh ? '跳转至下方候选池' : 'Jump to Research Pool below'}
-              >
-                <span>🗂️ {zh ? '候选池' : 'Pool'}</span>
-                <span className="rounded-full bg-stone-200 px-1.5 py-0 text-[9.5px] font-bold text-stone-700">{pendingCandidates.length}</span>
-              </button>
+              {dayAssessment.status !== 'unknown' ? (
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  dayAssessment.status === 'feasible'
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                    : dayAssessment.status === 'conflict'
+                      ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
+                      : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                }`}>
+                  {dayAssessment.status === 'feasible'
+                    ? (zh ? '可执行' : 'Feasible')
+                    : dayAssessment.status === 'conflict'
+                      ? (zh ? '有冲突' : 'Conflict')
+                      : (zh ? '需注意' : 'Warning')}
+                </span>
+              ) : null}
             </div>
             {activeDayWeather ? (
               <span
@@ -1333,7 +1320,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                                         className="inline-flex items-center gap-1 hover:text-stone-800 hover:underline cursor-pointer transition font-medium"
                                         title={zh ? '当前无需交通时间预估，点击可恢复或切换' : 'No travel estimate. Click to switch or restore'}
                                       >
-                                        <span>🚫 {zh ? '无需交通预估' : 'No commute estimate'}</span>
+                                        <span>🚫 {zh ? '无预估' : 'No est'}</span>
                                         <span className="text-[9px] opacity-70">▾</span>
                                       </button>
                                       <a
