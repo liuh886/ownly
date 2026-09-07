@@ -342,6 +342,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [poolTargetDate, setPoolTargetDate] = useState('');
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -2221,11 +2222,29 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                             </button>
                           ) : (
                             <>
+                              {tripDates.length > 1 ? (
+                                <select
+                                  value={poolTargetDate || activeDate}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    setPoolTargetDate(e.target.value);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-6 max-w-20 rounded-md border border-stone-200 bg-white px-1 text-[10px] font-semibold text-stone-600 focus:border-stone-400 focus:outline-hidden"
+                                  title={zh ? '选择要排入的日期（触屏拖拽不可用时用此方式）' : 'Choose target day'}
+                                >
+                                  {tripDates.map((date, index) => (
+                                    <option key={date} value={date}>
+                                      D{index + 1}·{formatDay(date, language)}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  void schedulePlace(place.id);
+                                  void schedulePlace(place.id, poolTargetDate || activeDate);
                                 }}
                                 className={`flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold transition shadow-2xs ${
                                   (visitCountByPlaceId.get(place.id) || 0) > 0
@@ -2234,8 +2253,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                                 }`}
                                 title={
                                   (visitCountByPlaceId.get(place.id) || 0) > 0
-                                    ? (zh ? `已排入行程（已排 ${visitCountByPlaceId.get(place.id)} 次，点击可再次排入当天）` : `Already scheduled (${visitCountByPlaceId.get(place.id)}x, click to add again)`)
-                                    : (zh ? '直接排入当天日程' : 'Schedule to active day')
+                                    ? (zh ? `已排入行程（已排 ${visitCountByPlaceId.get(place.id)} 次，点击可再次排入所选日期）` : `Already scheduled (${visitCountByPlaceId.get(place.id)}x, click to add again)`)
+                                    : (zh ? '排入所选日期' : 'Schedule to selected day')
                                 }
                               >
                                 +
