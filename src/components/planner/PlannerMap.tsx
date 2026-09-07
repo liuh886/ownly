@@ -806,6 +806,7 @@ export function PlannerMap({
             }}
             className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-xs font-bold text-stone-800 shadow-sm hover:bg-stone-50"
             title={zh ? '放大' : 'Zoom In'}
+            aria-label={zh ? '放大' : 'Zoom In'}
           >
             +
           </button>
@@ -817,6 +818,7 @@ export function PlannerMap({
             }}
             className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-xs font-bold text-stone-800 shadow-sm hover:bg-stone-50"
             title={zh ? '缩小' : 'Zoom Out'}
+            aria-label={zh ? '缩小' : 'Zoom Out'}
           >
             −
           </button>
@@ -825,6 +827,7 @@ export function PlannerMap({
             onClick={fitBounds}
             className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-xs font-bold text-stone-800 shadow-sm hover:bg-stone-50"
             title={zh ? '视野居中所有点' : 'Fit All Points'}
+            aria-label={zh ? '视野居中所有点' : 'Fit All Points'}
           >
             ⊙
           </button>
