@@ -20,6 +20,7 @@ import {
 } from '@/domain/planner';
 import type { PlannerExecutionTransitionItem, PlannerTimelineStopItem } from '@/domain/planner-schedule';
 import { PLANNER_LOAD_LEVEL_LABEL, type PlannerDayLoad } from '@/domain/planner-schedule';
+import type { PlannerDayOptimizationComputation } from '@/domain/planner-optimization';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
@@ -28,6 +29,7 @@ import { ImportCandidatesModal } from './ImportCandidatesModal';
 import { PlaceTimingModal } from './PlaceTimingModal';
 import { CreateTripModal } from './CreateTripModal';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
+import { OptimizeOrderModal } from './OptimizeOrderModal';
 import { usePlannerController } from './usePlannerController';
 
 interface PlannerHomeProps {
@@ -353,6 +355,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [isSwapDaysModalOpen, setIsSwapDaysModalOpen] = useState(false);
   const [swapTargetDate, setSwapTargetDate] = useState<string>('');
   const [budgetInitialPlaceId, setBudgetInitialPlaceId] = useState<string | null>(null);
+  const [optimizeBusy, setOptimizeBusy] = useState(false);
+  const [optimizeComputation, setOptimizeComputation] = useState<PlannerDayOptimizationComputation | null>(null);
 
   const {
     language,
@@ -461,6 +465,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleRotateFeed,
     handleDisableFeed,
     copyItineraryText,
+    optimizeDayOrder,
+    applyDayOptimization,
   } = ctrl;
 
   // Multi-day keyboard navigation: [ / ] or ArrowLeft / ArrowRight to switch days
@@ -486,6 +492,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         isCalendarModalOpen ||
         isSuspectedModalOpen ||
         isMapExpanded ||
+        optimizeComputation ||
         confirmRequest
       ) {
         return;
@@ -520,8 +527,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     isCalendarModalOpen,
     isSuspectedModalOpen,
     isMapExpanded,
+    optimizeComputation,
     confirmRequest,
   ]);
+
+  const runOptimizeOrder = () => {
+    if (optimizeBusy || !selectedTrip) return;
+    setOptimizeBusy(true);
+    void (async () => {
+      try {
+        const computation = await optimizeDayOrder(activeDate);
+        if (computation) setOptimizeComputation(computation);
+      } finally {
+        setOptimizeBusy(false);
+      }
+    })();
+  };
 
   const expensesByPlace = useMemo(() => {
     const map = new Map<string, { total: number; count: number }>();
@@ -948,6 +969,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             ) : null}
             {scheduled.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={optimizeBusy}
+                  onClick={() => void runOptimizeOrder()}
+                  className="hidden sm:inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  title={zh ? '按交通时间优化当天游览顺序 (预览后应用)' : 'Optimize day order by travel time (preview first)'}
+                >
+                  {optimizeBusy ? '⏳' : '✨'} {zh ? '优化顺序' : 'Optimize'}
+                </button>
                 <a
                   href={buildGoogleMapsRouteUrl(scheduled, 'driving')}
                   target="_blank"
@@ -2324,6 +2354,27 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         }}
         language={language}
       />
+
+      {optimizeComputation ? (
+        <OptimizeOrderModal
+          zh={zh}
+          computation={optimizeComputation}
+          busy={optimizeBusy}
+          onClose={() => setOptimizeComputation(null)}
+          onApply={(computation) => {
+            setOptimizeBusy(true);
+            setOptimizeComputation(null);
+            void (async () => {
+              try {
+                await applyDayOptimization(computation);
+              } finally {
+                setOptimizeBusy(false);
+              }
+            })();
+          }}
+          onRecompute={runOptimizeOrder}
+        />
+      ) : null}
 
       <HotelComparisonModal
         key={`hotel-cmp-${activeDate}-${isHotelModalOpen}`}

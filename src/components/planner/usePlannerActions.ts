@@ -9,6 +9,7 @@ import type {
   TripExpenseItem,
 } from '@/domain/planner';
 import type { PlannerScheduledPlace, PlannerTripVisit } from '@/domain/planner-visits';
+import { sortPlannerScheduledPlaces } from '@/domain/planner-visits';
 import {
   calculateDefaultTripLeg,
   exportPlacesToCSV,
@@ -16,6 +17,16 @@ import {
   exportTripToMarkdown,
   plannerTripLegId,
 } from '@/domain/planner';
+import {
+  computeDayOrderOptimization,
+  type OrsMatrixFacts,
+  type PlannerDayOptimizationComputation,
+} from '@/domain/planner-optimization';
+import {
+  fetchOpenRouteServiceMatrix,
+  loadOrsApiKey,
+  openRouteServiceProfile,
+} from '@/lib/openrouteservice';
 import { buildTripCalendarIcs, buildDayCalendarIcs } from '@/domain/calendar-feed';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { calendarFeedService } from '@/services/CalendarFeedService';
@@ -974,6 +985,75 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setNotice(zh ? '已复制当天路线清单至剪贴板！' : 'Copied day itinerary to clipboard!');
   }, [selectedTrip, scheduled, activeDate, zh, setNotice]);
 
+  const optimizeDayOrder = useCallback(
+    async (date: string): Promise<PlannerDayOptimizationComputation | null> => {
+      if (!selectedTrip) return null;
+      const dayStops = sortPlannerScheduledPlaces(scheduledAll.filter((place) => place.scheduled_date === date));
+      if (dayStops.length < 3) {
+        setNotice(zh ? '至少需要 3 个已安排的游览点才能优化顺序。' : 'Need at least 3 scheduled stops to optimize the order.');
+        return null;
+      }
+      const missingCoords = dayStops.filter((place) => !place.coordinates).map((place) => place.title);
+      if (missingCoords.length > 0) {
+        setNotice(zh
+          ? `以下地点缺少坐标，无法估算路线：${missingCoords.join('、')}`
+          : `Missing coordinates, cannot estimate routes: ${missingCoords.join(', ')}`);
+        return null;
+      }
+      const mode: PlannerTravelMode = selectedTrip.transport_mode ?? 'transit';
+      let ors: OrsMatrixFacts | null = null;
+      if (openRouteServiceProfile(mode)) {
+        const apiKey = loadOrsApiKey();
+        if (apiKey) {
+          try {
+            ors = await fetchOpenRouteServiceMatrix(
+              apiKey,
+              dayStops.map((place) => ({ coordinates: place.coordinates as { lat: number; lng: number } })),
+              mode,
+            );
+          } catch (error) {
+            console.warn('[Planner] OpenRouteService matrix failed; falling back to heuristic estimates', error);
+          }
+        }
+      }
+      const computation = computeDayOrderOptimization(selectedTrip, dayStops, legs, ors);
+      if (!computation) {
+        setNotice(zh ? '当前顺序已是最优（按已知交通时间）。' : 'Current order is already optimal by known travel times.');
+        return null;
+      }
+      return computation;
+    },
+    [selectedTrip, scheduledAll, legs, setNotice, zh],
+  );
+
+  const applyDayOptimization = useCallback(
+    async (computation: PlannerDayOptimizationComputation) => {
+      if (!selectedTrip) return;
+      const orderedVisitIds = computation.orderedPlaces.map((place) => place.id);
+      const orderById = new Map(orderedVisitIds.map((id, order) => [id, order] as const));
+      setVisits((prev) => prev.map((visit) => {
+        const order = orderById.get(visit.id);
+        return order === undefined ? visit : { ...visit, sort_order: order };
+      }));
+      if (computation.legsToWrite.length > 0) setLegs((prev) => mergeLegs(prev, computation.legsToWrite));
+      try {
+        for (const leg of computation.legsToWrite) {
+          await plannerRepository.upsertLeg(leg);
+        }
+        await plannerRepository.reorderVisits(computation.date, orderedVisitIds);
+      } catch (error) {
+        showPersistError(error, 'apply optimized day order');
+        await load();
+        return;
+      }
+      await load();
+      setNotice(zh
+        ? `已按最优顺序重排，预计节省 ${computation.savedMinutes} 分钟交通时间。`
+        : `Reordered optimally; about ${computation.savedMinutes} min of travel saved.`);
+    },
+    [selectedTrip, load, setVisits, setLegs, setNotice, showPersistError, zh],
+  );
+
   return {
     handleUpsertTrip,
     handleDeleteTrip,
@@ -1016,5 +1096,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleRotateFeed,
     handleDisableFeed,
     copyItineraryText,
+    optimizeDayOrder,
+    applyDayOptimization,
   };
 }

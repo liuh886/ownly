@@ -8,16 +8,22 @@ import {
 } from '../../src/domain/planner';
 import { materializePlannerScheduledPlaces, sortPlannerScheduledPlaces, type PlannerScheduledPlace, type PlannerTripVisit } from '../../src/domain/planner-visits';
 import { OwnlyMcpError } from './ownly-tools';
+import {
+  fetchOpenRouteServiceLeg as fetchOrsLeg,
+  fetchOpenRouteServiceMatrix as fetchOrsMatrix,
+  openRouteServiceProfile,
+  OrsDataError,
+  OrsRequestError,
+} from '../../src/lib/openrouteservice';
 import { optimizeStopsByTravelTime, type PlannerTravelTimeMatrix } from '../../src/domain/planner-route-time';
 
-const ORS_BASE_URL = 'https://api.heigit.org/openrouteservice/v2/directions';
-const ORS_MATRIX_BASE_URL = 'https://api.heigit.org/openrouteservice/v2/matrix';
+export { openRouteServiceProfile };
 
-export function openRouteServiceProfile(mode: PlannerTravelMode): string | null {
-  if (mode === 'driving' || mode === 'motorcycle') return 'driving-car';
-  if (mode === 'walking') return 'foot-walking';
-  if (mode === 'bicycling') return 'cycling-regular';
-  return null;
+function toOwnlyMcpError(error: unknown, fallback: string): OwnlyMcpError {
+  if (error instanceof OwnlyMcpError) return error;
+  if (error instanceof OrsRequestError) return new OwnlyMcpError(error.message, 'IO_ERROR');
+  if (error instanceof OrsDataError) return new OwnlyMcpError(error.message, 'DATA_INVALID');
+  return new OwnlyMcpError(error instanceof Error ? error.message : fallback, 'IO_ERROR');
 }
 
 export async function fetchOpenRouteServiceLeg(
@@ -26,31 +32,13 @@ export async function fetchOpenRouteServiceLeg(
   to: { lat: number; lng: number },
   mode: PlannerTravelMode,
 ): Promise<{ duration_minutes: number; distance_meters: number }> {
-  const profile = openRouteServiceProfile(mode);
-  if (!profile) throw new OwnlyMcpError('OpenRouteService does not provide public-transit routing; record this leg manually.', 'INVALID_INPUT');
+  if (!openRouteServiceProfile(mode)) throw new OwnlyMcpError('OpenRouteService does not provide public-transit routing; record this leg manually.', 'INVALID_INPUT');
   if (!apiKey.trim()) throw new OwnlyMcpError('OPENROUTESERVICE_API_KEY is required to refresh travel legs.', 'INVALID_INPUT');
-
-  const response = await fetch(`${ORS_BASE_URL}/${profile}`, {
-    method: 'POST',
-    headers: {
-      Authorization: apiKey,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ coordinates: [[from.lng, from.lat], [to.lng, to.lat]] }),
-  });
-  if (!response.ok) {
-    throw new OwnlyMcpError(`OpenRouteService request failed (${response.status}).`, 'IO_ERROR');
+  try {
+    return await fetchOrsLeg(apiKey, from, to, mode);
+  } catch (error) {
+    throw toOwnlyMcpError(error, 'OpenRouteService request failed.');
   }
-  const payload = await response.json() as { routes?: Array<{ summary?: { duration?: number; distance?: number } }> };
-  const summary = payload.routes?.[0]?.summary;
-  if (!summary || !Number.isFinite(summary.duration) || !Number.isFinite(summary.distance)) {
-    throw new OwnlyMcpError('OpenRouteService returned no usable route summary.', 'DATA_INVALID');
-  }
-  return {
-    duration_minutes: Math.max(1, Math.ceil(Number(summary.duration) / 60)),
-    distance_meters: Math.max(0, Math.round(Number(summary.distance))),
-  };
 }
 
 export interface PlannerDayTravelRefresh {
@@ -139,29 +127,13 @@ export async function fetchOpenRouteServiceMatrix(
   places: Array<{ coordinates: { lat: number; lng: number } }>,
   mode: PlannerTravelMode,
 ): Promise<OpenRouteServiceMatrixResult> {
-  const profile = openRouteServiceProfile(mode);
-  if (!profile) throw new OwnlyMcpError('OpenRouteService does not provide public-transit routing; travel-time optimization requires walking, driving or bicycling.', 'INVALID_INPUT');
+  if (!openRouteServiceProfile(mode)) throw new OwnlyMcpError('OpenRouteService does not provide public-transit routing; travel-time optimization requires walking, driving or bicycling.', 'INVALID_INPUT');
   if (!apiKey.trim()) throw new OwnlyMcpError('OPENROUTESERVICE_API_KEY is required for travel-time optimization.', 'INVALID_INPUT');
-  const response = await fetch(`${ORS_MATRIX_BASE_URL}/${profile}`, {
-    method: 'POST',
-    headers: { Authorization: apiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      locations: places.map((place) => [place.coordinates.lng, place.coordinates.lat]),
-      metrics: ['duration', 'distance'],
-    }),
-  });
-  if (!response.ok) throw new OwnlyMcpError(`OpenRouteService matrix request failed (${response.status}).`, 'IO_ERROR');
-  const payload = await response.json() as {
-    durations?: Array<Array<number | null>>;
-    distances?: Array<Array<number | null>>;
-  };
-  if (!Array.isArray(payload.durations) || !Array.isArray(payload.distances)) {
-    throw new OwnlyMcpError('OpenRouteService returned no usable travel-time matrix.', 'DATA_INVALID');
+  try {
+    return await fetchOrsMatrix(apiKey, places, mode);
+  } catch (error) {
+    throw toOwnlyMcpError(error, 'OpenRouteService matrix request failed.');
   }
-  return {
-    durations_minutes: payload.durations.map((row) => row.map((value) => value === null ? null : Math.max(0, Math.ceil(value / 60)))),
-    distances_meters: payload.distances.map((row) => row.map((value) => value === null ? null : Math.max(0, Math.round(value)))),
-  };
 }
 
 export interface PlannerDayTravelOptimization {
