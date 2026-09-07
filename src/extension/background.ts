@@ -246,6 +246,28 @@ async function resumePendingEnrichment(limit = 5): Promise<number> {
   }
 }
 
+/**
+ * Single identity-match implementation shared by quick-save dedup and the
+ * FAB captured-state check. Keep them in sync by construction, not by copy.
+ */
+function findCaptureMatch(places: CapturePlace[], place: CurrentResearchPlace): CapturePlace | undefined {
+  return findExistingPlaceByIdentity(places, {
+    source_provider: place.sourceProvider,
+    source_place_id: place.sourcePlaceId,
+    source_url: place.sourceUrl,
+    title: place.title,
+    coordinates: place.coordinates ?? null,
+  }) ?? (
+    place.sourceUrl && !place.sourceUrl.includes('/search')
+      ? places.find((p) => p.source.url === place.sourceUrl)
+      : undefined
+  ) ?? (
+    place.sourcePlaceId && place.sourceProvider
+      ? places.find((p) => p.source.provider === place.sourceProvider && p.source.place_id === place.sourcePlaceId)
+      : undefined
+  );
+}
+
 async function savePlaceIntoInboxDirectly(
   place: CurrentResearchPlace,
   tabId?: number,
@@ -261,21 +283,7 @@ async function savePlaceIntoInboxDirectly(
     const capturedId = await mutateCaptureStateV3InWorker((state) => {
       const collection = getDefaultCollection(state);
       const collectionPlaces = state.places.filter((p) => p.collection_id === collection.id);
-      const existing = findExistingPlaceByIdentity(collectionPlaces, {
-        source_provider: place.sourceProvider,
-        source_place_id: place.sourcePlaceId,
-        source_url: place.sourceUrl,
-        title: place.title,
-        coordinates: place.coordinates ?? null,
-      }) ?? (
-        place.sourceUrl && !place.sourceUrl.includes('/search')
-          ? collectionPlaces.find((p) => p.source.url === place.sourceUrl)
-          : undefined
-      ) ?? (
-        place.sourcePlaceId && place.sourceProvider
-          ? collectionPlaces.find((p) => p.source.provider === place.sourceProvider && p.source.place_id === place.sourcePlaceId)
-          : undefined
-      );
+      const existing = findCaptureMatch(collectionPlaces, place);
 
       if (existing) {
         alreadyExists = true;
@@ -513,6 +521,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     void savePlaceIntoInboxDirectly(place, tabId, false).then(sendResponse);
+    return true;
+  }
+
+  if (type === 'OWNLY_CHECK_CAPTURED') {
+    const place = (message as { place?: CurrentResearchPlace }).place;
+    if (!place?.title) {
+      sendResponse({ ok: false, error: 'no place data' });
+      return true;
+    }
+    void readCaptureStateV3()
+      .then((state) => {
+        sendResponse({ ok: true, captured: Boolean(findCaptureMatch(state.places, place)) });
+      })
+      .catch((err: unknown) => {
+        sendResponse({ ok: false, error: String(err) });
+      });
     return true;
   }
 

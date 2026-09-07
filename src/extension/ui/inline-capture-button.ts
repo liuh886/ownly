@@ -135,6 +135,12 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
   btn.addEventListener('pointerdown', isolateEvent);
 
   let isSaving = false;
+  const setPersistentState = (icon: string, text: string, cls: string) => {
+    btn.classList.remove('is-loading', 'is-success', 'is-exists');
+    if (cls) btn.classList.add(cls);
+    btn.innerHTML = `<span class="card-fab-icon">${icon}</span><span class="card-fab-text">${text}</span>`;
+    isSaving = false;
+  };
   btn.addEventListener('click', async (ev) => {
     isolateEvent(ev);
     if (isSaving) return;
@@ -147,12 +153,7 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
     try {
       const place = await getPlace();
       if (!place || !place.title) {
-        btn.classList.remove('is-loading');
-        btn.innerHTML = `<span class="card-fab-icon">⚠️</span><span class="card-fab-text">${errorText}</span>`;
-        setTimeout(() => {
-          btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
-          isSaving = false;
-        }, 2000);
+        setPersistentState('⚠️', errorText, '');
         return;
       }
 
@@ -170,39 +171,34 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
 
       btn.classList.remove('is-loading');
       if (resp?.alreadyExists) {
-        btn.classList.add('is-exists');
-        btn.innerHTML = `<span class="card-fab-icon">ℹ️</span><span class="card-fab-text">${existsText}</span>`;
-        setTimeout(() => {
-          btn.classList.remove('is-exists');
-          btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
-          isSaving = false;
-        }, 2500);
+        setPersistentState('ℹ️', existsText, 'is-exists');
       } else if (resp?.ok) {
-        btn.classList.add('is-success');
-        btn.innerHTML = `<span class="card-fab-icon">✓</span><span class="card-fab-text">${successText}</span>`;
-        setTimeout(() => {
-          btn.classList.remove('is-success');
-          btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
-          isSaving = false;
-        }, 2500);
+        setPersistentState('✓', successText, 'is-success');
       } else {
-        btn.innerHTML = `<span class="card-fab-icon">⚠️</span><span class="card-fab-text">${errorText}</span>`;
-        setTimeout(() => {
-          btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
-          isSaving = false;
-        }, 2000);
+        setPersistentState('⚠️', errorText, '');
       }
     } catch {
-      btn.classList.remove('is-loading');
-      btn.innerHTML = `<span class="card-fab-icon">⚠️</span><span class="card-fab-text">${errorText}</span>`;
-      setTimeout(() => {
-        btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
-        isSaving = false;
-      }, 2000);
+      setPersistentState('⚠️', errorText, '');
     }
   });
 
   root.appendChild(btn);
+
+  // State awareness: places already on the board render the persistent
+  // exists-state on load instead of the default action label.
+  void (async () => {
+    try {
+      const place = await getPlace();
+      if (!place?.title) return;
+      const resp = await chrome.runtime.sendMessage({ type: 'OWNLY_CHECK_CAPTURED', place }) as {
+        captured?: boolean;
+      } | undefined;
+      if (resp?.captured) {
+        btn.classList.add('is-exists');
+        btn.innerHTML = `<span class="card-fab-icon">ℹ️</span><span class="card-fab-text">${existsText}</span>`;
+      }
+    } catch {}
+  })();
 
   if (position === 'before' && anchor.parentNode) {
     anchor.parentNode.insertBefore(btnContainer, anchor);
