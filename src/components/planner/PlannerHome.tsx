@@ -1616,15 +1616,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                       : (zh ? '需注意' : 'Warning')}
                 </span>
               ) : null}
-              <button
-                type="button"
-                disabled={optimizeBusy}
-                onClick={() => void runOptimizeOrder()}
-                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200 transition hover:brightness-95 disabled:opacity-50"
-                title={zh ? '按交通时间优化当天游览顺序 (预览后应用)' : 'Optimize day order by travel time (preview first)'}
-              >
-                {optimizeBusy ? '⏳' : '✨'} {zh ? '优化顺序' : 'Optimize'}
-              </button>
             </div>
             {activeDayWeather ? (
               <span
@@ -1710,6 +1701,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                   title={zh ? '日历导出与订阅 (.ics / Feed)' : 'Calendar (.ics / Feed)'}
                 >
                   📅 {zh ? '日历' : 'Calendar'}
+                </button>
+                <button
+                  type="button"
+                  disabled={optimizeBusy}
+                  onClick={() => void runOptimizeOrder()}
+                  className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                  title={zh ? '按交通时间优化当天游览顺序 (预览后应用)' : 'Optimize day order by travel time (preview first)'}
+                >
+                  {optimizeBusy ? '⏳' : '✨'} {zh ? '优化顺序' : 'Optimize'}
                 </button>
               </div>
             ) : null}
@@ -2198,25 +2198,25 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                                       </a>
                                     </div>
                                   ) : (
-                                    <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-3 py-1 text-[10.5px] font-semibold text-sky-900 shadow-2xs">
+                                    <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-stone-500">
                                       <button
                                         type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setActiveModeSwitchPair(isPairSwitching ? null : `${place.id}->${nextPlace.id}`);
                                         }}
-                                        className="inline-flex items-center gap-1 hover:text-sky-700 hover:underline cursor-pointer transition font-medium"
+                                        className="inline-flex items-center gap-1 hover:text-stone-800 hover:underline cursor-pointer transition"
                                         title={zh ? '点击切换出行方式或清除预估' : 'Click to change travel mode or clear estimate'}
                                       >
-                                        <span>{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS' : ''}</span>
+                                        <span className="font-medium text-stone-600">{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS' : ''}</span>
                                         <span className="text-[9px] opacity-70">▾</span>
                                       </button>
-                                      {item.start && item.end ? <span className="text-sky-700 font-mono">⏱ {item.start}-{item.end}</span> : null}
+                                      {item.start && item.end ? <span className="font-mono text-stone-400">{item.start}–{item.end}</span> : null}
                                       <a
                                         href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${item.mode === 'motorcycle' ? 'two_wheeler' : (item.mode ?? selectedTrip.transport_mode ?? 'transit')}`}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9.5px] font-bold text-sky-800 transition"
+                                        className="text-[9.5px] text-stone-400 hover:text-stone-700 underline underline-offset-2 transition"
                                       >
                                         Google 导航 ↗
                                       </a>
