@@ -1167,8 +1167,18 @@ describe('checkOpeningHoursCollision & checkDayScheduleCollisions', () => {
     expect(beforeOpen.isCollision).toBe(true);
     expect(beforeOpen.reason).toContain('闭门羹');
 
+    const partiallyBeforeOpen = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '08:00', '10:00');
+    expect(partiallyBeforeOpen.isCollision).toBe(true);
+    expect(partiallyBeforeOpen.reason).toContain('闭门羹');
+
     const inside = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '11:00', '12:00');
     expect(inside.isCollision).toBe(false);
+
+    const endsAtClose = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '17:00', '18:00');
+    expect(endsAtClose.isCollision).toBe(false);
+
+    const pastClose = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '17:30', '18:30');
+    expect(pastClose.isCollision).toBe(true);
 
     const afterClose = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '19:00');
     expect(afterClose.isCollision).toBe(true);
@@ -1178,6 +1188,9 @@ describe('checkOpeningHoursCollision & checkDayScheduleCollisions', () => {
 
     const overnightBad = checkOpeningHoursCollision('18:00-02:00', '2026-10-20', undefined, '10:00', '11:00');
     expect(overnightBad.isCollision).toBe(true);
+
+    const startInsideNoEnd = checkOpeningHoursCollision('10:00-18:00', '2026-10-20', undefined, '11:00');
+    expect(startInsideNoEnd.isCollision).toBe(false);
   });
 
   it('fails open on day-specific or unparseable hours for precise check', () => {

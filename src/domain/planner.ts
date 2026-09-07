@@ -1032,9 +1032,12 @@ export function checkOpeningHoursCollision(
           ? t >= range.open && t < range.close
           : t >= range.open || t < range.close;
       const startInside = inside(startMin);
-      // Sample just before visit end so back-to-back bookings at close time don't false-alarm.
-      const endInside = endMin !== null && endMin !== startMin ? inside((endMin + 24 * 60 - 1) % (24 * 60)) : false;
-      if (!startInside && !endInside) {
+      // The visit must be fully within open hours. Sample just before visit
+      // end so back-to-back bookings ending exactly at close don't false-alarm.
+      // When no end is known, fall back to start-only (old behavior).
+      const endSampleMin = endMin !== null && endMin !== startMin ? (endMin + 24 * 60 - 1) % (24 * 60) : null;
+      const endInside = endSampleMin === null ? startInside : inside(endSampleMin);
+      if (!startInside || !endInside) {
         const rangeLabel = `${formatClockMinutes(range.open)}-${formatClockMinutes(range.close)}`;
         const visitLabel = endMin !== null && endMin !== startMin ? `${scheduledStart.trim()}-${scheduledEnd!.trim()}` : scheduledStart.trim();
         return {
