@@ -5,6 +5,8 @@ import {
   applyOrsDayTravelMatrix,
   buildHeuristicDayTravelMatrix,
   computeDayOrderOptimization,
+  materializeStopCoordinates,
+  resolveStopCoordinates,
   type OrsMatrixFacts,
 } from './planner-optimization';
 
@@ -83,6 +85,15 @@ describe('buildHeuristicDayTravelMatrix', () => {
     const hubC = coordStop('c', { kind: 'transit', title: 'Suvarnabhumi Airport' });
     const hubMatrix = buildHeuristicDayTravelMatrix(trip, [hubA, hubC], []);
     expect(hubMatrix.minutes['visit:a']?.['visit:c']).toBeNull();
+  });
+
+  it('marks same-place visit pairs (morning checkout + evening stay) as unusable', () => {
+    const hotelOut = coordStop('hotel-out', { place_id: 'hotel', title: 'Hotel Sunrise', is_anchor: true });
+    const hotelStay = coordStop('hotel-stay', { place_id: 'hotel', title: 'Hotel Sunrise', is_anchor: true });
+    const matrix = buildHeuristicDayTravelMatrix(trip, [hotelOut, coordStop('a'), hotelStay], []);
+    expect(matrix.minutes['visit:hotel-out']?.['visit:hotel-stay']).toBeNull();
+    expect(matrix.minutes['visit:hotel-stay']?.['visit:hotel-out']).toBeNull();
+    expect(matrix.minutes['visit:hotel-out']?.['visit:a']).not.toBeNull();
   });
 });
 
@@ -178,8 +189,7 @@ describe('computeDayOrderOptimization', () => {
     expect(computeDayOrderOptimization(trip, stops.slice(0, 2), [], null)).toBeNull();
   });
 
-  it('keeps locked and anchored stops pinned', () => {
-    const stops = [
+  it('keeps locked and anchored stops pinned', () => {    const stops = [
       coordStop('a'),
       coordStop('b', { locked: true }),
       coordStop('c'),
@@ -199,6 +209,78 @@ describe('computeDayOrderOptimization', () => {
     const computation = computeDayOrderOptimization(trip, stops, [], ors);
     expect(computation).not.toBeNull();
     expect(computation!.orderedPlaces.map((p) => p.place_id)).toEqual(['a', 'b', 'e', 'c', 'd']);
+  });
+
+  it('never orders two visits of the same place back to back, even when ORS reports ~0 minutes', () => {
+    // Morning checkout and evening stay are two visits of the same hotel. ORS
+    // would return ~0 for the identical coordinates; without the same-place
+    // guard the optimizer used to suggest "hotel A → hotel A".
+    const hotelOut = coordStop('hotel-out', { place_id: 'hotel', title: 'Hotel Sunrise', is_anchor: true });
+    const hotelStay = coordStop('hotel-stay', { place_id: 'hotel', title: 'Hotel Sunrise', is_anchor: true });
+    // Current order: hotel → b → a → hotel (65 min); valid optimum: hotel → a → b → hotel (45).
+    const stops = [hotelOut, coordStop('b'), coordStop('a'), hotelStay];
+    const ors: OrsMatrixFacts = {
+      // Index order matches `stops`: hotel-out, b, a, hotel-stay.
+      durations_minutes: [
+        [0, 20, 20, 0],
+        [20, 0, 25, 20],
+        [20, 5, 0, 20],
+        [0, 20, 20, 0],
+      ],
+      distances_meters: orsFakeDistances(4),
+    };
+    const computation = computeDayOrderOptimization(trip, stops, [], ors);
+    expect(computation).not.toBeNull();
+    const orderedPlaceIds = computation!.orderedPlaces.map((p) => p.place_id);
+    expect(orderedPlaceIds).toEqual(['hotel', 'a', 'b', 'hotel']);
+    for (let index = 0; index < computation!.orderedPlaces.length - 1; index += 1) {
+      expect(computation!.orderedPlaces[index]!.place_id).not.toBe(computation!.orderedPlaces[index + 1]!.place_id);
+    }
+    for (const written of computation!.legsToWrite) {
+      expect(written.from_place_id).not.toBe(written.to_place_id);
+    }
+    expect(computation!.legsToWrite.map((l) => l.id)).toEqual([
+      'leg:trip-1:hotel:a',
+      'leg:trip-1:a:b',
+      'leg:trip-1:b:hotel',
+    ]);
+  });
+});
+
+describe('resolveStopCoordinates & materializeStopCoordinates', () => {
+  it('resolves coordinates from the source URL when the persisted field is missing', () => {
+    // Regression: the route optimizer read only the persisted field while the
+    // map falls back to the URL, so the same place counted as located on the
+    // map but missing for route estimation (e.g. Chiang Mai University).
+    const urlOnly = stop('url-only', {
+      coordinates: undefined,
+      source_url: 'https://www.google.com/maps/place/Chiang+Mai+University/@18.8082241,98.9523053,17z/data=!4m2!3m1!1s0x0:0x0!3d18.8082363!4d98.9546953',
+    });
+    const resolved = resolveStopCoordinates([urlOnly]);
+    expect(resolved[0]?.coords).toEqual({ lat: 18.8082241, lng: 98.9523053 });
+  });
+
+  it('prefers the persisted field over the URL and reports null when neither exists', () => {
+    const fieldFirst = stop('field', {
+      coordinates: { lat: 13.74, lng: 100.5 },
+      source_url: 'https://www.google.com/maps/place/Somewhere/@18.8,98.95,17z',
+    });
+    const nowhere = stop('nowhere', { coordinates: undefined, source_url: 'https://maps.example/nowhere' });
+    const resolved = resolveStopCoordinates([fieldFirst, nowhere]);
+    expect(resolved[0]?.coords).toEqual({ lat: 13.74, lng: 100.5 });
+    expect(resolved[1]?.coords).toBeNull();
+  });
+
+  it('materializes resolved coordinates without touching ids or already-located stops', () => {
+    const urlOnly = stop('url-only', {
+      coordinates: undefined,
+      source_url: 'https://www.google.com/maps/place/X/@18.8,98.95,17z',
+    });
+    const withField = coordStop('a');
+    const materialized = materializeStopCoordinates(resolveStopCoordinates([urlOnly, withField]));
+    expect(materialized[0]?.coordinates).toEqual({ lat: 18.8, lng: 98.95 });
+    expect(materialized[0]?.id).toBe(urlOnly.id);
+    expect(materialized[1]).toBe(withField);
   });
 });
 

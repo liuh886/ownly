@@ -19,6 +19,8 @@ import {
 } from '@/domain/planner';
 import {
   computeDayOrderOptimization,
+  materializeStopCoordinates,
+  resolveStopCoordinates,
   type OrsMatrixFacts,
   type PlannerDayOptimizationComputation,
 } from '@/domain/planner-optimization';
@@ -993,13 +995,17 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         setNotice(zh ? '至少需要 3 个已安排的游览点才能优化顺序。' : 'Need at least 3 scheduled stops to optimize the order.');
         return null;
       }
-      const missingCoords = dayStops.filter((place) => !place.coordinates).map((place) => place.title);
+      // Same field-first, URL-fallback rule as the map: a stop counts as
+      // geo-located when either the persisted field or the source URL yields it.
+      const resolved = resolveStopCoordinates(dayStops);
+      const missingCoords = resolved.filter((stop) => !stop.coords).map((stop) => stop.place.title);
       if (missingCoords.length > 0) {
         setNotice(zh
           ? `以下地点缺少坐标，无法估算路线：${missingCoords.join('、')}`
           : `Missing coordinates, cannot estimate routes: ${missingCoords.join(', ')}`);
         return null;
       }
+      const stopsForCompute = materializeStopCoordinates(resolved);
       const mode: PlannerTravelMode = selectedTrip.transport_mode ?? 'transit';
       let ors: OrsMatrixFacts | null = null;
       if (openRouteServiceProfile(mode)) {
@@ -1008,7 +1014,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
           try {
             ors = await fetchOpenRouteServiceMatrix(
               apiKey,
-              dayStops.map((place) => ({ coordinates: place.coordinates as { lat: number; lng: number } })),
+              stopsForCompute.map((place) => ({ coordinates: place.coordinates as { lat: number; lng: number } })),
               mode,
             );
           } catch (error) {
@@ -1016,7 +1022,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
           }
         }
       }
-      const computation = computeDayOrderOptimization(selectedTrip, dayStops, legs, ors);
+      const computation = computeDayOrderOptimization(selectedTrip, stopsForCompute, legs, ors);
       if (!computation) {
         setNotice(zh ? '当前顺序已是最优（按已知交通时间）。' : 'Current order is already optimal by known travel times.');
         return null;

@@ -1,5 +1,6 @@
 import {
   calculateDefaultTripLeg,
+  extractPlaceCoordinates,
   plannerTripLegId,
   type PlannerTravelMode,
   type PlannerTrip,
@@ -37,6 +38,34 @@ function pairKey(fromPlaceId: string, toPlaceId: string): string {
   return `${fromPlaceId}→${toPlaceId}`;
 }
 
+/** Two distinct visits of the same place (morning checkout + evening stay): no travel between them. */
+function isSamePlacePair(from: PlannerScheduledPlace, to: PlannerScheduledPlace): boolean {
+  return from.id !== to.id && (from.place_id || from.id) === (to.place_id || to.id);
+}
+
+export interface ResolvedOptimizationStop {
+  place: PlannerScheduledPlace;
+  coords: { lat: number; lng: number } | null;
+}
+
+/**
+ * Resolves each stop's coordinates with the same field-first, URL-fallback
+ * rule the map uses. Callers gate on `coords === null` and materialize
+ * `coordinates` for the matrix builders, which only read the persisted field.
+ */
+export function resolveStopCoordinates(places: PlannerScheduledPlace[]): ResolvedOptimizationStop[] {
+  return places.map((place) => ({ place, coords: extractPlaceCoordinates(place) }));
+}
+
+/**
+ * Copies stops with resolved coordinates materialized into the persisted
+ * field so heuristic/ORS matrix code sees them. Ids are untouched, so the
+ * resulting computation still maps back to the original visits.
+ */
+export function materializeStopCoordinates(resolved: ResolvedOptimizationStop[]): PlannerScheduledPlace[] {
+  return resolved.map(({ place, coords }) => (coords && !place.coordinates ? { ...place, coordinates: coords } : place));
+}
+
 export function buildHeuristicDayTravelMatrix(
   trip: PlannerTrip,
   places: PlannerScheduledPlace[],
@@ -60,6 +89,15 @@ export function buildHeuristicDayTravelMatrix(
       if (from.id === to.id) {
         minutes[from.id]![to.id] = 0;
         distances[from.id]![to.id] = 0;
+        sources[from.id]![to.id] = 'heuristic';
+        continue;
+      }
+      if (isSamePlacePair(from, to)) {
+        // Null, not 0: a 0-cost cell would lure the optimizer into ordering
+        // the two visits back to back ("hotel A → hotel A"), which is not a
+        // real transit. Null makes any such ordering score Infinity.
+        minutes[from.id]![to.id] = null;
+        distances[from.id]![to.id] = undefined;
         sources[from.id]![to.id] = 'heuristic';
         continue;
       }
@@ -97,6 +135,14 @@ export function applyOrsDayTravelMatrix(
     distances[from.id] = {};
     sources[from.id] = {};
     places.forEach((to, toIndex) => {
+      if (isSamePlacePair(from, to)) {
+        // Same-place pairs stay null: neither manual legs nor ORS (which would
+        // return ~0 for identical coordinates) may turn them into valid moves.
+        minutes[from.id]![to.id] = null;
+        distances[from.id]![to.id] = undefined;
+        sources[from.id]![to.id] = 'heuristic';
+        return;
+      }
       const baseSource = base.sources[from.id]?.[to.id] ?? 'heuristic';
       if (baseSource === 'manual') {
         minutes[from.id]![to.id] = base.minutes[from.id]?.[to.id] ?? null;
@@ -150,6 +196,7 @@ export function computeDayOrderOptimization(
     const to = result.places[index + 1];
     const fromPlaceId = from.place_id || from.id;
     const toPlaceId = to.place_id || to.id;
+    if (fromPlaceId === toPlaceId) continue;
     const existing = existingByPair.get(pairKey(fromPlaceId, toPlaceId));
     if (existing?.source === 'manual') continue;
     const duration = matrix.minutes[from.id]?.[to.id];
