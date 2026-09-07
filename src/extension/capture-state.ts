@@ -98,9 +98,10 @@ function normalizePlace(value: unknown): CapturePlace | null {
 export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {
   if (!value || typeof value !== 'object') return ensureInboxCollection({ ...EMPTY_CAPTURE_STATE_V3 });
   const raw = value as Record<string, unknown>;
-  const version = raw.version;
 
-  if (version !== 3) return ensureInboxCollection({ ...EMPTY_CAPTURE_STATE_V3 });
+  // Forward-compatible: even if version differs, preserve recognizable
+  // collections/places instead of wiping the user library.
+  void raw.version;
 
   const state = value as Partial<OwnlyCaptureStateV3>;
 
