@@ -1,22 +1,21 @@
 # Ownly — Task Progress & Review
 
-## Active: Map "Show All Routes" (显示所有路线) Multi-Day Overlay & Cloud Push (2026-09-07)
-- [ ] **1. Sync & Push to Remote ("推送云端")**:
-  - Stage and commit the completed checkout departure / hotel stay fixes.
-  - Push branch to remote origin.
-- [ ] **2. Domain & Map Data Extension (`src/domain/planner.ts` & `src/components/planner/PlannerMap.tsx`)**:
-  - Extend `getMapPointsForFilter` to support `'all_routes'`.
-  - Extend `PlannerMapProps` with `allPlacesByDate?: Record<string, PlannerScheduledPlace[]>` and `tripDates?: string[]`.
-  - In `PlannerMap.tsx`, calculate multi-day route trajectories and screen coordinates for all trip dates.
-  - Render other days' polylines with soft dimmed styling (`#94a3b8` / `#64748b`, `opacity="0.45"`, `strokeDasharray="5,4"`) in the background, while the active day's polyline remains in prominent bold emerald green (`#047857`, `opacity="0.95"`, `strokeWidth="3.5"`).
-  - Render subtle markers (`D{dayIndex + 1}·{order}`) for other days' scheduled stops when `filterMode === 'all_routes'`.
-  - Add filter button `🌐 显示所有路线` to map header controls.
-- [ ] **3. Wire Props in Planner Home (`src/components/planner/PlannerHome.tsx`)**:
-  - Pass `allPlacesByDate={placesByDate}` and `tripDates={tripDates}` to both embedded and expanded `PlannerMap` instances.
-- [ ] **4. Verification & Testing**:
-  - Add unit test in `src/domain/planner.test.ts` for `getMapPointsForFilter` with `'all_routes'`.
-  - Run `npm run validate:fast`, `npm run test:planner`, and `npm test`.
-  - Commit and push to remote.
+## Completed: Map "Show All Routes" (显示所有路线) Multi-Day Overlay & Cloud Push (2026-09-07)
+- [x] **1. Sync & Push to Remote ("推送云端")**:
+  - Staged, committed, and pushed the departure hotel checkout & anchor role updates to `origin/main`.
+- [x] **2. Domain & Map Data Extension (`src/domain/planner.ts` & `src/components/planner/PlannerMap.tsx`)**:
+  - Extended `getMapPointsForFilter` to support `'all_routes'`.
+  - Extended `PlannerMapProps` with `allPlacesByDate?: Record<string, PlannerScheduledPlace[]>` and `tripDates?: string[]`.
+  - In `PlannerMap.tsx`, calculated multi-day route trajectories and screen coordinates for all trip dates.
+  - Rendered other days' polylines with soft dimmed styling (`#64748b`, `opacity="0.45"`, `strokeDasharray="5,4"`) in the background, while the active day's polyline remains in prominent bold emerald green (`#047857`, `opacity="0.95"`, `strokeWidth="3.5"`).
+  - Rendered subtle markers (`D{dayIndex + 1}·{order}`) for other days' scheduled stops when `filterMode === 'all_routes'`.
+  - Added interactive filter button `🌐 显示所有路线 ({allScheduledCount})` to map header controls.
+- [x] **3. Wire Props in Planner Home (`src/components/planner/PlannerHome.tsx`)**:
+  - Passed `allPlacesByDate={placesByDate}` and `tripDates={tripDates}` to both embedded and expanded `PlannerMap` instances.
+- [x] **4. Verification & Testing**:
+  - Added unit test in `src/domain/planner.test.ts` for `getMapPointsForFilter` with `'all_routes'`.
+  - Passed `npm run validate:fast`: 0 errors (clean TypeScript, ESLint, terminology & membership).
+  - Passed `npm run test:planner`: 8 test suites, 155 tests passed.
 
 ## Completed: Distinguish Morning Checkout/Departure Hotel from Tonight's Stay (2026-09-07)
 - [x] **1. Domain Hotel Detection Logic (`src/domain/planner.ts` & `src/services/PlannerRepository.ts`)**:

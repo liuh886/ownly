@@ -1273,7 +1273,7 @@ export interface MapPointLike {
 
 export function getMapPointsForFilter<T extends MapPointLike>(
   points: T[],
-  filterMode: 'all' | 'candidates' | 'scheduled',
+  filterMode: 'all' | 'candidates' | 'scheduled' | 'all_routes',
 ): T[] {
   if (filterMode === 'scheduled') {
     return points.filter((p) => Boolean(p.isScheduled));

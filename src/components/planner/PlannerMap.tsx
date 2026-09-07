@@ -15,6 +15,8 @@ import { searchCities } from '@/domain/travel';
 interface PlannerMapProps {
   scheduledPlaces: PlannerScheduledPlace[];
   candidatePlaces: PlannerTripPlace[];
+  allPlacesByDate?: Record<string, PlannerScheduledPlace[]>;
+  tripDates?: string[];
   destinations?: string[];
   activeDate?: string;
   activeDayIndex: number;
@@ -34,6 +36,8 @@ interface Point {
   lng: number;
   isScheduled: boolean;
   order?: number;
+  dayIndex?: number;
+  isActiveDay?: boolean;
 }
 
 const KIND_EMOJI = PLANNER_KIND_ICONS;
@@ -115,7 +119,10 @@ const ZOOM_STEP_WHEEL = 0.5;
 export function PlannerMap({
   scheduledPlaces,
   candidatePlaces,
+  allPlacesByDate,
+  tripDates,
   destinations,
+  activeDate,
   activeDayIndex,
   highlightedPlaceId,
   onSchedulePlace,
@@ -131,7 +138,7 @@ export function PlannerMap({
 
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [filterMode, setFilterMode] = useState<'all' | 'candidates' | 'scheduled'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'candidates' | 'scheduled' | 'all_routes'>('all');
   const [basemapStyle, setBasemapStyle] = useState<BasemapStyle>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -156,8 +163,57 @@ export function PlannerMap({
     [basemapStyle],
   );
 
-  // Extract valid geo points
+  // Multi-day points across all trip dates
+  const multiDayPoints = useMemo<Point[]>(() => {
+    if (!allPlacesByDate || !tripDates || tripDates.length === 0) return [];
+    const result: Point[] = [];
+
+    tripDates.forEach((date, dIdx) => {
+      const dayPlaces = allPlacesByDate[date] || [];
+      const isActiveDay = date === activeDate || dIdx === activeDayIndex;
+
+      dayPlaces.forEach((place, index) => {
+        const coords = extractPlaceCoordinates(place);
+        if (coords) {
+          result.push({
+            place,
+            lat: coords.lat,
+            lng: coords.lng,
+            isScheduled: true,
+            order: index + 1,
+            dayIndex: dIdx,
+            isActiveDay,
+          });
+        }
+      });
+    });
+
+    return result;
+  }, [allPlacesByDate, tripDates, activeDate, activeDayIndex]);
+
+  const allScheduledCount = useMemo(() => {
+    if (!allPlacesByDate) return scheduledPlaces.length;
+    return Object.values(allPlacesByDate).reduce((sum, list) => sum + list.length, 0);
+  }, [allPlacesByDate, scheduledPlaces.length]);
+
+  // Extract valid geo points based on filter mode
   const points = useMemo<Point[]>(() => {
+    if (filterMode === 'all_routes' && multiDayPoints.length > 0) {
+      const result = [...multiDayPoints];
+      candidatePlaces.forEach((place) => {
+        const coords = extractPlaceCoordinates(place);
+        if (coords) {
+          result.push({
+            place,
+            lat: coords.lat,
+            lng: coords.lng,
+            isScheduled: false,
+          });
+        }
+      });
+      return result;
+    }
+
     const result: Point[] = [];
 
     scheduledPlaces.forEach((place, index) => {
@@ -169,6 +225,8 @@ export function PlannerMap({
           lng: coords.lng,
           isScheduled: true,
           order: index + 1,
+          dayIndex: activeDayIndex,
+          isActiveDay: true,
         });
       }
     });
@@ -186,7 +244,7 @@ export function PlannerMap({
     });
 
     return result;
-  }, [scheduledPlaces, candidatePlaces]);
+  }, [filterMode, multiDayPoints, scheduledPlaces, candidatePlaces, activeDayIndex]);
 
   // Default center based on active day schedule (last scheduled point) or candidate pool (last imported point)
   const defaultCenter = useMemo(
@@ -474,10 +532,10 @@ export function PlannerMap({
     });
   }, [points, filterMode]);
 
-  // Scheduled route points for line rendering
+  // Scheduled route points for line rendering (active day)
   const scheduledRoutePoints = useMemo(() => {
     return points
-      .filter((p) => p.isScheduled)
+      .filter((p) => p.isScheduled && p.isActiveDay !== false)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       .map((p) => {
         const x = projectLngToX(p.lng, zoom) - centerX + containerSize.width / 2;
@@ -486,9 +544,42 @@ export function PlannerMap({
       });
   }, [points, zoom, centerX, centerY, containerSize.width, containerSize.height]);
 
+  // Multi-day route polylines for line rendering
+  const allDaysRoutes = useMemo(() => {
+    if (!allPlacesByDate || !tripDates || tripDates.length === 0) return [];
+
+    return tripDates
+      .map((date, dIdx) => {
+        const dayPlaces = allPlacesByDate[date] || [];
+        const isActiveDay = date === activeDate || dIdx === activeDayIndex;
+        const screenPoints: Array<{ x: number; y: number; place: PlannerScheduledPlace; order: number }> = [];
+
+        dayPlaces.forEach((place, index) => {
+          const coords = extractPlaceCoordinates(place);
+          if (coords) {
+            const x = projectLngToX(coords.lng, zoom) - centerX + containerSize.width / 2;
+            const y = projectLatToY(coords.lat, zoom) - centerY + containerSize.height / 2;
+            screenPoints.push({ x, y, place, order: index + 1 });
+          }
+        });
+
+        return {
+          date,
+          dayIndex: dIdx,
+          isActiveDay,
+          screenPoints,
+        };
+      })
+      .filter((r) => r.screenPoints.length >= 2);
+  }, [allPlacesByDate, tripDates, activeDate, activeDayIndex, zoom, centerX, centerY, containerSize.width, containerSize.height]);
+
   const selectedPoint = useMemo(() => points.find((point) => point.place.id === selectedPlaceId) ?? null, [points, selectedPlaceId]);
   const selectedPlace = selectedPoint?.place ?? null;
-  const selectedScheduledPlace = selectedPoint?.isScheduled ? selectedPoint.place as PlannerScheduledPlace : null;
+  const selectedScheduledPlace = useMemo(() => {
+    if (!selectedPoint?.isScheduled) return null;
+    if (selectedPoint.isActiveDay === false) return null;
+    return selectedPoint.place as PlannerScheduledPlace;
+  }, [selectedPoint]);
 
   const selectedPointScreen = useMemo(() => {
     if (!selectedPoint) return null;
@@ -531,6 +622,15 @@ export function PlannerMap({
         >
           🟢 {zh ? `第${activeDayIndex + 1}天路线` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
         </button>
+        {allPlacesByDate && tripDates && tripDates.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => setFilterMode('all_routes')}
+            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all_routes' ? 'bg-indigo-700 text-white shadow-xs' : 'bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100'}`}
+          >
+            🌐 {zh ? '显示所有路线' : 'All Routes'} ({allScheduledCount})
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => setFilterMode('candidates')}
@@ -577,7 +677,43 @@ export function PlannerMap({
         </div>
 
         {/* Connecting Polyline Route SVG overlay */}
-        {scheduledRoutePoints.length >= 2 && (filterMode === 'all' || filterMode === 'scheduled') && (
+        {filterMode === 'all_routes' ? (
+          <svg className="pointer-events-none absolute inset-0 h-full w-full">
+            {/* Other days' polylines (rendered first, in the background with soft/dimmed styling) */}
+            {allDaysRoutes
+              .filter((r) => !r.isActiveDay)
+              .map((r) => (
+                <polyline
+                  key={r.date}
+                  points={r.screenPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke="#64748b"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray="5,4"
+                  opacity="0.45"
+                />
+              ))}
+
+            {/* Active day's polyline (rendered on top with prominent emerald green styling) */}
+            {allDaysRoutes
+              .filter((r) => r.isActiveDay)
+              .map((r) => (
+                <polyline
+                  key={r.date}
+                  points={r.screenPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke="#047857"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray="6,4"
+                  opacity="0.95"
+                />
+              ))}
+          </svg>
+        ) : scheduledRoutePoints.length >= 2 && (filterMode === 'all' || filterMode === 'scheduled') ? (
           <svg className="pointer-events-none absolute inset-0 h-full w-full">
             <polyline
               points={scheduledRoutePoints.map((p) => `${p.x},${p.y}`).join(' ')}
@@ -590,10 +726,10 @@ export function PlannerMap({
               className="opacity-85"
             />
           </svg>
-        )}
+        ) : null}
 
         {/* POI Markers */}
-        {visiblePoints.map((p) => {
+        {visiblePoints.map((p, pIdx) => {
           const x = projectLngToX(p.lng, zoom) - centerX + containerSize.width / 2;
           const y = projectLatToY(p.lat, zoom) - centerY + containerSize.height / 2;
 
@@ -603,10 +739,11 @@ export function PlannerMap({
           }
 
           const isHighlighted = highlightedPlaceId === p.place.id || selectedPlaceId === p.place.id;
+          const isOtherDayStop = p.isScheduled && p.isActiveDay === false;
 
           return (
             <div
-              key={p.place.id}
+              key={`${p.place.id}_${p.dayIndex ?? ''}_${p.order ?? ''}_${pIdx}`}
               onClick={(e) => {
                 e.stopPropagation();
                 if (Date.now() - lastPinchEndRef.current < 350) return;
@@ -618,20 +755,32 @@ export function PlannerMap({
               style={{
                 left: `${x}px`,
                 top: `${y}px`,
-                zIndex: isHighlighted ? 40 : p.isScheduled ? 30 : 20,
+                zIndex: isHighlighted ? 40 : p.isScheduled ? (p.isActiveDay !== false ? 30 : 25) : 20,
                 transform: isHighlighted ? 'translate(-50%, -50%) scale(1.2)' : 'translate(-50%, -50%) scale(1)',
               }}
             >
               {p.isScheduled ? (
-                // Numbered Scheduled Marker
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md text-xs font-bold text-white transition-all ${
-                    isHighlighted ? 'bg-emerald-600 ring-3 ring-emerald-300' : 'bg-emerald-800'
-                  }`}
-                  title={`${p.order}. ${p.place.title}`}
-                >
-                  {p.order}
-                </div>
+                isOtherDayStop ? (
+                  // Other Day Stop Marker (Subtle dimmed pill)
+                  <div
+                    className={`flex h-5 items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all ${
+                      isHighlighted ? 'bg-slate-700 ring-2 ring-slate-400 scale-110' : 'bg-slate-500/80 hover:bg-slate-600'
+                    }`}
+                    title={`Day ${(p.dayIndex ?? 0) + 1} #${p.order}. ${p.place.title}`}
+                  >
+                    D{(p.dayIndex ?? 0) + 1}·{p.order}
+                  </div>
+                ) : (
+                  // Numbered Scheduled Marker
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md text-xs font-bold text-white transition-all ${
+                      isHighlighted ? 'bg-emerald-600 ring-3 ring-emerald-300' : 'bg-emerald-800'
+                    }`}
+                    title={`${p.order}. ${p.place.title}`}
+                  >
+                    {p.order}
+                  </div>
+                )
               ) : (
                 // Candidate POI Marker
                 <div

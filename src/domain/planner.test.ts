@@ -1485,6 +1485,11 @@ describe('exportTripToMarkdown', () => {
       expect(filtered).toHaveLength(1);
       expect(filtered[0].isScheduled).toBe(false);
     });
+
+    it('returns all points for all_routes mode', () => {
+      const filtered = getMapPointsForFilter(pts, 'all_routes');
+      expect(filtered).toHaveLength(2);
+    });
   });
 
   describe('calculateBounds', () => {

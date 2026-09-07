@@ -1499,6 +1499,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <PlannerMap
                 scheduledPlaces={mapScheduled}
                 candidatePlaces={sortedPendingCandidates}
+                allPlacesByDate={placesByDate}
+                tripDates={tripDates}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
@@ -1588,6 +1590,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
               <PlannerMap
                 scheduledPlaces={mapScheduled}
                 candidatePlaces={sortedPendingCandidates}
+                allPlacesByDate={placesByDate}
+                tripDates={tripDates}
                 destinations={selectedTrip?.destinations}
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
