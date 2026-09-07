@@ -132,17 +132,6 @@ function extractPrice(): string | undefined {
     }
   }
 
-  const allCandidates = document.querySelectorAll<HTMLElement>('span, div, button');
-  for (const el of Array.from(allCandidates).slice(0, 400)) {
-    const text = cleanExtractedText(el.textContent || '');
-    if (!text || text.length > 60 || text.length < 3) continue;
-    if (!/[¥฿$€£₩]|JP¥|CN¥|S\$|HK\$/.test(text)) continue;
-    const cleanPrice = extractCleanPriceText(text);
-    if (cleanPrice && !isZeroOrPlaceholderPrice(cleanPrice) && isValidExtractedPriceCandidate(cleanPrice) && /\d/.test(cleanPrice)) {
-      return cleanPrice;
-    }
-  }
-
   return undefined;
 }
 
