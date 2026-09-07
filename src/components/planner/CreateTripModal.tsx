@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
+import { applyTripFormPatch } from '../../domain/planner';
 import {
   createShareableTripBundle,
   parseTripBundle,
@@ -170,21 +171,18 @@ export function CreateTripModal({
     const destList = destinations.split(/[,，、]/).map((d) => d.trim()).filter(Boolean);
     const tagList = tags.split(/[,，、]/).map((t) => t.trim()).filter(Boolean);
 
-    const newTrip: PlannerTrip = {
-      schema_version: '0.1',
-      type: 'trip',
-      id: editingTrip?.id ?? crypto.randomUUID(),
+    // NB: applyTripFormPatch merges over editingTrip so fields the form does not
+    // own (members, fx_rates, calendar_feed, …) survive an edit — the repo upsert
+    // replaces the whole trip file.
+    const newTrip: PlannerTrip = applyTripFormPatch(editingTrip, {
       title: cleanTitle,
-      status: editingTrip?.status ?? 'planning',
       start_date: startDate,
       end_date: endDate,
       destinations: destList.length > 0 ? destList : [cleanTitle],
       currency: currency.toUpperCase().trim() || 'THB',
       transport_mode: transportMode,
       tags: tagList,
-      created_at: editingTrip?.created_at ?? now,
-      updated_at: now,
-    };
+    }, now);
 
     setBusy(true);
     setError(null);

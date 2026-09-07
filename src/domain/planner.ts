@@ -447,6 +447,45 @@ export function assertTripDates(trip: PlannerTrip, dates: string[]): void {
   }
 }
 
+export interface TripFormPatch {
+  title: string;
+  start_date: string;
+  end_date: string;
+  destinations: string[];
+  currency?: string;
+  transport_mode?: PlannerTravelMode;
+  tags?: string[];
+}
+
+/**
+ * Builds the trip entity to persist from the manage-trips form.
+ * Editing must preserve every field the form does not own (members, fx_rates,
+ * calendar_feed, saved_list_name, ignored_duplicate_pair_ids, …) because the
+ * repository upsert replaces the whole trip file.
+ */
+export function applyTripFormPatch(
+  existing: PlannerTrip | null,
+  patch: TripFormPatch,
+  now: string,
+): PlannerTrip {
+  return {
+    schema_version: '0.1',
+    type: 'trip',
+    ...existing,
+    id: existing?.id ?? crypto.randomUUID(),
+    title: patch.title,
+    status: existing?.status ?? 'planning',
+    start_date: patch.start_date,
+    end_date: patch.end_date,
+    destinations: patch.destinations,
+    currency: patch.currency,
+    transport_mode: patch.transport_mode,
+    tags: patch.tags,
+    created_at: existing?.created_at ?? now,
+    updated_at: now,
+  };
+}
+
 export function isZeroOrPlaceholderPrice(raw?: string | null): boolean {
   if (!raw || typeof raw !== 'string') return true;
   const t = raw.trim();

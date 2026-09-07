@@ -45,6 +45,10 @@ import {
   pullCaptureState,
   setCaptureContext,
 } from './capture-bridge';
+import {
+  resolveInitialTripId,
+  SELECTED_TRIP_STORAGE_KEY,
+} from './trip-selection';
 
 export interface UsePlannerDataProps {
   disabled: boolean;
@@ -133,6 +137,20 @@ export function sortPlaceList(
   });
 }
 
+function pickTripIdOnLoad(
+  current: string,
+  nextTrips: PlannerTrip[],
+  nextPlaces: PlannerTripPlace[],
+  nextVisits: PlannerTripVisit[],
+): string {
+  if (current && nextTrips.some((trip) => trip.id === current)) return current;
+  let stored = '';
+  try {
+    stored = typeof window !== 'undefined' ? window.localStorage.getItem(SELECTED_TRIP_STORAGE_KEY) || '' : '';
+  } catch {}
+  return resolveInitialTripId(nextTrips, nextPlaces, nextVisits, stored);
+}
+
 export function usePlannerData({ disabled }: UsePlannerDataProps) {
   const { language } = useI18n();
   const zh = language === 'zh';
@@ -162,6 +180,14 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     }, 8000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // Remember the trip being edited so reopening Planner restores it.
+  useEffect(() => {
+    if (!selectedTripId) return;
+    try {
+      window.localStorage.setItem(SELECTED_TRIP_STORAGE_KEY, selectedTripId);
+    } catch {}
+  }, [selectedTripId]);
 
   const [expensesByTrip, setExpensesByTrip] = useState<Record<string, TripExpenseItem[]>>({});
   const [membersByTrip, setMembersByTrip] = useState<Record<string, string[]>>({});
@@ -216,7 +242,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     setPlaces(nextPlaces);
     setVisits(nextVisits);
     setLegs(nextLegs);
-    setSelectedTripId((current) => current || nextTrips[0]?.id || '');
+    setSelectedTripId((current) => pickTripIdOnLoad(current, nextTrips, nextPlaces, nextVisits));
     try {
       await hydrateLedgerFromVault(nextTrips);
     } catch (error) {
@@ -243,7 +269,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
       setPlaces(nextPlaces);
       setVisits(nextVisits);
       setLegs(nextLegs);
-      setSelectedTripId((current) => current || nextTrips[0]?.id || '');
+      setSelectedTripId((current) => pickTripIdOnLoad(current, nextTrips, nextPlaces, nextVisits));
       setCapturePending(state && Array.isArray(state.pendingPlaces) ? state.pendingPlaces.length : null);
       try {
         await hydrateLedgerFromVault(nextTrips);

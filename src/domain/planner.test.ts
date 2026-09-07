@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyCaptureImportReport,
+  applyTripFormPatch,
   buildGoogleMapsDirectionsSegments,
   buildGoogleMapsRouteUrl,
   calculateDefaultTripLeg,
@@ -1751,5 +1752,75 @@ describe('exportTripToMarkdown', () => {
       expect(PLANNER_TRAVEL_MODE_CONFIG.bicycling.emoji).toBe('🚲');
       expect(PLANNER_TRAVEL_MODE_CONFIG.transit.emoji).toBe('🚇');
     });
+  });
+});
+describe('applyTripFormPatch', () => {
+  const NOW_ISO = '2026-09-08T00:00:00.000Z';
+
+  function baseTrip(overrides: Partial<PlannerTrip> = {}): PlannerTrip {
+    return {
+      schema_version: '0.1',
+      type: 'trip',
+      id: 'trip-1',
+      title: 'TH26',
+      status: 'planning',
+      start_date: '2026-10-05',
+      end_date: '2026-10-13',
+      destinations: ['曼谷', '清迈'],
+      currency: 'CNY',
+      transport_mode: 'transit',
+      tags: ['TH26'],
+      created_at: '2026-09-01T00:00:00.000Z',
+      updated_at: '2026-09-01T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  it('builds a fresh trip when nothing is being edited', () => {
+    const trip = applyTripFormPatch(null, {
+      title: 'JP27',
+      start_date: '2027-03-01',
+      end_date: '2027-03-07',
+      destinations: ['东京'],
+      currency: 'JPY',
+      transport_mode: 'transit',
+      tags: [],
+    }, NOW_ISO);
+    expect(trip.id).toBeTruthy();
+    expect(trip.status).toBe('planning');
+    expect(trip.title).toBe('JP27');
+    expect(trip.created_at).toBe(NOW_ISO);
+    expect(trip.updated_at).toBe(NOW_ISO);
+  });
+
+  it('preserves form-unowned fields when editing (regression: members/fx/feed wipe)', () => {
+    const existing = baseTrip({
+      members: ['我', '同伴'],
+      fx_rates: { SGD: 5.2 },
+      calendar_feed: {
+        feed_token: 'tok', trip_id: 'trip-1', created_at: '2026-09-01T00:00:00.000Z',
+        updated_at: '2026-09-01T00:00:00.000Z', enabled: true,
+      },
+      saved_list_name: 'TH26 收藏',
+      ignored_duplicate_pair_ids: ['a|b'],
+    });
+    const trip = applyTripFormPatch(existing, {
+      title: 'TH26 改名',
+      start_date: '2026-10-05',
+      end_date: '2026-10-13',
+      destinations: ['曼谷', '清迈'],
+      currency: 'CNY',
+      transport_mode: 'transit',
+      tags: ['TH26'],
+    }, NOW_ISO);
+    expect(trip.id).toBe('trip-1');
+    expect(trip.title).toBe('TH26 改名');
+    expect(trip.created_at).toBe('2026-09-01T00:00:00.000Z');
+    expect(trip.updated_at).toBe(NOW_ISO);
+    expect(trip.members).toEqual(['我', '同伴']);
+    expect(trip.fx_rates).toEqual({ SGD: 5.2 });
+    expect(trip.calendar_feed?.enabled).toBe(true);
+    expect(trip.saved_list_name).toBe('TH26 收藏');
+    expect(trip.ignored_duplicate_pair_ids).toEqual(['a|b']);
   });
 });
