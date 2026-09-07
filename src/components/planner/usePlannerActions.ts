@@ -27,6 +27,12 @@ import {
 } from './capture-bridge';
 import type { PlannerDataReturn } from './usePlannerData';
 
+function mergeLegs(prev: PlannerTripLeg[], next: PlannerTripLeg[]): PlannerTripLeg[] {
+  const byId = new Map(prev.map((leg) => [leg.id, leg] as const));
+  for (const leg of next) byId.set(leg.id, leg);
+  return [...byId.values()];
+}
+
 export interface UsePlannerActionsProps {
   data: PlannerDataReturn;
   disabled: boolean;
@@ -59,6 +65,8 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setNotice,
     setBusy,
     setTrips,
+    setVisits,
+    setLegs,
     setExpensesByTrip,
     setMembersByTrip,
     setSelectedTripId,
@@ -165,9 +173,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     async (from: PlannerScheduledPlace, to: PlannerScheduledPlace, mode: PlannerTravelMode) => {
       if (!selectedTrip) return;
       const leg = calculateDefaultTripLeg(selectedTrip, from, to, mode);
-      if (leg) {
-        await plannerRepository.upsertLeg(leg);
-      }
       // Propagate forward: later legs of the same day that still follow the
       // previous mode (or have no stored leg) inherit the new mode, so the
       // user doesn't have to switch every leg one by one. Manually cleared
@@ -179,6 +184,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
           && item.from_place_id === fromPlaceId && item.to_place_id === toPlaceId,
       );
       const previousMode = previousLeg?.mode ?? selectedTrip.transport_mode ?? 'driving';
+      const pendingLegs = leg ? [leg] : [];
       let propagated = 0;
       const fromIndex = scheduled.findIndex((item) => item.id === from.id);
       if (fromIndex >= 0) {
@@ -195,9 +201,19 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
           if (stored && stored.mode !== previousMode) continue;
           const next = calculateDefaultTripLeg(selectedTrip, segFrom, segTo, mode);
           if (!next) continue;
-          await plannerRepository.upsertLeg(next);
+          pendingLegs.push(next);
           propagated += 1;
         }
+      }
+      // Optimistic: leg ids and estimates derive from the same pure function,
+      // so the preview matches persistence exactly; load() reconciles/rolls back.
+      if (pendingLegs.length > 0) setLegs((prev) => mergeLegs(prev, pendingLegs));
+      try {
+        for (const pending of pendingLegs) {
+          await plannerRepository.upsertLeg(pending);
+        }
+      } catch (error) {
+        console.warn('[Planner] Failed to persist travel mode', error);
       }
       await load();
       if (propagated > 0) {
@@ -205,7 +221,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         setTimeout(() => setNotice(''), 3000);
       }
     },
-    [selectedTrip, load, legs, scheduled, setNotice, zh],
+    [selectedTrip, load, legs, scheduled, setLegs, setNotice, zh],
   );
 
   const handleClearTravelEstimate = useCallback(
@@ -228,12 +244,17 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         created_at: nowIso,
         updated_at: nowIso,
       };
-      await plannerRepository.upsertLeg(clearedLeg);
+      setLegs((prev) => mergeLegs(prev, [clearedLeg]));
+      try {
+        await plannerRepository.upsertLeg(clearedLeg);
+      } catch (error) {
+        console.warn('[Planner] Failed to clear commute estimate', error);
+      }
       await load();
       setNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.');
       setTimeout(() => setNotice(''), 3000);
     },
-    [selectedTrip, load, setNotice, zh],
+    [selectedTrip, load, setLegs, setNotice, zh],
   );
 
   const handleRecalculateTravelEstimate = useCallback(
@@ -245,12 +266,17 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         setTimeout(() => setNotice(''), 3000);
         return;
       }
-      await plannerRepository.upsertLeg(leg);
+      setLegs((prev) => mergeLegs(prev, [leg]));
+      try {
+        await plannerRepository.upsertLeg(leg);
+      } catch (error) {
+        console.warn('[Planner] Failed to recalculate commute estimate', error);
+      }
       await load();
       setNotice(zh ? '已按当前行程默认交通方式重新计算。' : 'Commute estimate recalculated with the trip default mode.');
       setTimeout(() => setNotice(''), 3000);
     },
-    [selectedTrip, load, setNotice, zh],
+    [selectedTrip, load, setLegs, setNotice, zh],
   );
 
   const handleSelectHotelForStaySpan = useCallback(
@@ -561,17 +587,30 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         anchor_type?: PlannerScheduledPlace['anchor_type'];
       },
     ) => {
-      await plannerRepository.updateVisitTiming(visitId, {
-        start: timing.scheduled_start,
-        duration_minutes: timing.duration_minutes,
-        is_anchor: timing.is_anchor,
-        anchor_type: timing.anchor_type,
-      });
+      setVisits((prev) => prev.map((visit) => {
+        if (visit.id !== visitId) return visit;
+        const next = { ...visit };
+        if (timing.scheduled_start !== undefined) next.start = timing.scheduled_start;
+        if (timing.duration_minutes !== undefined) next.duration_minutes = timing.duration_minutes;
+        if (timing.is_anchor !== undefined) next.is_anchor = timing.is_anchor;
+        if (timing.anchor_type !== undefined) next.anchor_type = timing.anchor_type;
+        return next;
+      }));
+      try {
+        await plannerRepository.updateVisitTiming(visitId, {
+          start: timing.scheduled_start,
+          duration_minutes: timing.duration_minutes,
+          is_anchor: timing.is_anchor,
+          anchor_type: timing.anchor_type,
+        });
+      } catch (error) {
+        console.warn('[Planner] Failed to save place timing', error);
+      }
       await load();
       setNotice(zh ? '已更新行程时段与停留时长！' : 'Updated schedule timing and duration!');
       setTimeout(() => setNotice(''), 3000);
     },
-    [load, setNotice, zh],
+    [load, setNotice, setVisits, zh],
   );
 
   const schedulePlace = useCallback(
@@ -593,10 +632,15 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
 
   const removeVisit = useCallback(
     async (place: PlannerScheduledPlace) => {
-      await plannerRepository.removeVisit(place.visit_id);
+      setVisits((prev) => prev.filter((visit) => visit.id !== place.visit_id));
+      try {
+        await plannerRepository.removeVisit(place.visit_id);
+      } catch (error) {
+        console.warn('[Planner] Failed to remove visit', error);
+      }
       await load();
     },
-    [load],
+    [load, setVisits],
   );
 
   const moveScheduled = useCallback(
@@ -606,10 +650,19 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       const orderedIds = scheduled.map((p) => p.id);
       const [moved] = orderedIds.splice(index, 1);
       orderedIds.splice(targetIndex, 0, moved);
-      await plannerRepository.reorderVisits(activeDate, orderedIds);
+      const orderById = new Map(orderedIds.map((id, order) => [id, order] as const));
+      setVisits((prev) => prev.map((visit) => {
+        const order = orderById.get(visit.id);
+        return order === undefined || visit.date !== activeDate ? visit : { ...visit, sort_order: order };
+      }));
+      try {
+        await plannerRepository.reorderVisits(activeDate, orderedIds);
+      } catch (error) {
+        console.warn('[Planner] Failed to reorder visits', error);
+      }
       await load();
     },
-    [activeDate, load, scheduled],
+    [activeDate, load, scheduled, setVisits],
   );
 
   const syncCapture = useCallback(async () => {
