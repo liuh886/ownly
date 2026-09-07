@@ -109,6 +109,11 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setCapturePending,
   } = data;
 
+  const showPersistError = useCallback((error: unknown, context: string) => {
+    console.warn(`[Planner] Failed to ${context}`, error);
+    setNotice(zh ? '保存失败，界面已还原，请重试。' : 'Save failed; the change was reverted. Please try again.');
+  }, [setNotice, zh]);
+
   const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
     setNoticeAction({
       label: zh ? '撤销' : 'Undo',
@@ -259,20 +264,22 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       }
       // Optimistic: leg ids and estimates derive from the same pure function,
       // so the preview matches persistence exactly; load() reconciles/rolls back.
+      let saved = false;
       if (pendingLegs.length > 0) setLegs((prev) => mergeLegs(prev, pendingLegs));
       try {
         for (const pending of pendingLegs) {
           await plannerRepository.upsertLeg(pending);
         }
+        saved = true;
       } catch (error) {
-        console.warn('[Planner] Failed to persist travel mode', error);
+        showPersistError(error, 'persist travel mode');
       }
       await load();
-      if (propagated > 0) {
+      if (saved && propagated > 0) {
         setNotice(zh ? `已切换交通方式，并向后应用 ${propagated} 段。` : `Travel mode switched and applied to ${propagated} following legs.`);
       }
     },
-    [selectedTrip, load, legs, scheduled, setLegs, setNotice, zh],
+    [selectedTrip, load, legs, scheduled, setLegs, setNotice, showPersistError, zh],
   );
 
   const handleClearTravelEstimate = useCallback(
@@ -304,7 +311,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       try {
         await plannerRepository.upsertLeg(clearedLeg);
       } catch (error) {
-        console.warn('[Planner] Failed to clear commute estimate', error);
+        showPersistError(error, 'clear commute estimate');
+        await load();
+        return;
       }
       await load();
       if (previousLeg && previousLeg.duration_minutes > 0) {
@@ -315,7 +324,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         setNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.');
       }
     },
-    [legs, selectedTrip, load, setLegs, setNotice, showUndoNotice, zh],
+    [legs, selectedTrip, load, setLegs, setNotice, showPersistError, showUndoNotice, zh],
   );
 
   const handleRecalculateTravelEstimate = useCallback(
@@ -330,12 +339,14 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       try {
         await plannerRepository.upsertLeg(leg);
       } catch (error) {
-        console.warn('[Planner] Failed to recalculate commute estimate', error);
+        showPersistError(error, 'recalculate commute estimate');
+        await load();
+        return;
       }
       await load();
       setNotice(zh ? '已按当前行程默认交通方式重新计算。' : 'Commute estimate recalculated with the trip default mode.');
     },
-    [selectedTrip, load, setLegs, setNotice, zh],
+    [selectedTrip, load, setLegs, setNotice, showPersistError, zh],
   );
 
   const handleSelectHotelForStaySpan = useCallback(
@@ -673,12 +684,14 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
           anchor_type: timing.anchor_type,
         });
       } catch (error) {
-        console.warn('[Planner] Failed to save place timing', error);
+        showPersistError(error, 'save place timing');
+        await load();
+        return;
       }
       await load();
       setNotice(zh ? '已更新行程时段与停留时长！' : 'Updated schedule timing and duration!');
     },
-    [load, setNotice, setVisits, zh],
+    [load, setNotice, setVisits, showPersistError, zh],
   );
 
   const schedulePlace = useCallback(
@@ -704,7 +717,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       try {
         await plannerRepository.removeVisit(place.visit_id);
       } catch (error) {
-        console.warn('[Planner] Failed to remove visit', error);
+        showPersistError(error, 'remove visit');
+        await load();
+        return;
       }
       await load();
       if (snapshot) {
@@ -713,7 +728,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         });
       }
     },
-    [load, setVisits, showUndoNotice, visits, zh],
+    [load, setVisits, showPersistError, showUndoNotice, visits, zh],
   );
 
   const moveScheduled = useCallback(
@@ -731,11 +746,11 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       try {
         await plannerRepository.reorderVisits(activeDate, orderedIds);
       } catch (error) {
-        console.warn('[Planner] Failed to reorder visits', error);
+        showPersistError(error, 'reorder visits');
       }
       await load();
     },
-    [activeDate, load, scheduled, setVisits],
+    [activeDate, load, scheduled, setVisits, showPersistError],
   );
 
   const syncCapture = useCallback(async () => {
