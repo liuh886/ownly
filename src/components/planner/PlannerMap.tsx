@@ -390,9 +390,16 @@ export function PlannerMap({
     const point = { x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) };
     pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
     activePointers.current.set(e.pointerId, point);
-    try {
-      containerRef.current?.setPointerCapture(e.pointerId);
-    } catch {}
+    // Do not steal pointer capture from markers / interactive controls:
+    // capturing to the container retargets pointerup and breaks child onClick,
+    // so the popover intermittently fails to open (especially on double-click).
+    const target = e.target as HTMLElement | null;
+    const isInteractiveTarget = !!target?.closest?.('[data-map-marker],button,a,select,input,textarea');
+    if (!isInteractiveTarget) {
+      try {
+        containerRef.current?.setPointerCapture(e.pointerId);
+      } catch {}
+    }
 
     if (activePointers.current.size === 2) {
       dragStartRef.current = null;
@@ -744,9 +751,14 @@ export function PlannerMap({
           return (
             <div
               key={`${p.place.id}_${p.dayIndex ?? ''}_${p.order ?? ''}_${pIdx}`}
+              data-map-marker="true"
               onClick={(e) => {
                 e.stopPropagation();
                 if (Date.now() - lastPinchEndRef.current < 350) return;
+                setSelectedPlaceId(p.place.id);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
                 setSelectedPlaceId(p.place.id);
               }}
               onMouseEnter={() => onHoverPlace?.(p.place.id)}
