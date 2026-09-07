@@ -513,8 +513,11 @@ export async function enrichCandidatePlacesBatch(
   options?: { concurrency?: number; signal?: AbortSignal }
 ): Promise<{ enrichedPlaces: PlannerTripPlace[]; totalEnriched: number }> {
   const concurrency = Math.max(1, Math.min(options?.concurrency ?? 3, 5));
-  // Priority queue: A (0x/ChIJ) before B (query), stable for same priority
-  const sorted = [...places].sort((a, b) => priorityOf(a) - priorityOf(b));
+  // Priority queue: A (0x/ChIJ) before B (query), stable for same priority.
+  // Carry the original index explicitly: places may contain duplicate object
+  // references or equal titles, so indexOf() would collapse them to the first match.
+  const indexed = places.map((place, originalIndex) => ({ place, originalIndex }));
+  indexed.sort((a, b) => priorityOf(a.place) - priorityOf(b.place));
   // Use sorted order for processing but keep results in original order
   const results = [...places];
   let totalEnriched = 0;
@@ -522,11 +525,10 @@ export async function enrichCandidatePlacesBatch(
   // Worker pool of size concurrency
   let cursor = 0;
   async function worker() {
-    while (cursor < sorted.length) {
+    while (cursor < indexed.length) {
       if (options?.signal?.aborted) break;
       const idx = cursor++;
-      const place = sorted[idx];
-      const originalIndex = places.indexOf(place);
+      const { place, originalIndex } = indexed[idx];
       const res = await enrichPlaceMetadata(place, { signal: options?.signal, force: true });
       if (res.enriched) {
         results[originalIndex] = res.place;
