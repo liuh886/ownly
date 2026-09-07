@@ -1639,9 +1639,43 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         <div className="fixed inset-0 z-50 flex flex-col bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in">
           <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-stone-900">🗺️ {selectedTrip.title} · {zh ? `第${activeDayIndex + 1}天空间地图` : `Day ${activeDayIndex + 1} Spatial Map`}</span>
-                <span className="text-xs text-stone-400">({activeDate})</span>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="truncate text-sm font-bold text-stone-900">🗺️ {selectedTrip.title} · {zh ? `第${activeDayIndex + 1}天空间地图` : `Day ${activeDayIndex + 1} Spatial Map`}</span>
+                <span className="shrink-0 text-xs text-stone-400">({activeDate})</span>
+                {tripDates.length > 1 ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={activeDayIndex <= 0}
+                      onClick={() => setSelectedDate(tripDates[activeDayIndex - 1])}
+                      className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={zh ? '前一天' : 'Previous day'}
+                    >
+                      ‹
+                    </button>
+                    <select
+                      value={activeDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="rounded-lg border border-stone-200 bg-white px-1.5 py-1 text-xs font-semibold text-stone-700 focus:border-stone-400 focus:outline-hidden"
+                      title={zh ? '切换日期' : 'Switch day'}
+                    >
+                      {tripDates.map((date, index) => (
+                        <option key={date} value={date}>
+                          D{index + 1} · {formatDay(date, language)}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={activeDayIndex >= tripDates.length - 1}
+                      onClick={() => setSelectedDate(tripDates[activeDayIndex + 1])}
+                      className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={zh ? '后一天' : 'Next day'}
+                    >
+                      ›
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <button
                 type="button"
