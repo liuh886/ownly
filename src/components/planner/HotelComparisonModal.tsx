@@ -178,7 +178,7 @@ export function HotelComparisonModal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div

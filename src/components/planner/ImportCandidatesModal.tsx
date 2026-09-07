@@ -116,7 +116,7 @@ export function ImportCandidatesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in"
       role="dialog"
       aria-modal="true"
     >

@@ -1591,7 +1591,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
 
       {isMapExpanded && selectedTrip ? (
-        <div className="fixed inset-0 z-50 flex flex-col bg-stone-950/70 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex flex-col bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in">
           <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-4 py-3">
               <div className="flex items-center gap-2">
@@ -2213,7 +2213,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
 
       {/* Suspected Duplicates Review Modal */}
       {isSuspectedModalOpen && visibleSuspectedPairs.length > 0 ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 backdrop-blur-xs p-4">
           <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl border border-stone-200 bg-white shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4 bg-stone-50">
               <div>
@@ -2348,7 +2348,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
       {/* Accessible Day Swap Modal */}
       {isSwapDaysModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl space-y-4">
+          <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
                 <span>⇄</span>

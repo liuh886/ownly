@@ -342,7 +342,7 @@ export function TripBundleManager({ disabled = false, onImported }: TripBundleMa
       ) : null}
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4"><div><h2 className="text-base font-bold text-stone-900">🔗 {zh ? 'Ownly Trip 分享与复制' : 'Ownly Trip Sharing'}</h2><p className="mt-0.5 text-[11px] text-stone-500">{zh ? '分享链接优先；Bundle 文件作为离线兜底。' : 'Share by link first; Bundle files are the offline fallback.'}</p></div><button type="button" onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100">✕</button></div>
             <div className="grid grid-cols-2 border-b border-stone-100 bg-stone-50/70 p-1.5"><button type="button" onClick={() => { resetMessages(); setMode('share'); }} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === 'share' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500'}`}>{zh ? '📤 分享我的 Trip' : '📤 Share Trip'}</button><button type="button" onClick={() => { resetMessages(); setMode('import'); }} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === 'import' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500'}`}>{zh ? '📥 导入 Trip' : '📥 Import Trip'}</button></div>
