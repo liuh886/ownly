@@ -116,6 +116,14 @@ const MAX_ZOOM = 18;
 const ZOOM_STEP_BUTTON = 1;
 const ZOOM_STEP_WHEEL = 0.5;
 
+// Native tooltip shows the place name on line 1 and the recommendation reason (why) on line 2.
+function markerTitle(firstLine: string, why?: string): string {
+  const reason = (why ?? '').trim().replace(/\s+/g, ' ');
+  if (!reason) return firstLine;
+  const short = reason.length > 80 ? `${reason.slice(0, 80)}…` : reason;
+  return `${firstLine}\n${short}`;
+}
+
 export function PlannerMap({
   scheduledPlaces,
   candidatePlaces,
@@ -778,7 +786,7 @@ export function PlannerMap({
                     className={`flex h-5 items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all ${
                       isHighlighted ? 'bg-slate-700 ring-2 ring-slate-400 scale-110' : 'bg-slate-500/80 hover:bg-slate-600'
                     }`}
-                    title={`Day ${(p.dayIndex ?? 0) + 1} #${p.order}. ${p.place.title}`}
+                    title={markerTitle(`Day ${(p.dayIndex ?? 0) + 1} #${p.order}. ${p.place.title}`, p.place.why)}
                   >
                     D{(p.dayIndex ?? 0) + 1}·{p.order}
                   </div>
@@ -788,7 +796,7 @@ export function PlannerMap({
                     className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md text-xs font-bold text-white transition-all ${
                       isHighlighted ? 'bg-emerald-600 ring-3 ring-emerald-300' : 'bg-emerald-800'
                     }`}
-                    title={`${p.order}. ${p.place.title}`}
+                    title={markerTitle(`${p.order}. ${p.place.title}`, p.place.why)}
                   >
                     {p.order}
                   </div>
@@ -799,7 +807,7 @@ export function PlannerMap({
                   className={`flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-white shadow-md text-[11px] transition-all ${
                     isHighlighted ? 'ring-3 ring-blue-400 scale-110' : 'hover:scale-110'
                   }`}
-                  title={p.place.title}
+                  title={markerTitle(p.place.title, p.place.why)}
                 >
                   <span className="leading-none">{KIND_EMOJI[p.place.kind] || '📍'}</span>
                 </div>
