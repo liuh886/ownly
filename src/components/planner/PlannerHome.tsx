@@ -19,7 +19,6 @@ import {
   PLANNER_TRAVEL_MODE_CONFIG,
 } from '@/domain/planner';
 import type { PlannerExecutionTransitionItem, PlannerTimelineStopItem } from '@/domain/planner-schedule';
-import { PLANNER_LOAD_LEVEL_LABEL, type PlannerDayLoad } from '@/domain/planner-schedule';
 import type { PlannerDayOptimizationComputation } from '@/domain/planner-optimization';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { PlannerMap } from './PlannerMap';
@@ -30,6 +29,7 @@ import { PlaceTimingModal } from './PlaceTimingModal';
 import { CreateTripModal } from './CreateTripModal';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
 import { OptimizeOrderModal } from './OptimizeOrderModal';
+import { DayLoadBreakdown, DayRiskList, DayRiskSummary } from './PlannerDayStatsPanel';
 import { usePlannerController, type PlannerControllerReturn } from './usePlannerController';
 
 interface PlannerHomeProps {
@@ -207,91 +207,6 @@ function TravelModeSwitchPopover({
           <span>{zh ? '重新计算' : 'Recalc'}</span>
         </button>
       </div>
-    </div>
-  );
-}
-
-function DayLoadBadge({ zh, load }: { zh: boolean; load: PlannerDayLoad }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(e: MouseEvent | TouchEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open ]);
-
-  const levelStyle = load.level === 'heavy'
-    ? 'bg-rose-50 text-rose-800 ring-rose-200'
-    : load.level === 'tight'
-      ? 'bg-amber-50 text-amber-800 ring-amber-200'
-      : load.level === 'moderate'
-        ? 'bg-sky-50 text-sky-800 ring-sky-200'
-        : 'bg-stone-100 text-stone-600 ring-stone-200';
-  const rows: Array<{ label: string; text: string; ratio: number }> = [
-    { label: zh ? '游览' : 'Stops', text: `${Math.round(load.activity_minutes)} min`, ratio: Math.min(1, load.activity_minutes / 600) },
-    { label: zh ? '交通' : 'Transit', text: `${Math.round(load.transit_minutes)} min`, ratio: Math.min(1, load.transit_minutes / 180) },
-    { label: zh ? '站点' : 'Places', text: `${load.stop_count}`, ratio: Math.min(1, load.stop_count / 8) },
-    {
-      label: zh ? '跨度' : 'Span',
-      text: load.span_minutes !== null ? `${Math.floor(load.span_minutes / 60)}h${load.span_minutes % 60 > 0 ? `${load.span_minutes % 60}m` : ''}` : '—',
-      ratio: load.span_minutes !== null ? Math.min(1, load.span_minutes / 720) : 0,
-    },
-  ];
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 transition hover:brightness-95 ${levelStyle}`}
-        title={zh ? '点击查看负荷构成' : 'Show load breakdown'}
-      >
-        <span>📊 {zh ? '负荷' : 'Load'} {load.score} · {PLANNER_LOAD_LEVEL_LABEL[load.level]}</span>
-        <span className="text-[8.5px] opacity-70">▾</span>
-      </button>
-      {open ? (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-60 rounded-xl border border-stone-200 bg-white/95 p-2.5 shadow-xl backdrop-blur-md">
-          <div className="px-1 pb-1.5 text-[9.5px] font-bold uppercase tracking-wider text-stone-400">
-            {zh ? '负荷构成' : 'Load breakdown'}
-          </div>
-          <div className="space-y-1.5">
-            {rows.map((row) => (
-              <div key={row.label} className="flex items-center gap-2 text-[11px]">
-                <span className="w-8 shrink-0 font-semibold text-stone-500">{row.label}</span>
-                <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-100">
-                  <div className="h-full rounded-full bg-stone-500" style={{ width: `${Math.round(row.ratio * 100)}%` }} />
-                </div>
-                <span className="w-14 shrink-0 text-right font-mono text-[10px] text-stone-600">{row.text}</span>
-              </div>
-            ))}
-            <div className="flex items-center gap-2 px-1 pt-0.5 text-[10.5px] text-stone-600">
-              <span>{load.lunch_ok ? '✅' : '⚠️'} {zh ? '午餐' : 'Lunch'}</span>
-              <span>{load.dinner_ok ? '✅' : '⚠️'} {zh ? '晚餐' : 'Dinner'}</span>
-              {load.longest_stretch_minutes !== null ? (
-                <span className="ml-auto font-mono text-[10px] text-stone-500">
-                  {zh ? '最长连轴' : 'Stretch'} {Math.floor(load.longest_stretch_minutes / 60)}h{load.longest_stretch_minutes % 60 > 0 ? `${load.longest_stretch_minutes % 60}m` : ''}
-                </span>
-              ) : null}
-            </div>
-            {load.suggestion ? (
-              <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-[10.5px] leading-relaxed text-amber-900 ring-1 ring-amber-200">
-                💡 {load.suggestion}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1661,7 +1576,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                       : (zh ? '需注意' : 'Warning')}
                 </span>
               ) : null}
-              <DayLoadBadge zh={zh} load={dayAssessment.load} />
+              <button
+                type="button"
+                disabled={optimizeBusy}
+                onClick={() => void runOptimizeOrder()}
+                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200 transition hover:brightness-95 disabled:opacity-50"
+                title={zh ? '按交通时间优化当天游览顺序 (预览后应用)' : 'Optimize day order by travel time (preview first)'}
+              >
+                {optimizeBusy ? '⏳' : '✨'} {zh ? '优化顺序' : 'Optimize'}
+              </button>
             </div>
             {activeDayWeather ? (
               <span
@@ -1680,15 +1603,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             ) : null}
             {scheduled.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={optimizeBusy}
-                  onClick={() => void runOptimizeOrder()}
-                  className="hidden sm:inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                  title={zh ? '按交通时间优化当天游览顺序 (预览后应用)' : 'Optimize day order by travel time (preview first)'}
-                >
-                  {optimizeBusy ? '⏳' : '✨'} {zh ? '优化顺序' : 'Optimize'}
-                </button>
                 <a
                   href={buildGoogleMapsRouteUrl(scheduled, 'driving')}
                   target="_blank"
@@ -1793,34 +1707,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
               ) : null}
             </div>
           ) : null}
-          {dayAssessment.time_overlaps.length > 0 || dayAssessment.travel_conflicts.length > 0 || dayAssessment.is_overloaded || dayAssessment.opening_hours_warnings.length > 0 ? (
-            <div className="mx-4 mt-2 space-y-1">
-              {dayAssessment.time_overlaps.map((overlap) => (
-                <div key={`${overlap.fromId}-${overlap.toId}`} className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900 shadow-2xs font-medium">
-                  <span>⚠️</span>
-                  <span>{zh ? `${overlap.fromTitle} 与 ${overlap.toTitle} 时段重叠（${overlap.fromTime} / ${overlap.toTime}）` : `${overlap.fromTitle} overlaps ${overlap.toTitle} (${overlap.fromTime} / ${overlap.toTime})`}</span>
-                </div>
-              ))}
-              {dayAssessment.travel_conflicts.map((conflict) => (
-                <div key={conflict.id} className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900 shadow-2xs font-medium">
-                  <span>🚨</span>
-                  <span>{zh ? `交通耗时冲突: 从「${conflict.from_title}」出发预计到达时间迟于「${conflict.to_title}」开始时间（晚 ${conflict.late_by_minutes} 分钟）` : `Travel conflict: arrival from "${conflict.from_title}" is ${conflict.late_by_minutes}m late for "${conflict.to_title}"`}</span>
-                </div>
-              ))}
-              {dayAssessment.opening_hours_warnings.map((oh) => (
-                <div key={`${oh.visit_id}-${oh.place_id}`} className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 shadow-2xs font-medium">
-                  <span>⚠️</span>
-                  <span><b>{oh.title}</b>: {oh.reason}</span>
-                </div>
-              ))}
-              {dayAssessment.is_overloaded ? (
-                <div className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 shadow-2xs font-medium">
-                  <span>⚠️</span>
-                  <span>{dayAssessment.overload_reason}</span>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <DayRiskSummary zh={zh} assessment={dayAssessment} onViewDetails={() => setRightTab('context')} />
           <div className="p-2 sm:p-2.5">
             {scheduled.length === 0 ? (
               <div className={`rounded-xl border-2 border-dashed px-4 py-12 text-center text-sm ${draggingPlaceId ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700' : 'border-stone-200 text-stone-400'}`}>
@@ -2435,8 +2322,21 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             />
           ) : (
             <div className="p-4 overflow-y-auto">
-              <h2 className="text-sm font-semibold text-stone-900">Planner Context</h2>
-              <div className="mt-3 divide-y divide-stone-100 text-xs">
+              <h2 className="text-sm font-semibold text-stone-900">{zh ? '当天负荷统计' : 'Day Stats'}</h2>
+              <div className="mt-3 space-y-5">
+                <DayLoadBreakdown zh={zh} load={dayAssessment.load} />
+
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold text-stone-700">{zh ? '当天风险' : 'Day risks'}</h3>
+                  <DayRiskList
+                    zh={zh}
+                    assessment={dayAssessment}
+                    onHighlight={setHighlightedPlaceId}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 divide-y divide-stone-100 text-xs">
                 <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '当天已排' : 'Day Scheduled'}</span><strong>{scheduled.length}</strong></div>
                 <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '候选池' : 'Candidates'}</span><strong>{pendingCandidates.length}</strong></div>
                 <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '暂不考虑' : 'Shelved'}</span><strong>{droppedPlaces.length}</strong></div>
