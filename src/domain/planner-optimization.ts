@@ -26,11 +26,12 @@ export interface OrsMatrixFacts {
 export interface PlannerDayOptimizationComputation {
   date: string;
   originalPlaces: PlannerScheduledPlace[];
-  orderedPlaces: PlannerScheduledPlace[];
-  originalMinutes: number;
+  orderedPlaces: PlannerScheduledPlace[];  originalMinutes: number;
   optimizedMinutes: number;
   savedMinutes: number;
   matrixSource: PlannerDayMatrixSource;
+  /** Why the matrix fell back to heuristic estimates despite an ORS-capable trip mode. */
+  orsFallback?: 'missing_key' | 'request_failed';
   legsToWrite: PlannerTripLeg[];
 }
 

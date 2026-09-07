@@ -1039,6 +1039,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       const stopsForCompute = materializeStopCoordinates(resolved);
       const mode: PlannerTravelMode = selectedTrip.transport_mode ?? 'transit';
       let ors: OrsMatrixFacts | null = null;
+      let orsFallback: PlannerDayOptimizationComputation['orsFallback'];
       if (openRouteServiceProfile(mode)) {
         const apiKey = loadOrsApiKey();
         if (apiKey) {
@@ -1050,7 +1051,10 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
             );
           } catch (error) {
             console.warn('[Planner] OpenRouteService matrix failed; falling back to heuristic estimates', error);
+            orsFallback = 'request_failed';
           }
+        } else {
+          orsFallback = 'missing_key';
         }
       }
       const computation = computeDayOrderOptimization(selectedTrip, stopsForCompute, legs, ors);
@@ -1058,6 +1062,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         setNotice(zh ? '当前顺序已是最优（按已知交通时间）。' : 'Current order is already optimal by known travel times.');
         return null;
       }
+      if (orsFallback) computation.orsFallback = orsFallback;
       return computation;
     },
     [selectedTrip, scheduledAll, legs, setNotice, zh],

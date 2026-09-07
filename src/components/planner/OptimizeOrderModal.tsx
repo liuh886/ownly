@@ -22,7 +22,7 @@ export function OptimizeOrderModal({
   onRecompute,
 }: OptimizeOrderModalProps) {
   const [apiKeyDraft, setApiKeyDraft] = useState('');
-  const [showKeyForm, setShowKeyForm] = useState(false);
+  const [showKeyForm, setShowKeyForm] = useState(computation.orsFallback === 'missing_key');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -88,6 +88,18 @@ export function OptimizeOrderModal({
             <span>⏱️</span>
             <span>{matrixSourceLabel}</span>
           </div>
+
+          {computation.orsFallback ? (
+            <div className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-900 ring-1 ring-amber-200">
+              {computation.orsFallback === 'missing_key'
+                ? (zh
+                  ? '⚠️ 本次使用粗略估算：未配置 OpenRouteService key（可在下方填入后重算）。'
+                  : '⚠️ Rough estimates used: no OpenRouteService key configured (add one below and recompute).')
+                : (zh
+                  ? '⚠️ 本次使用粗略估算：ORS 请求失败，已回退（可稍后重试）。'
+                  : '⚠️ Rough estimates used: the ORS request failed and fell back (retry later).')}
+            </div>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
