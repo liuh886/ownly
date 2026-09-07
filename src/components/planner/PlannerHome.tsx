@@ -283,8 +283,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
     weather,
     urgencies,
     activeDayWeather,
-    dayEstimatedCost,
-    dayActualCost,
     isMultiSelectMode,
     setIsMultiSelectMode,
     selectedCandidateIds,
@@ -766,17 +764,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
                 <span>🗂️ {zh ? '候选池' : 'Pool'}</span>
                 <span className="rounded-full bg-stone-200 px-1.5 py-0 text-[9.5px] font-bold text-stone-700">{pendingCandidates.length}</span>
               </button>
-              <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-stone-50 border border-stone-200 px-2 py-1 text-[11px] font-medium text-stone-700">
-                <span>💸</span>
-                <span>{zh ? '预估' : 'Est'}: {currencySymbolFor(selectedTrip.currency)}{dayEstimatedCost.total}</span>
-                <span className="text-stone-300">|</span>
-                <span>{zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip.currency)}{dayActualCost.total}</span>
-                {dayEstimatedCost.unconverted + dayActualCost.unconverted > 0 ? (
-                  <span className="text-amber-700" title={zh ? '存在缺少可用汇率的金额，未计入总额' : 'Some amounts lack a usable FX rate and are excluded'}>
-                    ⚠ {dayEstimatedCost.unconverted + dayActualCost.unconverted}
-                  </span>
-                ) : null}
-              </div>
             </div>
             {activeDayWeather ? (
               <span
@@ -795,21 +782,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {
             ) : null}
             {scheduled.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span
-                  className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-sky-800"
-                  title={zh ? '真实交通时间优化通过本地 Ownly MCP 执行；网页不持有路由 API key' : 'Travel-time optimization runs through local Ownly MCP; the web app never holds the routing API key'}
-                >
-                  ⏱️ {zh ? 'MCP 真实交通优化' : 'MCP travel-time optimize'}
-                </span>
-                <a
-                  href={buildGoogleMapsRouteUrl(scheduled, selectedTrip.transport_mode ?? 'transit')}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-md bg-stone-950 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-stone-800 transition"
-                  title={zh ? '在 Google Maps 中打开全天完整路线' : 'Open full day route in Google Maps'}
-                >
-                  🗺️ {zh ? 'Google Maps 完整路线' : 'Google Maps Route'}
-                </a>
                 <a
                   href={buildGoogleMapsRouteUrl(scheduled, 'driving')}
                   target="_blank"
