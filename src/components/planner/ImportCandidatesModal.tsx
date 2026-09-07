@@ -62,7 +62,8 @@ export function ImportCandidatesModal({
           if (isCollectionExport(parsed)) {
             const exportData = parseCaptureCollectionExport(parsed);
             if (exportData) {
-              const converted = exportData.places.map((p) => capturePlaceToPlannerPlace(p, tripId, exportData.provenance)) as PlannerTripPlace[];
+              // Preserve capture ids so re-imports dedup by id (same policy as bridge sync).
+              const converted = exportData.places.map((p) => capturePlaceToPlannerPlace(p, tripId, exportData.provenance, { preserveId: true })) as PlannerTripPlace[];
               setParsedPlaces(converted);
               setErrorMsg('');
               return;
