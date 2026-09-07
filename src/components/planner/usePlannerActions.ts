@@ -15,9 +15,12 @@ import {
   exportPlacesToCSV,
   exportPlacesToKML,
   exportTripToMarkdown,
+  extractPlaceCoordinates,
+  isTransitHubPlace,
   plannerTripLegId,
 } from '@/domain/planner';
 import {
+  buildOrsSingleLeg,
   computeDayOrderOptimization,
   materializeStopCoordinates,
   resolveStopCoordinates,
@@ -25,6 +28,7 @@ import {
   type PlannerDayOptimizationComputation,
 } from '@/domain/planner-optimization';
 import {
+  fetchOpenRouteServiceLeg,
   fetchOpenRouteServiceMatrix,
   loadOrsApiKey,
   openRouteServiceProfile,
@@ -343,7 +347,30 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   const handleRecalculateTravelEstimate = useCallback(
     async (from: PlannerScheduledPlace, to: PlannerScheduledPlace) => {
       if (!selectedTrip) return;
-      const leg = calculateDefaultTripLeg(selectedTrip, from, to);
+      if (isTransitHubPlace(from) && isTransitHubPlace(to)) {
+        setNotice(zh ? '两站均为交通枢纽，无需本地交通预估。' : 'Both stops are transit hubs; no local commute estimate needed.');
+        return;
+      }
+      // Prefer real road-network routing when the trip mode supports it and an
+      // API key is configured; any failure falls back to the distance heuristic.
+      const mode = selectedTrip.transport_mode ?? 'driving';
+      const fromPlaceId = from.place_id || from.id;
+      const toPlaceId = to.place_id || to.id;
+      let leg: PlannerTripLeg | null = null;
+      let viaOrs = false;
+      const fromCoords = extractPlaceCoordinates(from);
+      const toCoords = extractPlaceCoordinates(to);
+      const apiKey = loadOrsApiKey();
+      if (fromCoords && toCoords && openRouteServiceProfile(mode) && apiKey.trim()) {
+        try {
+          const ors = await fetchOpenRouteServiceLeg(apiKey, fromCoords, toCoords, mode);
+          leg = buildOrsSingleLeg(selectedTrip, fromPlaceId, toPlaceId, mode, ors);
+          viaOrs = true;
+        } catch (error) {
+          console.warn('[Planner] OpenRouteService single-leg failed; falling back to heuristic estimate', error);
+        }
+      }
+      leg ??= calculateDefaultTripLeg(selectedTrip, from, to);
       if (!leg) {
         setNotice(zh ? '两站均为交通枢纽，无需本地交通预估。' : 'Both stops are transit hubs; no local commute estimate needed.');
         return;
@@ -357,7 +384,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         return;
       }
       await load();
-      setNotice(zh ? '已按当前行程默认交通方式重新计算。' : 'Commute estimate recalculated with the trip default mode.');
+      setNotice(viaOrs
+        ? (zh ? '已用真实路网（ORS）重新计算该段。' : 'Recalculated this leg with live road-network routing (ORS).')
+        : (zh ? '已按当前行程默认交通方式重新计算。' : 'Commute estimate recalculated with the trip default mode.'));
     },
     [selectedTrip, load, setLegs, setNotice, showPersistError, zh],
   );
@@ -782,9 +811,11 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       const pending = Array.isArray(state.pendingPlaces) ? state.pendingPlaces : [];
       if (pending.length > 0) {
         const targetTripId = selectedTripId || state.activeContext?.tripId || trips[0]?.id || '';
+        // Stamp the currently selected trip unconditionally: pending places all
+        // share one pull batch, and a stale bridge context must never win.
         const placesToImport = pending.map((p) => ({
           ...p,
-          trip_id: p.trip_id || targetTripId,
+          trip_id: targetTripId,
         })) as PlannerTripPlace[];
         const report = await plannerRepository.importCapturedPlaces(placesToImport);
 

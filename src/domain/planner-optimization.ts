@@ -43,6 +43,40 @@ function isSamePlacePair(from: PlannerScheduledPlace, to: PlannerScheduledPlace)
   return from.id !== to.id && (from.place_id || from.id) === (to.place_id || to.id);
 }
 
+export interface OrsSingleLegResult {
+  duration_minutes: number;
+  distance_meters: number;
+}
+
+/**
+ * Builds a persisted leg from a single ORS directions result. Same id scheme
+ * as the heuristic builder so re-running either path overwrites the same leg.
+ */
+export function buildOrsSingleLeg(
+  trip: PlannerTrip,
+  fromPlaceId: string,
+  toPlaceId: string,
+  mode: PlannerTravelMode,
+  result: OrsSingleLegResult,
+  now = new Date(),
+): PlannerTripLeg {
+  const timestamp = now.toISOString();
+  return {
+    schema_version: '0.1',
+    type: 'trip_leg',
+    id: plannerTripLegId(trip.id, fromPlaceId, toPlaceId),
+    trip_id: trip.id,
+    from_place_id: fromPlaceId,
+    to_place_id: toPlaceId,
+    mode,
+    duration_minutes: result.duration_minutes,
+    distance_meters: result.distance_meters,
+    source: 'openrouteservice',
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+}
+
 export interface ResolvedOptimizationStop {
   place: PlannerScheduledPlace;
   coords: { lat: number; lng: number } | null;

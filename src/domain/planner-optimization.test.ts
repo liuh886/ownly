@@ -4,6 +4,7 @@ import type { PlannerScheduledPlace } from './planner-visits';
 import {
   applyOrsDayTravelMatrix,
   buildHeuristicDayTravelMatrix,
+  buildOrsSingleLeg,
   computeDayOrderOptimization,
   materializeStopCoordinates,
   resolveStopCoordinates,
@@ -281,6 +282,19 @@ describe('resolveStopCoordinates & materializeStopCoordinates', () => {
     expect(materialized[0]?.coordinates).toEqual({ lat: 18.8, lng: 98.95 });
     expect(materialized[0]?.id).toBe(urlOnly.id);
     expect(materialized[1]).toBe(withField);
+  });
+});
+
+describe('buildOrsSingleLeg', () => {
+  it('builds an openrouteservice leg on the same id scheme as the heuristic builder', () => {
+    const leg = buildOrsSingleLeg(trip, 'a', 'b', 'driving', { duration_minutes: 23, distance_meters: 8450 });
+    expect(leg.id).toBe('leg:trip-1:a:b');
+    expect(leg.trip_id).toBe('trip-1');
+    expect(leg.mode).toBe('driving');
+    expect(leg.duration_minutes).toBe(23);
+    expect(leg.distance_meters).toBe(8450);
+    expect(leg.source).toBe('openrouteservice');
+    expect(leg.created_at).toBe(leg.updated_at);
   });
 });
 
