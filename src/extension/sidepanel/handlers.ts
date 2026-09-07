@@ -17,7 +17,7 @@ import {
   type CapturePlacePriority,
 } from '../../domain/capture';
 import type { PlannerTripPlace } from '../../domain/planner';
-import { saveState, getActiveCollection, getActivePlaces, store, t, DEBUG_STORAGE_KEY, getExistingPlaceForUrl } from './store';
+import { saveState, getActiveCollection, getActivePlaces, store, t, takeDeferredExternalState, DEBUG_STORAGE_KEY, getExistingPlaceForUrl } from './store';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
 import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, resolveWhyNotes, safeDecodeUri } from '../utils';
@@ -403,6 +403,7 @@ function initCandidateDelegation() {
 
     if (action === 'cancel-inline-edit') {
       store.editingCandidateId = null;
+      takeDeferredExternalState();
       renderCandidatesList();
       setStatus(store.lang === 'zh' ? '已取消编辑。' : 'Edit cancelled.');
       return;
@@ -412,6 +413,7 @@ function initCandidateDelegation() {
       const isAlreadyEditing = store.editingCandidateId === placeId;
       if (isAlreadyEditing) {
         store.editingCandidateId = null;
+        takeDeferredExternalState();
         renderCandidatesList();
         setStatus(store.lang === 'zh' ? '已退出编辑模式。' : 'Exited edit mode.');
       } else {

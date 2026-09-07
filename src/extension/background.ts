@@ -11,6 +11,7 @@ import {
   type OwnlyCaptureStateV3,
 } from '../domain/capture';
 import {
+  mergeUserByFreshness,
   mutateCaptureStateV3InWorker,
   normalizeCaptureStateV3,
   readCaptureStateV3,
@@ -466,7 +467,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             review_topics: incomingPlace.review_topics || existing.review_topics,
             hotel_facts: incomingPlace.hotel_facts || existing.hotel_facts,
             inferred_kind: incomingPlace.inferred_kind || existing.inferred_kind,
-            user: incomingPlace.user !== undefined ? incomingPlace.user : existing.user,
+            user: mergeUserByFreshness(existing, incomingPlace),
           };
         });
 

@@ -210,6 +210,94 @@ export async function setPlannerTargetViaWorker(target: { trip_id: string; title
   return { ok: true };
 }
 
+// ─── Lost-update guard ───────────────────────────────────────────────────────
+
+export interface RebaseTombstones {
+  placeIds?: ReadonlySet<string>;
+  collectionIds?: ReadonlySet<string>;
+}
+
+function isNewer(left: string | undefined, right: string | undefined): boolean {
+  return (left ?? '') > (right ?? '');
+}
+
+/**
+ * Reconcile in-memory edits made while a worker round-trip was in flight.
+ * `truth` is the worker/storage result, `memory` is the current in-memory state.
+ * Per entity the side with the newer `updated_at` wins (ties go to truth);
+ * memory-only entities are kept unless tombstoned.
+ * Ownership split for top-level fields: the panel owns `active_collection_id`,
+ * the background worker owns `planner_target` / `last_export_at`.
+ */
+export function rebaseOntoTruth(
+  truth: OwnlyCaptureStateV3,
+  memory: OwnlyCaptureStateV3,
+  tombstones?: RebaseTombstones,
+): OwnlyCaptureStateV3 {
+  const memoryPlaces = new Map(memory.places.map((p) => [p.id, p]));
+  const places: CapturePlace[] = [];
+  for (const place of truth.places) {
+    if (tombstones?.placeIds?.has(place.id)) continue;
+    const mem = memoryPlaces.get(place.id);
+    memoryPlaces.delete(place.id);
+    if (mem && isNewer(mem.updated_at, place.updated_at)) {
+      places.push(mem);
+    } else {
+      places.push(place);
+    }
+  }
+  for (const mem of memoryPlaces.values()) {
+    if (tombstones?.placeIds?.has(mem.id)) continue;
+    places.push(mem);
+  }
+
+  const memoryCols = new Map(memory.collections.map((c) => [c.id, c]));
+  const collections: CaptureCollection[] = [];
+  for (const col of truth.collections) {
+    if (tombstones?.collectionIds?.has(col.id)) continue;
+    const mem = memoryCols.get(col.id);
+    memoryCols.delete(col.id);
+    if (mem && isNewer(mem.updated_at, col.updated_at)) {
+      collections.push(mem);
+    } else {
+      collections.push(col);
+    }
+  }
+  for (const mem of memoryCols.values()) {
+    if (tombstones?.collectionIds?.has(mem.id)) continue;
+    collections.push(mem);
+  }
+
+  const collectionIds = new Set(collections.map((c) => c.id));
+  const activeId = memory.active_collection_id && collectionIds.has(memory.active_collection_id)
+    ? memory.active_collection_id
+    : truth.active_collection_id;
+
+  return carryUnknownKeys(truth, {
+    version: 3 as const,
+    active_collection_id: activeId,
+    collections,
+    places: places.filter((p) => !p.collection_id || collectionIds.has(p.collection_id)),
+    planner_target: truth.planner_target,
+    last_export_at: truth.last_export_at,
+  });
+}
+
+/**
+ * Worker-merge policy for the `user` sub-object: the side with the newer
+ * `updated_at` wins wholesale. Wholesale (not field-wise) preserves explicit
+ * clearing — setting `why` to undefined in the editor must delete it, not
+ * resurrect the stored value.
+ */
+export function mergeUserByFreshness(
+  existing: CapturePlace,
+  incoming: CapturePlace,
+): CapturePlace['user'] {
+  if (incoming.user === undefined) return existing.user;
+  if (existing.user === undefined) return incoming.user;
+  return isNewer(existing.updated_at, incoming.updated_at) ? existing.user : incoming.user;
+}
+
 // ─── V3 Worker Mutator ──────────────────────────────────────────────────────
 
 let workerOpChain: Promise<unknown> = Promise.resolve();

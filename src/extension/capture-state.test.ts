@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CAPTURE_STORAGE_KEY,
+  mergeUserByFreshness,
   mutateCaptureStateV3InWorker,
   normalizeCaptureStateV3,
   readCaptureStateV3,
+  rebaseOntoTruth,
 } from './capture-state';
-import type { CapturePlace } from '../domain/capture';
+import type { CapturePlace, OwnlyCaptureStateV3 } from '../domain/capture';
 
 const storage = new Map<string, unknown>();
 
@@ -180,5 +182,93 @@ describe('mutateCaptureStateV3InWorker', () => {
 
     const restored = await readCaptureStateV3();
     expect(restored.places.map((p) => p.id)).toEqual(['p-legacy']);
+  });
+});
+
+function stateWith(places: CapturePlace[], extra?: Partial<OwnlyCaptureStateV3>): OwnlyCaptureStateV3 {
+  return {
+    version: 3,
+    active_collection_id: 'inbox',
+    collections: [{ id: 'inbox', title: 'Inbox', created_at: '2026-09-01T00:00:00Z' }],
+    places,
+    ...extra,
+  };
+}
+
+function placeWith(id: string, updatedAt: string, userWhy?: string): CapturePlace {
+  return {
+    ...createTestPlace(id),
+    updated_at: updatedAt,
+    user: { priority: 'want', tags: [], why: userWhy },
+  };
+}
+
+describe('rebaseOntoTruth', () => {
+  it('keeps in-flight local edits over the stale worker truth', () => {
+    const truth = stateWith([
+      placeWith('edited', '2026-09-01T10:00:00Z', 'old why'),
+      placeWith('enriched', '2026-09-01T10:05:00Z', 'same'),
+    ]);
+    const memory = stateWith([
+      // User edited during flight: newer updated_at wins.
+      placeWith('edited', '2026-09-01T10:06:00Z', 'user-typed why'),
+      placeWith('enriched', '2026-09-01T10:00:00Z', 'same'),
+      // Added during flight: kept.
+      placeWith('added', '2026-09-01T10:06:00Z', 'new'),
+    ]);
+
+    const rebased = rebaseOntoTruth(truth, memory);
+    const byId = new Map(rebased.places.map((p) => [p.id, p]));
+    expect(byId.get('edited')?.user?.why).toBe('user-typed why');
+    expect(byId.get('enriched')?.updated_at).toBe('2026-09-01T10:05:00Z');
+    expect(byId.get('added')?.id).toBe('added');
+  });
+
+  it('drops tombstoned places and prefers truth on timestamp ties', () => {
+    const truth = stateWith([
+      placeWith('gone', '2026-09-01T10:00:00Z'),
+      placeWith('tie', '2026-09-01T10:00:00Z', 'truth why'),
+    ]);
+    const memory = stateWith([
+      placeWith('tie', '2026-09-01T10:00:00Z', 'memory why'),
+    ]);
+
+    const rebased = rebaseOntoTruth(truth, memory, { placeIds: new Set(['gone']) });
+    const byId = new Map(rebased.places.map((p) => [p.id, p]));
+    expect(byId.has('gone')).toBe(false);
+    expect(byId.get('tie')?.user?.why).toBe('truth why');
+  });
+
+  it('keeps memory active collection when valid, truth planner_target', () => {
+    const truth = stateWith([], {
+      active_collection_id: 'inbox',
+      planner_target: { trip_id: 'trip-bg', title: 'Background' },
+    });
+    const memory = stateWith([], {
+      active_collection_id: 'inbox',
+      planner_target: { trip_id: 'trip-stale', title: 'Stale' },
+    });
+
+    const rebased = rebaseOntoTruth(truth, memory);
+    expect(rebased.active_collection_id).toBe('inbox');
+    expect(rebased.planner_target?.trip_id).toBe('trip-bg');
+  });
+});
+
+describe('mergeUserByFreshness', () => {
+  it('lets the fresher side win instead of always incoming', () => {
+    const staleIncoming = placeWith('p', '2026-09-01T10:00:00Z', 'stale why');
+    const freshExisting = placeWith('p', '2026-09-01T10:05:00Z', 'fresh why');
+    expect(mergeUserByFreshness(freshExisting, staleIncoming)?.why).toBe('fresh why');
+
+    const freshIncoming = placeWith('p', '2026-09-01T10:06:00Z', 'user edit');
+    expect(mergeUserByFreshness(freshExisting, freshIncoming)?.why).toBe('user edit');
+  });
+
+  it('falls back when one side has no user object', () => {
+    const noUser = createTestPlace('p');
+    const withUser = placeWith('p', '2026-09-01T10:00:00Z', 'why');
+    expect(mergeUserByFreshness(noUser, withUser)?.why).toBe('why');
+    expect(mergeUserByFreshness(withUser, noUser)?.why).toBe('why');
   });
 });

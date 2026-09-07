@@ -1,5 +1,5 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
-import { readCaptureStateV3, saveCaptureStateV3ViaWorker, writeCaptureStateV3 } from '../capture-state';
+import { readCaptureStateV3, rebaseOntoTruth, saveCaptureStateV3ViaWorker, writeCaptureStateV3 } from '../capture-state';
 import { DEFAULT_INBOX_TITLE, EMPTY_CAPTURE_STATE_V3, ensureInboxCollection, findExistingPlaceByIdentity, getInboxCollection as getInboxCollectionDomain, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
 import { I18N, type Lang } from '../i18n';
 import { sessionStorage } from '../session-storage';
@@ -42,6 +42,8 @@ export const store = {
   smartListDismissed: false,
   smartListKey: '' as string,
   editingCandidateId: null as string | null,
+  /** Storage truth that arrived while the user was editing; applied on save/cancel. */
+  deferredExternalState: null as OwnlyCaptureStateV3 | null,
   isListPreviewOpen: false,
   bulkMode: false,
   bulkSelected: new Set<string>(),
@@ -226,21 +228,49 @@ export function getExistingPlaceForUrl(sourceUrl: string, sourcePlaceId?: string
 /** Save V3 state via worker. */
 export async function saveState(): Promise<void> {
   const started = Date.now();
-  const payload = { places: store.stateV3.places.length, collections: store.stateV3.collections.length, deleted: store.locallyDeletedIds.size, deletedCols: store.locallyDeletedCollectionIds.size };
+  const sent = store.stateV3;
+  const payload = { places: sent.places.length, collections: sent.collections.length, deleted: store.locallyDeletedIds.size, deletedCols: store.locallyDeletedCollectionIds.size };
   logger.debug('Store', 'saveState → worker', payload);
   try {
     const currentDeletedIds = new Set(store.locallyDeletedIds);
     const currentDeletedColIds = new Set(store.locallyDeletedCollectionIds);
-    const viaWorker = await saveCaptureStateV3ViaWorker(store.stateV3, currentDeletedIds, currentDeletedColIds);
-    store.setState(viaWorker.state);
+    const viaWorker = await saveCaptureStateV3ViaWorker(sent, currentDeletedIds, currentDeletedColIds);
+    if (store.stateV3 === sent) {
+      store.setState(viaWorker.state);
+    } else {
+      // Local edits landed while the request was in flight: rebase them onto
+      // the worker truth instead of letting the stale response wipe them.
+      store.setState(rebaseOntoTruth(viaWorker.state, store.stateV3, {
+        placeIds: store.locallyDeletedIds,
+        collectionIds: store.locallyDeletedCollectionIds,
+      }));
+      logger.info('Store', 'saveState rebased over in-flight edits', payload);
+    }
     for (const id of currentDeletedIds) store.locallyDeletedIds.delete(id);
     for (const id of currentDeletedColIds) store.locallyDeletedCollectionIds.delete(id);
-    logger.info('Store', 'saveState persisted', { ...payload, ms: Date.now() - started, afterPlaces: viaWorker.state.places.length });
+    takeDeferredExternalState();
+    logger.info('Store', 'saveState persisted', { ...payload, ms: Date.now() - started, afterPlaces: store.stateV3.places.length });
   } catch (error) {
     logger.error('Store', 'Failed to persist capture state', { error: error instanceof Error ? error.stack || error.message : String(error), payload });
     console.warn('[Ownly Capture] Failed to persist capture state', error);
     throw error;
   }
+}
+
+/**
+ * Apply a storage change that arrived while the user was editing, rebased
+ * onto current memory so neither side is lost. Returns true when applied.
+ */
+export function takeDeferredExternalState(): boolean {
+  const deferred = store.deferredExternalState;
+  store.deferredExternalState = null;
+  if (!deferred) return false;
+  store.setState(rebaseOntoTruth(deferred, store.stateV3, {
+    placeIds: store.locallyDeletedIds,
+    collectionIds: store.locallyDeletedCollectionIds,
+  }));
+  logger.info('Sidepanel', 'Applied deferred external change', { places: store.stateV3.places.length });
+  return true;
 }
 
 /** Write V3 state directly (for restore). */

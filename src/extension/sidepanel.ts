@@ -14,11 +14,18 @@ import {
 import { logger } from './logger';
 
 // Live-reload when the background service worker (quick capture / web ack)
-// writes state externally.
+// writes state externally. While the user is editing a candidate, defer the
+// refresh (rebased on save/cancel) so re-rendering never destroys the open
+// editor and its unsaved text.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[CAPTURE_STORAGE_KEY]) return;
   const incoming = normalizeCaptureStateV3(changes[CAPTURE_STORAGE_KEY].newValue);
   if (JSON.stringify(incoming) === JSON.stringify(store.stateV3)) return;
+  if (store.editingCandidateId) {
+    store.deferredExternalState = incoming;
+    logger.info('Sidepanel', 'Storage external change deferred (editing)', { places: incoming.places.length });
+    return;
+  }
   logger.info('Sidepanel', 'Storage external change → re-render', { places: incoming.places.length, collections: incoming.collections.length });
   store.setState(incoming);
   renderState();
