@@ -318,6 +318,17 @@ export function PlannerMap({
     setZoom(computed.zoom);
   }, [filterMode, points, defaultCenter]);
 
+  // Jump back to the active day: show its route and fit its stops.
+  const backToActiveDay = useCallback(() => {
+    setFilterMode('scheduled');
+    const dayPoints = points.filter((p) => p.isScheduled && p.isActiveDay !== false);
+    const target = dayPoints.length > 0 ? dayPoints : points;
+    if (target.length === 0) return;
+    const computed = calculateBounds(target);
+    setCenter(defaultCenter ?? computed.center);
+    setZoom(computed.zoom);
+  }, [points, defaultCenter]);
+
   // Pan & pinch interaction (pointer events cover mouse, touch and pen)
   const activePointers = useRef(new Map<number, { x: number; y: number }>());
   const dragStartRef = useRef<{ x: number; y: number; center: { lat: number; lng: number } } | null>(null);
@@ -1012,6 +1023,30 @@ export function PlannerMap({
           <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded bg-white/85 px-1.5 py-0.5 shadow-xs backdrop-blur-sm">
             <div className="text-[9px] font-semibold text-stone-600">{scaleBar.label}</div>
             <div className="border-b-2 border-l-2 border-r-2 border-stone-600" style={{ width: `${scaleBar.widthPx}px`, height: '4px' }} />
+          </div>
+        ) : null}
+
+        {/* Day Color Legend + Back-to-Day */}
+        {tripDates && tripDates.length > 1 ? (
+          <div className="absolute bottom-2 right-2 z-30 rounded-lg bg-white/90 px-2 py-1.5 shadow-xs backdrop-blur-sm">
+            <div className="flex flex-col gap-1">
+              {tripDates.map((date, dIdx) => (
+                <div key={date} className="flex items-center gap-1.5 text-[9.5px] font-semibold text-stone-500">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: plannerDayColor(dIdx) }} />
+                  <span className={dIdx === activeDayIndex ? 'text-stone-900' : ''}>
+                    D{dIdx + 1} · {date.slice(5).replace('-', '/')}
+                  </span>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={backToActiveDay}
+                className="mt-0.5 rounded-md border border-stone-200 bg-white px-1.5 py-0.5 text-[9.5px] font-bold text-stone-700 hover:bg-stone-50 transition"
+                title={zh ? '回到当天路线视野' : 'Back to active day view'}
+              >
+                ⌖ {zh ? '回当天' : 'Today'}
+              </button>
+            </div>
           </div>
         ) : null}
 
