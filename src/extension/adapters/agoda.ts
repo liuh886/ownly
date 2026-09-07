@@ -164,7 +164,6 @@ export function parseAgodaCard(
     sourcePlaceId: hotelId,
     types: ['lodging', 'hotel', 'establishment'],
     hotelFacts,
-    summary: '来自 Agoda',
   };
 }
 
@@ -226,7 +225,7 @@ export async function resolveAgodaHotelToMapsPlace(
       sourcePlaceId: fallbackCardPlace.sourcePlaceId,
       types: Array.from(new Set(['lodging', 'hotel', ...(facts.types || []), ...(fallbackCardPlace.types || [])])),
       hotelFacts,
-      summary: fallbackCardPlace.summary || '来自 Agoda',
+      summary: fallbackCardPlace.summary,
     };
   } catch (err) {
     logger.warn('Agoda', 'Failed to resolve hotel detail HTML, using card fallback', { error: String(err) });
@@ -364,7 +363,6 @@ export class AgodaAdapter implements PageAdapter {
       website: facts.website,
       types: ['lodging', 'hotel', 'establishment'],
       hotelFacts,
-      summary: '来自 Agoda',
     };
   }
 

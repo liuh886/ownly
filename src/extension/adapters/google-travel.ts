@@ -142,7 +142,6 @@ export function parseGoogleTravelCard(
     sourcePlaceId,
     types: ['lodging', 'hotel', 'establishment'],
     hotelFacts,
-    summary: '来自 Google Travel',
   };
 }
 
@@ -162,7 +161,7 @@ export function convertToStandardGoogleMapsPlace(
     kind: 'stay',
     category: cardPlace.category && cardPlace.category !== 'Google Travel 住宿' ? cardPlace.category : 'Hotel',
     types: Array.from(new Set(['lodging', 'hotel', ...(cardPlace.types || [])])),
-    summary: cardPlace.summary || '来自 Google Travel',
+    summary: cardPlace.summary,
   };
 }
 
@@ -315,7 +314,6 @@ export class GoogleTravelAdapter implements PageAdapter {
       sourcePlaceId,
       types: Array.from(new Set(['lodging', 'hotel', ...(facts.types || [])])),
       hotelFacts,
-      summary: '来自 Google Travel',
     };
   }
 

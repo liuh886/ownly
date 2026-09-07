@@ -53,7 +53,6 @@ export function extractTabelogPlace(overrideCurrency?: string, hintCurrency?: st
     detectedCurrency: detectCurrencyFromPage(sourceUrl, priceLevel, hintCurrency, overrideCurrency) ?? 'JPY',
     address,
     types: ['restaurant', 'food', 'establishment'],
-    summary: '来自 Tabelog',
   };
 }
 
@@ -93,7 +92,6 @@ export function parseTabelogCard(cardEl: HTMLElement, overrideCurrency?: string)
     priceLevel,
     detectedCurrency: detectCurrencyFromPage(window.location.href, priceLevel, undefined, overrideCurrency) ?? 'JPY',
     types: ['restaurant', 'food', 'establishment'],
-    summary: '来自 Tabelog',
   };
 }
 

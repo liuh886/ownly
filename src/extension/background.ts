@@ -16,6 +16,7 @@ import {
   readCaptureStateV3,
 } from './capture-state';
 import type { CurrentResearchPlace } from './content';
+import { resolveWhyNotes, sanitizeExtractedSummary } from './utils';
 import { enrichPlaceMetadata } from './enrichment';
 import { sessionStorage } from './session-storage';
 import { logger } from './logger';
@@ -268,13 +269,12 @@ async function savePlaceIntoInboxDirectly(
         inferred_kind: effectiveKind,
         user: existing?.user ? {
           ...existing.user,
-          why: existing.user.why ?? place.summary,
+          why: existing.user.why ?? sanitizeExtractedSummary(place.summary),
           notes: existing.user.notes ?? place.userNote,
         } : {
           priority: 'want',
           tags: ensurePlaceKindTag([], effectiveKind),
-          why: place.summary,
-          notes: place.userNote,
+          ...resolveWhyNotes({ userNote: place.userNote, summary: place.summary }),
         },
         captured_at: existing?.captured_at ?? now,
         updated_at: now,

@@ -20,7 +20,7 @@ import type { PlannerTripPlace } from '../../domain/planner';
 import { saveState, getActiveCollection, getActivePlaces, store, t, DEBUG_STORAGE_KEY, getExistingPlaceForUrl } from './store';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
-import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, safeDecodeUri } from '../utils';
+import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, resolveWhyNotes, safeDecodeUri } from '../utils';
 import { readCurrentPlace } from './capture';
 import { enrichCandidatePlacesBatch, isCandidateMissingData, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
 import {
@@ -215,8 +215,7 @@ function buildPlaceFromDetected(
     user: {
       priority: 'want',
       tags: ensurePlaceKindTag([], inferredKind, store.lang),
-      why: item.userNote || item.summary || undefined,
-      notes: item.userNote || undefined,
+      ...resolveWhyNotes({ userNote: item.userNote, summary: item.summary }),
     },
     captured_at: now,
   };
@@ -1201,8 +1200,7 @@ export function initHandlers(): void {
             user: {
               priority: 'want',
               tags: ensurePlaceKindTag(savedList.listName ? [savedList.listName] : [], kind, store.lang),
-              why: item.userNote ?? item.summary,
-              notes: item.userNote,
+              ...resolveWhyNotes({ userNote: item.userNote, summary: item.summary }),
             },
             captured_at: now,
           };
@@ -1453,8 +1451,7 @@ export function initHandlers(): void {
           user: {
             priority: 'want',
             tags: ensurePlaceKindTag([], kind, store.lang),
-            why: item.userNote || item.summary,
-            notes: item.userNote,
+            ...resolveWhyNotes({ userNote: item.userNote, summary: item.summary }),
           },
           open_hours: item.openHours,
           address: item.address,

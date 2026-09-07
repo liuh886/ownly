@@ -361,6 +361,60 @@ export function isJunkNavigationText(text?: string | null): boolean {
   return false;
 }
 
+/**
+ * Matches adapter "source placeholder" summaries that carry no real information,
+ * e.g. "来自 Google Travel", "来自 Agoda", "来自 Google Maps 搜索列表".
+ * Informative summaries that reference a specific note (e.g. "来自小红书笔记「…」")
+ * contain 「」 quotes and are intentionally NOT matched.
+ */
+const SOURCE_PLACEHOLDER_SUMMARY_RE = /^来自\s*[A-Za-z0-9.\u4e00-\u9fa5·\- ]+$/;
+
+export function isSourcePlaceholderSummary(text?: string | null): boolean {
+  if (!text) return false;
+  const clean = text.trim();
+  if (!clean || clean.length > 30) return false;
+  return SOURCE_PLACEHOLDER_SUMMARY_RE.test(clean);
+}
+
+/**
+ * Returns the summary only if it is a real editorial/description text.
+ * Empty strings and "来自 XXX" source placeholders become undefined so they
+ * never leak into the place's `why` (推荐理由) field.
+ */
+export function sanitizeExtractedSummary(summary?: string | null): string | undefined {
+  if (!summary) return undefined;
+  const clean = summary.trim();
+  if (!clean || isSourcePlaceholderSummary(clean)) return undefined;
+  return clean;
+}
+
+export interface WhyNotesInput {
+  userNote?: string | null;
+  summary?: string | null;
+}
+
+export interface WhyNotesResult {
+  why?: string;
+  notes?: string;
+}
+
+/**
+ * Splits an extracted user note and place summary into `why` (推荐理由)
+ * and `notes` (备注) without duplication:
+ * - `notes` always carries the user's own note verbatim.
+ * - `why` prefers a real summary; falls back to the user note when there is none.
+ * - When both resolve to the same text, only `why` is kept.
+ */
+export function resolveWhyNotes(input: WhyNotesInput): WhyNotesResult {
+  const trimmedNote = input.userNote?.trim();
+  const notes = trimmedNote ? trimmedNote : undefined;
+  const why = sanitizeExtractedSummary(input.summary) ?? notes;
+  if (why && notes && why.toLowerCase() === notes.toLowerCase()) {
+    return { why, notes: undefined };
+  }
+  return { why, notes };
+}
+
 import { type HotelPropertyFacts } from '../domain/planner';
 export { type HotelPropertyFacts };
 

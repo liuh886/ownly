@@ -11,10 +11,13 @@ import {
   isFakePlaceLabel,
   isJunkNavigationText,
   isPlausiblePriceText,
+  isSourcePlaceholderSummary,
   isZeroOrPlaceholderPrice,
   normalizePhoneDisplay,
   parseEntityListCoordinates,
+  resolveWhyNotes,
   safeDecodeUri,
+  sanitizeExtractedSummary,
 } from './utils';
 import {
   findAgodaHotelUrl,
@@ -626,5 +629,95 @@ describe('Agoda Adapter & Card Parser', () => {
     expect(adapter.matches('https://www.agoda.com/trips/detail?navBack=true&id=78652960&tab=saved')).toBe(true);
     expect(adapter.matches('https://www.agoda.com/zh-cn/hotel/pattaya-th.html')).toBe(true);
     expect(adapter.matches('https://www.google.com/travel/')).toBe(false);
+  });
+
+  it('does not emit a source-placeholder summary for hotel cards', () => {
+    const cardEl = document.createElement('div');
+    cardEl.setAttribute('data-selenium', 'saved-hotel-item');
+    cardEl.setAttribute('data-hotel-id', '786529');
+    cardEl.innerHTML = `
+      <div class="TripItem__Header">
+        <h3 data-selenium="hotel-name">
+          <a href="https://www.agoda.com/zh-cn/cross-pattaya-pratamnak/hotel/pattaya-th.html?id=786529">
+            Cross Pattaya Pratamnak
+          </a>
+        </h3>
+      </div>
+    `;
+
+    const place = parseAgodaCard(cardEl);
+    expect(place).not.toBeNull();
+    // Regression lock: adapter must not fabricate "来自 Agoda" as summary;
+    // source attribution already lives in `sourceProvider`.
+    expect(place?.summary).toBeUndefined();
+    expect(resolveWhyNotes({ userNote: place?.userNote, summary: place?.summary }).why).toBeUndefined();
+  });
+});
+
+describe('isSourcePlaceholderSummary', () => {
+  it('flags bare source attributions', () => {
+    expect(isSourcePlaceholderSummary('来自 Google Travel')).toBe(true);
+    expect(isSourcePlaceholderSummary('来自 Agoda')).toBe(true);
+    expect(isSourcePlaceholderSummary('来自 Booking.com')).toBe(true);
+    expect(isSourcePlaceholderSummary('来自 Tabelog')).toBe(true);
+    expect(isSourcePlaceholderSummary('来自 Google Maps 搜索列表')).toBe(true);
+    expect(isSourcePlaceholderSummary('  来自 Agoda  ')).toBe(true);
+  });
+
+  it('keeps informative summaries', () => {
+    expect(isSourcePlaceholderSummary(undefined)).toBe(false);
+    expect(isSourcePlaceholderSummary('')).toBe(false);
+    expect(isSourcePlaceholderSummary('   ')).toBe(false);
+    // Xiaohongshu summaries reference a specific note — real information, not a placeholder.
+    expect(isSourcePlaceholderSummary('来自小红书笔记「曼谷必吃」')).toBe(false);
+    expect(isSourcePlaceholderSummary('来自笔记「清迈三日游」· 地标：塔佩门')).toBe(false);
+    expect(isSourcePlaceholderSummary('米其林推荐的泰式炒河粉老店，锅气十足')).toBe(false);
+  });
+});
+
+describe('sanitizeExtractedSummary', () => {
+  it('drops empty and placeholder summaries', () => {
+    expect(sanitizeExtractedSummary(undefined)).toBeUndefined();
+    expect(sanitizeExtractedSummary('')).toBeUndefined();
+    expect(sanitizeExtractedSummary('来自 Google Travel')).toBeUndefined();
+    expect(sanitizeExtractedSummary('来自 Agoda')).toBeUndefined();
+  });
+
+  it('keeps and trims real summaries', () => {
+    expect(sanitizeExtractedSummary('  米其林老店  ')).toBe('米其林老店');
+    expect(sanitizeExtractedSummary('来自小红书笔记「曼谷必吃」')).toBe('来自小红书笔记「曼谷必吃」');
+  });
+});
+
+describe('resolveWhyNotes', () => {
+  it('leaves both empty when nothing extracted', () => {
+    expect(resolveWhyNotes({})).toEqual({ why: undefined, notes: undefined });
+    expect(resolveWhyNotes({ userNote: '  ', summary: '来自 Agoda' })).toEqual({ why: undefined, notes: undefined });
+  });
+
+  it('puts a lone user note into why only (no duplication)', () => {
+    // Regression lock for the 10 why/notes duplicates (e.g. "粘粘瀑布", "JCB 礼遇").
+    expect(resolveWhyNotes({ userNote: '粘粘瀑布' })).toEqual({ why: '粘粘瀑布', notes: undefined });
+  });
+
+  it('puts a real summary into why', () => {
+    expect(resolveWhyNotes({ summary: '米其林老店' })).toEqual({ why: '米其林老店', notes: undefined });
+  });
+
+  it('drops placeholder summaries so they never become why', () => {
+    // Regression lock for the 5 junk whys ("来自 Google Travel" / "来自 Agoda").
+    expect(resolveWhyNotes({ summary: '来自 Google Travel' })).toEqual({ why: undefined, notes: undefined });
+    expect(resolveWhyNotes({ userNote: undefined, summary: '来自 Agoda' }).why).toBeUndefined();
+  });
+
+  it('keeps distinct note and summary side by side', () => {
+    expect(resolveWhyNotes({ userNote: '提前预约', summary: '清迈米其林泰北菜' })).toEqual({
+      why: '清迈米其林泰北菜',
+      notes: '提前预约',
+    });
+  });
+
+  it('dedupes identical note and summary into why', () => {
+    expect(resolveWhyNotes({ userNote: 'plan b', summary: 'plan b' })).toEqual({ why: 'plan b', notes: undefined });
   });
 });

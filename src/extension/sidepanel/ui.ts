@@ -14,7 +14,7 @@ import type { CurrentResearchPlace } from '../content';
 import type { CapturePlace } from '../../domain/capture';
 import { el } from '../dom';
 import { logger } from '../logger';
-import { escapeHtml, isPlausiblePriceText, isZeroOrPlaceholderPrice } from '../utils';
+import { escapeHtml, isPlausiblePriceText, isZeroOrPlaceholderPrice, sanitizeExtractedSummary } from '../utils';
 import { getExistingPlaceForUrl, store, t } from './store';
 
 const KIND_ICONS = PLANNER_KIND_ICONS;
@@ -603,7 +603,7 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
     el.rating.value = existing.rating ? String(existing.rating) : (place.rating ? String(place.rating) : '');
     const storedPrice = isPlausiblePriceText(existing.price?.raw) ? existing.price?.raw : undefined;
     el.price.value = storedPrice || (isPlausiblePriceText(place.priceLevel) ? place.priceLevel! : '');
-    el.why.value = existing.user?.why || place.summary || '';
+    el.why.value = existing.user?.why || sanitizeExtractedSummary(place.summary) || '';
     el.signals.value = '';
     el.risks.value = '';
     el.notes.value = existing.user?.notes || '';
@@ -636,8 +636,9 @@ export function autoFillPlaceForm(place: CurrentResearchPlace) {
     const parts = place.address.split(/[,，·]/).map((p) => p.trim()).filter(Boolean);
     el.area.value = parts[0] || place.address;
   }
-  if ((place.userNote || place.summary) && !el.why.value) {
-    el.why.value = place.userNote || place.summary || '';
+  const cleanPrefillSummary = sanitizeExtractedSummary(place.summary);
+  if ((place.userNote || cleanPrefillSummary) && !el.why.value) {
+    el.why.value = place.userNote || cleanPrefillSummary || '';
   }
   applyTierNote(place);
   if (place.userNote && !el.notes.value) {

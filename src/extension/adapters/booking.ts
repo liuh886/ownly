@@ -83,7 +83,6 @@ export function parseBookingCard(
     address,
     types: ['lodging', 'hotel', 'establishment'],
     hotelFacts,
-    summary: '来自 Booking.com',
   };
 }
 
@@ -204,7 +203,6 @@ export class BookingAdapter implements PageAdapter {
       website: facts.website,
       types: ['lodging', 'hotel', 'establishment'],
       hotelFacts,
-      summary: '来自 Booking.com',
     };
   }
 

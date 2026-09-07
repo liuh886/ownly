@@ -724,7 +724,6 @@ export class GoogleMapsAdapter implements PageAdapter {
             priceLevel,
             address: subtitleText || undefined,
             types: category ? [category, 'point_of_interest', 'establishment'] : ['point_of_interest', 'establishment'],
-            summary: '来自 Google Maps 搜索列表',
           };
         },
       });
