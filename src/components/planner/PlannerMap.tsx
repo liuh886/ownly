@@ -42,6 +42,17 @@ interface Point {
 
 const KIND_EMOJI = PLANNER_KIND_ICONS;
 
+// CARTO raster tiles serve an "API key required" watermark without a key.
+// Key source: GitHub repository secret CARTO_BASEMAP_KEY -> build env
+// NEXT_PUBLIC_CARTO_BASEMAP_KEY (see .github/workflows/pages.yml);
+// local dev override via .env.local. Attribution stays mandatory per CARTO/OSM terms.
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_BASEMAP_KEY?.trim() || undefined;
+
+function cartoTile(path: string, z: number, x: number, y: number): string {
+  const url = `https://basemaps.cartocdn.com/${path}/${z}/${x}/${y}.png`;
+  return CARTO_KEY ? `${url}?key=${encodeURIComponent(CARTO_KEY)}` : url;
+}
+
 export type BasemapStyle = 'carto_voyager' | 'carto_positron' | 'carto_dark' | 'osm_standard' | 'esri_satellite';
 
 export interface BasemapOption {
@@ -58,7 +69,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     id: 'carto_voyager',
     label: { zh: '淡彩旅行', en: 'Voyager' },
     icon: '🧭',
-    getUrl: (z, x, y) => `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    getUrl: (z, x, y) => cartoTile('rastertiles/voyager', z, x, y),
     fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     bgColor: '#e5e7eb',
   },
@@ -66,7 +77,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     id: 'carto_positron',
     label: { zh: '极简浅灰', en: 'Positron' },
     icon: '⚪',
-    getUrl: (z, x, y) => `https://basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`,
+    getUrl: (z, x, y) => cartoTile('light_all', z, x, y),
     fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     bgColor: '#f3f4f6',
   },
@@ -74,7 +85,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     id: 'carto_dark',
     label: { zh: '深邃夜景', en: 'Dark' },
     icon: '🌑',
-    getUrl: (z, x, y) => `https://basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`,
+    getUrl: (z, x, y) => cartoTile('dark_all', z, x, y),
     fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     bgColor: '#18181b',
   },
@@ -83,7 +94,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     label: { zh: '开源标准', en: 'OSM' },
     icon: '🗺️',
     getUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
-    fallbackUrl: (z, x, y) => `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    fallbackUrl: (z, x, y) => cartoTile('rastertiles/voyager', z, x, y),
     bgColor: '#e5e7eb',
   },
   {
@@ -91,7 +102,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     label: { zh: '卫星实景', en: 'Satellite' },
     icon: '🛰️',
     getUrl: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
-    fallbackUrl: (z, x, y) => `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    fallbackUrl: (z, x, y) => cartoTile('rastertiles/voyager', z, x, y),
     bgColor: '#1c1917',
   },
 ];
@@ -156,7 +167,7 @@ export function PlannerMap({
         }
       } catch {}
     }
-    return 'carto_voyager';
+    return 'carto_positron';
   });
 
   const handleBasemapChange = useCallback((newStyle: BasemapStyle) => {
@@ -998,8 +1009,8 @@ export function PlannerMap({
         <div>
           💡 {zh ? '顺路排程技巧：在地图上沿动线依次点击候选点 🔵 即可按地理最优顺序加入当天路线。' : 'Tip: Click candidate markers 🔵 in sequence along your route to add them to your day schedule in optimal order.'}
         </div>
-        <div className="mt-0.5 text-[9.5px] text-stone-400">
-          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="hover:underline">OpenStreetMap</a> contributors · © <a href="https://carto.com/attributions" target="_blank" rel="noreferrer" className="hover:underline">CARTO</a>
+        <div className="mt-0.5 text-[9px] text-stone-400">
+          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="hover:underline">OpenStreetMap</a> · © <a href="https://carto.com/attributions" target="_blank" rel="noreferrer" className="hover:underline">CARTO</a>
         </div>
       </div>
     </div>
