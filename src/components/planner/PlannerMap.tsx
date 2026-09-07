@@ -588,6 +588,44 @@ export function PlannerMap({
     });
   }, [points, filterMode]);
 
+  // Cluster only unscheduled candidates on a 56px grid so dense pools stay tappable;
+  // scheduled stops always keep their own identity marker.
+  const CLUSTER_CELL = 56;
+  const markerLayout = useMemo(() => {
+    const positioned = visiblePoints.map((p, index) => {
+      const x = projectLngToX(p.lng, zoom) - centerX + containerSize.width / 2;
+      const y = projectLatToY(p.lat, zoom) - centerY + containerSize.height / 2;
+      return { p, index, x, y };
+    }).filter(
+      (item) => item.x >= -40 && item.x <= containerSize.width + 40 && item.y >= -40 && item.y <= containerSize.height + 40,
+    );
+    const singles: typeof positioned = [];
+    const cellMap = new Map<string, typeof positioned>();
+    for (const item of positioned) {
+      if (item.p.isScheduled) {
+        singles.push(item);
+        continue;
+      }
+      const key = `${Math.floor(item.x / CLUSTER_CELL)}:${Math.floor(item.y / CLUSTER_CELL)}`;
+      const group = cellMap.get(key);
+      if (group) group.push(item);
+      else cellMap.set(key, [item]);
+    }
+    const clusters: Array<{ x: number; y: number; items: typeof positioned }> = [];
+    for (const group of cellMap.values()) {
+      if (group.length <= 1) {
+        singles.push(group[0]);
+      } else {
+        clusters.push({
+          x: group.reduce((sum, item) => sum + item.x, 0) / group.length,
+          y: group.reduce((sum, item) => sum + item.y, 0) / group.length,
+          items: group,
+        });
+      }
+    }
+    return { singles, clusters };
+  }, [visiblePoints, zoom, centerX, centerY, containerSize]);
+
   // Scheduled route points for line rendering (active day)
   const scheduledRoutePoints = useMemo(() => {
     return points
@@ -800,15 +838,7 @@ export function PlannerMap({
         ) : null}
 
         {/* POI Markers */}
-        {visiblePoints.map((p, pIdx) => {
-          const x = projectLngToX(p.lng, zoom) - centerX + containerSize.width / 2;
-          const y = projectLatToY(p.lat, zoom) - centerY + containerSize.height / 2;
-
-          // Out of viewport cull
-          if (x < -40 || x > containerSize.width + 40 || y < -40 || y > containerSize.height + 40) {
-            return null;
-          }
-
+        {markerLayout.singles.map(({ p, index: pIdx, x, y }) => {
           const isHighlighted = highlightedPlaceId === p.place.id || selectedPlaceId === p.place.id;
           const isOtherDayStop = p.isScheduled && p.isActiveDay === false;
           const dayColor = plannerDayColor(p.dayIndex ?? activeDayIndex);
@@ -851,9 +881,9 @@ export function PlannerMap({
                     D{(p.dayIndex ?? 0) + 1}·{p.order}
                   </div>
                 ) : (
-                  // Numbered Scheduled Marker (day identity color)
+                  // Numbered Scheduled Marker (day identity color, 32px touch target)
                   <div
-                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md text-xs font-bold text-white transition-all"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md text-xs font-bold text-white transition-all"
                     style={{
                       backgroundColor: dayColor,
                       boxShadow: isHighlighted ? `0 0 0 3px ${dayColor}66, 0 4px 6px -1px rgb(0 0 0 / 0.3)` : undefined,
@@ -864,9 +894,9 @@ export function PlannerMap({
                   </div>
                 )
               ) : (
-                // Candidate POI Marker (light green when already scheduled on some day)
+                // Candidate POI Marker (light green when already scheduled on some day, 32px touch target)
                 <div
-                  className={`flex h-6 w-6 items-center justify-center rounded-full border-2 shadow-md text-[11px] transition-all ${
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 shadow-md text-xs transition-all ${
                     scheduledCount > 0
                       ? `border-emerald-300 bg-emerald-50 ${isHighlighted ? 'ring-3 ring-emerald-400 scale-110' : 'hover:scale-110'}`
                       : `border-white bg-white ${isHighlighted ? 'ring-3 ring-blue-400 scale-110' : 'hover:scale-110'}`
@@ -879,6 +909,32 @@ export function PlannerMap({
                   <span className="leading-none">{KIND_EMOJI[p.place.kind] || '📍'}</span>
                 </div>
               )}
+            </div>
+          );
+        })}
+
+        {/* Candidate Clusters: tap to zoom in and split */}
+        {markerLayout.clusters.map((cluster, cIdx) => {
+          const names = cluster.items.slice(0, 3).map((item) => item.p.place.title).join('、');
+          const extra = cluster.items.length > 3 ? ` 等 ${cluster.items.length} 个候选` : '';
+          return (
+            <div
+              key={`cluster_${cIdx}_${cluster.items.length}`}
+              data-map-marker="true"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (Date.now() - lastPinchEndRef.current < 350) return;
+                applyZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, cluster.x, cluster.y);
+              }}
+              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-150 hover:scale-110"
+              style={{ left: `${cluster.x}px`, top: `${cluster.y}px`, zIndex: 15 }}
+            >
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-stone-900 shadow-md text-[11px] font-bold text-white"
+                title={`${cluster.items.length} 个候选：${names}${extra}（点击放大散开）`}
+              >
+                {cluster.items.length}
+              </div>
             </div>
           );
         })}
