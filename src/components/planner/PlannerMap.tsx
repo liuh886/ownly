@@ -849,6 +849,9 @@ export function PlannerMap({
             <div
               key={`${p.place.id}_${p.dayIndex ?? ''}_${p.order ?? ''}_${pIdx}`}
               data-map-marker="true"
+              role="button"
+              tabIndex={0}
+              aria-label={markerTitle(p.place.title, p.place.why)}
               onClick={(e) => {
                 e.stopPropagation();
                 if (Date.now() - lastPinchEndRef.current < 350) return;
@@ -858,9 +861,27 @@ export function PlannerMap({
                 e.stopPropagation();
                 setSelectedPlaceId(p.place.id);
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedPlaceId(p.place.id);
+                } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const ids = markerLayout.singles.map((item) => item.p.place.id);
+                  const current = ids.indexOf(p.place.id);
+                  if (current < 0) return;
+                  const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+                  const next = ids[(current + delta + ids.length) % ids.length];
+                  setSelectedPlaceId(next);
+                  document.querySelector<HTMLElement>(`[data-marker-id="${next}"]`)?.focus();
+                }
+              }}
+              data-marker-id={p.place.id}
               onMouseEnter={() => onHoverPlace?.(p.place.id)}
               onMouseLeave={() => onHoverPlace?.(null)}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-150"
+              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-900"
               style={{
                 left: `${x}px`,
                 top: `${y}px`,
@@ -921,12 +942,22 @@ export function PlannerMap({
             <div
               key={`cluster_${cIdx}_${cluster.items.length}`}
               data-map-marker="true"
+              role="button"
+              tabIndex={0}
+              aria-label={`${cluster.items.length} 个候选，回车放大散开`}
               onClick={(e) => {
                 e.stopPropagation();
                 if (Date.now() - lastPinchEndRef.current < 350) return;
                 applyZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, cluster.x, cluster.y);
               }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-150 hover:scale-110"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  applyZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, cluster.x, cluster.y);
+                }
+              }}
+              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-150 hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-900"
               style={{ left: `${cluster.x}px`, top: `${cluster.y}px`, zIndex: 15 }}
             >
               <div
