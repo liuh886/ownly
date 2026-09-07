@@ -17,7 +17,7 @@ import {
   normalizePhoneDisplay,
   safeDecodeUri,
 } from '../utils';
-import { SELECTORS, driftCheck } from '../selectors';
+import { SELECTORS, trackSelector } from '../selectors';
 import { PLACE_PARSER } from '../place-parser';
 import { detectPageCurrency } from '../currency-detector';
 import { extractGoogleMapsSavedListId } from '../saved-list-match';
@@ -463,13 +463,17 @@ export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?:
   const jsonLd = PLACE_PARSER.extractJsonLd(document);
   const heading = detailHeading;
   const title = heading?.textContent?.trim() || jsonLd.title || titleFromUrl(sourceUrl);
-  if (!title && isDedicatedPlacePage) {
-    driftCheck('placeHeading', null);
+  if (isDedicatedPlacePage) {
+    trackSelector('placeHeading', title, true);
   }
   if (!title || (!/\/maps/i.test(window.location.pathname) && !window.location.hostname.includes('maps.google') && !window.location.href.includes('/maps'))) return null;
 
-  const priceLevel = extractPrice() || jsonLd.priceLevel;
-  const address = extractAddress() || jsonLd.address;
+  const domPriceLevel = extractPrice();
+  trackSelector('priceBadge', domPriceLevel !== undefined, jsonLd.priceLevel !== undefined);
+  const priceLevel = domPriceLevel || jsonLd.priceLevel;
+  const domAddress = extractAddress();
+  trackSelector('address', domAddress !== undefined, jsonLd.address !== undefined);
+  const address = domAddress || jsonLd.address;
   const detectedCurrency = detectPageCurrency({
     url: sourceUrl,
     priceText: priceLevel,
@@ -483,9 +487,15 @@ export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?:
   const openStatus = extractOpenStatus();
   const stateSignals = collectAppStateSignals();
   const reservation = extractReservation();
-  const rating = extractRating() || jsonLd.rating;
-  const reviewCount = extractReviewCount() || jsonLd.reviewCount;
-  const category = extractCategory() || jsonLd.category;
+  const domRating = extractRating();
+  trackSelector('rating', domRating !== undefined, jsonLd.rating !== undefined);
+  const rating = domRating || jsonLd.rating;
+  const domReviewCount = extractReviewCount();
+  trackSelector('reviewCount', domReviewCount !== undefined, jsonLd.reviewCount !== undefined);
+  const reviewCount = domReviewCount || jsonLd.reviewCount;
+  const domCategory = extractCategory();
+  trackSelector('category', domCategory !== undefined, jsonLd.category !== undefined);
+  const category = domCategory || jsonLd.category;
   const kind = category
     ? inferPlaceKind(category)
     : (stateSignals?.types?.length ? inferPlaceKind(stateSignals.types.join(' ')) : inferPlaceKind(title));

@@ -31,12 +31,30 @@ export const SELECTORS = {
 
 const drifted = new Set<string>();
 
-export function driftCheck(key: keyof typeof SELECTORS, found: Element | null): void {
-  if (found) return;
-  if (drifted.has(key)) return;
-  drifted.add(key);
-  console.warn(`[Ownly Capture] selector drift detected for "${key}" — Google Maps markup may have changed.`);
+function sendDriftMessage(type: 'OWNLY_SELECTOR_DRIFT' | 'OWNLY_SELECTOR_RECOVERED', key: string): void {
   try {
-    void chrome.runtime.sendMessage({ type: 'OWNLY_SELECTOR_DRIFT', selector: key }).catch(() => {});
+    const url = typeof window !== 'undefined' ? window.location.href : undefined;
+    void Promise.resolve(chrome.runtime.sendMessage({ type, selector: key, url })).catch(() => {});
   } catch {}
+}
+
+/**
+ * Two-way drift tracking for one selector. Callers must pass `expected=true`
+ * only when they can prove the data exists on the page (e.g. JSON-LD carries
+ * a rating but the DOM query missed) — absence alone is NOT drift, many
+ * places genuinely lack prices/ratings/hours.
+ * A later hit auto-clears a stale report (self-heal) and re-arms detection.
+ */
+export function trackSelector(key: keyof typeof SELECTORS, found: unknown, expected: boolean): void {
+  if (found) {
+    if (drifted.has(key)) {
+      drifted.delete(key);
+      sendDriftMessage('OWNLY_SELECTOR_RECOVERED', key);
+    }
+    return;
+  }
+  if (!expected || drifted.has(key)) return;
+  drifted.add(key);
+  console.warn(`[Ownly Capture] selector drift detected for "${key}" — page has the data but the query missed. Google Maps markup may have changed.`);
+  sendDriftMessage('OWNLY_SELECTOR_DRIFT', key);
 }

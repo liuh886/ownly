@@ -432,16 +432,71 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
   }).catch((e) => logger.warn('Background', 'Tab get failed on activated', String(e)));
 });
 
+/** Badge-scoped selector-drift ledger. Session-persisted so reports survive worker restarts. */
+const DRIFT_REPORTS_KEY = 'ownlyDriftReports';
+const MAX_DRIFT_RECORDS = 100;
+
+type DriftReports = Record<string, { url: string; at: string }>;
+
+async function readDriftReports(): Promise<DriftReports> {
+  try {
+    const raw = (await sessionStorage.get(DRIFT_REPORTS_KEY))[DRIFT_REPORTS_KEY];
+    if (raw && typeof raw === 'object') return raw as DriftReports;
+  } catch {}
+  return {};
+}
+
+async function persistDriftRecord(
+  type: string,
+  tabId: number | undefined,
+  selector: string,
+  url: string,
+): Promise<void> {
+  const reports = await readDriftReports();
+  const key = `${tabId ?? 'unknown'}:${selector}`;
+  if (type === 'OWNLY_SELECTOR_RECOVERED') {
+    delete reports[key];
+  } else {
+    reports[key] = { url: url.slice(0, 180), at: new Date().toISOString() };
+    const keys = Object.keys(reports);
+    if (keys.length > MAX_DRIFT_RECORDS) {
+      keys
+        .sort((a, b) => (reports[a]?.at ?? '').localeCompare(reports[b]?.at ?? ''))
+        .slice(0, keys.length - MAX_DRIFT_RECORDS)
+        .forEach((old) => { delete reports[old]; });
+    }
+  }
+  try {
+    await sessionStorage.set({ [DRIFT_REPORTS_KEY]: reports });
+  } catch {}
+}
+
+async function countTabDrifts(tabId: number): Promise<number> {
+  const reports = await readDriftReports();
+  const prefix = `${tabId}:`;
+  return Object.keys(reports).filter((key) => key.startsWith(prefix)).length;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const type = (message as { type?: string }).type;
 
-  if (type === 'OWNLY_SELECTOR_DRIFT') {
+  if (type === 'OWNLY_SELECTOR_DRIFT' || type === 'OWNLY_SELECTOR_RECOVERED') {
     const selector = (message as { selector?: string }).selector || 'unknown';
-    logger.warn('Background', `Selector drift: ${selector}`, { sender: sender.tab?.url?.slice(0, 60) });
-    void chrome.action.setBadgeText({ text: '!' }).catch(() => {});
-    void chrome.action.setBadgeBackgroundColor({ color: '#b91c1c' }).catch(() => {});
-    // Also broadcast to diagnostics layer — diagnostics.ts listens for this type
+    const url = (message as { url?: string }).url || sender.tab?.url || '';
+    const tabId = sender.tab?.id;
+    logger.warn('Background', `Selector ${type === 'OWNLY_SELECTOR_DRIFT' ? 'drift' : 'recovered'}: ${selector}`, { url: url.slice(0, 120) });
+    void persistDriftRecord(type, tabId, selector, url).then(async () => {
+      if (tabId === undefined) return;
+      const remaining = await countTabDrifts(tabId);
+      if (remaining > 0) {
+        await chrome.action.setBadgeText({ tabId, text: '!' }).catch(() => {});
+        await chrome.action.setBadgeBackgroundColor({ tabId, color: '#b91c1c' }).catch(() => {});
+      } else {
+        await chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
+      }
+    }).catch(() => {});
+    // Also broadcast to diagnostics layer — diagnostics.ts listens for these types
     sendResponse({ ok: true });
     return;
   }

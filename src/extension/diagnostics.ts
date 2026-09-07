@@ -72,14 +72,23 @@ export interface OwnlyDiagnosticsBundleV2 {
 const lastPerf: OwnlyDiagnosticsBundleV2['performance'] = {};
 const selectorDrifts: string[] = [];
 
-// Called from selectors.ts driftCheck via message — accumulate here
+// Called from selectors.ts trackSelector via message — accumulate here
 if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg && typeof msg === 'object' && (msg as { type?: string }).type === 'OWNLY_SELECTOR_DRIFT') {
-      const selector = (msg as { selector?: string }).selector;
-      if (selector && !selectorDrifts.includes(selector)) {
+    if (!msg || typeof msg !== 'object') return;
+    const msgType = (msg as { type?: string }).type;
+    const selector = (msg as { selector?: string }).selector;
+    if (!selector) return;
+    if (msgType === 'OWNLY_SELECTOR_DRIFT') {
+      if (!selectorDrifts.includes(selector)) {
         selectorDrifts.push(selector);
         logger.warn('Diagnostics', `Selector drift recorded: ${selector}`);
+      }
+    } else if (msgType === 'OWNLY_SELECTOR_RECOVERED') {
+      const idx = selectorDrifts.indexOf(selector);
+      if (idx !== -1) {
+        selectorDrifts.splice(idx, 1);
+        logger.info('Diagnostics', `Selector drift cleared: ${selector}`);
       }
     }
   });
