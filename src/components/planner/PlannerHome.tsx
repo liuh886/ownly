@@ -1700,6 +1700,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 onHoverPlace={setHighlightedPlaceId}
                 visitCountByPlaceId={visitCountByPlaceId}
                 language={language}
+                showLegend={false}
+                enableClustering={false}
               />
             </div>
           ) : rightTab === 'budget' ? (

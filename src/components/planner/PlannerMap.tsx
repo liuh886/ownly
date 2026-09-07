@@ -28,6 +28,10 @@ interface PlannerMapProps {
   onHoverPlace?: (placeId: string | null) => void;
   visitCountByPlaceId?: Map<string, number>;
   language?: 'zh' | 'en';
+  /** Compact (sidebar) maps hide the day legend to save space. Defaults to true. */
+  showLegend?: boolean;
+  /** Overview maps disable candidate clustering so every place stays directly plannable. Defaults to true. */
+  enableClustering?: boolean;
 }
 
 interface Point {
@@ -169,6 +173,8 @@ export function PlannerMap({
   onHoverPlace,
   visitCountByPlaceId,
   language = 'zh',
+  showLegend = true,
+  enableClustering = true,
 }: PlannerMapProps) {
   const zh = language === 'zh';
   const containerRef = useRef<HTMLDivElement>(null);
@@ -600,7 +606,8 @@ export function PlannerMap({
   }, [points, filterMode]);
 
   // Cluster only unscheduled candidates on a 56px grid so dense pools stay tappable;
-  // scheduled stops always keep their own identity marker.
+  // scheduled stops always keep their own identity marker. Overview (compact)
+  // maps can opt out via enableClustering so every place stays directly plannable.
   const CLUSTER_CELL = 56;
   const markerLayout = useMemo(() => {
     const positioned = visiblePoints.map((p, index) => {
@@ -613,7 +620,7 @@ export function PlannerMap({
     const singles: typeof positioned = [];
     const cellMap = new Map<string, typeof positioned>();
     for (const item of positioned) {
-      if (item.p.isScheduled) {
+      if (item.p.isScheduled || !enableClustering) {
         singles.push(item);
         continue;
       }
@@ -635,7 +642,7 @@ export function PlannerMap({
       }
     }
     return { singles, clusters };
-  }, [visiblePoints, zoom, centerX, centerY, containerSize]);
+  }, [visiblePoints, zoom, centerX, centerY, containerSize, enableClustering]);
 
   // Scheduled route points for line rendering (active day)
   const scheduledRoutePoints = useMemo(() => {
@@ -1027,7 +1034,7 @@ export function PlannerMap({
         ) : null}
 
         {/* Day Color Legend + Back-to-Day */}
-        {tripDates && tripDates.length > 1 ? (
+        {showLegend && tripDates && tripDates.length > 1 ? (
           <div className="absolute bottom-2 right-2 z-30 rounded-lg bg-white/90 px-2 py-1.5 shadow-xs backdrop-blur-sm">
             <div className="flex flex-col gap-1">
               {tripDates.map((date, dIdx) => (
