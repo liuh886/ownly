@@ -21,7 +21,10 @@ interface PlannerMapProps {
   highlightedPlaceId?: string | null;
   onSchedulePlace: (placeId: string) => void;
   onUnschedulePlace: (place: PlannerScheduledPlace) => void;
+  onShelvePlace?: (placeId: string) => void;
+  onDeletePlace?: (placeId: string, placeTitle?: string) => void;
   onHoverPlace?: (placeId: string | null) => void;
+  visitCountByPlaceId?: Map<string, number>;
   language?: 'zh' | 'en';
 }
 
@@ -117,7 +120,10 @@ export function PlannerMap({
   highlightedPlaceId,
   onSchedulePlace,
   onUnschedulePlace,
+  onShelvePlace,
+  onDeletePlace,
   onHoverPlace,
+  visitCountByPlaceId,
   language = 'zh',
 }: PlannerMapProps) {
   const zh = language === 'zh';
@@ -318,10 +324,13 @@ export function PlannerMap({
     setZoom(zoomTo);
   }, [centerForAnchor, clampZoom, screenToGeo]);
 
+  const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     const rect = containerRef.current?.getBoundingClientRect();
     const point = { x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) };
+    pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
     activePointers.current.set(e.pointerId, point);
     try {
       containerRef.current?.setPointerCapture(e.pointerId);
@@ -399,6 +408,12 @@ export function PlannerMap({
         center: { ...viewRef.current.center },
       };
     } else {
+      if (pointerDownPosRef.current) {
+        const dist = Math.hypot(e.clientX - pointerDownPosRef.current.x, e.clientY - pointerDownPosRef.current.y);
+        if (dist < 6 && (e.target === containerRef.current || (e.target as HTMLElement).tagName === 'IMG' || (e.target as HTMLElement).tagName === 'svg' || (e.target as HTMLElement).tagName === 'polyline')) {
+          setSelectedPlaceId(null);
+        }
+      }
       setIsDragging(false);
       dragStartRef.current = null;
     }
@@ -474,6 +489,13 @@ export function PlannerMap({
   const selectedPoint = useMemo(() => points.find((point) => point.place.id === selectedPlaceId) ?? null, [points, selectedPlaceId]);
   const selectedPlace = selectedPoint?.place ?? null;
   const selectedScheduledPlace = selectedPoint?.isScheduled ? selectedPoint.place as PlannerScheduledPlace : null;
+
+  const selectedPointScreen = useMemo(() => {
+    if (!selectedPoint) return null;
+    const x = projectLngToX(selectedPoint.lng, zoom) - centerX + containerSize.width / 2;
+    const y = projectLatToY(selectedPoint.lat, zoom) - centerY + containerSize.height / 2;
+    return { x, y };
+  }, [selectedPoint, zoom, centerX, centerY, containerSize.width, containerSize.height]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xs">
@@ -659,77 +681,134 @@ export function PlannerMap({
           </button>
         </div>
 
-        {/* Selected Place Popup Card */}
-        {selectedPlace && (
+        {/* Anchored Mini Popover on Clicked Marker with 3 Emoji Actions */}
+        {selectedPlace && selectedPointScreen && selectedPointScreen.x >= -60 && selectedPointScreen.x <= containerSize.width + 60 && selectedPointScreen.y >= -60 && selectedPointScreen.y <= containerSize.height + 60 && (
           <div
-            className="absolute bottom-2 left-2 right-2 z-40 rounded-xl border border-stone-200 bg-white/95 p-3 shadow-lg backdrop-blur-xs transition-all animate-in fade-in slide-in-from-bottom-2"
+            className="absolute z-50 rounded-xl border border-stone-200/95 bg-white/95 p-2.5 shadow-xl backdrop-blur-md transition-all duration-150 animate-in fade-in zoom-in-95 select-text"
+            style={{
+              left: `${Math.max(130, Math.min(containerSize.width - 130, selectedPointScreen.x))}px`,
+              top: selectedPointScreen.y > 170 ? `${selectedPointScreen.y - 12}px` : `${selectedPointScreen.y + 26}px`,
+              transform: selectedPointScreen.y > 170 ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+              width: 'max-content',
+              maxWidth: `${Math.min(300, containerSize.width - 24)}px`,
+              minWidth: '220px',
+            }}
             onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm">{KIND_EMOJI[selectedPlace.kind] || '📍'}</span>
-                  <h4 className="truncate text-xs font-bold text-stone-900">{selectedPlace.title}</h4>
-                  {selectedPlace.area ? (
-                    <span className="rounded-full bg-stone-100 px-1.5 py-0.2 text-[9.5px] font-medium text-stone-600">
-                      {selectedPlace.area}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-stone-500">
-                  {selectedPlace.observed_rating ? <span>★ {selectedPlace.observed_rating}</span> : null}
-                  {selectedPlace.observed_price ? <span>💰 {selectedPlace.observed_price}</span> : null}
-                  {selectedPlace.duration_minutes ? <span>⏱️ {selectedPlace.duration_minutes}m</span> : null}
-                </div>
-                {selectedPlace.why || selectedPlace.notes ? (
-                  <p className="mt-1 line-clamp-2 text-[11px] text-stone-600">
-                    💡 {selectedPlace.why || selectedPlace.notes}
-                  </p>
-                ) : null}
+            {/* Popover Header */}
+            <div className="flex items-start justify-between gap-1.5">
+              <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                <span className="text-sm shrink-0">{KIND_EMOJI[selectedPlace.kind] || '📍'}</span>
+                <h4 className="truncate text-xs font-bold text-stone-900 leading-snug" title={selectedPlace.title}>
+                  {selectedPlace.title}
+                </h4>
               </div>
-
               <button
                 type="button"
                 onClick={() => setSelectedPlaceId(null)}
-                className="shrink-0 rounded-md p-1 text-xs text-stone-400 hover:text-stone-600"
+                className="shrink-0 rounded p-0.5 text-stone-400 hover:text-stone-700 transition cursor-pointer"
+                title={zh ? '关闭' : 'Close'}
               >
                 ✕
               </button>
             </div>
 
-            <div className="mt-2.5 flex items-center justify-between gap-2 pt-2 border-t border-stone-100">
-              <a
-                href={selectedPlace.source_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[11px] font-semibold text-emerald-700 hover:underline"
-              >
-                🗺️ {zh ? 'Google Maps 查看' : 'View in Google Maps'}
-              </a>
+            {/* Popover Metadata Subtitle */}
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-stone-500">
+              {selectedPlace.area ? (
+                <span className="rounded bg-stone-100 px-1.5 py-0.2 font-medium text-stone-600">
+                  {selectedPlace.area}
+                </span>
+              ) : null}
+              {selectedPlace.observed_rating ? <span>★ {selectedPlace.observed_rating}</span> : null}
+              {selectedPlace.observed_price ? <span>💰 {selectedPlace.observed_price}</span> : null}
+              {selectedPlace.duration_minutes ? <span>⏱️ {selectedPlace.duration_minutes}m</span> : null}
+              {selectedPlace.source_url ? (
+                <a
+                  href={selectedPlace.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-700 hover:underline inline-flex items-center gap-0.5 ml-auto text-[10px] font-medium"
+                  title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
+                >
+                  🗺️ {zh ? '地图' : 'Maps'}
+                </a>
+              ) : null}
+            </div>
 
+            {/* 3 Emoji Actions: 添加操作 | 不考虑操作 | 删除操作 */}
+            <div className="mt-2 grid grid-cols-3 gap-1.5 pt-2 border-t border-stone-100">
+              {/* 1. 添加 / 移出当天操作 */}
               {selectedScheduledPlace ? (
                 <button
                   type="button"
                   onClick={() => {
                     onUnschedulePlace(selectedScheduledPlace);
-                    setSelectedPlaceId(null);
                   }}
-                  className="rounded-md border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-50"
+                  className="flex flex-col items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-1.5 px-1 text-center hover:bg-emerald-100 hover:border-emerald-400 transition shadow-2xs group cursor-pointer"
+                  title={zh ? '已排入当天日程，点击移出（回到待安排候选池）' : 'Scheduled on active day. Click to remove'}
                 >
-                  {zh ? '移出当天' : 'Return to Pool'}
+                  <span className="text-base transition group-hover:scale-115">✕</span>
+                  <span className="mt-0.5 text-[9.5px] font-bold text-emerald-800">{zh ? '已排当天' : 'Scheduled'}</span>
+                </button>
+              ) : (visitCountByPlaceId?.get(selectedPlace.id) ?? 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSchedulePlace(selectedPlace.id);
+                  }}
+                  className="flex flex-col items-center justify-center rounded-lg border border-emerald-400 bg-emerald-100/90 py-1.5 px-1 text-center hover:bg-emerald-200 transition shadow-2xs group cursor-pointer"
+                  title={zh ? `已在行程中排入 ${visitCountByPlaceId?.get(selectedPlace.id)} 次，点击再次加入第 ${activeDayIndex + 1} 天` : `Scheduled ${visitCountByPlaceId?.get(selectedPlace.id)}x. Click to add to Day ${activeDayIndex + 1}`}
+                >
+                  <span className="text-base transition group-hover:scale-115">➕</span>
+                  <span className="mt-0.5 text-[9.5px] font-bold text-emerald-900">{zh ? '已排 (加当天)' : 'Add Stop'}</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => {
                     onSchedulePlace(selectedPlace.id);
-                    setSelectedPlaceId(null);
                   }}
-                  className="rounded-md bg-stone-950 px-3 py-1 text-[11px] font-semibold text-white hover:bg-stone-800"
+                  className="flex flex-col items-center justify-center rounded-lg border border-stone-200 bg-stone-50 py-1.5 px-1 text-center hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800 transition shadow-2xs group cursor-pointer"
+                  title={zh ? `排入第 ${activeDayIndex + 1} 天路线` : `Add to Day ${activeDayIndex + 1}`}
                 >
-                  + {zh ? `排入第 ${activeDayIndex + 1} 天` : `Add to Day ${activeDayIndex + 1}`}
+                  <span className="text-base transition group-hover:scale-115">➕</span>
+                  <span className="mt-0.5 text-[9.5px] font-bold text-stone-700 group-hover:text-emerald-800">{zh ? '加入当天' : 'Add Stop'}</span>
                 </button>
               )}
+
+              {/* 2. 不考虑操作 */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onShelvePlace) {
+                    onShelvePlace(selectedPlace.id);
+                    setSelectedPlaceId(null);
+                  }
+                }}
+                className="flex flex-col items-center justify-center rounded-lg border border-amber-200 bg-amber-50 py-1.5 px-1 text-center hover:bg-amber-100 hover:border-amber-300 transition shadow-2xs group cursor-pointer"
+                title={zh ? '设为暂不考虑（可在待考虑池查看）' : 'Shelve (drop) place'}
+              >
+                <span className="text-base transition group-hover:scale-115">🙈</span>
+                <span className="mt-0.5 text-[9.5px] font-bold text-amber-900">{zh ? '暂不考虑' : 'Shelve'}</span>
+              </button>
+
+              {/* 3. 删除操作 */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeletePlace) {
+                    onDeletePlace(selectedPlace.id, selectedPlace.title);
+                    setSelectedPlaceId(null);
+                  }
+                }}
+                className="flex flex-col items-center justify-center rounded-lg border border-rose-200 bg-rose-50 py-1.5 px-1 text-center hover:bg-rose-100 hover:border-rose-300 transition shadow-2xs group cursor-pointer"
+                title={zh ? '彻底删除地点' : 'Delete place'}
+              >
+                <span className="text-base transition group-hover:scale-115">🗑️</span>
+                <span className="mt-0.5 text-[9.5px] font-bold text-rose-800">{zh ? '彻底删除' : 'Delete'}</span>
+              </button>
             </div>
           </div>
         )}

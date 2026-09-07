@@ -1601,19 +1601,56 @@ export function detectHotelTransferDays(
   if (tripDates.length === 0) return result;
 
   const stayByDate: Record<string, PlannerScheduledPlace | undefined> = {};
-  tripDates.forEach((date) => {
-    const stays = tripPlaces.filter(
-      (p) =>
-        p.scheduled_date === date &&
-        (p.kind === 'stay' || (p.is_anchor && p.anchor_type === 'stay_checkin')),
-    );
-    stayByDate[date] = stays[0];
+  const morningCheckoutByDate: Record<string, PlannerScheduledPlace | undefined> = {};
+
+  tripDates.forEach((date, index) => {
+    const isLastDay = index === tripDates.length - 1;
+    const dayPlaces = tripPlaces
+      .filter((p) => p.scheduled_date === date)
+      .sort((a, b) => a.sort_order - b.sort_order);
+
+    const checkins = dayPlaces.filter((p) => p.anchor_type === 'stay_checkin');
+    const checkouts = dayPlaces.filter((p) => p.anchor_type === 'stay_checkout');
+
+    if (checkins.length > 0) {
+      stayByDate[date] = checkins[0];
+      if (checkouts.length > 0) {
+        morningCheckoutByDate[date] = checkouts[0];
+      } else if (dayPlaces.length > 1 && dayPlaces[0].kind === 'stay' && dayPlaces[0].id !== checkins[0].id) {
+        morningCheckoutByDate[date] = dayPlaces[0];
+      }
+    } else if (checkouts.length > 0) {
+      morningCheckoutByDate[date] = checkouts[0];
+      const laterStays = dayPlaces.filter((p, i) => i > 0 && p.kind === 'stay' && p.id !== checkouts[0].id);
+      if (laterStays.length > 0) {
+        stayByDate[date] = laterStays[0];
+      }
+    } else {
+      const hotelStops = dayPlaces.filter((p) => p.kind === 'stay');
+      if (hotelStops.length >= 2) {
+        morningCheckoutByDate[date] = hotelStops[0];
+        stayByDate[date] = hotelStops[hotelStops.length - 1];
+      } else if (hotelStops.length === 1) {
+        const singleHotel = hotelStops[0];
+        const isFirstStop = dayPlaces[0]?.id === singleHotel.id;
+        const hasSubsequentStops = dayPlaces.length > 1;
+
+        if (isLastDay && isFirstStop && hasSubsequentStops) {
+          // On the last day of the trip, a hotel at the start of the day with subsequent stops
+          // represents morning departure / checkout, not tonight's stay!
+          morningCheckoutByDate[date] = singleHotel;
+        } else {
+          stayByDate[date] = singleHotel;
+        }
+      }
+    }
   });
 
   tripDates.forEach((date, index) => {
     const todayStay = stayByDate[date];
     const prevDate = index > 0 ? tripDates[index - 1] : null;
     const prevStay = prevDate ? stayByDate[prevDate] : null;
+    const morningCheckout = morningCheckoutByDate[date];
 
     if (
       prevStay &&
@@ -1638,50 +1675,56 @@ export function detectHotelTransferDays(
         date,
         dayIndex: index,
         isTransferDay: true,
-        checkoutHotel: prevStay,
+        checkoutHotel: morningCheckout || prevStay,
         checkinHotel: todayStay,
         stayHotel: todayStay,
         stayNightIndex: 1,
         totalStayNights: totalNights,
       };
-    } else {
-      let nightIndex = 1;
-      let totalNights = 1;
-
-      if (todayStay) {
-        const baseId = normalizePlaceIdentity(todayStay.source_url || todayStay.title);
-        let start = index;
-        while (
-          start > 0 &&
-          stayByDate[tripDates[start - 1]] &&
-          normalizePlaceIdentity(
-            stayByDate[tripDates[start - 1]]!.source_url || stayByDate[tripDates[start - 1]]!.title,
-          ) === baseId
-        ) {
-          start--;
-        }
-        nightIndex = index - start + 1;
-
-        let end = index;
-        while (
-          end < tripDates.length - 1 &&
-          stayByDate[tripDates[end + 1]] &&
-          normalizePlaceIdentity(
-            stayByDate[tripDates[end + 1]]!.source_url || stayByDate[tripDates[end + 1]]!.title,
-          ) === baseId
-        ) {
-          end++;
-        }
-        totalNights = end - start + 1;
+    } else if (todayStay) {
+      const baseId = normalizePlaceIdentity(todayStay.source_url || todayStay.title);
+      let start = index;
+      while (
+        start > 0 &&
+        stayByDate[tripDates[start - 1]] &&
+        normalizePlaceIdentity(
+          stayByDate[tripDates[start - 1]]!.source_url || stayByDate[tripDates[start - 1]]!.title,
+        ) === baseId
+      ) {
+        start--;
       }
+      const nightIndex = index - start + 1;
+
+      let end = index;
+      while (
+        end < tripDates.length - 1 &&
+        stayByDate[tripDates[end + 1]] &&
+        normalizePlaceIdentity(
+          stayByDate[tripDates[end + 1]]!.source_url || stayByDate[tripDates[end + 1]]!.title,
+        ) === baseId
+      ) {
+        end++;
+      }
+      const totalNights = end - start + 1;
 
       result[date] = {
         date,
         dayIndex: index,
         isTransferDay: false,
+        checkoutHotel: morningCheckout,
         stayHotel: todayStay,
-        stayNightIndex: todayStay ? nightIndex : undefined,
-        totalStayNights: todayStay ? totalNights : undefined,
+        stayNightIndex: nightIndex,
+        totalStayNights: totalNights,
+      };
+    } else {
+      result[date] = {
+        date,
+        dayIndex: index,
+        isTransferDay: false,
+        checkoutHotel: morningCheckout,
+        stayHotel: undefined,
+        stayNightIndex: undefined,
+        totalStayNights: undefined,
       };
     }
   });

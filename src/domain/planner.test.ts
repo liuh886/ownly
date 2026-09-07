@@ -805,6 +805,52 @@ describe('Ownly Planner domain', () => {
     expect(transfers['2026-10-03'].checkinHotel?.title).toBe('Hotel B (Nimman)');
   });
 
+  it('correctly identifies last-day morning departure checkout and does not misidentify it as tonight stay', () => {
+    const hotelA = place('hA', { title: 'Hotel A (Old Town)', kind: 'stay' });
+    const cafe = place('c1', { title: 'Nimman Cafe', kind: 'food' });
+    const airport = place('apt', { title: 'Chiang Mai Airport', kind: 'transit' });
+
+    const hotelA1 = scheduledPlace(hotelA, '2026-10-01', 0, { is_anchor: true, anchor_type: 'stay_checkin' });
+    const hotelA2 = scheduledPlace(hotelA, '2026-10-02', 0, { is_anchor: true, anchor_type: 'stay_checkin' });
+    // Day 3 (last day): Traveler departs from Hotel A in the morning, visits cafe, and heads to airport
+    const hotelA3Departure = scheduledPlace(hotelA, '2026-10-03', 0);
+    const cafeStop = scheduledPlace(cafe, '2026-10-03', 1);
+    const airportStop = scheduledPlace(airport, '2026-10-03', 2);
+
+    const dates = ['2026-10-01', '2026-10-02', '2026-10-03'];
+    const transfers = detectHotelTransferDays(
+      [hotelA1, hotelA2, hotelA3Departure, cafeStop, airportStop],
+      dates,
+    );
+
+    expect(transfers['2026-10-01'].stayHotel?.title).toBe('Hotel A (Old Town)');
+    expect(transfers['2026-10-01'].stayNightIndex).toBe(1);
+    expect(transfers['2026-10-01'].totalStayNights).toBe(2);
+
+    expect(transfers['2026-10-02'].stayHotel?.title).toBe('Hotel A (Old Town)');
+    expect(transfers['2026-10-02'].stayNightIndex).toBe(2);
+    expect(transfers['2026-10-02'].totalStayNights).toBe(2);
+
+    // Day 3 is departure day: checkoutHotel is Hotel A, stayHotel is undefined (no overnight stay tonight!)
+    expect(transfers['2026-10-03'].isTransferDay).toBe(false);
+    expect(transfers['2026-10-03'].checkoutHotel?.title).toBe('Hotel A (Old Town)');
+    expect(transfers['2026-10-03'].stayHotel).toBeUndefined();
+    expect(transfers['2026-10-03'].stayNightIndex).toBeUndefined();
+  });
+
+  it('respects explicit stay_checkout anchor type on any day', () => {
+    const hotelA = place('hA', { title: 'Hotel A (Old Town)', kind: 'stay' });
+    const temple = place('t1', { title: 'Wat Phra Singh', kind: 'attraction' });
+    const hotelA_checkout = scheduledPlace(hotelA, '2026-10-02', 0, { is_anchor: true, anchor_type: 'stay_checkout' });
+    const templeStop = scheduledPlace(temple, '2026-10-02', 1);
+
+    const dates = ['2026-10-01', '2026-10-02'];
+    const transfers = detectHotelTransferDays([hotelA_checkout, templeStop], dates);
+
+    expect(transfers['2026-10-02'].checkoutHotel?.title).toBe('Hotel A (Old Town)');
+    expect(transfers['2026-10-02'].stayHotel).toBeUndefined();
+  });
+
   it('parses numeric prices from diverse currency and range strings', () => {
     expect(parseNumericPrice('人均 ฿200-400')).toBe(300);
     expect(parseNumericPrice('¥1,800/晚')).toBe(1800);

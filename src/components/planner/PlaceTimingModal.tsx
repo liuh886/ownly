@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { PlannerVisitAnchorType } from '@/domain/planner';
 import { checkOpeningHoursCollision } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
 import {
@@ -13,7 +14,15 @@ interface PlaceTimingModalProps {
   dayOtherPlaces?: PlannerScheduledPlace[];
   inferredStartTime?: string;
   onClose: () => void;
-  onSave: (visitId: string, timing: { scheduled_start?: string; duration_minutes?: number }) => Promise<void>;
+  onSave: (
+    visitId: string,
+    timing: {
+      scheduled_start?: string;
+      duration_minutes?: number;
+      is_anchor?: boolean;
+      anchor_type?: PlannerVisitAnchorType;
+    },
+  ) => Promise<void>;
   language?: 'zh' | 'en';
 }
 
@@ -58,6 +67,7 @@ export function PlaceTimingModal({
   const zh = language === 'zh';
   const [startTime, setStartTime] = useState<string>(() => place?.scheduled_start || '');
   const [durationMinutes, setDurationMinutes] = useState<number | ''>(() => place?.duration_minutes || '');
+  const [anchorType, setAnchorType] = useState<PlannerVisitAnchorType | undefined>(() => place?.anchor_type);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
@@ -104,9 +114,12 @@ export function PlaceTimingModal({
     setSaving(true);
     setSaveError('');
     try {
+      const isAnchor = anchorType ? true : (place.kind === 'stay' ? false : place.is_anchor);
       await onSave(place.visit_id, {
         scheduled_start: startTime.trim() || undefined,
         duration_minutes: normalizedDuration,
+        is_anchor: isAnchor,
+        anchor_type: anchorType,
       });
       onClose();
     } catch (error) {
@@ -120,7 +133,12 @@ export function PlaceTimingModal({
     setSaving(true);
     setSaveError('');
     try {
-      await onSave(place.visit_id, { scheduled_start: undefined, duration_minutes: undefined });
+      await onSave(place.visit_id, {
+        scheduled_start: undefined,
+        duration_minutes: undefined,
+        is_anchor: false,
+        anchor_type: undefined,
+      });
       onClose();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
@@ -192,6 +210,62 @@ export function PlaceTimingModal({
             {QUICK_DURATIONS.map((item) => <button key={item.minutes} type="button" onClick={() => setDurationMinutes(item.minutes)} className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${durationMinutes === item.minutes ? 'bg-stone-900 font-semibold text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>{zh ? item.labelZh : item.labelEn}</button>)}
           </div>
         </div>
+
+        {place.kind === 'stay' ? (
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-stone-700">
+              {zh ? '3. 住宿角色定位' : '3. Stay Place Role'}
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setAnchorType('stay_checkout')}
+                className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition ${
+                  anchorType === 'stay_checkout'
+                    ? 'border-sky-500 bg-sky-50/90 text-sky-950 ring-2 ring-sky-500/20 shadow-2xs'
+                    : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300 hover:bg-stone-50'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-bold">
+                  <span>🌅</span>
+                  <span>{zh ? '早晨退房出发' : 'Morning Checkout'}</span>
+                </span>
+                <span className="mt-1 text-[11px] text-stone-500 leading-snug">
+                  {zh ? '早晨从此酒店离开（退房出发，今晚不住宿）' : 'Depart from hotel (no stay tonight)'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAnchorType('stay_checkin')}
+                className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition ${
+                  anchorType === 'stay_checkin'
+                    ? 'border-indigo-500 bg-indigo-50/90 text-indigo-950 ring-2 ring-indigo-500/20 shadow-2xs'
+                    : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300 hover:bg-stone-50'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-bold">
+                  <span>🌙</span>
+                  <span>{zh ? '傍晚入住 / 今晚住宿' : 'Tonight Stay'}</span>
+                </span>
+                <span className="mt-1 text-[11px] text-stone-500 leading-snug">
+                  {zh ? '今晚在此过夜（计入住宿天数与连住统计）' : 'Overnight lodging tonight'}
+                </span>
+              </button>
+            </div>
+            {anchorType ? (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setAnchorType(undefined)}
+                  className="text-[11px] text-stone-400 hover:text-stone-700 transition"
+                >
+                  {zh ? '↺ 恢复系统自动识别' : '↺ Reset to Auto-detect'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="space-y-1.5 rounded-xl border border-stone-200 bg-stone-50/80 p-3 text-xs">
           <div className="flex items-center justify-between gap-2">

@@ -940,7 +940,12 @@ export class PlannerRepository {
 
   async updateVisitTiming(
     visitId: string,
-    timing: { start?: string | null; duration_minutes?: number | null },
+    timing: {
+      start?: string | null;
+      duration_minutes?: number | null;
+      is_anchor?: boolean;
+      anchor_type?: PlannerTripVisit['anchor_type'] | null;
+    },
   ): Promise<PlannerTripVisit | null> {
     return this.executeTransaction(async (tx) => {
       const visit = (await this.listVisits({ strict: true })).find((item) => item.id === visitId);
@@ -950,12 +955,22 @@ export class PlannerRepository {
         throw new Error(`Planner trip "${visit.trip_id}" was not found for visit.`);
       }
       assertTripDate(trip, visit.date);
-      const start = timing.start?.trim() || undefined;
-      const duration = timing.duration_minutes ?? undefined;
-      const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: visit.is_anchor })
+      const start = timing.start !== undefined ? (timing.start?.trim() || undefined) : visit.start;
+      const duration = timing.duration_minutes !== undefined ? (timing.duration_minutes ?? undefined) : visit.duration_minutes;
+      const isAnchor = timing.is_anchor !== undefined ? Boolean(timing.is_anchor) : Boolean(visit.is_anchor);
+      const anchorType = timing.anchor_type !== undefined ? (timing.anchor_type || undefined) : visit.anchor_type;
+
+      const errors = validatePlannerTiming(start, duration, { allowCrossMidnight: isAnchor })
         .filter((issue) => issue.severity === 'error');
       if (errors.length > 0) throw new Error(errors.map((issue) => issue.message).join(' | '));
-      const next: PlannerTripVisit = { ...visit, start, duration_minutes: duration, updated_at: new Date().toISOString() };
+      const next: PlannerTripVisit = {
+        ...visit,
+        start,
+        duration_minutes: duration,
+        is_anchor: isAnchor,
+        anchor_type: anchorType,
+        updated_at: new Date().toISOString(),
+      };
       await tx.stageUpsertEntity(next);
       return next;
     });

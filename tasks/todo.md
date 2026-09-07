@@ -1,5 +1,79 @@
 # Ownly — Task Progress & Review
 
+## Active: Map "Show All Routes" (显示所有路线) Multi-Day Overlay & Cloud Push (2026-09-07)
+- [ ] **1. Sync & Push to Remote ("推送云端")**:
+  - Stage and commit the completed checkout departure / hotel stay fixes.
+  - Push branch to remote origin.
+- [ ] **2. Domain & Map Data Extension (`src/domain/planner.ts` & `src/components/planner/PlannerMap.tsx`)**:
+  - Extend `getMapPointsForFilter` to support `'all_routes'`.
+  - Extend `PlannerMapProps` with `allPlacesByDate?: Record<string, PlannerScheduledPlace[]>` and `tripDates?: string[]`.
+  - In `PlannerMap.tsx`, calculate multi-day route trajectories and screen coordinates for all trip dates.
+  - Render other days' polylines with soft dimmed styling (`#94a3b8` / `#64748b`, `opacity="0.45"`, `strokeDasharray="5,4"`) in the background, while the active day's polyline remains in prominent bold emerald green (`#047857`, `opacity="0.95"`, `strokeWidth="3.5"`).
+  - Render subtle markers (`D{dayIndex + 1}·{order}`) for other days' scheduled stops when `filterMode === 'all_routes'`.
+  - Add filter button `🌐 显示所有路线` to map header controls.
+- [ ] **3. Wire Props in Planner Home (`src/components/planner/PlannerHome.tsx`)**:
+  - Pass `allPlacesByDate={placesByDate}` and `tripDates={tripDates}` to both embedded and expanded `PlannerMap` instances.
+- [ ] **4. Verification & Testing**:
+  - Add unit test in `src/domain/planner.test.ts` for `getMapPointsForFilter` with `'all_routes'`.
+  - Run `npm run validate:fast`, `npm run test:planner`, and `npm test`.
+  - Commit and push to remote.
+
+## Completed: Distinguish Morning Checkout/Departure Hotel from Tonight's Stay (2026-09-07)
+- [x] **1. Domain Hotel Detection Logic (`src/domain/planner.ts` & `src/services/PlannerRepository.ts`)**:
+  - Updated `detectHotelTransferDays` to parse `stay_checkout` & `stay_checkin` anchors and automatically identify last-day departure checkout hotel stops (index 0 hotel followed by other stops/airport) as morning departures without overnight stay (`stayHotel: undefined`).
+  - Extended `PlannerRepository.updateVisitTiming` and `usePlannerActions` to support atomic updates to `is_anchor` and `anchor_type`.
+- [x] **2. UI Controls & Visual Differentiation (`PlaceTimingModal.tsx` & `PlannerHome.tsx`)**:
+  - In `PlaceTimingModal`, added interactive Stay Place Role selection (`🌅 早晨退房出发` vs `🌙 傍晚入住 / 今晚住宿` vs `↺ 恢复系统自动识别`).
+  - In `PlannerHome.tsx`, added departure day banner (`🌅 早晨退房出发: Hotel A (退房出发日 · 今晚不住宿)`) when departing without evening checkin.
+  - In timeline place cards, rendered distinct contextual badges (`🌅 退房出发` vs `🌙 今晚住宿`).
+  - Aligned `hotelStayDaysMap` to count genuine stay nights from `transferDaysInfo` so departure checkout stops do not inflate hotel stay night counts or distort per-night expense calculations.
+- [x] **3. Quality Gates & Automated Verification**:
+  - Added unit test suite in `src/domain/planner.test.ts` verifying last-day checkout departure auto-detection and explicit `stay_checkout` anchor handling.
+  - `npm run validate:fast`: 0 errors (clean TypeScript, ESLint, terminology & membership).
+  - `npm run test:planner`: 8 test suites, 154 tests passed.
+  - `npm test`: 59 test suites, 552 tests passed.
+
+## Completed: Highlight Scheduled Places with Green Plus Button (`PlannerHome.tsx` & `PlannerMap.tsx`) (2026-09-07)
+- [x] **1. Candidate Pool Cards Styling (`PlannerHome.tsx`)**:
+  - For places that have already been scheduled (`visitCountByPlaceId.get(place.id) > 0`), changed the `+` action button background from black to emerald green (`bg-emerald-600 hover:bg-emerald-700 text-white ring-1 ring-emerald-500/50`).
+- [x] **2. Map Popover & Prop Alignment (`PlannerMap.tsx` & `PlannerHome.tsx`)**:
+  - Passed `visitCountByPlaceId` to embedded and expanded `PlannerMap`.
+  - Updated map action buttons to clearly distinguish already-scheduled places with emerald green styling (`bg-emerald-50` / `bg-emerald-100`) and tooltips showing schedule counts.
+- [x] **3. Quality Gates & Automated Verification**:
+  - `npm run validate:fast`: TypeScript 0 errors, ESLint 0 warnings, terminology & membership rules passed.
+  - `npm run test:planner`: 8 test suites, 152 tests passed.
+
+## Completed: Fix Timeline Travel Mode & Estimate Popover Truncation (2026-09-07)
+- [x] **1. Root Cause Analysis & Layout Unclipping (`PlannerHome.tsx`)**:
+  - Removed `overflow-hidden` from the timeline execution card `<section>` to allow absolute popovers to overflow seamlessly without getting sliced.
+- [x] **2. Implement Auto-Flipping `TravelModeSwitchPopover` Component**:
+  - Detected vertical available space dynamically (`spaceBelow < 250px` -> automatically flips upwards with `bottom-full mb-1.5 origin-bottom-left`).
+  - Constrained maximum height with `max-h-[min(300px,calc(100vh-120px))] overflow-y-auto overscroll-contain` with internal scrolling for extreme small-height / mobile scenarios.
+  - Implemented outside-click (`pointerdown`) and `Escape` key dismiss listeners with `e.stopPropagation()` on toggle buttons.
+  - Unified the popover implementation between default leg fallback and explicit transit leg items.
+- [x] **3. Quality Gates & Automated Verification**:
+  - `npm run validate:fast`: TypeScript 0 errors, ESLint 0 warnings, terminology & membership rules passed.
+  - `npm run test:planner`: 8 test suites, 152 tests passed.
+
+## Completed: Map Point Continuous Clicking & 3-Emoji Mini Popover (2026-09-07)
+- [x] **1. Upgrade `PlannerMapProps` and Connect Actions (`PlannerMap.tsx` & `PlannerHome.tsx`)**:
+  - Added `onShelvePlace` and `onDeletePlace` to `PlannerMapProps`.
+  - Connected `handleDropPlace` and `handleDeletePlace` from `PlannerHome.tsx` to both embedded and expanded `PlannerMap` instances.
+- [x] **2. Redesign Map Marker Popover with 3-Emoji Action Layout (`PlannerMap.tsx`)**:
+  - Computed anchored screen position `(selectedPointScreen.x, selectedPointScreen.y)` dynamically tracking the active marker.
+  - Replaced bottom sheet with a sleek, compact floating popover containing:
+    - Kind icon + Title + Close button.
+    - Meta info (Area, Rating, Duration, Google Maps link).
+    - 3 Emoji Action Buttons:
+      1. `➕ 加入当天` / `✕ 移出当天` (Instant add/remove from active day schedule)
+      2. `🙈 暂不考虑` (Shelve/Drop to shelved pool)
+      3. `🗑️ 彻底删除` (Delete place with confirmation)
+  - Enabled fluid continuous clicking (clicking marker A -> instant schedule -> clicking marker B immediately switches popover without lag).
+  - Added background tap dismiss when clicking empty map canvas without dragging.
+- [x] **3. Automated Testing & Verification**:
+  - `npm run validate:fast`: 0 lint/type errors, terminology & membership gates passed.
+  - `npm run test:planner`: 152 tests passed.
+
 ## Completed: Map Center Optimization & Timeline Place Card Compression (2026-09-07)
 - [x] **1. Map Default Center Optimization (`src/domain/planner.ts` & `src/components/planner/PlannerMap.tsx`)**:
   - Implemented `getPlannerMapDefaultCenter`:

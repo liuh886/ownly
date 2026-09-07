@@ -499,8 +499,21 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   }, [disabled, isBatchOperating, load, selectedCandidateIds, setIsBatchOperating, setIsMultiSelectMode, setNotice, setSelectedCandidateIds, sortedPendingCandidates, zh]);
 
   const handleSavePlaceTiming = useCallback(
-    async (visitId: string, timing: { scheduled_start?: string; duration_minutes?: number }) => {
-      await plannerRepository.updateVisitTiming(visitId, { start: timing.scheduled_start, duration_minutes: timing.duration_minutes });
+    async (
+      visitId: string,
+      timing: {
+        scheduled_start?: string;
+        duration_minutes?: number;
+        is_anchor?: boolean;
+        anchor_type?: PlannerScheduledPlace['anchor_type'];
+      },
+    ) => {
+      await plannerRepository.updateVisitTiming(visitId, {
+        start: timing.scheduled_start,
+        duration_minutes: timing.duration_minutes,
+        is_anchor: timing.is_anchor,
+        anchor_type: timing.anchor_type,
+      });
       await load();
       setNotice(zh ? '已更新行程时段与停留时长！' : 'Updated schedule timing and duration!');
       setTimeout(() => setNotice(''), 3000);
