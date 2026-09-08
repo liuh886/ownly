@@ -470,19 +470,31 @@ export function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
   return Array.from(scannedListPlaces.values());
 }
 
-export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
-  const sourceUrl = window.location.href;
+/**
+ * Lightweight place-detail gate: heading + at least one fact, no JSON
+ * parsing, no APP_STATE bridge, no telemetry. Used by the FAB injector on
+ * every DOM scan; the full extractor reuses it below. Exported for tests.
+ */
+export function hasGoogleMapsPlaceDetail(): boolean {
   const detailHeading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
     ?? document.querySelector<HTMLElement>('main h1')
     ?? document.querySelector<HTMLElement>('h1');
-  const hasVisibleDetailFacts = Boolean(
+  if (!cleanExtractedText(detailHeading?.textContent || '')) return false;
+  return Boolean(
     document.querySelector(SELECTORS.address)
     || document.querySelector(SELECTORS.rating)
     || document.querySelector(SELECTORS.category)
     || document.querySelector(SELECTORS.phone)
     || document.querySelector(SELECTORS.website),
   );
-  const hasVisiblePlaceDetails = Boolean(cleanExtractedText(detailHeading?.textContent || '') && hasVisibleDetailFacts);
+}
+
+export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?: string): CurrentResearchPlace | null {
+  const sourceUrl = window.location.href;
+  const detailHeading = document.querySelector<HTMLElement>(SELECTORS.placeHeading)
+    ?? document.querySelector<HTMLElement>('main h1')
+    ?? document.querySelector<HTMLElement>('h1');
+  const hasVisiblePlaceDetails = hasGoogleMapsPlaceDetail();
   const isDedicatedPlacePage = /\/maps\/place\/[^/?#]+/i.test(window.location.pathname)
     || /data=.*!1s0x/i.test(window.location.href)
     || /cid=\d+/i.test(window.location.search)
@@ -721,13 +733,23 @@ export class GoogleMapsAdapter implements PageAdapter {
   initInlineButtons(): void {
     if (typeof document === 'undefined' || !document.body) return;
 
-    // 1. Single POI Detail Pane: inject "📌 放入案板" button next to main place title
+    // 1. Single POI Detail Pane: inject "📌 放入案板" button next to main place title.
+    // The pane container survives SPA navigation, so validate every scan and
+    // remove stale buttons when the pane no longer shows a place.
+    for (const marked of Array.from(document.querySelectorAll<HTMLElement>('[data-ownly-detail-fab="true"]'))) {
+      if (!marked.isConnected || !hasGoogleMapsPlaceDetail()) {
+        marked.querySelectorAll('.ownly-inline-fab-root').forEach((node) => node.remove());
+        marked.removeAttribute('data-ownly-detail-fab');
+        delete marked.dataset.ownlyCardInjected;
+      }
+    }
     const detailTitleEl = document.querySelector<HTMLElement>(
       'h1.DUwDvf, h1.fontHeadlineLarge, div.lMbq3e h1, div.TIH9bg h1, div[role="main"] h1'
     );
-    if (detailTitleEl) {
+    if (detailTitleEl && hasGoogleMapsPlaceDetail()) {
       const paneContainer = (detailTitleEl.closest<HTMLElement>('div[role="main"], div.m6QErb, div.lMbq3e') || detailTitleEl.parentElement) as HTMLElement;
       if (paneContainer && paneContainer.dataset.ownlyCardInjected !== 'true' && !paneContainer.querySelector('.ownly-inline-fab-root')) {
+        paneContainer.dataset.ownlyDetailFab = 'true';
         injectInlineCaptureButton({
           container: paneContainer,
           anchor: detailTitleEl,
@@ -738,12 +760,14 @@ export class GoogleMapsAdapter implements PageAdapter {
       }
     }
 
-    // 2. Search Result List items: inject next to each search result item title
+    // 2. Search Result List items: inject next to each search result item title.
+    // Cards must reference a real place (href or item id); otherwise the FAB
+    // would capture the search page itself. Recycled feed nodes (Google
+    // reuses DOM nodes for new results) are detected via signature mismatch.
     const searchCards = document.querySelectorAll<HTMLElement>(
       'div.Nv2PK, div.THOPZb, div[role="feed"] div[role="article"]'
     );
     for (const card of Array.from(searchCards)) {
-      if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) continue;
       const titleEl = card.querySelector<HTMLElement>('div.qBF1Pd, div.fontHeadlineSmall, [role="heading"]');
       if (!titleEl || !titleEl.textContent?.trim()) continue;
 
@@ -751,8 +775,21 @@ export class GoogleMapsAdapter implements PageAdapter {
       if (!rawTitle || isFakePlaceLabel(rawTitle) || isJunkNavigationText(rawTitle)) continue;
 
       const anchorEl = card.querySelector<HTMLAnchorElement>('a.hfpxzc, a[href*="/maps/place/"], a[data-item-id]');
-      const href = anchorEl?.href || window.location.href;
+      const href = anchorEl?.href || '';
+      const itemRef = anchorEl?.getAttribute('data-item-id') || anchorEl?.getAttribute('data-place-id') || '';
+      const hasPlaceRef = Boolean(itemRef) || /(\/maps\/place\/|!1s0x|!1sChIJ|query_place_id=|cid=\d+|ftid=|data=.*!1s)/.test(href);
+      if (!hasPlaceRef) continue;
 
+      const cardSig = `${rawTitle}|${href || itemRef}`;
+      if (card.dataset.ownlyCardSig && card.dataset.ownlyCardSig !== cardSig) {
+        // Recycled node showing new content: drop the stale button and flag.
+        card.querySelectorAll('.ownly-inline-fab-root').forEach((node) => node.remove());
+        delete card.dataset.ownlyCardInjected;
+        delete card.dataset.ownlyCardSig;
+      }
+      if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) continue;
+
+      card.dataset.ownlyCardSig = cardSig;
       injectInlineCaptureButton({
         container: card,
         anchor: titleEl,
@@ -805,6 +842,7 @@ export class GoogleMapsAdapter implements PageAdapter {
             reviewCount,
             category,
             priceLevel,
+            sourceDetail: DOM_SOURCE_DETAIL,
             address: subtitleText || undefined,
             types: category ? [category, 'point_of_interest', 'establishment'] : ['point_of_interest', 'establishment'],
           };
