@@ -27,6 +27,7 @@ import { PlannerBudgetLedger } from './PlannerBudgetLedger';
 import { ImportCandidatesModal } from './ImportCandidatesModal';
 import { PlaceTimingModal } from './PlaceTimingModal';
 import { CreateTripModal } from './CreateTripModal';
+import { useEscapeKey } from './use-escape-key';
 import { extractTripSharePayload } from '@/domain/trip-share-link';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
 import { OptimizeOrderModal } from './OptimizeOrderModal';
@@ -301,17 +302,6 @@ interface ResearchPoolSectionProps {
   setIsSuspectedModalOpen: (open: boolean) => void;
   disabled: boolean;
   className?: string;
-}
-
-function useEscapeKey(active: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!active) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [active, onClose]);
 }
 
 function ResearchPoolSection(props: ResearchPoolSectionProps) {
