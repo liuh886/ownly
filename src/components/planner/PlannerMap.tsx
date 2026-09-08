@@ -30,8 +30,6 @@ interface PlannerMapProps {
   language?: 'zh' | 'en';
   /** Compact (sidebar) maps hide the day legend to save space. Defaults to true. */
   showLegend?: boolean;
-  /** Overview maps disable candidate clustering so every place stays directly plannable. Defaults to true. */
-  enableClustering?: boolean;
 }
 
 interface Point {
@@ -174,7 +172,6 @@ export function PlannerMap({
   visitCountByPlaceId,
   language = 'zh',
   showLegend = true,
-  enableClustering = true,
 }: PlannerMapProps) {
   const zh = language === 'zh';
   const containerRef = useRef<HTMLDivElement>(null);
@@ -605,44 +602,18 @@ export function PlannerMap({
     });
   }, [points, filterMode]);
 
-  // Cluster only unscheduled candidates on a 56px grid so dense pools stay tappable;
-  // scheduled stops always keep their own identity marker. Overview (compact)
-  // maps can opt out via enableClustering so every place stays directly plannable.
-  const CLUSTER_CELL = 56;
+  // Every visible point keeps its own identity marker (no clustering):
+  // dense candidate pools stay directly plannable; visual hierarchy comes
+  // from marker size grading instead.
   const markerLayout = useMemo(() => {
-    const positioned = visiblePoints.map((p, index) => {
+    return visiblePoints.map((p, index) => {
       const x = projectLngToX(p.lng, zoom) - centerX + containerSize.width / 2;
       const y = projectLatToY(p.lat, zoom) - centerY + containerSize.height / 2;
       return { p, index, x, y };
     }).filter(
       (item) => item.x >= -40 && item.x <= containerSize.width + 40 && item.y >= -40 && item.y <= containerSize.height + 40,
     );
-    const singles: typeof positioned = [];
-    const cellMap = new Map<string, typeof positioned>();
-    for (const item of positioned) {
-      if (item.p.isScheduled || !enableClustering) {
-        singles.push(item);
-        continue;
-      }
-      const key = `${Math.floor(item.x / CLUSTER_CELL)}:${Math.floor(item.y / CLUSTER_CELL)}`;
-      const group = cellMap.get(key);
-      if (group) group.push(item);
-      else cellMap.set(key, [item]);
-    }
-    const clusters: Array<{ x: number; y: number; items: typeof positioned }> = [];
-    for (const group of cellMap.values()) {
-      if (group.length <= 1) {
-        singles.push(group[0]);
-      } else {
-        clusters.push({
-          x: group.reduce((sum, item) => sum + item.x, 0) / group.length,
-          y: group.reduce((sum, item) => sum + item.y, 0) / group.length,
-          items: group,
-        });
-      }
-    }
-    return { singles, clusters };
-  }, [visiblePoints, zoom, centerX, centerY, containerSize, enableClustering]);
+  }, [visiblePoints, zoom, centerX, centerY, containerSize]);
 
   // Scheduled route points for line rendering (active day)
   const scheduledRoutePoints = useMemo(() => {
@@ -856,7 +827,7 @@ export function PlannerMap({
         ) : null}
 
         {/* POI Markers */}
-        {markerLayout.singles.map(({ p, index: pIdx, x, y }) => {
+        {markerLayout.map(({ p, index: pIdx, x, y }) => {
           const isHighlighted = highlightedPlaceId === p.place.id || selectedPlaceId === p.place.id;
           const isOtherDayStop = p.isScheduled && p.isActiveDay === false;
           const dayColor = plannerDayColor(p.dayIndex ?? activeDayIndex);
@@ -887,7 +858,7 @@ export function PlannerMap({
                 } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                   e.preventDefault();
                   e.stopPropagation();
-                  const ids = markerLayout.singles.map((item) => item.p.place.id);
+                  const ids = markerLayout.map((item) => item.p.place.id);
                   const current = ids.indexOf(p.place.id);
                   if (current < 0) return;
                   const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
@@ -909,9 +880,9 @@ export function PlannerMap({
             >
               {p.isScheduled ? (
                 isOtherDayStop ? (
-                  // Other Day Stop Marker (day identity color, dimmed)
+                  // Other Day Stop Marker (day identity color, dimmed, one step smaller)
                   <div
-                    className={`flex h-5 items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all hover:brightness-110 ${
+                    className={`flex h-6 items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all hover:brightness-110 ${
                       isHighlighted ? 'ring-2 ring-white scale-110' : ''
                     }`}
                     style={{ backgroundColor: `${dayColor}CC` }}
@@ -933,12 +904,13 @@ export function PlannerMap({
                   </div>
                 )
               ) : (
-                // Candidate POI Marker (light green when already scheduled on some day, 32px touch target)
+                // Candidate POI Marker (20px dot; light green when already scheduled
+                // on some day). Hover/selected restores the full 32px size as feedback.
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 shadow-md text-xs transition-all ${
+                  className={`flex h-5 w-5 items-center justify-center rounded-full border shadow-sm text-[10px] transition-all ${
                     scheduledCount > 0
-                      ? `border-emerald-300 bg-emerald-50 ${isHighlighted ? 'ring-3 ring-emerald-400 scale-110' : 'hover:scale-110'}`
-                      : `border-white bg-white ${isHighlighted ? 'ring-3 ring-blue-400 scale-110' : 'hover:scale-110'}`
+                      ? `border-emerald-200 bg-emerald-50 ${isHighlighted ? 'ring-3 ring-emerald-400 scale-[1.6]' : 'hover:scale-[1.6]'}`
+                      : `border-white/80 bg-white ${isHighlighted ? 'ring-3 ring-blue-400 scale-[1.6]' : 'hover:scale-[1.6]'}`
                   }`}
                   title={markerTitle(
                     scheduledCount > 0 ? `${p.place.title} (已排 ${scheduledCount} 次)` : p.place.title,
@@ -952,41 +924,7 @@ export function PlannerMap({
           );
         })}
 
-        {/* Candidate Clusters: tap to zoom in and split */}
-        {markerLayout.clusters.map((cluster, cIdx) => {
-          const names = cluster.items.slice(0, 3).map((item) => item.p.place.title).join('、');
-          const extra = cluster.items.length > 3 ? ` 等 ${cluster.items.length} 个候选` : '';
-          return (
-            <div
-              key={`cluster_${cIdx}_${cluster.items.length}`}
-              data-map-marker="true"
-              role="button"
-              tabIndex={0}
-              aria-label={`${cluster.items.length} 个候选，回车放大散开`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (Date.now() - lastPinchEndRef.current < 350) return;
-                applyZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, cluster.x, cluster.y);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  applyZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, cluster.x, cluster.y);
-                }
-              }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-150 hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-900"
-              style={{ left: `${cluster.x}px`, top: `${cluster.y}px`, zIndex: 15 }}
-            >
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-stone-900 shadow-md text-[11px] font-bold text-white"
-                title={`${cluster.items.length} 个候选：${names}${extra}（点击放大散开）`}
-              >
-                {cluster.items.length}
-              </div>
-            </div>
-          );
-        })}
+
 
         {/* Floating Map Action Controls */}
         <div className="absolute top-2 right-2 flex flex-col gap-1 z-30">
