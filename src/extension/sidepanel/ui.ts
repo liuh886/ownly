@@ -1038,7 +1038,7 @@ function buildCandidateCard(
   grip.className = 'grip';
   grip.draggable = true;
   grip.textContent = '⠿';
-  grip.title = store.lang === 'zh' ? '拖动调整候选池顺序' : 'Drag to reorder the pool';
+  grip.title = store.lang === 'zh' ? '拖动调整案板顺序' : 'Drag to reorder the pool';
   grip.setAttribute('aria-hidden', 'true');
 
   const titleEl = document.createElement('div');

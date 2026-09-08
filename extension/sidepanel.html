@@ -56,7 +56,7 @@
     <!-- Inbox (primary) — Gmail-style saved places -->
     <details id="candidatesDrawer" class="panel stack drawer" open>
       <summary>
-        <span id="sumCandidatesDrawer">📥 Inbox</span>
+        <span id="sumCandidatesDrawer">📥 案板</span>
         <span class="row" style="gap: 6px;">
           <span id="candidatesCountBadge" class="badge">0</span>
           <button id="btnEnrichCandidates" class="link" type="button" title="从 Google Maps 一键补强评分、评论、价格、分类、地址与坐标" style="font-size: 11px;">⚡ 一键补强</button>
@@ -96,7 +96,7 @@
       </div>
       <p id="placeUrl" class="url">在 Google Maps、Tabelog、小红书浏览时自动识别</p>
       <div id="placeCapturedBanner" class="status-banner" style="display: none;">
-        <span id="txtCapturedBanner">✓ 该地点已在候选池中</span>
+          <span id="txtCapturedBanner">✓ 该地点已在案板中</span>
       </div>
       <div id="placeMetaBadges" class="meta-badges"></div>
 
@@ -122,7 +122,7 @@
           <label id="lblBulkText" style="font-size: 11px; color: var(--muted);">批量粘贴链接或地点名
             <textarea id="bulkInputText" rows="3" placeholder="每行一个链接或地点名"></textarea>
           </label>
-          <button id="btnParseBulkImport" class="secondary" type="button">📥 解析并加入候选池</button>
+          <button id="btnParseBulkImport" class="secondary" type="button">📥 解析并放入案板</button>
         </div>
       </details>
     </section>
@@ -172,7 +172,7 @@
       </details>
 
       <div class="btn-row">
-        <button id="btnCaptureSubmit" class="primary" type="submit">➕ 加入候选池</button>
+          <button id="btnCaptureSubmit" class="primary" type="submit">➕ 放入案板</button>
         <button id="btnRemoveCandidate" class="danger-btn" type="button" style="display: none;">🗑️ 移出</button>
       </div>
     </form>

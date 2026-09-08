@@ -108,8 +108,9 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
       border-color: #6ee7b7;
     }
     .card-fab-btn.is-exists {
-      background: #0369a1;
-      border-color: #7dd3fc;
+      background: #78716c;
+      border-color: rgba(255, 255, 255, 0.25);
+      opacity: 0.75;
     }
     .card-fab-btn.is-loading {
       opacity: 0.85;

@@ -1666,7 +1666,7 @@ export function initHandlers(): void {
       if (dupes.length > 0) {
         const names = dupes.slice(0, 3).map((p) => `「${p.title}」`).join('、');
         const dupMsg = store.lang === 'zh'
-          ? `候选池已有疑似相同地点：${names}。仍要添加「${cleanTitle}」吗？`
+          ? `案板已有疑似相同地点：${names}。仍要添加「${cleanTitle}」吗？`
           : `The pool may already contain ${names}. Still add "${cleanTitle}"?`;
         if (!window.confirm(dupMsg)) return;
       }

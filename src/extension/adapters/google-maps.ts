@@ -748,15 +748,28 @@ export class GoogleMapsAdapter implements PageAdapter {
     );
     if (detailTitleEl && hasGoogleMapsPlaceDetail()) {
       const paneContainer = (detailTitleEl.closest<HTMLElement>('div[role="main"], div.m6QErb, div.lMbq3e') || detailTitleEl.parentElement) as HTMLElement;
-      if (paneContainer && paneContainer.dataset.ownlyCardInjected !== 'true' && !paneContainer.querySelector('.ownly-inline-fab-root')) {
-        paneContainer.dataset.ownlyDetailFab = 'true';
-        injectInlineCaptureButton({
-          container: paneContainer,
-          anchor: detailTitleEl,
-          position: 'before',
-          customStyle: 'margin-right: 10px; margin-bottom: 4px;',
-          getPlace: () => extractGoogleMapsPlace(),
-        });
+      if (paneContainer) {
+        // SPA place-to-place navigation reuses the pane: a button injected
+        // for the previous place shows stale captured state. Re-inject (with
+        // a fresh captured check) when the URL moved on.
+        if (
+          paneContainer.querySelector('.ownly-inline-fab-root') &&
+          paneContainer.dataset.ownlyCheckedUrl !== window.location.href
+        ) {
+          paneContainer.querySelectorAll('.ownly-inline-fab-root').forEach((node) => node.remove());
+          delete paneContainer.dataset.ownlyCardInjected;
+        }
+        if (paneContainer.dataset.ownlyCardInjected !== 'true' && !paneContainer.querySelector('.ownly-inline-fab-root')) {
+          paneContainer.dataset.ownlyDetailFab = 'true';
+          const injected = injectInlineCaptureButton({
+            container: paneContainer,
+            anchor: detailTitleEl,
+            position: 'before',
+            customStyle: 'margin-right: 10px; margin-bottom: 4px;',
+            getPlace: () => extractGoogleMapsPlace(),
+          });
+          if (injected) paneContainer.dataset.ownlyCheckedUrl = window.location.href;
+        }
       }
     }
 
