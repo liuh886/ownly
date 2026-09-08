@@ -43,6 +43,29 @@ function setLeadingLabel(node: HTMLElement, text: string): void {
   }
 }
 
+/**
+ * Status with a one-shot action (e.g. delete undo). The button lives until
+ * the next setStatus call wipes the line; pointer events are re-enabled for
+ * the button only (the status line itself stays click-through).
+ */
+export function setStatusWithAction(
+  message: string,
+  actionLabel: string,
+  onAction: () => void,
+  tone: 'muted' | 'success' | 'error' = 'muted',
+) {
+  setStatus(message, tone);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'link status-action';
+  btn.textContent = actionLabel;
+  btn.addEventListener('click', () => {
+    btn.remove();
+    onAction();
+  });
+  el.status.append(' ', btn);
+}
+
 export function setStatus(message: string, tone: 'muted' | 'success' | 'error' = 'muted') {
   if (statusTimer !== undefined) {
     window.clearTimeout(statusTimer);
@@ -1162,6 +1185,15 @@ function buildCandidateDetails(
   addToTripBtn.title = store.lang === 'zh' ? '加入行程' : 'Add to Trip';
   addToTripBtn.setAttribute('aria-label', addToTripBtn.title);
 
+  const linkBtn = document.createElement('button');
+  linkBtn.type = 'button';
+  linkBtn.className = 'card-btn';
+  linkBtn.dataset.action = 'link-place';
+  linkBtn.dataset.placeId = place.id;
+  linkBtn.textContent = '🔗';
+  linkBtn.title = store.lang === 'zh' ? '关联地图地点（粘贴 Google Maps 链接绑定 Place ID）' : 'Link a map place (paste a Google Maps URL to bind the Place ID)';
+  linkBtn.setAttribute('aria-label', linkBtn.title);
+
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.className = 'card-btn del';
@@ -1171,7 +1203,7 @@ function buildCandidateDetails(
   delBtn.title = dict.deleteAction;
   delBtn.setAttribute('aria-label', dict.deleteAction);
 
-  btnGroup.append(editBtn, mustBtn, addToTripBtn, delBtn);
+  btnGroup.append(editBtn, mustBtn, addToTripBtn, linkBtn, delBtn);
   actions.append(btnGroup);
 
   const isEditing = store.editingCandidateId === place.id;

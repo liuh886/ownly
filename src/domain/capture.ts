@@ -94,6 +94,14 @@ export interface CapturePlace {
     duration_minutes?: number;
   };
 
+  /**
+   * Capture-display fields the user hand-confirmed (form submit, inline
+   * editor, manual map bind). Re-scrapes — DOM or fallback — never touch
+   * these. Keys use CapturePlace-level names: title|kind|category|rating|
+   * review_count|price|address|phone|plus_code|open_hours|place_id.
+   */
+  user_overrides?: string[];
+
   captured_at: string;
   updated_at?: string;
   /** Consecutive background-enrich failures; resume skips places at MAX. Reset on success. */
@@ -513,28 +521,90 @@ export function reorderPlaces(
   return [...visible, ...hidden];
 }
 
-/** Merge research enrichment data into an existing CapturePlace. */
+/**
+ * Merge research enrichment data into an existing CapturePlace.
+ *
+ * DOM-standard + user supremacy: a stored value survives when (a) the user
+ * hand-confirmed the field (user_overrides), or (b) the incoming value is
+ * fallback-sourced (incomingDetail) while a stored value exists. Gaps always
+ * fill; fresh DOM always wins; absent provenance preserves legacy behavior.
+ */
 export function mergePlaceResearch(
   existing: CapturePlace,
   incoming: Partial<CapturePlace>,
+  incomingDetail?: Partial<
+    Record<
+      | 'title'
+      | 'category'
+      | 'rating'
+      | 'reviewCount'
+      | 'priceLevel'
+      | 'address'
+      | 'phone'
+      | 'plusCode'
+      | 'openHours',
+      'dom' | 'jsonld' | 'appstate' | 'wire' | 'url' | undefined
+    >
+  >,
 ): CapturePlace {
+  const overridden = new Set(existing.user_overrides ?? []);
+  const hasText = (value: string | undefined): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+  const takeText = (
+    key: string,
+    detailKey: keyof NonNullable<typeof incomingDetail>,
+    incomingValue: string | undefined,
+    storedValue: string | undefined,
+  ): string | undefined => {
+    if (!hasText(incomingValue)) return storedValue;
+    if (!hasText(storedValue)) return incomingValue;
+    if (overridden.has(key)) return storedValue;
+    const source = incomingDetail?.[detailKey];
+    if (source !== undefined && source !== 'dom') return storedValue;
+    return incomingValue;
+  };
+  const takeNumber = (
+    key: string,
+    detailKey: keyof NonNullable<typeof incomingDetail>,
+    incomingValue: number | undefined,
+    storedValue: number | undefined,
+  ): number | undefined => {
+    const valid = (value: number | undefined): value is number =>
+      typeof value === 'number' && Number.isFinite(value);
+    if (!valid(incomingValue)) return storedValue;
+    if (!valid(storedValue)) return incomingValue;
+    if (overridden.has(key)) return storedValue;
+    const source = incomingDetail?.[detailKey];
+    if (source !== undefined && source !== 'dom') return storedValue;
+    return incomingValue;
+  };
+
   return {
     ...existing,
-    title: incoming.title || existing.title,
+    user_overrides: Array.from(
+      new Set([...(existing.user_overrides ?? []), ...(incoming.user_overrides ?? [])]),
+    ),
+    title: takeText('title', 'title', incoming.title, existing.title) ?? existing.title,
     source: {
       ...existing.source,
       ...(incoming.source || {}),
+      // A hand-bound place_id is identity the user verified: keep it until
+      // the user re-binds. (Re-scrapes with no id leave it untouched via ??.)
+      place_id: overridden.has('place_id')
+        ? (existing.source.place_id ?? incoming.source?.place_id)
+        : (incoming.source?.place_id ?? existing.source.place_id),
+      category: takeText('category', 'category', incoming.source?.category, existing.source.category),
       types: incoming.source?.types
         ? Array.from(new Set([...(incoming.source.types ?? []), ...(existing.source.types ?? [])]))
         : existing.source.types,
     },
-    address: incoming.address ?? existing.address,
+    address: takeText('address', 'address', incoming.address, existing.address),
     coordinates: incoming.coordinates ?? existing.coordinates,
-    rating: incoming.rating ?? existing.rating,
-    review_count: incoming.review_count ?? existing.review_count,
-    phone: incoming.phone ?? existing.phone,
-    plus_code: incoming.plus_code ?? existing.plus_code,
-    open_hours: incoming.open_hours ?? existing.open_hours,
+    rating: takeNumber('rating', 'rating', incoming.rating, existing.rating),
+    review_count: takeNumber('review_count', 'reviewCount', incoming.review_count, existing.review_count),
+    phone: takeText('phone', 'phone', incoming.phone, existing.phone),
+    plus_code: takeText('plus_code', 'plusCode', incoming.plus_code, existing.plus_code),
+    open_hours: takeText('open_hours', 'openHours', incoming.open_hours, existing.open_hours),
     menu_url: incoming.menu_url ?? existing.menu_url,
     reservation_url: incoming.reservation_url ?? existing.reservation_url,
     review_topics: incoming.review_topics ?? existing.review_topics,
@@ -554,9 +624,11 @@ export function mergePlaceResearch(
         ? Array.from(new Set([...(incoming.user.tags ?? []), ...(existing.user?.tags ?? [])]))
         : existing.user?.tags,
     },
-    inferred_kind: incoming.inferred_kind && incoming.inferred_kind !== 'other'
-      ? incoming.inferred_kind
-      : existing.inferred_kind,
+    inferred_kind: overridden.has('kind')
+      ? (existing.inferred_kind ?? incoming.inferred_kind)
+      : incoming.inferred_kind && incoming.inferred_kind !== 'other'
+        ? incoming.inferred_kind
+        : existing.inferred_kind,
     updated_at: new Date().toISOString(),
   };
 }

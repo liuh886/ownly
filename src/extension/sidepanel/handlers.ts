@@ -11,6 +11,7 @@ import {
   capturePlaceToPlannerPlace,
   findExistingPlace,
   findExistingPlaceByIdentity,
+  findPotentialDuplicatePlaces,
   reorderPlaces,
   mergePlaceResearch,
   type CapturePlace,
@@ -20,7 +21,7 @@ import type { PlannerTripPlace } from '../../domain/planner';
 import { saveState, getActiveCollection, getActivePlaces, store, t, takeDeferredExternalState, DEBUG_STORAGE_KEY, getExistingPlaceForUrl } from './store';
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
 import { el } from '../dom';
-import { cleanExtractedText, isJunkNavigationText, isZeroOrPlaceholderPrice, resolveWhyNotes, safeDecodeUri } from '../utils';
+import { cleanExtractedText, extractFeatureIdFromUrl, extractPlaceCoordinates, isJunkNavigationText, isZeroOrPlaceholderPrice, resolveWhyNotes, safeDecodeUri } from '../utils';
 import { readCurrentPlace } from './capture';
 import { enrichCandidatePlacesBatch, isCandidateMissingData, mergeDetectedResearchIntoPlannerPlaces } from '../enrichment';
 import {
@@ -32,6 +33,7 @@ import {
   renderSmartListCard,
   renderState,
   setStatus,
+  setStatusWithAction,
   showImportReport,
   syncQuickChipStates,
   updateDebugLogViewer,
@@ -383,6 +385,15 @@ function initCandidateDelegation() {
         inferred_kind: nextKind,
         rating: validRating ?? p.rating,
         price: rawPrice ? { ...p.price, raw: rawPrice } : p.price,
+        // Hand-confirmed facts: re-scrapes never touch these again.
+        user_overrides: Array.from(
+          new Set([
+            ...(p.user_overrides ?? []),
+            'kind',
+            ...(rawPrice ? ['price'] : []),
+            ...(validRating !== undefined ? ['rating'] : []),
+          ]),
+        ),
         user: {
           ...p.user,
           priority: nextPriority,
@@ -445,7 +456,42 @@ function initCandidateDelegation() {
           renderCurrentPlace();
         });
       }
+    } else if (action === 'link-place') {
+      const place = getActivePlaces().find((p) => p.id === placeId);
+      if (!place) return;
+      const hint = store.lang === 'zh'
+        ? `为「${place.title}」关联地图地点：\n粘贴 Google Maps 地点链接（place / search / @坐标均可），将绑定 Place ID 与坐标。`
+        : `Link a map place for "${place.title}":\nPaste a Google Maps URL to bind the Place ID and coordinates.`;
+      const input = window.prompt(hint, place.source.url || '');
+      if (input === null) return;
+      const url = input.trim();
+      if (!url) return;
+      const featureId = extractFeatureIdFromUrl(url);
+      const coords = extractPlaceCoordinates(url);
+      if (!featureId && !coords) {
+        setStatus(store.lang === 'zh' ? '未能从该链接解析出地点，请粘贴 Google Maps 地点链接。' : 'Could not resolve a place from that URL; paste a Google Maps place link.', 'error');
+        return;
+      }
+      store.updatePlace(placeId, (p) => ({
+        ...p,
+        source: { ...p.source, url, place_id: featureId ?? p.source.place_id },
+        coordinates: coords ?? p.coordinates,
+        user_overrides: Array.from(new Set([...(p.user_overrides ?? []), 'place_id'])),
+        updated_at: new Date().toISOString(),
+      }));
+      void saveState().then(() => {
+        renderState();
+        renderCandidatesList();
+        setStatus(
+          store.lang === 'zh'
+            ? `已关联${featureId ? ' Place ID' : ''}${coords ? '与坐标' : ''}。`
+            : `Linked${featureId ? ' Place ID' : ''}${coords ? ' and coordinates' : ''}.`,
+          'success',
+        );
+      });
     } else if (action === 'delete') {
+      const deletedIndex = store.stateV3.places.findIndex((p) => p.id === placeId);
+      const deleted = deletedIndex >= 0 ? store.stateV3.places[deletedIndex] : undefined;
       store.locallyDeletedIds.add(placeId);
       store.removePlace(placeId);
       if (store.editingCandidateId === placeId) store.editingCandidateId = null;
@@ -453,6 +499,30 @@ function initCandidateDelegation() {
         renderState();
         renderCandidatesList();
         renderCurrentPlace();
+        if (deleted) {
+          setStatusWithAction(
+            store.lang === 'zh' ? `已删除「${deleted.title}」。` : `Deleted "${deleted.title}".`,
+            store.lang === 'zh' ? '撤销' : 'Undo',
+            () => {
+              const at = Math.min(deletedIndex, store.stateV3.places.length);
+              store.setState({
+                ...store.stateV3,
+                places: [
+                  ...store.stateV3.places.slice(0, at),
+                  deleted,
+                  ...store.stateV3.places.slice(at),
+                ],
+              });
+              store.locallyDeletedIds.delete(placeId);
+              void saveState().then(() => {
+                renderState();
+                renderCandidatesList();
+                renderCurrentPlace();
+                setStatus(store.lang === 'zh' ? '已撤销删除。' : 'Delete undone.', 'success');
+              });
+            },
+          );
+        }
       });
     } else if (action === 'archive') {
       // PR-C: Gmail-style archive — same as delete for Inbox, but semantically归档
@@ -1220,7 +1290,7 @@ export function initHandlers(): void {
             } : existing.price,
             open_hours: item.openHours ?? existing.open_hours,
             updated_at: now,
-          });
+          }, item.sourceDetail);
         } else {
           captured = {
             id,
@@ -1582,6 +1652,25 @@ export function initHandlers(): void {
       currentPlace.sourcePlaceId,
       currentPlace.coordinates,
     );
+    if (!existing) {
+      // Soft duplicate warning (same collection only; cross-collection
+      // copies are legitimate). Strong identity already merged above.
+      const cleanTitle = cleanExtractedText(currentPlace.title);
+      const dupes = findPotentialDuplicatePlaces(activePlaces, {
+        source_provider: currentPlace.sourceProvider,
+        source_place_id: currentPlace.sourcePlaceId,
+        source_url: currentPlace.sourceUrl,
+        title: cleanTitle,
+        coordinates: currentPlace.coordinates,
+      }).filter((p) => p.collection_id === collection.id);
+      if (dupes.length > 0) {
+        const names = dupes.slice(0, 3).map((p) => `「${p.title}」`).join('、');
+        const dupMsg = store.lang === 'zh'
+          ? `候选池已有疑似相同地点：${names}。仍要添加「${cleanTitle}」吗？`
+          : `The pool may already contain ${names}. Still add "${cleanTitle}"?`;
+        if (!window.confirm(dupMsg)) return;
+      }
+    }
     const kind = (el.kind.value as CapturePlace['inferred_kind']) || 'other';
     const tags = ensurePlaceKindTag(normalizeDelimitedText(el.tags.value), kind, store.lang);
     const rawPrice = el.price.value.trim() || undefined;
@@ -1590,10 +1679,21 @@ export function initHandlers(): void {
       store.mapCurrencyOverride || currentPlace.detectedCurrency || existing?.price?.currency || store.pageDetectedCurrency,
     );
     const id = existing?.id ?? crypto.randomUUID();
+    const formRatingValid = Number.isFinite(rating) && rating >= 1 && rating <= 5;
     const place: CapturePlace = {
       id,
       collection_id: collection.id,
       title: cleanExtractedText(currentPlace.title),
+      // The capture form is a hand-confirmation: kind/rating/price asserted
+      // here outrank any future re-scrape.
+      user_overrides: Array.from(
+        new Set([
+          ...(existing?.user_overrides ?? []),
+          'kind',
+          ...(formRatingValid ? ['rating'] : []),
+          ...(rawPrice ? ['price'] : []),
+        ]),
+      ),
       source: {
         provider: currentPlace.sourceProvider || 'google_maps',
         url: currentPlace.sourceUrl,

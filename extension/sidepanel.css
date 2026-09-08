@@ -738,6 +738,12 @@ hr.divider {
   transform: none;
 }
 
+.status .status-action {
+  pointer-events: auto;
+  margin-left: 6px;
+  font-weight: 800;
+}
+
 .status[data-tone="muted"] {
   color: var(--text-3);
   background: transparent;

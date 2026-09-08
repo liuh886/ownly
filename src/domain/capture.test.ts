@@ -219,6 +219,80 @@ describe('mergePlaceResearch', () => {
     expect(merged.inferred_kind).toBe('food');
   });
 
+  it('keeps user-overridden fields against any re-scrape', () => {
+    const existing = makePlace({
+      title: 'My Name',
+      rating: 5.0,
+      source: { provider: 'google_maps', url: '', category: '刀削面馆' },
+      user_overrides: ['title', 'rating', 'category'],
+    });
+    const incoming: Partial<CapturePlace> = {
+      title: 'Scraped Name',
+      rating: 4.0,
+      source: { provider: 'google_maps', url: '', category: '面馆' },
+    };
+    const merged = mergePlaceResearch(existing, incoming, {
+      title: 'dom',
+      rating: 'dom',
+      category: 'dom',
+    });
+    // Even fresh DOM does not move a hand-confirmed fact.
+    expect(merged.title).toBe('My Name');
+    expect(merged.rating).toBe(5.0);
+    expect(merged.source.category).toBe('刀削面馆');
+    expect(merged.user_overrides).toContain('rating');
+  });
+
+  it('refuses fallback values overwriting stored DOM values', () => {
+    const existing = makePlace({
+      source: { provider: 'google_maps', url: '', category: '面馆' },
+      address: 'DOM Street 1',
+      rating: 4.7,
+    });
+    const incoming: Partial<CapturePlace> = {
+      source: { provider: 'google_maps', url: '', category: 'Restaurant' },
+      address: 'Reassembled, Address',
+      rating: 3.0,
+    };
+    const merged = mergePlaceResearch(existing, incoming, {
+      category: 'jsonld',
+      address: 'jsonld',
+      rating: 'jsonld',
+    });
+    expect(merged.source.category).toBe('面馆');
+    expect(merged.address).toBe('DOM Street 1');
+    expect(merged.rating).toBe(4.7);
+  });
+
+  it('keeps a hand-bound place_id until the user re-binds', () => {
+    const existing = makePlace({
+      source: { provider: 'google_maps', url: '', place_id: 'ChIJbound12345678' },
+      user_overrides: ['place_id'],
+    });
+    const incoming: Partial<CapturePlace> = {
+      source: { provider: 'google_maps', url: '', place_id: 'ChIJrescraped9999' },
+    };
+    const merged = mergePlaceResearch(existing, incoming, {});
+    expect(merged.source.place_id).toBe('ChIJbound12345678');
+
+    const unbound = makePlace({ source: { provider: 'google_maps', url: '' } });
+    const filled = mergePlaceResearch(unbound, incoming, {});
+    expect(filled.source.place_id).toBe('ChIJrescraped9999');
+  });
+
+  it('fills gaps with fallback values and lets fresh DOM win', () => {
+    const gappy = makePlace({});
+    const filled = mergePlaceResearch(
+      gappy,
+      { source: { provider: 'google_maps', url: '', category: '餐厅' } },
+      { category: 'jsonld' },
+    );
+    expect(filled.source.category).toBe('餐厅');
+
+    const updated = mergePlaceResearch(gappy, { rating: 4.9 }, { rating: 'dom' });
+    expect(updated.rating).toBe(4.9);
+  });
+
   it('merges source.types without duplicates', () => {
     const existing = makePlace({ source: { provider: 'google_maps', url: '', types: ['restaurant', 'thai'] } });
     const incoming: Partial<CapturePlace> = { source: { provider: 'google_maps', url: '', types: ['thai', 'noodle'] } };
