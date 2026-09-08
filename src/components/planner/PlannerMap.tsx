@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerTripLeg, PlannerTripPlace } from '@/domain/planner';
+import { plannerTripLegId } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
 import { buildSegmentBadges } from './map-badges';
+
+/**
+ * Per-segment dash encoding for the active route. motorized modes stay solid;
+ * walking/cycling dot, transit long-dash. Unknown/missing legs fall back solid.
+ */
+function routeDashForMode(mode?: string): string | undefined {
+  if (mode === 'walking' || mode === 'bicycling') return '2 4';
+  if (mode === 'transit') return '8 6';
+  return undefined;
+}
 import {
   calculateBounds,
   extractPlaceCoordinates,
@@ -195,6 +206,9 @@ export function PlannerMap({
   const [isDragging, setIsDragging] = useState(false);
   const [filterMode, setFilterMode] = useState<'all' | 'candidates' | 'scheduled' | 'all_routes'>('all');
   const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
+  /** Day-legend solo view (big map): isolate one day's markers + route, overriding filterMode. */
+  const [soloDayIndex, setSoloDayIndex] = useState<number | null>(null);
+  const soloView = soloDayIndex !== null;
   const [basemapStyle, setBasemapStyle] = useState<BasemapStyle>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -609,14 +623,15 @@ export function PlannerMap({
     }
   }
 
-  // Filtered display points
+  // Filtered display points. Solo view isolates one day entirely.
   const visiblePoints = useMemo(() => {
     return points.filter((p) => {
+      if (soloDayIndex !== null) return p.isScheduled && p.dayIndex === soloDayIndex;
       if (filterMode === 'scheduled') return p.isScheduled;
       if (filterMode === 'candidates') return !p.isScheduled;
       return true;
     });
-  }, [points, filterMode]);
+  }, [points, filterMode, soloDayIndex]);
 
   // Every visible point keeps its own identity marker (no clustering):
   // dense candidate pools stay directly plannable; visual hierarchy comes
@@ -643,30 +658,7 @@ export function PlannerMap({
       });
   }, [points, zoom, centerX, centerY, containerSize.width, containerSize.height]);
 
-  // Time pills at active-day segment midpoints, sourced from the same persisted
-  // legs the timeline uses. Overlap is tested against scheduled markers only:
-  // tiny candidate dots may sit under a pill, but a numbered stop must stay readable.
-  const segmentBadges = useMemo(() => {
-    if (!legByPair || !tripId || scheduledRoutePoints.length < 2) return [];
-    const markers = markerLayout
-      .filter((item) => item.p.isScheduled)
-      .map((item) => ({
-        x: item.x,
-        y: item.y,
-        radius: item.p.isActiveDay === false ? (compact ? 10 : 12) : (compact ? 12 : 16),
-      }));
-    return buildSegmentBadges(
-      scheduledRoutePoints.map((p) => ({
-        placeId: (p.place as PlannerScheduledPlace).place_id ?? p.place.id,
-        x: p.x,
-        y: p.y,
-      })),
-      legByPair,
-      tripId,
-      markers,
-      { zh },
-    );
-  }, [scheduledRoutePoints, legByPair, tripId, markerLayout, compact, zh]);
+
 
   // Multi-day route polylines for line rendering
   const allDaysRoutes = useMemo(() => {
@@ -696,6 +688,67 @@ export function PlannerMap({
       })
       .filter((r) => r.screenPoints.length >= 2);
   }, [allPlacesByDate, tripDates, activeDate, activeDayIndex, zoom, centerX, centerY, containerSize.width, containerSize.height]);
+
+  // Solo day's route points (from the multi-day set, independent of active day).
+  const soloRoutePoints = useMemo(() => {
+    if (soloDayIndex === null) return [];
+    const route = allDaysRoutes.find((r) => r.dayIndex === soloDayIndex);
+    if (!route) return [];
+    return route.screenPoints.map((p) => ({
+      placeId: p.place.place_id ?? p.place.id,
+      x: p.x,
+      y: p.y,
+    }));
+  }, [allDaysRoutes, soloDayIndex]);
+
+  // The route actually drawn (and badged): solo wins over the active day.
+  const activeRoutePts = useMemo(() => {
+    if (soloDayIndex !== null) return soloRoutePoints;
+    return scheduledRoutePoints.map((p) => ({
+      placeId: (p.place as PlannerScheduledPlace).place_id ?? p.place.id,
+      x: p.x,
+      y: p.y,
+    }));
+  }, [soloDayIndex, soloRoutePoints, scheduledRoutePoints]);
+
+  const routeDayColor = plannerDayColor(soloDayIndex ?? activeDayIndex);
+
+  // Per-segment polylines for the drawn route, dashed by each leg's mode.
+  const activeRouteSegments = useMemo(() => {
+    const segments: Array<{ key: string; x1: number; y1: number; x2: number; y2: number; dash?: string }> = [];
+    for (let index = 0; index + 1 < activeRoutePts.length; index += 1) {
+      const from = activeRoutePts[index];
+      const to = activeRoutePts[index + 1];
+      const leg = tripId && legByPair ? legByPair.get(plannerTripLegId(tripId, from.placeId, to.placeId)) : undefined;
+      segments.push({
+        key: `${from.placeId}→${to.placeId}`,
+        x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+        dash: routeDashForMode(leg?.mode),
+      });
+    }
+    return segments;
+  }, [activeRoutePts, legByPair, tripId]);
+
+  // Time pills at drawn-route segment midpoints, sourced from the same persisted
+  // legs the timeline uses. Overlap is tested against scheduled markers only:
+  // tiny candidate dots may sit under a pill, but a numbered stop must stay readable.
+  const segmentBadges = useMemo(() => {
+    if (!legByPair || !tripId || activeRoutePts.length < 2) return [];
+    const markers = markerLayout
+      .filter((item) => item.p.isScheduled)
+      .map((item) => ({
+        x: item.x,
+        y: item.y,
+        radius: item.p.isActiveDay === false ? (compact ? 10 : 12) : (compact ? 12 : 16),
+      }));
+    return buildSegmentBadges(
+      activeRoutePts,
+      legByPair,
+      tripId,
+      markers,
+      { zh },
+    );
+  }, [activeRoutePts, legByPair, tripId, markerLayout, compact, zh]);
 
   const selectedPoint = useMemo(() => points.find((point) => point.place.id === selectedPlaceId) ?? null, [points, selectedPlaceId]);
   const selectedPlace = selectedPoint?.place ?? null;
@@ -735,11 +788,12 @@ export function PlannerMap({
           <>
             <button
               type="button"
-              onClick={() => setFilterMode('all')}
+              onClick={() => { setSoloDayIndex(null); setFilterMode('all'); }}
               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all' ? 'bg-stone-900 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100'}`}
             >
               {zh ? '全部' : 'All'} ({points.length})
             </button>
+            <span inert={soloView} className={soloView ? 'contents opacity-40 saturate-0' : 'contents'}>
             <button
               type="button"
               onClick={() => setFilterMode('scheduled')}
@@ -747,6 +801,7 @@ export function PlannerMap({
             >
               🟢 {zh ? `第${activeDayIndex + 1}天` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
             </button>
+            </span>
             <div className="relative">
               <button
                 type="button"
@@ -775,6 +830,7 @@ export function PlannerMap({
                         ))}
                       </select>
                     </div>
+                    <span inert={soloView} className={soloView ? 'contents opacity-40 saturate-0' : 'contents'}>
                     {allPlacesByDate && tripDates && tripDates.length > 1 ? (
                       <button
                         type="button"
@@ -791,6 +847,7 @@ export function PlannerMap({
                     >
                       🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
                     </button>
+                    </span>
                   </div>
                 </>
               ) : null}
@@ -816,11 +873,12 @@ export function PlannerMap({
 
             <button
               type="button"
-              onClick={() => setFilterMode('all')}
+              onClick={() => { setSoloDayIndex(null); setFilterMode('all'); }}
               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all' ? 'bg-stone-900 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100'}`}
             >
               {zh ? '全部' : 'All'} ({points.length})
             </button>
+            <span inert={soloView} className={soloView ? 'contents opacity-40 saturate-0' : 'contents'}>
             <button
               type="button"
               onClick={() => setFilterMode('scheduled')}
@@ -844,6 +902,7 @@ export function PlannerMap({
             >
               🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
             </button>
+            </span>
           </>
         )}
       </div>
@@ -884,10 +943,29 @@ export function PlannerMap({
           ))}
         </div>
 
-        {/* Connecting Polyline Route SVG overlay */}
-        {filterMode === 'all_routes' ? (
+        {/* Connecting Polyline Route SVG overlay.
+            Solo view isolates one day; otherwise all_routes dims other days to
+            neutral gray while the drawn (active/solo) route keeps day color
+            with per-segment transport-mode dashes. */}
+        {soloDayIndex !== null ? (
           <svg className="pointer-events-none absolute inset-0 h-full w-full">
-            {/* Other days' polylines (rendered first, in the background with soft/dimmed styling) */}
+            {activeRouteSegments.map((seg) => (
+              <polyline
+                key={seg.key}
+                points={`${seg.x1},${seg.y1} ${seg.x2},${seg.y2}`}
+                fill="none"
+                stroke={routeDayColor}
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={seg.dash}
+                opacity="0.95"
+              />
+            ))}
+          </svg>
+        ) : filterMode === 'all_routes' ? (
+          <svg className="pointer-events-none absolute inset-0 h-full w-full">
+            {/* Other days: single muted neutral base so focus stays on the drawn route */}
             {allDaysRoutes
               .filter((r) => !r.isActiveDay)
               .map((r) => (
@@ -895,53 +973,53 @@ export function PlannerMap({
                   key={r.date}
                   points={r.screenPoints.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke={plannerDayColor(r.dayIndex)}
-                  strokeWidth="2.5"
+                  stroke="#a8a29e"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeDasharray="5,4"
-                  opacity="0.45"
+                  opacity="0.5"
                 />
               ))}
 
-            {/* Active day's polyline (rendered on top with the day identity color) */}
-            {allDaysRoutes
-              .filter((r) => r.isActiveDay)
-              .map((r) => (
-                <polyline
-                  key={r.date}
-                  points={r.screenPoints.map((p) => `${p.x},${p.y}`).join(' ')}
-                  fill="none"
-                  stroke={plannerDayColor(r.dayIndex)}
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeDasharray="6,4"
-                  opacity="0.95"
-                />
-              ))}
+            {/* Drawn route on top with day identity color and per-segment dashes */}
+            {activeRouteSegments.map((seg) => (
+              <polyline
+                key={seg.key}
+                points={`${seg.x1},${seg.y1} ${seg.x2},${seg.y2}`}
+                fill="none"
+                stroke={routeDayColor}
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={seg.dash}
+                opacity="0.95"
+              />
+            ))}
           </svg>
-        ) : scheduledRoutePoints.length >= 2 && (filterMode === 'all' || filterMode === 'scheduled') ? (
+        ) : activeRouteSegments.length > 0 && (filterMode === 'all' || filterMode === 'scheduled') ? (
           <svg className="pointer-events-none absolute inset-0 h-full w-full">
-            <polyline
-              points={scheduledRoutePoints.map((p) => `${p.x},${p.y}`).join(' ')}
-              fill="none"
-              stroke={plannerDayColor(activeDayIndex)}
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray="6,4"
-              className="opacity-85"
-            />
+            {activeRouteSegments.map((seg) => (
+              <polyline
+                key={seg.key}
+                points={`${seg.x1},${seg.y1} ${seg.x2},${seg.y2}`}
+                fill="none"
+                stroke={routeDayColor}
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={seg.dash}
+                className="opacity-85"
+              />
+            ))}
           </svg>
         ) : null}
 
-        {/* Segment time pills (active day, below markers, never intercepting taps) */}
-        {filterMode !== 'candidates' ? segmentBadges.map((badge) => (
+        {/* Segment time pills (drawn route, below markers, never intercepting taps) */}
+        {(soloDayIndex !== null || filterMode !== 'candidates') ? segmentBadges.map((badge) => (
           <div
             key={badge.key}
             className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border bg-white/95 px-1.5 text-[9.5px] font-semibold text-stone-600 shadow-xs"
-            style={{ left: `${badge.x}px`, top: `${badge.y}px`, borderColor: `${plannerDayColor(activeDayIndex)}88`, zIndex: 10 }}
+            style={{ left: `${badge.x}px`, top: `${badge.y}px`, borderColor: `${routeDayColor}88`, zIndex: 10 }}
             title={zh ? '与时间线一致的行程段耗时' : 'Matches the timeline leg duration'}
           >
             {badge.text}
@@ -953,6 +1031,8 @@ export function PlannerMap({
           const isHighlighted = highlightedPlaceId === p.place.id || selectedPlaceId === p.place.id;
           const isOtherDayStop = p.isScheduled && p.isActiveDay === false;
           const dayColor = plannerDayColor(p.dayIndex ?? activeDayIndex);
+          // all_routes overview: non-active scheduled stops recede to neutral gray dots.
+          const grayedOut = filterMode === 'all_routes' && soloDayIndex === null && isOtherDayStop;
           // Candidates already scheduled on some day get a light-green marker to stand out from plain white ones.
           const scheduledCount = visitCountByPlaceId?.get(p.place.id) ?? 0;
 
@@ -1002,12 +1082,13 @@ export function PlannerMap({
             >
               {p.isScheduled ? (
                 isOtherDayStop ? (
-                  // Other Day Stop Marker (day identity color, dimmed, one step smaller)
+                  // Other Day Stop Marker (day identity color, dimmed, one step smaller;
+                  // neutral gray dot in the all_routes overview)
                   <div
                     className={`flex ${compact ? 'h-5' : 'h-6'} items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all hover:brightness-110 ${
                       isHighlighted ? 'ring-2 ring-white scale-110' : ''
                     }`}
-                    style={{ backgroundColor: `${dayColor}CC` }}
+                    style={{ backgroundColor: grayedOut ? '#a8a29eb3' : `${dayColor}CC` }}
                     title={markerTitle(`Day ${(p.dayIndex ?? 0) + 1} #${p.order}. ${p.place.title}`, p.place.why)}
                   >
                     D{(p.dayIndex ?? 0) + 1}·{p.order}
@@ -1105,17 +1186,23 @@ export function PlannerMap({
           </div>
         ) : null}
 
-        {/* Day Color Legend + Back-to-Day */}
+        {/* Day Color Legend (click a day to solo it) + Back-to-Day */}
         {showLegend && tripDates && tripDates.length > 1 ? (
           <div className="absolute bottom-2 right-2 z-30 rounded-lg bg-white/90 px-2 py-1.5 shadow-xs backdrop-blur-sm">
             <div className="flex flex-col gap-1">
               {tripDates.map((date, dIdx) => (
-                <div key={date} className="flex items-center gap-1.5 text-[9.5px] font-semibold text-stone-500">
+                <button
+                  key={date}
+                  type="button"
+                  onClick={() => setSoloDayIndex((prev) => (prev === dIdx ? null : dIdx))}
+                  className={`flex items-center gap-1.5 rounded px-0.5 text-[9.5px] font-semibold transition hover:bg-stone-100 ${soloDayIndex === dIdx ? 'text-stone-900 ring-1 ring-stone-400' : 'text-stone-500'}`}
+                  title={zh ? (soloDayIndex === dIdx ? '退出单天视图' : '只看这一天') : (soloDayIndex === dIdx ? 'Exit solo view' : 'Solo this day')}
+                >
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: plannerDayColor(dIdx) }} />
                   <span className={dIdx === activeDayIndex ? 'text-stone-900' : ''}>
                     D{dIdx + 1} · {date.slice(5).replace('-', '/')}
                   </span>
-                </div>
+                </button>
               ))}
               <button
                 type="button"
