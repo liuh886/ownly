@@ -44,6 +44,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
+  // Shared viewport for the sidebar + expanded map instances (single writer:
+  // whichever instance is currently visible). Survives big-map mount/unmount.
+  const mapViewRef = useRef<{ center: { lat: number; lng: number }; zoom: number } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   useEscapeKey(exportMenuOpen, () => setExportMenuOpen(false));
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
@@ -254,6 +257,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     rightTab,
     setRightTab,
     setIsMapExpanded,
+    sharedViewRef: mapViewRef,
+    ownsSharedView: !isMapExpanded,
     mapScheduled,
     sortedPendingCandidates,
     placesByDate,
@@ -987,6 +992,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 language={language}
                 legByPair={legByPair}
                 tripId={selectedTripId}
+                sharedViewRef={mapViewRef}
+                ownsSharedView={isMapExpanded}
               />
             </div>
           </div>

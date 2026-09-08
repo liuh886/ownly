@@ -18,6 +18,8 @@ export interface PlannerRightPanelProps {
   tripDates: PlannerControllerReturn['tripDates'];
   legByPair: Map<string, PlannerTripLeg>;
   tripId: string;
+  sharedViewRef: { current: { center: { lat: number; lng: number }; zoom: number } | null };
+  ownsSharedView: boolean;
   selectedTrip: PlannerTrip;
   activeDate: PlannerControllerReturn['activeDate'];
   activeDayIndex: PlannerControllerReturn['activeDayIndex'];
@@ -59,7 +61,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
     currentExpenses, handleAddExpense, handleUpdateExpense, handleDeleteExpense,
     currentMembers, handleUpdateMembers, handleUpdateFxRates, dayAssessment,
     pendingCandidates, droppedPlaces, mustScheduled, mustTotal, scheduledMinutes,
-    areaCounts, maxAreaCount, legByPair, tripId,
+    areaCounts, maxAreaCount, legByPair, tripId, sharedViewRef, ownsSharedView,
   } = props;
   return (
         <aside className="min-w-0 flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
@@ -126,6 +128,8 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                 variant="compact"
                 legByPair={legByPair}
                 tripId={tripId}
+                sharedViewRef={sharedViewRef}
+                ownsSharedView={ownsSharedView}
               />
             </div>
           ) : rightTab === 'budget' ? (

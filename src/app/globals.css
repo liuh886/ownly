@@ -259,3 +259,15 @@ body {
 .wyqd-web-shell .shadow-lg {
   box-shadow: var(--shadow-dropdown);
 }
+
+/* ===== Planner map route flow dots (marching direction cue) ===== */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes ownly-route-flow {
+    to {
+      stroke-dashoffset: -22;
+    }
+  }
+  .ownly-route-flow {
+    animation: ownly-route-flow 1.1s linear infinite;
+  }
+}

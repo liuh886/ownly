@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerTripLeg, PlannerTripPlace } from '@/domain/planner';
 import { plannerTripLegId } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
@@ -52,6 +52,13 @@ interface PlannerMapProps {
   legByPair?: Map<string, PlannerTripLeg>;
   /** Trip id used to resolve leg ids for segment badges. */
   tripId?: string;
+  /**
+   * Shared viewport owned by PlannerHome so the sidebar and expanded instances
+   * continue each other's view instead of auto-fitting on every mount.
+   * Only the visible instance writes (see ownsSharedView).
+   */
+  sharedViewRef?: { current: { center: { lat: number; lng: number }; zoom: number } | null };
+  ownsSharedView?: boolean;
 }
 
 interface Point {
@@ -197,6 +204,8 @@ export function PlannerMap({
   variant = 'full',
   legByPair,
   tripId,
+  sharedViewRef,
+  ownsSharedView = true,
 }: PlannerMapProps) {
   const compact = variant === 'compact';
   const zh = language === 'zh';
@@ -324,8 +333,37 @@ export function PlannerMap({
 
   // Initial bounds
   const initial = useMemo(() => calculateBounds(points), [points]);
+  // A shared view adopted at mount suppresses the first auto-fit below.
+  const skipInitialFitRef = useRef(false);
   const [center, setCenter] = useState<{ lat: number; lng: number }>(() => defaultCenter ?? initial.center);
   const [zoom, setZoom] = useState(initial.zoom);
+  // Mount-only adoption runs before the auto-fit effect (layout vs passive),
+  // so an adopted view never flashes through a fitted one.
+  useLayoutEffect(() => {
+    const shared = sharedViewRef?.current;
+    if (shared) {
+      skipInitialFitRef.current = true;
+      setCenter(shared.center);
+      setZoom(shared.zoom);
+    }
+  }, [sharedViewRef]);
+
+  // Viewport continuity: only the visible instance writes; a newly visible
+  // instance adopts the last written view instead of auto-fitting.
+  useEffect(() => {
+    if (ownsSharedView && sharedViewRef) {
+      sharedViewRef.current = { center, zoom };
+    }
+  }, [center, zoom, ownsSharedView, sharedViewRef]);
+  const wasViewOwnerRef = useRef(ownsSharedView);
+  useEffect(() => {
+    const gained = ownsSharedView && !wasViewOwnerRef.current;
+    wasViewOwnerRef.current = ownsSharedView;
+    if (gained && sharedViewRef?.current) {
+      setCenter(sharedViewRef.current.center);
+      setZoom(sharedViewRef.current.zoom);
+    }
+  }, [ownsSharedView, sharedViewRef]);
 
   // Fallback geocode destination using Ownly's cities.json database
   useEffect(() => {
@@ -342,14 +380,43 @@ export function PlannerMap({
     }
   }, [destinations, points.length]);
 
+  // Pan visual layer: during a drag only tiles + route SVGs translate via refs
+  // (no React state churn); markers/badges/popover stay frozen and snap on release.
+  const tilesWrapRef = useRef<HTMLDivElement>(null);
+  const routesWrapRef = useRef<HTMLDivElement>(null);
+  const panOffsetRef = useRef<{ dx: number; dy: number } | null>(null);
+  const applyPanTransform = useCallback((dx: number, dy: number) => {
+    const transform = `translate3d(${dx}px, ${dy}px, 0)`;
+    if (tilesWrapRef.current) {
+      tilesWrapRef.current.style.transform = transform;
+      tilesWrapRef.current.style.willChange = 'transform';
+    }
+    if (routesWrapRef.current) {
+      routesWrapRef.current.style.transform = transform;
+      routesWrapRef.current.style.willChange = 'transform';
+    }
+  }, []);
+  const clearPanTransform = useCallback(() => {
+    panOffsetRef.current = null;
+    if (tilesWrapRef.current) {
+      tilesWrapRef.current.style.transform = '';
+      tilesWrapRef.current.style.willChange = '';
+    }
+    if (routesWrapRef.current) {
+      routesWrapRef.current.style.transform = '';
+      routesWrapRef.current.style.willChange = '';
+    }
+  }, []);
+
   // Fit bounds helper on user button click
   const fitBounds = useCallback(() => {
     const activePoints = getMapPointsForFilter(points, filterMode);
     if (activePoints.length === 0) return;
     const computed = calculateBounds(activePoints);
+    clearPanTransform();
     setCenter(defaultCenter ?? computed.center);
     setZoom(computed.zoom);
-  }, [filterMode, points, defaultCenter]);
+  }, [filterMode, points, defaultCenter, clearPanTransform]);
 
   // Jump back to the active day: show its route and fit its stops.
   const backToActiveDay = useCallback(() => {
@@ -358,9 +425,10 @@ export function PlannerMap({
     const target = dayPoints.length > 0 ? dayPoints : points;
     if (target.length === 0) return;
     const computed = calculateBounds(target);
+    clearPanTransform();
     setCenter(defaultCenter ?? computed.center);
     setZoom(computed.zoom);
-  }, [points, defaultCenter]);
+  }, [points, defaultCenter, clearPanTransform]);
 
   // Pan & pinch interaction (pointer events cover mouse, touch and pen)
   const activePointers = useRef(new Map<number, { x: number; y: number }>());
@@ -405,6 +473,13 @@ export function PlannerMap({
 
   useEffect(() => {
     if (points.length === 0) return;
+    if (skipInitialFitRef.current) {
+      skipInitialFitRef.current = false;
+      lastPointsCountRef.current = points.length;
+      lastActiveDayRef.current = activeDayIndex;
+      lastFilterModeRef.current = filterMode;
+      return;
+    }
     const dayChanged = lastActiveDayRef.current !== activeDayIndex;
     const filterChanged = lastFilterModeRef.current !== filterMode;
     const pointsAppeared = lastPointsCountRef.current === 0 && points.length > 0;
@@ -471,14 +546,62 @@ export function PlannerMap({
   const applyZoomAround = useCallback((targetZoom: number, sx: number, sy: number) => {
     const zoomTo = clampZoom(targetZoom);
     if (zoomTo === viewRef.current.zoom) return;
+    clearPanTransform();
     setCenter(centerForAnchor(screenToGeo(sx, sy), zoomTo, sx, sy));
     setZoom(zoomTo);
-  }, [centerForAnchor, clampZoom, screenToGeo]);
+  }, [centerForAnchor, clampZoom, screenToGeo, clearPanTransform]);
+
+  // Button zoom glides (~200ms ease-out); wheel/pinch stay instant and cancel a glide.
+  const zoomGlideRef = useRef<number>(0);
+  const cancelZoomGlide = useCallback(() => {
+    if (zoomGlideRef.current) {
+      cancelAnimationFrame(zoomGlideRef.current);
+      zoomGlideRef.current = 0;
+    }
+  }, []);
+  // Coalesced view updates (pinch): latest event wins, at most one setState per frame.
+  const viewRafRef = useRef<number>(0);
+  const pendingViewFrameRef = useRef<(() => void) | null>(null);
+  const scheduleViewFrame = useCallback((frame: () => void) => {
+    pendingViewFrameRef.current = frame;
+    if (!viewRafRef.current) {
+      viewRafRef.current = requestAnimationFrame(() => {
+        viewRafRef.current = 0;
+        const run = pendingViewFrameRef.current;
+        pendingViewFrameRef.current = null;
+        run?.();
+      });
+    }
+  }, []);
+  useEffect(() => () => {
+    cancelZoomGlide();
+    if (viewRafRef.current) cancelAnimationFrame(viewRafRef.current);
+  }, [cancelZoomGlide]);
+  const animateZoomAround = useCallback((targetZoom: number, sx: number, sy: number) => {
+    cancelZoomGlide();
+    const fromZoom = viewRef.current.zoom;
+    const zoomTo = clampZoom(targetZoom);
+    if (zoomTo === fromZoom) return;
+    const geo = screenToGeo(sx, sy);
+    const start = performance.now();
+    const durationMs = 200;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const z = fromZoom + (zoomTo - fromZoom) * eased;
+      setCenter(centerForAnchor(geo, z, sx, sy));
+      setZoom(z);
+      zoomGlideRef.current = t < 1 ? requestAnimationFrame(step) : 0;
+    };
+    zoomGlideRef.current = requestAnimationFrame(step);
+  }, [cancelZoomGlide, clampZoom, screenToGeo, centerForAnchor]);
 
   const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    cancelZoomGlide();
+    clearPanTransform();
     const rect = containerRef.current?.getBoundingClientRect();
     const point = { x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) };
     pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
@@ -524,30 +647,21 @@ export function PlannerMap({
       const midY = (a.y + b.y) / 2;
       const pinch = pinchRef.current;
       const zoomTo = clampZoom(pinch.startZoom + Math.log2(distance / pinch.startDistance));
-      setCenter(centerForAnchor(pinch.geo, zoomTo, midX, midY));
-      setZoom(zoomTo);
+      const geo = pinch.geo;
+      scheduleViewFrame(() => {
+        setCenter(centerForAnchor(geo, zoomTo, midX, midY));
+        setZoom(zoomTo);
+      });
       return;
     }
 
+    // Pan: translate tiles + routes imperatively (no state churn, markers frozen).
+    // The geographic commit happens once on pointerup.
     if (!isDragging || !dragStartRef.current) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
-
-    const startX = projectLngToX(dragStartRef.current.center.lng, zoom);
-    const startY = projectLatToY(dragStartRef.current.center.lat, zoom);
-
-    const newX = startX - dx;
-    const newY = startY - dy;
-
-    const scale = Math.pow(2, zoom) * 256;
-    const newLng = (newX / scale) * 360 - 180;
-    const newLatRad = Math.atan(Math.sinh(Math.PI * (1 - (2 * newY) / scale)));
-    const newLat = (newLatRad * 180) / Math.PI;
-
-    setCenter({
-      lat: Math.max(-85, Math.min(85, newLat)),
-      lng: Math.max(-180, Math.min(180, newLng)),
-    });
+    panOffsetRef.current = { dx, dy };
+    applyPanTransform(dx, dy);
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -555,6 +669,22 @@ export function PlannerMap({
     if (pinchRef.current && activePointers.current.size < 2) {
       pinchRef.current = null;
       lastPinchEndRef.current = Date.now();
+    }
+    // Commit a finished pan exactly once, then snap markers/routes to geography.
+    const panOffset = panOffsetRef.current;
+    clearPanTransform();
+    if (panOffset && (panOffset.dx !== 0 || panOffset.dy !== 0) && dragStartRef.current) {
+      const startX = projectLngToX(dragStartRef.current.center.lng, zoom);
+      const startY = projectLatToY(dragStartRef.current.center.lat, zoom);
+      const scale = Math.pow(2, zoom) * 256;
+      const newX = startX - panOffset.dx;
+      const newY = startY - panOffset.dy;
+      const newLng = (newX / scale) * 360 - 180;
+      const newLatRad = Math.atan(Math.sinh(Math.PI * (1 - (2 * newY) / scale)));
+      setCenter({
+        lat: Math.max(-85, Math.min(85, (newLatRad * 180) / Math.PI)),
+        lng: Math.max(-180, Math.min(180, newLng)),
+      });
     }
     const remaining = [...activePointers.current.values()][0];
     if (remaining) {
@@ -582,6 +712,7 @@ export function PlannerMap({
     if (!el) return;
     const onWheelNative = (event: WheelEvent) => {
       event.preventDefault();
+      cancelZoomGlide();
       const rect = el.getBoundingClientRect();
       const sx = event.clientX - rect.left;
       const sy = event.clientY - rect.top;
@@ -590,7 +721,7 @@ export function PlannerMap({
     };
     el.addEventListener('wheel', onWheelNative, { passive: false });
     return () => el.removeEventListener('wheel', onWheelNative);
-  }, [applyZoomAround]);
+  }, [applyZoomAround, cancelZoomGlide]);
 
   const centerX = projectLngToX(center.lng, zoom);
   const centerY = projectLatToY(center.lat, zoom);
@@ -600,10 +731,11 @@ export function PlannerMap({
   const tileSize = 256 * Math.pow(2, zoom - intZoom);
   const numTiles = Math.pow(2, intZoom);
 
-  const startTileX = Math.floor((centerX - containerSize.width / 2) / tileSize);
-  const endTileX = Math.floor((centerX + containerSize.width / 2) / tileSize);
-  const startTileY = Math.floor((centerY - containerSize.height / 2) / tileSize);
-  const endTileY = Math.floor((centerY + containerSize.height / 2) / tileSize);
+  // One tile of overdraw on every side so frozen pans don't expose blank margins.
+  const startTileX = Math.floor((centerX - containerSize.width / 2) / tileSize) - 1;
+  const endTileX = Math.floor((centerX + containerSize.width / 2) / tileSize) + 1;
+  const startTileY = Math.floor((centerY - containerSize.height / 2) / tileSize) - 1;
+  const endTileY = Math.floor((centerY + containerSize.height / 2) / tileSize) + 1;
 
   const tiles = [];
   for (let tx = startTileX; tx <= endTileX; tx++) {
@@ -749,6 +881,22 @@ export function PlannerMap({
       { zh },
     );
   }, [activeRoutePts, legByPair, tripId, markerLayout, compact, zh]);
+
+  // White flow dots marching along the drawn route (direction cue).
+  // Pure CSS animation, disabled under prefers-reduced-motion.
+  const flowDots = useMemo(() => activeRouteSegments.map((seg) => (
+    <polyline
+      key={`flow-${seg.key}`}
+      points={`${seg.x1},${seg.y1} ${seg.x2},${seg.y2}`}
+      fill="none"
+      stroke="#ffffff"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeDasharray="0.5 10"
+      className="ownly-route-flow"
+      opacity="0.9"
+    />
+  )), [activeRouteSegments]);
 
   const selectedPoint = useMemo(() => points.find((point) => point.place.id === selectedPlaceId) ?? null, [points, selectedPlaceId]);
   const selectedPlace = selectedPoint?.place ?? null;
@@ -917,8 +1065,8 @@ export function PlannerMap({
         className="relative flex-1 cursor-grab overflow-hidden select-none active:cursor-grabbing"
         style={{ minHeight: '300px', background: activeBasemap.bgColor, touchAction: 'none' }}
       >
-        {/* Dynamic Basemap Tiles */}
-        <div className="absolute inset-0 pointer-events-none">
+        {/* Dynamic Basemap Tiles (translated imperatively during pans) */}
+        <div ref={tilesWrapRef} className="absolute inset-0 pointer-events-none">
           {tiles.map((t) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -943,10 +1091,11 @@ export function PlannerMap({
           ))}
         </div>
 
-        {/* Connecting Polyline Route SVG overlay.
+        {/* Connecting Polyline Route SVG overlay (translated imperatively during pans).
             Solo view isolates one day; otherwise all_routes dims other days to
             neutral gray while the drawn (active/solo) route keeps day color
             with per-segment transport-mode dashes. */}
+        <div ref={routesWrapRef} className="absolute inset-0 pointer-events-none">
         {soloDayIndex !== null ? (
           <svg className="pointer-events-none absolute inset-0 h-full w-full">
             {activeRouteSegments.map((seg) => (
@@ -962,6 +1111,7 @@ export function PlannerMap({
                 opacity="0.95"
               />
             ))}
+            {flowDots}
           </svg>
         ) : filterMode === 'all_routes' ? (
           <svg className="pointer-events-none absolute inset-0 h-full w-full">
@@ -995,6 +1145,7 @@ export function PlannerMap({
                 opacity="0.95"
               />
             ))}
+            {flowDots}
           </svg>
         ) : activeRouteSegments.length > 0 && (filterMode === 'all' || filterMode === 'scheduled') ? (
           <svg className="pointer-events-none absolute inset-0 h-full w-full">
@@ -1011,8 +1162,10 @@ export function PlannerMap({
                 className="opacity-85"
               />
             ))}
+            {flowDots}
           </svg>
         ) : null}
+        </div>
 
         {/* Segment time pills (drawn route, below markers, never intercepting taps) */}
         {(soloDayIndex !== null || filterMode !== 'candidates') ? segmentBadges.map((badge) => (
@@ -1080,6 +1233,14 @@ export function PlannerMap({
                 transform: isHighlighted ? 'translate(-50%, -50%) scale(1.2)' : 'translate(-50%, -50%) scale(1)',
               }}
             >
+              {/* Timeline-hover highlight pulse (motion-safe only) */}
+              {isHighlighted ? (
+                <span
+                  aria-hidden
+                  className="absolute -inset-1 rounded-full opacity-25 motion-safe:animate-ping"
+                  style={{ backgroundColor: dayColor }}
+                />
+              ) : null}
               {p.isScheduled ? (
                 isOtherDayStop ? (
                   // Other Day Stop Marker (day identity color, dimmed, one step smaller;
@@ -1135,7 +1296,7 @@ export function PlannerMap({
             type="button"
             onClick={() => {
               const { width, height } = viewportSize();
-              applyZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, width / 2, height / 2);
+              animateZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, width / 2, height / 2);
             }}
             className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-xs font-bold text-stone-800 shadow-sm hover:bg-stone-50"
             title={zh ? '放大' : 'Zoom In'}
@@ -1147,7 +1308,7 @@ export function PlannerMap({
             type="button"
             onClick={() => {
               const { width, height } = viewportSize();
-              applyZoomAround(viewRef.current.zoom - ZOOM_STEP_BUTTON, width / 2, height / 2);
+              animateZoomAround(viewRef.current.zoom - ZOOM_STEP_BUTTON, width / 2, height / 2);
             }}
             className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-xs font-bold text-stone-800 shadow-sm hover:bg-stone-50"
             title={zh ? '缩小' : 'Zoom Out'}
