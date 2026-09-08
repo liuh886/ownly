@@ -18,7 +18,7 @@ import {
   safeDecodeUri,
 } from '../utils';
 import { SELECTORS, trackSelector } from '../selectors';
-import { PLACE_PARSER } from '../place-parser';
+import { PLACE_PARSER, isZhDocument, normalizeCategoryLabel } from '../place-parser';
 import { detectPageCurrency } from '../currency-detector';
 import { extractGoogleMapsSavedListId } from '../saved-list-match';
 import { injectInlineCaptureButton } from '../ui/inline-capture-button';
@@ -43,7 +43,10 @@ function titleFromUrl(url: string): string {
 function extractRating(): number | undefined {
   const ratingEl = document.querySelector<HTMLElement>(SELECTORS.rating);
   const ariaEl = document.querySelector<HTMLElement>(SELECTORS.ratingAria);
-  return PLACE_PARSER.parseRating(ratingEl?.textContent || ariaEl?.getAttribute('aria-label'));
+  // aria-label first: it is atomic ("4.6星" / "Rated 4.6 out of 5"), while a
+  // rotated selector can match a container whose textContent mixes the rating
+  // with review counts and other nearby fields.
+  return PLACE_PARSER.parseRating(ariaEl?.getAttribute('aria-label') || ratingEl?.textContent);
 }
 
 function extractReviewCount(): number | undefined {
@@ -74,7 +77,7 @@ function extractCategory(): string | undefined {
       const item = Array.isArray(data) ? data[0] : (data?.['@graph'] ? data['@graph'][0] : data);
       const type = item?.['@type'] || item?.type;
       if (type && typeof type === 'string' && type !== 'Place' && type !== 'LocalBusiness') {
-        return cleanExtractedText(type);
+        return normalizeCategoryLabel(type, isZhDocument(typeof document !== 'undefined' ? document : null));
       }
     }
   } catch (err) {

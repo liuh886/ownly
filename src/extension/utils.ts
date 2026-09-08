@@ -209,9 +209,27 @@ export function extractFeatureIdFromUrl(url?: string | null): string | undefined
   return match?.[1];
 }
 
-const PRICE_TOKEN_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?(?:S\$|HK\$|US\$|NT\$|AU\$|A\$|CA\$|C\$|NZ\$|R\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR|AED|CHF)\s?)\s?\d[\d.,]*\+?(?:\s*[-–—〜~至到]\s*(?:S\$|HK\$|US\$|NT\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR)\s?)?\s?\d[\d.,]*\+?)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day|บาท|泰铢|元|円))?/i;
-const SUFFIX_PRICE_REGEX = /(?:(?:人均|per person|每人|每晚|per night|from|约|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?\d[\d.,]*(?:\s*[-–—〜~至到]\s*\d[\d.,]*)?\s*(?:บาท|泰铢|元|円|THB|SGD|HKD|USD|TWD|JPY|CNY|\.-|\.–)(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
-const NO_CURR_PRICE_REGEX = /(?:(?:人均|per person|每人|每晚|per night|ราคา|คนละ|ท่านละ)\s*)+[:：]?\s*\d[\d.,]*(?:\s*[-–—〜~至到]\s*\d[\d.,]*)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?/i;
+// NUM allows intra-number spaces (regular, NBSP U+00A0, narrow NBSP U+202F):
+// some locales render thousands as "JPY 10 000", which used to truncate to
+// "JPY 10". Candidates are normalized by normalizePriceCandidate below.
+const NUM_FRAG = String.raw`\d[\d.,  \u00A0\u202F]*`;
+const PRICE_TOKEN_REGEX = new RegExp(
+  String.raw`(?:(?:人均|per person|每人|每晚|per night|from|约|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?(?:JP[¥￥]|CN[¥￥]|S\$|HK\$|US\$|NT\$|AU\$|A\$|CA\$|C\$|NZ\$|R\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR|AED|CHF)\s?)\s?${NUM_FRAG}\+?(?:\s*[-–—〜~至到]\s*(?:JP[¥￥]|CN[¥￥]|S\$|HK\$|US\$|NT\$|[¥￥฿$€£₩₫₹]|(?:USD|SGD|HKD|TWD|THB|JPY|CNY|RMB|EUR|GBP|MYR|KRW|VND|INR)\s?)?\s?${NUM_FRAG}\+?)?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day|บาท|泰铢|元|円))?`,
+  'i',
+);
+const SUFFIX_PRICE_REGEX = new RegExp(
+  String.raw`(?:(?:人均|per person|每人|每晚|per night|from|约|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?${NUM_FRAG}(?:\s*[-–—〜~至到]\s*${NUM_FRAG})?\s*(?:บาท|泰铢|元|円|THB|SGD|HKD|USD|TWD|JPY|CNY|\.-|\.–)(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?`,
+  'i',
+);
+const NO_CURR_PRICE_REGEX = new RegExp(
+  String.raw`(?:(?:人均|per person|每人|每晚|per night|ราคา|คนละ|ท่านละ)\s*)+[:：]?\s*${NUM_FRAG}(?:\s*[-–—〜~至到]\s*${NUM_FRAG})?(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?`,
+  'i',
+);
+
+/** Collapse thousand-separator spaces: "JPY 10 000" -> "JPY 10000". */
+export function normalizePriceCandidate(candidate: string): string {
+  return candidate.replace(/(\d)[ \u00A0\u202F]+(?=\d)/g, '$1').trim();
+}
 
 export function isValidExtractedPriceCandidate(candidate: string): boolean {
   if (!candidate || candidate.length < 1) return false;
@@ -247,7 +265,7 @@ export function extractCleanPriceText(raw?: string | null): string | undefined {
 
   const match = PRICE_TOKEN_REGEX.exec(text);
   if (match) {
-    const candidate = match[0].trim();
+    const candidate = normalizePriceCandidate(match[0]);
     if (isValidExtractedPriceCandidate(candidate)) {
       return candidate;
     }
@@ -256,7 +274,7 @@ export function extractCleanPriceText(raw?: string | null): string | undefined {
   // Check suffix patterns like "299 บาท" or "299.-" or "200-400 泰铢"
   const matchSuffix = SUFFIX_PRICE_REGEX.exec(text);
   if (matchSuffix) {
-    const candidate = matchSuffix[0].trim();
+    const candidate = normalizePriceCandidate(matchSuffix[0]);
     if (isValidExtractedPriceCandidate(candidate)) {
       return candidate;
     }
@@ -265,7 +283,7 @@ export function extractCleanPriceText(raw?: string | null): string | undefined {
   // Fallback for "人均 200-400" / "每晚 per night 120" (no currency symbol)
   const matchNoCurr = NO_CURR_PRICE_REGEX.exec(text);
   if (matchNoCurr) {
-    const candidate = matchNoCurr[0].trim();
+    const candidate = normalizePriceCandidate(matchNoCurr[0]);
     if (isValidExtractedPriceCandidate(candidate)) {
       return candidate;
     }

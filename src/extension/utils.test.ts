@@ -316,6 +316,13 @@ describe('extractCleanPriceText', () => {
     expect(extractCleanPriceText('S$1,024 night')).toBe('S$1,024 night');
   });
 
+  it('keeps space-separated thousands intact instead of truncating ("JPY 10" bug)', () => {
+    expect(extractCleanPriceText('JPY 10 000')).toBe('JPY 10000');
+    expect(extractCleanPriceText('JP¥10,200')).toBe('JP¥10,200');
+    expect(extractCleanPriceText('¥10 000 per night')).toBe('¥10000 per night');
+    expect(extractCleanPriceText('每晚 JPY 12 800')).toBe('每晚 JPY 12800');
+  });
+
   it('returns undefined for non-price, hotel star text, and spurious tokens', () => {
     expect(extractCleanPriceText('5-star hotel')).toBeUndefined();
     expect(extractCleanPriceText('4.4 (996)·5-star hotel')).toBeUndefined();

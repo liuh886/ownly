@@ -15,6 +15,88 @@ import {
   normalizePhoneDisplay,
 } from './utils';
 
+/**
+ * Humanize a machine category token (schema.org @type or a snake_case place
+ * type) into the page's display language. Raw tokens like "Restaurant" or
+ * "bed_and_breakfast" otherwise leak into the stored category whenever the
+ * DOM category selector misses (Google rotates obfuscated classes often).
+ */
+const SCHEMA_TYPE_ZH: Record<string, string> = {
+  restaurant: '餐厅',
+  cafeorcoffeeshop: '咖啡馆',
+  cafe: '咖啡馆',
+  bakery: '面包房',
+  barorpub: '酒吧',
+  bar: '酒吧',
+  fastfoodrestaurant: '快餐',
+  foodestablishment: '餐饮',
+  hotel: '酒店',
+  hostel: '青旅',
+  guesthouse: '民宿',
+  bedandbreakfast: '民宿',
+  motel: '汽车旅馆',
+  resort: '度假村',
+  lodgingbusiness: '住宿',
+  touristattraction: '旅游景点',
+  museum: '博物馆',
+  artgallery: '美术馆',
+  park: '公园',
+  amusementpark: '游乐园',
+  zoo: '动物园',
+  aquarium: '水族馆',
+  shoppingcenter: '购物中心',
+  shoppingmall: '购物中心',
+  departmentstore: '百货',
+  grocerystore: '超市',
+  supermarket: '超市',
+  conveniencestore: '便利店',
+  pharmacy: '药店',
+  airport: '机场',
+  trainstation: '火车站',
+  busstation: '汽车站',
+  subwaystation: '地铁站',
+  spa: '水疗',
+  gym: '健身房',
+  movietheater: '电影院',
+  nightclub: '夜总会',
+  placeofworship: '宗教场所',
+  buddhisttemple: '寺庙',
+  shintoshrine: '神社',
+  church: '教堂',
+  library: '图书馆',
+  hospital: '医院',
+  store: '商店',
+  landmarksorhistoricalbuildings: '历史建筑',
+};
+
+export function normalizeCategoryLabel(raw: string, isZhPage: boolean): string {
+  const text = cleanExtractedText(raw);
+  if (!text) return text;
+  // Already human text (DOM-sourced, may be any language): leave untouched.
+  if (/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af\s]/.test(text) && !/^[A-Za-z_]+$/.test(text)) {
+    return text;
+  }
+  const key = text.toLowerCase().replace(/[\s_-]+/g, '');
+  if (isZhPage && SCHEMA_TYPE_ZH[key]) return SCHEMA_TYPE_ZH[key];
+  // Prettify snake_case / CamelCase enums when no translation applies.
+  const pretty = text
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, (c) => c.toUpperCase());
+  return pretty || text;
+}
+
+export function isZhDocument(doc?: Document | HTMLElement | null): boolean {
+  try {
+    const root = doc && 'documentElement' in doc ? doc.documentElement : typeof document !== 'undefined' ? document.documentElement : null;
+    return (root?.lang || '').toLowerCase().startsWith('zh');
+  } catch {
+    return false;
+  }
+}
+
 export interface ParsedPlaceData {
   title: string;
   sourceUrl: string;
@@ -225,7 +307,9 @@ export function extractStructuredJsonLd(doc: Document | HTMLElement): Partial<Pa
           const rawType = item['@type'] || item.type;
           const type = Array.isArray(rawType) ? rawType[0] : rawType;
           if (type && typeof type === 'string' && type !== 'Place' && type !== 'LocalBusiness') {
-            if (!result.category) result.category = cleanExtractedText(type);
+            if (!result.category) {
+              result.category = normalizeCategoryLabel(type, isZhDocument(doc));
+            }
           }
 
           if (item.name && typeof item.name === 'string' && !result.title) {

@@ -4,6 +4,8 @@ import {
   parseReviewCount,
   parseSubtitleInfo,
   extractEntityListResearch,
+  extractStructuredJsonLd,
+  normalizeCategoryLabel,
 } from './place-parser';
 import { extractGoogleMapsResearchFromHtml, featureIdToCid, googleMapsDetailUrlFromSourceId } from './google-maps-research';
 
@@ -26,6 +28,41 @@ describe('PLACE_PARSER.parseRating', () => {
     expect(parseRatingNumber('4-star hotel')).toBeUndefined();
     expect(parseRatingNumber('')).toBeUndefined();
     expect(parseRatingNumber(null)).toBeUndefined();
+  });
+});
+
+describe('normalizeCategoryLabel (JSON-LD fallback should read like the DOM)', () => {
+  it('translates schema.org types on zh pages', () => {
+    expect(normalizeCategoryLabel('Restaurant', true)).toBe('餐厅');
+    expect(normalizeCategoryLabel('Hotel', true)).toBe('酒店');
+    expect(normalizeCategoryLabel('TouristAttraction', true)).toBe('旅游景点');
+    expect(normalizeCategoryLabel('bed_and_breakfast', true)).toBe('民宿');
+  });
+
+  it('prettifies machine tokens on non-zh pages instead of translating', () => {
+    expect(normalizeCategoryLabel('Restaurant', false)).toBe('Restaurant');
+    expect(normalizeCategoryLabel('bed_and_breakfast', false)).toBe('Bed and breakfast');
+  });
+
+  it('leaves genuine display text untouched', () => {
+    expect(normalizeCategoryLabel('ラーメン屋', true)).toBe('ラーメン屋');
+    expect(normalizeCategoryLabel('餐厅', true)).toBe('餐厅');
+  });
+});
+
+describe('extractStructuredJsonLd category fallback', () => {
+  function docWithJsonLd(payload: unknown, lang: string) {
+    return {
+      documentElement: { lang },
+      querySelectorAll: () => [{ textContent: JSON.stringify(payload) }],
+    } as unknown as Document;
+  }
+
+  it('stores a localized category instead of the raw schema type', () => {
+    const result = extractStructuredJsonLd(
+      docWithJsonLd({ '@type': 'Restaurant', name: 'X' }, 'zh-CN'),
+    );
+    expect(result.category).toBe('餐厅');
   });
 });
 
