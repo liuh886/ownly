@@ -7,6 +7,7 @@ import {
   type PlannerTripPlace,
 } from '../domain/planner';
 import type { CurrentResearchPlace } from './content';
+import type { ResearchFieldSource, ResearchSourceDetail } from './adapters/types';
 import { cleanTitleForSearch, extractFeatureIdFromUrl } from './utils';
 export { cleanTitleForSearch };
 import { logger } from './logger';
@@ -475,6 +476,31 @@ function plannerIdentity(place: PlannerTripPlace): string {
  * Merges Google Maps content-script research into the latest Planner candidates.
  * mergeCapturedPlaceResearch keeps Planner-owned decisions authoritative.
  */
+/**
+ * DOM-priority merge for one field. Stored values are treated as DOM-era:
+ * a fallback-sourced incoming value (jsonld/appstate/wire/url) may fill a
+ * gap but never clobbers a present stored value. Incoming DOM values always
+ * win (latest DOM read is freshest); unknown provenance preserves legacy
+ * latest-wins behavior for other adapters.
+ */
+export function domPriorityValue<T>(
+  incoming: T | undefined,
+  source: ResearchFieldSource | undefined,
+  stored: T | undefined,
+  isPresent: (value: T | undefined) => boolean = (value) =>
+    value !== undefined &&
+    value !== null &&
+    (typeof value !== 'string' || value.trim().length > 0),
+): T | undefined {
+  if (!isPresent(incoming)) return stored;
+  if (!isPresent(stored)) return incoming;
+  if (source === undefined || source === 'dom') return incoming;
+  return stored;
+}
+
+const isFiniteNumber = (value: number | undefined): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
 export function mergeDetectedResearchIntoPlannerPlaces(
   currentPlaces: PlannerTripPlace[],
   researchPlaces: CurrentResearchPlace[],
@@ -484,10 +510,27 @@ export function mergeDetectedResearchIntoPlannerPlaces(
   return currentPlaces.map((existing) => {
     const research = researchByIdentity.get(plannerIdentity(existing));
     if (!research) return existing;
+    const detail: ResearchSourceDetail = research.sourceDetail ?? {};
 
-    const validResearchPrice = (research.priceLevel && !isZeroOrPlaceholderPrice(research.priceLevel) && isValidExtractedPriceCandidate(research.priceLevel))
-      ? research.priceLevel
-      : (existing.observed_price && !isZeroOrPlaceholderPrice(existing.observed_price) && isValidExtractedPriceCandidate(existing.observed_price) ? existing.observed_price : undefined);
+    const researchPriceValid =
+      research.priceLevel &&
+      !isZeroOrPlaceholderPrice(research.priceLevel) &&
+      isValidExtractedPriceCandidate(research.priceLevel)
+        ? research.priceLevel
+        : undefined;
+    const storedPriceValid =
+      existing.observed_price &&
+      !isZeroOrPlaceholderPrice(existing.observed_price) &&
+      isValidExtractedPriceCandidate(existing.observed_price)
+        ? existing.observed_price
+        : undefined;
+    // Price follows the same DOM rule, but a valid stored price is never
+    // replaced by mere validity of an incoming fallback price.
+    const validResearchPrice =
+      researchPriceValid &&
+      (!storedPriceValid || detail.priceLevel === undefined || detail.priceLevel === 'dom')
+        ? researchPriceValid
+        : storedPriceValid;
 
     const normalizedPrice = validResearchPrice
       ? normalizeObservedPrice(
@@ -498,13 +541,13 @@ export function mergeDetectedResearchIntoPlannerPlaces(
     const now = new Date().toISOString();
     return mergeCapturedPlaceResearch(existing, {
       ...existing,
-      title: research.title || existing.title,
+      title: domPriorityValue(research.title, detail.title, existing.title) ?? existing.title,
       source_provider: research.sourceProvider || existing.source_provider,
       source_url: research.sourceUrl || existing.source_url,
       source_place_id: research.sourcePlaceId ?? existing.source_place_id,
-      source_category: research.category,
-      observed_rating: research.rating,
-      observed_review_count: research.reviewCount,
+      source_category: domPriorityValue(research.category, detail.category, existing.source_category),
+      observed_rating: domPriorityValue(research.rating, detail.rating, existing.observed_rating, isFiniteNumber),
+      observed_review_count: domPriorityValue(research.reviewCount, detail.reviewCount, existing.observed_review_count, isFiniteNumber),
       observed_price: validResearchPrice,
       price_currency: normalizedPrice?.currency,
       price_min: normalizedPrice?.min,
@@ -512,14 +555,14 @@ export function mergeDetectedResearchIntoPlannerPlaces(
       price_unit: normalizedPrice?.unit,
       price_level: normalizedPrice?.level,
       observed_at: now.slice(0, 10),
-      open_hours: research.openHours,
-      address: research.address,
+      open_hours: domPriorityValue(research.openHours, detail.openHours, existing.open_hours),
+      address: domPriorityValue(research.address, detail.address, existing.address),
       coordinates: research.coordinates,
-      phone: research.phone,
-      plus_code: research.plusCode,
-      menu_url: research.menuUrl,
-      reservation_url: research.reservationUrl,
-      review_topics: research.reviewTopics,
+      phone: domPriorityValue(research.phone, detail.phone, existing.phone),
+      plus_code: domPriorityValue(research.plusCode, detail.plusCode, existing.plus_code),
+      menu_url: domPriorityValue(research.menuUrl, undefined, existing.menu_url),
+      reservation_url: domPriorityValue(research.reservationUrl, undefined, existing.reservation_url),
+      review_topics: research.reviewTopics?.length ? research.reviewTopics : existing.review_topics,
       types: research.types,
       updated_at: now,
     });

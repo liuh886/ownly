@@ -603,6 +603,85 @@ describe('mergeDetectedResearchIntoPlannerPlaces', () => {
   });
 });
 
+describe('mergeDetectedResearchIntoPlannerPlaces DOM priority', () => {
+  const stored: PlannerTripPlace = {
+    schema_version: '0.1',
+    type: 'trip_place',
+    id: 'dom-1',
+    trip_id: 'trip-1',
+    title: 'DOM Noodle Shop',
+    source_provider: 'google_maps',
+    source_url: 'https://www.google.com/maps?cid=456',
+    source_place_id: '0xdef:0x456',
+    source_category: '面馆',
+    kind: 'food',
+    priority: 'want',
+    tags: [],
+    signals: [],
+    risks: [],
+    address: 'DOM Street 1',
+    observed_rating: 4.7,
+    observed_review_count: 321,
+    reservation_status: 'none',
+    state: 'candidate',
+    created_at: '2026-08-31T00:00:00Z',
+  };
+
+  function researchWith(
+    overrides: Partial<CurrentResearchPlace>,
+    sourceDetail?: CurrentResearchPlace['sourceDetail'],
+  ): CurrentResearchPlace {
+    return {
+      title: 'DOM Noodle Shop',
+      sourceUrl: stored.source_url,
+      sourceProvider: 'google_maps',
+      sourcePlaceId: stored.source_place_id,
+      ...overrides,
+      ...(sourceDetail ? { sourceDetail } : {}),
+    };
+  }
+
+  it('refuses fallback-sourced values overwriting stored DOM values', () => {
+    const [merged] = mergeDetectedResearchIntoPlannerPlaces(
+      [stored],
+      [
+        researchWith(
+          { category: 'Restaurant', rating: 3.0, address: 'Reassembled, Address, 123' },
+          { category: 'jsonld', rating: 'jsonld', address: 'jsonld' },
+        ),
+      ],
+    );
+    expect(merged.source_category).toBe('面馆');
+    expect(merged.observed_rating).toBe(4.7);
+    expect(merged.address).toBe('DOM Street 1');
+  });
+
+  it('fills gaps with fallback values and lets fresh DOM win', () => {
+    const gappy = { ...stored, source_category: undefined, address: undefined };
+    const [filled] = mergeDetectedResearchIntoPlannerPlaces(
+      [gappy],
+      [researchWith({ category: '餐厅', address: 'Gap Street 2' }, { category: 'jsonld', address: 'jsonld' })],
+    );
+    expect(filled.source_category).toBe('餐厅');
+    expect(filled.address).toBe('Gap Street 2');
+
+    const [updated] = mergeDetectedResearchIntoPlannerPlaces(
+      [stored],
+      [researchWith({ category: '刀削面馆' }, { category: 'dom' })],
+    );
+    expect(updated.source_category).toBe('刀削面馆');
+  });
+
+  it('preserves legacy latest-wins when provenance is absent', () => {
+    const [merged] = mergeDetectedResearchIntoPlannerPlaces(
+      [stored],
+      [researchWith({ category: 'Restaurant', rating: 3.0 })],
+    );
+    expect(merged.source_category).toBe('Restaurant');
+    expect(merged.observed_rating).toBe(3.0);
+  });
+});
+
 describe('enrichCandidatePlacesBatch', () => {
   it('processes multiple candidate places with progress callbacks', async () => {
     const mockHtml = `

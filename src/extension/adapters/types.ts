@@ -1,6 +1,30 @@
 import type { PlannerPlaceKind, PlannerPlaceSourceProvider } from '../../domain/planner';
 import type { HotelPropertyFacts } from '../utils';
 
+/**
+ * Where a captured field value came from. DOM is the standard: merge logic
+ * must never let a fallback source clobber a stored DOM-era value.
+ * Absent provenance (other adapters, legacy flows) preserves legacy
+ * latest-wins behavior.
+ */
+export type ResearchFieldSource = 'dom' | 'jsonld' | 'appstate' | 'wire' | 'url';
+
+export type ResearchSourceDetail = Partial<
+  Record<
+    | 'title'
+    | 'category'
+    | 'rating'
+    | 'reviewCount'
+    | 'priceLevel'
+    | 'address'
+    | 'phone'
+    | 'website'
+    | 'plusCode'
+    | 'openHours',
+    ResearchFieldSource
+  >
+>;
+
 export interface CurrentResearchPlace {
   title: string;
   sourceUrl: string;
@@ -10,6 +34,7 @@ export interface CurrentResearchPlace {
   reviewCount?: number;
   category?: string;
   priceLevel?: string;
+  sourceDetail?: ResearchSourceDetail;
   detectedCurrency?: string;
   address?: string;
   area?: string;

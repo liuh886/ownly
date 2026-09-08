@@ -1,4 +1,32 @@
-import type { PageAdapter, CurrentResearchPlace, DetectedSavedList } from './types';
+import type { PageAdapter, CurrentResearchPlace, DetectedSavedList, ResearchSourceDetail } from './types';
+
+/** List-card scans are pure DOM reads. */
+const DOM_SOURCE_DETAIL: ResearchSourceDetail = {
+  title: 'dom',
+  category: 'dom',
+  rating: 'dom',
+  reviewCount: 'dom',
+  priceLevel: 'dom',
+  address: 'dom',
+  phone: 'dom',
+  website: 'dom',
+  plusCode: 'dom',
+  openHours: 'dom',
+};
+
+/** Entity-list wire payloads are Google's raw format, not DOM display text. */
+const WIRE_SOURCE_DETAIL: ResearchSourceDetail = {
+  title: 'wire',
+  category: 'wire',
+  rating: 'wire',
+  reviewCount: 'wire',
+  priceLevel: 'wire',
+  address: 'wire',
+  phone: 'wire',
+  website: 'wire',
+  plusCode: 'wire',
+  openHours: 'wire',
+};
 import {
   inferPlaceKind,
   type PlannerPlaceKind,
@@ -54,11 +82,13 @@ function extractReviewCount(): number | undefined {
   return PLACE_PARSER.parseReviewCount(countEl?.getAttribute('aria-label') || countEl?.textContent);
 }
 
-function extractCategory(): string | undefined {
+function extractCategory(): { value?: string; source?: 'dom' | 'jsonld' } {
   const catBtn = document.querySelector<HTMLElement>(SELECTORS.category);
   if (catBtn?.textContent) {
     const cat = cleanExtractedText(catBtn.textContent);
-    if (cat && cat.length < 50 && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(cat)) return cat;
+    if (cat && cat.length < 50 && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(cat)) {
+      return { value: cat, source: 'dom' };
+    }
   }
 
   const hotelClassEl = document.querySelector<HTMLElement>(
@@ -66,7 +96,9 @@ function extractCategory(): string | undefined {
   );
   if (hotelClassEl) {
     const text = cleanExtractedText(hotelClassEl.getAttribute('aria-label') || hotelClassEl.textContent || '');
-    if (text && text.length < 50 && /(hotel|resort|inn|hostel|lodging|stay|酒店|旅馆|民宿|度假村|星级)/i.test(text)) return text;
+    if (text && text.length < 50 && /(hotel|resort|inn|hostel|lodging|stay|酒店|旅馆|民宿|度假村|星级)/i.test(text)) {
+      return { value: text, source: 'dom' };
+    }
   }
 
   try {
@@ -77,7 +109,10 @@ function extractCategory(): string | undefined {
       const item = Array.isArray(data) ? data[0] : (data?.['@graph'] ? data['@graph'][0] : data);
       const type = item?.['@type'] || item?.type;
       if (type && typeof type === 'string' && type !== 'Place' && type !== 'LocalBusiness') {
-        return normalizeCategoryLabel(type, isZhDocument(typeof document !== 'undefined' ? document : null));
+        return {
+          value: normalizeCategoryLabel(type, isZhDocument(typeof document !== 'undefined' ? document : null)),
+          source: 'jsonld',
+        };
       }
     }
   } catch (err) {
@@ -88,11 +123,11 @@ function extractCategory(): string | undefined {
   for (const span of Array.from(subSpans).slice(0, 5)) {
     const text = cleanExtractedText(span.textContent || '');
     if (text && text.length < 40 && !/^(directions|save|share|nearby|路线|保存|分享|附近|\d+)/i.test(text)) {
-      return text;
+      return { value: text, source: 'dom' };
     }
   }
 
-  return undefined;
+  return {};
 }
 
 function extractPrice(): string | undefined {
@@ -422,6 +457,7 @@ export function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
       reviewCount: cand.reviewCount,
       category: cand.category,
       priceLevel: cand.priceLevel,
+      sourceDetail: DOM_SOURCE_DETAIL,
       address: cand.address,
       detectedCurrency: cand.detectedCurrency,
       summary: cand.summary,
@@ -471,12 +507,22 @@ export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?:
   }
   if (!title || (!/\/maps/i.test(window.location.pathname) && !window.location.hostname.includes('maps.google') && !window.location.href.includes('/maps'))) return null;
 
+  // Field provenance: DOM is the standard. Merge logic downstream uses this
+  // to refuse fallback-sourced values overwriting stored DOM-era values.
+  const sourceDetail: ResearchSourceDetail = {};
+  const headingText = cleanExtractedText(heading?.textContent || '');
+  if (headingText) sourceDetail.title = 'dom';
+  else if (jsonLd.title) sourceDetail.title = 'jsonld';
+  else sourceDetail.title = 'url';
+
   const domPriceLevel = extractPrice();
   trackSelector('priceBadge', domPriceLevel !== undefined, jsonLd.priceLevel !== undefined);
   const priceLevel = domPriceLevel || jsonLd.priceLevel;
+  if (priceLevel !== undefined) sourceDetail.priceLevel = domPriceLevel !== undefined ? 'dom' : 'jsonld';
   const domAddress = extractAddress();
   trackSelector('address', domAddress !== undefined, jsonLd.address !== undefined);
   const address = domAddress || jsonLd.address;
+  if (address !== undefined) sourceDetail.address = domAddress !== undefined ? 'dom' : 'jsonld';
   const detectedCurrency = detectPageCurrency({
     url: sourceUrl,
     priceText: priceLevel,
@@ -493,15 +539,37 @@ export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?:
   const domRating = extractRating();
   trackSelector('rating', domRating !== undefined, jsonLd.rating !== undefined);
   const rating = domRating || jsonLd.rating;
+  if (rating !== undefined) sourceDetail.rating = domRating !== undefined ? 'dom' : 'jsonld';
   const domReviewCount = extractReviewCount();
   trackSelector('reviewCount', domReviewCount !== undefined, jsonLd.reviewCount !== undefined);
   const reviewCount = domReviewCount || jsonLd.reviewCount;
+  if (reviewCount !== undefined) sourceDetail.reviewCount = domReviewCount !== undefined ? 'dom' : 'jsonld';
   const domCategory = extractCategory();
-  trackSelector('category', domCategory !== undefined, jsonLd.category !== undefined);
-  const category = domCategory || jsonLd.category;
+  trackSelector('category', domCategory.value !== undefined, jsonLd.category !== undefined);
+  const category = domCategory.value || jsonLd.category;
+  if (category !== undefined) {
+    sourceDetail.category = domCategory.value !== undefined ? (domCategory.source ?? 'dom') : 'jsonld';
+  }
   const kind = category
     ? inferPlaceKind(category)
     : (stateSignals?.types?.length ? inferPlaceKind(stateSignals.types.join(' ')) : inferPlaceKind(title));
+
+  const domWebsite = extractWebsite();
+  const website = domWebsite || jsonLd.website;
+  if (website !== undefined) {
+    sourceDetail.website = domWebsite !== undefined ? 'dom' : 'jsonld';
+  }
+  const domPhone = extractPhone();
+  const phone = domPhone ?? jsonLd.phone ?? stateSignals?.intlPhone;
+  if (phone !== undefined) {
+    sourceDetail.phone = domPhone !== undefined ? 'dom' : jsonLd.phone !== undefined ? 'jsonld' : 'appstate';
+  }
+  const domPlusCode = extractPlusCode();
+  const plusCode = domPlusCode ?? stateSignals?.plusCode;
+  if (plusCode !== undefined) {
+    sourceDetail.plusCode = domPlusCode !== undefined ? 'dom' : 'appstate';
+  }
+  if (openHours !== undefined) sourceDetail.openHours = 'dom';
 
   return {
     title,
@@ -513,17 +581,18 @@ export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?:
     reviewCount,
     category,
     priceLevel,
+    sourceDetail,
     detectedCurrency,
     address,
     summary,
     userNote,
     openStatus,
     openHours,
-    website: extractWebsite() || jsonLd.website,
+    website,
     coordinates: extractPlaceCoordinates(sourceUrl) ?? undefined,
     tierNote: extractHotelTier(),
-    phone: extractPhone() ?? jsonLd.phone ?? stateSignals?.intlPhone,
-    plusCode: extractPlusCode() ?? stateSignals?.plusCode,
+    phone,
+    plusCode,
     menuUrl: extractMenuLink(),
     reservationUrl: reservation.url,
     reviewTopics: (() => {
@@ -584,6 +653,7 @@ export async function fetchGoogleMapsEntityList(listId: string, overrideCurrency
           sourceProvider: 'google_maps',
           kind: (cand.kind as PlannerPlaceKind) || inferPlaceKind((cand.category || '') + ' ' + cand.title + ' ' + (cand.address || '')),
           address: cand.address,
+          sourceDetail: WIRE_SOURCE_DETAIL,
           userNote: cand.userNote,
           summary: cand.summary,
           rating: cand.rating,
