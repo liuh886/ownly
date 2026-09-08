@@ -30,6 +30,12 @@ interface PlannerMapProps {
   language?: 'zh' | 'en';
   /** Compact (sidebar) maps hide the day legend to save space. Defaults to true. */
   showLegend?: boolean;
+  /**
+   * Compact variant (sidebar): smaller markers, collapsed controls, two-line
+   * popover. Independent from showLegend so each concern stays explicit.
+   * Defaults to 'full'.
+   */
+  variant?: 'compact' | 'full';
 }
 
 interface Point {
@@ -172,13 +178,16 @@ export function PlannerMap({
   visitCountByPlaceId,
   language = 'zh',
   showLegend = true,
+  variant = 'full',
 }: PlannerMapProps) {
+  const compact = variant === 'compact';
   const zh = language === 'zh';
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [filterMode, setFilterMode] = useState<'all' | 'candidates' | 'scheduled' | 'all_routes'>('all');
+  const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
   const [basemapStyle, setBasemapStyle] = useState<BasemapStyle>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -690,52 +699,121 @@ export function PlannerMap({
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xs">
       {/* Map Controls */}
       <div className="flex flex-wrap items-center justify-end gap-1.5 border-b border-stone-100 bg-stone-50/80 px-3 py-2">
-        {/* Basemap Style Selector */}
-        <div className="relative inline-flex items-center">
-          <select
-            value={basemapStyle}
-            onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
-            className="rounded-full border border-stone-200 bg-white py-0.5 pl-2 pr-6 text-[10px] font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 focus:border-stone-400 focus:outline-hidden cursor-pointer"
-            title={zh ? '切换免费底图样式' : 'Switch Basemap Style'}
-          >
-            {BASEMAP_OPTIONS.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.icon} {opt.label[language]}
-              </option>
-            ))}
-          </select>
-        </div>
+        {compact ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all' ? 'bg-stone-900 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100'}`}
+            >
+              {zh ? '全部' : 'All'} ({points.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('scheduled')}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'scheduled' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
+            >
+              🟢 {zh ? `第${activeDayIndex + 1}天` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setControlsMenuOpen((prev) => !prev)}
+                className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100 transition"
+                title={zh ? '更多地图选项' : 'More map options'}
+                aria-expanded={controlsMenuOpen}
+              >
+                ⋯
+              </button>
+              {controlsMenuOpen ? (
+                <>
+                  <div className="fixed inset-0 z-40 cursor-default" onClick={() => setControlsMenuOpen(false)} />
+                  <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-xl">
+                    <div className="px-3 py-1.5">
+                      <div className="mb-1 text-[9px] font-bold text-stone-400">{zh ? '底图' : 'Basemap'}</div>
+                      <select
+                        value={basemapStyle}
+                        onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
+                        className="w-full rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-stone-700 focus:border-stone-400 focus:outline-hidden cursor-pointer"
+                      >
+                        {BASEMAP_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.icon} {opt.label[language]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {allPlacesByDate && tripDates && tripDates.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => { setControlsMenuOpen(false); setFilterMode('all_routes'); }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                      >
+                        🌐 {zh ? '显示所有路线' : 'All Routes'} ({allScheduledCount})
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => { setControlsMenuOpen(false); setFilterMode('candidates'); }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                    >
+                      🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Basemap Style Selector */}
+            <div className="relative inline-flex items-center">
+              <select
+                value={basemapStyle}
+                onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
+                className="rounded-full border border-stone-200 bg-white py-0.5 pl-2 pr-6 text-[10px] font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 focus:border-stone-400 focus:outline-hidden cursor-pointer"
+                title={zh ? '切换免费底图样式' : 'Switch Basemap Style'}
+              >
+                {BASEMAP_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.icon} {opt.label[language]}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <button
-          type="button"
-          onClick={() => setFilterMode('all')}
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all' ? 'bg-stone-900 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100'}`}
-        >
-          {zh ? '全部' : 'All'} ({points.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setFilterMode('scheduled')}
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'scheduled' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
-        >
-          🟢 {zh ? `第${activeDayIndex + 1}天路线` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
-        </button>
-        {allPlacesByDate && tripDates && tripDates.length > 1 ? (
-          <button
-            type="button"
-            onClick={() => setFilterMode('all_routes')}
-            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all_routes' ? 'bg-indigo-700 text-white shadow-xs' : 'bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100'}`}
-          >
-            🌐 {zh ? '显示所有路线' : 'All Routes'} ({allScheduledCount})
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => setFilterMode('candidates')}
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'candidates' ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
-        >
-          🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
-        </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all' ? 'bg-stone-900 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100'}`}
+            >
+              {zh ? '全部' : 'All'} ({points.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('scheduled')}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'scheduled' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
+            >
+              🟢 {zh ? `第${activeDayIndex + 1}天路线` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
+            </button>
+            {allPlacesByDate && tripDates && tripDates.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => setFilterMode('all_routes')}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'all_routes' ? 'bg-indigo-700 text-white shadow-xs' : 'bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100'}`}
+              >
+                🌐 {zh ? '显示所有路线' : 'All Routes'} ({allScheduledCount})
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setFilterMode('candidates')}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${filterMode === 'candidates' ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
+            >
+              🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
+            </button>
+          </>
+        )}
       </div>
 
       {/* Map Viewport Area */}
@@ -882,7 +960,7 @@ export function PlannerMap({
                 isOtherDayStop ? (
                   // Other Day Stop Marker (day identity color, dimmed, one step smaller)
                   <div
-                    className={`flex h-6 items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all hover:brightness-110 ${
+                    className={`flex ${compact ? 'h-5' : 'h-6'} items-center justify-center rounded-full border border-white/90 px-1.5 shadow-xs text-[9.5px] font-semibold text-white transition-all hover:brightness-110 ${
                       isHighlighted ? 'ring-2 ring-white scale-110' : ''
                     }`}
                     style={{ backgroundColor: `${dayColor}CC` }}
@@ -891,9 +969,9 @@ export function PlannerMap({
                     D{(p.dayIndex ?? 0) + 1}·{p.order}
                   </div>
                 ) : (
-                  // Numbered Scheduled Marker (day identity color, 32px touch target)
+                  // Numbered Scheduled Marker (day identity color, 32px touch target; 24px compact)
                   <div
-                    className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md text-xs font-bold text-white transition-all"
+                    className={`flex ${compact ? 'h-6 w-6 text-[10px]' : 'h-8 w-8 text-xs'} items-center justify-center rounded-full border-2 border-white shadow-md font-bold text-white transition-all`}
                     style={{
                       backgroundColor: dayColor,
                       boxShadow: isHighlighted ? `0 0 0 3px ${dayColor}66, 0 4px 6px -1px rgb(0 0 0 / 0.3)` : undefined,
@@ -904,10 +982,10 @@ export function PlannerMap({
                   </div>
                 )
               ) : (
-                // Candidate POI Marker (20px dot; light green when already scheduled
-                // on some day). Hover/selected restores the full 32px size as feedback.
+                // Candidate POI Marker (20px dot, 14px compact; light green when already
+                // scheduled on some day). Hover/selected restores the full size as feedback.
                 <div
-                  className={`flex h-5 w-5 items-center justify-center rounded-full border shadow-sm text-[10px] transition-all ${
+                  className={`flex ${compact ? 'h-3.5 w-3.5 text-[8px]' : 'h-5 w-5 text-[10px]'} items-center justify-center rounded-full border shadow-sm transition-all ${
                     scheduledCount > 0
                       ? `border-emerald-200 bg-emerald-50 ${isHighlighted ? 'ring-3 ring-emerald-400 scale-[1.6]' : 'hover:scale-[1.6]'}`
                       : `border-white/80 bg-white ${isHighlighted ? 'ring-3 ring-blue-400 scale-[1.6]' : 'hover:scale-[1.6]'}`
@@ -961,6 +1039,18 @@ export function PlannerMap({
           >
             ⊙
           </button>
+          {/* Compact maps have no day legend: standalone back-to-active-day entry */}
+          {!showLegend && tripDates && tripDates.length > 1 ? (
+            <button
+              type="button"
+              onClick={backToActiveDay}
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-[11px] font-bold text-stone-800 shadow-sm hover:bg-stone-50"
+              title={zh ? '回到当天路线视野' : 'Back to active day view'}
+              aria-label={zh ? '回到当天路线视野' : 'Back to active day view'}
+            >
+              ⌖
+            </button>
+          ) : null}
         </div>
 
         {/* Scale Bar */}
@@ -1000,16 +1090,60 @@ export function PlannerMap({
           <div
             className="absolute z-50 rounded-xl border border-stone-200/95 bg-white/95 p-2.5 shadow-xl backdrop-blur-md transition-all duration-150 animate-in fade-in zoom-in-95 select-text"
             style={{
-              left: `${Math.max(130, Math.min(containerSize.width - 130, selectedPointScreen.x))}px`,
+              left: `${Math.max(compact ? 80 : 130, Math.min(containerSize.width - (compact ? 80 : 130), selectedPointScreen.x))}px`,
               top: selectedPointScreen.y > 170 ? `${selectedPointScreen.y - 12}px` : `${selectedPointScreen.y + 26}px`,
               transform: selectedPointScreen.y > 170 ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
               width: 'max-content',
-              maxWidth: `${Math.min(300, containerSize.width - 24)}px`,
-              minWidth: '220px',
+              maxWidth: `${Math.min(compact ? 220 : 300, containerSize.width - 24)}px`,
+              minWidth: compact ? '150px' : '220px',
             }}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           >
+            {compact ? (
+              <>
+                <div className="flex items-center justify-between gap-1.5">
+                  <h4 className="truncate text-xs font-bold text-stone-900 leading-snug" title={selectedPlace.title}>
+                    {selectedPlace.title}
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPlaceId(null)}
+                    className="shrink-0 rounded p-0.5 text-stone-400 hover:text-stone-700 transition cursor-pointer"
+                    title={zh ? '关闭' : 'Close'}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="mt-1.5">
+                  {selectedScheduledPlace ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onUnschedulePlace(selectedScheduledPlace);
+                      }}
+                      className="flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition"
+                    >
+                      <span>−</span>
+                      <span>{zh ? '移出当天' : 'Remove'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSchedulePlace(selectedPlace.id);
+                      }}
+                      className="flex w-full items-center justify-center gap-1 rounded-lg bg-stone-900 px-2 py-1.5 text-[11px] font-bold text-white hover:bg-stone-700 transition"
+                      title={zh ? `排入第 ${activeDayIndex + 1} 天路线` : `Add to Day ${activeDayIndex + 1}`}
+                    >
+                      <span>＋</span>
+                      <span>{zh ? '排入当天' : 'Add Stop'}</span>
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
             {/* Popover Header */}
             <div className="flex items-start justify-between gap-1.5">
               <div className="min-w-0 flex-1 flex items-center gap-1.5">
@@ -1124,6 +1258,8 @@ export function PlannerMap({
                 <span className="mt-0.5 text-[9.5px] font-bold text-rose-800">{zh ? '彻底删除' : 'Delete'}</span>
               </button>
             </div>
+              </>
+            )}
           </div>
         )}
       </div>

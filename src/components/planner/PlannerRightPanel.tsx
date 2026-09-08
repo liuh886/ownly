@@ -121,6 +121,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                 visitCountByPlaceId={visitCountByPlaceId}
                 language={language}
                 showLegend={false}
+                variant="compact"
               />
             </div>
           ) : rightTab === 'budget' ? (
