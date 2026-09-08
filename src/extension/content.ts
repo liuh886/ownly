@@ -26,6 +26,7 @@ import {
   scanAllGoogleMapsPlaces,
   fetchGoogleMapsEntityList,
   resolveGoogleMapsList,
+  isDedicatedGoogleMapsPlacePage,
 } from './adapters/google-maps';
 import type { CurrentResearchPlace, DetectedSavedList, SavedListCardSummary } from './adapters/types';
 
@@ -64,7 +65,9 @@ function applyEnriched(target: CurrentResearchPlace, enriched: CurrentResearchPl
   };
 }
 
-const TAXONOMY_TYPES = /(restaurant|lodging|hotel|hostel|bed_and_breakfast|guest_house|motel|campground|cafe|coffee_shop|bakery|bar|pub|meal_takeaway|meal_delivery|food_court|tourist_attraction|museum|art_gallery|park|national_park|historical_landmark|historical_place|scenic_viewpoint|spa|massage|gym|fitness_center|amusement_park|water_park|aquarium|zoo|shopping_mall|department_store|supermarket|grocery_or_supermarket|convenience_store|transit_station|subway_station|train_station|bus_station|airport|ferry_terminal|store|night_club)/g;
+// Word boundaries are load-bearing: without them "bar" matches "navbar"
+// and "zoo" matches "zoom" inside the 3MB raw-HTML blob, fabricating types.
+const TAXONOMY_TYPES = /\b(restaurant|lodging|hotel|hostel|bed_and_breakfast|guest_house|motel|campground|cafe|coffee_shop|bakery|bar|pub|meal_takeaway|meal_delivery|food_court|tourist_attraction|museum|art_gallery|park|national_park|historical_landmark|historical_place|scenic_viewpoint|spa|massage|gym|fitness_center|amusement_park|water_park|aquarium|zoo|shopping_mall|department_store|supermarket|grocery_or_supermarket|convenience_store|transit_station|subway_station|train_station|bus_station|airport|ferry_terminal|store|night_club)\b/g;
 
 export async function enrichFromPlaceHtml(
   place: CurrentResearchPlace,
@@ -224,9 +227,14 @@ function scanAllSavedListsOnPage(): SavedListCardSummary[] {
     return m ? parseInt(m[1], 10) : undefined;
   };
 
-  const listAnchors = document.querySelectorAll<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="!1s"], a[href*="!2s"], a[href*="?list="]');
+  // Only real list carriers: /placelists/list/ and ?list=. Bare `!1s`/`!2s`
+  // anchors are place links (D-step identity), not lists — scanning them
+  // misreads the current place (or the account menu's continuation URL) as
+  // a saved list.
+  const listAnchors = document.querySelectorAll<HTMLAnchorElement>('a[href*="/placelists/list/"], a[href*="?list="], a[href*="&list="]');
   for (const anchor of Array.from(listAnchors)) {
     const href = anchor.href || '';
+    if (/^https:\/\/(accounts|myaccount)\.google\./i.test(href)) continue;
     const listId = extractGoogleMapsSavedListId(href);
     if (!listId) continue;
 
@@ -498,7 +506,15 @@ async function enrichSavedListDetails(
   return { list: { ...list, places }, attempted, enriched, failed };
 }
 
-// Global Chrome Message Router
+// Global Chrome Message Router.
+// Guard: sidepanel retry logic re-executes this file via
+// scripting.executeScript when a page is mid-navigation; without the guard
+// every message would be answered twice by duplicate listeners.
+const CONTENT_ARMED_KEY = '__ownlyContentArmed';
+const contentScope = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : undefined;
+const alreadyArmed = contentScope?.[CONTENT_ARMED_KEY] === true;
+if (contentScope) contentScope[CONTENT_ARMED_KEY] = true;
+if (!alreadyArmed) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const msgType = (message as { type?: string }).type;
@@ -600,6 +616,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const overrideCurrency = (message as { overrideCurrency?: string }).overrideCurrency;
       const adapter = getAdapterForUrl(window.location.href);
 
+      // D/M scheme: a dedicated place page has ONE identity, not a list.
+      // Skipping here avoids autoScrollFeed (~13s) plus scanning generic
+      // jsaction divs into dozens of phantom cards on detail pages.
+      if (adapter?.id === 'google_maps' && isDedicatedGoogleMapsPlacePage()) {
+        sendResponse({ listPlaces: [], listName: undefined, truncated: false });
+        return;
+      }
+
       let savedList: DetectedSavedList | null = null;
       if (adapter?.detectSavedList) {
         savedList = await adapter.detectSavedList(overrideCurrency);
@@ -653,9 +677,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 });
+} // !alreadyArmed
 
 // Unified DOM & Page Observer for Inline Buttons & List Scanning
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+if (!alreadyArmed && typeof window !== 'undefined' && typeof document !== 'undefined') {
   const DEBOUNCE_MS = 350;
   let scanTimer: number | undefined;
 
@@ -663,7 +688,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     const adapter = getAdapterForUrl(window.location.href);
     if (!adapter) return;
 
-    if (adapter.id === 'google_maps') {
+    // D/M scheme: dedicated place pages have no list to scavenge — the
+    // observer keeps FAB injection, drops the feed scan.
+    if (adapter.id === 'google_maps' && !isDedicatedGoogleMapsPlacePage()) {
       scanAllGoogleMapsPlaces();
     }
     if (adapter.initInlineButtons) {

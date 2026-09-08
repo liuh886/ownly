@@ -29,5 +29,15 @@ export function extractGoogleMapsSavedListId(value: string): string | undefined 
   let text = value;
   try { text = decodeURIComponent(value); } catch {}
   const match = /(?:!1s|!2s)([A-Za-z0-9_-]{8,})|\/placelists\/list\/([A-Za-z0-9_-]{8,})|[?&](?:list|list_id)=([A-Za-z0-9_-]{8,})/i.exec(text);
-  return match?.[1] || match?.[2] || match?.[3] || undefined;
+  if (match?.[1]) {
+    // D-step identity guard (D/M scheme): `!1s0xAAA:0xBBB` is a PLACE feature
+    // id, not a list. The greedy class stops at the colon, so check the very
+    // next char — a colon means place, anything else means list.
+    const after = text[match.index + 3 + match[1].length];
+    if (after === ':') return match[2] || match[3] || undefined;
+    // `!1sChIJ…` place references are identity too, never lists.
+    if (/^ChIJ[A-Za-z0-9_-]{8,}/.test(match[1])) return match[2] || match[3] || undefined;
+    return match[1];
+  }
+  return match?.[2] || match?.[3] || undefined;
 }

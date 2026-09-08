@@ -377,7 +377,13 @@ export interface EntityListResearchFacts {
   types?: string[];
 }
 
-const ENTITY_LIST_TYPES = new Set([
+/**
+ * Canonical Google-Places-style taxonomy tokens. Machine `types` fields must
+ * only ever carry these — obfuscated class names ("ejmgat_…") or JS-blob
+ * substrings ("zoo" inside "zoom", "bar" inside "navbar") are rejected by
+ * `isKnownPlaceTypeToken`. Human display text (`category`) is NOT gated.
+ */
+export const ENTITY_LIST_TYPES = new Set([
   'restaurant', 'lodging', 'hotel', 'hostel', 'bed_and_breakfast', 'guest_house', 'motel',
   'cafe', 'coffee_shop', 'bakery', 'bar', 'pub', 'meal_takeaway', 'meal_delivery', 'food_court',
   'tourist_attraction', 'museum', 'art_gallery', 'park', 'national_park', 'historical_landmark',
@@ -385,9 +391,21 @@ const ENTITY_LIST_TYPES = new Set([
   'amusement_park', 'water_park', 'aquarium', 'zoo', 'shopping_mall', 'department_store',
   'supermarket', 'grocery_or_supermarket', 'convenience_store', 'transit_station', 'subway_station',
   'train_station', 'bus_station', 'airport', 'ferry_terminal', 'store', 'night_club',
+  // schema.org concatenations seen in real JSON-LD (normalized lowercase).
+  'lodgingbusiness', 'foodestablishment', 'cafeorcoffeeshop', 'barorpub',
+  'fastfoodrestaurant', 'bedandbreakfast', 'guesthouse', 'touristattraction',
+  'artgallery', 'amusementpark', 'shoppingcenter', 'shoppingmall', 'departmentstore',
+  'grocerystore', 'conveniencestore', 'pharmacy', 'trainstation', 'busstation',
+  'subwaystation', 'movietheater', 'nightclub', 'placeofworship', 'buddhisttemple',
+  'shintoshrine', 'church', 'mosque', 'library', 'hospital',
+  'landmarksorhistoricalbuildings', 'resort', 'campground',
 ]);
 
 /** Best-effort facts that are actually present inside an entitylist node. */
+export function isKnownPlaceTypeToken(token?: string | null): boolean {
+  if (!token) return false;
+  return ENTITY_LIST_TYPES.has(token.toLowerCase().replace(/\s+/g, '_'));
+}
 export function extractEntityListResearch(item: unknown, knownTitle?: string): EntityListResearchFacts {
   const result: EntityListResearchFacts = {};
   const types = new Set<string>();

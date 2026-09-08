@@ -663,6 +663,14 @@ describe('Ownly Planner domain', () => {
     // 3. !3dlat!4dlng format
     expect(extractPlaceCoordinates('https://www.google.com/maps/place/Sensoji/data=!4m2!3m1!1s0x0:0x0!3d35.7147!4d139.7966')).toEqual({ lat: 35.7147, lng: 139.7966 });
 
+    // 3b. Exact pin beats the @ viewport center on detail pages (D/M scheme:
+    // @18.790648,98.9531665 is the map center, !3d/!4d is the place itself).
+    expect(
+      extractPlaceCoordinates(
+        'https://www.google.com/maps/place/abc/@18.790648,98.9531665,15z/data=!4m6!3m5!1s0x30da3bb2c4fe6299:0xb0cfed329b0c1809!8m2!3d18.7905113!4d98.9560481!16s%2Fg%2F11p0h57p13?entry=ttu',
+      ),
+    ).toEqual({ lat: 18.7905113, lng: 98.9560481 });
+
     // 4. query parameter format
     expect(extractPlaceCoordinates('https://www.google.com/maps/search/?api=1&query=35.6586,139.7454')).toEqual({ lat: 35.6586, lng: 139.7454 });
 

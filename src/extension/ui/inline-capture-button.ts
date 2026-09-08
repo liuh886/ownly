@@ -15,6 +15,27 @@ export interface InlineCaptureButtonOptions {
 }
 
 /**
+ * Fully tears down buttons injected by `injectInlineCaptureButton` inside a
+ * scope: removes the button roots AND clears the injected markers on the
+ * scope and every descendant.
+ *
+ * Clearing descendant markers matters because the anchor element (e.g. a
+ * place-title h1 that survives Maps SPA navigation) keeps its marker after
+ * the button node is removed — re-injecting against the same anchor without
+ * clearing would silently return null and the button would never come back.
+ */
+export function clearInlineCaptureButtons(scope: HTMLElement, injectedAttribute = 'ownlyCardInjected'): void {
+  scope.querySelectorAll('.ownly-inline-fab-root').forEach((node) => node.remove());
+  const clear = (el: Element) => {
+    try {
+      delete (el as HTMLElement).dataset[injectedAttribute];
+    } catch {}
+  };
+  clear(scope);
+  scope.querySelectorAll(`[data-${injectedAttribute.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}]`).forEach(clear);
+}
+
+/**
  * Creates and injects an encapsulated Shadow-DOM "📌 放入案板" quick capture button.
  * Ensures zero style bleed, micro-animations, atomic messaging to background worker,
  * and resilient in-place deduplication feedback.

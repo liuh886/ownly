@@ -1,4 +1,5 @@
 import { cleanExtractedText, extractCleanPriceText, isPlausiblePriceText, isValidExtractedPriceCandidate, isZeroOrPlaceholderPrice } from './utils';
+import { isKnownPlaceTypeToken } from './place-parser';
 
 export interface GoogleMapsResearchFacts {
   sourcePlaceId?: string;
@@ -125,12 +126,15 @@ export function extractGoogleMapsPreviewFacts(data: unknown): GoogleMapsResearch
     }
   }
 
-  // Categories / Types from placeNode[13]
+  // Categories / Types from placeNode[13]. Category keeps human display
+  // text; machine types are whitelist-gated (schema drift can land
+  // obfuscated tokens here).
   if (Array.isArray(placeNode[13])) {
     const cats = placeNode[13].filter((c): c is string => typeof c === 'string');
     if (cats.length > 0) {
       result.category = cleanExtractedText(cats[0]);
-      result.types = cats.map(cleanExtractedText).filter(Boolean);
+      const known = cats.map((c) => cleanExtractedText(c)).filter((c) => c && isKnownPlaceTypeToken(c));
+      if (known.length > 0) result.types = known.map((c) => c.toLowerCase().replace(/\s+/g, '_'));
     }
   }
 
@@ -342,7 +346,9 @@ export function extractGoogleMapsResearchFromHtml(html: string): GoogleMapsResea
       if (typeof typeValue !== 'string') continue;
       const type = cleanExtractedText(typeValue);
       if (!type) continue;
-      types.add(type.toLowerCase().replace(/\s+/g, '_'));
+      // Whitelist-gate machine types; schema.org display types outside the
+      // taxonomy (e.g. "FoodEstablishment") still inform the category below.
+      if (isKnownPlaceTypeToken(type)) types.add(type.toLowerCase().replace(/\s+/g, '_'));
       if (!result.category && PLACE_TYPE.test(type)) result.category = type;
     }
 

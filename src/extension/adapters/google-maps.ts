@@ -49,7 +49,7 @@ import { SELECTORS, trackSelector } from '../selectors';
 import { PLACE_PARSER, isZhDocument, normalizeCategoryLabel } from '../place-parser';
 import { detectPageCurrency } from '../currency-detector';
 import { extractGoogleMapsSavedListId } from '../saved-list-match';
-import { injectInlineCaptureButton } from '../ui/inline-capture-button';
+import { injectInlineCaptureButton, clearInlineCaptureButtons } from '../ui/inline-capture-button';
 import { logger } from '../logger';
 import {
   buildFromEntityList,
@@ -82,12 +82,33 @@ function extractReviewCount(): number | undefined {
   return PLACE_PARSER.parseReviewCount(countEl?.getAttribute('aria-label') || countEl?.textContent);
 }
 
-function extractCategory(): { value?: string; source?: 'dom' | 'jsonld' } {
+function extractCategory(): { value?: string; source?: 'dom' | 'jsonld'; rating?: number; reviewCount?: number } {
   const catBtn = document.querySelector<HTMLElement>(SELECTORS.category);
   if (catBtn?.textContent) {
     const cat = cleanExtractedText(catBtn.textContent);
     if (cat && cat.length < 50 && !/^(directions|save|share|nearby|路线|保存|分享|附近)$/i.test(cat)) {
-      return { value: cat, source: 'dom' };
+      // Rotated selectors can match a container whose text fuses the rating
+      // composite with the category ("4.9(15)Grill"). Decompose: keep the
+      // human category, backfill rating/reviewCount instead of storing junk.
+      const decomp = PLACE_PARSER.parseSubtitleInfo(cat);
+      const remainder = cat
+        .replace(/^[★☆]?\s*[1-5](?:[.,]\d)?\s*(?:[★☆])?\s*(\([0-9.,kK万mM]+\)|\d+\s*(?:reviews?|评价|评论))\s*[·•\s]*/, '')
+        .trim();
+      const cleanRemainder = remainder && remainder.length >= 2 && remainder.length < 40
+        && !isJunkNavigationText(remainder) && !isFakePlaceLabel(remainder)
+        ? remainder
+        : undefined;
+      const finalCategory = decomp.category && decomp.category !== cat ? decomp.category : cleanRemainder;
+      if (finalCategory) {
+        return { value: finalCategory, source: 'dom', rating: decomp.rating, reviewCount: decomp.reviewCount };
+      }
+      if (!/^[★☆]?\s*[1-5](?:[.,]\d)?\s*(?:[★☆])?\s*(\([0-9.,kK万mM]+\)|$)/.test(cat)) {
+        return { value: cat, source: 'dom' };
+      }
+      // Pure rating composite, no category remainder — still salvage numbers.
+      if (decomp.rating !== undefined || decomp.reviewCount !== undefined) {
+        return { source: 'dom', rating: decomp.rating, reviewCount: decomp.reviewCount };
+      }
     }
   }
 
@@ -222,8 +243,11 @@ function extractUserNote(): string | undefined {
 function extractOpenStatus(): string | undefined {
   const openEl = document.querySelector<HTMLElement>(SELECTORS.openStatus);
   if (openEl?.textContent) {
-    const text = cleanExtractedText(openEl.textContent);
-    if (text && text.length < 60) return text;
+    const aria = cleanExtractedText(openEl.getAttribute('aria-label') || '');
+    const text = aria || cleanExtractedText(openEl.textContent);
+    // Rotated selectors can match a bare icon glyph (private-use char with
+    // no readable text). Require at least one letter or number.
+    if (text && text.length < 60 && /[\p{L}\p{N}]/u.test(text)) return text;
   }
   return undefined;
 }
@@ -416,6 +440,8 @@ function cardToRaw(title: string, href: string, card: HTMLElement | null): impor
 const PLACE_LINK = 'a.hfpxzc, a[href*="/maps/place/"], a[href*="/place/"], a[data-place-id]';
 
 export function scanAllGoogleMapsPlaces(): CurrentResearchPlace[] {
+  // D/M scheme: dedicated place pages have one identity, not a list.
+  if (isDedicatedGoogleMapsPlacePage()) return [];
   pruneScavengedCache(window.location.href);
   const rawCards: import('../maps/saved-list-parser').RawDomCard[] = [];
 
@@ -548,16 +574,18 @@ export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?:
   const openStatus = extractOpenStatus();
   const stateSignals = collectAppStateSignals();
   const reservation = extractReservation();
-  const domRating = extractRating();
-  trackSelector('rating', domRating !== undefined, jsonLd.rating !== undefined);
-  const rating = domRating || jsonLd.rating;
-  if (rating !== undefined) sourceDetail.rating = domRating !== undefined ? 'dom' : 'jsonld';
-  const domReviewCount = extractReviewCount();
-  trackSelector('reviewCount', domReviewCount !== undefined, jsonLd.reviewCount !== undefined);
-  const reviewCount = domReviewCount || jsonLd.reviewCount;
-  if (reviewCount !== undefined) sourceDetail.reviewCount = domReviewCount !== undefined ? 'dom' : 'jsonld';
+  // Category first: a fused rating+category container ("4.9(15)Grill")
+  // backfills rating/reviewCount when the dedicated selectors miss.
   const domCategory = extractCategory();
   trackSelector('category', domCategory.value !== undefined, jsonLd.category !== undefined);
+  const domRating = extractRating();
+  trackSelector('rating', domRating !== undefined, jsonLd.rating !== undefined);
+  const rating = domRating || domCategory.rating || jsonLd.rating;
+  if (rating !== undefined) sourceDetail.rating = domRating !== undefined ? 'dom' : (domCategory.rating !== undefined ? 'dom' : 'jsonld');
+  const domReviewCount = extractReviewCount();
+  trackSelector('reviewCount', domReviewCount !== undefined, jsonLd.reviewCount !== undefined);
+  const reviewCount = domReviewCount || domCategory.reviewCount || jsonLd.reviewCount;
+  if (reviewCount !== undefined) sourceDetail.reviewCount = domReviewCount !== undefined ? 'dom' : (domCategory.reviewCount !== undefined ? 'dom' : 'jsonld');
   const category = domCategory.value || jsonLd.category;
   if (category !== undefined) {
     sourceDetail.category = domCategory.value !== undefined ? (domCategory.source ?? 'dom') : 'jsonld';
@@ -714,6 +742,27 @@ export async function resolveGoogleMapsList(overrideCurrency?: string): Promise<
   return null;
 }
 
+/**
+ * D-step identity gate (D/M recognition scheme): a dedicated place page is
+ * identified by its canonical place feature id (`!1s0x…:0x…`), never by the
+ * full URL — Maps pushes several URL states while loading ONE place.
+ * Exported for content-script scan gating. Exported for tests.
+ */
+export function isDedicatedGoogleMapsPlacePage(url?: string): boolean {
+  const href = url ?? (typeof window !== 'undefined' ? window.location.href : '');
+  const path = (() => {
+    try {
+      return new URL(href).pathname;
+    } catch {
+      return '';
+    }
+  })();
+  return /\/maps\/place\/[^/?#]+/i.test(path)
+    || /data=.*!1s0x/i.test(href)
+    || /[?&]cid=\d+/i.test(href)
+    || Boolean(extractFeatureIdFromUrl(href));
+}
+
 export class GoogleMapsAdapter implements PageAdapter {
   readonly id = 'google_maps' as const;
   readonly name = 'Google Maps';
@@ -738,9 +787,8 @@ export class GoogleMapsAdapter implements PageAdapter {
     // remove stale buttons when the pane no longer shows a place.
     for (const marked of Array.from(document.querySelectorAll<HTMLElement>('[data-ownly-detail-fab="true"]'))) {
       if (!marked.isConnected || !hasGoogleMapsPlaceDetail()) {
-        marked.querySelectorAll('.ownly-inline-fab-root').forEach((node) => node.remove());
+        clearInlineCaptureButtons(marked);
         marked.removeAttribute('data-ownly-detail-fab');
-        delete marked.dataset.ownlyCardInjected;
       }
     }
     const detailTitleEl = document.querySelector<HTMLElement>(
@@ -749,17 +797,22 @@ export class GoogleMapsAdapter implements PageAdapter {
     if (detailTitleEl && hasGoogleMapsPlaceDetail()) {
       const paneContainer = (detailTitleEl.closest<HTMLElement>('div[role="main"], div.m6QErb, div.lMbq3e') || detailTitleEl.parentElement) as HTMLElement;
       if (paneContainer) {
-        // SPA place-to-place navigation reuses the pane: a button injected
-        // for the previous place shows stale captured state. Re-inject (with
-        // a fresh captured check) when the URL moved on.
-        if (
-          paneContainer.querySelector('.ownly-inline-fab-root') &&
-          paneContainer.dataset.ownlyCheckedUrl !== window.location.href
-        ) {
-          paneContainer.querySelectorAll('.ownly-inline-fab-root').forEach((node) => node.remove());
-          delete paneContainer.dataset.ownlyCardInjected;
+        // D-step identity (D/M scheme): the place feature id is the identity.
+        // Maps pushes several URL states while loading ONE place, so a raw
+        // href comparison would tear the button down mid-load and — with the
+        // anchor marker surviving on the reused h1 — it could never come back.
+        // Only rebuild when the identity actually moved on.
+        const detailPlaceId = extractFeatureIdFromUrl(window.location.href) ?? null;
+        const checkedId = paneContainer.dataset.ownlyCheckedPlaceId;
+        const hasButton = Boolean(paneContainer.querySelector('.ownly-inline-fab-root'));
+        const identityChanged = detailPlaceId
+          ? checkedId !== detailPlaceId
+          : Boolean(checkedId);
+        if (hasButton && identityChanged) {
+          clearInlineCaptureButtons(paneContainer);
+          delete paneContainer.dataset.ownlyCheckedPlaceId;
         }
-        if (paneContainer.dataset.ownlyCardInjected !== 'true' && !paneContainer.querySelector('.ownly-inline-fab-root')) {
+        if (!paneContainer.querySelector('.ownly-inline-fab-root')) {
           paneContainer.dataset.ownlyDetailFab = 'true';
           const injected = injectInlineCaptureButton({
             container: paneContainer,
@@ -768,7 +821,7 @@ export class GoogleMapsAdapter implements PageAdapter {
             customStyle: 'margin-right: 10px; margin-bottom: 4px;',
             getPlace: () => extractGoogleMapsPlace(),
           });
-          if (injected) paneContainer.dataset.ownlyCheckedUrl = window.location.href;
+          if (injected) paneContainer.dataset.ownlyCheckedPlaceId = detailPlaceId ?? '';
         }
       }
     }
@@ -796,8 +849,9 @@ export class GoogleMapsAdapter implements PageAdapter {
       const cardSig = `${rawTitle}|${href || itemRef}`;
       if (card.dataset.ownlyCardSig && card.dataset.ownlyCardSig !== cardSig) {
         // Recycled node showing new content: drop the stale button and flag.
-        card.querySelectorAll('.ownly-inline-fab-root').forEach((node) => node.remove());
-        delete card.dataset.ownlyCardInjected;
+        // clearInlineCaptureButtons also clears the anchor marker, otherwise
+        // re-injecting against the reused title element returns null forever.
+        clearInlineCaptureButtons(card);
         delete card.dataset.ownlyCardSig;
       }
       if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) continue;

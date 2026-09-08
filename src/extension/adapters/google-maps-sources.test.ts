@@ -76,4 +76,16 @@ describe('extractGoogleMapsPlace field provenance', () => {
     expect(place?.category).toBe('餐厅');
     expect(place?.sourceDetail?.category).toBe('jsonld');
   });
+
+  it('decomposes a fused rating+category container instead of storing junk ("4.9(15)Grill" bug)', async () => {
+    stubDocument({ heading: 'หม่าล่าสิบสองปันนา สาขา 2', categoryText: '4.9(15)Grill' });
+    const { extractGoogleMapsPlace } = await import('./google-maps');
+    const place = extractGoogleMapsPlace();
+    expect(place?.category).toBe('Grill');
+    expect(place?.rating).toBe(4.9);
+    expect(place?.reviewCount).toBe(15);
+    expect(place?.sourceDetail?.category).toBe('dom');
+    expect(place?.sourceDetail?.rating).toBe('dom');
+    expect(place?.sourceDetail?.reviewCount).toBe('dom');
+  });
 });

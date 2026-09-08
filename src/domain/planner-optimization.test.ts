@@ -259,7 +259,9 @@ describe('resolveStopCoordinates & materializeStopCoordinates', () => {
       source_url: 'https://www.google.com/maps/place/Chiang+Mai+University/@18.8082241,98.9523053,17z/data=!4m2!3m1!1s0x0:0x0!3d18.8082363!4d98.9546953',
     });
     const resolved = resolveStopCoordinates([urlOnly]);
-    expect(resolved[0]?.coords).toEqual({ lat: 18.8082241, lng: 98.9523053 });
+    // D/M scheme: the !3d/!4d pin beats the @ viewport center (the viewport
+    // here is ~200m off the place; the pin matches the curated CMU record).
+    expect(resolved[0]?.coords).toEqual({ lat: 18.8082363, lng: 98.9546953 });
   });
 
   it('prefers the persisted field over the URL and reports null when neither exists', () => {

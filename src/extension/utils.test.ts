@@ -316,6 +316,19 @@ describe('extractCleanPriceText', () => {
     expect(extractCleanPriceText('S$1,024 night')).toBe('S$1,024 night');
   });
 
+  it('rejects obfuscated-script fragments misread as currency codes ("krW4"/"JpY10" bug)', () => {
+    // Minified-JS/class-name debris ("krW4", "JpY10") matches KRW/JPY
+    // case-insensitively when glued to a digit. Google renders ISO codes
+    // ALL-UPPERCASE, so mixed-case glued tokens are never real prices.
+    expect(extractCleanPriceText('krW4')).toBeUndefined();
+    expect(extractCleanPriceText('JpY10')).toBeUndefined();
+    expect(extractCleanPriceText('xxkrW4yy')).toBeUndefined();
+    // Genuine forms stay intact.
+    expect(extractCleanPriceText('THB 400')).toBe('THB 400');
+    expect(extractCleanPriceText('JPY1000')).toBe('JPY1000');
+    expect(extractCleanPriceText('thb 400')).toBe('thb 400');
+  });
+
   it('keeps space-separated thousands intact instead of truncating ("JPY 10" bug)', () => {
     expect(extractCleanPriceText('JPY 10 000')).toBe('JPY 10000');
     expect(extractCleanPriceText('JP¥10,200')).toBe('JP¥10,200');

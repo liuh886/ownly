@@ -1305,21 +1305,23 @@ export function extractPlaceCoordinates(
   const url = typeof place === 'string' ? place : place.source_url || '';
   if (!url) return null;
 
-  // 1. @lat,lng e.g. @13.7437,100.4888 or @13.7437,100.4888,15z
-  const atMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(url);
-  if (atMatch) {
-    const lat = parseFloat(atMatch[1]);
-    const lng = parseFloat(atMatch[2]);
+  // 1. !3dlat!4dlng (Google Maps place data protobuf serialization) — the
+  // exact resolved pin. MUST precede @lat,lng: on detail pages the @ viewport
+  // is only the map center and can be hundreds of meters off the place.
+  const dMatch = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/.exec(url);
+  if (dMatch) {
+    const lat = parseFloat(dMatch[1]);
+    const lng = parseFloat(dMatch[2]);
     if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
       return { lat, lng };
     }
   }
 
-  // 2. !3dlat!4dlng (Google Maps place data protobuf serialization)
-  const dMatch = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/.exec(url);
-  if (dMatch) {
-    const lat = parseFloat(dMatch[1]);
-    const lng = parseFloat(dMatch[2]);
+  // 2. @lat,lng e.g. @13.7437,100.4888 or @13.7437,100.4888,15z
+  const atMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(url);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
     if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
       return { lat, lng };
     }

@@ -231,6 +231,12 @@ export function normalizePriceCandidate(candidate: string): string {
   return candidate.replace(/(\d)[ \u00A0\u202F]+(?=\d)/g, '$1').trim();
 }
 
+const PRICE_CODE_TOKENS = new Set([
+  'SGD', 'HKD', 'TWD', 'NTD', 'JPY', 'CNY', 'RMB', 'THB', 'KRW', 'MYR',
+  'VND', 'INR', 'EUR', 'GBP', 'USD', 'AUD', 'CAD', 'CHF', 'NZD', 'AED',
+  'PHP', 'IDR',
+]);
+
 export function isValidExtractedPriceCandidate(candidate: string): boolean {
   if (!candidate || candidate.length < 1) return false;
   if (PRICE_LEVEL_ONLY.test(candidate)) return true;
@@ -238,6 +244,15 @@ export function isValidExtractedPriceCandidate(candidate: string): boolean {
   if (/(?<!\.)[-–—〜~]$/.test(candidate)) return false;
   // Disallow internal letter-number hybrid fragments like "2b-", "3x", "4a"
   if (/^\d+[a-zA-Z]+-?$/i.test(candidate)) return false;
+  // Disallow obfuscated-script fragments misread as currency codes: Google
+  // renders ISO codes ALL-UPPERCASE ("THB 400"), so a mixed-case code token
+  // glued to a digit ("krW4", "JpY10") is minified-JS/class-name debris, not
+  // a price. Spaced lowercase ("thb 400") stays lenient; glued uppercase
+  // ("JPY1000") is kept as a possible compact-locale form.
+  const glued = /(?<![A-Za-z])([A-Za-z]{3})(?=\d)/.exec(candidate);
+  if (glued?.[1] && PRICE_CODE_TOKENS.has(glued[1].toUpperCase()) && glued[1] !== glued[1].toUpperCase()) {
+    return false;
+  }
   // Must contain at least one digit
   if (!/\d/.test(candidate)) return false;
   // Disallow navigation action words
