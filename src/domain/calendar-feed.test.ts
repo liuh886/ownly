@@ -62,6 +62,21 @@ function makeVisit(id: string, placeId: string, date: string, overrides: Partial
 }
 
 describe('RFC 5545 ICS Projection & Calendar Feed', () => {
+  it('covers past/completed trips without date filtering (WS-1 linkage)', () => {
+    const finished: PlannerTrip = {
+      ...trip,
+      status: 'completed',
+      start_date: '2020-01-01',
+      end_date: '2020-01-03',
+      review_id: 'obj_finished',
+    };
+    const palace = makePlace('grand-palace', { title: 'Grand Palace' });
+    const visit = makeVisit('visit-gp', palace.id, '2020-01-02', { start: '09:00' });
+    const ics = buildTripCalendarIcs(finished, [palace], [visit]);
+    expect(ics).toContain('Grand Palace');
+    expect(ics).toContain('DTSTART');
+  });
+
   it('generates valid RFC 5545 format with CRLF and standard calendar headers', () => {
     const palace = makePlace('grand-palace', {
       title: 'Grand Palace',

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { HomeDashboard } from '@/components/home/HomeDashboard';
 import { ObjectList, type ObjectListFocus } from '@/components/objects/ObjectList';
+import { ObjectInsightsPanel } from '@/components/objects/ObjectInsightsPanel';
 import { ObjectComposer } from '@/components/objects/ObjectComposer';
 import { ArchivePanel } from '@/components/archive/ArchivePanel';
 import { AccountsOverview } from '@/components/accounts/AccountsOverview';
@@ -137,6 +138,13 @@ export function TabRenderer({
   if (activeTab === 'objects') {
     return (
       <div className="space-y-5">
+        <ObjectInsightsPanel
+          objects={objects}
+          snapshots={snapshots}
+          logs={(storedLogs ?? []).map((stored) => stored.entity)}
+          membership={membership}
+          language={language}
+        />
         <ObjectComposer
           disabled={!isConnected}
           submitLabel={t('saveToOwnly')}

@@ -168,6 +168,11 @@ export function CalendarSubscriptionModal({
                 ? '只在 Google Calendar、Apple 日历或 Outlook 订阅一次。后续在 Planner 中调整时间、换酒店、增删地点，日历自动同步最新版本。'
                 : 'Subscribe once in Google Calendar, Apple Calendar, or Outlook. Changes in Planner automatically sync to your calendar.'}
             </p>
+            <p className="mt-1.5 text-[11px] leading-4.5 text-stone-400">
+              {zh
+                ? '数据去向：订阅内容（含行程标题与地点）经 Ownly 订阅服务存放并提供轮询，不上云盘、不做账号体系。'
+                : 'Data note: feed content (trip titles and places) is hosted by the Ownly subscription service for polling; no cloud drive, no accounts.'}
+            </p>
 
             {!isPro ? (
               <div className="mt-3.5 space-y-3 rounded-lg border border-amber-300 bg-amber-50/70 p-3.5">
