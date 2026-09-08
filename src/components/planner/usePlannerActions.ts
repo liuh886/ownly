@@ -37,6 +37,7 @@ import {
   openRouteServiceProfile,
 } from '@/lib/openrouteservice';
 import { buildTripCalendarIcs, buildDayCalendarIcs } from '@/domain/calendar-feed';
+import { createTripSnapshot, tripSnapshotFileName } from '@/domain/trip-snapshot';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { calendarFeedService } from '@/services/CalendarFeedService';
 import {
@@ -906,6 +907,28 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setNotice(zh ? '已导出 Google My Maps (KML) 路线文件！' : 'Exported Google My Maps (KML) route file!');
   }, [selectedTrip, scheduled, activeDate, zh, setNotice]);
 
+  const downloadTripSnapshot = useCallback((includeExpenses: boolean) => {
+    if (!selectedTrip) return;
+    const snapshot = createTripSnapshot(
+      selectedTrip,
+      places,
+      visits,
+      legs,
+      currentExpenses ?? [],
+      { includeExpenses },
+    );
+    const blob = new Blob([`${JSON.stringify(snapshot, null, 2)}\n`], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = tripSnapshotFileName(selectedTrip.title);
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(zh
+      ? `已导出手机快照「${selectedTrip.title}」（${includeExpenses ? '含费用' : '不含费用'}），传到手机后在 /trip 页打开。`
+      : `Exported phone snapshot for "${selectedTrip.title}" (${includeExpenses ? 'with' : 'without'} expenses); open it on the /trip page.`);
+  }, [selectedTrip, places, visits, legs, currentExpenses, zh, setNotice]);
+
   const downloadCSV = useCallback(() => {
     if (!selectedTrip || scheduled.length === 0) return;
     const csvContent = exportPlacesToCSV(scheduled);
@@ -1227,6 +1250,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleSwapDays,
     downloadKML,
     downloadCSV,
+    downloadTripSnapshot,
     copyMarkdownItinerary,
     downloadFullIcs,
     downloadDayIcs,

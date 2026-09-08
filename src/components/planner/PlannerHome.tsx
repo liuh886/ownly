@@ -188,6 +188,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleSwapDays,
     downloadKML,
     downloadCSV,
+    downloadTripSnapshot,
     copyMarkdownItinerary,
     downloadFullIcs,
     downloadDayIcs,
@@ -883,6 +884,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                           title={zh ? '复制路线文字清单' : 'Copy itinerary text'}
                         >
                           📋 {zh ? '复制文本' : 'Copy text'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setExportMenuOpen(false); downloadTripSnapshot(false); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '导出手机快照（不含费用），传到手机后在 /trip 页只读打开' : 'Export phone snapshot (no expenses); open read-only on the /trip page'}
+                        >
+                          📱 {zh ? '手机快照' : 'Snapshot'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setExportMenuOpen(false); downloadTripSnapshot(true); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '导出含费用的手机快照——费用将随文件流转，请确认知晓' : 'Export snapshot WITH expenses — expenses travel with the file, confirm you understand'}
+                        >
+                          📱 {zh ? '快照（含费用）' : 'Snapshot + costs'}
                         </button>
                       </div>
                     </>
