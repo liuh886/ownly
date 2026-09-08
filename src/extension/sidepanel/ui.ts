@@ -421,16 +421,18 @@ function renderFilters() {
         (p.risks || []).some((r: string) => r.trim().toLowerCase() === tagLower),
     ).length;
     if (count > 0) {
-      filters.push({ id: `tag:${tag}`, label: `🏷️ ${tag}`, count });
+      filters.push({ id: `tag:${tag}`, label: tag, count });
     }
   }
 
   el.candidatesFilterBar.innerHTML = '';
   for (const item of filters) {
+    const isActive = store.activeFilter === item.id;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `filter-btn ${store.activeFilter === item.id ? 'active' : ''}`;
-    btn.textContent = `${item.label} (${item.count})`;
+    btn.className = `filter-btn ${isActive ? 'active' : ''}`;
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    btn.innerHTML = `${escapeHtml(item.label)} <span class="mono">(${item.count})</span>`;
     btn.addEventListener('click', () => {
       store.activeFilter = store.activeFilter === item.id && item.id !== 'all' ? 'all' : item.id;
       renderFilters();
@@ -678,8 +680,10 @@ export function renderCurrentPlace() {
     el.placeCapturedBanner.style.display = 'none';
 
     const bCount = document.createElement('span');
-    bCount.className = 'badge highlight';
-    bCount.textContent = `📋 ${store.detectedSavedList.places.length} 个地点`;
+    bCount.className = 'badge highlight mono';
+    bCount.textContent = store.lang === 'zh'
+      ? `${store.detectedSavedList.places.length} 个地点`
+      : `${store.detectedSavedList.places.length} places`;
     el.placeMetaBadges.append(bCount);
 
     if (store.detectedSavedList.truncated) {
@@ -707,10 +711,11 @@ export function renderCurrentPlace() {
       chk.type = 'checkbox';
       chk.checked = true;
       chk.dataset.url = item.sourceUrl;
+      chk.setAttribute('aria-label', item.title);
 
       const info = document.createElement('div');
       info.className = 'batch-item-info';
-      const sub = [item.category, item.rating ? `★ ${item.rating}` : '', item.userNote ? `📝 ${item.userNote}` : ''].filter(Boolean).join(' · ');
+      const sub = [item.category, item.rating ? `★ ${item.rating}` : '', item.userNote || ''].filter(Boolean).join(' · ');
       const titleEl = document.createElement('div');
       titleEl.className = 'batch-item-title';
       titleEl.textContent = item.title;
@@ -750,37 +755,38 @@ export function renderCurrentPlace() {
 
     if (store.currentPlace.rating) {
       const b = document.createElement('span');
-      b.className = 'badge highlight';
+      b.className = 'badge highlight mono';
       b.textContent = `★ ${store.currentPlace.rating}${store.currentPlace.reviewCount ? ` (${store.currentPlace.reviewCount.toLocaleString()})` : ''}`;
       el.placeMetaBadges.append(b);
     }
     if (store.currentPlace.category) {
       const b = document.createElement('span');
       b.className = 'badge';
-      b.textContent = `🏷️ ${store.currentPlace.category}`;
+      b.textContent = store.currentPlace.category;
       el.placeMetaBadges.append(b);
     }
     if (store.currentPlace.priceLevel) {
       const b = document.createElement('span');
-      b.className = 'badge';
-      b.textContent = `💰 ${store.currentPlace.priceLevel}`;
+      b.className = 'badge mono';
+      b.textContent = store.currentPlace.priceLevel;
       el.placeMetaBadges.append(b);
     } else if (store.currentPlace.detectedCurrency) {
       const b = document.createElement('span');
-      b.className = 'badge highlight';
-      b.textContent = `💱 ${store.currentPlace.detectedCurrency}`;
+      b.className = 'badge highlight mono';
+      b.textContent = store.currentPlace.detectedCurrency;
       el.placeMetaBadges.append(b);
     }
     if (store.currentPlace.openStatus) {
       const b = document.createElement('span');
       b.className = 'badge';
-      b.textContent = `⏰ ${store.currentPlace.openStatus}`;
+      b.textContent = store.currentPlace.openStatus;
       el.placeMetaBadges.append(b);
     }
     if (store.currentPlace.address || store.currentPlace.coordinates) {
       const b = document.createElement('span');
       b.className = 'badge';
-      b.textContent = '📍';
+      const areaText = store.currentPlace.address?.split(/[,，·]/)[0]?.trim() || '';
+      b.textContent = areaText || '📍';
       b.title = store.currentPlace.address || `${store.currentPlace.coordinates?.lat}, ${store.currentPlace.coordinates?.lng}`;
       el.placeMetaBadges.append(b);
     }
@@ -1010,6 +1016,7 @@ function buildCandidateCard(
   grip.draggable = true;
   grip.textContent = '⠿';
   grip.title = store.lang === 'zh' ? '拖动调整候选池顺序' : 'Drag to reorder the pool';
+  grip.setAttribute('aria-hidden', 'true');
 
   const titleEl = document.createElement('div');
   titleEl.className = 'candidate-title';
@@ -1019,7 +1026,7 @@ function buildCandidateCard(
   if (isEditing) {
     const editBadge = document.createElement('span');
     editBadge.className = 'badge highlight';
-    editBadge.textContent = store.lang === 'zh' ? '✏️ 编辑中' : '✏️ Editing';
+    editBadge.textContent = store.lang === 'zh' ? '编辑中' : 'Editing';
     header.append(editBadge);
   }
 
@@ -1053,10 +1060,10 @@ function buildCandidateDetails(
   const rawCategory = place.source_category?.trim() || (place.types && place.types.length > 0 ? place.types[0] : '');
   const categoryLabel = rawCategory && !KNOWN_KINDS.has(rawCategory.toLowerCase()) ? rawCategory : '';
   if (categoryLabel) {
-    mainParts.push(`<span class="badge" title="${escapeHtml(categoryLabel)}">🏷️ ${escapeHtml(categoryLabel)}</span>`);
+    mainParts.push(`<span class="badge" title="${escapeHtml(categoryLabel)}">${escapeHtml(categoryLabel)}</span>`);
   }
   if (place.observed_rating && place.observed_rating > 1.0 && place.observed_rating <= 5.0) {
-    mainParts.push(`<span>★ ${place.observed_rating}</span>`);
+    mainParts.push(`<span class="mono">★ ${place.observed_rating}</span>`);
   }
   if (place.observed_price && !isZeroOrPlaceholderPrice(place.observed_price)) {
     const activeCollection = store.getActiveCollection();
@@ -1065,19 +1072,20 @@ function buildCandidateDetails(
       ? convertPriceRange(place.observed_price, activeCollection.currency, undefined, sourceCurrency)
       : null;
     if (converted && converted.sourceCurrency !== converted.targetCurrency && converted.convertedMin > 0) {
-      mainParts.push(`<span>💰 ${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);
+      mainParts.push(`<span class="mono">${escapeHtml(place.observed_price)} <small style="opacity:0.85; font-size:10px; color:var(--accent);">(≈ ${escapeHtml(converted.formattedTarget)})</small></span>`);
     } else {
-      mainParts.push(`<span>💰 ${escapeHtml(place.observed_price)}</span>`);
+      mainParts.push(`<span class="mono">${escapeHtml(place.observed_price)}</span>`);
     }
   }
   const userTags = place.tags.filter((t) => !KNOWN_KINDS.has(t.trim().toLowerCase()));
   if (userTags.length) {
     const shown = userTags.slice(0, 2).join(', ');
     const more = userTags.length > 2 ? ` +${userTags.length - 2}` : '';
-    mainParts.push(`<span>🏷️ ${escapeHtml(shown)}${more}</span>`);
+    mainParts.push(`<span>${escapeHtml(shown)}${more}</span>`);
   }
-  if (place.area || place.address) {
-    mainParts.push(`<span title="${escapeHtml(place.address ?? place.area ?? '')}">📍</span>`);
+  const areaText = place.area?.trim() || place.address?.split(/[,，·]/)[0]?.trim() || '';
+  if (areaText) {
+    mainParts.push(`<span class="meta-area" title="${escapeHtml(place.address ?? place.area ?? '')}">${escapeHtml(areaText)}</span>`);
   }
   details.innerHTML = mainParts.join(' ');
 
@@ -1086,31 +1094,32 @@ function buildCandidateDetails(
   extra.className = 'candidate-extra';
   extra.style.display = 'block';
   const extraParts: string[] = [];
-  if (place.plus_code) extraParts.push(`<span class="badge" title="Plus Code: ${escapeHtml(place.plus_code)}">➕ ${escapeHtml(place.plus_code)}</span>`);
+  if (place.plus_code) extraParts.push(`<span class="badge mono" title="Plus Code: ${escapeHtml(place.plus_code)}">${escapeHtml(place.plus_code)}</span>`);
   const safeMenuUrl = sanitizeSafeHref(place.menu_url);
   if (safeMenuUrl) extraParts.push(`<a href="${escapeHtml(safeMenuUrl)}" target="_blank" rel="noreferrer" class="badge">${escapeHtml(dict.menuBadge)}</a>`);
   const safeResUrl = sanitizeSafeHref(place.reservation_url);
   if (safeResUrl) extraParts.push(`<a href="${escapeHtml(safeResUrl)}" target="_blank" rel="noreferrer" class="badge highlight">${escapeHtml(dict.reserveBadge)}</a>`);
   if (place.review_topics && place.review_topics.length > 0) {
-    extraParts.push(`<span class="badge">💬 ${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
+    extraParts.push(`<span class="badge">${escapeHtml(place.review_topics.slice(0, 3).join(' · '))}</span>`);
   }
   if (place.open_hours) {
-    extraParts.push(`<span class="badge" title="${escapeHtml(place.open_hours)}">🕒</span>`);
+    const hoursLabel = store.lang === 'zh' ? '时间' : 'Hours';
+    extraParts.push(`<span class="badge" title="${escapeHtml(place.open_hours)}">${hoursLabel}</span>`);
   }
   if (place.phone) {
-    extraParts.push(`<a href="tel:${escapeHtml(place.phone)}" class="badge" title="${escapeHtml(place.phone)}">📞</a>`);
+    extraParts.push(`<a href="tel:${escapeHtml(place.phone)}" class="badge" title="${escapeHtml(place.phone)}" aria-label="${escapeHtml(store.lang === 'zh' ? `电话 ${place.phone}` : `Phone ${place.phone}`)}">📞</a>`);
   }
-  if (place.duration_minutes) extraParts.push(`<span>⏱️ ${place.duration_minutes}m</span>`);
+  if (place.duration_minutes) extraParts.push(`<span class="mono">${place.duration_minutes}m</span>`);
   if (place.tags.length > 2) extraParts.push(`<span>🏷️ ${escapeHtml(place.tags.join(', '))}</span>`);
   if (place.signals && place.signals.length > 0) {
-    extraParts.push(...place.signals.map((s) => `<span class="badge">✅ ${escapeHtml(s)}</span>`));
+    extraParts.push(...place.signals.map((s) => `<span class="signal-ok">${escapeHtml(s)}</span>`));
   }
   if (place.risks && place.risks.length > 0) {
     extraParts.push(...place.risks.map((r) => `<span class="risk-flag">⚠️ ${escapeHtml(r)}</span>`));
   }
   const noteText = place.notes || place.why;
   if (noteText) {
-    extraParts.push(`<div class="note-line">📝 ${escapeHtml(noteText)}</div>`);
+    extraParts.push(`<div class="note-line">${escapeHtml(noteText)}</div>`);
   }
   if (extraParts.length) {
     extra.innerHTML = extraParts.join(' ');
@@ -1129,6 +1138,7 @@ function buildCandidateDetails(
   editBtn.dataset.placeId = place.id;
   editBtn.textContent = '✏️';
   editBtn.title = dict.editAction;
+  editBtn.setAttribute('aria-label', dict.editAction);
 
   const mustBtn = document.createElement('button');
   mustBtn.type = 'button';
@@ -1140,6 +1150,8 @@ function buildCandidateDetails(
   mustBtn.title = isMust
     ? (store.lang === 'zh' ? '已标记为必去（点击取消）' : 'Marked as Must (click to toggle)')
     : (store.lang === 'zh' ? '设为必去' : 'Mark as Must');
+  mustBtn.setAttribute('aria-label', mustBtn.title);
+  mustBtn.setAttribute('aria-pressed', isMust ? 'true' : 'false');
 
   const addToTripBtn = document.createElement('button');
   addToTripBtn.type = 'button';
@@ -1148,6 +1160,7 @@ function buildCandidateDetails(
   addToTripBtn.dataset.placeId = place.id;
   addToTripBtn.textContent = '➕';
   addToTripBtn.title = store.lang === 'zh' ? '加入行程' : 'Add to Trip';
+  addToTripBtn.setAttribute('aria-label', addToTripBtn.title);
 
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
@@ -1156,6 +1169,7 @@ function buildCandidateDetails(
   delBtn.dataset.placeId = place.id;
   delBtn.textContent = '🗑️';
   delBtn.title = dict.deleteAction;
+  delBtn.setAttribute('aria-label', dict.deleteAction);
 
   btnGroup.append(editBtn, mustBtn, addToTripBtn, delBtn);
   actions.append(btnGroup);

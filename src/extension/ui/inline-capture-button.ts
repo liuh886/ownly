@@ -81,35 +81,35 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
       align-items: center;
       gap: 5px;
       padding: 4px 10px;
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      background: #047857;
       color: #ffffff;
       font-size: 12px;
       font-weight: 600;
       line-height: 1.2;
       border: 1px solid rgba(255, 255, 255, 0.25);
       border-radius: 9999px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
       cursor: pointer;
       outline: none;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: background 0.15s ease, transform 0.1s ease;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       text-decoration: none;
       white-space: nowrap;
     }
     .card-fab-btn:hover {
-      transform: translateY(-1px) scale(1.02);
-      box-shadow: 0 4px 14px rgba(4, 120, 87, 0.38);
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      background: #065f46;
+    }
+    .card-fab-btn:focus-visible {
+      outline: 2px solid #047857;
+      outline-offset: 2px;
     }
     .card-fab-btn.is-success {
-      background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+      background: #047857;
       border-color: #6ee7b7;
-      box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
     }
     .card-fab-btn.is-exists {
-      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      background: #0369a1;
       border-color: #7dd3fc;
-      box-shadow: 0 0 12px rgba(2, 132, 199, 0.45);
     }
     .card-fab-btn.is-loading {
       opacity: 0.85;
@@ -129,6 +129,7 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
   btn.className = 'card-fab-btn';
   btn.setAttribute('type', 'button');
   btn.setAttribute('title', '一键采集到 Ownly 案板 (Inbox)');
+  btn.setAttribute('aria-label', '一键采集到 Ownly 案板 (Inbox)');
   btn.innerHTML = `<span class="card-fab-icon">📌</span><span class="card-fab-text">${buttonText}</span>`;
 
   btn.addEventListener('mousedown', isolateEvent);
@@ -139,6 +140,7 @@ export function injectInlineCaptureButton(options: InlineCaptureButtonOptions): 
     btn.classList.remove('is-loading', 'is-success', 'is-exists');
     if (cls) btn.classList.add(cls);
     btn.innerHTML = `<span class="card-fab-icon">${icon}</span><span class="card-fab-text">${text}</span>`;
+    btn.setAttribute('aria-label', text);
     isSaving = false;
   };
   btn.addEventListener('click', async (ev) => {

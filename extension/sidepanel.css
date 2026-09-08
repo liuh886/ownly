@@ -206,9 +206,20 @@ body {
   transform: scale(0.95);
 }
 
+/* Tabular numerals for money, counts, ratings, durations */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Muted success inline text (replaces ✅ prefix soup) */
+.signal-ok {
+  color: var(--accent-text);
+}
+
 .panel {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--surface);
   padding: 10px;
   min-width: 0;
@@ -1079,6 +1090,8 @@ hr.divider {
   border: 0;
   background: transparent;
   padding: 5px 7px;
+  min-width: 24px;
+  min-height: 24px;
   font-size: 10.5px;
   font-weight: 650;
   color: var(--text-3);
@@ -1137,7 +1150,7 @@ hr.divider {
 
 .match-title {
   font-size: var(--fs-lg);
-  font-weight: 800;
+  font-weight: 700;
   color: var(--accent-strong);
   margin: 1px 0;
   overflow: hidden;
