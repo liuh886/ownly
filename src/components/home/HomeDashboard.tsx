@@ -7,6 +7,7 @@ import { HomeCostSection } from './HomeCostSection';
 import { HomeReviewSection } from './HomeReviewSection';
 import { HomeDataScaleSection } from './HomeDataScaleSection';
 import { HomeDoctorSection } from './HomeDoctorSection';
+import { TrustStatusSection } from '@/components/data-safety/TrustStatusSection';
 import { CaptureOnboarding, dismissCaptureOnboarding, shouldShowCaptureOnboarding } from '@/components/onboarding/CaptureOnboarding';
 import { useState } from 'react';
 
@@ -88,6 +89,7 @@ export function HomeDashboard({
         itemVariants={itemVariants}
       />
       <HomeDoctorSection itemVariants={itemVariants} />
+      <TrustStatusSection itemVariants={itemVariants} />
     </motion.section>
   );
 }

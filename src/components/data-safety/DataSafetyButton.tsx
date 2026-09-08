@@ -8,6 +8,14 @@ import {
   type BrowserBackupInspection,
   type BrowserMigrationInspection,
 } from '@/services/BrowserDataPortabilityService';
+import { recordTrustTimestamp, type TrustTimestampStore } from '@/domain/trust-status';
+
+const trustTimestampStore: TrustTimestampStore = {
+  get: (key) => (typeof window === 'undefined' ? null : window.localStorage.getItem(key)),
+  set: (key, value) => {
+    if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
+  },
+};
 
 const COPY = {
   en: {
@@ -120,6 +128,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
   async function exportBackup() {
     await run(async () => {
       const bundle = await browserDataPortabilityService.exportBackup();
+      recordTrustTimestamp(trustTimestampStore, 'export');
       setStatus(`${copy.exported} ${bundle.files.length} files.`);
     });
   }
@@ -130,6 +139,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
       const nextInspection = await browserDataPortabilityService.inspectRestore(bundle);
       setInspection(nextInspection);
       setMigration(null);
+      recordTrustTimestamp(trustTimestampStore, 'validated');
       setStatus(copy.valid);
     });
   }
