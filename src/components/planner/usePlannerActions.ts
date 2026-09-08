@@ -37,6 +37,7 @@ import {
   openRouteServiceProfile,
 } from '@/lib/openrouteservice';
 import { buildTripCalendarIcs, buildDayCalendarIcs } from '@/domain/calendar-feed';
+import { trackFirstEver } from '@/lib/analytics';
 import { createTripSnapshot, tripSnapshotFileName } from '@/domain/trip-snapshot';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { calendarFeedService } from '@/services/CalendarFeedService';
@@ -433,6 +434,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       try {
         await plannerRepository.dropPlace(placeId);
         await load();
+        trackFirstEver('object_archived', 'object_archived');
         showUndoNotice(zh ? '已将地点设为暂不考虑' : 'Place shelved', async () => {
           await plannerRepository.restorePlace(placeId);
         });
@@ -449,6 +451,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       try {
         await plannerRepository.restorePlace(placeId);
         await load();
+        trackFirstEver('object_restored', 'object_restored');
         setNotice(zh ? '已恢复为待考虑候选' : 'Place restored to candidates');
       } catch (err) {
         setNotice(err instanceof Error ? err.message : String(err));

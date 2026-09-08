@@ -64,6 +64,7 @@ export function WebShell() {
       return false;
     }
     setOnboardingOpen(true);
+    trackOwnlyEvent('onboarding_opened');
     return false;
   }, [localDataCopy]);
 
@@ -112,6 +113,21 @@ export function WebShell() {
 
     let isMounted = true;
 
+    // Activation funnel: returning-visit milestone. Gap bucket is computed
+    // locally from the last-visit date; only the bucket leaves the device.
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const lastVisit = window.localStorage.getItem('ownly_last_visit');
+      const seen = window.localStorage.getItem('ownly_seen');
+      if (seen && lastVisit && lastVisit !== today) {
+        const gapDays = Math.max(0, Math.round((Date.parse(today) - Date.parse(lastVisit)) / 86400000));
+        const gap = gapDays <= 1 ? '1d' : gapDays <= 7 ? '7d' : gapDays <= 30 ? '30d' : '90d+';
+        trackOwnlyEvent('app_return', { gap });
+      }
+      window.localStorage.setItem('ownly_last_visit', today);
+      window.localStorage.setItem('ownly_seen', '1');
+    } catch {}
+
     async function init() {
       setIsLoading(true);
       try {
@@ -136,6 +152,7 @@ export function WebShell() {
           const shouldPrompt = !connected
             && window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
           setOnboardingOpen(shouldPrompt);
+          if (shouldPrompt) trackOwnlyEvent('onboarding_opened');
         }
       } catch (error) {
         if (isMounted) {
@@ -143,6 +160,7 @@ export function WebShell() {
           setRecoveryState('RECONNECT_REQUIRED');
           const shouldPrompt = window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
           setOnboardingOpen(shouldPrompt);
+          if (shouldPrompt) trackOwnlyEvent('onboarding_opened');
         }
       } finally {
         if (isMounted) setIsLoading(false);

@@ -9,6 +9,7 @@ import {
   type BrowserMigrationInspection,
 } from '@/services/BrowserDataPortabilityService';
 import { recordTrustTimestamp, type TrustTimestampStore } from '@/domain/trust-status';
+import { trackFirstEver } from '@/lib/analytics';
 
 const trustTimestampStore: TrustTimestampStore = {
   get: (key) => (typeof window === 'undefined' ? null : window.localStorage.getItem(key)),
@@ -129,6 +130,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
     await run(async () => {
       const bundle = await browserDataPortabilityService.exportBackup();
       recordTrustTimestamp(trustTimestampStore, 'export');
+      trackFirstEver('backup_exported', 'backup_exported', { files: bundle.files.length });
       setStatus(`${copy.exported} ${bundle.files.length} files.`);
     });
   }
@@ -140,6 +142,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
       setInspection(nextInspection);
       setMigration(null);
       recordTrustTimestamp(trustTimestampStore, 'validated');
+      trackFirstEver('backup_validated', 'backup_validated');
       setStatus(copy.valid);
     });
   }

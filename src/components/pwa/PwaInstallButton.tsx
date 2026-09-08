@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
+import { trackOwnlyEvent } from '@/lib/analytics';
 import { AppInstallGuideModal } from './AppInstallGuideModal';
 
 type InstallChoice = {
@@ -45,6 +46,7 @@ export function PwaInstallButton({ variant = 'default' }: { variant?: 'default' 
       setInstalled(true);
       setInstallPrompt(null);
       setShowNudge(false);
+      trackOwnlyEvent('pwa_installed');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);

@@ -5,6 +5,7 @@ import type { PlannerTripLeg, PlannerTripPlace } from '@/domain/planner';
 import { plannerTripLegId } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
 import { buildSegmentBadges } from './map-badges';
+import { MapPlaceCard } from './MapPlaceCard';
 
 /**
  * Per-segment dash encoding for the active route. motorized modes stay solid;
@@ -200,7 +201,6 @@ export function PlannerMap({
   onSchedulePlace,
   onUnschedulePlace,
   onShelvePlace,
-  onDeletePlace,
   onHoverPlace,
   visitCountByPlaceId,
   language = 'zh',
@@ -952,6 +952,26 @@ export function PlannerMap({
             >
               🟢 {zh ? `第${activeDayIndex + 1}天` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
             </button>
+            {allPlacesByDate && tripDates && tripDates.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => setShowRoutesLayer((prev) => !prev)}
+                title={zh ? '所有路线图层：叠加显示，全灰，需到图例点亮某天' : 'All-routes layer: overlay, all gray until a day is lit in the legend'}
+                aria-pressed={showRoutesLayer}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${showRoutesLayer ? 'bg-indigo-700 text-white shadow-xs' : 'bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100'}`}
+              >
+                {showRoutesLayer ? '☑' : '☐'} 🌐 {zh ? '所有路线' : 'All Routes'} ({allScheduledCount})
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowCandidates((prev) => !prev)}
+              title={zh ? '候选池图层开关' : 'Toggle the candidate pool layer'}
+              aria-pressed={showCandidates}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${showCandidates ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
+            >
+              {showCandidates ? '☑' : '☐'} 🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
+            </button>
             <div className="relative">
               <button
                 type="button"
@@ -979,27 +999,6 @@ export function PlannerMap({
                           </option>
                         ))}
                       </select>
-                    </div>
-                    <div className="px-3 py-1.5">
-                      <div className="mb-1 text-[9px] font-bold text-stone-400">{zh ? '图层' : 'Layers'}</div>
-                      {allPlacesByDate && tripDates && tripDates.length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() => setShowRoutesLayer((prev) => !prev)}
-                          className="flex w-full items-center gap-2 px-0 py-1 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                        >
-                          <span aria-hidden>{showRoutesLayer ? '☑' : '☐'}</span>
-                          🌐 {zh ? '所有路线' : 'All Routes'} ({allScheduledCount})
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setShowCandidates((prev) => !prev)}
-                        className="flex w-full items-center gap-2 px-0 py-1 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                      >
-                        <span aria-hidden>{showCandidates ? '☑' : '☐'}</span>
-                        🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
-                      </button>
                     </div>
                   </div>
                 </>
@@ -1430,122 +1429,17 @@ export function PlannerMap({
                 </div>
               </>
             ) : (
-              <>
-            {/* Popover Header */}
-            <div className="flex items-start justify-between gap-1.5">
-              <div className="min-w-0 flex-1 flex items-center gap-1.5">
-                <span className="text-sm shrink-0">{KIND_EMOJI[selectedPlace.kind] || '📍'}</span>
-                <h4 className="truncate text-xs font-bold text-stone-900 leading-snug" title={selectedPlace.title}>
-                  {selectedPlace.title}
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedPlaceId(null)}
-                className="shrink-0 rounded p-0.5 text-stone-400 hover:text-stone-700 transition cursor-pointer"
-                title={zh ? '关闭' : 'Close'}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Popover Metadata Subtitle */}
-            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-stone-500">
-              {selectedPlace.area ? (
-                <span className="rounded bg-stone-100 px-1.5 py-0.2 font-medium text-stone-600">
-                  {selectedPlace.area}
-                </span>
-              ) : null}
-              {selectedPlace.observed_rating ? <span>★ {selectedPlace.observed_rating}</span> : null}
-              {selectedPlace.observed_price ? <span>💰 {selectedPlace.observed_price}</span> : null}
-              {selectedPlace.duration_minutes ? <span>⏱️ {selectedPlace.duration_minutes}m</span> : null}
-              {selectedPlace.source_url ? (
-                <a
-                  href={selectedPlace.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-emerald-700 hover:underline inline-flex items-center gap-0.5 ml-auto text-[10px] font-medium"
-                  title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
-                >
-                  🗺️ {zh ? '地图' : 'Maps'}
-                </a>
-              ) : null}
-            </div>
-
-            {/* 3 Emoji Actions: 添加操作 | 不考虑操作 | 删除操作 */}
-            <div className="mt-2 grid grid-cols-3 gap-1.5 pt-2 border-t border-stone-100">
-              {/* 1. 添加 / 移出当天操作 */}
-              {selectedScheduledPlace ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onUnschedulePlace(selectedScheduledPlace);
-                  }}
-                  className="flex flex-col items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 py-1.5 px-1 text-center hover:bg-emerald-100 hover:border-emerald-400 transition shadow-2xs group cursor-pointer"
-                  title={zh ? '已排入当天日程，点击移出（回到待安排候选池）' : 'Scheduled on active day. Click to remove'}
-                >
-                  <span className="text-base transition group-hover:scale-115">✕</span>
-                  <span className="mt-0.5 text-[9.5px] font-bold text-emerald-800">{zh ? '已排当天' : 'Scheduled'}</span>
-                </button>
-              ) : (visitCountByPlaceId?.get(selectedPlace.id) ?? 0) > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSchedulePlace(selectedPlace.id);
-                  }}
-                  className="flex flex-col items-center justify-center rounded-lg border border-emerald-400 bg-emerald-100/90 py-1.5 px-1 text-center hover:bg-emerald-200 transition shadow-2xs group cursor-pointer"
-                  title={zh ? `已在行程中排入 ${visitCountByPlaceId?.get(selectedPlace.id)} 次，点击再次加入第 ${activeDayIndex + 1} 天` : `Scheduled ${visitCountByPlaceId?.get(selectedPlace.id)}x. Click to add to Day ${activeDayIndex + 1}`}
-                >
-                  <span className="text-base transition group-hover:scale-115">➕</span>
-                  <span className="mt-0.5 text-[9.5px] font-bold text-emerald-900">{zh ? '已排 (加当天)' : 'Add Stop'}</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSchedulePlace(selectedPlace.id);
-                  }}
-                  className="flex flex-col items-center justify-center rounded-lg border border-stone-200 bg-stone-50 py-1.5 px-1 text-center hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800 transition shadow-2xs group cursor-pointer"
-                  title={zh ? `排入第 ${activeDayIndex + 1} 天路线` : `Add to Day ${activeDayIndex + 1}`}
-                >
-                  <span className="text-base transition group-hover:scale-115">➕</span>
-                  <span className="mt-0.5 text-[9.5px] font-bold text-stone-700 group-hover:text-emerald-800">{zh ? '加入当天' : 'Add Stop'}</span>
-                </button>
-              )}
-
-              {/* 2. 不考虑操作 */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (onShelvePlace) {
-                    onShelvePlace(selectedPlace.id);
-                    setSelectedPlaceId(null);
-                  }
-                }}
-                className="flex flex-col items-center justify-center rounded-lg border border-amber-200 bg-amber-50 py-1.5 px-1 text-center hover:bg-amber-100 hover:border-amber-300 transition shadow-2xs group cursor-pointer"
-                title={zh ? '设为暂不考虑（可在待考虑池查看）' : 'Shelve (drop) place'}
-              >
-                <span className="text-base transition group-hover:scale-115">🙈</span>
-                <span className="mt-0.5 text-[9.5px] font-bold text-amber-900">{zh ? '暂不考虑' : 'Shelve'}</span>
-              </button>
-
-              {/* 3. 删除操作 */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (onDeletePlace) {
-                    onDeletePlace(selectedPlace.id, selectedPlace.title);
-                    setSelectedPlaceId(null);
-                  }
-                }}
-                className="flex flex-col items-center justify-center rounded-lg border border-rose-200 bg-rose-50 py-1.5 px-1 text-center hover:bg-rose-100 hover:border-rose-300 transition shadow-2xs group cursor-pointer"
-                title={zh ? '彻底删除地点' : 'Delete place'}
-              >
-                <span className="text-base transition group-hover:scale-115">🗑️</span>
-                <span className="mt-0.5 text-[9.5px] font-bold text-rose-800">{zh ? '彻底删除' : 'Delete'}</span>
-              </button>
-            </div>
-              </>
+              <MapPlaceCard
+                place={selectedPlace}
+                zh={zh}
+                activeDayIndex={activeDayIndex}
+                visitCount={visitCountByPlaceId?.get(selectedPlace.id) ?? 0}
+                scheduledPlace={selectedScheduledPlace}
+                onSchedule={onSchedulePlace}
+                onUnschedule={onUnschedulePlace}
+                onShelve={onShelvePlace}
+                onClose={() => setSelectedPlaceId(null)}
+              />
             )}
           </div>
         )}

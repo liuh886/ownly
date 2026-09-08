@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
@@ -254,6 +254,22 @@ export function TrustStatusSection({ itemVariants }: { itemVariants: Variants })
       setChecking(false);
     }
   }, [storageGet]);
+
+  // Gate 1 (#46): the operating state must be visible without asking —
+  // auto-run the check on mount instead of waiting for a manual click.
+  // Deferred past mount to satisfy set-state-in-effect.
+  useEffect(() => {
+    const timer = setTimeout(() => void runCheck(), 0);
+    return () => clearTimeout(timer);
+  }, [runCheck]);
+
+  // Backup export/validation updates trust timestamps; refresh the rows when
+  // the data-safety controls report a change instead of showing stale state.
+  useEffect(() => {
+    const refresh = () => void runCheck();
+    window.addEventListener('ownly:data-changed', refresh);
+    return () => window.removeEventListener('ownly:data-changed', refresh);
+  }, [runCheck]);
 
   const runDrill = useCallback(async () => {
     setDrilling(true);

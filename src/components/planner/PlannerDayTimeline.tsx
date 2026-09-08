@@ -57,7 +57,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                 {zh ? '把 Research Pool 的候选拖进这一天，或点击“+ 当天”。' : 'Drag a researched candidate here, or use “+ Day”.'}
               </div>
             ) : (
-              <ol className="space-y-1">
+              <ol className={`space-y-1 ${scheduled.length > 6 ? 'timeline-scroll max-h-[420px] overflow-y-auto overscroll-contain pr-1' : ''}`}>
                 {scheduled.map((place, index) => {
                   const timeOverlap = dayAssessment.time_overlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
                   const openHoursIssue = dayAssessment.opening_hours_warnings.find((issue) => issue.visit_id === place.visit_id || issue.place_id === place.place_id);

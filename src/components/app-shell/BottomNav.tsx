@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 import type { WYQDTranslationKey } from '@/core/i18n';
@@ -24,8 +25,44 @@ interface BottomNavProps {
 
 export function BottomNav({ activeTab, onChange }: BottomNavProps) {
   const { t, language } = useI18n();
+  const [hidden, setHidden] = useState(false);
+  const lastY = useRef(0);
+
+  // Hide on scroll down, reveal on scroll up (or near the top). The wrapper
+  // collapses the in-flow slot so no blank strip is left behind.
+  useEffect(() => {
+    lastY.current = Math.max(0, window.scrollY);
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        const y = Math.max(0, window.scrollY);
+        const dy = y - lastY.current;
+        lastY.current = y;
+        if (y < 64) {
+          setHidden(false);
+        } else if (dy > 8) {
+          setHidden(true);
+        } else if (dy < -8) {
+          setHidden(false);
+        }
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
-    <nav className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/90 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl">
+    <div className="sticky bottom-0 z-20">
+      <div
+        className={`grid transition-all duration-300 motion-reduce:transition-none ${hidden ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}
+        aria-hidden={hidden || undefined}
+        inert={hidden || undefined}
+      >
+        <div className="overflow-hidden">
+    <nav className="border-t border-stone-200/70 bg-white/70 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl">
       <div className="relative mx-auto grid max-w-3xl grid-cols-5 gap-1 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-200">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -57,5 +94,8 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
         })}
       </div>
     </nav>
+        </div>
+      </div>
+    </div>
   );
 }
