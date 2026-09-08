@@ -22,9 +22,12 @@ import {
 import {
   buildOrsSingleLeg,
   computeDayOrderOptimization,
+  computeDayTravelRefresh,
   materializeStopCoordinates,
   resolveStopCoordinates,
+  type DayTravelRefreshLedger,
   type OrsMatrixFacts,
+  type OrsMatrixInput,
   type PlannerDayOptimizationComputation,
 } from '@/domain/planner-optimization';
 import {
@@ -1096,6 +1099,99 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     [selectedTrip, load, setVisits, setLegs, setNotice, showPersistError, zh],
   );
 
+  const refreshTravelTimes = useCallback(
+    async (scope: 'day' | 'trip') => {
+      if (!selectedTrip || disabled) return;
+      const mode = selectedTrip.transport_mode ?? 'transit';
+      if (!openRouteServiceProfile(mode)) {
+        setNotice(zh ? '当前交通方式无真实路网支持，保持距离估算。' : 'This travel mode has no road-network routing; keeping estimates.');
+        return;
+      }
+      const apiKey = loadOrsApiKey();
+      if (!apiKey.trim()) {
+        setNotice(zh ? '未配置 OpenRouteService key，保持距离估算。可在优化弹窗中填入。' : 'No OpenRouteService key configured; keeping estimates. Add one in the optimize dialog.');
+        return;
+      }
+      const dates = scope === 'day' ? (activeDate ? [activeDate] : []) : tripDates;
+      if (dates.length === 0) return;
+      setBusy(true);
+      try {
+        const allNewLegs: PlannerTripLeg[] = [];
+        const total: DayTravelRefreshLedger = {
+          updated: 0, manualSkipped: 0, keptEstimate: 0,
+          missingCoordsSkipped: 0, samePlaceSkipped: 0, unroutableSkipped: 0,
+        };
+        let beforeMinutes = 0;
+        let afterMinutes = 0;
+        let daysWithPairs = 0;
+        for (const date of dates) {
+          const dayStops = sortPlannerScheduledPlaces(scheduledAll.filter((place) => place.scheduled_date === date));
+          if (dayStops.length < 2) continue;
+          const stopsForCompute = materializeStopCoordinates(resolveStopCoordinates(dayStops));
+          let ors: OrsMatrixInput | null = null;
+          try {
+            const matrixStops = stopsForCompute.filter((stop) => stop.coordinates);
+            if (matrixStops.length >= 2) {
+              const facts = await fetchOpenRouteServiceMatrix(
+                apiKey,
+                matrixStops.map((stop) => ({ coordinates: stop.coordinates as { lat: number; lng: number } })),
+                mode,
+              );
+              ors = { order: matrixStops, facts };
+            }
+          } catch (error) {
+            console.warn('[Planner] Travel refresh matrix failed for', date, '; keeping estimates', error);
+          }
+          const result = computeDayTravelRefresh(selectedTrip, stopsForCompute, legs, ors, mode);
+          allNewLegs.push(...result.legs);
+          total.updated += result.ledger.updated;
+          total.manualSkipped += result.ledger.manualSkipped;
+          total.keptEstimate += result.ledger.keptEstimate;
+          total.missingCoordsSkipped += result.ledger.missingCoordsSkipped;
+          total.samePlaceSkipped += result.ledger.samePlaceSkipped;
+          total.unroutableSkipped += result.ledger.unroutableSkipped;
+          beforeMinutes += result.beforeMinutes;
+          afterMinutes += result.afterMinutes;
+          daysWithPairs += 1;
+        }
+        if (allNewLegs.length > 0) setLegs((prev) => mergeLegs(prev, allNewLegs));
+        try {
+          for (const leg of allNewLegs) {
+            await plannerRepository.upsertLeg(leg);
+          }
+        } catch (error) {
+          showPersistError(error, 'refresh travel times');
+          await load();
+          return;
+        }
+        await load();
+        const skipped: string[] = [];
+        if (total.manualSkipped > 0) skipped.push(zh ? `手动锁定 ${total.manualSkipped} 段` : `${total.manualSkipped} manual`);
+        if (total.keptEstimate > 0) skipped.push(zh ? `保持估算 ${total.keptEstimate} 段` : `${total.keptEstimate} kept`);
+        if (total.missingCoordsSkipped > 0) skipped.push(zh ? `缺坐标 ${total.missingCoordsSkipped} 段` : `${total.missingCoordsSkipped} missing coords`);
+        if (total.unroutableSkipped > 0) skipped.push(zh ? `不可达 ${total.unroutableSkipped} 段` : `${total.unroutableSkipped} unroutable`);
+        if (total.samePlaceSkipped > 0) skipped.push(zh ? `同地 ${total.samePlaceSkipped} 段` : `${total.samePlaceSkipped} same-place`);
+        const scopeLabel = scope === 'day' ? (zh ? '当天' : 'day') : (zh ? `${daysWithPairs} 天` : `${daysWithPairs} days`);
+        if (total.updated === 0) {
+          setNotice(zh
+            ? `无需刷新（${scopeLabel}）：${skipped.length > 0 ? skipped.join('、') : '没有可刷新的路段'}。`
+            : `Nothing to refresh (${scopeLabel}): ${skipped.length > 0 ? skipped.join(', ') : 'no refreshable legs'}.`);
+          return;
+        }
+        const delta = afterMinutes - beforeMinutes;
+        const deltaLabel = delta === 0
+          ? (zh ? '持平' : 'unchanged')
+          : (zh ? `${delta > 0 ? '+' : ''}${delta} 分钟` : `${delta > 0 ? '+' : ''}${delta} min`);
+        setNotice(zh
+          ? `已刷新${scopeLabel}交通 ${beforeMinutes}→${afterMinutes} 分钟（${deltaLabel}），更新 ${total.updated} 段${skipped.length > 0 ? `；跳过：${skipped.join('、')}` : ''}。`
+          : `Refreshed ${scopeLabel}: ${beforeMinutes}→${afterMinutes} min (${deltaLabel}), ${total.updated} legs updated${skipped.length > 0 ? `; skipped: ${skipped.join(', ')}` : ''}.`);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [selectedTrip, disabled, activeDate, tripDates, scheduledAll, legs, setBusy, setLegs, showPersistError, load, setNotice, zh],
+  );
+
   return {
     handleUpsertTrip,
     handleDeleteTrip,
@@ -1107,6 +1203,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleSwitchTravelMode,
     handleClearTravelEstimate,
     handleRecalculateTravelEstimate,
+    refreshTravelTimes,
     handleSelectHotelForStaySpan,
     handleUpdateFxRates,
     handleDropPlace,

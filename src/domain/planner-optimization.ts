@@ -84,6 +84,119 @@ export interface ResolvedOptimizationStop {
   coords: { lat: number; lng: number } | null;
 }
 
+/** ORS matrix facts plus the stop order its rows/columns follow. */
+export interface OrsMatrixInput {
+  order: PlannerScheduledPlace[];
+  facts: OrsMatrixFacts;
+}
+
+export interface DayTravelRefreshLedger {
+  updated: number;
+  manualSkipped: number;
+  keptEstimate: number;
+  missingCoordsSkipped: number;
+  samePlaceSkipped: number;
+  unroutableSkipped: number;
+}
+
+export interface DayTravelRefreshResult {
+  legs: PlannerTripLeg[];
+  ledger: DayTravelRefreshLedger;
+  beforeMinutes: number;
+  afterMinutes: number;
+}
+
+function emptyTravelRefreshLedger(): DayTravelRefreshLedger {
+  return {
+    updated: 0,
+    manualSkipped: 0,
+    keptEstimate: 0,
+    missingCoordsSkipped: 0,
+    samePlaceSkipped: 0,
+    unroutableSkipped: 0,
+  };
+}
+
+function hasFiniteCoords(place: PlannerScheduledPlace): boolean {
+  const coords = place.coordinates;
+  return !!coords
+    && typeof coords.lat === 'number' && typeof coords.lng === 'number'
+    && Number.isFinite(coords.lat) && Number.isFinite(coords.lng);
+}
+
+/**
+ * Decides per adjacent pair what a travel-time refresh would do, without any
+ * I/O. `ors: null` means no fresh road-network data for this day (transit
+ * mode, missing key, failed request — the caller owns that distinction);
+ * refreshable pairs are then counted as kept estimates.
+ * Same-place pairs and manual legs are never touched, mirroring the matrix
+ * builders' invariants.
+ */
+export function computeDayTravelRefresh(
+  trip: PlannerTrip,
+  stops: PlannerScheduledPlace[],
+  existingLegs: PlannerTripLeg[],
+  ors: OrsMatrixInput | null,
+  mode: PlannerTravelMode,
+  now = new Date(),
+): DayTravelRefreshResult {
+  const ledger = emptyTravelRefreshLedger();
+  const legs: PlannerTripLeg[] = [];
+  let beforeMinutes = 0;
+  let afterMinutes = 0;
+  const existingByPair = new Map(
+    existingLegs
+      .filter((leg) => leg.trip_id === trip.id)
+      .map((leg) => [`${leg.from_place_id}→${leg.to_place_id}`, leg] as const),
+  );
+  const orderIndex = new Map((ors?.order ?? []).map((place, index) => [place.id, index]));
+  for (let index = 0; index + 1 < stops.length; index += 1) {
+    const from = stops[index];
+    const to = stops[index + 1];
+    const fromPlaceId = from.place_id || from.id;
+    const toPlaceId = to.place_id || to.id;
+    if (!fromPlaceId || !toPlaceId) continue;
+    if (isSamePlacePair(from, to)) {
+      ledger.samePlaceSkipped += 1;
+      continue;
+    }
+    const existing = existingByPair.get(`${fromPlaceId}→${toPlaceId}`);
+    if (existing?.source === 'manual') {
+      ledger.manualSkipped += 1;
+      continue;
+    }
+    if (!hasFiniteCoords(from) || !hasFiniteCoords(to)) {
+      ledger.missingCoordsSkipped += 1;
+      continue;
+    }
+    if (!ors) {
+      ledger.keptEstimate += 1;
+      continue;
+    }
+    const row = orderIndex.get(from.id);
+    const col = orderIndex.get(to.id);
+    const cell = row !== undefined && col !== undefined
+      ? ors.facts.durations_minutes[row]?.[col]
+      : null;
+    if (typeof cell !== 'number') {
+      ledger.unroutableSkipped += 1;
+      continue;
+    }
+    const distance = ors.facts.distances_meters[row!]?.[col!] ?? 0;
+    const before = existing && existing.duration_minutes > 0
+      ? existing.duration_minutes
+      : (calculateDefaultTripLeg(trip, from, to, mode, now)?.duration_minutes ?? 0);
+    legs.push(buildOrsSingleLeg(trip, fromPlaceId, toPlaceId, mode, {
+      duration_minutes: cell,
+      distance_meters: distance,
+    }, now));
+    ledger.updated += 1;
+    beforeMinutes += before;
+    afterMinutes += cell;
+  }
+  return { legs, ledger, beforeMinutes, afterMinutes };
+}
+
 /**
  * Resolves each stop's coordinates with the same field-first, URL-fallback
  * rule the map uses. Callers gate on `coords === null` and materialize

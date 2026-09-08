@@ -6,6 +6,7 @@ import {
   buildHeuristicDayTravelMatrix,
   buildOrsSingleLeg,
   computeDayOrderOptimization,
+  computeDayTravelRefresh,
   materializeStopCoordinates,
   resolveStopCoordinates,
   type OrsMatrixFacts,
@@ -282,6 +283,80 @@ describe('resolveStopCoordinates & materializeStopCoordinates', () => {
     expect(materialized[0]?.coordinates).toEqual({ lat: 18.8, lng: 98.95 });
     expect(materialized[0]?.id).toBe(urlOnly.id);
     expect(materialized[1]).toBe(withField);
+  });
+});
+
+describe('computeDayTravelRefresh', () => {
+  const stops3 = () => [coordStop('a'), coordStop('b'), coordStop('c')];
+  // Full 3x3 matrix over the stop order; adjacent cells drive the refresh.
+  const matrix3 = (ab: number | null, bc: number | null): OrsMatrixFacts => ({
+    durations_minutes: [
+      [0, ab, null],
+      [null, 0, bc],
+      [null, null, 0],
+    ],
+    distances_meters: [
+      [0, 1200, null],
+      [null, 0, 1300],
+      [null, null, 0],
+    ],
+  });
+  const orsInput = (ab: number | null, bc: number | null) => ({ order: stops3(), facts: matrix3(ab, bc) });
+
+  it('writes ORS legs for adjacent pairs on the shared leg id scheme', () => {
+    const stops = stops3();
+    const result = computeDayTravelRefresh(trip, stops, [], orsInput(11, 12), 'driving');
+    expect(result.ledger.updated).toBe(2);
+    expect(result.legs.map((leg) => leg.id)).toEqual(['leg:trip-1:a:b', 'leg:trip-1:b:c']);
+    expect(result.legs.every((leg) => leg.source === 'openrouteservice')).toBe(true);
+    expect(result.legs[0]?.distance_meters).toBe(1200);
+    expect(result.afterMinutes).toBe(23);
+  });
+
+  it('never overwrites manual legs and prefers stored durations for the before delta', () => {
+    const stops = stops3();
+    const manual = leg('a', 'b', 30, 'manual');
+    const result = computeDayTravelRefresh(trip, stops, [manual], orsInput(11, 12), 'driving');
+    expect(result.ledger.updated).toBe(1);
+    expect(result.ledger.manualSkipped).toBe(1);
+    expect(result.legs.map((leg) => leg.id)).toEqual(['leg:trip-1:b:c']);
+    // b→c has no stored leg: before falls back to the distance heuristic (>0).
+    expect(result.beforeMinutes).toBeGreaterThan(0);
+    expect(result.afterMinutes).toBe(12);
+  });
+
+  it('counts everything as kept estimates when no ORS data is available', () => {
+    const result = computeDayTravelRefresh(trip, stops3(), [], null, 'driving');
+    expect(result.legs).toEqual([]);
+    expect(result.ledger.keptEstimate).toBe(2);
+    expect(result.ledger.updated).toBe(0);
+  });
+
+  it('skips pairs without coordinates', () => {
+    const stops = [coordStop('a'), stop('no-coords', { coordinates: undefined }), coordStop('c')];
+    const result = computeDayTravelRefresh(trip, stops, [], null, 'driving');
+    expect(result.ledger.missingCoordsSkipped).toBe(2);
+    expect(result.ledger.updated).toBe(0);
+  });
+
+  it('skips same-place visit pairs even when the matrix offers a cell', () => {
+    const checkout = coordStop('a', { visit_id: 'visit:a-checkout', id: 'visit:a-checkout', place_id: 'a' });
+    const checkin = coordStop('a', { visit_id: 'visit:a-checkin', id: 'visit:a-checkin', place_id: 'a' });
+    const pair = [checkout, checkin];
+    const ors = {
+      order: pair,
+      facts: { durations_minutes: [[0, 5], [5, 0]], distances_meters: [[0, 100], [100, 0]] },
+    };
+    const result = computeDayTravelRefresh(trip, pair, [], ors, 'driving');
+    expect(result.ledger.samePlaceSkipped).toBe(1);
+    expect(result.ledger.updated).toBe(0);
+    expect(result.legs).toEqual([]);
+  });
+
+  it('skips pairs the matrix cannot route', () => {
+    const result = computeDayTravelRefresh(trip, stops3(), [], orsInput(11, null), 'driving');
+    expect(result.ledger.updated).toBe(1);
+    expect(result.ledger.unroutableSkipped).toBe(1);
   });
 });
 
