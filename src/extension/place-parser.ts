@@ -406,6 +406,64 @@ export function isKnownPlaceTypeToken(token?: string | null): boolean {
   if (!token) return false;
   return ENTITY_LIST_TYPES.has(token.toLowerCase().replace(/\s+/g, '_'));
 }
+
+/**
+ * Service/amenity option vocabulary (Maps "amenities" chips). Matched
+ * case-insensitively against chip text; the canonical English label is kept
+ * so later AI passes see one language. These chips also leak into editorial
+ * summaries ("…by the water. · Dine-in · Takeaway"), hence the shared strip.
+ */
+const SERVICE_OPTION_CANONICAL: Array<[RegExp, string]> = [
+  [/\bdine[ -]?in\b/i, 'Dine-in'],
+  [/\btake[ -]?away\b/i, 'Takeaway'],
+  [/\bdelivery\b/i, 'Delivery'],
+  [/\bdrive[ -]?thr?u\b/i, 'Drive-through'],
+  [/\bcurbside\b/i, 'Curbside pickup'],
+  [/\boutdoor\s*seating\b/i, 'Outdoor seating'],
+  [/\bwheelchair\b/i, 'Wheelchair accessible'],
+  [/\baccessible\b/i, 'Accessible'],
+  [/\bpet[ -]?friendly\b/i, 'Pet friendly'],
+  [/\bfamily[ -]?friendly\b/i, 'Family friendly'],
+  [/\bfree\s*wi[ -]?fi\b/i, 'Free Wi-Fi'],
+  [/\bparking\b/i, 'Parking'],
+  [/\brestroom\b/i, 'Restroom'],
+  [/\bbar\s*onsite\b|\bonsite\s*bar\b/i, 'Bar onsite'],
+  [/堂食|内用/, '堂食'],
+  [/外卖|外帶|外带/, '外卖'],
+  [/自取|打包|带走/, '自取'],
+  [/户外座位|露天座/, '户外座位'],
+  [/无障碍|轮椅/, '无障碍'],
+  [/停车/, '停车'],
+  [/卫生间|洗手间/, '卫生间'],
+  [/宠物友好|可带宠物/, '宠物友好'],
+  [/儿童友好/, '儿童友好'],
+];
+
+export function matchServiceOption(text?: string | null): string | undefined {
+  const clean = cleanExtractedText(text);
+  if (!clean || clean.length > 40) return undefined;
+  for (const [pattern, canonical] of SERVICE_OPTION_CANONICAL) {
+    if (pattern.test(clean)) return canonical;
+  }
+  return undefined;
+}
+
+/**
+ * Splits an editorial summary from its trailing service-chip tail:
+ * "…by the water. · Dine-in · Takeaway" → "…by the water.".
+ * Only trailing chip-vocabulary segments are dropped; a summary made
+ * entirely of chips yields undefined (the chips live in serviceOptions).
+ */
+export function stripServiceChipsFromSummary(summary?: string | null): string | undefined {
+  const clean = cleanExtractedText(summary);
+  if (!clean) return undefined;
+  const segments = clean.split(/[·•]/).map((s) => s.trim()).filter(Boolean);
+  if (segments.length <= 1) return clean || undefined;
+  let end = segments.length;
+  while (end > 0 && matchServiceOption(segments[end - 1])) end -= 1;
+  if (end === 0) return undefined;
+  return segments.slice(0, end).join(' · ') || undefined;
+}
 export function extractEntityListResearch(item: unknown, knownTitle?: string): EntityListResearchFacts {
   const result: EntityListResearchFacts = {};
   const types = new Set<string>();

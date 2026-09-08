@@ -113,6 +113,8 @@ export interface PlannerTripPlace {
   menu_url?: string;
   reservation_url?: string;
   review_topics?: string[];
+  /** Service/amenity chips from the detail pane; stored for later AI passes, not shown in v1 UI. */
+  service_options?: string[];
   /** Google taxonomy types, e.g. ["lodging","restaurant","tourist_attraction"]. */
   types?: string[];
   /** Hotel property metadata (opening year, renovation year, rooms, check-in/out). */
@@ -570,6 +572,7 @@ export function mergeCapturedPlaceResearch(
     menu_url: hasContent(captured.menu_url) ? captured.menu_url : existing.menu_url,
     reservation_url: hasContent(captured.reservation_url) ? captured.reservation_url : existing.reservation_url,
     review_topics: (captured.review_topics && captured.review_topics.length > 0) ? captured.review_topics : existing.review_topics,
+    service_options: (captured.service_options && captured.service_options.length > 0) ? captured.service_options : existing.service_options,
     types: mergedTypes.size > 0 ? [...mergedTypes] : undefined,
     updated_at: captured.updated_at || new Date().toISOString(),
   };
@@ -895,6 +898,15 @@ export function inferPlaceKind(category?: string): PlannerPlaceKind {
     /\b(?:cafe|café|coffee|roastery|espresso|boba|bubble\s*tea|milk\s*tea|matcha|patisserie|pâtisserie|chocolatier|gelateria|gelato|waffle|pancake|crepe|crêpe|creperie|crêperie|tea\s*house|tea\s*room|tea\s*salon|salon\s*de\s*thé|dessert|bakery|boulangerie|ice\s*cream|pastry|donut|doughnut|bagel|juice\s*bar|smoothie|acai|arabica|starbucks|blue\s*bottle|doutor|komeda|tully'?s|luckin|cotti|manner|seesaw|heytea|nayuki|chagee|gong\s*cha|koi\s*th[eé]|mixue|châteraisé|chateraise|ladur[eé]e|pierre\s*herm[eé]|harbs|after\s*you)\b|카페|커피|디저트|베이커리|찻집|빙수|제과점|คาเฟ่|กาแฟ|ชา|ขนม|เบเกอรี่|ไอศกรีม|ร้านกาแฟ|ชานม|ร้านเค้ก|カフェ|喫茶|喫茶店|コーヒー|珈琲|スイーツ|ベーカリー|ケーキ|洋菓子|和菓子|甘味処|茶屋|パン屋|咖啡|甜品|奶茶|面包|烘焙|茶室|茶馆|茶饮|冰淇淋|冰品|蛋糕|糕点|点心局|下午茶|糖水|糖水铺|饮品|咖啡馆|咖啡厅|手冲|烘焙坊|甜品店|星巴克|瑞幸|库迪|霸王茶姬|喜茶|奈雪|一点点|蜜雪冰城|茶颜悦色|古茗|茶百道|tiệm\s*cà\s*phê|quán\s*trà/i.test(lower)
   ) {
     return 'cafe';
+  }
+
+  // 5b. Entertainment & Shows (theaters, cinemas, cabarets, nightclubs).
+  // Checked before generic dining: show venues tagged with 'bar' in Google
+  // types (Tiffany's, Alcazar, 69 Show) must not fall into food.
+  if (
+    /\b(?:theater|theatre|cinema|movie\s*theater|movies|cabaret|nightclub|night\s*club|clubs?|show|shows|performing\s*arts|opera|concert|concert\s*hall|music\s*hall|live\s*house|livehouse|comedy|stand[ -]?up|circus|karaoke|ktv|imax|drive[ -]?in)\b|극장|영화관|클럽|쇼|공연|โรงละคร|โรงหนัง|ไนท์คลับ|คาบาเร่ต์|การแสดง|โชว์|คอนเสิร์ต|劇場|映画館|映画|シネマ|キャバレー|ショー|ナイトクラブ|クラブ|コンサート|寄席|劇场|剧院|剧场|影院|电影院|影城|夜总会|夜店|演艺|演出|表演|秀场|歌舞|脱口秀|相声|马戏|人妖秀|演唱会|音乐厅|音乐会|话剧|歌剧|舞剧|卡拉ok|ktv|nhà\s*hát|rạp\s*chiếu\s*phim|teatro|cine|spectacle|salle\s*de\s*spectacle/i.test(lower)
+  ) {
+    return 'experience';
   }
 
   // 6. Food, Dining, Restaurants, Bars, Street Food, Cuisines
@@ -2835,6 +2847,7 @@ export function parseImportPayload(rawText: string, tripId: string): PlannerTrip
     const signals = Array.isArray(partial.signals) ? partial.signals.filter((value): value is string => typeof value === 'string') : [];
     const risks = Array.isArray(partial.risks) ? partial.risks.filter((value): value is string => typeof value === 'string') : [];
     const reviewTopics = Array.isArray(partial.review_topics) ? partial.review_topics.filter((value): value is string => typeof value === 'string') : undefined;
+    const serviceOptions = Array.isArray(partial.service_options) ? partial.service_options.filter((value): value is string => typeof value === 'string') : undefined;
     const types = Array.isArray(partial.types) ? partial.types.filter((value): value is string => typeof value === 'string') : undefined;
     const coordinates = partial.coordinates
       && Number.isFinite(partial.coordinates.lat)
@@ -2887,6 +2900,7 @@ export function parseImportPayload(rawText: string, tripId: string): PlannerTrip
       reservation_url: partial.reservation_url?.trim() || undefined,
       reservation_status: partial.reservation_status || 'none',
       review_topics: reviewTopics,
+      service_options: serviceOptions,
       types,
       hotel_facts: partial.hotel_facts,
       state: 'candidate',

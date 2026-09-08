@@ -81,6 +81,8 @@ export interface CapturePlace {
   menu_url?: string;
   reservation_url?: string;
   review_topics?: string[];
+  /** Service/amenity chips from the detail pane; stored for later AI passes, not shown in v1 UI. */
+  service_options?: string[];
   hotel_facts?: HotelPropertyFacts;
 
   inferred_kind?: CapturePlaceKind;
@@ -608,6 +610,7 @@ export function mergePlaceResearch(
     menu_url: incoming.menu_url ?? existing.menu_url,
     reservation_url: incoming.reservation_url ?? existing.reservation_url,
     review_topics: incoming.review_topics ?? existing.review_topics,
+    service_options: incoming.service_options?.length ? incoming.service_options : existing.service_options,
     // Merge price if incoming has data
     price: incoming.price?.raw ? {
       raw: incoming.price.raw,

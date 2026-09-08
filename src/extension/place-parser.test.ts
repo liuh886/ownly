@@ -6,6 +6,8 @@ import {
   extractEntityListResearch,
   extractStructuredJsonLd,
   normalizeCategoryLabel,
+  matchServiceOption,
+  stripServiceChipsFromSummary,
 } from './place-parser';
 import { extractGoogleMapsResearchFromHtml, featureIdToCid, googleMapsDetailUrlFromSourceId } from './google-maps-research';
 
@@ -205,5 +207,24 @@ describe('Google Maps saved-list enrichment', () => {
     expect(facts.priceCurrency).toBe('THB');
     expect(facts.phone).toBe('+66 2 123 4567');
     expect(facts.address).toContain('Bangkok');
+  });
+});
+
+describe('service options squeeze (M-step DOM harvest)', () => {
+  it('matches chip text to canonical labels', () => {
+    expect(matchServiceOption('Dine-in')).toBe('Dine-in');
+    expect(matchServiceOption('· Takeaway')).toBe('Takeaway');
+    expect(matchServiceOption('Delivery')).toBe('Delivery');
+    expect(matchServiceOption('堂食')).toBe('堂食');
+    expect(matchServiceOption('Grill')).toBeUndefined();
+    expect(matchServiceOption('Spicy mussels and fried fish')).toBeUndefined();
+  });
+
+  it('strips the trailing chip tail from editorial summaries', () => {
+    expect(
+      stripServiceChipsFromSummary('Spicy mussels, fried fish & other seafood dishes offered in a large, informal venue by the water. · Dine-in · Takeaway · Delivery'),
+    ).toBe('Spicy mussels, fried fish & other seafood dishes offered in a large, informal venue by the water.');
+    expect(stripServiceChipsFromSummary('· Dine-in · Takeaway')).toBeUndefined();
+    expect(stripServiceChipsFromSummary('平价泰餐')).toBe('平价泰餐');
   });
 });

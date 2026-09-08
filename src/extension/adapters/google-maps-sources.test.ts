@@ -12,6 +12,7 @@ const SEL = SELECTORS as unknown as Record<string, string>;
 function stubDocument(options: {
   heading?: string | null;
   categoryText?: string | null;
+  openStatusText?: string | null;
   jsonLd?: unknown;
   lang?: string;
 }) {
@@ -30,6 +31,11 @@ function stubDocument(options: {
         return options.categoryText == null
           ? null
           : { textContent: options.categoryText, getAttribute: () => null };
+      }
+      if (selector === SEL.openStatus) {
+        return options.openStatusText == null
+          ? null
+          : { textContent: options.openStatusText, getAttribute: () => null };
       }
       return null;
     },
@@ -87,5 +93,11 @@ describe('extractGoogleMapsPlace field provenance', () => {
     expect(place?.sourceDetail?.category).toBe('dom');
     expect(place?.sourceDetail?.rating).toBe('dom');
     expect(place?.sourceDetail?.reviewCount).toBe('dom');
+  });
+
+  it('rejects bare section headers as open status ("Hours" bug)', async () => {
+    stubDocument({ heading: 'Test Place', categoryText: '餐厅', openStatusText: 'Hours' });
+    const { extractGoogleMapsPlace } = await import('./google-maps');
+    expect(extractGoogleMapsPlace()?.openStatus).toBeUndefined();
   });
 });

@@ -53,6 +53,8 @@ export interface CurrentResearchPlace {
   reviewTopics?: string[];
   types?: string[];
   hotelFacts?: HotelPropertyFacts;
+  /** Service/amenity chips squeezed from the detail pane (Dine-in, …). Stored for later AI passes; not shown in v1 UI. */
+  serviceOptions?: string[];
 }
 
 export interface DetectedSavedList {

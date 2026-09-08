@@ -563,6 +563,7 @@ export function mergeDetectedResearchIntoPlannerPlaces(
       menu_url: domPriorityValue(research.menuUrl, undefined, existing.menu_url),
       reservation_url: domPriorityValue(research.reservationUrl, undefined, existing.reservation_url),
       review_topics: research.reviewTopics?.length ? research.reviewTopics : existing.review_topics,
+      service_options: research.serviceOptions?.length ? research.serviceOptions : existing.service_options,
       types: research.types,
       updated_at: now,
     });

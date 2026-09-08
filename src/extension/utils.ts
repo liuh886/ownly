@@ -55,6 +55,12 @@ export function cleanExtractedText(raw?: string | null): string {
   str = str
     .replace(/[\u200B-\u200D\uFEFF\u00AD\u200E\u200F]/g, '')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    // 3b. Strip Unicode private-use chars: Google renders icon glyphs with
+    // them (address pins, open-status dots, chip checks) and they otherwise
+    // leak into stored addresses/summaries as tofu boxes.
+    // NOTE: astral planes need brace escapes (\u{F0000}) plus the `u` flag —
+    // bare \u is always exactly 4 hex digits, so \uF0000 would parse as \uF000 + '0'.
+    .replace(/[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu, '')
     .replace(/[\u00A0\u3000]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();

@@ -363,3 +363,89 @@ describe('nextEnrichFailures', () => {
     expect(nextEnrichFailures(2, true)).toBeUndefined();
   });
 });
+
+describe('scrubLegacyPlace (one-time debris healing on load)', () => {
+  function stateWith(place: Partial<CapturePlace> & { id: string }): OwnlyCaptureStateV3 {
+    return normalizeCaptureStateV3({
+      version: 3,
+      collections: [{ id: 'inbox', title: 'Inbox', created_at: '2026-09-03T00:00:00Z' }],
+      active_collection_id: 'inbox',
+      places: [{
+        collection_id: 'inbox',
+        title: `Place ${place.id}`,
+        source: { provider: 'google_maps', url: `https://www.google.com/maps/place/${place.id}` },
+        inferred_kind: 'attraction',
+        captured_at: '2026-09-08T00:00:00Z',
+        ...place,
+      }],
+    });
+  }
+
+  it('drops mixed-case pseudo-prices but keeps real ones', () => {
+    const debris = stateWith({ id: 'a', price: { raw: 'Thb1', currency: 'THB', min: 1, max: 1 } }).places[0];
+    expect(debris.price).toBeUndefined();
+    const real = stateWith({ id: 'b', price: { raw: '฿200–400', currency: 'THB', min: 200, max: 400 } }).places[0];
+    expect(real.price?.raw).toBe('฿200–400');
+  });
+
+  it('decomposes fused rating+category and backfills missing numbers', () => {
+    const healed = stateWith({
+      id: 'c',
+      source: { provider: 'google_maps', url: 'https://x', category: '4.9(15)Grill' },
+    }).places[0];
+    expect(healed.source.category).toBe('Grill');
+    expect(healed.rating).toBe(4.9);
+    expect(healed.review_count).toBe(15);
+  });
+
+  it('respects user_overrides when healing', () => {
+    const kept = stateWith({
+      id: 'd',
+      source: { provider: 'google_maps', url: 'https://x', category: '4.9(15)Grill' },
+      rating: 4.2,
+      user_overrides: ['category', 'rating'],
+    }).places[0];
+    expect(kept.source.category).toBe('4.9(15)Grill');
+    expect(kept.rating).toBe(4.2);
+  });
+
+  it('drops obfuscated-class types and strips chip tails from why', () => {
+    const healed = stateWith({
+      id: 'e',
+      source: {
+        provider: 'google_maps',
+        url: 'https://x',
+        category: '海鲜馆',
+        types: ['rFGgaq2PGPKd4-EPtviuqQ0', '海鲜馆', 'bar'],
+      },
+      user: { why: 'Spicy mussels by the water. · Dine-in · Takeaway' },
+    }).places[0];
+    expect(healed.source.types).toEqual(['海鲜馆', 'bar']);
+    expect(healed.user?.why).toBe('Spicy mussels by the water.');
+  });
+
+  it('repairs theater venues misfiled as food unless overridden', () => {
+    const healed = stateWith({
+      id: 'f',
+      source: { provider: 'google_maps', url: 'https://x', category: '演艺剧场' },
+      inferred_kind: 'food',
+    }).places[0];
+    expect(healed.inferred_kind).toBe('experience');
+    const kept = stateWith({
+      id: 'g',
+      source: { provider: 'google_maps', url: 'https://x', category: '演艺剧场' },
+      inferred_kind: 'food',
+      user_overrides: ['kind'],
+    }).places[0];
+    expect(kept.inferred_kind).toBe('food');
+  });
+
+  it('leaves clean places untouched', () => {
+    const before: CapturePlace = {
+      ...createTestPlace('h'),
+      updated_at: '2026-09-01T00:00:00Z',
+    };
+    const after = stateWith(before).places[0];
+    expect(after.updated_at).toBe('2026-09-01T00:00:00Z');
+  });
+});

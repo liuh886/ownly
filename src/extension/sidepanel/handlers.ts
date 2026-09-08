@@ -83,6 +83,7 @@ function researchPlaceFromCapturePlace(place: CapturePlace): CurrentResearchPlac
     menuUrl: place.menu_url,
     reservationUrl: place.reservation_url,
     reviewTopics: place.review_topics,
+    serviceOptions: place.service_options,
     types: place.source.types,
   };
 }
@@ -160,6 +161,7 @@ async function strengthenCandidatesThroughMaps(
         menu_url: enrichedVp.menu_url || p.menu_url,
         reservation_url: enrichedVp.reservation_url || p.reservation_url,
         review_topics: enrichedVp.review_topics || p.review_topics,
+        service_options: enrichedVp.service_options?.length ? enrichedVp.service_options : p.service_options,
       });
     });
     store.setState({ ...store.stateV3, places: [...otherPlaces, ...activePlaces] });
@@ -214,6 +216,7 @@ function buildPlaceFromDetected(
     menu_url: item.menuUrl,
     reservation_url: item.reservationUrl,
     review_topics: item.reviewTopics,
+    service_options: item.serviceOptions,
     user: {
       priority: 'want',
       tags: ensurePlaceKindTag([], inferredKind, store.lang),
@@ -1028,6 +1031,7 @@ export function initHandlers(): void {
                 menu_url: enrichedVp.menu_url || cp.menu_url,
                 reservation_url: enrichedVp.reservation_url || cp.reservation_url,
                 review_topics: enrichedVp.review_topics || cp.review_topics,
+                service_options: enrichedVp.service_options?.length ? enrichedVp.service_options : cp.service_options,
                 inferred_kind: (enrichedVp.kind && enrichedVp.kind !== 'other') ? (enrichedVp.kind as unknown as import('../../domain/capture').CapturePlaceKind) : cp.inferred_kind,
               });
             });
@@ -1150,6 +1154,7 @@ export function initHandlers(): void {
                 menu_url: enrichedVp.menu_url || cp.menu_url,
                 reservation_url: enrichedVp.reservation_url || cp.reservation_url,
                 review_topics: enrichedVp.review_topics || cp.review_topics,
+                service_options: enrichedVp.service_options?.length ? enrichedVp.service_options : cp.service_options,
                 inferred_kind: (enrichedVp.kind && enrichedVp.kind !== 'other') ? (enrichedVp.kind as unknown as import('../../domain/capture').CapturePlaceKind) : cp.inferred_kind,
               });
             });
@@ -1278,6 +1283,7 @@ export function initHandlers(): void {
             menu_url: item.menuUrl ?? existing.menu_url,
             reservation_url: item.reservationUrl ?? existing.reservation_url,
             review_topics: item.reviewTopics ?? existing.review_topics,
+            service_options: item.serviceOptions?.length ? item.serviceOptions : existing.service_options,
             rating: item.rating ?? existing.rating,
             review_count: item.reviewCount ?? existing.review_count,
             price: effectivePrice ? {
@@ -1321,6 +1327,7 @@ export function initHandlers(): void {
             menu_url: item.menuUrl,
             reservation_url: item.reservationUrl,
             review_topics: item.reviewTopics,
+            service_options: item.serviceOptions,
             user: {
               priority: 'want',
               tags: ensurePlaceKindTag(savedList.listName ? [savedList.listName] : [], kind, store.lang),
@@ -1373,6 +1380,7 @@ export function initHandlers(): void {
               menu_url: enrichedVp.menu_url,
               reservation_url: enrichedVp.reservation_url,
               review_topics: enrichedVp.review_topics,
+              service_options: enrichedVp.service_options,
             });
           });
           store.setState({ ...store.stateV3, places: [...otherPlaces2, ...activePlaces2] });
@@ -1588,6 +1596,7 @@ export function initHandlers(): void {
           menu_url: item.menuUrl,
           reservation_url: item.reservationUrl,
           review_topics: item.reviewTopics,
+          service_options: item.serviceOptions,
           captured_at: now,
         };
         newPlaces.push(place);
@@ -1719,6 +1728,7 @@ export function initHandlers(): void {
       menu_url: currentPlace.menuUrl ?? existing?.menu_url,
       reservation_url: currentPlace.reservationUrl ?? existing?.reservation_url,
       review_topics: currentPlace.reviewTopics ?? existing?.review_topics,
+      service_options: currentPlace.serviceOptions?.length ? currentPlace.serviceOptions : existing?.service_options,
       user: {
         priority: existing?.user?.priority ?? 'want',
         tags,

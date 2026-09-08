@@ -46,7 +46,7 @@ import {
   safeDecodeUri,
 } from '../utils';
 import { SELECTORS, trackSelector } from '../selectors';
-import { PLACE_PARSER, isZhDocument, normalizeCategoryLabel } from '../place-parser';
+import { PLACE_PARSER, isZhDocument, matchServiceOption, normalizeCategoryLabel, stripServiceChipsFromSummary } from '../place-parser';
 import { detectPageCurrency } from '../currency-detector';
 import { extractGoogleMapsSavedListId } from '../saved-list-match';
 import { injectInlineCaptureButton, clearInlineCaptureButtons } from '../ui/inline-capture-button';
@@ -225,10 +225,33 @@ function extractAddress(): string | undefined {
 function extractSummary(): string | undefined {
   const summaryEl = document.querySelector<HTMLElement>(SELECTORS.summary);
   if (summaryEl?.textContent) {
-    const sum = cleanExtractedText(summaryEl.textContent);
+    const sum = stripServiceChipsFromSummary(summaryEl.textContent);
     if (sum && sum.length < 300 && !isJunkNavigationText(sum)) return sum;
   }
   return undefined;
+}
+
+/**
+ * M-step DOM squeeze: harvest service/amenity chips from the detail pane
+ * into a dedicated array (also stored for later AI passes) instead of
+ * letting them pollute the editorial summary.
+ */
+function extractServiceOptions(): string[] | undefined {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const pane = document.querySelector<HTMLElement>('div[role="main"]') || document.body;
+  if (!pane) return undefined;
+  for (const el of Array.from(pane.querySelectorAll<HTMLElement>('button, span[aria-label], li'))) {
+    const label = cleanExtractedText(el.getAttribute('aria-label') || el.textContent || '');
+    if (!label || label.length > 40) continue;
+    const option = matchServiceOption(label);
+    if (option && !seen.has(option)) {
+      seen.add(option);
+      found.push(option);
+      if (found.length >= 12) break;
+    }
+  }
+  return found.length > 0 ? found : undefined;
 }
 
 function extractUserNote(): string | undefined {
@@ -246,8 +269,11 @@ function extractOpenStatus(): string | undefined {
     const aria = cleanExtractedText(openEl.getAttribute('aria-label') || '');
     const text = aria || cleanExtractedText(openEl.textContent);
     // Rotated selectors can match a bare icon glyph (private-use char with
-    // no readable text). Require at least one letter or number.
-    if (text && text.length < 60 && /[\p{L}\p{N}]/u.test(text)) return text;
+    // no readable text) or a bare section header ("Hours"). Require a real
+    // status signal: an open/closed pattern or time content.
+    if (!text || text.length >= 60 || !/[\p{L}\p{N}]/u.test(text)) return undefined;
+    if (/^(hours|营业时间|opening\s*hours)$/i.test(text)) return undefined;
+    return text;
   }
   return undefined;
 }
@@ -639,6 +665,7 @@ export function extractGoogleMapsPlace(overrideCurrency?: string, hintCurrency?:
       const topics = extractReviewTopics();
       return topics.length > 0 ? topics : undefined;
     })(),
+    serviceOptions: extractServiceOptions(),
     types: stateSignals?.types,
     hotelFacts: extractHotelPropertyFacts(summary, typeof document !== 'undefined' ? document : null),
   };
@@ -812,6 +839,12 @@ export class GoogleMapsAdapter implements PageAdapter {
           clearInlineCaptureButtons(paneContainer);
           delete paneContainer.dataset.ownlyCheckedPlaceId;
         }
+        if (!hasButton && !identityChanged && paneContainer.dataset.ownlyCardInjected === 'true') {
+          // Google re-rendered the header and dropped our node without any
+          // URL change: the stale anchor/container markers would block
+          // re-injection forever. Clear and fall through to re-inject.
+          clearInlineCaptureButtons(paneContainer);
+        }
         if (!paneContainer.querySelector('.ownly-inline-fab-root')) {
           paneContainer.dataset.ownlyDetailFab = 'true';
           const injected = injectInlineCaptureButton({
@@ -854,7 +887,12 @@ export class GoogleMapsAdapter implements PageAdapter {
         clearInlineCaptureButtons(card);
         delete card.dataset.ownlyCardSig;
       }
-      if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) continue;
+      if (card.dataset.ownlyCardInjected === 'true' || card.querySelector('.ownly-inline-fab-root')) {
+        // Heal the same staleness as the detail pane: node dropped by a
+        // re-render while the marker survived → clear and re-inject below.
+        if (!card.querySelector('.ownly-inline-fab-root')) clearInlineCaptureButtons(card);
+        else continue;
+      }
 
       card.dataset.ownlyCardSig = cardSig;
       injectInlineCaptureButton({

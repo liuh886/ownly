@@ -5,6 +5,8 @@ import {
   type CaptureCollection,
   type CapturePlace,
 } from '../domain/capture';
+import { inferPlaceKind } from '../domain/planner';
+import { parseSubtitleInfo, stripServiceChipsFromSummary } from './place-parser';
 
 export const CAPTURE_STORAGE_KEY = 'ownlyCaptureStateV3';
 
@@ -43,6 +45,97 @@ function normalizeCollection(value: unknown): CaptureCollection | null {
   });
 }
 
+/**
+ * One-time legacy scrub (idempotent): removes capture debris produced by
+ * pre-D/M extractors the first time a stored place loads — mixed-case
+ * pseudo-prices ("Thb1", "RMb502"), fused rating+category ("4.9(15)Grill"),
+ * obfuscated-class types, service-chip tails in why, and theater→food kind
+ * misfires. Honors user_overrides: hand-fixed fields are never touched.
+ * Clean places pass through unchanged, so this is a no-op after healing.
+ */
+const DEBRIS_PRICE_RAW = /(?<![A-Za-z])([A-Za-z]{3})(?=\d)/;
+const PRICE_CODE_TOKENS = new Set([
+  'SGD', 'HKD', 'TWD', 'NTD', 'JPY', 'CNY', 'RMB', 'THB', 'KRW', 'MYR',
+  'VND', 'INR', 'EUR', 'GBP', 'USD', 'AUD', 'CAD', 'CHF', 'NZD', 'AED',
+  'PHP', 'IDR',
+]);
+const OBFUSCATED_TOKEN = /^(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9_-]{10,}$/;
+const ENTERTAINMENT_CATEGORY = /theater|theatre|cinema|movie|cabaret|nightclub|night\s*club|clubs?|shows?|performing\s*arts|opera|concert|剧场|剧院|影院|电影院|夜总会|夜店|演艺|演出|秀|歌舞|演唱会/i;
+
+function isDebrisPriceRaw(raw?: string | null): boolean {
+  if (!raw) return false;
+  const m = DEBRIS_PRICE_RAW.exec(raw);
+  return Boolean(m?.[1] && PRICE_CODE_TOKENS.has(m[1].toUpperCase()) && m[1] !== m[1].toUpperCase());
+}
+
+function scrubLegacyPlace(place: CapturePlace): CapturePlace {
+  const overridden = new Set(place.user_overrides ?? []);
+  let dirty = false;
+  const next: CapturePlace = { ...place, source: { ...place.source } };
+
+  if (next.price?.raw && isDebrisPriceRaw(next.price.raw)) {
+    next.price = undefined;
+    dirty = true;
+  }
+
+  const category = next.source.category;
+  if (category && !overridden.has('category')) {
+    const decomp = parseSubtitleInfo(category);
+    const remainder = category
+      .replace(/^[★☆]?\s*[1-5](?:[.,]\d)?\s*(?:[★☆])?\s*(\([0-9.,kK万mM]+\)|\d+\s*(?:reviews?|评价|评论))\s*[·•\s]*/, '')
+      .trim();
+    if (remainder && remainder !== category && remainder.length >= 2 && remainder.length < 40) {
+      next.source = { ...next.source, category: decomp.category && decomp.category !== category ? decomp.category : remainder };
+      if (decomp.rating !== undefined && !overridden.has('rating') && next.rating === undefined) {
+        next.rating = decomp.rating;
+        dirty = true;
+      }
+      if (decomp.reviewCount !== undefined && !overridden.has('review_count') && next.review_count === undefined) {
+        next.review_count = decomp.reviewCount;
+        dirty = true;
+      }
+      dirty = true;
+    }
+  }
+
+  const types = next.source.types;
+  if (types?.length) {
+    const kept = types.filter((t) => typeof t === 'string' && !OBFUSCATED_TOKEN.test(t));
+    if (kept.length !== types.length) {
+      next.source = { ...next.source, types: kept };
+      dirty = true;
+    }
+  }
+
+  const why = next.user?.why;
+  if (why) {
+    const stripped = stripServiceChipsFromSummary(why);
+    // Only rewrite when chips were actually removed (or the whole note was
+    // chips) — ignore trivial whitespace normalization noise.
+    if (stripped === undefined || (stripped !== why.trim() && stripped.length < why.trim().length)) {
+      next.user = { ...next.user, why: stripped };
+      dirty = true;
+    }
+  }
+
+  if (
+    !overridden.has('kind') &&
+    next.inferred_kind === 'food' &&
+    next.source.category &&
+    ENTERTAINMENT_CATEGORY.test(next.source.category)
+  ) {
+    const fixed = inferPlaceKind(next.source.category);
+    if (fixed !== 'food') {
+      next.inferred_kind = fixed as CapturePlace['inferred_kind'];
+      dirty = true;
+    }
+  }
+
+  if (!dirty) return place;
+  next.updated_at = new Date().toISOString();
+  return next;
+}
+
 function normalizePlace(value: unknown): CapturePlace | null {
   if (!value || typeof value !== 'object') return null;
   const p = value as Partial<CapturePlace>;
@@ -52,7 +145,7 @@ function normalizePlace(value: unknown): CapturePlace | null {
   if (!p.source || typeof p.source !== 'object') return null;
   const src = p.source as Partial<CapturePlace['source']>;
   if (typeof src.url !== 'string') return null;
-  return carryUnknownKeys(value, {
+  const normalized = carryUnknownKeys(value, {
     id: p.id,
     collection_id: p.collection_id,
     title: p.title,
@@ -97,6 +190,7 @@ function normalizePlace(value: unknown): CapturePlace | null {
     menu_url: p.menu_url,
     reservation_url: p.reservation_url,
     review_topics: Array.isArray(p.review_topics) ? p.review_topics.filter((t): t is string => typeof t === 'string') : undefined,
+    service_options: Array.isArray(p.service_options) ? p.service_options.filter((t): t is string => typeof t === 'string') : undefined,
     inferred_kind: p.inferred_kind as CapturePlace['inferred_kind'],
     user: p.user && typeof p.user === 'object' ? carryUnknownKeys(p.user, {
       priority: ((p.user as Record<string, unknown>).priority as string | undefined) as CapturePlace['user'] extends { priority?: infer P } ? P : never,
@@ -114,6 +208,7 @@ function normalizePlace(value: unknown): CapturePlace | null {
     enrich_last_failed_at: typeof p.enrich_last_failed_at === 'string' ? p.enrich_last_failed_at : undefined,
     enrich_last_attempt_at: typeof p.enrich_last_attempt_at === 'string' ? p.enrich_last_attempt_at : undefined,
   });
+  return scrubLegacyPlace(normalized);
 }
 
 export function normalizeCaptureStateV3(value: unknown): OwnlyCaptureStateV3 {

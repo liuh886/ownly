@@ -204,6 +204,7 @@ describe('Ownly Planner domain', () => {
       menu_url: 'https://example.com/menu',
       reservation_url: 'https://example.com/book',
       review_topics: ['ramen', 'queue'],
+      service_options: ['Dine-in', 'Takeaway'],
       types: ['restaurant', 'cash_only'],
     });
     const merged = mergeCapturedPlaceResearch(existing, place('rich', { title: 'Renamed' }));
@@ -215,6 +216,7 @@ describe('Ownly Planner domain', () => {
     expect(merged.menu_url).toBe('https://example.com/menu');
     expect(merged.reservation_url).toBe('https://example.com/book');
     expect(merged.review_topics).toEqual(['ramen', 'queue']);
+    expect(merged.service_options).toEqual(['Dine-in', 'Takeaway']);
     expect(merged.types).toEqual(['restaurant', 'cash_only']);
   });
 
@@ -478,6 +480,15 @@ describe('Ownly Planner domain', () => {
     expect(inferPlaceKind('大江户温泉物语 (Oedo Onsen)')).toBe('experience');
     expect(inferPlaceKind('นวดแผนไทย')).toBe('experience');
     expect(inferPlaceKind('용산 드래곤힐스파 찜질방')).toBe('experience');
+
+    // 6b. Entertainment & Shows (剧场影院 / 夜总会 / 秀场 — must not fall into food via 'bar' types)
+    expect(inferPlaceKind('演艺剧场')).toBe('experience');
+    expect(inferPlaceKind('夜总会')).toBe('experience');
+    expect(inferPlaceKind("Tiffany's Show Pattaya")).toBe('experience');
+    expect(inferPlaceKind('69 Pattaya Show')).toBe('experience');
+    expect(inferPlaceKind('Alcazar Cabaret Show')).toBe('experience');
+    expect(inferPlaceKind('阿卡萨人妖秀')).toBe('experience');
+    expect(inferPlaceKind('imax')).toBe('experience');
 
     // 7. Attractions & Sightseeing (观光景点 / 寺庙 / 博物馆 / 自然地标)
     expect(inferPlaceKind('Historical Temple & Museum')).toBe('attraction');

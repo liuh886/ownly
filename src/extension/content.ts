@@ -62,6 +62,7 @@ function applyEnriched(target: CurrentResearchPlace, enriched: CurrentResearchPl
     types: target.types && target.types.length > 0 ? target.types : enriched.types,
     priceLevel: target.priceLevel ?? enriched.priceLevel,
     detectedCurrency: target.detectedCurrency ?? enriched.detectedCurrency,
+    serviceOptions: target.serviceOptions?.length ? target.serviceOptions : enriched.serviceOptions,
   };
 }
 

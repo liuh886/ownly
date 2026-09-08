@@ -246,6 +246,14 @@ describe('cleanExtractedText & safeDecodeUri', () => {
     expect(cleanExtractedText('Tom&#x27;s Bistro')).toBe("Tom's Bistro");
   });
 
+  it('strips private-use icon glyphs leaked from Google DOM', () => {
+    const pin = String.fromCodePoint(0xE8B5);
+    const check = String.fromCodePoint(0xE5CC);
+    expect(cleanExtractedText(pin + '165 - 166 Moo 14')).toBe('165 - 166 Moo 14');
+    expect(cleanExtractedText(check + ' Dine-in ' + check)).toBe('Dine-in');
+    expect(cleanExtractedText('正常文字')).toBe('正常文字');
+  });
+
   it('normalizes minor languages (Thai, Japanese, Vietnamese, Arabic)', () => {
     // Thai place name
     const thaiName = 'ร้านอาหารไทย &amp; คาเฟ่';
