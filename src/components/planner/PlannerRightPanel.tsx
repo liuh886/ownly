@@ -1,6 +1,6 @@
 'use client';
 
-import type { PlannerTrip } from '@/domain/planner';
+import type { PlannerTrip, PlannerTripLeg } from '@/domain/planner';
 import type { PlannerControllerReturn } from './usePlannerController';
 import { DayLoadBreakdown, DayRiskList } from './PlannerDayStatsPanel';
 import { PlannerBudgetLedger } from './PlannerBudgetLedger';
@@ -16,6 +16,8 @@ export interface PlannerRightPanelProps {
   sortedPendingCandidates: PlannerControllerReturn['sortedPendingCandidates'];
   placesByDate: PlannerControllerReturn['placesByDate'];
   tripDates: PlannerControllerReturn['tripDates'];
+  legByPair: Map<string, PlannerTripLeg>;
+  tripId: string;
   selectedTrip: PlannerTrip;
   activeDate: PlannerControllerReturn['activeDate'];
   activeDayIndex: PlannerControllerReturn['activeDayIndex'];
@@ -57,7 +59,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
     currentExpenses, handleAddExpense, handleUpdateExpense, handleDeleteExpense,
     currentMembers, handleUpdateMembers, handleUpdateFxRates, dayAssessment,
     pendingCandidates, droppedPlaces, mustScheduled, mustTotal, scheduledMinutes,
-    areaCounts, maxAreaCount,
+    areaCounts, maxAreaCount, legByPair, tripId,
   } = props;
   return (
         <aside className="min-w-0 flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
@@ -122,6 +124,8 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                 language={language}
                 showLegend={false}
                 variant="compact"
+                legByPair={legByPair}
+                tripId={tripId}
               />
             </div>
           ) : rightTab === 'budget' ? (

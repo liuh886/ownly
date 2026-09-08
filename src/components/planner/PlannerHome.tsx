@@ -117,6 +117,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     setCandidateSortMode,
     scheduledAll,
     scheduled,
+    legs,
     mapScheduled,
     dayAssessment,
     dayTimeline,
@@ -242,6 +243,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     disabled,
   };
 
+  // Built once here; both map instances share it for segment time badges.
+  const legByPair = useMemo(() => new Map(
+    legs.filter((leg) => leg.trip_id === selectedTripId).map((leg) => [leg.id, leg] as const),
+  ), [legs, selectedTripId]);
+
   const rightPanelProps = {
     zh,
     language,
@@ -251,6 +257,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     mapScheduled,
     sortedPendingCandidates,
     placesByDate,
+    legByPair,
+    tripId: selectedTripId,
     tripDates,
     // Rendered only after the empty-trip early return, so the trip is non-null here.
     selectedTrip: selectedTrip!,
@@ -977,6 +985,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 onHoverPlace={setHighlightedPlaceId}
                 visitCountByPlaceId={visitCountByPlaceId}
                 language={language}
+                legByPair={legByPair}
+                tripId={selectedTripId}
               />
             </div>
           </div>

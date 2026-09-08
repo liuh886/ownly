@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PlannerTripPlace } from '@/domain/planner';
+import type { PlannerTripLeg, PlannerTripPlace } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
+import { buildSegmentBadges } from './map-badges';
 import {
   calculateBounds,
   extractPlaceCoordinates,
@@ -36,6 +37,10 @@ interface PlannerMapProps {
    * Defaults to 'full'.
    */
   variant?: 'compact' | 'full';
+  /** Persisted legs keyed by leg id, shared from PlannerHome (built once). */
+  legByPair?: Map<string, PlannerTripLeg>;
+  /** Trip id used to resolve leg ids for segment badges. */
+  tripId?: string;
 }
 
 interface Point {
@@ -179,6 +184,8 @@ export function PlannerMap({
   language = 'zh',
   showLegend = true,
   variant = 'full',
+  legByPair,
+  tripId,
 }: PlannerMapProps) {
   const compact = variant === 'compact';
   const zh = language === 'zh';
@@ -636,6 +643,31 @@ export function PlannerMap({
       });
   }, [points, zoom, centerX, centerY, containerSize.width, containerSize.height]);
 
+  // Time pills at active-day segment midpoints, sourced from the same persisted
+  // legs the timeline uses. Overlap is tested against scheduled markers only:
+  // tiny candidate dots may sit under a pill, but a numbered stop must stay readable.
+  const segmentBadges = useMemo(() => {
+    if (!legByPair || !tripId || scheduledRoutePoints.length < 2) return [];
+    const markers = markerLayout
+      .filter((item) => item.p.isScheduled)
+      .map((item) => ({
+        x: item.x,
+        y: item.y,
+        radius: item.p.isActiveDay === false ? (compact ? 10 : 12) : (compact ? 12 : 16),
+      }));
+    return buildSegmentBadges(
+      scheduledRoutePoints.map((p) => ({
+        placeId: (p.place as PlannerScheduledPlace).place_id ?? p.place.id,
+        x: p.x,
+        y: p.y,
+      })),
+      legByPair,
+      tripId,
+      markers,
+      { zh },
+    );
+  }, [scheduledRoutePoints, legByPair, tripId, markerLayout, compact, zh]);
+
   // Multi-day route polylines for line rendering
   const allDaysRoutes = useMemo(() => {
     if (!allPlacesByDate || !tripDates || tripDates.length === 0) return [];
@@ -903,6 +935,18 @@ export function PlannerMap({
             />
           </svg>
         ) : null}
+
+        {/* Segment time pills (active day, below markers, never intercepting taps) */}
+        {filterMode !== 'candidates' ? segmentBadges.map((badge) => (
+          <div
+            key={badge.key}
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border bg-white/95 px-1.5 text-[9.5px] font-semibold text-stone-600 shadow-xs"
+            style={{ left: `${badge.x}px`, top: `${badge.y}px`, borderColor: `${plannerDayColor(activeDayIndex)}88`, zIndex: 10 }}
+            title={zh ? '与时间线一致的行程段耗时' : 'Matches the timeline leg duration'}
+          >
+            {badge.text}
+          </div>
+        )) : null}
 
         {/* POI Markers */}
         {markerLayout.map(({ p, index: pIdx, x, y }) => {
