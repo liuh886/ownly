@@ -36,6 +36,8 @@ function sanitizeSharedTrip(trip: PlannerTrip): PlannerTrip {
   delete next.members;
   delete next.calendar_feed;
   delete next.ignored_duplicate_pair_ids;
+  // A retrospective backlink points at the sharer's own object graph.
+  delete next.review_id;
   return next;
 }
 
@@ -92,6 +94,7 @@ function validateTrip(raw: unknown): PlannerTrip {
   delete trip.members;
   delete trip.calendar_feed;
   delete trip.ignored_duplicate_pair_ids;
+  delete trip.review_id;
   return trip;
 }
 
