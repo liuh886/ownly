@@ -1387,47 +1387,17 @@ export function PlannerMap({
             onPointerDown={(e) => e.stopPropagation()}
           >
             {compact ? (
-              <>
-                <div className="flex items-center justify-between gap-1.5">
-                  <h4 className="truncate text-xs font-bold text-stone-900 leading-snug" title={selectedPlace.title}>
-                    {selectedPlace.title}
-                  </h4>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPlaceId(null)}
-                    className="shrink-0 rounded p-0.5 text-stone-400 hover:text-stone-700 transition cursor-pointer"
-                    title={zh ? '关闭' : 'Close'}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="mt-1.5">
-                  {selectedScheduledPlace ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onUnschedulePlace(selectedScheduledPlace);
-                      }}
-                      className="flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition"
-                    >
-                      <span>−</span>
-                      <span>{zh ? '移出当天' : 'Remove'}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onSchedulePlace(selectedPlace.id);
-                      }}
-                      className="flex w-full items-center justify-center gap-1 rounded-lg bg-stone-900 px-2 py-1.5 text-[11px] font-bold text-white hover:bg-stone-700 transition"
-                      title={zh ? `排入第 ${activeDayIndex + 1} 天路线` : `Add to Day ${activeDayIndex + 1}`}
-                    >
-                      <span>＋</span>
-                      <span>{zh ? '排入当天' : 'Add Stop'}</span>
-                    </button>
-                  )}
-                </div>
-              </>
+              <MapPlaceCard
+                place={selectedPlace}
+                zh={zh}
+                activeDayIndex={activeDayIndex}
+                visitCount={visitCountByPlaceId?.get(selectedPlace.id) ?? 0}
+                scheduledPlace={selectedScheduledPlace}
+                onSchedule={onSchedulePlace}
+                onUnschedule={onUnschedulePlace}
+                onShelve={onShelvePlace}
+                onClose={() => setSelectedPlaceId(null)}
+              />
             ) : (
               <MapPlaceCard
                 place={selectedPlace}
