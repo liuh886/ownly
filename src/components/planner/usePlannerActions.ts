@@ -843,6 +843,34 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     [disabled, load, places, setNotice, showPersistError, zh],
   );
 
+  // Candidate-pool edit mode: patch price/note without touching anything
+  // else. Blank input clears the field. Silent on success (the card badges
+  // update visibly); only persistence failures surface a notice.
+  // Pin semantics come free from mergeCapturedPlaceResearch: why/notes are
+  // planner-owned and recapture never overwrites them.
+  const handleUpdatePlaceFields = useCallback(
+    async (placeId: string, patch: { observed_price?: string; why?: string }) => {
+      if (!placeId || disabled) return;
+      const target = places.find((p) => p.id === placeId);
+      if (!target) return;
+      const nextPrice = patch.observed_price === undefined
+        ? target.observed_price
+        : (patch.observed_price.trim() || undefined);
+      const nextWhy = patch.why === undefined
+        ? target.why
+        : (patch.why.trim() || undefined);
+      if (nextPrice === target.observed_price && nextWhy === target.why) return;
+      try {
+        await plannerRepository.upsertPlace({ ...target, observed_price: nextPrice, why: nextWhy });
+        await load();
+      } catch (error) {
+        showPersistError(error, 'update place details');
+        await load();
+      }
+    },
+    [disabled, load, places, showPersistError],
+  );
+
   const schedulePlace = useCallback(
     async (placeId: string, date = activeDate, opts?: { sortOrder?: number }) => {
       if (!date || disabled || isScheduling) return;
@@ -1433,6 +1461,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleBatchMergeCandidates,
     handleSavePlaceTiming,
     handleChangePlaceKind,
+    handleUpdatePlaceFields,
     schedulePlace,
     removeVisit,
     moveScheduled,
