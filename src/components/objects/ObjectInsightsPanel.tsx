@@ -22,6 +22,7 @@ const COPY = {
     total: 'Total',
     netWorth: 'Net worth trend',
     latest: 'Latest',
+    previous: 'Previous',
     change: 'Change',
     moreItems: '… {n} more',
     noSnapshots: 'Record snapshots in the Accounts tab to start the trend.',
@@ -38,6 +39,7 @@ const COPY = {
     total: '合计',
     netWorth: '净值趋势',
     latest: '最新',
+    previous: '上期',
     change: '变化',
     moreItems: '… 还有 {n} 项',
     noSnapshots: '去「账户」页记录快照后开始趋势统计。',
@@ -187,6 +189,9 @@ export function ObjectInsightsPanel({
               {latest ? (
                 <div className="mt-auto flex flex-wrap gap-3 border-t border-stone-100 pt-1.5 text-xs text-stone-600">
                   <span>{copy.latest} {latest.date}</span>
+                  {previous ? (
+                    <span>{copy.previous} {previous.date}</span>
+                  ) : null}
                   {delta !== null ? (
                     <span className={delta >= 0 ? 'text-emerald-700' : 'text-rose-600'}>
                       {copy.change} {delta >= 0 ? '+' : ''}{delta.toLocaleString('en-US')}
