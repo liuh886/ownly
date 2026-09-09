@@ -52,10 +52,8 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
     handleSwitchTravelMode, handleClearTravelEstimate, handleRecalculateTravelEstimate,
   } = props;
   const [transferExpanded, setTransferExpanded] = useState(false);
-  // Banners + stops scroll away as one unit (nothing is sticky here).
-  const scrollable = scheduled.length > 6;
   return (
-          <div className={`p-2 sm:p-2.5 ${scrollable ? 'timeline-scroll max-h-[420px] overflow-y-auto overscroll-contain pr-1' : ''}`}>
+          <div className="p-2 sm:p-2.5">
             {currentDayTransferInfo?.isTransferDay ? (
               <div className="mb-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 shadow-2xs">
                 <button
