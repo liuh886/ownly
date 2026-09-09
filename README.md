@@ -220,7 +220,7 @@ The MCP tool surface covers:
 
 The source-of-truth stays in the user-selected Ownly data folder. Facts returned by an MCP tool can enter the connected external agent's context, so Ownly does not claim that every selected fact remains on-device during an agent session.
 
-The publish-ready MCP package lives in [`packages/mcp`](packages/mcp). See the [Ownly MCP Guide](docs/MCP.md) for Codex and Claude Code setup, privacy boundaries and example prompts.
+Install it with `npx -y @ownly-app/mcp --data-dir <vault-or-data-root>` (source in [`packages/mcp`](packages/mcp)). See the [Ownly MCP Guide](docs/MCP.md) for Codex and Claude Code setup, privacy boundaries and example prompts.
 
 ## Current runtime status
 

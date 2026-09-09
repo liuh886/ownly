@@ -128,13 +128,8 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
               </article>
 
               <article className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 sm:p-5">
-                <h3 className="text-sm font-semibold text-emerald-950">{copy.readOnlyTitle}</h3>
-                <p className="mt-2 text-xs leading-5 text-emerald-900/80">{copy.readOnlyBody}</p>
-              </article>
-
-              <article className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-                <h3 className="text-sm font-semibold text-amber-950">{copy.privacyTitle}</h3>
-                <p className="mt-2 text-xs leading-5 text-amber-900/80">{copy.privacyBody}</p>
+                <h3 className="text-sm font-semibold text-emerald-950">{copy.safetyTitle}</h3>
+                <p className="mt-2 text-xs leading-5 text-emerald-900/80">{copy.safetyBody}</p>
               </article>
             </div>
 
@@ -143,15 +138,6 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
                 <h3 className="text-sm font-semibold text-stone-950">{copy.setupTitle}</h3>
                 <p className="mt-2 text-xs leading-5 text-stone-500">{copy.setupIntro}</p>
                 <div className="mt-4 space-y-3">
-                  <CommandBlock
-                    label={copy.buildLabel}
-                    command={copy.buildCommand}
-                    copyLabel={copy.copyLabel}
-                    copiedLabel={copy.copiedLabel}
-                    copyKey="build"
-                    copiedKey={copiedKey}
-                    onCopy={(key, value) => void copyCommand(key, value)}
-                  />
                   <CommandBlock
                     label={copy.codexLabel}
                     command={copy.codexCommand}
@@ -172,6 +158,16 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
                     onCopy={(key, value) => void copyCommand(key, value)}
                   />
                   <p className="px-1 text-[11px] leading-5 text-stone-500">{copy.claudeVerify}</p>
+                  <CommandBlock
+                    label={copy.otherLabel}
+                    command={copy.otherCommand}
+                    copyLabel={copy.copyLabel}
+                    copiedLabel={copy.copiedLabel}
+                    copyKey="other"
+                    copiedKey={copiedKey}
+                    onCopy={(key, value) => void copyCommand(key, value)}
+                  />
+                  <p className="px-1 text-[11px] leading-5 text-stone-500">{copy.otherHint}</p>
                 </div>
                 <p className="mt-4 rounded-lg bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-600">
                   {copy.placeholderNote}

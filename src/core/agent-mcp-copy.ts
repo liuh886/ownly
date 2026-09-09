@@ -14,21 +14,20 @@ export interface AgentMcpCopy {
   dataNote: string;
   setupTitle: string;
   setupIntro: string;
-  buildLabel: string;
-  buildCommand: string;
   codexLabel: string;
   codexCommand: string;
   codexVerify: string;
   claudeLabel: string;
   claudeCommand: string;
   claudeVerify: string;
+  otherLabel: string;
+  otherCommand: string;
+  otherHint: string;
   placeholderNote: string;
   promptsTitle: string;
   prompts: string[];
-  privacyTitle: string;
-  privacyBody: string;
-  readOnlyTitle: string;
-  readOnlyBody: string;
+  safetyTitle: string;
+  safetyBody: string;
   docsLabel: string;
   closeLabel: string;
   copyLabel: string;
@@ -40,48 +39,45 @@ const COPY: Record<WYQDLanguage, AgentMcpCopy> = {
     eyebrow: 'Agent access',
     title: 'Use Ownly with Codex or Claude Code',
     description:
-      'Ownly MCP lets an external agent query and, when explicitly enabled, maintain validated records in the same local Markdown source of truth.',
+      'One command connects your agent to the same local Ownly facts. No clone, no build, no uploads.',
     scopeBadge: 'MCP v0.7 · read-only by default',
-    localBadge: 'Local stdio process',
+    localBadge: 'Local stdio · npm',
     whatTitle: 'What this gives you',
     whatBody:
-      'Ask an agent about renewals, subscription spend, object history, review evidence, or data health without asking it to scrape Markdown files or infer state from filenames.',
-    dataTitle: '1 · Point MCP at your Ownly data location',
+      'Ask about renewals, spending, object history, or data health without letting the agent scrape Markdown files or guess from filenames.',
+    dataTitle: '1 · Point it at your Ownly data',
     dataBody:
-      'Use either the operating-system folder containing the default Ownly/ directory or a custom data root that contains Objects/ directly. Do not point at Objects/ itself or an individual Markdown file.',
-    dataExample: '<VAULT>/Ownly/Objects/... or <CUSTOM_ROOT>/Objects/...',
+      'Use the folder containing the default Ownly/ directory, or a custom root containing Objects/ directly. Browsers never reveal the real OS path — copy it from Finder, File Explorer, Terminal, or your Obsidian vault location.',
+    dataExample: '<VAULT_OR_DATA_ROOT> — e.g. D:\\MyVault or /Users/you/Vault',
     dataNote:
-      'The Web/PWA can open a folder but browsers do not expose its absolute OS path. Use the real local path from Finder, File Explorer, Terminal, or your Obsidian Vault location.',
-    setupTitle: '2 · Build once, then register the local MCP process',
+      'Never point at Objects/ itself or a single Markdown file. Quote Windows paths that contain spaces.',
+    setupTitle: '2 · Connect with one command',
     setupIntro:
-      'The public npm release is tracked separately. The current product path uses the source-built local executable below.',
-    buildLabel: 'Build Ownly MCP',
-    buildCommand: `git clone https://github.com/liuh886/ownly.git\ncd ownly\nnpm ci\nnpm install --prefix packages/mcp --ignore-scripts --no-audit --no-fund\nnpm run build --prefix packages/mcp`,
-    codexLabel: 'Connect Codex',
+      'Published on npm (0.7.1+). Requires Node 20+ and nothing else.',
+    codexLabel: 'Codex',
     codexCommand:
-      'codex mcp add ownly -- node /absolute/path/to/ownly/packages/mcp/dist/index.js --data-dir <VAULT_OR_DATA_ROOT>',
+      'codex mcp add ownly -- npx -y @ownly-app/mcp --data-dir <VAULT_OR_DATA_ROOT>',
     codexVerify: 'Verify with: codex mcp list · inside Codex use /mcp',
-    claudeLabel: 'Connect Claude Code',
+    claudeLabel: 'Claude Code',
     claudeCommand:
-      'claude mcp add --transport stdio --scope user ownly -- node /absolute/path/to/ownly/packages/mcp/dist/index.js --data-dir <VAULT_OR_DATA_ROOT>',
+      'claude mcp add --transport stdio --scope user ownly -- npx -y @ownly-app/mcp --data-dir <VAULT_OR_DATA_ROOT>',
     claudeVerify: 'Verify with: claude mcp list · inside Claude Code use /mcp',
+    otherLabel: 'Other clients (Cursor / Windsurf / VS Code)',
+    otherCommand:
+      '{"mcpServers":{"ownly":{"command":"npx","args":["-y","@ownly-app/mcp","--data-dir","<VAULT_OR_DATA_ROOT>"]}}}',
+    otherHint:
+      'Paste into your MCP config file (Cursor: Settings → MCP; Claude Desktop: claude_desktop_config.json), then restart the client.',
     placeholderNote:
-      'Replace both placeholders with real absolute paths. Keep the Ownly source checkout and your Ownly data folder wherever you normally store them.',
-    promptsTitle: '3 · Start with questions that benefit from recorded evidence',
+      'Replace <VAULT_OR_DATA_ROOT> with the real absolute path to your data location.',
+    promptsTitle: '3 · Start with one of these',
     prompts: [
-      'Which subscriptions renew in the next 30 days? Use Ownly rather than guessing from memory.',
-      'Show my active software subscriptions and annualized cost. Do not add different currencies together.',
-      'Which subscriptions look worth reviewing first? Separate recorded Ownly facts from your recommendation.',
-      'Why did I stop using this item? Use its Ownly history and distinguish facts from inference.',
+      'Which subscriptions renew in the next 30 days? Use Ownly, do not guess from memory.',
       'Add this subscription to Ownly. Show the exact preview and wait for my confirmation before committing.',
-      'Analyze my recurring costs, but run Ownly Doctor first and tell me if the dataset has material integrity problems.',
+      'Why did I stop using this item? Use its Ownly history and keep facts separate from inference.',
     ],
-    privacyTitle: 'Privacy boundary',
-    privacyBody:
-      'Your canonical Ownly Markdown stays on your machine and Ownly does not upload the whole dataset to an Ownly service. Facts returned by a tool call are sent to the MCP client and may enter that client/model context under its own data policy.',
-    readOnlyTitle: 'Writes require two explicit gates',
-    readOnlyBody:
-      'MCP starts read-only. Start it with --allow-write (or OWNLY_MCP_ALLOW_WRITE=1) to permit commits. The agent must still prepare a validated before/after preview and obtain confirmation before commit; Ownly creates a safety backup first.',
+    safetyTitle: 'Safe by default',
+    safetyBody:
+      'Read-only unless started with --allow-write. Every write needs a validated before/after preview plus your confirmation, with a safety backup first. Your Markdown stays local; only facts returned by a tool call enter the agent context.',
     docsLabel: 'Open full MCP guide on GitHub',
     closeLabel: 'Close',
     copyLabel: 'Copy',
@@ -91,48 +87,45 @@ const COPY: Record<WYQDLanguage, AgentMcpCopy> = {
     eyebrow: 'Agent 访问',
     title: '让 Codex 或 Claude Code 使用 Ownly',
     description:
-      'Ownly MCP 让外部 Agent 查询同一份本地 Markdown 事实源；显式授权后，也能安全维护其中已经校验过的记录。',
+      '一行命令，让外部 Agent 查询同一份本地 Markdown 事实源。不用 clone，不用构建，不上传数据。',
     scopeBadge: 'MCP v0.7 · 默认只读',
-    localBadge: '本地 stdio 进程',
+    localBadge: '本地 stdio · npm',
     whatTitle: '它能解决什么',
     whatBody:
-      '你可以直接询问续费、订阅支出、物品历史、复盘证据或数据健康度，而不需要让 Agent 自己扫描 Markdown、猜文件名或推断状态。',
-    dataTitle: '1 · 告诉 MCP 你的 Ownly 数据在哪里',
+      '直接询问续费、订阅支出、物品历史或数据健康度，不需要让 Agent 自己扫描 Markdown、猜文件名或推断状态。',
+    dataTitle: '1 · 告诉它你的 Ownly 数据在哪里',
     dataBody:
-      '可以填写“包含默认 Ownly/ 文件夹”的目录，也可以直接填写内部含有 Objects/ 的自定义数据根。不要指向 Objects/ 本身或某个 Markdown 文件。',
-    dataExample: '<VAULT>/Ownly/Objects/... 或 <CUSTOM_ROOT>/Objects/...',
+      '填写“包含默认 Ownly/ 文件夹”的目录，或内部含有 Objects/ 的自定义数据根。浏览器不会暴露真实系统路径，请从 Finder、文件资源管理器、Terminal 或 Obsidian Vault 位置复制。',
+    dataExample: '<VAULT_OR_DATA_ROOT> —— 例如 D:\\MyVault 或 /Users/you/Vault',
     dataNote:
-      'Web/PWA 可以打开文件夹，但浏览器不会把真实的系统绝对路径暴露给网页。请从 Finder、文件资源管理器、Terminal，或你的 Obsidian Vault 位置取得真实本地路径。',
-    setupTitle: '2 · 本地构建一次，然后把 MCP 注册给 Agent',
+      '不要指向 Objects/ 本身或某个 Markdown 文件；Windows 路径含空格时请加引号。',
+    setupTitle: '2 · 一行命令接好',
     setupIntro:
-      '公共 npm 发布由独立任务跟踪。当前产品内给出的可执行路径，是直接使用已经落地的本地 MCP 源码包。',
-    buildLabel: '构建 Ownly MCP',
-    buildCommand: `git clone https://github.com/liuh886/ownly.git\ncd ownly\nnpm ci\nnpm install --prefix packages/mcp --ignore-scripts --no-audit --no-fund\nnpm run build --prefix packages/mcp`,
-    codexLabel: '连接 Codex',
+      '已发布到 npm（0.7.1+），只需要 Node 20+，不需要其它准备。',
+    codexLabel: 'Codex',
     codexCommand:
-      'codex mcp add ownly -- node /absolute/path/to/ownly/packages/mcp/dist/index.js --data-dir <VAULT_OR_DATA_ROOT>',
+      'codex mcp add ownly -- npx -y @ownly-app/mcp --data-dir <VAULT_OR_DATA_ROOT>',
     codexVerify: '验证：codex mcp list · 进入 Codex 后使用 /mcp',
-    claudeLabel: '连接 Claude Code',
+    claudeLabel: 'Claude Code',
     claudeCommand:
-      'claude mcp add --transport stdio --scope user ownly -- node /absolute/path/to/ownly/packages/mcp/dist/index.js --data-dir <VAULT_OR_DATA_ROOT>',
+      'claude mcp add --transport stdio --scope user ownly -- npx -y @ownly-app/mcp --data-dir <VAULT_OR_DATA_ROOT>',
     claudeVerify: '验证：claude mcp list · 进入 Claude Code 后使用 /mcp',
+    otherLabel: '其它客户端（Cursor / Windsurf / VS Code）',
+    otherCommand:
+      '{"mcpServers":{"ownly":{"command":"npx","args":["-y","@ownly-app/mcp","--data-dir","<VAULT_OR_DATA_ROOT>"]}}}',
+    otherHint:
+      '粘贴到你的 MCP 配置文件（Cursor：Settings → MCP；Claude Desktop：claude_desktop_config.json），然后重启客户端。',
     placeholderNote:
-      '把两个占位符都替换成真实绝对路径即可。Ownly 源码目录和 Ownly 数据目录可以继续放在你原本习惯的位置。',
-    promptsTitle: '3 · 从真正需要“历史证据”的问题开始问',
+      '把 <VAULT_OR_DATA_ROOT> 替换成你的数据目录真实绝对路径即可。',
+    promptsTitle: '3 · 从这三句开始问',
     prompts: [
       '未来 30 天有哪些订阅会续费？请使用 Ownly，不要凭记忆猜。',
-      '列出我仍在使用的软件订阅和年化成本。不同币种不要直接相加。',
-      '哪些订阅最值得我优先复盘？请把 Ownly 已记录事实与您的建议分开。',
-      '我为什么后来不再使用这个物品？请查 Ownly 历史，并区分事实与推断。',
       '把这个订阅加入 Ownly。请先展示完整预览，等待我确认后再提交。',
-      '分析我的订阅支出，但先运行 Ownly Doctor；如果数据存在重要完整性问题，先告诉我。',
+      '我为什么后来不再使用这个物品？请查 Ownly 历史，并把事实与推断分开。',
     ],
-    privacyTitle: '隐私边界',
-    privacyBody:
-      'Ownly 的 Markdown 事实源仍保留在你的电脑上，Ownly 不会把整份数据上传到 Ownly 云服务。但当 Agent 主动调用工具时，被返回的那部分事实会交给 MCP 客户端，并可能按照该客户端/模型自己的数据政策进入上下文。',
-    readOnlyTitle: '写入需要两道明确授权',
-    readOnlyBody:
-      'MCP 启动时默认只读。只有使用 --allow-write（或 OWNLY_MCP_ALLOW_WRITE=1）才允许提交；Agent 仍必须先生成已校验的前后对比预览，取得确认后再提交，且 Ownly 会先创建安全备份。',
+    safetyTitle: '默认安全',
+    safetyBody:
+      '默认只读；只有使用 --allow-write 启动才允许提交。每次写入都需要已校验的前后对比预览加你的确认，提交前先创建安全备份。Markdown 一直留在本地，只有被工具返回的那部分事实会进入 Agent 上下文。',
     docsLabel: '在 GitHub 查看完整 MCP 文档',
     closeLabel: '关闭',
     copyLabel: '复制',

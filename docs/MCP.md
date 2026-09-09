@@ -35,7 +35,7 @@ Read-only, which is the default:
 npx -y @ownly-app/mcp --data-dir /path/to/vault-or-data-root
 ```
 
-For a source checkout:
+For local development from a source checkout (not needed for normal use):
 
 ```bash
 npm ci
