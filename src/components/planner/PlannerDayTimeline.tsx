@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { PlannerTravelMode, PlannerTrip } from '@/domain/planner';
 import {
   calculateDefaultTripLeg,
@@ -50,8 +51,41 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
     moveScheduled, removeVisit, activeModeSwitchPair, setActiveModeSwitchPair,
     handleSwitchTravelMode, handleClearTravelEstimate, handleRecalculateTravelEstimate,
   } = props;
+  const [transferExpanded, setTransferExpanded] = useState(false);
   return (
           <div className="p-2 sm:p-2.5">
+            {currentDayTransferInfo?.isTransferDay ? (
+              <div className="mb-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setTransferExpanded((v) => !v)}
+                  aria-expanded={transferExpanded}
+                  className="flex w-full cursor-pointer items-center gap-1.5 text-left"
+                  title={zh ? '点击展开换宿详情' : 'Toggle transfer details'}
+                >
+                  <span className="shrink-0">🧳</span>
+                  <span className="min-w-0 flex-1 truncate font-bold text-amber-900">
+                    {zh ? '换宿日' : 'Transfer Day'}：{currentDayTransferInfo.checkoutHotel?.title} → {currentDayTransferInfo.checkinHotel?.title}
+                  </span>
+                  <span className={`shrink-0 text-[10px] text-amber-700 transition-transform ${transferExpanded ? 'rotate-180' : ''}`}>
+                    ▾
+                  </span>
+                </button>
+                {transferExpanded ? (
+                  <p className="mt-1.5 border-t border-amber-200/70 pt-1.5 text-[11px] leading-relaxed text-amber-800">
+                    {zh ? (
+                      <>
+                        🌅 <b>退房:</b> {currentDayTransferInfo.checkoutHotel?.title}（行李可寄放前台） → 🌙 <b>入住:</b> {currentDayTransferInfo.checkinHotel?.title}
+                      </>
+                    ) : (
+                      <>
+                        🌅 <b>Check-out:</b> {currentDayTransferInfo.checkoutHotel?.title} → 🌙 <b>Check-in:</b> {currentDayTransferInfo.checkinHotel?.title}
+                      </>
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {scheduled.length === 0 ? (
               <div className={`rounded-xl border-2 border-dashed px-4 py-12 text-center text-sm ${draggingPlaceId ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700' : 'border-stone-200 text-stone-400'}`}>
                 {zh ? '把 Research Pool 的候选拖进这一天，或点击“+ 当天”。' : 'Drag a researched candidate here, or use “+ Day”.'}

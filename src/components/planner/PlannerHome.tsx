@@ -958,27 +958,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
               </div>
             ) : null}
           </div>
-          {currentDayTransferInfo?.isTransferDay ? (
-            <div className="mx-4 mt-3 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50/90 p-3 text-xs text-amber-950 shadow-2xs">
-              <span className="text-base">🧳</span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 font-bold text-amber-900">
-                  <span>{zh ? '今日为换宿日 (Hotel Transfer Day)' : 'Hotel Transfer Day'}</span>
-                </div>
-                <p className="mt-0.5 text-[11px] text-amber-800 leading-relaxed">
-                  {zh ? (
-                    <>
-                      🌅 <b>早上退房:</b> {currentDayTransferInfo.checkoutHotel?.title} (行李可寄放前台或直送新店) ➔ 🚶 <b>白天游览</b> ➔ 🌙 <b>傍晚入住:</b> {currentDayTransferInfo.checkinHotel?.title}
-                    </>
-                  ) : (
-                    <>
-                      🌅 <b>Morning Check-out:</b> {currentDayTransferInfo.checkoutHotel?.title} ➔ 🚶 <b>Sightseeing</b> ➔ 🌙 <b>Evening Check-in:</b> {currentDayTransferInfo.checkinHotel?.title}
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-          ) : currentDayTransferInfo?.checkoutHotel && !currentDayTransferInfo.stayHotel ? (
+          {!currentDayTransferInfo?.isTransferDay && currentDayTransferInfo?.checkoutHotel && !currentDayTransferInfo.stayHotel ? (
             <div className="mx-4 mt-3 flex items-center justify-between rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs text-sky-950 shadow-2xs">
               <div className="flex items-center gap-1.5 font-medium truncate">
                 <span>🌅</span>
