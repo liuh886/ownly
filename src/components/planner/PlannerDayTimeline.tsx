@@ -52,8 +52,10 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
     handleSwitchTravelMode, handleClearTravelEstimate, handleRecalculateTravelEstimate,
   } = props;
   const [transferExpanded, setTransferExpanded] = useState(false);
+  // Banners + stops scroll away as one unit (nothing is sticky here).
+  const scrollable = scheduled.length > 6;
   return (
-          <div className="p-2 sm:p-2.5">
+          <div className={`p-2 sm:p-2.5 ${scrollable ? 'timeline-scroll max-h-[420px] overflow-y-auto overscroll-contain pr-1' : ''}`}>
             {currentDayTransferInfo?.isTransferDay ? (
               <div className="mb-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 shadow-2xs">
                 <button
@@ -85,13 +87,43 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                   </p>
                 ) : null}
               </div>
+            ) : !currentDayTransferInfo?.isTransferDay && currentDayTransferInfo?.checkoutHotel && !currentDayTransferInfo.stayHotel ? (
+              <div className="mb-1.5 flex items-center justify-between gap-1.5 rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs text-sky-950 shadow-2xs">
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 font-medium">
+                  <span className="shrink-0">🌅</span>
+                  <span className="truncate">
+                    {zh ? '早晨退房出发:' : 'Morning Checkout & Depart:'}{' '}
+                    <strong className="font-bold">{currentDayTransferInfo.checkoutHotel.title}</strong>
+                  </span>
+                </div>
+                <span className="shrink-0 rounded-full bg-sky-200/80 px-2 py-0.5 text-[10.5px] font-bold text-sky-900">
+                  {zh ? '退房出发日 · 今晚不住宿' : 'Checkout & Departure Day'}
+                </span>
+              </div>
+            ) : currentDayTransferInfo?.stayHotel ? (
+              <div className="mb-1.5 flex items-center justify-between gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-950 shadow-2xs">
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 font-medium">
+                  <span className="shrink-0">🌙</span>
+                  <span className="truncate">
+                    {zh ? '今晚住宿:' : 'Tonight Stay:'}{' '}
+                    <strong className="font-bold">{currentDayTransferInfo.stayHotel.title}</strong>
+                  </span>
+                </div>
+                {currentDayTransferInfo.totalStayNights && currentDayTransferInfo.totalStayNights > 1 ? (
+                  <span className="shrink-0 rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10.5px] font-bold text-emerald-900">
+                    {zh
+                      ? `连住第 ${currentDayTransferInfo.stayNightIndex} 晚 / 共 ${currentDayTransferInfo.totalStayNights} 晚`
+                      : `Night ${currentDayTransferInfo.stayNightIndex} of ${currentDayTransferInfo.totalStayNights}`}
+                  </span>
+                ) : null}
+              </div>
             ) : null}
             {scheduled.length === 0 ? (
               <div className={`rounded-xl border-2 border-dashed px-4 py-12 text-center text-sm ${draggingPlaceId ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700' : 'border-stone-200 text-stone-400'}`}>
                 {zh ? '把 Research Pool 的候选拖进这一天，或点击“+ 当天”。' : 'Drag a researched candidate here, or use “+ Day”.'}
               </div>
             ) : (
-              <ol className={`space-y-1 ${scheduled.length > 6 ? 'timeline-scroll max-h-[420px] overflow-y-auto overscroll-contain pr-1' : ''}`}>
+              <ol className="space-y-1">
                 {scheduled.map((place, index) => {
                   const timeOverlap = dayAssessment.time_overlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
                   const openHoursIssue = dayAssessment.opening_hours_warnings.find((issue) => issue.visit_id === place.visit_id || issue.place_id === place.place_id);

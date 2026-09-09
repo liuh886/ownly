@@ -1,6 +1,18 @@
-import type { PlannerTripPlace } from '@/domain/planner';
+import type { PlannerPlaceKind, PlannerTripPlace } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
-import { PLANNER_KIND_ICONS } from '@/domain/planner';
+import { PLANNER_KIND_ICONS, PLANNER_KIND_LABELS } from '@/domain/planner';
+
+const KIND_OPTIONS: PlannerPlaceKind[] = [
+  'attraction',
+  'food',
+  'cafe',
+  'experience',
+  'shopping',
+  'stay',
+  'transit',
+  'service',
+  'other',
+];
 
 export interface MapPlaceCardProps {
   /** Candidate or scheduled place (map points carry either shape). */
@@ -14,6 +26,8 @@ export interface MapPlaceCardProps {
   onSchedule: (placeId: string) => void;
   onUnschedule: (place: PlannerScheduledPlace) => void;
   onShelve?: (placeId: string) => void;
+  /** Manual kind correction; when set a 🏷️ row lets the user re-classify. */
+  onChangeKind?: (placeId: string, kind: PlannerPlaceKind) => void;
   onClose: () => void;
 }
 
@@ -31,6 +45,7 @@ export function MapPlaceCard({
   onSchedule,
   onUnschedule,
   onShelve,
+  onChangeKind,
   onClose,
 }: MapPlaceCardProps) {
   const meta: string[] = [];
@@ -68,6 +83,25 @@ export function MapPlaceCard({
         <p className="mt-1 truncate text-[11px] text-stone-500" title={meta.join(' · ')}>
           {meta.join(' · ')}
         </p>
+      ) : null}
+
+      {/* Kind correction */}
+      {onChangeKind ? (
+        <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-stone-500">
+          <span className="shrink-0">🏷️ {zh ? '分类' : 'Kind'}</span>
+          <select
+            value={place.kind}
+            onChange={(e) => onChangeKind(place.id, e.target.value as PlannerPlaceKind)}
+            className="min-w-0 flex-1 cursor-pointer truncate rounded-md border border-stone-200 bg-white px-1 py-0.5 text-[11px] font-semibold text-stone-700"
+            title={zh ? '纠正分类（后续抓取不会覆盖）' : 'Correct kind (future captures keep it)'}
+          >
+            {KIND_OPTIONS.map((kind) => (
+              <option key={kind} value={kind}>
+                {PLANNER_KIND_ICONS[kind]} {zh ? PLANNER_KIND_LABELS[kind].zh : PLANNER_KIND_LABELS[kind].en}
+              </option>
+            ))}
+          </select>
+        </label>
       ) : null}
 
       {/* Why quote */}

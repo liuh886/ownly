@@ -194,7 +194,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
   const [poolSearch, setPoolSearch] = useState('');
-  const [candidateSortMode, setCandidateSortMode] = useState<'default' | 'distance' | 'must' | 'rating'>('default');
+  const [candidateSortMode, setCandidateSortMode] = useState<'default' | 'distance' | 'must' | 'rating'>('distance');
   const [isBatchOperating, setIsBatchOperating] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const dateNavRef = useRef<HTMLDivElement>(null);

@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import type {
+  PlannerPlaceKind,
   PlannerTravelMode,
   PlannerTrip,
   PlannerTripLeg,
@@ -16,6 +17,7 @@ import {
   exportPlacesToKML,
   exportTripToMarkdown,
   extractPlaceCoordinates,
+  getPlannerKindLabel,
   isTransitHubPlace,
   plannerTripLegId,
 } from '@/domain/planner';
@@ -743,6 +745,32 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     [load, setNotice, setVisits, showPersistError, zh],
   );
 
+  /**
+   * Manual kind correction from the planner UI. The vault record is
+   * planner-owned: mergeCapturedPlaceResearch pins kind to the stored value,
+   * so future re-capture / re-enrichment will not flip it back.
+   */
+  const handleChangePlaceKind = useCallback(
+    async (placeId: string, kind: PlannerPlaceKind) => {
+      if (!placeId || disabled) return;
+      const target = places.find((p) => p.id === placeId);
+      if (!target || target.kind === kind) return;
+      try {
+        await plannerRepository.upsertPlace({ ...target, kind });
+        await load();
+        setNotice(
+          zh
+            ? `已将「${target.title}」分类改为${getPlannerKindLabel(kind, 'zh')}，后续抓取不会覆盖。`
+            : `Changed "${target.title}" to ${getPlannerKindLabel(kind, 'en')}. Future captures will keep it.`,
+        );
+      } catch (error) {
+        showPersistError(error, 'change place kind');
+        await load();
+      }
+    },
+    [disabled, load, places, setNotice, showPersistError, zh],
+  );
+
   const schedulePlace = useCallback(
     async (placeId: string, date = activeDate) => {
       if (!date || disabled || isScheduling) return;
@@ -1246,6 +1274,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleBatchScheduleCandidates,
     handleBatchMergeCandidates,
     handleSavePlaceTiming,
+    handleChangePlaceKind,
     schedulePlace,
     removeVisit,
     moveScheduled,

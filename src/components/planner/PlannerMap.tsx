@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { PlannerTripLeg, PlannerTripPlace } from '@/domain/planner';
+import type { PlannerPlaceKind, PlannerTripLeg, PlannerTripPlace } from '@/domain/planner';
 import { plannerTripLegId } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
 import { buildSegmentBadges } from './map-badges';
@@ -42,6 +42,7 @@ interface PlannerMapProps {
   onUnschedulePlace: (place: PlannerScheduledPlace) => void;
   onShelvePlace?: (placeId: string) => void;
   onDeletePlace?: (placeId: string, placeTitle?: string) => void;
+  onChangePlaceKind?: (placeId: string, kind: PlannerPlaceKind) => void;
   onHoverPlace?: (placeId: string | null) => void;
   visitCountByPlaceId?: Map<string, number>;
   language?: 'zh' | 'en';
@@ -201,6 +202,7 @@ export function PlannerMap({
   onSchedulePlace,
   onUnschedulePlace,
   onShelvePlace,
+  onChangePlaceKind,
   onHoverPlace,
   visitCountByPlaceId,
   language = 'zh',
@@ -1396,6 +1398,7 @@ export function PlannerMap({
                 onSchedule={onSchedulePlace}
                 onUnschedule={onUnschedulePlace}
                 onShelve={onShelvePlace}
+                onChangeKind={onChangePlaceKind}
                 onClose={() => setSelectedPlaceId(null)}
               />
             ) : (
@@ -1408,6 +1411,7 @@ export function PlannerMap({
                 onSchedule={onSchedulePlace}
                 onUnschedule={onUnschedulePlace}
                 onShelve={onShelvePlace}
+                onChangeKind={onChangePlaceKind}
                 onClose={() => setSelectedPlaceId(null)}
               />
             )}

@@ -141,7 +141,6 @@ export function TabRenderer({
         <ObjectInsightsPanel
           objects={objects}
           snapshots={snapshots}
-          logs={(storedLogs ?? []).map((stored) => stored.entity)}
           membership={membership}
           language={language}
         />

@@ -181,6 +181,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleBatchScheduleCandidates,
     handleBatchMergeCandidates,
     handleSavePlaceTiming,
+    handleChangePlaceKind,
     schedulePlace,
     removeVisit,
     moveScheduled,
@@ -323,6 +324,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     removeVisit,
     handleDropPlace,
     handleDeletePlace,
+    handleChangePlaceKind,
     setHighlightedPlaceId,
     visitCountByPlaceId,
     scheduled,
@@ -958,37 +960,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
               </div>
             ) : null}
           </div>
-          {!currentDayTransferInfo?.isTransferDay && currentDayTransferInfo?.checkoutHotel && !currentDayTransferInfo.stayHotel ? (
-            <div className="mx-4 mt-3 flex items-center justify-between rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs text-sky-950 shadow-2xs">
-              <div className="flex items-center gap-1.5 font-medium truncate">
-                <span>🌅</span>
-                <span className="truncate">
-                  {zh ? '早晨退房出发:' : 'Morning Checkout & Depart:'}{' '}
-                  <strong className="font-bold">{currentDayTransferInfo.checkoutHotel.title}</strong>
-                </span>
-              </div>
-              <span className="shrink-0 rounded-full bg-sky-200/80 px-2 py-0.5 text-[10.5px] font-bold text-sky-900">
-                {zh ? '退房出发日 · 今晚不住宿' : 'Checkout & Departure Day'}
-              </span>
-            </div>
-          ) : currentDayTransferInfo?.stayHotel ? (
-            <div className="mx-4 mt-3 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-950 shadow-2xs">
-              <div className="flex items-center gap-1.5 font-medium truncate">
-                <span>🌙</span>
-                <span className="truncate">
-                  {zh ? '今晚住宿:' : 'Tonight Stay:'}{' '}
-                  <strong className="font-bold">{currentDayTransferInfo.stayHotel.title}</strong>
-                </span>
-              </div>
-              {currentDayTransferInfo.totalStayNights && currentDayTransferInfo.totalStayNights > 1 ? (
-                <span className="shrink-0 rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10.5px] font-bold text-emerald-900">
-                  {zh
-                    ? `连住第 ${currentDayTransferInfo.stayNightIndex} 晚 / 共 ${currentDayTransferInfo.totalStayNights} 晚`
-                    : `Night ${currentDayTransferInfo.stayNightIndex} of ${currentDayTransferInfo.totalStayNights}`}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
           <DayRiskSummary zh={zh} assessment={dayAssessment} onViewDetails={() => setRightTab('context')} />
           <PlannerDayTimeline {...dayTimelineProps} />
         </section>
@@ -1061,6 +1032,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 onUnschedulePlace={removeVisit}
                 onShelvePlace={handleDropPlace}
                 onDeletePlace={handleDeletePlace}
+                onChangePlaceKind={handleChangePlaceKind}
                 onHoverPlace={setHighlightedPlaceId}
                 visitCountByPlaceId={visitCountByPlaceId}
                 language={language}
