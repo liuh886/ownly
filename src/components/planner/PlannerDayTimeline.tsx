@@ -559,7 +559,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                         className="inline-flex items-center gap-1 hover:text-stone-800 hover:underline cursor-pointer transition"
                                         title={zh ? '点击切换出行方式或清除预估' : 'Click to change travel mode or clear estimate'}
                                       >
-                                        <span className="font-medium text-stone-600">{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? ' · ORS' : ''}</span>
+                                        <span className="font-medium text-stone-600">{icon} {item.duration_minutes} min{distance}{item.source === 'openrouteservice' ? (zh ? ' · 🛣️ ORS路网' : ' · 🛣️ ORS') : item.source === 'manual' ? (zh ? ' · 🔒手动' : ' · 🔒manual') : (zh ? ' · 📐估算' : ' · 📐est.')}</span>
                                         <span className="text-[9px] opacity-70">▾</span>
                                       </button>
                                       {item.start && item.end ? <span className="font-mono text-stone-400">{item.start}–{item.end}</span> : null}

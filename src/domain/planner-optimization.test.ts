@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PlannerTrip, PlannerTripLeg } from './planner';
+import type { PlannerTravelMode, PlannerTrip, PlannerTripLeg } from './planner';
 import type { PlannerScheduledPlace } from './planner-visits';
 import {
   applyOrsDayTravelMatrix,
@@ -7,9 +7,12 @@ import {
   buildOrsSingleLeg,
   computeDayOrderOptimization,
   computeDayTravelRefresh,
+  computeDayTravelRefreshByMode,
   materializeStopCoordinates,
+  resolvePairEffectiveModes,
   resolveStopCoordinates,
   type OrsMatrixFacts,
+  type OrsMatrixInput,
 } from './planner-optimization';
 
 const trip: PlannerTrip = {
@@ -38,12 +41,12 @@ function stop(placeId: string, overrides: Partial<PlannerScheduledPlace> = {}): 
   };
 }
 
-function leg(from: string, to: string, minutes: number, source: PlannerTripLeg['source'] = 'manual'): PlannerTripLeg {
+function leg(from: string, to: string, minutes: number, source: PlannerTripLeg['source'] = 'manual', mode: PlannerTripLeg['mode'] = 'driving'): PlannerTripLeg {
   return {
     schema_version: '0.1', type: 'trip_leg',
     id: `leg:trip-1:${from}:${to}`,
     trip_id: 'trip-1', from_place_id: from, to_place_id: to,
-    mode: 'driving', duration_minutes: minutes, distance_meters: minutes * 500,
+    mode, duration_minutes: minutes, distance_meters: minutes * 500,
     source, created_at: '2026-09-01T00:00:00Z',
   };
 }
@@ -58,6 +61,22 @@ const COORDS: Record<string, { lat: number; lng: number }> = {
 function coordStop(placeId: string, overrides: Partial<PlannerScheduledPlace> = {}): PlannerScheduledPlace {
   return stop(placeId, { coordinates: COORDS[placeId], ...overrides });
 }
+
+const stops3 = () => [coordStop('a'), coordStop('b'), coordStop('c')];
+// Full 3x3 matrix over the stop order; adjacent cells drive the refresh.
+const matrix3 = (ab: number | null, bc: number | null): OrsMatrixFacts => ({
+  durations_minutes: [
+    [0, ab, null],
+    [null, 0, bc],
+    [null, null, 0],
+  ],
+  distances_meters: [
+    [0, 1200, null],
+    [null, 0, 1300],
+    [null, null, 0],
+  ],
+});
+const orsInput = (ab: number | null, bc: number | null) => ({ order: stops3(), facts: matrix3(ab, bc) });
 
 describe('buildHeuristicDayTravelMatrix', () => {
   it('fills heuristic durations for every pair and reuses existing manual and openrouteservice legs', () => {
@@ -289,21 +308,7 @@ describe('resolveStopCoordinates & materializeStopCoordinates', () => {
 });
 
 describe('computeDayTravelRefresh', () => {
-  const stops3 = () => [coordStop('a'), coordStop('b'), coordStop('c')];
   // Full 3x3 matrix over the stop order; adjacent cells drive the refresh.
-  const matrix3 = (ab: number | null, bc: number | null): OrsMatrixFacts => ({
-    durations_minutes: [
-      [0, ab, null],
-      [null, 0, bc],
-      [null, null, 0],
-    ],
-    distances_meters: [
-      [0, 1200, null],
-      [null, 0, 1300],
-      [null, null, 0],
-    ],
-  });
-  const orsInput = (ab: number | null, bc: number | null) => ({ order: stops3(), facts: matrix3(ab, bc) });
 
   it('writes ORS legs for adjacent pairs on the shared leg id scheme', () => {
     const stops = stops3();
@@ -359,6 +364,65 @@ describe('computeDayTravelRefresh', () => {
     const result = computeDayTravelRefresh(trip, stops3(), [], orsInput(11, null), 'driving');
     expect(result.ledger.updated).toBe(1);
     expect(result.ledger.unroutableSkipped).toBe(1);
+  });
+});
+
+describe('computeDayTravelRefreshByMode', () => {
+  const byMode = (
+    stops: PlannerScheduledPlace[],
+    existing: PlannerTripLeg[],
+    entries: Array<[PlannerTravelMode, OrsMatrixInput]>,
+    defaultMode: PlannerTravelMode = 'driving',
+  ) => computeDayTravelRefreshByMode(trip, stops, existing, new Map(entries), defaultMode);
+
+  it('refreshes each pair with its own effective mode matrix', () => {
+    const stops = stops3();
+    const walking = leg('a', 'b', 30, 'heuristic', 'walking');
+    const walkingOrs: OrsMatrixInput = { order: stops, facts: matrix3(21, 22) };
+    const result = byMode(stops, [walking], [['driving', orsInput(11, 12)], ['walking', walkingOrs]]);
+    expect(result.ledger.updated).toBe(2);
+    // a→b keeps its stored walking mode instead of being homogenized into driving.
+    expect(result.legs[0]).toMatchObject({ mode: 'walking', duration_minutes: 21, source: 'openrouteservice' });
+    expect(result.legs[1]).toMatchObject({ mode: 'driving', duration_minutes: 12 });
+  });
+
+  it('keeps estimates for pairs whose mode has no fresh matrix', () => {
+    const stops = stops3();
+    const walking = leg('a', 'b', 30, 'heuristic', 'walking');
+    const result = byMode(stops, [walking], [['driving', orsInput(11, 12)]]);
+    expect(result.ledger.updated).toBe(1);
+    expect(result.ledger.keptEstimate).toBe(1);
+    expect(result.legs.map((item) => item.id)).toEqual(['leg:trip-1:b:c']);
+  });
+
+  it('keeps transit pairs on estimates even when other modes refresh', () => {
+    const stops = stops3();
+    const transit = leg('a', 'b', 40, 'heuristic', 'transit');
+    const result = byMode(stops, [transit], [['driving', orsInput(11, 12)]]);
+    expect(result.ledger.updated).toBe(1);
+    expect(result.ledger.keptEstimate).toBe(1);
+    expect(result.legs.map((item) => item.id)).toEqual(['leg:trip-1:b:c']);
+  });
+
+  it('matches the single-mode wrapper when only the trip mode has data', () => {
+    const stops = stops3();
+    const now = new Date('2026-09-09T12:00:00Z');
+    const viaWrapper = computeDayTravelRefresh(trip, stops, [], orsInput(11, 12), 'driving', now);
+    const viaByMode = computeDayTravelRefreshByMode(trip, stops, [], new Map([['driving', orsInput(11, 12)]]), 'driving', now);
+    expect(viaByMode).toEqual(viaWrapper);
+  });
+});
+
+describe('resolvePairEffectiveModes', () => {
+  it('prefers stored leg modes and falls back to the trip default', () => {
+    const modes = resolvePairEffectiveModes('trip-1', stops3(), [leg('a', 'b', 30, 'heuristic', 'walking')], 'driving');
+    expect(modes.get('a→b')).toEqual({ mode: 'walking', manual: false });
+    expect(modes.get('b→c')).toEqual({ mode: 'driving', manual: false });
+  });
+
+  it('flags manual legs so callers can exclude them from pre-scans', () => {
+    const modes = resolvePairEffectiveModes('trip-1', stops3(), [leg('a', 'b', 30, 'manual')], 'driving');
+    expect(modes.get('a→b')).toEqual({ mode: 'driving', manual: true });
   });
 });
 

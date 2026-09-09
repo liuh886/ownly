@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import type {
   PlannerPlaceKind,
   PlannerTravelMode,
@@ -10,7 +10,7 @@ import type {
   TripExpenseItem,
 } from '@/domain/planner';
 import type { PlannerScheduledPlace, PlannerTripVisit } from '@/domain/planner-visits';
-import { materializePlannerScheduledPlaces, sortPlannerScheduledPlaces } from '@/domain/planner-visits';
+import { sortPlannerScheduledPlaces } from '@/domain/planner-visits';
 import {
   calculateDefaultTripLeg,
   exportPlacesToCSV,
@@ -24,7 +24,6 @@ import {
 import {
   buildOrsSingleLeg,
   computeDayOrderOptimization,
-  computeDayTravelRefresh,
   computeDayTravelRefreshByMode,
   materializeStopCoordinates,
   resolvePairEffectiveModes,
@@ -33,6 +32,7 @@ import {
   type DayTravelRefreshLedger,
   type OrsMatrixFacts,
   type OrsMatrixInput,
+  type PairEffectiveTravel,
   type PlannerDayOptimizationComputation,
 } from '@/domain/planner-optimization';
 import {
@@ -118,6 +118,50 @@ export function saveAutoRefreshLegsPref(enabled: boolean): void {
   }
 }
 
+/**
+ * Motorcycle pairs go through per-leg directions (with expressway/tollway
+ * avoidance) because the matrix endpoint ignores those options. Results are
+ * assembled into a sparse matrix so the shared refresh computation can
+ * consume every mode uniformly. Unroutable pairs stay null → kept estimates.
+ */
+async function fetchMotorcyclePairMatrix(
+  apiKey: string,
+  stopsForCompute: PlannerScheduledPlace[],
+  matrixStops: PlannerScheduledPlace[],
+  pairModes: Map<string, PairEffectiveTravel>,
+): Promise<OrsMatrixInput | null> {
+  const orderIndex = new Map(matrixStops.map((stop, index) => [stop.id, index]));
+  const size = matrixStops.length;
+  const durations_minutes: Array<Array<number | null>> = Array.from({ length: size }, () => Array<number | null>(size).fill(null));
+  const distances_meters: Array<Array<number | null>> = Array.from({ length: size }, () => Array<number | null>(size).fill(null));
+  let attempted = false;
+  for (let index = 0; index + 1 < stopsForCompute.length; index += 1) {
+    const from = stopsForCompute[index];
+    const to = stopsForCompute[index + 1];
+    const info = pairModes.get(travelPairKey(from.place_id || from.id, to.place_id || to.id));
+    if (!info || info.manual || info.mode !== 'motorcycle') continue;
+    const row = orderIndex.get(from.id);
+    const col = orderIndex.get(to.id);
+    if (row === undefined || col === undefined || !from.coordinates || !to.coordinates) continue;
+    attempted = true;
+    try {
+      const leg = await fetchOpenRouteServiceLeg(apiKey, from.coordinates, to.coordinates, 'motorcycle');
+      const durationRow = durations_minutes[row];
+      const distanceRow = distances_meters[row];
+      if (durationRow && distanceRow) {
+        durationRow[col] = leg.duration_minutes;
+        distanceRow[col] = leg.distance_meters;
+      }
+    } catch (error) {
+      console.warn('[Planner] Travel refresh motorcycle leg failed; keeping estimate', error);
+    }
+    // Stay comfortably under the 40/min rate limit on pair-heavy days.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  if (!attempted) return null;
+  return { order: matrixStops, facts: { durations_minutes, distances_meters } };
+}
+
 export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   const {
     zh,
@@ -161,10 +205,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     console.warn(`[Planner] Failed to ${context}`, error);
     setNotice(zh ? '保存失败，界面已还原，请重试。' : 'Save failed; the change was reverted. Please try again.');
   }, [setNotice, zh]);
-
-  // Guards overlapping manual/auto travel refreshes (state `busy` drives the
-  // button; this ref is readable from fire-and-forget auto triggers).
-  const refreshBusyRef = useRef(false);
 
   const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
     setNoticeAction({
@@ -386,11 +426,14 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         setNotice(zh ? '两站均为交通枢纽，无需本地交通预估。' : 'Both stops are transit hubs; no local commute estimate needed.');
         return;
       }
-      // Prefer real road-network routing when the trip mode supports it and an
-      // API key is configured; any failure falls back to the distance heuristic.
-      const mode = selectedTrip.transport_mode ?? 'driving';
+      // Prefer real road-network routing when the pair's effective mode
+      // (stored leg mode, else the trip default) supports it and an API key
+      // is configured; any failure falls back to the distance heuristic.
       const fromPlaceId = from.place_id || from.id;
       const toPlaceId = to.place_id || to.id;
+      const mode = legs.find(
+        (item) => item.trip_id === selectedTrip.id && item.from_place_id === fromPlaceId && item.to_place_id === toPlaceId,
+      )?.mode ?? selectedTrip.transport_mode ?? 'driving';
       let leg: PlannerTripLeg | null = null;
       let viaOrs = false;
       const fromCoords = extractPlaceCoordinates(from);
@@ -421,9 +464,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       await load();
       setNotice(viaOrs
         ? (zh ? '已用真实路网（ORS）重新计算该段。' : 'Recalculated this leg with live road-network routing (ORS).')
-        : (zh ? '已按当前行程默认交通方式重新计算。' : 'Commute estimate recalculated with the trip default mode.'));
+        : (zh ? '已按该段交通方式重新计算。' : 'Commute estimate recalculated with this leg’s travel mode.'));
     },
-    [selectedTrip, load, setLegs, setNotice, showPersistError, zh],
+    [selectedTrip, legs, load, setLegs, setNotice, showPersistError, zh],
   );
 
   const handleSelectHotelForStaySpan = useCallback(
@@ -1186,20 +1229,33 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   );
 
   const refreshTravelTimes = useCallback(
-    async (scope: 'day' | 'trip') => {
+    async (scope: 'day' | 'trip', opts?: { silent?: boolean }) => {
       if (!selectedTrip || disabled) return;
-      const mode = selectedTrip.transport_mode ?? 'transit';
-      if (!openRouteServiceProfile(mode)) {
-        setNotice(zh ? '当前交通方式无真实路网支持，保持距离估算。' : 'This travel mode has no road-network routing; keeping estimates.');
+      const trip = selectedTrip;
+      const silent = opts?.silent ?? false;
+      // Per-pair effective modes: a stored leg's mode wins, else the trip
+      // default. A transit-default trip (e.g. TH26) no longer vetoes ORS for
+      // pairs that carry their own routable mode.
+      const defaultMode = trip.transport_mode ?? 'transit';
+      const dates = scope === 'day' ? (activeDate ? [activeDate] : []) : tripDates;
+      if (dates.length === 0) return;
+      const anyRoutable = dates.some((date) => {
+        const dayStops = sortPlannerScheduledPlaces(scheduledAll.filter((place) => place.scheduled_date === date));
+        if (dayStops.length < 2) return false;
+        for (const { mode, manual } of resolvePairEffectiveModes(trip.id, dayStops, legs, defaultMode).values()) {
+          if (!manual && openRouteServiceProfile(mode)) return true;
+        }
+        return false;
+      });
+      if (!anyRoutable && !openRouteServiceProfile(defaultMode)) {
+        if (!silent) setNotice(zh ? '当前交通方式无真实路网支持，保持距离估算。' : 'This travel mode has no road-network routing; keeping estimates.');
         return;
       }
       const apiKey = loadOrsApiKey();
-      if (!apiKey.trim()) {
-        setNotice(zh ? '未配置 OpenRouteService key，保持距离估算。可在优化弹窗中填入。' : 'No OpenRouteService key configured; keeping estimates. Add one in the optimize dialog.');
+      if (anyRoutable && !apiKey.trim()) {
+        if (!silent) setNotice(zh ? '未配置 OpenRouteService key，保持距离估算。可在优化弹窗中填入。' : 'No OpenRouteService key configured; keeping estimates. Add one in the optimize dialog.');
         return;
       }
-      const dates = scope === 'day' ? (activeDate ? [activeDate] : []) : tripDates;
-      if (dates.length === 0) return;
       setBusy(true);
       try {
         const allNewLegs: PlannerTripLeg[] = [];
@@ -1214,21 +1270,35 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
           const dayStops = sortPlannerScheduledPlaces(scheduledAll.filter((place) => place.scheduled_date === date));
           if (dayStops.length < 2) continue;
           const stopsForCompute = materializeStopCoordinates(resolveStopCoordinates(dayStops));
-          let ors: OrsMatrixInput | null = null;
-          try {
-            const matrixStops = stopsForCompute.filter((stop) => stop.coordinates);
-            if (matrixStops.length >= 2) {
-              const facts = await fetchOpenRouteServiceMatrix(
-                apiKey,
-                matrixStops.map((stop) => ({ coordinates: stop.coordinates as { lat: number; lng: number } })),
-                mode,
-              );
-              ors = { order: matrixStops, facts };
+          const pairModes = resolvePairEffectiveModes(trip.id, stopsForCompute, legs, defaultMode);
+          const matrixStops = stopsForCompute.filter((stop) => stop.coordinates);
+          const orsByMode = new Map<PlannerTravelMode, OrsMatrixInput>();
+          if (matrixStops.length >= 2) {
+            const modesToFetch = new Set<PlannerTravelMode>();
+            let needsMotorcycle = false;
+            for (const { mode, manual } of pairModes.values()) {
+              if (manual || !openRouteServiceProfile(mode)) continue;
+              if (mode === 'motorcycle') needsMotorcycle = true;
+              else modesToFetch.add(mode);
             }
-          } catch (error) {
-            console.warn('[Planner] Travel refresh matrix failed for', date, '; keeping estimates', error);
+            for (const mode of modesToFetch) {
+              try {
+                const facts = await fetchOpenRouteServiceMatrix(
+                  apiKey,
+                  matrixStops.map((stop) => ({ coordinates: stop.coordinates as { lat: number; lng: number } })),
+                  mode,
+                );
+                orsByMode.set(mode, { order: matrixStops, facts });
+              } catch (error) {
+                console.warn('[Planner] Travel refresh matrix failed for', date, mode, '; keeping estimates', error);
+              }
+            }
+            if (needsMotorcycle) {
+              const motorcycle = await fetchMotorcyclePairMatrix(apiKey, stopsForCompute, matrixStops, pairModes);
+              if (motorcycle) orsByMode.set('motorcycle', motorcycle);
+            }
           }
-          const result = computeDayTravelRefresh(selectedTrip, stopsForCompute, legs, ors, mode);
+          const result = computeDayTravelRefreshByMode(trip, stopsForCompute, legs, orsByMode, defaultMode);
           allNewLegs.push(...result.legs);
           total.updated += result.ledger.updated;
           total.manualSkipped += result.ledger.manualSkipped;
@@ -1259,18 +1329,22 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         if (total.samePlaceSkipped > 0) skipped.push(zh ? `同地 ${total.samePlaceSkipped} 段` : `${total.samePlaceSkipped} same-place`);
         const scopeLabel = scope === 'day' ? (zh ? '当天' : 'day') : (zh ? `${daysWithPairs} 天` : `${daysWithPairs} days`);
         if (total.updated === 0) {
-          setNotice(zh
-            ? `无需刷新（${scopeLabel}）：${skipped.length > 0 ? skipped.join('、') : '没有可刷新的路段'}。`
-            : `Nothing to refresh (${scopeLabel}): ${skipped.length > 0 ? skipped.join(', ') : 'no refreshable legs'}.`);
+          if (!silent) {
+            setNotice(zh
+              ? `无需刷新（${scopeLabel}）：${skipped.length > 0 ? skipped.join('、') : '没有可刷新的路段'}。`
+              : `Nothing to refresh (${scopeLabel}): ${skipped.length > 0 ? skipped.join(', ') : 'no refreshable legs'}.`);
+          }
           return;
         }
         const delta = afterMinutes - beforeMinutes;
         const deltaLabel = delta === 0
           ? (zh ? '持平' : 'unchanged')
           : (zh ? `${delta > 0 ? '+' : ''}${delta} 分钟` : `${delta > 0 ? '+' : ''}${delta} min`);
-        setNotice(zh
-          ? `已刷新${scopeLabel}交通 ${beforeMinutes}→${afterMinutes} 分钟（${deltaLabel}），更新 ${total.updated} 段${skipped.length > 0 ? `；跳过：${skipped.join('、')}` : ''}。`
-          : `Refreshed ${scopeLabel}: ${beforeMinutes}→${afterMinutes} min (${deltaLabel}), ${total.updated} legs updated${skipped.length > 0 ? `; skipped: ${skipped.join(', ')}` : ''}.`);
+        if (!silent) {
+          setNotice(zh
+            ? `已刷新${scopeLabel}交通 ${beforeMinutes}→${afterMinutes} 分钟（${deltaLabel}），更新 ${total.updated} 段${skipped.length > 0 ? `；跳过：${skipped.join('、')}` : ''}。`
+            : `Refreshed ${scopeLabel}: ${beforeMinutes}→${afterMinutes} min (${deltaLabel}), ${total.updated} legs updated${skipped.length > 0 ? `; skipped: ${skipped.join(', ')}` : ''}.`);
+        }
       } finally {
         setBusy(false);
       }
