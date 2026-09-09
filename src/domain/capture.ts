@@ -283,6 +283,11 @@ export interface PlannerTripPlaceLike {
   coordinates?: { lat: number; lng: number };
   phone?: string;
   plus_code?: string;
+  menu_url?: string;
+  reservation_url?: string;
+  review_topics?: string[];
+  service_options?: string[];
+  types?: string[];
   hotel_facts?: HotelPropertyFacts;
   preferred_window?: string;
   duration_minutes?: number;
@@ -342,6 +347,11 @@ export function capturePlaceToPlannerPlace(
     coordinates: capture.coordinates,
     phone: capture.phone,
     plus_code: capture.plus_code,
+    menu_url: capture.menu_url,
+    reservation_url: capture.reservation_url,
+    review_topics: capture.review_topics,
+    service_options: capture.service_options,
+    types: capture.source.types,
     hotel_facts: capture.hotel_facts,
     preferred_window: capture.user?.preferred_window,
     duration_minutes: capture.user?.duration_minutes,

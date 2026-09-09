@@ -109,7 +109,7 @@ Archive metadata such as `archived_at`, `archived_from`, and `original_file_name
 - Entity type: `trip_place`
 - Path: `Ownly/Trip Places/`
 - Reusable location entity referenced by multiple visits.
-- Stable fields include `id`, `trip_id`, `title`, `kind` (`stay`, `attraction`, `food`, `shopping`, `transit`, `flight`, `other`), `priority` (`must`, `want`, `optional`), `state` (`candidate`, `done`, `dropped`), `source_provider`, `source_place_id`, `source_url`, `coordinates`, `open_hours`, `duration_minutes`, `observed_price`, `observed_rating`, `hotel_facts`, and `reservation_status`.
+- Stable fields include `id`, `trip_id`, `title`, `kind` (`stay`, `attraction`, `food`, `cafe`, `shopping`, `transit`, `experience`, `service`, `other`), `priority` (`must`, `want`, `optional`), `state` (`candidate`, `done`, `dropped`), `source_provider`, `source_place_id`, `source_url`, `coordinates`, `open_hours`, `duration_minutes`, `observed_price`, `observed_rating`, `hotel_facts`, and `reservation_status`.
 
 ### 10. Travel Visits
 
@@ -123,7 +123,7 @@ Archive metadata such as `archived_at`, `archived_from`, and `original_file_name
 - Entity type: `trip_leg`
 - Path: `Ownly/Trip Legs/`
 - Route segment connecting two adjacent Places on a given day.
-- Stable fields include `id`, `trip_id`, `from_place_id`, `to_place_id`, `mode` (`driving`, `walking`, `motorcycle`, `cycling`, `transit`), `duration_minutes`, `distance_meters`, and `source` (`heuristic`, `manual`, `openrouteservice`).
+- Stable fields include `id`, `trip_id`, `from_place_id`, `to_place_id`, `mode` (`driving`, `walking`, `motorcycle`, `bicycling`, `transit`), `duration_minutes`, `distance_meters`, and `source` (`heuristic`, `manual`, `openrouteservice`).
 
 ### 12. Travel Expenses
 

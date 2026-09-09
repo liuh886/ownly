@@ -83,9 +83,7 @@ export function filterAndSearchPlaces(
     const targetTag = activeFilter.slice(4).trim().toLowerCase();
     filtered = places.filter(
       (p) =>
-        p.tags.some((t) => t.trim().toLowerCase() === targetTag) ||
-        p.signals?.some((s) => s.trim().toLowerCase() === targetTag) ||
-        p.risks?.some((r) => r.trim().toLowerCase() === targetTag),
+        p.tags.some((t) => t.trim().toLowerCase() === targetTag),
     );
   }
 
@@ -358,7 +356,9 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
 
     const rawTags = [
       ...(selectedTrip?.tags || []),
-      ...tripPlaces.flatMap((p) => [...(p.tags || []), ...(p.signals || []), ...(p.risks || [])]),
+      // Facet chips are user-controlled tags only. signals/risks are
+      // remark-type facts: shown on cards and searchable, never facets.
+      ...tripPlaces.flatMap((p) => [...(p.tags || [])]),
     ];
     const knownKindTags = new Set(
       Object.values(PLANNER_KIND_LABELS).flatMap((l) => [
@@ -464,9 +464,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
       const tagLower = tag.trim().toLowerCase();
       const count = pendingCandidates.filter(
         (p) =>
-          p.tags.some((t) => t.trim().toLowerCase() === tagLower) ||
-          p.signals?.some((s) => s.trim().toLowerCase() === tagLower) ||
-          p.risks?.some((r) => r.trim().toLowerCase() === tagLower),
+          p.tags.some((t) => t.trim().toLowerCase() === tagLower),
       ).length;
       if (count > 0) {
         chips.push({

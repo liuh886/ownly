@@ -17,7 +17,7 @@ end_date: "2026-10-12"
 destinations: ["Bangkok", "Chiang Mai"]
 currency: "THB"
 members: ["Alice", "Bob"]
-transport_mode: "driving" | "walking" | "motorcycle" | "cycling" | "transit"
+transport_mode: "driving" | "walking" | "motorcycle" | "bicycling" | "transit"
 ```
 
 **Authority over**: destinations, currency, members, transport mode.
@@ -32,10 +32,10 @@ type: trip_place
 id: "place-{uuid}"
 trip_id: "trip-{uuid}"
 title: "The Grand Palace"
-kind: stay | attraction | food | shopping | transit | flight | other
+kind: stay | attraction | food | cafe | shopping | transit | experience | service | other
 priority: must | want | optional
 state: candidate | done | dropped
-source_provider: "google_maps" | "google_travel" | "agoda" | "booking" | "xiaohongshu" | "tabelog" | "manual" | "other"
+source_provider: "google_maps" | "google_travel" | "tabelog" | "xiaohongshu" | "booking" | "agoda" | "other"
 source_place_id: "0x30e2991678584ec5:0x698c069655046fbe"
 source_url: "https://www.google.com/maps/place/..."
 coordinates: { lat: 13.75, lng: 100.49 }
@@ -44,7 +44,7 @@ duration_minutes: 120
 observed_price: "฿500"
 observed_rating: 4.6
 observed_review_count: 12500
-reservation_status: none | pending | booked | waitlisted
+reservation_status: none | needed | booked
 hotel_facts:
   opened_year: "2022"
   renovated_year: "2024"
@@ -65,8 +65,7 @@ id: "visit-{uuid}"          # Occurrence Authority
 place_id: "place-{uuid}"
 trip_id: "trip-{uuid}"
 date: "2026-10-05"
-start_time: "09:00"
-end_time: "11:00"
+start: "09:00"
 duration_minutes: 120
 sort_order: 0               # Position in day timeline
 locked: false
@@ -89,7 +88,7 @@ id: "leg-{uuid}"
 trip_id: "trip-{uuid}"
 from_place_id: "place-{uuid}"
 to_place_id: "place-{uuid}"
-mode: "driving" | "walking" | "motorcycle" | "cycling" | "transit"
+mode: "driving" | "walking" | "motorcycle" | "bicycling" | "transit"
 duration_minutes: 12
 distance_meters: 900
 source: "heuristic" | "manual" | "openrouteservice"
@@ -109,7 +108,7 @@ trip_id: "trip-{uuid}"
 date: "2026-10-05"
 amount: 500
 currency: "THB"
-category: "food" | "attraction" | "transport" | "stay" | "other"
+category: "stay" | "food" | "cafe" | "transit" | "transport" | "ticket" | "attraction" | "experience" | "shopping" | "service" | "other"
 description: "Grand Palace entrance"
 paid_by: "Alice"
 payments:

@@ -2,6 +2,7 @@ import {
   DEFAULT_USD_PIVOT,
   ensurePlaceKindTag,
   inferPlaceKind,
+  normalizeObservedPrice,
   type PlannerTripPlace,
 } from '../domain/planner';
 import {
@@ -157,7 +158,16 @@ async function resolveAndEnrichCapturedPlace(placeId: string): Promise<void> {
         coordinates: enriched.coordinates || existingPlace.coordinates,
         rating: enriched.observed_rating ?? existingPlace.rating,
         review_count: enriched.observed_review_count ?? existingPlace.review_count,
-        price: enriched.observed_price ? { raw: enriched.observed_price } : existingPlace.price,
+        price: enriched.observed_price
+          ? {
+              raw: enriched.observed_price,
+              currency: enriched.price_currency ?? existingPlace.price?.currency,
+              min: enriched.price_min ?? existingPlace.price?.min,
+              max: enriched.price_max ?? existingPlace.price?.max,
+              unit: enriched.price_unit ?? existingPlace.price?.unit,
+              level: enriched.price_level ?? existingPlace.price?.level,
+            }
+          : existingPlace.price,
         open_hours: enriched.open_hours || existingPlace.open_hours,
         phone: enriched.phone || existingPlace.phone,
         plus_code: enriched.plus_code || existingPlace.plus_code,
@@ -322,7 +332,19 @@ async function savePlaceIntoInboxDirectly(
         coordinates: place.coordinates ?? existing?.coordinates,
         rating: place.rating ?? existing?.rating,
         review_count: place.reviewCount ?? existing?.review_count,
-        price: place.priceLevel ? { raw: place.priceLevel } : existing?.price,
+        price: place.priceLevel
+          ? (() => {
+              const normalized = normalizeObservedPrice(place.priceLevel, place.detectedCurrency);
+              return {
+                raw: place.priceLevel,
+                currency: normalized?.currency ?? place.detectedCurrency,
+                min: normalized?.min,
+                max: normalized?.max,
+                unit: normalized?.unit,
+                level: normalized?.level,
+              };
+            })()
+          : existing?.price,
         open_hours: place.openHours ?? existing?.open_hours,
         phone: place.phone ?? existing?.phone,
         plus_code: place.plusCode ?? existing?.plus_code,
