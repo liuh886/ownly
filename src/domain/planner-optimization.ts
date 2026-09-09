@@ -40,6 +40,46 @@ function pairKey(fromPlaceId: string, toPlaceId: string): string {
   return `${fromPlaceId}→${toPlaceId}`;
 }
 
+/** Shared pair-key rule so callers can match pairs without duplicating the scheme. */
+export function travelPairKey(fromPlaceId: string, toPlaceId: string): string {
+  return pairKey(fromPlaceId, toPlaceId);
+}
+
+export interface PairEffectiveTravel {
+  mode: PlannerTravelMode;
+  manual: boolean;
+}
+
+/**
+ * Effective per-pair travel mode: a stored leg's mode wins (the user may have
+ * switched individual segments), otherwise the trip default. Manual legs are
+ * flagged so callers can exclude them from routability pre-scans.
+ */
+export function resolvePairEffectiveModes(
+  tripId: string,
+  stops: PlannerScheduledPlace[],
+  existingLegs: PlannerTripLeg[],
+  defaultMode: PlannerTravelMode,
+): Map<string, PairEffectiveTravel> {
+  const existingByPair = new Map(
+    existingLegs
+      .filter((leg) => leg.trip_id === tripId)
+      .map((leg) => [pairKey(leg.from_place_id, leg.to_place_id), leg] as const),
+  );
+  const modes = new Map<string, PairEffectiveTravel>();
+  for (let index = 0; index + 1 < stops.length; index += 1) {
+    const from = stops[index];
+    const to = stops[index + 1];
+    const fromPlaceId = from.place_id || from.id;
+    const toPlaceId = to.place_id || to.id;
+    if (!fromPlaceId || !toPlaceId) continue;
+    const key = pairKey(fromPlaceId, toPlaceId);
+    const existing = existingByPair.get(key);
+    modes.set(key, { mode: existing?.mode ?? defaultMode, manual: existing?.source === 'manual' });
+  }
+  return modes;
+}
+
 /** Two distinct visits of the same place (morning checkout + evening stay): no travel between them. */
 function isSamePlacePair(from: PlannerScheduledPlace, to: PlannerScheduledPlace): boolean {
   return from.id !== to.id && (from.place_id || from.id) === (to.place_id || to.id);
@@ -125,19 +165,17 @@ function hasFiniteCoords(place: PlannerScheduledPlace): boolean {
 }
 
 /**
- * Decides per adjacent pair what a travel-time refresh would do, without any
- * I/O. `ors: null` means no fresh road-network data for this day (transit
- * mode, missing key, failed request — the caller owns that distinction);
- * refreshable pairs are then counted as kept estimates.
- * Same-place pairs and manual legs are never touched, mirroring the matrix
- * builders' invariants.
+ * Multi-mode refresh: each adjacent pair uses its own effective mode
+ * (stored leg mode, else the trip default) and only pairs whose mode has
+ * fresh ORS data are rewritten. Pairs on transit or unfetched modes keep
+ * their estimates, and a stored mode is never homogenized into another.
  */
-export function computeDayTravelRefresh(
+export function computeDayTravelRefreshByMode(
   trip: PlannerTrip,
   stops: PlannerScheduledPlace[],
   existingLegs: PlannerTripLeg[],
-  ors: OrsMatrixInput | null,
-  mode: PlannerTravelMode,
+  orsByMode: Map<PlannerTravelMode, OrsMatrixInput>,
+  defaultMode: PlannerTravelMode,
   now = new Date(),
 ): DayTravelRefreshResult {
   const ledger = emptyTravelRefreshLedger();
@@ -149,7 +187,16 @@ export function computeDayTravelRefresh(
       .filter((leg) => leg.trip_id === trip.id)
       .map((leg) => [`${leg.from_place_id}→${leg.to_place_id}`, leg] as const),
   );
-  const orderIndex = new Map((ors?.order ?? []).map((place, index) => [place.id, index]));
+  const pairModes = resolvePairEffectiveModes(trip.id, stops, existingLegs, defaultMode);
+  const orderIndexCache = new Map<OrsMatrixInput, Map<string, number>>();
+  const orderIndexFor = (ors: OrsMatrixInput): Map<string, number> => {
+    let cached = orderIndexCache.get(ors);
+    if (!cached) {
+      cached = new Map(ors.order.map((place, index) => [place.id, index]));
+      orderIndexCache.set(ors, cached);
+    }
+    return cached;
+  };
   for (let index = 0; index + 1 < stops.length; index += 1) {
     const from = stops[index];
     const to = stops[index + 1];
@@ -169,10 +216,13 @@ export function computeDayTravelRefresh(
       ledger.missingCoordsSkipped += 1;
       continue;
     }
+    const mode = pairModes.get(pairKey(fromPlaceId, toPlaceId))?.mode ?? defaultMode;
+    const ors = orsByMode.get(mode) ?? null;
     if (!ors) {
       ledger.keptEstimate += 1;
       continue;
     }
+    const orderIndex = orderIndexFor(ors);
     const row = orderIndex.get(from.id);
     const col = orderIndex.get(to.id);
     const cell = row !== undefined && col !== undefined
@@ -195,6 +245,32 @@ export function computeDayTravelRefresh(
     afterMinutes += cell;
   }
   return { legs, ledger, beforeMinutes, afterMinutes };
+}
+
+/**
+ * Decides per adjacent pair what a travel-time refresh would do, without any
+ * I/O. `ors: null` means no fresh road-network data for this day (transit
+ * mode, missing key, failed request — the caller owns that distinction);
+ * refreshable pairs are then counted as kept estimates.
+ * Same-place pairs and manual legs are never touched, mirroring the matrix
+ * builders' invariants.
+ */
+export function computeDayTravelRefresh(
+  trip: PlannerTrip,
+  stops: PlannerScheduledPlace[],
+  existingLegs: PlannerTripLeg[],
+  ors: OrsMatrixInput | null,
+  mode: PlannerTravelMode,
+  now = new Date(),
+): DayTravelRefreshResult {
+  return computeDayTravelRefreshByMode(
+    trip,
+    stops,
+    existingLegs,
+    ors ? new Map([[mode, ors]]) : new Map(),
+    mode,
+    now,
+  );
 }
 
 /**

@@ -43,7 +43,15 @@ export async function fetchOpenRouteServiceLeg(
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: JSON.stringify({ coordinates: [[from.lng, from.lat], [to.lng, to.lat]] }),
+    // Motorcycles are banned from expressways/motorways in Thailand (and most
+    // of the region): without this the car profile happily routes them onto
+    // tollways, producing illegal routes and systematically fast times.
+    // The matrix endpoint does not support avoid_features, so motorcycle
+    // pairs go through this per-leg call instead of the matrix.
+    body: JSON.stringify({
+      coordinates: [[from.lng, from.lat], [to.lng, to.lat]],
+      ...(mode === 'motorcycle' ? { options: { avoid_features: ['highways', 'tollways'] } } : {}),
+    }),
   });
   if (!response.ok) throw new OrsRequestError(`OpenRouteService request failed (${response.status}).`, response.status);
   const payload = await response.json() as { routes?: Array<{ summary?: { duration?: number; distance?: number } }> };

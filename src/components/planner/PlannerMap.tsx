@@ -38,7 +38,7 @@ interface PlannerMapProps {
   activeDate?: string;
   activeDayIndex: number;
   highlightedPlaceId?: string | null;
-  onSchedulePlace: (placeId: string) => void;
+  onSchedulePlace: (placeId: string, sortOrder?: number) => void;
   onUnschedulePlace: (place: PlannerScheduledPlace) => void;
   onShelvePlace?: (placeId: string) => void;
   onDeletePlace?: (placeId: string, placeTitle?: string) => void;
@@ -907,6 +907,11 @@ export function PlannerMap({
     if (selectedPoint.isActiveDay === false) return null;
     return selectedPoint.place as PlannerScheduledPlace;
   }, [selectedPoint]);
+  // Full numbered-stop count of the active day (dedup-free: a place scheduled
+  // twice occupies two numbers). Drives the insert-at-position picker.
+  const activeDayStopCount = activeDate && allPlacesByDate?.[activeDate]
+    ? allPlacesByDate[activeDate].length
+    : scheduledPlaces.length;
 
   const selectedPointScreen = useMemo(() => {
     if (!selectedPoint) return null;
@@ -1395,6 +1400,7 @@ export function PlannerMap({
                 activeDayIndex={activeDayIndex}
                 visitCount={visitCountByPlaceId?.get(selectedPlace.id) ?? 0}
                 scheduledPlace={selectedScheduledPlace}
+                dayStopCount={activeDayStopCount}
                 onSchedule={onSchedulePlace}
                 onUnschedule={onUnschedulePlace}
                 onShelve={onShelvePlace}
@@ -1408,6 +1414,7 @@ export function PlannerMap({
                 activeDayIndex={activeDayIndex}
                 visitCount={visitCountByPlaceId?.get(selectedPlace.id) ?? 0}
                 scheduledPlace={selectedScheduledPlace}
+                dayStopCount={activeDayStopCount}
                 onSchedule={onSchedulePlace}
                 onUnschedule={onUnschedulePlace}
                 onShelve={onShelvePlace}

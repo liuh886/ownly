@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import type {
   PlannerPlaceKind,
   PlannerTravelMode,
@@ -10,7 +10,7 @@ import type {
   TripExpenseItem,
 } from '@/domain/planner';
 import type { PlannerScheduledPlace, PlannerTripVisit } from '@/domain/planner-visits';
-import { sortPlannerScheduledPlaces } from '@/domain/planner-visits';
+import { materializePlannerScheduledPlaces, sortPlannerScheduledPlaces } from '@/domain/planner-visits';
 import {
   calculateDefaultTripLeg,
   exportPlacesToCSV,
@@ -25,8 +25,11 @@ import {
   buildOrsSingleLeg,
   computeDayOrderOptimization,
   computeDayTravelRefresh,
+  computeDayTravelRefreshByMode,
   materializeStopCoordinates,
+  resolvePairEffectiveModes,
   resolveStopCoordinates,
+  travelPairKey,
   type DayTravelRefreshLedger,
   type OrsMatrixFacts,
   type OrsMatrixInput,
@@ -94,6 +97,27 @@ export interface UsePlannerActionsProps {
   disabled: boolean;
 }
 
+export const AUTO_REFRESH_LEGS_STORAGE_KEY = 'ownly_planner_auto_refresh_legs';
+
+/** Auto-refresh legs after schedule edits. Defaults ON; explicit '0' disables. */
+export function loadAutoRefreshLegsPref(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(AUTO_REFRESH_LEGS_STORAGE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+export function saveAutoRefreshLegsPref(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(AUTO_REFRESH_LEGS_STORAGE_KEY, enabled ? '1' : '0');
+  } catch {
+    // storage unavailable — preference stays session-only
+  }
+}
+
 export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   const {
     zh,
@@ -137,6 +161,10 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     console.warn(`[Planner] Failed to ${context}`, error);
     setNotice(zh ? '保存失败，界面已还原，请重试。' : 'Save failed; the change was reverted. Please try again.');
   }, [setNotice, zh]);
+
+  // Guards overlapping manual/auto travel refreshes (state `busy` drives the
+  // button; this ref is readable from fire-and-forget auto triggers).
+  const refreshBusyRef = useRef(false);
 
   const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
     setNoticeAction({
@@ -772,11 +800,15 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   );
 
   const schedulePlace = useCallback(
-    async (placeId: string, date = activeDate) => {
+    async (placeId: string, date = activeDate, opts?: { sortOrder?: number }) => {
       if (!date || disabled || isScheduling) return;
       setIsScheduling(true);
       try {
-        await plannerRepository.addVisit(placeId, date);
+        await plannerRepository.addVisit(
+          placeId,
+          date,
+          opts?.sortOrder !== undefined ? { sort_order: opts.sortOrder } : undefined,
+        );
         await load();
       } catch (err) {
         setNotice(err instanceof Error ? err.message : String(err));

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { PlannerPlaceKind, PlannerTripPlace } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
 import { PLANNER_KIND_ICONS, PLANNER_KIND_LABELS } from '@/domain/planner';
@@ -23,7 +24,9 @@ export interface MapPlaceCardProps {
   visitCount: number;
   /** The scheduled entry on the active day, if any. */
   scheduledPlace: PlannerScheduledPlace | null;
-  onSchedule: (placeId: string) => void;
+  /** Numbered-stop count of the active day; drives the insert-position picker. */
+  dayStopCount?: number;
+  onSchedule: (placeId: string, sortOrder?: number) => void;
   onUnschedule: (place: PlannerScheduledPlace) => void;
   onShelve?: (placeId: string) => void;
   /** Manual kind correction; when set a 🏷️ row lets the user re-classify. */
@@ -42,12 +45,22 @@ export function MapPlaceCard({
   activeDayIndex,
   visitCount,
   scheduledPlace,
+  dayStopCount = 0,
   onSchedule,
   onUnschedule,
   onShelve,
   onChangeKind,
   onClose,
 }: MapPlaceCardProps) {
+  // Insert position within the active day (1-based stop number).
+  // '' = append at the end (default, unchanged behavior). Reset when the card
+  // switches to another place (render-adjust pattern, keeps the picker fresh).
+  const [insertPos, setInsertPos] = useState<number | ''>('');
+  const [posPlaceId, setPosPlaceId] = useState(place.id);
+  if (posPlaceId !== place.id) {
+    setPosPlaceId(place.id);
+    setInsertPos('');
+  }
   const meta: string[] = [];
   if (place.observed_rating) {
     meta.push(
@@ -114,6 +127,30 @@ export function MapPlaceCard({
         </p>
       ) : null}
 
+      {/* Insert position: default appends at the end; pick a stop number to insert before it */}
+      {!scheduledPlace && dayStopCount > 0 ? (
+        <label className="mt-1.5 flex items-center gap-1 text-[11px] text-stone-500">
+          <span className="shrink-0">{zh ? '插入为第' : 'Insert as stop'}</span>
+          <select
+            value={insertPos}
+            onChange={(event) => {
+              const value = event.target.value;
+              setInsertPos(value === '' ? '' : Number(value));
+            }}
+            onClick={(event) => event.stopPropagation()}
+            className="min-w-0 flex-1 cursor-pointer rounded-md border border-stone-200 bg-white px-1 py-0.5 text-[11px] font-medium text-stone-700"
+            title={zh ? '默认排到末尾；选序号则插入成为新的该号' : 'Defaults to the end; pick a number to become the new stop at that position'}
+          >
+            <option value="">{zh ? `末尾（共 ${dayStopCount} 站）` : `End (${dayStopCount} stops)`}</option>
+            {Array.from({ length: dayStopCount }, (_, index) => index + 1).map((num) => (
+              <option key={num} value={num}>
+                {zh ? `第 ${num} 站` : `#${num}`}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
       {/* Actions: schedule + shelve only */}
       <div className="mt-2 flex items-center gap-1.5 border-t border-stone-100 pt-2">
         {scheduledPlace ? (
@@ -129,7 +166,7 @@ export function MapPlaceCard({
         ) : (
           <button
             type="button"
-            onClick={() => onSchedule(place.id)}
+            onClick={() => onSchedule(place.id, insertPos === '' ? undefined : insertPos - 1)}
             className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-stone-900 px-2 py-1.5 text-[11px] font-bold text-white transition hover:bg-stone-700"
             title={zh ? `排入第 ${activeDayIndex + 1} 天路线` : `Add to Day ${activeDayIndex + 1}`}
           >

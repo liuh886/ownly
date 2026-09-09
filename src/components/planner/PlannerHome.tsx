@@ -1028,7 +1028,9 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 activeDate={activeDate}
                 activeDayIndex={activeDayIndex}
                 highlightedPlaceId={highlightedPlaceId}
-                onSchedulePlace={schedulePlace}
+                onSchedulePlace={(placeId, sortOrder) => {
+                  void schedulePlace(placeId, undefined, sortOrder === undefined ? undefined : { sortOrder });
+                }}
                 onUnschedulePlace={removeVisit}
                 onShelvePlace={handleDropPlace}
                 onDeletePlace={handleDeletePlace}
