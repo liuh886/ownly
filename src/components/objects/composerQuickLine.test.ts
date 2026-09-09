@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyQuickLine, parseQuickLine, parseObjectType, QL_FIELD } from './composerQuickLine';
+import { applyQuickLine, parseQuickLine, parseObjectType, getQuickLineTemplates, localTodayString, QL_FIELD } from './composerQuickLine';
 import type { BillingCycle, OneTimeExperienceStatus, PhysicalStatus, RecurringCostStatus, WYQDObjectType } from '@/domain/types';
 
 function makeSetters() {
@@ -339,5 +339,75 @@ describe('parseObjectType', () => {
 
   it('returns null for empty string', () => {
     expect(parseObjectType('')).toBeNull();
+  });
+});
+
+describe('relative dates and current templates', () => {
+  function expectedToday(): string {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+  }
+
+  it('localTodayString matches the local calendar day', () => {
+    expect(localTodayString()).toBe(expectedToday());
+  });
+
+  it('resolves 今天 in 6-field physical lines without an end date', () => {
+    const result = parseQuickLine('大疆 Pocket 3 / 实物 / 3499 / 今天 / 数码产品 / 使用中');
+    expect(result.ok).toBe(true);
+    expect(result.fields[QL_FIELD.PURCHASED_AT]).toBe(expectedToday());
+    expect(result.fields[QL_FIELD.ENDED_AT]).toBeUndefined();
+    expect(result.fields[QL_FIELD.CATEGORY]).toBe('数码产品');
+    expect(result.fields[QL_FIELD.PHYSICAL_STATUS]).toBe('using');
+    expect(result.warnings).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('resolves today in 7-field physical end dates', () => {
+    const result = parseQuickLine('DJI Pocket 3 / physical / 3499 / 2026-01-01 / today / Gadgets / using');
+    expect(result.ok).toBe(true);
+    expect(result.fields[QL_FIELD.PURCHASED_AT]).toBe('2026-01-01');
+    expect(result.fields[QL_FIELD.ENDED_AT]).toBe(expectedToday());
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('resolves 今天 in recurring start dates', () => {
+    const result = parseQuickLine('网易云音乐 / 订阅 / 15 / 每月 / 1 / 支付宝 / 今天 / 订阅中 / 娱乐');
+    expect(result.ok).toBe(true);
+    expect(result.fields[QL_FIELD.STARTED_AT]).toBe(expectedToday());
+    expect(result.fields[QL_FIELD.RECURRING_STATUS]).toBe('active');
+    expect(result.warnings).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('resolves 今天 in travel end dates', () => {
+    const result = parseQuickLine('大理之旅 / 旅行 / 8000 / 7200 / 今天 / 旅行体验 / 已完成 / CN / 大理 / 25.6065 / 100.2676');
+    expect(result.ok).toBe(true);
+    expect(result.fields[QL_FIELD.ENDED_AT]).toBe(expectedToday());
+    expect(result.fields[QL_FIELD.CITY]).toBe('大理');
+    expect(result.warnings).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('all shipped zh templates parse warning-free', () => {
+    const templates = getQuickLineTemplates((key) => key, 'zh');
+    expect(templates).toHaveLength(3);
+    for (const template of templates) {
+      const result = parseQuickLine(template.value);
+      expect(`${template.label}: ${result.warnings.join(';')} ${result.errors.join(';')}`).toBe(`${template.label}:  `);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('all shipped en templates parse warning-free', () => {
+    const templates = getQuickLineTemplates((key) => key, 'en');
+    expect(templates).toHaveLength(3);
+    for (const template of templates) {
+      const result = parseQuickLine(template.value);
+      expect(`${template.label}: ${result.warnings.join(';')} ${result.errors.join(';')}`).toBe(`${template.label}:  `);
+      expect(result.ok).toBe(true);
+    }
   });
 });

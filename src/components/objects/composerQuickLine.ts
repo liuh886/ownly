@@ -46,30 +46,50 @@ export const QL_FIELD = {
 export function getQuickLineTemplates(t: (key: WYQDTranslationKey) => string, lang: string): Array<{ label: string; value: string; kind: 'physical' | 'recurring_cost' | 'travel' }> {
   const isZh = lang !== 'en';
   const travelCategory = isZh ? '旅行体验' : 'Travel experience';
-  const aiCategory = isZh ? 'AI工具' : 'AI Tools';
   return [
     {
       label: t('physicalTemplate'),
       kind: 'physical' as const,
       value: isZh
-        ? `小米13U / physical / 5843 / 2023-06-07 / 2025-09-20 / 电子产品 / 已退役`
-        : `Sony A7C / physical / 12000 / 2026-05-01 / 2026-05-17 / Camera / using`,
+        ? `大疆 Pocket 3 / 实物 / 3499 / 今天 / 数码产品 / 使用中`
+        : `DJI Pocket 3 / physical / 3499 / today / Gadgets / using`,
     },
     {
       label: t('fixedCostTemplate'),
       kind: 'recurring_cost' as const,
       value: isZh
-        ? `ChatGPT Plus / recurring_cost / 145 / monthly / 20 / 招行信用卡 / 2026-05-01 / 订阅中 / ${aiCategory}`
-        : `ChatGPT Plus / recurring_cost / 20 / monthly / 1 / Credit Card / 2026-01-01 / active / ${aiCategory}`,
+        ? `网易云音乐 / 订阅 / 15 / 每月 / 1 / 支付宝 / 今天 / 订阅中 / 娱乐`
+        : `Spotify / recurring_cost / 11 / monthly / 1 / Credit Card / today / active / Music`,
     },
     {
       label: t('experienceTemplate'),
       kind: 'travel' as const,
       value: isZh
-        ? `香港之旅 / travel / 18000 / 16500 / 2026-05-04 / ${travelCategory} / 已完成 / HK / Hong Kong / 22.3193 / 114.1694`
-        : `Tokyo trip / travel / 18000 / 16500 / 2026-05-04 / ${travelCategory} / completed / JP / Tokyo / 35.6762 / 139.6503`,
+        ? `大理之旅 / 旅行 / 8000 / 7200 / 今天 / ${travelCategory} / 已完成 / CN / 大理 / 25.6065 / 100.2676`
+        : `Kyoto trip / travel / 9000 / 8200 / today / ${travelCategory} / completed / JP / Kyoto / 35.0116 / 135.7681`,
     },
   ];
+}
+
+// ── Relative dates ─────────────────────────────────────
+
+/** Local (non-UTC) today as YYYY-MM-DD — UTC would shift the day near midnight. */
+export function localTodayString(now = new Date()): string {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+const RELATIVE_TODAY_TOKENS = new Set(['今天', '今日', 'today']);
+
+/**
+ * Resolves 今天/今日/today in date slots to the local current date so
+ * templates (and hand-typed lines) never need editing just for the date.
+ * Only applied to date slots — titles/categories named 今天 are untouched.
+ */
+export function resolveRelativeDateToken(value: string | undefined, now = new Date()): string | undefined {
+  if (!value) return value;
+  return RELATIVE_TODAY_TOKENS.has(value.trim().toLowerCase()) ? localTodayString(now) : value;
 }
 
 // ── Field parsers (unchanged public API) ──────────────────
@@ -220,11 +240,15 @@ function parsePhysicalFields(parts: string[], hasExplicitType: boolean) {
   const warnings: string[] = [];
 
   const [name, priceOrType, firstDateOrPrice, secondDateOrFirstDate, maybeCategory, maybeStatus] = parts;
+  // Explicit type with 6 parts omits the end date: [name, type, price, purchased, category, status].
+  const omitsEndDate = hasExplicitType && parts.length === 6;
   const price = hasExplicitType ? firstDateOrPrice : priceOrType;
-  const firstDate = hasExplicitType ? secondDateOrFirstDate : firstDateOrPrice;
-  const secondDate = hasExplicitType ? maybeCategory : secondDateOrFirstDate;
-  const category = hasExplicitType ? maybeStatus : maybeCategory;
-  const status = hasExplicitType ? parts[6] : maybeStatus;
+  const firstDate = resolveRelativeDateToken(hasExplicitType ? secondDateOrFirstDate : firstDateOrPrice);
+  const secondDate = omitsEndDate
+    ? undefined
+    : resolveRelativeDateToken(hasExplicitType ? maybeCategory : secondDateOrFirstDate);
+  const category = hasExplicitType ? (omitsEndDate ? maybeCategory : maybeStatus) : maybeCategory;
+  const status = hasExplicitType ? (omitsEndDate ? maybeStatus : parts[6]) : maybeStatus;
 
   if (name) fields[QL_FIELD.TITLE] = name;
   if (price) {
@@ -278,8 +302,9 @@ function parseRecurringFields(parts: string[]) {
   }
   if (account) fields[QL_FIELD.ACCOUNT] = account;
   if (startedAt) {
-    fields[QL_FIELD.STARTED_AT] = startedAt;
-    if (!isDateLike(startedAt)) warnings.push('Started date is not YYYY-MM-DD');
+    const resolvedStartedAt = resolveRelativeDateToken(startedAt);
+    if (resolvedStartedAt) fields[QL_FIELD.STARTED_AT] = resolvedStartedAt;
+    if (!isDateLike(resolvedStartedAt || '')) warnings.push('Started date is not YYYY-MM-DD');
   }
   if (status) {
     const parsedStatus = parseRecurringStatus(status);
@@ -322,8 +347,9 @@ function parseExperienceFields(parts: string[]) {
     if (!isNumeric(actual)) warnings.push('Actual amount is not a valid number');
   }
   if (endedAt) {
-    fields[QL_FIELD.ENDED_AT] = endedAt;
-    if (!isDateLike(endedAt)) warnings.push('Ended date is not YYYY-MM-DD');
+    const resolvedEndedAt = resolveRelativeDateToken(endedAt);
+    if (resolvedEndedAt) fields[QL_FIELD.ENDED_AT] = resolvedEndedAt;
+    if (!isDateLike(resolvedEndedAt || '')) warnings.push('Ended date is not YYYY-MM-DD');
   }
   if (maybeCategory) fields[QL_FIELD.CATEGORY] = maybeCategory;
 
