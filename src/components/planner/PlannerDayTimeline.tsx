@@ -53,7 +53,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
   } = props;
   const [transferExpanded, setTransferExpanded] = useState(false);
   return (
-          <div className="p-2 sm:p-2.5">
+          <div className="max-h-[800px] min-h-[500px] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
             {currentDayTransferInfo?.isTransferDay ? (
               <div className="mb-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 shadow-2xs">
                 <button
