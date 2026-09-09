@@ -187,7 +187,7 @@ describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://test.supabase.co/rest/v1/calendar_feeds',
+      'https://test.supabase.co/rest/v1/ownly_calendar_feeds',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({

@@ -32,7 +32,7 @@ function resolveSupabaseConfig(overrides?: SupabaseFeedConfig): {
 
 /**
  * SupabaseCalendarFeedStore connects CalendarFeedService directly to the
- * production Supabase calendar_feeds table.
+ * production Supabase ownly_calendar_feeds table.
  */
 export class SupabaseCalendarFeedStore implements CalendarFeedStore {
   private config: { url: string; key: string; fetchFn: typeof fetch };
@@ -42,7 +42,7 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
   }
 
   async upsertFeed(record: CalendarFeedRecord): Promise<void> {
-    const endpoint = `${this.config.url}/rest/v1/calendar_feeds`;
+    const endpoint = `${this.config.url}/rest/v1/ownly_calendar_feeds`;
     const payload = {
       user_id: record.user_id,
       trip_id: record.trip_id,
@@ -76,7 +76,7 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
       select: 'id,user_id,trip_id,token_hash,ics_content,enabled,created_at,updated_at',
       limit: '1',
     });
-    const endpoint = `${this.config.url}/rest/v1/calendar_feeds?${query.toString()}`;
+    const endpoint = `${this.config.url}/rest/v1/ownly_calendar_feeds?${query.toString()}`;
 
     const res = await this.config.fetchFn(endpoint, {
       method: 'GET',
@@ -102,7 +102,7 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     });
     if (userId) query.append('user_id', `eq.${userId}`);
 
-    const endpoint = `${this.config.url}/rest/v1/calendar_feeds?${query.toString()}`;
+    const endpoint = `${this.config.url}/rest/v1/ownly_calendar_feeds?${query.toString()}`;
 
     const res = await this.config.fetchFn(endpoint, {
       method: 'PATCH',

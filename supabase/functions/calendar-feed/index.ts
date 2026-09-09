@@ -40,7 +40,7 @@ serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   const { data: record, error } = await supabase
-    .from('calendar_feeds')
+    .from('ownly_calendar_feeds')
     .select('trip_id, ics_content, enabled, updated_at')
     .eq('token_hash', tokenHash)
     .eq('enabled', true)
