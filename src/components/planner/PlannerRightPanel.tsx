@@ -28,7 +28,6 @@ export interface PlannerRightPanelProps {
   removeVisit: PlannerControllerReturn['removeVisit'];
   handleDropPlace: PlannerControllerReturn['handleDropPlace'];
   handleDeletePlace: PlannerControllerReturn['handleDeletePlace'];
-  handleChangePlaceKind: PlannerControllerReturn['handleChangePlaceKind'];
   setHighlightedPlaceId: (value: string | null) => void;
   visitCountByPlaceId: PlannerControllerReturn['visitCountByPlaceId'];
   scheduled: PlannerControllerReturn['scheduled'];
@@ -57,7 +56,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
     zh, language, rightTab, setRightTab, setIsMapExpanded,
     mapScheduled, sortedPendingCandidates, placesByDate, tripDates, selectedTrip,
     activeDate, activeDayIndex, highlightedPlaceId, schedulePlace, removeVisit,
-    handleDropPlace, handleDeletePlace, handleChangePlaceKind, setHighlightedPlaceId, visitCountByPlaceId,
+    handleDropPlace, handleDeletePlace, setHighlightedPlaceId, visitCountByPlaceId,
     scheduled, tripPlaces, budgetInitialPlaceId, onClearInitialPlaceId,
     currentExpenses, handleAddExpense, handleUpdateExpense, handleDeleteExpense,
     currentMembers, handleUpdateMembers, handleUpdateFxRates, dayAssessment,
@@ -124,7 +123,6 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                 onUnschedulePlace={removeVisit}
                 onShelvePlace={handleDropPlace}
                 onDeletePlace={handleDeletePlace}
-                onChangePlaceKind={handleChangePlaceKind}
                 onHoverPlace={setHighlightedPlaceId}
                 visitCountByPlaceId={visitCountByPlaceId}
                 language={language}

@@ -240,7 +240,9 @@ function extractServiceOptions(): string[] | undefined {
   const found: string[] = [];
   const seen = new Set<string>();
   const pane = document.querySelector<HTMLElement>('div[role="main"]') || document.body;
-  if (!pane) return undefined;
+  // The body fallback must be a real element: hostile pages (and the
+  // pinned-structure test stub) can hand us an object without DOM methods.
+  if (!pane || typeof pane.querySelectorAll !== 'function') return undefined;
   for (const el of Array.from(pane.querySelectorAll<HTMLElement>('button, span[aria-label], li'))) {
     const label = cleanExtractedText(el.getAttribute('aria-label') || el.textContent || '');
     if (!label || label.length > 40) continue;

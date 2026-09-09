@@ -1,10 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { formatPlacePriceInTripCurrency } from '@/domain/planner';
+import { formatPlacePriceInTripCurrency, PLANNER_KIND_ICONS, PLANNER_KIND_LABELS, type PlannerPlaceKind } from '@/domain/planner';
 import { formatDistanceBadge, getDisplayTags, placeMeta } from './planner-home-shared';
 import { useEscapeKey } from './use-escape-key';
 import type { PlannerControllerReturn } from './usePlannerController';
+
+const KIND_OPTIONS: PlannerPlaceKind[] = [
+  'attraction',
+  'food',
+  'cafe',
+  'experience',
+  'shopping',
+  'stay',
+  'transit',
+  'service',
+  'other',
+];
 
 export interface ResearchPoolSectionProps {
   zh: PlannerControllerReturn['zh'];
@@ -46,6 +58,7 @@ export interface ResearchPoolSectionProps {
   handleDropPlace: PlannerControllerReturn['handleDropPlace'];
   handleDeletePlace: PlannerControllerReturn['handleDeletePlace'];
   handleRestorePlace: PlannerControllerReturn['handleRestorePlace'];
+  handleChangePlaceKind: PlannerControllerReturn['handleChangePlaceKind'];
   highlightedPlaceId: string | null;
   setHighlightedPlaceId: (value: string | null) => void;
   setDraggingPlaceId: (value: string | null) => void;
@@ -98,6 +111,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
     handleDropPlace,
     handleDeletePlace,
     handleRestorePlace,
+    handleChangePlaceKind,
     highlightedPlaceId,
     setHighlightedPlaceId,
     setDraggingPlaceId,
@@ -110,6 +124,9 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
   } = props;
   const [tidyMenuOpen, setTidyMenuOpen] = useState(false);
   useEscapeKey(tidyMenuOpen, () => setTidyMenuOpen(false));
+  // Edit mode (entered from 整理): cards expose an inline edit zone.
+  // Currently only kind; future fields (tags, price, ... ) go in the same zone.
+  const [isEditMode, setIsEditMode] = useState(false);
   return (
     <>
     {/* Horizontal Full-Width Candidate Research Pool below Day Skeleton and Map Workspace */}
@@ -267,11 +284,11 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                     type="button"
                     onClick={() => setTidyMenuOpen((prev) => !prev)}
                     className={`rounded-md border px-2 py-1 text-[11px] font-medium transition flex items-center gap-1 shadow-2xs ${
-                      isMultiSelectMode
+                      isMultiSelectMode || isEditMode
                         ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-bold'
                         : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
                     }`}
-                    title={zh ? '整理：多选、去重与疑似合并' : 'Tidy up: multi-select, dedupe and merge'}
+                    title={zh ? '整理：多选、去重、疑似合并与信息编辑' : 'Tidy up: multi-select, dedupe, merge and edit'}
                     aria-expanded={tidyMenuOpen}
                   >
                     🧹 {zh ? '整理' : 'Tidy'} ▾
@@ -286,12 +303,29 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                           onClick={() => {
                             setIsMultiSelectMode((prev) => !prev);
                             setSelectedCandidateIds(new Set());
+                            setIsEditMode(false);
                             setTidyMenuOpen(false);
                           }}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-35"
                           title={zh ? '开启批量选择与删除模式' : 'Toggle multi-select mode'}
                         >
                           ☑️ {isMultiSelectMode ? (zh ? '退出多选' : 'Exit Select') : (zh ? '批量多选' : 'Select')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !isEditMode;
+                            setIsEditMode(next);
+                            if (next) {
+                              setIsMultiSelectMode(false);
+                              setSelectedCandidateIds(new Set());
+                            }
+                            setTidyMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '开启卡片信息编辑（分类等），后续抓取不会覆盖手改项' : 'Edit card info (kind, …); manual edits survive future captures'}
+                        >
+                          ✏️ {isEditMode ? (zh ? '退出编辑' : 'Exit Edit') : (zh ? '编辑信息' : 'Edit Info')}
                         </button>
                         <button
                           type="button"
@@ -423,6 +457,8 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                           : 'border-stone-200 bg-white hover:border-stone-300 cursor-pointer shadow-2xs'
                         : highlightedPlaceId === place.id
                         ? 'border-emerald-500 ring-2 ring-emerald-300/60 bg-emerald-50/30 shadow-xs cursor-grab active:cursor-grabbing'
+                        : isEditMode
+                        ? 'border-sky-300 bg-sky-50/40 hover:border-sky-400 shadow-2xs cursor-grab active:cursor-grabbing'
                         : 'border-stone-200/90 bg-white hover:border-stone-300 hover:shadow-xs cursor-grab active:cursor-grabbing'
                     }`}
                   >
@@ -447,6 +483,30 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
 
                       {/* Meta Line */}
                       <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
+
+                      {/* Edit zone (edit mode only): kind first, more fields plug in here */}
+                      {isEditMode ? (
+                        <div
+                          className="mt-2 rounded-lg border border-dashed border-sky-300 bg-sky-50/60 px-2 py-1.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <label className="flex items-center gap-1.5 text-[11px] text-stone-600">
+                            <span className="shrink-0 font-semibold">🏷️ {zh ? '分类' : 'Kind'}</span>
+                            <select
+                              value={place.kind}
+                              onChange={(e) => void handleChangePlaceKind(place.id, e.target.value as PlannerPlaceKind)}
+                              className="min-w-0 flex-1 cursor-pointer rounded-md border border-sky-200 bg-white px-1 py-0.5 text-[11px] font-semibold text-stone-800"
+                              title={zh ? '纠正分类（后续抓取不会覆盖）' : 'Correct kind (future captures keep it)'}
+                            >
+                              {KIND_OPTIONS.map((kind) => (
+                                <option key={kind} value={kind}>
+                                  {PLANNER_KIND_ICONS[kind]} {zh ? PLANNER_KIND_LABELS[kind].zh : PLANNER_KIND_LABELS[kind].en}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      ) : null}
 
                       {/* Badges and Tags Cluster */}
                       <div className="mt-2 flex flex-wrap gap-1 items-center">

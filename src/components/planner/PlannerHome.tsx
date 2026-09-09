@@ -286,6 +286,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleDropPlace,
     handleDeletePlace,
     handleRestorePlace,
+    handleChangePlaceKind,
     highlightedPlaceId,
     setHighlightedPlaceId,
     setDraggingPlaceId,
@@ -324,7 +325,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     removeVisit,
     handleDropPlace,
     handleDeletePlace,
-    handleChangePlaceKind,
     setHighlightedPlaceId,
     visitCountByPlaceId,
     scheduled,
@@ -1034,7 +1034,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 onUnschedulePlace={removeVisit}
                 onShelvePlace={handleDropPlace}
                 onDeletePlace={handleDeletePlace}
-                onChangePlaceKind={handleChangePlaceKind}
                 onHoverPlace={setHighlightedPlaceId}
                 visitCountByPlaceId={visitCountByPlaceId}
                 language={language}
