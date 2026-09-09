@@ -54,6 +54,7 @@ export function MapPlaceCard({
   }
   if (place.source_category) meta.push(place.source_category);
   if (place.observed_price) meta.push(place.observed_price);
+  if (place.open_hours) meta.push(`⏰ ${place.open_hours}`);
   if (visitCount > 0) meta.push(zh ? `已排 ${visitCount} 次` : `${visitCount}x scheduled`);
 
   return (
