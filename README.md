@@ -214,6 +214,7 @@ The MCP tool surface covers:
 - upcoming subscription renewals;
 - recurring costs grouped by payment account with currencies kept separate;
 - deterministic review-needed records.
+- Planner trips, visits, budget estimates, and calendar projections, plus two-phase schedule edits and local OpenRouteService travel refresh/optimization.
 - opt-in creation and updates, lifecycle changes, append-only logs, reviews, snapshots, and recoverable archive/restore;
 - short-lived before/after previews, pre-write backups, stale-write conflict detection, and idempotent commits.
 

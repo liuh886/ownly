@@ -225,7 +225,7 @@ Doctor does not use AI and does not inspect Dropbox, Google Drive, OneDrive, iCl
 
 Scripts and external AI agents should use documented Ownly interfaces instead of editing YAML through unvalidated file manipulation.
 
-The Agent CLI exposes deterministic facts, validated mutations, JSON output, and documented error codes. The local MCP server exposes a read-only tool surface over the same Ownly data folder.
+The Agent CLI exposes deterministic facts, validated mutations, JSON output, and documented error codes. The local MCP server exposes a read-by-default tool surface over the same Ownly data folder, with opt-in two-phase writes described in the Agent / MCP Guide.
 
 The selected data folder remains the source of truth whether it is stored in a normal local location or a personal cloud folder. Facts explicitly returned through MCP can enter the connected agent/provider context.
 

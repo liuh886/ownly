@@ -84,7 +84,7 @@ Stable frontmatter fields, JSON keys, directory names, and object-type identifie
 | PWA | Installed form of the same Web runtime; data behavior remains identical |
 | Obsidian plugin | Obsidian-native interface over the shared Ownly data model |
 | Agent CLI | Deterministic fact-ready read/write interface for scripts and external agents |
-| Local MCP | Read-only STDIO adapter over the same user-selected Ownly evidence store |
+| Local MCP | Read-by-default STDIO adapter over the same user-selected Ownly evidence store; persistent writes require explicit opt-in and two-phase confirmation |
 
 Avoid describing Web, PWA, Obsidian, CLI, and MCP as separate products. They are interfaces over one data model and one data folder.
 

@@ -90,7 +90,7 @@ claude mcp list
 | `ownly_planner_summary` | Trips overview with reusable-place, Visit-occurrence and expense counts |
 | `ownly_planner_get_trip` | Full trip context: reusable places, repeatable visits, budget, conflicts, travel legs, execution timeline, expenses |
 | `ownly_planner_budget_estimate` | Scheduled-day budget converted into the trip base currency |
-| `ownly_planner_get_ical_markdown` | Project confirmed Planner/Vault schedule facts into obsidian-ical-plugin-pro Markdown |
+| `ownly_planner_get_calendar_ics` | Project confirmed Planner/Vault schedule facts into an RFC5545 `.ics` calendar projection |
 
 ## Opt-in write mode
 
@@ -134,10 +134,12 @@ Write tools:
 | `ownly_planner_prepare_optimize_day_travel_time` | Query an ephemeral ORS matrix, minimize actual travel minutes, keep the first/locked/anchored Visit occurrences fixed, and preview one atomic order + final-leg commit |
 | `ownly_planner_prepare_set_stay_span` | Preview hotel stay-span Visit anchors (replaces stale hotel visits on those dates) |
 | `ownly_planner_prepare_drop_place` | Preview marking a place dropped |
+| `ownly_planner_prepare_restore_place` | Preview restoring a dropped place |
+| `ownly_planner_prepare_set_travel_leg` | Preview setting one manual travel leg between two places |
+| `ownly_planner_prepare_refresh_day_travel` | Preview refreshing one day's legs from OpenRouteService, keeping manual legs |
 | `ownly_planner_prepare_add_expense` | Preview appending an AA-ledger expense |
 | `ownly_planner_prepare_set_fx_rates` | Preview persisting trip FX-rate overrides |
 | `ownly_planner_prepare_apply_schedule_proposal` | Validate and preview an MCP client/LLM schedule proposal without changing locked/anchored Visit occurrences; repeated `place_id` values create separate visits |
-| `ownly_planner_prepare_save_ical_markdown` | Preview regenerating the derived iCal Pro Markdown projection from canonical Planner facts |
 | `ownly_commit_operation` | Back up and persist a confirmed preview |
 | `ownly_discard_operation` | Remove a preview without touching files |
 

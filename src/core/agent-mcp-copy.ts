@@ -41,7 +41,7 @@ const COPY: Record<WYQDLanguage, AgentMcpCopy> = {
     title: 'Use Ownly with Codex or Claude Code',
     description:
       'Ownly MCP lets an external agent query and, when explicitly enabled, maintain validated records in the same local Markdown source of truth.',
-    scopeBadge: 'MCP v0.2 · read-only by default',
+    scopeBadge: 'MCP v0.7 · read-only by default',
     localBadge: 'Local stdio process',
     whatTitle: 'What this gives you',
     whatBody:
@@ -92,7 +92,7 @@ const COPY: Record<WYQDLanguage, AgentMcpCopy> = {
     title: '让 Codex 或 Claude Code 使用 Ownly',
     description:
       'Ownly MCP 让外部 Agent 查询同一份本地 Markdown 事实源；显式授权后，也能安全维护其中已经校验过的记录。',
-    scopeBadge: 'MCP v0.2 · 默认只读',
+    scopeBadge: 'MCP v0.7 · 默认只读',
     localBadge: '本地 stdio 进程',
     whatTitle: '它能解决什么',
     whatBody:

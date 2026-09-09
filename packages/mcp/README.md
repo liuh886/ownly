@@ -57,7 +57,7 @@ Read tools:
 - `ownly_recurring_costs`, `ownly_recurring_due`, `ownly_recurring_by_account`
 - `ownly_review_needed`, `ownly_doctor`
 - `ownly_planner_summary`, `ownly_planner_get_trip`, `ownly_planner_budget_estimate`
-- `ownly_planner_get_ical_markdown`
+- `ownly_planner_get_calendar_ics`
 
 Write workflow tools:
 
@@ -67,7 +67,8 @@ Write workflow tools:
 - `ownly_prepare_create_snapshot`
 - `ownly_prepare_archive_object`, `ownly_prepare_restore_object`
 - `ownly_planner_prepare_add_visit`, `ownly_planner_prepare_remove_visit`, `ownly_planner_prepare_reorder_day`
-- `ownly_planner_prepare_set_stay_span`, `ownly_planner_prepare_drop_place`
+- `ownly_planner_prepare_set_stay_span`, `ownly_planner_prepare_drop_place`, `ownly_planner_prepare_restore_place`
+- `ownly_planner_prepare_add_expense`, `ownly_planner_prepare_set_fx_rates`
 - `ownly_planner_prepare_set_travel_leg`, `ownly_planner_prepare_refresh_day_travel`
 - `ownly_planner_prepare_optimize_day_travel_time`, `ownly_planner_prepare_apply_schedule_proposal`
 - `ownly_commit_operation`, `ownly_discard_operation`

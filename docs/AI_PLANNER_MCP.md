@@ -41,7 +41,7 @@ is_anchor: false
 
 - `ownly_planner_summary`：旅行、地点、Visit 与费用概览。
 - `ownly_planner_get_trip`：返回 reusable places、repeatable visits、travel legs、冲突与 execution timeline。
-- `ownly_planner_get_ical_markdown`：从当前 canonical Visit schedule 生成只读 iCal Pro Markdown 投影。
+- `ownly_planner_get_calendar_ics`：从当前 canonical Visit schedule 生成只读 RFC5545 `.ics` 日历投影。
 
 ## MCP 两阶段写入
 
@@ -51,7 +51,6 @@ is_anchor: false
 - `ownly_planner_prepare_set_stay_span`：把同一酒店 Place 展开为多天锁定 Visit。
 - `ownly_planner_prepare_apply_schedule_proposal`：验证并预览一组 `visits[]`。省略 `visit_id` 时创建新的 occurrence，因此同一 Place 可重复出现。
 - `ownly_planner_prepare_optimize_day_travel_time`：用 ORS 临时矩阵优化 Visit 顺序；只提交最终 Visit order 与相邻 Trip Legs。
-- `ownly_planner_prepare_save_ical_markdown`：从 canonical Visit schedule 重新生成日历投影。
 - `ownly_commit_operation`：用户确认后提交 prepared operation。
 
 Schedule proposal 的核心结构：
