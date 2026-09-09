@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type {
   PlannerPlaceKind,
   PlannerTravelMode,
@@ -189,6 +189,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setNotice,
     setNoticeAction,
     setConfirmRequest,
+    busy,
     setBusy,
     setTrips,
     setVisits,
@@ -1351,6 +1352,57 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     },
     [selectedTrip, disabled, activeDate, tripDates, scheduledAll, legs, setBusy, setLegs, showPersistError, load, setNotice, zh],
   );
+
+  // ORS-by-default: there is no manual refresh button anymore. Whenever the
+  // active day has routable pairs that still lack a persisted ORS leg, fetch
+  // them silently in the background (debounced). Anything left over keeps its
+  // heuristic estimate and the timeline marks it （估）/ (est.).
+  const autoRefreshSigRef = useRef(new Map<string, string>());
+  const autoRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!selectedTrip || disabled || busy || !activeDate) return;
+    const trip = selectedTrip;
+    const defaultMode = trip.transport_mode ?? 'transit';
+    const dayStops = sortPlannerScheduledPlaces(scheduledAll.filter((place) => place.scheduled_date === activeDate));
+    if (dayStops.length < 2) return;
+    const stopsForCompute = materializeStopCoordinates(resolveStopCoordinates(dayStops));
+    const coordsByPlaceId = new Map(stopsForCompute.map((stop) => [(stop.place_id || stop.id) as string, Boolean(stop.coordinates)]));
+    const pairModes = resolvePairEffectiveModes(trip.id, dayStops, legs, defaultMode);
+    const parts: string[] = [];
+    let needsOrs = false;
+    for (let index = 0; index + 1 < dayStops.length; index += 1) {
+      const from = dayStops[index];
+      const to = dayStops[index + 1];
+      const fromPlaceId = from.place_id || from.id;
+      const toPlaceId = to.place_id || to.id;
+      const info = pairModes.get(travelPairKey(fromPlaceId, toPlaceId));
+      if (!info) continue;
+      const storedSource = legs.find(
+        (item) => item.trip_id === trip.id && item.from_place_id === fromPlaceId && item.to_place_id === toPlaceId,
+      )?.source;
+      // Same-place pairs (e.g. morning checkout → evening stay) never get
+      // road routing; the refresh computation skips them as well.
+      const routable = !info.manual
+        && fromPlaceId !== toPlaceId
+        && openRouteServiceProfile(info.mode)
+        && coordsByPlaceId.get(fromPlaceId) === true
+        && coordsByPlaceId.get(toPlaceId) === true;
+      if (routable && storedSource !== 'openrouteservice') needsOrs = true;
+      parts.push(`${fromPlaceId}→${toPlaceId}|${info.mode}|${info.manual ? 'm' : 'a'}|${storedSource ?? '-'}|${routable ? 'r' : '-'}`);
+    }
+    if (!needsOrs) return;
+    const signature = parts.join(';');
+    if (autoRefreshSigRef.current.get(activeDate) === signature) return;
+    if (!loadOrsApiKey().trim()) return;
+    autoRefreshSigRef.current.set(activeDate, signature);
+    if (autoRefreshTimerRef.current) clearTimeout(autoRefreshTimerRef.current);
+    autoRefreshTimerRef.current = setTimeout(() => {
+      void refreshTravelTimes('day', { silent: true });
+    }, 900);
+    return () => {
+      if (autoRefreshTimerRef.current) clearTimeout(autoRefreshTimerRef.current);
+    };
+  }, [selectedTrip, disabled, busy, activeDate, scheduledAll, legs, refreshTravelTimes]);
 
   return {
     handleUpsertTrip,

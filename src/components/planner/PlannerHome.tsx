@@ -52,8 +52,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const mapViewRef = useRef<{ center: { lat: number; lng: number }; zoom: number } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   useEscapeKey(exportMenuOpen, () => setExportMenuOpen(false));
-  const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
-  useEscapeKey(refreshMenuOpen, () => setRefreshMenuOpen(false));
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -200,7 +198,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     copyItineraryText,
     optimizeDayOrder,
     applyDayOptimization,
-    refreshTravelTimes,
   } = ctrl;
 
   // WS-1 trip retrospective: draft lives in TripReviewModal (preview-only);
@@ -924,39 +921,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 >
                   {optimizeBusy ? '⏳' : '✨'} {zh ? '优化顺序' : 'Optimize'}
                 </button>
-                <div className="relative hidden sm:block">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setRefreshMenuOpen((prev) => !prev)}
-                    className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                    title={zh ? '用真实路网刷新交通时间（手动锁定的段不受影响）' : 'Refresh travel times with live road routing (manual legs untouched)'}
-                    aria-expanded={refreshMenuOpen}
-                  >
-                    🚗 {zh ? '刷新路况' : 'Refresh'} ▾
-                  </button>
-                  {refreshMenuOpen ? (
-                    <>
-                      <div className="fixed inset-0 z-40 cursor-default" onClick={() => setRefreshMenuOpen(false)} />
-                      <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-xl">
-                        <button
-                          type="button"
-                          onClick={() => { setRefreshMenuOpen(false); void refreshTravelTimes('day'); }}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                        >
-                          📅 {zh ? '刷新当天' : 'This day'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setRefreshMenuOpen(false); void refreshTravelTimes('trip'); }}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                        >
-                          🗓️ {zh ? '刷新整程' : 'Whole trip'}
-                        </button>
-                      </div>
-                    </>
-                  ) : null}
-                </div>
               </div>
             ) : null}
           </div>
