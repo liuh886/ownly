@@ -1657,6 +1657,29 @@ describe('exportTripToMarkdown', () => {
       expect(res.center.lng).toBeGreaterThan(99.0);
       expect(res.center.lng).toBeLessThan(102.0);
     });
+
+    it('adds extraZoom without moving the center', () => {
+      const pts = [
+        { lat: 13.746, lng: 100.534 },
+        { lat: 13.756, lng: 100.501 },
+      ];
+      const base = calculateBounds(pts);
+      const closer = calculateBounds(pts, { extraZoom: 0.5 });
+      expect(closer.zoom).toBeCloseTo(base.zoom + 0.5, 5);
+      expect(closer.center).toEqual(base.center);
+    });
+
+    it('steps zoom back until the span fits a small viewport', () => {
+      const pts = [
+        { lat: 13.746, lng: 100.534 },
+        { lat: 13.756, lng: 100.501 },
+      ];
+      const wide = calculateBounds(pts, { viewport: { width: 1200, height: 800 } });
+      const narrow = calculateBounds(pts, { viewport: { width: 200, height: 200 } });
+      expect(narrow.zoom).toBeLessThanOrEqual(wide.zoom);
+      // ...but never below the floor.
+      expect(narrow.zoom).toBeGreaterThanOrEqual(3);
+    });
   });
 
   describe('getPlannerMapDefaultCenter', () => {

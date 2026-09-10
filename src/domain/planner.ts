@@ -1422,6 +1422,20 @@ export interface MapBoundingResult {
   zoom: number;
 }
 
+export interface MapFitViewport {
+  width: number;
+  height: number;
+}
+
+export interface MapFitOptions {
+  /** Visible viewport in px: guards the result so the span fits with padding. */
+  viewport?: MapFitViewport;
+  /** Padding in px kept around the fitted span (default 48). */
+  paddingPx?: number;
+  /** Extra zoom levels added after fitting (compact maps sit closer). */
+  extraZoom?: number;
+}
+
 export interface MapPointLike {
   lat: number;
   lng: number;
@@ -1447,10 +1461,15 @@ export function getMapPointsForFilter<T extends MapPointLike>(
  * - Applies cosine latitude projection to handle spherical distortion
  * - Prunes extreme global outliers (> 800km away when majority are tightly clustered)
  *   while preserving multi-city itineraries (e.g. Bangkok + Pattaya, Tokyo + Hakone).
+ * - With `viewport`, steps the zoom back until the span fits (padding kept);
+ *   `extraZoom` then sits a small map closer without ever overflowing.
  */
-export function calculateBounds(pts: Array<{ lat: number; lng: number }>): MapBoundingResult {
+export function calculateBounds(
+  pts: Array<{ lat: number; lng: number }>,
+  opts: MapFitOptions = {},
+): MapBoundingResult {
   if (!pts || pts.length === 0) {
-    return { center: { lat: 35.6762, lng: 139.6503 }, zoom: 13 };
+    return { center: { lat: 35.6762, lng: 139.6503 }, zoom: 13 + (opts.extraZoom ?? 0) };
   }
 
   // Filter out invalid or near-zero coordinates
@@ -1468,10 +1487,10 @@ export function calculateBounds(pts: Array<{ lat: number; lng: number }>): MapBo
   if (validPts.length === 0) {
     const fallbackLat = Number.isFinite(pts[0]?.lat) ? pts[0].lat : 35.6762;
     const fallbackLng = Number.isFinite(pts[0]?.lng) ? pts[0].lng : 139.6503;
-    return { center: { lat: fallbackLat, lng: fallbackLng }, zoom: 13 };
+    return { center: { lat: fallbackLat, lng: fallbackLng }, zoom: 13 + (opts.extraZoom ?? 0) };
   }
   if (validPts.length === 1) {
-    return { center: { lat: validPts[0].lat, lng: validPts[0].lng }, zoom: 12 };
+    return { center: { lat: validPts[0].lat, lng: validPts[0].lng }, zoom: 12 + (opts.extraZoom ?? 0) };
   }
 
   // Calculate median center
@@ -1530,6 +1549,30 @@ export function calculateBounds(pts: Array<{ lat: number; lng: number }>): MapBo
   else if (maxSpan > 0.15) z = 12;
   else if (maxSpan > 0.04) z = 12;
   else z = 13;
+
+  z += opts.extraZoom ?? 0;
+
+  // Viewport guard: shrink until the span (+padding) fits the smaller side.
+  // Degrees-per-pixel at zoom z ≈ 360 / (256 * 2^z), latitude scaled by cos.
+  const viewport = opts.viewport;
+  const padding = opts.paddingPx ?? 48;
+  if (
+    viewport && Number.isFinite(viewport.width) && Number.isFinite(viewport.height) &&
+    viewport.width > padding * 2 && viewport.height > padding * 2 && maxSpan > 0
+  ) {
+    const fitSide = Math.min(viewport.width, viewport.height) - padding * 2;
+    let guard = z;
+    const spanFits = (zoom: number): boolean => {
+      const pxPerDeg = (256 * Math.pow(2, zoom)) / 360;
+      const spanPx = Math.max(
+        (maxLng - minLng) * Math.abs(cosLat) * pxPerDeg,
+        (maxLat - minLat) * pxPerDeg,
+      );
+      return spanPx <= fitSide;
+    };
+    while (guard > 3 && !spanFits(guard)) guard -= 0.5;
+    z = Math.min(z, guard);
+  }
 
   return { center: { lat: centerLat, lng: centerLng }, zoom: z };
 }
