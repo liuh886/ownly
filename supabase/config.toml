@@ -1,0 +1,7 @@
+# Supabase function deployment configuration.
+# Calendar subscription clients (Google/Apple/Outlook) do not send a Supabase
+# user JWT. The feed's high-entropy bearer token is validated inside the
+# calendar-feed handler, so platform JWT verification must remain disabled.
+
+[functions.calendar-feed]
+verify_jwt = false
