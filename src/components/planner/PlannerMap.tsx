@@ -58,6 +58,11 @@ interface PlannerMapProps {
   /** Trip id used to resolve leg ids for segment badges. */
   tripId?: string;
   /**
+   * Timeline-to-map locate request: centers the map on the stop's coordinates
+   * (zoom unchanged). Both instances consume the same nonce idempotently.
+   */
+  locateRequest?: { placeId: string; nonce: number } | null;
+  /**
    * Shared viewport owned by PlannerHome so the sidebar and expanded instances
    * continue each other's view instead of auto-fitting on every mount.
    * Only the visible instance writes (see ownsSharedView).
@@ -188,6 +193,9 @@ const MIN_ZOOM = 3;
 const MAX_ZOOM = 18;
 const ZOOM_STEP_BUTTON = 1;
 const ZOOM_STEP_WHEEL = 0.5;
+// Compact (sidebar) maps sit half a zoom level closer after any auto-fit:
+// same coverage logic, less empty air around the stops.
+const COMPACT_FIT_ZOOM_BUMP = 0.5;
 
 // Native tooltip shows the place name on line 1 and the recommendation reason (why) on line 2.
 function markerTitle(firstLine: string, why?: string): string {
@@ -216,6 +224,7 @@ export function PlannerMap({
   variant = 'full',
   legByPair,
   tripId,
+  locateRequest,
   sharedViewRef,
   ownsSharedView = true,
 }: PlannerMapProps) {
@@ -338,8 +347,13 @@ export function PlannerMap({
     [scheduledPlaces, candidatePlaces],
   );
 
-  // Initial bounds
-  const initial = useMemo(() => calculateBounds(points), [points]);
+  // Initial bounds: fit the active day (fallback: everything). The auto-fit
+  // effect below takes over with viewport guarding once measured.
+  const initial = useMemo(() => {
+    const active = points.filter((p) => p.isScheduled && p.isActiveDay !== false);
+    const target = active.length > 0 ? active : points;
+    return calculateBounds(target, { extraZoom: compact ? COMPACT_FIT_ZOOM_BUMP : 0 });
+  }, [points, compact]);
   // A shared view adopted at mount suppresses the first auto-fit below.
   const skipInitialFitRef = useRef(false);
   const [center, setCenter] = useState<{ lat: number; lng: number }>(() => defaultCenter ?? initial.center);
@@ -432,15 +446,65 @@ export function PlannerMap({
     });
   }, []);
 
+  // Dimensions (declared early: fit helpers below read the live size).
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 400, height: 350 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setContainerSize({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const clampZoom = useCallback((value: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value)), []);
+
+  const viewportSize = useCallback(() => ({
+    width: containerSize.width || containerRef.current?.clientWidth || 400,
+    height: containerSize.height || containerRef.current?.clientHeight || 300,
+  }), [containerSize.height, containerSize.width]);
+
+  // Single choke point for every auto-fit: viewport-guarded bounds, compact
+  // sits half a level closer, clamped to the allowed range.
+  const fitToPoints = useCallback((pts: Array<{ lat: number; lng: number }>) => {
+    if (pts.length === 0) return;
+    const computed = calculateBounds(pts, {
+      viewport: viewportSize(),
+      extraZoom: compact ? COMPACT_FIT_ZOOM_BUMP : 0,
+    });
+    clearPanTransform();
+    setCenter(defaultCenter ?? computed.center);
+    setZoom(clampZoom(computed.zoom));
+  }, [viewportSize, compact, defaultCenter, clearPanTransform, clampZoom]);
+
+  // Timeline-to-map locate: center on the stop, zoom untouched. Nonce-keyed
+  // so both instances consume the same request idempotently; retries every
+  // render until the point exists (points may still be loading).
+  const [locateNonceSeen, setLocateNonceSeen] = useState<number | null>(null);
+  if (locateRequest && locateRequest.nonce !== locateNonceSeen) {
+    const hit = points.find((p) =>
+      p.place.id === locateRequest.placeId ||
+      (p.place as PlannerScheduledPlace).place_id === locateRequest.placeId ||
+      (p.place as PlannerScheduledPlace).visit_id === locateRequest.placeId,
+    );
+    if (hit) {
+      setLocateNonceSeen(locateRequest.nonce);
+      setCenter({ lat: hit.lat, lng: hit.lng });
+    }
+  }
+
   // Fit bounds helper on user button click
   const fitBounds = useCallback(() => {
     const activePoints = resolveLayerPoints(points, { showRoutesLayer, showCandidates });
-    if (activePoints.length === 0) return;
-    const computed = calculateBounds(activePoints);
-    clearPanTransform();
-    setCenter(defaultCenter ?? computed.center);
-    setZoom(computed.zoom);
-  }, [showRoutesLayer, showCandidates, points, defaultCenter, clearPanTransform]);
+    fitToPoints(activePoints);
+  }, [showRoutesLayer, showCandidates, points, fitToPoints]);
 
   // Jump back to the active day: default layers, its route, fit its stops.
   const backToActiveDay = useCallback(() => {
@@ -448,11 +512,8 @@ export function PlannerMap({
     const dayPoints = points.filter((p) => p.isScheduled && p.isActiveDay !== false);
     const target = dayPoints.length > 0 ? dayPoints : points;
     if (target.length === 0) return;
-    const computed = calculateBounds(target);
-    clearPanTransform();
-    setCenter(defaultCenter ?? computed.center);
-    setZoom(computed.zoom);
-  }, [resetLayers, points, defaultCenter, clearPanTransform]);
+    fitToPoints(target);
+  }, [resetLayers, points, fitToPoints]);
 
   // Pan & pinch interaction (pointer events cover mouse, touch and pen)
   const activePointers = useRef(new Map<number, { x: number; y: number }>());
@@ -471,24 +532,6 @@ export function PlannerMap({
     viewRef.current = { center, zoom };
   }, [center, zoom]);
 
-  // Dimensions
-  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 400, height: 350 });
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        setContainerSize({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
   // Auto-fit only when necessary so user panning is never yanked away:
   // first load, active day change, layer change, or new points outside view.
   const lastPointsCountRef = useRef<number>(0);
@@ -508,8 +551,10 @@ export function PlannerMap({
     const layerChanged = lastLayerSigRef.current !== layerSig;
     const pointsAppeared = lastPointsCountRef.current === 0 && points.length > 0;
 
-    let needFit = pointsAppeared || dayChanged || layerChanged;
-    if (!needFit && points.length !== lastPointsCountRef.current) {
+    // Day changes refit; layer toggles never yank the viewport — newly
+    // revealed far points are pulled in by the out-of-view check below.
+    let needFit = pointsAppeared || dayChanged;
+    if (!needFit && (points.length !== lastPointsCountRef.current || layerChanged)) {
       const width = containerSize.width || 400;
       const height = containerSize.height || 300;
       const cx = projectLngToX(center.lng, zoom);
@@ -524,22 +569,13 @@ export function PlannerMap({
     if (needFit) {
       const activePoints = resolveLayerPoints(points, { showRoutesLayer, showCandidates });
       const pointsToFit = activePoints.length > 0 ? activePoints : points;
-      const computed = calculateBounds(pointsToFit);
-      setCenter(defaultCenter ?? computed.center);
-      setZoom(computed.zoom);
+      fitToPoints(pointsToFit);
     }
 
     lastPointsCountRef.current = points.length;
     lastActiveDayRef.current = activeDayIndex;
     lastLayerSigRef.current = layerSig;
-  }, [points, activeDayIndex, layerSig, showRoutesLayer, showCandidates, defaultCenter, center, zoom, containerSize]);
-  const clampZoom = useCallback((value: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value)), []);
-
-  const viewportSize = useCallback(() => ({
-    width: containerSize.width || containerRef.current?.clientWidth || 400,
-    height: containerSize.height || containerRef.current?.clientHeight || 300,
-  }), [containerSize.height, containerSize.width]);
-
+  }, [points, activeDayIndex, layerSig, showRoutesLayer, showCandidates, center, zoom, containerSize, fitToPoints]);
   const screenToGeo = useCallback((sx: number, sy: number) => {
     const { width, height } = viewportSize();
     const view = viewRef.current;
@@ -785,9 +821,10 @@ export function PlannerMap({
     return resolveLayerPoints(points, { showRoutesLayer, showCandidates });
   }, [points, showRoutesLayer, showCandidates]);
 
-  // Every visible point keeps its own identity marker (no clustering):
-  // dense candidate pools stay directly plannable; visual hierarchy comes
-  // from marker size grading instead.
+  // Every visible point keeps its own identity marker (no clustering of
+  // merely dense pools): candidate pools stay directly plannable; visual
+  // hierarchy comes from marker size grading instead. Only exact-duplicate
+  // coordinates collapse (see markerClusters below).
   const markerLayout = useMemo(() => {
     return visiblePoints.map((p, index) => {
       const x = projectLngToX(p.lng, zoom) - centerX + containerSize.width / 2;
@@ -797,6 +834,26 @@ export function PlannerMap({
       (item) => item.x >= -40 && item.x <= containerSize.width + 40 && item.y >= -40 && item.y <= containerSize.height + 40,
     );
   }, [visiblePoints, zoom, centerX, centerY, containerSize]);
+
+  // Exact-duplicate coordinates (≈1m) collapse into one cluster marker with a
+  // count badge — e.g. the same café scheduled twice a day. Click drills in
+  // (center + one zoom level). Merely dense pools keep individual markers.
+  const markerClusters = useMemo(() => {
+    const groups = new Map<string, typeof markerLayout>();
+    for (const item of markerLayout) {
+      const key = `${item.p.lat.toFixed(5)}|${item.p.lng.toFixed(5)}`;
+      const list = groups.get(key);
+      if (list) list.push(item);
+      else groups.set(key, [item]);
+    }
+    const firstOf = new Map<number, typeof markerLayout>();
+    for (const items of groups.values()) {
+      if (items.length > 1) {
+        for (const item of items) firstOf.set(item.index, items);
+      }
+    }
+    return firstOf;
+  }, [markerLayout]);
 
   // Scheduled route points for line rendering (active day)
   const scheduledRoutePoints = useMemo(() => {
@@ -948,35 +1005,44 @@ export function PlannerMap({
       <div className="flex flex-wrap items-center justify-end gap-1.5 border-b border-stone-100 bg-stone-50/80 px-3 py-2">
         {compact ? (
           <>
-            <button
-              type="button"
-              onClick={() => { resetLayers(); }}
-              className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-stone-600 ring-1 ring-stone-200 transition hover:bg-stone-100"
-              title={zh ? '回到默认图层' : 'Reset to default layers'}
+            <div
+              role="group"
+              aria-label={zh ? '地图图层' : 'Map layers'}
+              className="flex items-center overflow-hidden rounded-full text-[10px] font-semibold ring-1 ring-stone-200"
             >
-              {zh ? '全部' : 'All'} ({points.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!showRoutesLayer && !showCandidates) resetLayers();
-                else { setShowRoutesLayer(false); setShowCandidates(false); }
-              }}
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${!showRoutesLayer && !showCandidates ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
-            >
-              🟢 {zh ? `第${activeDayIndex + 1}天` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
-            </button>
-            {allPlacesByDate && tripDates && tripDates.length > 1 ? (
               <button
                 type="button"
-                onClick={() => setShowRoutesLayer((prev) => !prev)}
-                title={zh ? '所有路线图层：叠加显示，全灰，需到图例点亮某天' : 'All-routes layer: overlay, all gray until a day is lit in the legend'}
-                aria-pressed={showRoutesLayer}
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${showRoutesLayer ? 'bg-indigo-700 text-white shadow-xs' : 'bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100'}`}
+                onClick={() => {
+                  if (!showRoutesLayer && !showCandidates) resetLayers();
+                  else { setShowRoutesLayer(false); setShowCandidates(false); }
+                }}
+                aria-pressed={!showRoutesLayer && !showCandidates}
+                title={zh ? '只看当天路线' : 'Active day only'}
+                className={`px-2 py-0.5 transition ${!showRoutesLayer && !showCandidates ? 'bg-emerald-700 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
               >
-                {showRoutesLayer ? '☑' : '☐'} 🌐 {zh ? '所有路线' : 'All Routes'} ({allScheduledCount})
+                🟢 {zh ? `第${activeDayIndex + 1}天` : `Day ${activeDayIndex + 1}`}
               </button>
-            ) : null}
+              <button
+                type="button"
+                onClick={() => { resetLayers(); }}
+                aria-pressed={!showRoutesLayer && showCandidates && coloredDays.length === 0}
+                title={zh ? '回到默认图层' : 'Reset to default layers'}
+                className={`px-2 py-0.5 transition ${!showRoutesLayer && showCandidates && coloredDays.length === 0 ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
+              >
+                {zh ? '全部' : 'All'}
+              </button>
+              {allPlacesByDate && tripDates && tripDates.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowRoutesLayer((prev) => !prev)}
+                  title={zh ? '所有路线图层：叠加显示，全灰，需到图例点亮某天' : 'All-routes layer: overlay, all gray until a day is lit in the legend'}
+                  aria-pressed={showRoutesLayer}
+                  className={`px-2 py-0.5 transition ${showRoutesLayer ? 'bg-indigo-700 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
+                >
+                  🌐 {zh ? '路线' : 'Routes'}
+                </button>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={() => setShowCandidates((prev) => !prev)}
@@ -1175,6 +1241,44 @@ export function PlannerMap({
 
         {/* POI Markers */}
         {markerLayout.map(({ p, index: pIdx, x, y }) => {
+          const cluster = markerClusters.get(pIdx);
+          if (cluster && cluster[0].index !== pIdx) return null;
+          if (cluster && cluster.length > 1) {
+            const first = cluster[0];
+            const anyScheduled = cluster.some((item) => item.p.isScheduled);
+            const lit = cluster.some((item) =>
+              highlightedPlaceId === item.p.place.id || selectedPlaceId === item.p.place.id,
+            );
+            const names = cluster.map((item) => item.p.place.title).join('、');
+            return (
+              <div
+                key={`cluster_${first.p.lat.toFixed(5)}_${first.p.lng.toFixed(5)}`}
+                data-map-marker="true"
+                role="button"
+                tabIndex={0}
+                aria-label={zh ? `${cluster.length} 个地点在此：${names}（点击放大）` : `${cluster.length} places here (click to zoom in)`}
+                title={zh ? `${names}（点击放大）` : `${names} (click to zoom in)`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearPanTransform();
+                  setCenter({ lat: first.p.lat, lng: first.p.lng });
+                  const { width, height } = viewportSize();
+                  animateZoomAround(viewRef.current.zoom + 1, width / 2, height / 2);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    clearPanTransform();
+                    setCenter({ lat: first.p.lat, lng: first.p.lng });
+                  }
+                }}
+                className={`absolute z-30 flex h-7 min-w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full px-1 text-[11px] font-black text-white shadow-md transition hover:scale-110 ${anyScheduled ? 'bg-emerald-700 ring-2 ring-emerald-300' : 'bg-stone-800 ring-2 ring-white'} ${lit ? 'outline-2 outline-amber-400' : ''}`}
+                style={{ left: `${x}px`, top: `${y}px` }}
+              >
+                {cluster.length}
+              </div>
+            );
+          }
           const isHighlighted = highlightedPlaceId === p.place.id || selectedPlaceId === p.place.id;
           const isOtherDayStop = p.isScheduled && p.isActiveDay === false;
           const dayColor = plannerDayColor(p.dayIndex ?? activeDayIndex);
@@ -1338,9 +1442,9 @@ export function PlannerMap({
 
         {/* Scale Bar */}
         {scaleBar ? (
-          <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded bg-white/85 px-1.5 py-0.5 shadow-xs backdrop-blur-sm">
-            <div className="text-[9px] font-semibold text-stone-600">{scaleBar.label}</div>
-            <div className="border-b-2 border-l-2 border-r-2 border-stone-600" style={{ width: `${scaleBar.widthPx}px`, height: '4px' }} />
+          <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded bg-white/95 px-1.5 py-0.5 shadow-sm ring-1 ring-stone-200 backdrop-blur-sm">
+            <div className="text-[9px] font-bold text-stone-700">{scaleBar.label}</div>
+            <div className="border-b-2 border-l-2 border-r-2 border-stone-700" style={{ width: `${scaleBar.widthPx}px`, height: '4px' }} />
           </div>
         ) : null}
 

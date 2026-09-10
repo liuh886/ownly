@@ -12,6 +12,7 @@ export interface PlannerRightPanelProps {
   rightTab: 'map' | 'context' | 'budget';
   setRightTab: (tab: 'map' | 'context' | 'budget') => void;
   setIsMapExpanded: (open: boolean) => void;
+  locateRequest?: { placeId: string; nonce: number } | null;
   sortedPendingCandidates: PlannerControllerReturn['sortedPendingCandidates'];
   placesByDate: PlannerControllerReturn['placesByDate'];
   tripDates: PlannerControllerReturn['tripDates'];
@@ -55,6 +56,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
     currentExpenses, handleAddExpense, handleUpdateExpense, handleDeleteExpense,
     currentMembers, handleUpdateMembers, handleUpdateFxRates, dayAssessment,
     areaCounts, maxAreaCount, legByPair, tripId, sharedViewRef, ownsSharedView,
+    locateRequest,
   } = props;
   return (
         <aside className="min-w-0 flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
@@ -123,6 +125,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                 variant="compact"
                 legByPair={legByPair}
                 tripId={tripId}
+                locateRequest={locateRequest}
                 sharedViewRef={sharedViewRef}
                 ownsSharedView={ownsSharedView}
               />

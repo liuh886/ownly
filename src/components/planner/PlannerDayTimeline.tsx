@@ -32,6 +32,7 @@ export interface PlannerDayTimelineProps {
   setTimingModalPlace: (place: PlannerScheduledPlace | null) => void;
   setBudgetInitialPlaceId: (id: string) => void;
   setRightTab: (tab: 'map' | 'context' | 'budget') => void;
+  onLocatePlace?: (place: PlannerScheduledPlace) => void;
   handleToggleVisitLock: PlannerControllerReturn['handleToggleVisitLock'];
   moveScheduled: PlannerControllerReturn['moveScheduled'];
   removeVisit: PlannerControllerReturn['removeVisit'];
@@ -47,7 +48,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
     zh, scheduled, draggingPlaceId, dayAssessment, dayTimeline,
     highlightedPlaceId, setHighlightedPlaceId, currentDayTransferInfo,
     selectedTrip, expensesByPlace, hotelStayDaysMap,
-    setTimingModalPlace, setBudgetInitialPlaceId, setRightTab, handleToggleVisitLock,
+    setTimingModalPlace, setBudgetInitialPlaceId, setRightTab, onLocatePlace, handleToggleVisitLock,
     moveScheduled, removeVisit, activeModeSwitchPair, setActiveModeSwitchPair,
     handleSwitchTravelMode, handleClearTravelEstimate, handleRecalculateTravelEstimate,
   } = props;
@@ -369,6 +370,17 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                   >
                                     🎟️
                                   </a>
+                                ) : null}
+                                {/* 地图定位 */}
+                                {onLocatePlace ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onLocatePlace(place)}
+                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                    title={zh ? '在地图上定位此站' : 'Locate on map'}
+                                  >
+                                    ⌖
+                                  </button>
                                 ) : null}
                                 {/* 记账 */}
                                 <button

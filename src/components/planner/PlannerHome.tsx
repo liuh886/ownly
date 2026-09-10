@@ -47,6 +47,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
+  // Timeline-to-map locate request (nonce-keyed; both map instances consume it).
+  const [locateRequest, setLocateRequest] = useState<{ placeId: string; nonce: number } | null>(null);
+  const handleLocatePlace = useCallback((place: { id: string; visit_id?: string; place_id?: string }) => {
+    setHighlightedPlaceId(place.id);
+    setLocateRequest({ placeId: place.visit_id ?? place.place_id ?? place.id, nonce: Date.now() });
+  }, []);
   // Shared viewport for the sidebar + expanded map instances (single writer:
   // whichever instance is currently visible). Survives big-map mount/unmount.
   const mapViewRef = useRef<{ center: { lat: number; lng: number }; zoom: number } | null>(null);
@@ -309,6 +315,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     setIsMapExpanded,
     sharedViewRef: mapViewRef,
     ownsSharedView: !isMapExpanded,
+    locateRequest,
     sortedPendingCandidates,
     placesByDate,
     legByPair,
@@ -565,6 +572,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleSwitchTravelMode,
     handleClearTravelEstimate,
     handleRecalculateTravelEstimate,
+    onLocatePlace: handleLocatePlace,
   };
 
   if (disabled) {
@@ -999,6 +1007,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 language={language}
                 legByPair={legByPair}
                 tripId={selectedTripId}
+                locateRequest={locateRequest}
                 sharedViewRef={mapViewRef}
                 ownsSharedView={isMapExpanded}
               />
