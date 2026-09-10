@@ -1424,10 +1424,7 @@ export function PlannerMap({
 
       {/* Footer Helper */}
       <div className="border-t border-stone-100 bg-stone-50 px-3 py-1.5 text-[10.5px] text-stone-500">
-        <div>
-          💡 {zh ? '顺路排程技巧：在地图上沿动线依次点击候选点 🔵 即可按地理最优顺序加入当天路线。' : 'Tip: Click candidate markers 🔵 in sequence along your route to add them to your day schedule in optimal order.'}
-        </div>
-        <div className="mt-0.5 text-[9px] text-stone-400">
+        <div className="text-[9px] text-stone-400">
           © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="hover:underline">OpenStreetMap</a> · © <a href="https://carto.com/attributions" target="_blank" rel="noreferrer" className="hover:underline">CARTO</a>
         </div>
       </div>
