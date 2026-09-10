@@ -5,6 +5,14 @@ export interface ParsedMarkdown<T extends object> {
   body: string;
 }
 
+/**
+ * Symbol-keyed sidecar for a file's Markdown body on parsed entities.
+ * Survives `{...spread}` updates (symbols copy), is ignored by YAML/JSON
+ * serialization, and lets stageUpsertEntity rewrite frontmatter without
+ * silently deleting user notes written below it.
+ */
+export const ENTITY_BODY: unique symbol = Symbol('ownlyEntityBody');
+
 const FRONTMATTER_PATTERN = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 export function parseMarkdownEntity<T extends object = Record<string, unknown>>(

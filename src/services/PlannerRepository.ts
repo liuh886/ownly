@@ -1,4 +1,4 @@
-import { parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
+import { ENTITY_BODY, parseMarkdownEntity, serializeMarkdownEntity } from '@/data/frontmatter';
 import {
   assertTripDate,
   assertTripDates,
@@ -153,11 +153,14 @@ export class PlannerTransactionContext {
         : entity.type === 'trip_visit'
           ? PLANNER_DIRECTORIES.visits
           : PLANNER_DIRECTORIES.legs;
+    // Preserve the file's Markdown body (user notes below the frontmatter):
+    // entities carry it as a symbol sidecar through read→mutate→write.
+    const body = (entity as unknown as Record<symbol, unknown>)[ENTITY_BODY];
     const content = serializeMarkdownEntity(
       entity.type === 'trip_place'
         ? { ...entity, tags: ensurePlaceKindTag(entity.tags, entity.kind) }
         : entity,
-      '',
+      typeof body === 'string' ? body : '',
     );
     await this.stageWrite(dir, entityFileName(entity), content);
   }
@@ -174,7 +177,8 @@ export class PlannerTransactionContext {
   }
 
   async stageUpsertExpense(expense: TripExpenseItem): Promise<void> {
-    const content = serializeMarkdownEntity(toRepoExpense(expense), '');
+    const body = (expense as unknown as Record<symbol, unknown>)[ENTITY_BODY];
+    const content = serializeMarkdownEntity(toRepoExpense(expense), typeof body === 'string' ? body : '');
     await this.stageWrite(PLANNER_DIRECTORIES.expenses, expenseFileName(expense.id), content);
   }
 
@@ -262,7 +266,10 @@ export class PlannerRepository {
           }
           console.warn(`[PlannerRepository] Invalid schema in ${file.fileName}: ${issues}`);
         }
-        result.push(parsed.frontmatter as unknown as T);
+        const entity = parsed.frontmatter as unknown as T;
+        // Sidecar the Markdown body so mutations rewrite frontmatter only.
+        (entity as unknown as Record<symbol, unknown>)[ENTITY_BODY] = parsed.body;
+        result.push(entity);
       } catch (err) {
         if (options?.strict) {
           throw new Error(`Strict read failed for ${this.directory(directory)}/${file.fileName}: ${err instanceof Error ? err.message : String(err)}`);
@@ -311,7 +318,9 @@ export class PlannerRepository {
           }
           console.warn(`[PlannerRepository] Invalid schema in expense file ${file.fileName}: ${issues}`);
         }
-        result.push(fromRepoExpense(parsed.frontmatter));
+        const expense = fromRepoExpense(parsed.frontmatter);
+        (expense as unknown as Record<symbol, unknown>)[ENTITY_BODY] = parsed.body;
+        result.push(expense);
       } catch (err) {
         if (options?.strict) {
           throw new Error(`Strict read failed for expense file ${file.fileName}: ${err instanceof Error ? err.message : String(err)}`);
@@ -716,7 +725,15 @@ export class PlannerRepository {
     const report: ImportReport = { received: bundle.places.length, created: [], updated: [], deduped: [], failed: [] };
 
     return this.executeTransaction(async (tx) => {
-      await tx.stageUpsertEntity(bundle.trip);
+      // Same-id re-import (restore flows) must not wipe local-only trip state:
+      // exported bundles strip members/calendar_feed/fx_rates by design.
+      const existingTrip = (await this.listTrips()).find((item) => item.id === bundle.trip.id);
+      await tx.stageUpsertEntity({
+        ...bundle.trip,
+        members: bundle.trip.members ?? existingTrip?.members,
+        calendar_feed: bundle.trip.calendar_feed ?? existingTrip?.calendar_feed,
+        fx_rates: bundle.trip.fx_rates ?? existingTrip?.fx_rates,
+      });
 
       for (const place of bundle.places) {
         await tx.stageUpsertEntity({ ...place, tags: ensurePlaceKindTag(place.tags, place.kind) });
@@ -1088,6 +1105,26 @@ export class PlannerRepository {
 
       for (const visit of stale) {
         await tx.stageDeleteEntity(visit);
+      }
+      // Shift the surviving stops of each touched day to 1..N so the new
+      // stay visit can take sort_order 0 without duplicating it (a duplicate
+      // 0 breaks contiguous-order validation downstream).
+      const staleIds = new Set(stale.map((visit) => visit.id));
+      for (const date of targetDates) {
+        if (keepByDate.has(date)) continue;
+        const survivors = visits
+          .filter((visit) => visit.trip_id === place.trip_id && visit.date === date && !staleIds.has(visit.id))
+          .sort((left, right) => left.sort_order - right.sort_order || left.id.localeCompare(right.id));
+        for (let i = 0; i < survivors.length; i += 1) {
+          const nextOrder = i + 1;
+          if (survivors[i].sort_order !== nextOrder) {
+            await tx.stageUpsertEntity({
+              ...survivors[i],
+              sort_order: nextOrder,
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
       }
       const result: PlannerTripVisit[] = [];
       for (const date of targetDates) {

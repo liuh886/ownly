@@ -194,7 +194,9 @@ describe('PlannerRepository visit lifecycle', () => {
       source: 'manual', created_at: '2026-08-29T00:00:00.000Z',
     };
     await plannerRepository.upsertLeg(leg);
-    expect(await plannerRepository.listLegs()).toEqual([leg]);
+    // toMatchObject: listed entities carry a symbol-keyed body sidecar that
+    // toEqual would compare; field equality is what matters here.
+    expect(await plannerRepository.listLegs()).toMatchObject([leg]);
     expect(files.get('vault/Trip Legs')?.size).toBe(1);
   });
 
@@ -210,6 +212,58 @@ describe('PlannerRepository visit lifecycle', () => {
     const repeated = await plannerRepository.setStaySpan('hotel', ['2026-11-02', '2026-11-03', '2026-11-04']);
     expect(repeated.map((item) => item.id)).toEqual(shifted.map((item) => item.id));
     expect((await plannerRepository.listPlaces()).filter((item) => item.id === 'hotel')).toHaveLength(1);
+  });
+
+  it('preserves markdown body notes across mutations', async () => {
+    const visit = await plannerRepository.addVisit('a', '2026-11-01');
+    const dir = files.get('vault/Trip Visits')!;
+    const [name, content] = [...dir.entries()][0];
+    expect(name).toContain('visit');
+    dir.set(name, `${content}\nMy private notes below frontmatter\n`);
+
+    await plannerRepository.toggleVisitLock(visit!.id);
+
+    expect(dir.get(name)).toContain('My private notes below frontmatter');
+    const reloaded = (await plannerRepository.listVisits()).find((item) => item.id === visit!.id);
+    expect(reloaded?.locked).toBe(true);
+  });
+
+  it('shifts surviving stops when starting a stay span instead of duplicating sort_order 0', async () => {
+    await plannerRepository.addVisit('a', '2026-11-01');
+    await plannerRepository.addVisit('b', '2026-11-01');
+    await plannerRepository.setStaySpan('hotel', ['2026-11-01']);
+
+    const orders = (await plannerRepository.listVisits())
+      .filter((item) => item.date === '2026-11-01')
+      .sort((left, right) => left.sort_order - right.sort_order)
+      .map((item) => [item.place_id, item.sort_order]);
+    expect(orders).toEqual([['hotel', 0], ['a', 1], ['b', 2]]);
+  });
+
+  it('preserves local-only trip state on same-id bundle re-import', async () => {
+    const base = (await plannerRepository.listTrips()).find((item) => item.id === 'trip-1')!;
+    await plannerRepository.upsertTrip({
+      ...base,
+      members: ['me'],
+      fx_rates: { USD: 7.1 },
+      calendar_feed: {
+        feed_token: 'tok', trip_id: 'trip-1', created_at: '2026-08-24T00:00:00.000Z',
+        updated_at: '2026-08-24T00:00:00.000Z', enabled: true,
+      },
+    });
+
+    await plannerRepository.importBundle({
+      trip: { ...base, title: 'Thailand 2026 (restored)' },
+      places: [],
+      visits: [],
+      legs: [],
+    });
+
+    const restored = (await plannerRepository.listTrips()).find((item) => item.id === 'trip-1')!;
+    expect(restored.title).toBe('Thailand 2026 (restored)');
+    expect(restored.members).toEqual(['me']);
+    expect(restored.fx_rates).toEqual({ USD: 7.1 });
+    expect(restored.calendar_feed?.feed_token).toBe('tok');
   });
 
   it('blocks dropping a Place while a Visit still references it', async () => {
