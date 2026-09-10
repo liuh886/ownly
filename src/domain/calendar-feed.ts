@@ -1,10 +1,12 @@
 import {
+  calculateDefaultTripLeg,
   getPlannerKindLabel,
   PLANNER_KIND_ICONS,
   type PlannerPlacePriority,
   type PlannerTrip,
-  type PlannerTripPlace,
   type PlannerTripCalendarFeed,
+  type PlannerTripLeg,
+  type PlannerTripPlace,
 } from './planner';
 import {
   materializePlannerScheduledPlaces,
@@ -12,7 +14,11 @@ import {
   type PlannerTripVisit,
   type PlannerScheduledPlace,
 } from './planner-visits';
-import { getScheduledEndTime } from './planner-schedule';
+import {
+  calculateEffectiveDayTiming,
+  getScheduledEndTime,
+  type PlannerEffectiveTiming,
+} from './planner-schedule';
 
 export const ICS_PRIORITY_MAP: Record<PlannerPlacePriority, number> = {
   must: 1,
@@ -32,6 +38,11 @@ export interface CalendarExportOptions {
    * Tests should pass an explicit value to stay deterministic.
    */
   now?: Date | string;
+  /**
+   * Day-scoped travel legs for arrival inference. Absent pairs fall back to
+   * heuristic defaults, mirroring the timeline's effectiveDayLegs.
+   */
+  legs?: PlannerTripLeg[];
 }
 
 /**
@@ -301,12 +312,15 @@ export function resolveTripTimeZoneForDate(trip: PlannerTrip, date: string): str
 
 /**
  * Formats a single scheduled place into a VEVENT string block.
+ * `effective` carries the timeline's forward inference (prev stop end + leg):
+ * inferred blocks are emitted as timed TENTATIVE events instead of all-day.
  */
 function buildVEvent(
   place: PlannerScheduledPlace,
   options: CalendarExportOptions,
   nowTimestamp: string,
   timeZone?: string,
+  effective?: PlannerEffectiveTiming,
 ): string[] {
   const {
     includeAlarms = true,
@@ -340,6 +354,22 @@ function buildVEvent(
       // No (or invalid) trip timezone: legacy floating local time.
       const endTime = getScheduledEndTime(startTime, place.duration_minutes || 60) || '23:59';
       lines.push(`DTSTART:${toIcsDateTimeString(place.scheduled_date, startTime)}`);
+      lines.push(`DTEND:${toIcsDateTimeString(place.scheduled_date, endTime)}`);
+    }
+  } else if (effective?.start) {
+    // No fixed time: project the travel-time inference as a tentative block so
+    // the calendar matches the timeline's ~est chip instead of an all-day task.
+    const durationMinutes =
+      effective.duration_minutes && effective.duration_minutes > 0 ? effective.duration_minutes : 60;
+    const startUtcMs = timeZone ? zonedWallTimeToUtcMs(place.scheduled_date, effective.start, timeZone) : null;
+    if (startUtcMs !== null) {
+      lines.push(`DTSTART:${toIcsUtcString(startUtcMs)}`);
+      lines.push(`DTEND:${toIcsUtcString(startUtcMs + durationMinutes * 60000)}`);
+    } else {
+      const endTime = effective.end
+        || getScheduledEndTime(effective.start, durationMinutes)
+        || effective.start;
+      lines.push(`DTSTART:${toIcsDateTimeString(place.scheduled_date, effective.start)}`);
       lines.push(`DTEND:${toIcsDateTimeString(place.scheduled_date, endTime)}`);
     }
   } else {
@@ -392,10 +422,13 @@ function buildVEvent(
     lines.push(`PRIORITY:${ICS_PRIORITY_MAP[place.priority]}`);
   }
 
-  lines.push('STATUS:CONFIRMED');
+  // Inferred blocks are honest about being estimates; alarms only fire on
+  // fixed times so a shifted inference never buzzes at the wrong moment.
+  const isInferred = !place.scheduled_start && Boolean(effective?.start);
+  lines.push(isInferred ? 'STATUS:TENTATIVE' : 'STATUS:CONFIRMED');
 
-  // Alarm reminder for 'must' visits
-  if (includeAlarms && place.priority === 'must') {
+  // Alarm reminder for 'must' visits with fixed times
+  if (includeAlarms && place.priority === 'must' && !isInferred) {
     lines.push(
       'BEGIN:VALARM',
       'ACTION:DISPLAY',
@@ -407,6 +440,33 @@ function buildVEvent(
 
   lines.push('END:VEVENT');
   return lines;
+}
+
+/**
+ * Resolves the leg set for one trip's scheduled chain: caller-provided legs
+ * first, heuristic defaults synthesized for missing adjacent pairs — the same
+ * mix the timeline uses, so ICS inference matches the ~est chips.
+ */
+function resolveIcsLegs(
+  trip: PlannerTrip,
+  scheduled: PlannerScheduledPlace[],
+  legs?: PlannerTripLeg[],
+): PlannerTripLeg[] {
+  const tripLegs = (legs ?? []).filter((leg) => leg.trip_id === trip.id);
+  const pairSet = new Set(tripLegs.map((leg) => `${leg.from_place_id}→${leg.to_place_id}`));
+  const full = [...tripLegs];
+  for (let i = 0; i < scheduled.length - 1; i += 1) {
+    const from = scheduled[i];
+    const to = scheduled[i + 1];
+    const key = `${from.place_id}→${to.place_id}`;
+    if (pairSet.has(key)) continue;
+    const fallback = calculateDefaultTripLeg(trip, from, to);
+    if (fallback) {
+      full.push(fallback);
+      pairSet.add(key);
+    }
+  }
+  return full;
 }
 
 /**
@@ -423,6 +483,7 @@ export function buildTripCalendarIcs(
   const cutoff = getIcsWindowCutoffDate(options.now);
   const windowedVisits = tripVisits.filter((visit) => isVisitInIcsWindow(visit.date, cutoff));
   const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
+  const effective = calculateEffectiveDayTiming(scheduled, resolveIcsLegs(trip, scheduled, options.legs), trip.id);
 
   const nowTimestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
 
@@ -439,7 +500,7 @@ export function buildTripCalendarIcs(
   ];
 
   scheduled.forEach((place) => {
-    rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date)));
+    rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date), effective.get(place.id)));
   });
 
   rawLines.push('END:VCALENDAR');
@@ -487,8 +548,9 @@ export function buildAccountCalendarIcs(
     const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
     if (scheduled.length === 0) continue;
     tripCount += 1;
+    const effective = calculateEffectiveDayTiming(scheduled, resolveIcsLegs(trip, scheduled, options.legs), trip.id);
     scheduled.forEach((place) => {
-      rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date)));
+      rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date), effective.get(place.id)));
     });
     eventCount += scheduled.length;
   }
@@ -513,6 +575,7 @@ export function buildDayCalendarIcs(
   const cutoff = getIcsWindowCutoffDate(options.now);
   const windowedVisits = dayVisits.filter((visit) => isVisitInIcsWindow(visit.date, cutoff));
   const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
+  const effective = calculateEffectiveDayTiming(scheduled, resolveIcsLegs(trip, scheduled, options.legs), trip.id);
 
   const nowTimestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
 
@@ -529,7 +592,7 @@ export function buildDayCalendarIcs(
   ];
 
   scheduled.forEach((place) => {
-    rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date)));
+    rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date), effective.get(place.id)));
   });
 
   rawLines.push('END:VCALENDAR');

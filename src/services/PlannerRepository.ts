@@ -1126,7 +1126,8 @@ export class PlannerRepository {
     if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
     const places = (await this.listPlaces()).filter((place) => place.trip_id === tripId);
     const visits = (await this.listVisits()).filter((visit) => visit.trip_id === tripId);
-    return buildTripCalendarIcs(trip, places, visits, options);
+    const legs = (await this.listLegs()).filter((leg) => leg.trip_id === tripId);
+    return buildTripCalendarIcs(trip, places, visits, { ...options, legs });
   }
 
   async exportDayIcs(tripId: string, date: string, options?: CalendarExportOptions): Promise<string> {
@@ -1135,7 +1136,8 @@ export class PlannerRepository {
     if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
     const places = (await this.listPlaces()).filter((place) => place.trip_id === tripId);
     const visits = (await this.listVisits()).filter((visit) => visit.trip_id === tripId);
-    return buildDayCalendarIcs(trip, places, visits, date, options);
+    const legs = (await this.listLegs()).filter((leg) => leg.trip_id === tripId);
+    return buildDayCalendarIcs(trip, places, visits, date, { ...options, legs });
   }
 
   async createOrUpdateCalendarFeed(tripId: string): Promise<PlannerTripCalendarFeed> {

@@ -803,17 +803,19 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     async (
       visitId: string,
       timing: {
-        scheduled_start?: string;
-        duration_minutes?: number;
+        // null = explicitly clear the field; undefined = leave untouched.
+        scheduled_start?: string | null;
+        duration_minutes?: number | null;
         is_anchor?: boolean;
         anchor_type?: PlannerScheduledPlace['anchor_type'];
       },
     ) => {
+      const cleared = timing.scheduled_start === null || timing.duration_minutes === null;
       setVisits((prev) => prev.map((visit) => {
         if (visit.id !== visitId) return visit;
         const next = { ...visit };
-        if (timing.scheduled_start !== undefined) next.start = timing.scheduled_start;
-        if (timing.duration_minutes !== undefined) next.duration_minutes = timing.duration_minutes;
+        if (timing.scheduled_start !== undefined) next.start = timing.scheduled_start ?? undefined;
+        if (timing.duration_minutes !== undefined) next.duration_minutes = timing.duration_minutes ?? undefined;
         if (timing.is_anchor !== undefined) next.is_anchor = timing.is_anchor;
         if (timing.anchor_type !== undefined) next.anchor_type = timing.anchor_type;
         return next;
@@ -831,7 +833,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         return;
       }
       await load();
-      setNotice(zh ? '已更新行程时段与停留时长！' : 'Updated schedule timing and duration!');
+      setNotice(cleared
+        ? (zh ? '已清除固定时间，改按交通时间自动推算。' : 'Fixed time cleared; now inferred from travel times.')
+        : (zh ? '已更新行程时段与停留时长！' : 'Updated schedule timing and duration!'));
     },
     [load, setNotice, setVisits, showPersistError, zh],
   );
@@ -1105,7 +1109,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
 
   const downloadFullIcs = useCallback(() => {
     if (!selectedTrip) return;
-    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language });
+    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language, legs });
     const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1114,12 +1118,12 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     a.click();
     URL.revokeObjectURL(url);
     setNotice(zh ? '✓ 已下载全行程 .ics 日历文件！' : '✓ Downloaded full trip .ics file!');
-  }, [selectedTrip, places, visits, language, zh, setNotice]);
+  }, [selectedTrip, places, visits, legs, language, zh, setNotice]);
 
   const downloadDayIcs = useCallback(
     (date: string) => {
       if (!selectedTrip) return;
-      const ics = buildDayCalendarIcs(selectedTrip, places, visits, date, { language });
+      const ics = buildDayCalendarIcs(selectedTrip, places, visits, date, { language, legs });
       const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1129,15 +1133,15 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       URL.revokeObjectURL(url);
       setNotice(zh ? `✓ 已下载 ${date} 当天 .ics 日历文件！` : `✓ Downloaded day .ics file for ${date}!`);
     },
-    [selectedTrip, places, visits, language, zh, setNotice],
+    [selectedTrip, places, visits, legs, language, zh, setNotice],
   );
 
   const copyIcsContent = useCallback(async () => {
     if (!selectedTrip) return;
-    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language });
+    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language, legs });
     await navigator.clipboard.writeText(ics);
     setNotice(zh ? '✓ 已复制 RFC 5545 ICS 日历文本至剪贴板！' : '✓ Copied RFC 5545 ICS calendar text to clipboard!');
-  }, [selectedTrip, places, visits, language, zh, setNotice]);
+  }, [selectedTrip, places, visits, legs, language, zh, setNotice]);
 
   const handleCreateOrUpdateFeed = useCallback(async () => {
     if (!selectedTrip) return;
@@ -1147,13 +1151,14 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       visits,
       membership: { isPro },
       userId: currentUserId,
+      legs,
     });
     await plannerRepository.upsertTrip({
       ...selectedTrip,
       calendar_feed: response.feed,
     });
     await load();
-  }, [selectedTrip, places, visits, isPro, currentUserId, load]);
+  }, [selectedTrip, places, visits, legs, isPro, currentUserId, load]);
 
   const handleRotateFeed = useCallback(async () => {
     if (!selectedTrip) return;
@@ -1163,13 +1168,14 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       visits,
       membership: { isPro },
       userId: currentUserId,
+      legs,
     });
     await plannerRepository.upsertTrip({
       ...selectedTrip,
       calendar_feed: response.feed,
     });
     await load();
-  }, [selectedTrip, places, visits, isPro, currentUserId, load]);
+  }, [selectedTrip, places, visits, legs, isPro, currentUserId, load]);
 
   const handleDisableFeed = useCallback(async () => {
     if (!selectedTrip) return;
@@ -1194,6 +1200,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       userId: currentUserId,
       feedToken: accountFeed?.enabled ? accountFeed.feed_token : undefined,
       options: { language },
+      legs,
     });
     const meta: AccountCalendarFeedMeta = {
       feed_token: response.feed.feed_token,
@@ -1203,7 +1210,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     saveAccountFeedMeta(currentUserId, meta);
     setAccountFeed(meta);
     return response;
-  }, [trips, places, visits, isPro, currentUserId, accountFeed, language]);
+  }, [trips, places, visits, legs, isPro, currentUserId, accountFeed, language]);
 
   const handleRotateAccountFeed = useCallback(async () => {
     const response = await calendarFeedService.rotateAccountFeed({
@@ -1214,6 +1221,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       userId: currentUserId,
       currentFeedToken: accountFeed?.feed_token,
       options: { language },
+      legs,
     });
     const meta: AccountCalendarFeedMeta = {
       feed_token: response.feed.feed_token,
@@ -1223,7 +1231,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     saveAccountFeedMeta(currentUserId, meta);
     setAccountFeed(meta);
     return response;
-  }, [trips, places, visits, isPro, currentUserId, accountFeed, language]);
+  }, [trips, places, visits, legs, isPro, currentUserId, accountFeed, language]);
 
   const handleDisableAccountFeed = useCallback(async () => {
     if (!accountFeed?.feed_token) return;

@@ -339,6 +339,60 @@ describe('Trip timezone → UTC ICS emission', () => {
     expect(zonedWallTimeToUtcMs('2026-10-05', '8am', 'Asia/Bangkok')).toBeNull();
     expect(zonedWallTimeToUtcMs('2026-10-05', '08:00', 'Asia/Bangkok')).toBe(Date.UTC(2026, 9, 5, 1, 0, 0));
   });
+});
+
+describe('Travel-time inference → tentative ICS blocks', () => {
+  const legAB = {
+    schema_version: '0.1' as const,
+    type: 'trip_leg' as const,
+    id: 'leg:trip:place-a:place-b',
+    trip_id: trip.id,
+    from_place_id: 'place-a',
+    to_place_id: 'place-b',
+    mode: 'transit' as const,
+    duration_minutes: 30,
+    source: 'manual' as const,
+    created_at: '2026-08-29T00:00:00Z',
+  };
+
+  it('projects a reachable untimed stop as TENTATIVE with inferred times', () => {
+    const hotel = makePlace('place-a', { title: 'Hotel' });
+    const temple = makePlace('place-b', { title: 'Temple' });
+    const vA = makeVisit('visit:a-1', hotel.id, '2026-10-05', { start: '09:00', duration_minutes: 60 });
+    const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', { sort_order: 1 });
+    const ics = buildTripCalendarIcs(trip, [hotel, temple], [vA, vB], { now: '2026-09-10', legs: [legAB] });
+    // 09:00 + 60m stay + 30m leg = 10:30 arrival, default 60m duration.
+    expect(ics).toContain('DTSTART:20261005T103000\r\n');
+    expect(ics).toContain('DTEND:20261005T113000\r\n');
+    expect(ics).toContain('STATUS:TENTATIVE\r\n');
+    expect(ics).toContain('STATUS:CONFIRMED\r\n');
+  });
+
+  it('withholds alarms on tentative blocks but keeps them on fixed must visits', () => {
+    const hotel = makePlace('place-a', { title: 'Hotel', priority: 'must' });
+    const temple = makePlace('place-b', { title: 'Temple', priority: 'must' });
+    const vA = makeVisit('visit:a-1', hotel.id, '2026-10-05', { start: '09:00', duration_minutes: 60 });
+    const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', { sort_order: 1 });
+    const ics = buildTripCalendarIcs(trip, [hotel, temple], [vA, vB], { now: '2026-09-10', legs: [legAB] });
+    expect(ics.match(/BEGIN:VALARM/g)?.length).toBe(1);
+  });
+
+  it('keeps truly unreachable stops as all-day tasks', () => {
+    const temple = makePlace('place-b', { title: 'Temple' });
+    const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', {});
+    const ics = buildTripCalendarIcs(trip, [temple], [vB], { now: '2026-09-10' });
+    expect(ics).toContain('DTSTART;VALUE=DATE:20261005\r\n');
+    expect(ics).not.toContain('STATUS:TENTATIVE');
+  });
+
+  it('synthesizes heuristic legs when none are provided', () => {
+    const hotel = makePlace('place-a', { title: 'Hotel' });
+    const temple = makePlace('place-b', { title: 'Temple' });
+    const vA = makeVisit('visit:a-1', hotel.id, '2026-10-05', { start: '09:00', duration_minutes: 60 });
+    const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', { sort_order: 1 });
+    const ics = buildTripCalendarIcs(trip, [hotel, temple], [vA, vB], { now: '2026-09-10' });
+    expect(ics).toContain('STATUS:TENTATIVE\r\n');
+  });
 
   it('per-day override wins over the trip zone, other days fall back', () => {
     const multiTrip: PlannerTrip = {

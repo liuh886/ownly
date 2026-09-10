@@ -17,8 +17,9 @@ interface PlaceTimingModalProps {
   onSave: (
     visitId: string,
     timing: {
-      scheduled_start?: string;
-      duration_minutes?: number;
+      // null = explicitly clear the field; undefined = leave untouched.
+      scheduled_start?: string | null;
+      duration_minutes?: number | null;
       is_anchor?: boolean;
       anchor_type?: PlannerVisitAnchorType;
     },
@@ -121,9 +122,11 @@ export function PlaceTimingModal({
     setSaveError('');
     try {
       const isAnchor = anchorType ? true : (place.kind === 'stay' ? false : place.is_anchor);
+      // What you see is what gets saved: an emptied field clears the stored
+      // value (falls back to travel-time inference) instead of no-touch.
       await onSave(place.visit_id, {
-        scheduled_start: startTime.trim() || undefined,
-        duration_minutes: normalizedDuration,
+        scheduled_start: startTime.trim() ? startTime.trim() : null,
+        duration_minutes: durationMinutes === '' ? null : normalizedDuration,
         is_anchor: isAnchor,
         anchor_type: anchorType,
       });
@@ -140,8 +143,8 @@ export function PlaceTimingModal({
     setSaveError('');
     try {
       await onSave(place.visit_id, {
-        scheduled_start: undefined,
-        duration_minutes: undefined,
+        scheduled_start: null,
+        duration_minutes: null,
         is_anchor: false,
         anchor_type: undefined,
       });
@@ -276,10 +279,10 @@ export function PlaceTimingModal({
         <div className="space-y-1.5 rounded-xl border border-stone-200 bg-stone-50/80 p-3 text-xs">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-stone-700">{zh ? '📅 日历投影预览' : '📅 Calendar Projection'}</span>
-            {startTime && computedEndTime ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">VEVENT</span> : <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">date-only</span>}
+            {startTime && computedEndTime ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">VEVENT</span> : inferredStartTime ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">{zh ? '~推算 VEVENT' : '~inferred VEVENT'}</span> : <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">date-only</span>}
           </div>
-          <p className="font-mono text-sm font-semibold text-stone-800">{startTime && computedEndTime ? `${place.scheduled_date} ${startTime} - ${computedEndTime}` : `${place.scheduled_date} (${zh ? '日期级任务' : 'date-only task'})`}</p>
-          <p className="text-[11px] leading-relaxed text-stone-500">{zh ? '开始时间与时长都明确时才生成具体时间块；订阅日历将在客户端下一次刷新时更新。' : 'A timed block is projected only when both start time and duration are explicit; subscribed calendars update on their next client refresh.'}</p>
+          <p className="font-mono text-sm font-semibold text-stone-800">{startTime && computedEndTime ? `${place.scheduled_date} ${startTime} - ${computedEndTime}` : inferredStartTime ? `${place.scheduled_date} ~${inferredStartTime} (${zh ? '交通推算·暂定' : 'inferred·tentative'})` : `${place.scheduled_date} (${zh ? '日期级任务' : 'date-only task'})`}</p>
+          <p className="text-[11px] leading-relaxed text-stone-500">{zh ? '不设固定时间就按上一站＋交通时间自动推算，日历里显示为暂定时间块；订阅日历将在客户端下一次刷新时更新。' : 'Without a fixed time the block is inferred from the previous stop plus travel time and shown as tentative; subscribed calendars update on their next client refresh.'}</p>
         </div>
 
         {timingErrors.length > 0 ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-900">{timingErrors.map((issue) => <p key={issue.code}>{timingIssueText(issue.code, zh)}</p>)}</div> : null}

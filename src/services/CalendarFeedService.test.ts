@@ -256,6 +256,47 @@ describe('CalendarFeedService (PRO)', () => {
     expect(served.body).toContain('Doi Suthep');
   });
 
+  it('projects travel-time inference as TENTATIVE when legs are provided', async () => {
+    const annex: PlannerTripPlace = {
+      ...palace,
+      id: 'place-annex',
+      title: 'Annex Hall',
+    };
+    const visitAnnex: PlannerTripVisit = {
+      ...visit1,
+      id: 'visit-annex',
+      place_id: annex.id,
+      sort_order: 1,
+      start: undefined,
+      duration_minutes: undefined,
+    };
+    const result = await service.publishFeed({
+      trip,
+      places: [palace, annex],
+      visits: [visit1, visitAnnex],
+      membership: { isPro: true },
+      userId: 'user_123',
+      options: { now: '2026-09-10' },
+      legs: [
+        {
+          schema_version: '0.1',
+          type: 'trip_leg',
+          id: 'leg:trip:palace:annex',
+          trip_id: trip.id,
+          from_place_id: palace.id,
+          to_place_id: annex.id,
+          mode: 'transit',
+          duration_minutes: 30,
+          source: 'manual',
+          created_at: '2026-08-30T00:00:00Z',
+        },
+      ],
+    });
+    // 09:00 + 120m + 30m leg = 11:30 inferred arrival.
+    expect(result.ics).toContain('DTSTART:20261101T113000\r\n');
+    expect(result.ics).toContain('STATUS:TENTATIVE\r\n');
+  });
+
   it('rotates and disables the account feed by token', async () => {
     const first = await service.publishAccountFeed({
       trips: [trip],

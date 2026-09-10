@@ -1,4 +1,4 @@
-import type { PlannerTrip, PlannerTripCalendarFeed, PlannerTripPlace } from '../domain/planner';
+import type { PlannerTrip, PlannerTripCalendarFeed, PlannerTripLeg, PlannerTripPlace } from '../domain/planner';
 import type { PlannerTripVisit } from '../domain/planner-visits';
 import {
   ACCOUNT_FEED_TRIP_ID,
@@ -32,6 +32,8 @@ export interface PublishCalendarFeedInput {
   feedToken?: string;
   apiBaseUrl?: string;
   options?: CalendarExportOptions;
+  /** Day travel legs for arrival inference of untimed visits. */
+  legs?: PlannerTripLeg[];
 }
 
 export interface RotateCalendarFeedInput {
@@ -42,6 +44,8 @@ export interface RotateCalendarFeedInput {
   userId: string;
   apiBaseUrl?: string;
   options?: CalendarExportOptions;
+  /** Day travel legs for arrival inference of untimed visits. */
+  legs?: PlannerTripLeg[];
 }
 
 export interface DisableCalendarFeedInput {
@@ -59,6 +63,8 @@ export interface PublishAccountFeedInput {
   userId: string;
   feedToken?: string;
   options?: CalendarExportOptions;
+  /** Day travel legs for arrival inference of untimed visits. */
+  legs?: PlannerTripLeg[];
 }
 
 export interface RotateAccountFeedInput {
@@ -69,6 +75,8 @@ export interface RotateAccountFeedInput {
   userId: string;
   currentFeedToken?: string;
   options?: CalendarExportOptions;
+  /** Day travel legs for arrival inference of untimed visits. */
+  legs?: PlannerTripLeg[];
 }
 
 export interface DisableAccountFeedInput {
@@ -150,7 +158,7 @@ export class CalendarFeedService {
     const { trip, places, visits, userId } = input;
     const token = input.feedToken || trip.calendar_feed?.feed_token || generateCalendarFeedToken();
     const tokenHash = await hashFeedToken(token);
-    const ics = buildTripCalendarIcs(trip, places, visits, input.options);
+    const ics = buildTripCalendarIcs(trip, places, visits, { ...input.options, legs: input.legs });
     const now = new Date().toISOString();
 
     const record: CalendarFeedRecord = {
@@ -201,7 +209,7 @@ export class CalendarFeedService {
 
     const newToken = generateCalendarFeedToken();
     const newTokenHash = await hashFeedToken(newToken);
-    const ics = buildTripCalendarIcs(trip, places, visits, input.options);
+    const ics = buildTripCalendarIcs(trip, places, visits, { ...input.options, legs: input.legs });
     const now = new Date().toISOString();
 
     const newRecord: CalendarFeedRecord = {
@@ -274,7 +282,7 @@ export class CalendarFeedService {
     const { trips, places, visits, userId } = input;
     const token = input.feedToken?.trim() || generateCalendarFeedToken();
     const tokenHash = await hashFeedToken(token);
-    const { ics, tripCount, eventCount } = buildAccountCalendarIcs(trips, places, visits, input.options);
+    const { ics, tripCount, eventCount } = buildAccountCalendarIcs(trips, places, visits, { ...input.options, legs: input.legs });
     const now = new Date().toISOString();
 
     await this.store.upsertFeed({
@@ -328,6 +336,7 @@ export class CalendarFeedService {
       membership: input.membership,
       userId,
       options: input.options,
+      legs: input.legs,
     });
   }
 

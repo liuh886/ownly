@@ -233,6 +233,18 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(placeRestored?.title).toBe(placeBefore?.title);
   });
 
+  it('clears fixed timing with null so the visit falls back to travel inference', async () => {
+    const visit = await plannerRepository.addVisit('a', '2026-11-01');
+    await plannerRepository.updateVisitTiming(visit!.id, { start: '09:00', duration_minutes: 90 });
+    const timed = (await plannerRepository.listVisits()).find((item) => item.id === visit!.id);
+    expect(timed?.start).toBe('09:00');
+
+    await plannerRepository.updateVisitTiming(visit!.id, { start: null, duration_minutes: null });
+    const cleared = (await plannerRepository.listVisits()).find((item) => item.id === visit!.id);
+    expect(cleared?.start).toBeUndefined();
+    expect(cleared?.duration_minutes).toBeUndefined();
+  });
+
   it('exportTripIcs produces deterministic RFC 5545 projection with stable UID and timing', async () => {
     const trip: PlannerTrip = {
       schema_version: '0.1', type: 'trip', id: 'trip-1', title: 'Bangkok 2026', status: 'planning',
