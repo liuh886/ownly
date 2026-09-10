@@ -1,6 +1,8 @@
 import type { PlannerTrip, PlannerTripCalendarFeed, PlannerTripPlace } from '../domain/planner';
 import type { PlannerTripVisit } from '../domain/planner-visits';
 import {
+  ACCOUNT_FEED_TRIP_ID,
+  buildAccountCalendarIcs,
   buildTripCalendarIcs,
   type CalendarExportOptions,
   generateCalendarFeedToken,
@@ -47,6 +49,37 @@ export interface DisableCalendarFeedInput {
   membership: Pick<WYQDMembershipState, 'isPro'>;
   userId: string;
   apiBaseUrl?: string;
+}
+
+export interface PublishAccountFeedInput {
+  trips: PlannerTrip[];
+  places: PlannerTripPlace[];
+  visits: PlannerTripVisit[];
+  membership: Pick<WYQDMembershipState, 'isPro'>;
+  userId: string;
+  feedToken?: string;
+  options?: CalendarExportOptions;
+}
+
+export interface RotateAccountFeedInput {
+  trips: PlannerTrip[];
+  places: PlannerTripPlace[];
+  visits: PlannerTripVisit[];
+  membership: Pick<WYQDMembershipState, 'isPro'>;
+  userId: string;
+  currentFeedToken?: string;
+  options?: CalendarExportOptions;
+}
+
+export interface DisableAccountFeedInput {
+  membership: Pick<WYQDMembershipState, 'isPro'>;
+  userId: string;
+  feedToken: string;
+}
+
+export interface AccountFeedResponse extends CalendarFeedResponse {
+  tripCount: number;
+  eventCount: number;
 }
 
 export interface CalendarFeedResponse {
@@ -226,6 +259,105 @@ export class CalendarFeedService {
   }
 
   /**
+   * Publishes or refreshes the account-level aggregate feed: one subscription
+   * covering every trip. Re-publish after itinerary changes; the URL is stable
+   * across refreshes for the same token.
+   */
+  async publishAccountFeed(input: PublishAccountFeedInput): Promise<AccountFeedResponse> {
+    if (!canUseWYQDProFeature(input.membership)) {
+      throw new Error('PRO membership is required to publish continuous Calendar Feeds.');
+    }
+    if (!input.userId?.trim()) {
+      throw new Error('User ID is required for calendar feed operations.');
+    }
+
+    const { trips, places, visits, userId } = input;
+    const token = input.feedToken?.trim() || generateCalendarFeedToken();
+    const tokenHash = await hashFeedToken(token);
+    const { ics, tripCount, eventCount } = buildAccountCalendarIcs(trips, places, visits, input.options);
+    const now = new Date().toISOString();
+
+    await this.store.upsertFeed({
+      user_id: userId,
+      trip_id: ACCOUNT_FEED_TRIP_ID,
+      token_hash: tokenHash,
+      ics_content: ics,
+      enabled: true,
+      updated_at: now,
+    });
+
+    return {
+      feed: {
+        feed_token: token,
+        trip_id: ACCOUNT_FEED_TRIP_ID,
+        created_at: now,
+        updated_at: now,
+        enabled: true,
+      },
+      url: getCalendarFeedUrl(token),
+      ics,
+      tripCount,
+      eventCount,
+    };
+  }
+
+  /**
+   * Rotates the account feed bearer token, disabling the previous aggregate row.
+   */
+  async rotateAccountFeed(input: RotateAccountFeedInput): Promise<AccountFeedResponse> {
+    if (!canUseWYQDProFeature(input.membership)) {
+      throw new Error('PRO membership is required to manage Calendar Feeds.');
+    }
+    if (!input.userId?.trim()) {
+      throw new Error('User ID is required for calendar feed operations.');
+    }
+
+    const { trips, places, visits, userId } = input;
+    if (input.currentFeedToken?.trim()) {
+      const oldHash = await hashFeedToken(input.currentFeedToken.trim());
+      const oldRecord = await this.store.getFeedByTokenHash(oldHash);
+      if (oldRecord) {
+        await this.store.upsertFeed({ ...oldRecord, enabled: false });
+      }
+    }
+
+    return this.publishAccountFeed({
+      trips,
+      places,
+      visits,
+      membership: input.membership,
+      userId,
+      options: input.options,
+    });
+  }
+
+  /**
+   * Disables the account feed so subscriber requests receive 404.
+   */
+  async disableAccountFeed(input: DisableAccountFeedInput): Promise<PlannerTripCalendarFeed> {
+    if (!canUseWYQDProFeature(input.membership)) {
+      throw new Error('PRO membership is required to manage Calendar Feeds.');
+    }
+    if (!input.userId?.trim()) {
+      throw new Error('User ID is required for calendar feed operations.');
+    }
+    const feedToken = input.feedToken?.trim();
+    if (!feedToken) {
+      throw new Error('Calendar feed token is required to disable a published feed.');
+    }
+    const tokenHash = await hashFeedToken(feedToken);
+    await this.store.disableFeed(ACCOUNT_FEED_TRIP_ID, input.userId, tokenHash);
+
+    return {
+      feed_token: feedToken,
+      trip_id: ACCOUNT_FEED_TRIP_ID,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      enabled: false,
+    };
+  }
+
+  /**
    * Public HTTP/Edge handler serving Google/Apple/Outlook subscriber requests.
    */
   async handlePublicFeedRequest(rawToken: string): Promise<{
@@ -252,7 +384,7 @@ export class CalendarFeedService {
       status: 200,
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
-        'Content-Disposition': `inline; filename="trip-${record.trip_id}.ics"`,
+        'Content-Disposition': `inline; filename="${record.trip_id === ACCOUNT_FEED_TRIP_ID ? 'ownly' : `trip-${record.trip_id}`}.ics"`,
         'Cache-Control': 'public, max-age=1800, stale-while-revalidate=3600',
         'X-Published-By': 'Ownly Calendar Feed Service',
       },

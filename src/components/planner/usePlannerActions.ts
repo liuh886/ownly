@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   PlannerPlaceKind,
   PlannerTravelMode,
@@ -41,7 +41,13 @@ import {
   loadOrsApiKey,
   openRouteServiceProfile,
 } from '@/lib/openrouteservice';
-import { buildTripCalendarIcs, buildDayCalendarIcs } from '@/domain/calendar-feed';
+import {
+  buildTripCalendarIcs,
+  buildDayCalendarIcs,
+  loadAccountFeedMeta,
+  saveAccountFeedMeta,
+  type AccountCalendarFeedMeta,
+} from '@/domain/calendar-feed';
 import { trackFirstEver } from '@/lib/analytics';
 import { createTripSnapshot, tripSnapshotFileName } from '@/domain/trip-snapshot';
 import { plannerRepository } from '@/services/PlannerRepository';
@@ -206,6 +212,19 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     console.warn(`[Planner] Failed to ${context}`, error);
     setNotice(zh ? '保存失败，界面已还原，请重试。' : 'Save failed; the change was reverted. Please try again.');
   }, [setNotice, zh]);
+
+  // Account-level calendar feed: one subscription per account across all trips.
+  // The raw bearer token lives in localStorage; only its SHA-256 reaches the server.
+  // currentUserId resolves after workspace load, so re-derive when it changes
+  // (render-time adjustment, no effect needed).
+  const [accountFeedOwner, setAccountFeedOwner] = useState(currentUserId);
+  const [accountFeed, setAccountFeed] = useState<AccountCalendarFeedMeta | null>(() =>
+    loadAccountFeedMeta(currentUserId),
+  );
+  if (accountFeedOwner !== currentUserId) {
+    setAccountFeedOwner(currentUserId);
+    setAccountFeed(loadAccountFeedMeta(currentUserId));
+  }
 
   const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
     setNoticeAction({
@@ -1166,6 +1185,59 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     await load();
   }, [selectedTrip, isPro, currentUserId, load]);
 
+  const handleCreateOrUpdateAccountFeed = useCallback(async () => {
+    const response = await calendarFeedService.publishAccountFeed({
+      trips,
+      places,
+      visits,
+      membership: { isPro },
+      userId: currentUserId,
+      feedToken: accountFeed?.enabled ? accountFeed.feed_token : undefined,
+      options: { language },
+    });
+    const meta: AccountCalendarFeedMeta = {
+      feed_token: response.feed.feed_token,
+      updated_at: response.feed.updated_at,
+      enabled: true,
+    };
+    saveAccountFeedMeta(currentUserId, meta);
+    setAccountFeed(meta);
+    return response;
+  }, [trips, places, visits, isPro, currentUserId, accountFeed, language]);
+
+  const handleRotateAccountFeed = useCallback(async () => {
+    const response = await calendarFeedService.rotateAccountFeed({
+      trips,
+      places,
+      visits,
+      membership: { isPro },
+      userId: currentUserId,
+      currentFeedToken: accountFeed?.feed_token,
+      options: { language },
+    });
+    const meta: AccountCalendarFeedMeta = {
+      feed_token: response.feed.feed_token,
+      updated_at: response.feed.updated_at,
+      enabled: true,
+    };
+    saveAccountFeedMeta(currentUserId, meta);
+    setAccountFeed(meta);
+    return response;
+  }, [trips, places, visits, isPro, currentUserId, accountFeed, language]);
+
+  const handleDisableAccountFeed = useCallback(async () => {
+    if (!accountFeed?.feed_token) return;
+    await calendarFeedService.disableAccountFeed({
+      membership: { isPro },
+      userId: currentUserId,
+      feedToken: accountFeed.feed_token,
+    });
+    // Keep the token locally (enabled:false) so re-enabling resurrects the same URL.
+    const meta: AccountCalendarFeedMeta = { ...accountFeed, enabled: false, updated_at: new Date().toISOString() };
+    saveAccountFeedMeta(currentUserId, meta);
+    setAccountFeed(meta);
+  }, [accountFeed, isPro, currentUserId]);
+
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;
     const lines = [
@@ -1477,6 +1549,10 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleCreateOrUpdateFeed,
     handleRotateFeed,
     handleDisableFeed,
+    accountFeed,
+    handleCreateOrUpdateAccountFeed,
+    handleRotateAccountFeed,
+    handleDisableAccountFeed,
     copyItineraryText,
     optimizeDayOrder,
     applyDayOptimization,

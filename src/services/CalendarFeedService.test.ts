@@ -202,6 +202,91 @@ describe('CalendarFeedService (PRO)', () => {
     const res = await service.handlePublicFeedRequest(published.feed.feed_token);
     expect(res.status).toBe(404);
   });
+  it('publishes one account feed aggregating all trips under trip_id "*"', async () => {
+    const trip2: PlannerTrip = {
+      ...trip,
+      id: 'trip-feed-test-2',
+      title: 'Chiang Mai Escape',
+      start_date: '2026-12-01',
+      end_date: '2026-12-03',
+    };
+    const doiSuthep: PlannerTripPlace = {
+      ...palace,
+      id: 'place-doi',
+      trip_id: trip2.id,
+      title: 'Doi Suthep',
+    };
+    const visit2: PlannerTripVisit = {
+      ...visit1,
+      id: 'visit-doi-morning',
+      trip_id: trip2.id,
+      place_id: doiSuthep.id,
+      date: '2026-12-01',
+    };
+    const result = await service.publishAccountFeed({
+      trips: [trip, trip2],
+      places: [palace, doiSuthep],
+      visits: [visit1, visit2],
+      membership: { isPro: true },
+      userId: 'user_123',
+      options: { now: '2026-09-10' },
+    });
+
+    expect(result.feed.trip_id).toBe('*');
+    expect(result.tripCount).toBe(2);
+    expect(result.eventCount).toBe(2);
+    expect(result.ics).toContain('X-WR-CALNAME:Ownly');
+    expect(result.ics).toContain('Bangkok Explorer 2026');
+    expect(result.ics).toContain('Chiang Mai Escape');
+    expect(result.url).toContain('/functions/v1/calendar-feed/');
+
+    // Same token refresh keeps the URL stable and serves the aggregate.
+    const refresh = await service.publishAccountFeed({
+      trips: [trip, trip2],
+      places: [palace, doiSuthep],
+      visits: [visit1, visit2],
+      membership: { isPro: true },
+      userId: 'user_123',
+      feedToken: result.feed.feed_token,
+      options: { now: '2026-09-10' },
+    });
+    expect(refresh.url).toBe(result.url);
+    const served = await service.handlePublicFeedRequest(result.feed.feed_token);
+    expect(served.status).toBe(200);
+    expect(served.body).toContain('Grand Palace');
+    expect(served.body).toContain('Doi Suthep');
+  });
+
+  it('rotates and disables the account feed by token', async () => {
+    const first = await service.publishAccountFeed({
+      trips: [trip],
+      places: [palace],
+      visits: [visit1],
+      membership: { isPro: true },
+      userId: 'user_123',
+      options: { now: '2026-09-10' },
+    });
+    const rotated = await service.rotateAccountFeed({
+      trips: [trip],
+      places: [palace],
+      visits: [visit1],
+      membership: { isPro: true },
+      userId: 'user_123',
+      currentFeedToken: first.feed.feed_token,
+      options: { now: '2026-09-10' },
+    });
+    expect(rotated.feed.feed_token).not.toBe(first.feed.feed_token);
+    expect(rotated.feed.trip_id).toBe('*');
+    expect((await service.handlePublicFeedRequest(first.feed.feed_token)).status).toBe(404);
+
+    await service.disableAccountFeed({
+      membership: { isPro: true },
+      userId: 'user_123',
+      feedToken: rotated.feed.feed_token,
+    });
+    expect((await service.handlePublicFeedRequest(rotated.feed.feed_token)).status).toBe(404);
+  });
+
 });
 
 describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
@@ -271,4 +356,5 @@ describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
       }),
     );
   });
+
 });

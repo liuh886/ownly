@@ -193,9 +193,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     downloadFullIcs,
     downloadDayIcs,
     copyIcsContent,
-    handleCreateOrUpdateFeed,
-    handleRotateFeed,
-    handleDisableFeed,
+    accountFeed,
+    handleCreateOrUpdateAccountFeed,
+    handleRotateAccountFeed,
+    handleDisableAccountFeed,
     copyItineraryText,
     optimizeDayOrder,
     applyDayOptimization,
@@ -1112,17 +1113,18 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
 
       {selectedTrip ? (
         <CalendarSubscriptionModal
-          key={`calendar-${selectedTrip.id}-${isCalendarModalOpen}-${selectedTrip.calendar_feed?.feed_token}-${selectedTrip.calendar_feed?.enabled}`}
+          key={`calendar-account-${accountFeed?.feed_token ?? 'none'}-${accountFeed?.enabled ?? false}-${isCalendarModalOpen}`}
           open={isCalendarModalOpen}
           onClose={() => setIsCalendarModalOpen(false)}
-          trip={selectedTrip}
+          tripCount={trips.length}
+          accountFeed={accountFeed}
           activeDate={activeDate}
           onDownloadFullIcs={downloadFullIcs}
           onDownloadDayIcs={downloadDayIcs}
           onCopyIcs={copyIcsContent}
-          onCreateOrUpdateFeed={handleCreateOrUpdateFeed}
-          onRotateFeed={handleRotateFeed}
-          onDisableFeed={handleDisableFeed}
+          onCreateOrUpdateFeed={handleCreateOrUpdateAccountFeed}
+          onRotateFeed={handleRotateAccountFeed}
+          onDisableFeed={handleDisableAccountFeed}
           isPro={isPro}
           onUpgradePro={openLicenseModal}
           language={language}

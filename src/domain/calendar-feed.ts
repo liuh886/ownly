@@ -32,6 +32,64 @@ export interface CalendarExportOptions {
    * Tests should pass an explicit value to stay deterministic.
    */
   now?: Date | string;
+  /** Prefix prepended to every event SUMMARY (e.g. account feeds tag the trip title). */
+  summaryPrefix?: string;
+}
+
+/**
+ * Sentinel trip_id for the account-level aggregate feed row: one subscription
+ * per account covering every trip, instead of one feed per trip.
+ */
+export const ACCOUNT_FEED_TRIP_ID = '*';
+
+export interface AccountCalendarFeedMeta {
+  feed_token: string;
+  updated_at: string;
+  enabled: boolean;
+}
+
+function accountFeedStorageKey(userId: string): string {
+  return `ownly:account-calendar-feed:${userId}`;
+}
+
+/**
+ * Loads the account feed token metadata persisted on this device.
+ * The raw bearer token never leaves the device except inside subscription URLs
+ * the user copies; only its SHA-256 is stored server-side.
+ */
+export function loadAccountFeedMeta(userId: string): AccountCalendarFeedMeta | null {
+  try {
+    if (typeof window === 'undefined' || !userId) return null;
+    const raw = window.localStorage.getItem(accountFeedStorageKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AccountCalendarFeedMeta>;
+    if (typeof parsed.feed_token !== 'string' || !parsed.feed_token) return null;
+    return {
+      feed_token: parsed.feed_token,
+      updated_at: typeof parsed.updated_at === 'string' ? parsed.updated_at : '',
+      enabled: parsed.enabled !== false,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveAccountFeedMeta(userId: string, meta: AccountCalendarFeedMeta): void {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    window.localStorage.setItem(accountFeedStorageKey(userId), JSON.stringify(meta));
+  } catch {
+    // Storage full or blocked: feed still works, token just won't persist.
+  }
+}
+
+export function clearAccountFeedMeta(userId: string): void {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    window.localStorage.removeItem(accountFeedStorageKey(userId));
+  } catch {
+    // ignore
+  }
 }
 
 const VISIT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -292,8 +350,10 @@ function buildVEvent(
     lines.push(`DTEND;VALUE=DATE:${getNextDayDateString(place.scheduled_date)}`);
   }
 
-  // Summary
-  lines.push(`SUMMARY:${escapeIcsText(`${icon} ${place.title}`)}`);
+  // Summary (account feeds prefix the trip title so one subscription can
+  // carry many trips without ambiguity).
+  const prefix = options.summaryPrefix ? `${options.summaryPrefix} ` : '';
+  lines.push(`SUMMARY:${escapeIcsText(`${prefix}${icon} ${place.title}`)}`);
 
   // Location
   if (place.address) {
@@ -389,6 +449,59 @@ export function buildTripCalendarIcs(
   rawLines.push('END:VCALENDAR');
 
   return rawLines.map(foldIcsLine).join('\r\n') + '\r\n';
+}
+
+/**
+ * Builds one deterministic RFC 5545 feed aggregating every trip of an account.
+ * Each event SUMMARY is prefixed with its trip title (`【TH26】 …`) so the
+ * single subscription stays readable; per-trip timezones keep applying, and
+ * UIDs stay globally stable (`visit:<id>@ownly`) across re-publishes.
+ */
+export function buildAccountCalendarIcs(
+  trips: PlannerTrip[],
+  places: PlannerTripPlace[],
+  visits: PlannerTripVisit[],
+  options: CalendarExportOptions = {},
+): { ics: string; tripCount: number; eventCount: number } {
+  const nowTimestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+  const cutoff = getIcsWindowCutoffDate(options.now);
+  const orderedTrips = [...trips].sort((a, b) =>
+    a.start_date === b.start_date ? (a.id < b.id ? -1 : 1) : (a.start_date < b.start_date ? -1 : 1),
+  );
+
+  const rawLines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Ownly//Planner Calendar Feed//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:Ownly',
+    `X-WR-CALDESC:${escapeIcsText(`Ownly travel itineraries (${orderedTrips.length} trips)`)}`,
+    'X-PUBLISHED-TTL:PT60M',
+    'REFRESH-INTERVAL;VALUE=DURATION:PT60M',
+  ];
+
+  let tripCount = 0;
+  let eventCount = 0;
+  for (const trip of orderedTrips) {
+    const tripPlaces = places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped');
+    const windowedVisits = visits.filter(
+      (visit) => visit.trip_id === trip.id && isVisitInIcsWindow(visit.date, cutoff),
+    );
+    if (windowedVisits.length === 0) continue;
+    const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
+    if (scheduled.length === 0) continue;
+    tripCount += 1;
+    const tripOptions: CalendarExportOptions = { ...options, summaryPrefix: `【${trip.title}】` };
+    scheduled.forEach((place) => {
+      rawLines.push(...buildVEvent(place, tripOptions, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date)));
+    });
+    eventCount += scheduled.length;
+  }
+
+  rawLines.push('END:VCALENDAR');
+
+  return { ics: rawLines.map(foldIcsLine).join('\r\n') + '\r\n', tripCount, eventCount };
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   hashFeedToken,
   zonedWallTimeToUtcMs,
   resolveTripTimeZoneForDate,
+  buildAccountCalendarIcs,
 } from './calendar-feed';
 
 const trip: PlannerTrip = {
@@ -365,5 +366,62 @@ describe('Trip timezone → UTC ICS emission', () => {
     expect(resolveTripTimeZoneForDate(multiTrip, '2026-10-05')).toBe('Asia/Bangkok');
     expect(resolveTripTimeZoneForDate(multiTrip, '2026-10-07')).toBe('Asia/Bangkok');
     expect(resolveTripTimeZoneForDate(trip, '2026-10-05')).toBeUndefined();
+  });
+});
+
+describe('Account aggregate ICS (one subscription per account)', () => {
+  const tripB: PlannerTrip = {
+    ...trip,
+    id: 'trip-japan-2027',
+    title: 'Japan 2027',
+    start_date: '2027-01-01',
+    end_date: '2027-01-07',
+    timezone: 'Asia/Tokyo',
+  };
+  const tripEmpty: PlannerTrip = {
+    ...trip,
+    id: 'trip-empty',
+    title: 'Empty Trip',
+    start_date: '2026-12-01',
+    end_date: '2026-12-02',
+  };
+
+  it('aggregates trips in start-date order with title prefixes, skipping empty ones', () => {
+    const placeA = makePlace('place-a', { title: 'Grand Palace' });
+    const placeB = makePlace('place-b', { title: 'Sensoji', trip_id: tripB.id });
+    const vA = makeVisit('visit:a-1', placeA.id, '2026-10-05', { start: '09:00', duration_minutes: 60 });
+    const vB = makeVisit('visit:b-1', placeB.id, '2027-01-02', { start: '10:00', duration_minutes: 60, trip_id: tripB.id });
+    const { ics, tripCount, eventCount } = buildAccountCalendarIcs(
+      [tripB, trip, tripEmpty],
+      [placeA, placeB],
+      [vA, vB],
+      { now: '2026-09-10' },
+    );
+
+    expect(tripCount).toBe(2);
+    expect(eventCount).toBe(2);
+    expect(ics).toContain('X-WR-CALNAME:Ownly');
+    expect(ics).toContain('Thailand 2026 Adventure');
+    expect(ics).toContain('Japan 2027');
+    expect(ics).not.toContain('Empty Trip');
+    // Trip order follows start_date regardless of input order.
+    expect(ics.indexOf('Thailand 2026 Adventure')).toBeLessThan(ics.indexOf('Japan 2027'));
+  });
+
+  it('keeps per-trip timezones inside the aggregate', () => {
+    const zonedTrip: PlannerTrip = { ...trip, timezone: 'Asia/Bangkok' };
+    const placeA = makePlace('place-a', { title: 'Khao Soi' });
+    const placeB = makePlace('place-b', { title: 'Sensoji', trip_id: tripB.id });
+    const vA = makeVisit('visit:a-1', placeA.id, '2026-10-05', { start: '08:00', duration_minutes: 60 });
+    const vB = makeVisit('visit:b-1', placeB.id, '2027-01-02', { start: '09:00', duration_minutes: 60, trip_id: tripB.id });
+    const { ics } = buildAccountCalendarIcs(
+      [zonedTrip, tripB],
+      [placeA, placeB],
+      [vA, vB],
+      { now: '2026-09-10' },
+    );
+    // 08:00 ICT = 01:00Z; 09:00 JST = 00:00Z
+    expect(ics).toContain('DTSTART:20261005T010000Z\r\n');
+    expect(ics).toContain('DTSTART:20270102T000000Z\r\n');
   });
 });

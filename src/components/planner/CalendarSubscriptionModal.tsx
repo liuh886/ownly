@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import type { PlannerTrip } from '../../domain/planner';
-import { getCalendarFeedUrl } from '../../domain/calendar-feed';
+import { getCalendarFeedUrl, type AccountCalendarFeedMeta } from '../../domain/calendar-feed';
+import type { AccountFeedResponse } from '../../services/CalendarFeedService';
 
 interface CalendarSubscriptionModalProps {
   open: boolean;
   onClose: () => void;
-  trip: PlannerTrip;
+  tripCount: number;
+  accountFeed: AccountCalendarFeedMeta | null;
   activeDate: string;
   onDownloadFullIcs: () => void;
   onDownloadDayIcs: (date: string) => void;
   onCopyIcs: () => Promise<void>;
-  onCreateOrUpdateFeed: () => Promise<void>;
-  onRotateFeed: () => Promise<void>;
+  onCreateOrUpdateFeed: () => Promise<AccountFeedResponse>;
+  onRotateFeed: () => Promise<AccountFeedResponse>;
   onDisableFeed: () => Promise<void>;
   isPro?: boolean;
   onUpgradePro?: () => void;
@@ -21,7 +22,8 @@ interface CalendarSubscriptionModalProps {
 export function CalendarSubscriptionModal({
   open,
   onClose,
-  trip,
+  tripCount,
+  accountFeed,
   activeDate,
   onDownloadFullIcs,
   onDownloadDayIcs,
@@ -41,7 +43,7 @@ export function CalendarSubscriptionModal({
 
   if (!open) return null;
 
-  const feed = trip.calendar_feed;
+  const feed = accountFeed;
   const isFeedActive = Boolean(feed?.enabled && feed?.feed_token);
   const feedUrl = isFeedActive && feed ? getCalendarFeedUrl(feed.feed_token) : '';
 
@@ -67,11 +69,11 @@ export function CalendarSubscriptionModal({
     setBusy(true);
     setNotice(null);
     try {
-      await onCreateOrUpdateFeed();
+      const response = await onCreateOrUpdateFeed();
       setNotice(
         zh
-          ? '✓ 日历订阅源已发布！Google Calendar / Apple Calendar 将按其刷新周期同步。'
-          : '✓ Calendar feed updated! Clients will sync on their refresh cycle.',
+          ? `✓ 日历订阅已同步！${response.tripCount} 个行程 · ${response.eventCount} 个事件。Google Calendar / Apple Calendar 将按其刷新周期同步。`
+          : `✓ Feed synced! ${response.tripCount} trips · ${response.eventCount} events. Clients will sync on their refresh cycle.`,
       );
     } catch (err) {
       setNotice(String(err));
@@ -87,8 +89,12 @@ export function CalendarSubscriptionModal({
     setBusy(true);
     setNotice(null);
     try {
-      await onRotateFeed();
-      setNotice(zh ? '✓ 已生成全新订阅链接，旧链接已失效。' : '✓ Generated new subscription URL; old link revoked.');
+      const response = await onRotateFeed();
+      setNotice(
+        zh
+          ? `✓ 已生成全新订阅链接（含 ${response.tripCount} 个行程），旧链接已失效。`
+          : `✓ New subscription URL generated (${response.tripCount} trips); old link revoked.`,
+      );
     } catch (err) {
       setNotice(String(err));
     } finally {
@@ -122,7 +128,7 @@ export function CalendarSubscriptionModal({
             <div>
               <h2 className="text-base font-bold text-stone-900">{zh ? '日历与订阅' : 'Calendar & Feed'}</h2>
               <p className="text-xs text-stone-400">
-                {trip.title} · {trip.start_date} ~ {trip.end_date}
+                {zh ? `全部行程 · 共 ${tripCount} 个` : `All trips · ${tripCount} total`}
               </p>
             </div>
           </div>
@@ -165,8 +171,8 @@ export function CalendarSubscriptionModal({
 
             <p className="mt-2 text-xs leading-5 text-stone-600">
               {zh
-                ? '只在 Google Calendar、Apple 日历或 Outlook 订阅一次。后续在 Planner 中调整时间、换酒店、增删地点，日历自动同步最新版本。'
-                : 'Subscribe once in Google Calendar, Apple Calendar, or Outlook. Changes in Planner automatically sync to your calendar.'}
+                ? '一个账号，一条订阅：在 Google Calendar、Apple 日历或 Outlook 订阅一次，名下所有行程的日程都在里面（标题前带行程名，如【TH26】）。新增行程或调整时间后，点「同步全部行程」即更新，日历自动跟进。'
+                : 'One account, one subscription: subscribe once and every trip appears with its title prefixed (e.g. [TH26]). After adding trips or editing schedules, hit Sync All to refresh.'}
             </p>
             <p className="mt-1.5 text-[11px] leading-4.5 text-stone-400">
               {zh
@@ -213,8 +219,8 @@ export function CalendarSubscriptionModal({
                 <div className="rounded-lg bg-stone-100/80 p-2.5 text-[11px] leading-4.5 text-stone-500">
                   🔗 <strong>{zh ? '关于这个链接：' : 'About this link: '}</strong>
                   {zh
-                    ? '一个行程对应一个固定链接——这里是「泰国」全部日期的完整日程。日常点「更新日历」只刷新内容，链接不变；只有手动「重新生成链接」才会作废旧地址。链接只包含近一年内及未来的日程，更早的会自动略过。'
-                    : 'One trip, one permanent link — this covers the full Thailand itinerary across all dates. Regular updates refresh content only; the URL changes solely on manual rotation. Only visits from the past year onward are included; older ones are skipped.'}
+                    ? '一个账号对应一个固定链接，覆盖名下全部行程。日常点「同步全部行程」只刷新内容，链接不变；只有手动「重新生成链接」才会作废旧地址。链接只包含近一年内及未来的日程，更早的会自动略过。'
+                    : 'One account, one permanent link covering all trips. Regular syncs refresh content only; the URL changes solely on manual rotation. Only visits from the past year onward are included; older ones are skipped.'}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -224,7 +230,7 @@ export function CalendarSubscriptionModal({
                     onClick={() => void handleCreateOrUpdate()}
                     className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 transition shadow-2xs"
                   >
-                    🔄 {zh ? '更新日历' : 'Update Feed'}
+                    🔄 {zh ? '同步全部行程' : 'Sync All Trips'}
                   </button>
                   <button
                     type="button"
@@ -261,7 +267,7 @@ export function CalendarSubscriptionModal({
                   className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-amber-600 transition"
                 >
                   <span>📅</span>
-                  <span>{zh ? '启用日历订阅' : 'Enable Calendar Feed'}</span>
+                  <span>{zh ? '启用日历订阅（全部行程）' : 'Enable Feed (All Trips)'}</span>
                 </button>
               </div>
             )}
