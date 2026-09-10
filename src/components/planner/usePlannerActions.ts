@@ -105,6 +105,19 @@ export interface UsePlannerActionsProps {
 
 export const AUTO_REFRESH_LEGS_STORAGE_KEY = 'ownly_planner_auto_refresh_legs';
 
+/**
+ * Loads the account feed token, adopting the pre-upgrade identity's token
+ * (ownly_user → user_pro_*) so upgrades neither orphan the old servable row
+ * nor mint a duplicate subscription.
+ */
+function loadAccountFeedWithLegacyAdoption(userId: string): AccountCalendarFeedMeta | null {
+  const direct = loadAccountFeedMeta(userId);
+  if (direct || userId === 'ownly_user') return direct;
+  const legacy = loadAccountFeedMeta('ownly_user');
+  if (legacy) saveAccountFeedMeta(userId, legacy);
+  return legacy;
+}
+
 /** Auto-refresh legs after schedule edits. Defaults ON; explicit '0' disables. */
 export function loadAutoRefreshLegsPref(): boolean {
   if (typeof window === 'undefined') return true;
@@ -219,11 +232,11 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   // (render-time adjustment, no effect needed).
   const [accountFeedOwner, setAccountFeedOwner] = useState(currentUserId);
   const [accountFeed, setAccountFeed] = useState<AccountCalendarFeedMeta | null>(() =>
-    loadAccountFeedMeta(currentUserId),
+    loadAccountFeedWithLegacyAdoption(currentUserId),
   );
   if (accountFeedOwner !== currentUserId) {
     setAccountFeedOwner(currentUserId);
-    setAccountFeed(loadAccountFeedMeta(currentUserId));
+    setAccountFeed(loadAccountFeedWithLegacyAdoption(currentUserId));
   }
 
   const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
@@ -807,7 +820,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         scheduled_start?: string | null;
         duration_minutes?: number | null;
         is_anchor?: boolean;
-        anchor_type?: PlannerScheduledPlace['anchor_type'];
+        anchor_type?: PlannerScheduledPlace['anchor_type'] | null;
       },
     ) => {
       const cleared = timing.scheduled_start === null || timing.duration_minutes === null;
@@ -817,7 +830,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         if (timing.scheduled_start !== undefined) next.start = timing.scheduled_start ?? undefined;
         if (timing.duration_minutes !== undefined) next.duration_minutes = timing.duration_minutes ?? undefined;
         if (timing.is_anchor !== undefined) next.is_anchor = timing.is_anchor;
-        if (timing.anchor_type !== undefined) next.anchor_type = timing.anchor_type;
+        if (timing.anchor_type !== undefined) next.anchor_type = timing.anchor_type ?? undefined;
         return next;
       }));
       try {
@@ -1109,7 +1122,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
 
   const downloadFullIcs = useCallback(() => {
     if (!selectedTrip) return;
-    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language, legs });
+    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language, legs, includeAllDates: true });
     const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1123,7 +1136,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   const downloadDayIcs = useCallback(
     (date: string) => {
       if (!selectedTrip) return;
-      const ics = buildDayCalendarIcs(selectedTrip, places, visits, date, { language, legs });
+      const ics = buildDayCalendarIcs(selectedTrip, places, visits, date, { language, legs, includeAllDates: true });
       const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1138,7 +1151,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
 
   const copyIcsContent = useCallback(async () => {
     if (!selectedTrip) return;
-    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language, legs });
+    const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language, legs, includeAllDates: true });
     await navigator.clipboard.writeText(ics);
     setNotice(zh ? '✓ 已复制 RFC 5545 ICS 日历文本至剪贴板！' : '✓ Copied RFC 5545 ICS calendar text to clipboard!');
   }, [selectedTrip, places, visits, legs, language, zh, setNotice]);
@@ -1198,7 +1211,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       visits,
       membership: { isPro },
       userId: currentUserId,
-      feedToken: accountFeed?.enabled ? accountFeed.feed_token : undefined,
+      // Reuse the stored token even when locally disabled: re-enabling then
+      // resurrects the same URL instead of minting an orphan row per cycle.
+      feedToken: accountFeed?.feed_token,
       options: { language },
       legs,
     });

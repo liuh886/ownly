@@ -124,7 +124,9 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
               <ol className="space-y-1">
                 {scheduled.map((place, index) => {
                   const timeOverlap = dayAssessment.time_overlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
-                  const openHoursIssue = dayAssessment.opening_hours_warnings.find((issue) => issue.visit_id === place.visit_id || issue.place_id === place.place_id);
+                  // visit_id-first: the same place twice a day must not share
+                  // one occurrence's warning.
+                  const openHoursIssue = dayAssessment.opening_hours_warnings.find((issue) => issue.visit_id === place.visit_id || (issue.visit_id === undefined && issue.place_id === place.place_id));
                   const col = timeOverlap
                     ? { isCollision: true, reason: zh ? '与当天其它地点存在时间重叠' : 'Overlaps another timed stop on this day' }
                     : openHoursIssue
@@ -454,7 +456,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                       {/* Travel Transition Rail (Between Stops) */}
                       {index < scheduled.length - 1 ? (
                         <div className="relative ml-3 border-l-2 border-dashed border-stone-200 py-1 pl-3.5 space-y-1">
-                          {isTransitHubPlace(place) && isTransitHubPlace(nextPlace) ? (
+                          {isTransitHubPlace(place) && isTransitHubPlace(nextPlace) && transitionItems.length === 0 ? (
                             <div className="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-stone-200 bg-stone-100/90 px-2.5 py-0.5 text-[10px] font-semibold text-stone-700 shadow-2xs">
                               <span>✈️ {zh ? '跨城交通 · 依据票务时间' : 'Intercity Transit (Ticket-based)'}</span>
                               <a

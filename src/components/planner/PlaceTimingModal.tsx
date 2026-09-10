@@ -21,7 +21,7 @@ interface PlaceTimingModalProps {
       scheduled_start?: string | null;
       duration_minutes?: number | null;
       is_anchor?: boolean;
-      anchor_type?: PlannerVisitAnchorType;
+      anchor_type?: PlannerVisitAnchorType | null;
     },
   ) => Promise<void>;
   language?: 'zh' | 'en';
@@ -69,17 +69,24 @@ export function PlaceTimingModal({
   const [startTime, setStartTime] = useState<string>(() => place?.scheduled_start || '');
   const [durationMinutes, setDurationMinutes] = useState<number | ''>(() => place?.duration_minutes || '');
   const [anchorType, setAnchorType] = useState<PlannerVisitAnchorType | undefined>(() => place?.anchor_type);
+  // Whether the user touched the anchor control: Auto-detect (undefined) is
+  // the untouched default, so an explicit reset must still clear a stored
+  // anchor instead of reading as no-touch.
+  const [anchorDirty, setAnchorDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
+  // Draft anchor resolution mirrors the save path: an explicit anchor wins,
+  // a stay without one is not an anchor, otherwise keep the stored flag.
+  const draftIsAnchor = anchorType ? true : (place?.kind === 'stay' ? false : Boolean(place?.is_anchor));
   const normalizedDuration = typeof durationMinutes === 'number' ? durationMinutes : undefined;
   const timingErrors = useMemo(
     () => validatePlannerTiming(
       startTime || undefined,
       normalizedDuration,
-      { allowCrossMidnight: Boolean(place?.is_anchor) },
+      { allowCrossMidnight: draftIsAnchor },
     ).filter((issue) => issue.severity === 'error'),
-    [normalizedDuration, place?.is_anchor, startTime],
+    [normalizedDuration, draftIsAnchor, startTime],
   );
 
   const computedEndTime = useMemo(
@@ -124,11 +131,13 @@ export function PlaceTimingModal({
       const isAnchor = anchorType ? true : (place.kind === 'stay' ? false : place.is_anchor);
       // What you see is what gets saved: an emptied field clears the stored
       // value (falls back to travel-time inference) instead of no-touch.
+      // anchor_type uses the same null=clear convention, but only when the
+      // user touched the control — untouched Auto-detect means no-touch.
       await onSave(place.visit_id, {
         scheduled_start: startTime.trim() ? startTime.trim() : null,
         duration_minutes: durationMinutes === '' ? null : normalizedDuration,
         is_anchor: isAnchor,
-        anchor_type: anchorType,
+        anchor_type: anchorDirty ? (anchorType ?? null) : undefined,
       });
       onClose();
     } catch (error) {
@@ -146,7 +155,7 @@ export function PlaceTimingModal({
         scheduled_start: null,
         duration_minutes: null,
         is_anchor: false,
-        anchor_type: undefined,
+        anchor_type: null,
       });
       onClose();
     } catch (error) {
@@ -228,7 +237,7 @@ export function PlaceTimingModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setAnchorType('stay_checkout')}
+                onClick={() => { setAnchorType('stay_checkout'); setAnchorDirty(true); }}
                 className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition ${
                   anchorType === 'stay_checkout'
                     ? 'border-sky-500 bg-sky-50/90 text-sky-950 ring-2 ring-sky-500/20 shadow-2xs'
@@ -246,7 +255,7 @@ export function PlaceTimingModal({
 
               <button
                 type="button"
-                onClick={() => setAnchorType('stay_checkin')}
+                onClick={() => { setAnchorType('stay_checkin'); setAnchorDirty(true); }}
                 className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition ${
                   anchorType === 'stay_checkin'
                     ? 'border-indigo-500 bg-indigo-50/90 text-indigo-950 ring-2 ring-indigo-500/20 shadow-2xs'
@@ -266,7 +275,7 @@ export function PlaceTimingModal({
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setAnchorType(undefined)}
+                  onClick={() => { setAnchorType(undefined); setAnchorDirty(true); }}
                   className="text-[11px] text-stone-400 hover:text-stone-700 transition"
                 >
                   {zh ? '↺ 恢复系统自动识别' : '↺ Reset to Auto-detect'}
@@ -291,7 +300,7 @@ export function PlaceTimingModal({
         {saveError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[11px] text-rose-800">{saveError}</div> : null}
 
         <div className="flex items-center justify-between border-t border-stone-100 pt-2">
-          <button type="button" onClick={() => void handleClear()} disabled={saving || (!place.scheduled_start && !place.duration_minutes)} className="rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40">{zh ? '清除时间' : 'Clear Timing'}</button>
+          <button type="button" onClick={() => void handleClear()} disabled={saving || (!place.scheduled_start && !place.duration_minutes && !startTime && durationMinutes === '' && !anchorDirty)} className="rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40">{zh ? '清除时间' : 'Clear Timing'}</button>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50">{zh ? '取消' : 'Cancel'}</button>
             <button type="button" onClick={() => void handleSave()} disabled={saving || timingErrors.length > 0} className="rounded-lg bg-stone-900 px-4 py-2 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50">{saving ? '…' : (zh ? '保存时段' : 'Save Timing')}</button>

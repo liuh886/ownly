@@ -76,6 +76,14 @@ interface Point {
   isActiveDay?: boolean;
 }
 
+/**
+ * Canonical place identity for counting/selection: scheduled occurrences
+ * carry the visit id in `place.id`, so fall back to the underlying place_id.
+ */
+function canonicalPlaceId(place: PlannerTripPlace | PlannerScheduledPlace): string {
+  return (place as PlannerScheduledPlace).place_id ?? place.id;
+}
+
 const KIND_EMOJI = PLANNER_KIND_ICONS;
 
 // CARTO raster tiles serve an "API key required" watermark without a key.
@@ -853,7 +861,8 @@ export function PlannerMap({
       const to = activeRoutePts[index + 1];
       const leg = tripId && legByPair ? legByPair.get(plannerTripLegId(tripId, from.placeId, to.placeId)) : undefined;
       segments.push({
-        key: `${from.placeId}→${to.placeId}`,
+        // Index-scoped: the same place pair may repeat within one day.
+        key: `${index}:${from.placeId}→${to.placeId}`,
         x1: from.x, y1: from.y, x2: to.x, y2: to.y,
         dash: routeDashForMode(leg?.mode),
       });
@@ -1173,11 +1182,13 @@ export function PlannerMap({
           const dayLit = isDayLit(p.dayIndex, activeDayIndex, { coloredDays });
           const grayedOut = showRoutesLayer && isOtherDayStop && !dayLit;
           // Candidates already scheduled on some day get a light-green marker to stand out from plain white ones.
-          const scheduledCount = visitCountByPlaceId?.get(p.place.id) ?? 0;
+          const scheduledCount = visitCountByPlaceId?.get(canonicalPlaceId(p.place)) ?? 0;
 
           return (
             <div
-              key={`${p.place.id}_${p.dayIndex ?? ''}_${p.order ?? ''}_${pIdx}`}
+              // Stable across reorder/insert: visit ids are unique per
+              // occurrence (candidates keep index as tiebreak).
+              key={p.isScheduled ? `sched_${p.place.id}_${p.dayIndex ?? ''}` : `cand_${p.place.id}_${pIdx}`}
               data-map-marker="true"
               role="button"
               tabIndex={0}
@@ -1396,7 +1407,7 @@ export function PlannerMap({
                 place={selectedPlace}
                 zh={zh}
                 activeDayIndex={activeDayIndex}
-                visitCount={visitCountByPlaceId?.get(selectedPlace.id) ?? 0}
+                visitCount={visitCountByPlaceId?.get(canonicalPlaceId(selectedPlace)) ?? 0}
                 scheduledPlace={selectedScheduledPlace}
                 dayStopCount={activeDayStopCount}
                 onSchedule={onSchedulePlace}
@@ -1409,7 +1420,7 @@ export function PlannerMap({
                 place={selectedPlace}
                 zh={zh}
                 activeDayIndex={activeDayIndex}
-                visitCount={visitCountByPlaceId?.get(selectedPlace.id) ?? 0}
+                visitCount={visitCountByPlaceId?.get(canonicalPlaceId(selectedPlace)) ?? 0}
                 scheduledPlace={selectedScheduledPlace}
                 dayStopCount={activeDayStopCount}
                 onSchedule={onSchedulePlace}

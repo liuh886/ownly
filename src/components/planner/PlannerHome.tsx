@@ -124,7 +124,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     scheduledAll,
     scheduled,
     legs,
-    mapScheduled,
+    effectiveDayLegs,
     dayAssessment,
     dayTimeline,
     candidateDistances,
@@ -137,9 +137,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     currentDayTransferInfo,
     areaCounts,
     maxAreaCount,
-    mustTotal,
-    mustScheduled,
-    scheduledMinutes,
     daysOut,
     weatherRelevant,
     weather,
@@ -298,9 +295,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   };
 
   // Built once here; both map instances share it for segment time badges.
+  // Effective (timeline-consistent) legs so the map shows the same heuristic
+  // previews as the rail instead of nothing on fresh days.
   const legByPair = useMemo(() => new Map(
-    legs.filter((leg) => leg.trip_id === selectedTripId).map((leg) => [leg.id, leg] as const),
-  ), [legs, selectedTripId]);
+    effectiveDayLegs.map((leg) => [leg.id, leg] as const),
+  ), [effectiveDayLegs]);
 
   const rightPanelProps = {
     zh,
@@ -310,7 +309,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     setIsMapExpanded,
     sharedViewRef: mapViewRef,
     ownsSharedView: !isMapExpanded,
-    mapScheduled,
     sortedPendingCandidates,
     placesByDate,
     legByPair,
@@ -339,11 +337,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleUpdateMembers,
     handleUpdateFxRates,
     dayAssessment,
-    pendingCandidates,
-    droppedPlaces,
-    mustScheduled,
-    mustTotal,
-    scheduledMinutes,
     areaCounts,
     maxAreaCount,
   };
@@ -987,7 +980,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             </div>
             <div className="flex-1 p-2">
               <PlannerMap
-                scheduledPlaces={mapScheduled}
+                scheduledPlaces={scheduled}
                 candidatePlaces={sortedPendingCandidates}
                 allPlacesByDate={placesByDate}
                 tripDates={tripDates}
@@ -1077,9 +1070,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         dayOtherPlaces={scheduled.filter((p) => p.id !== timingModalPlace?.id)}
         inferredStartTime={(() => {
           if (!timingModalPlace) return undefined;
+          // visit_id-first: the same place twice a day must not borrow the
+          // other occurrence's inference.
           const stop = dayTimeline.items.find(
             (item): item is PlannerTimelineStopItem =>
-              item.type === 'stop' && (item.visit_id === timingModalPlace.visit_id || item.place_id === timingModalPlace.place_id || item.id === `stop:${timingModalPlace.id}`),
+              item.type === 'stop' && (item.visit_id === timingModalPlace.visit_id || item.id === `stop:${timingModalPlace.id}`),
           );
           return stop?.inferred_start || (stop?.is_inferred_start ? stop.start : undefined);
         })()}

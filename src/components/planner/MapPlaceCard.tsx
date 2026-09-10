@@ -133,7 +133,7 @@ export function MapPlaceCard({
         ) : (
           <button
             type="button"
-            onClick={() => onSchedule(place.id, insertPos === '' ? undefined : insertPos - 1)}
+            onClick={() => onSchedule((place as PlannerScheduledPlace).place_id ?? place.id, insertPos === '' ? undefined : insertPos - 1)}
             className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-stone-900 px-2 py-1.5 text-[11px] font-bold text-white transition hover:bg-stone-700"
             title={zh ? `排入第 ${activeDayIndex + 1} 天路线` : `Add to Day ${activeDayIndex + 1}`}
           >

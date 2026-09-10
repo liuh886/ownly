@@ -12,7 +12,6 @@ export interface PlannerRightPanelProps {
   rightTab: 'map' | 'context' | 'budget';
   setRightTab: (tab: 'map' | 'context' | 'budget') => void;
   setIsMapExpanded: (open: boolean) => void;
-  mapScheduled: PlannerControllerReturn['mapScheduled'];
   sortedPendingCandidates: PlannerControllerReturn['sortedPendingCandidates'];
   placesByDate: PlannerControllerReturn['placesByDate'];
   tripDates: PlannerControllerReturn['tripDates'];
@@ -42,11 +41,6 @@ export interface PlannerRightPanelProps {
   handleUpdateMembers: PlannerControllerReturn['handleUpdateMembers'];
   handleUpdateFxRates: PlannerControllerReturn['handleUpdateFxRates'];
   dayAssessment: PlannerControllerReturn['dayAssessment'];
-  pendingCandidates: PlannerControllerReturn['pendingCandidates'];
-  droppedPlaces: PlannerControllerReturn['droppedPlaces'];
-  mustScheduled: number;
-  mustTotal: number;
-  scheduledMinutes: number;
   areaCounts: PlannerControllerReturn['areaCounts'];
   maxAreaCount: number;
 }
@@ -54,13 +48,12 @@ export interface PlannerRightPanelProps {
 export function PlannerRightPanel(props: PlannerRightPanelProps) {
   const {
     zh, language, rightTab, setRightTab, setIsMapExpanded,
-    mapScheduled, sortedPendingCandidates, placesByDate, tripDates, selectedTrip,
+    sortedPendingCandidates, placesByDate, tripDates, selectedTrip,
     activeDate, activeDayIndex, highlightedPlaceId, schedulePlace, removeVisit,
     handleDropPlace, handleDeletePlace, setHighlightedPlaceId, visitCountByPlaceId,
     scheduled, tripPlaces, budgetInitialPlaceId, onClearInitialPlaceId,
     currentExpenses, handleAddExpense, handleUpdateExpense, handleDeleteExpense,
     currentMembers, handleUpdateMembers, handleUpdateFxRates, dayAssessment,
-    pendingCandidates, droppedPlaces, mustScheduled, mustTotal, scheduledMinutes,
     areaCounts, maxAreaCount, legByPair, tripId, sharedViewRef, ownsSharedView,
   } = props;
   return (
@@ -109,7 +102,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
           {rightTab === 'map' ? (
             <div className="flex-1 min-h-[380px] p-2 flex flex-col">
               <PlannerMap
-                scheduledPlaces={mapScheduled}
+                scheduledPlaces={scheduled}
                 candidatePlaces={sortedPendingCandidates}
                 allPlacesByDate={placesByDate}
                 tripDates={tripDates}
@@ -166,14 +159,6 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                     onHighlight={setHighlightedPlaceId}
                   />
                 </div>
-              </div>
-
-              <div className="mt-6 divide-y divide-stone-100 text-xs">
-                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '当天已排' : 'Day Scheduled'}</span><strong>{scheduled.length}</strong></div>
-                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '候选池' : 'Candidates'}</span><strong>{pendingCandidates.length}</strong></div>
-                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '暂不考虑' : 'Shelved'}</span><strong>{droppedPlaces.length}</strong></div>
-                <div className="flex justify-between py-2"><span className="text-stone-400">Must</span><strong>{mustScheduled}/{mustTotal}</strong></div>
-                <div className="flex justify-between py-2"><span className="text-stone-400">{zh ? '地点时长' : 'Place time'}</span><strong>{Math.round(scheduledMinutes / 60 * 10) / 10}h</strong></div>
               </div>
 
               <div className="mt-5">
