@@ -100,7 +100,6 @@ describe('CalendarFeedService (PRO)', () => {
     expect(result.ics).toContain('BEGIN:VCALENDAR');
     expect(result.ics).toContain('Grand Palace');
 
-    // Verify subscriber public endpoint resolution
     const publicResponse = await service.handlePublicFeedRequest(result.feed.feed_token);
     expect(publicResponse.status).toBe(200);
     expect(publicResponse.headers['Content-Type']).toBe('text/calendar; charset=utf-8');
@@ -131,11 +130,9 @@ describe('CalendarFeedService (PRO)', () => {
     expect(rotated.feed.enabled).toBe(true);
     expect(rotated.ics).toContain('Grand Palace');
 
-    // Old token should now be revoked (404)
     const oldResponse = await service.handlePublicFeedRequest(published.feed.feed_token);
     expect(oldResponse.status).toBe(404);
 
-    // New token immediately serves the ICS projection without extra steps
     const newResponse = await service.handlePublicFeedRequest(rotated.feed.feed_token);
     expect(newResponse.status).toBe(200);
     expect(newResponse.body).toContain('Grand Palace');
@@ -166,7 +163,7 @@ describe('CalendarFeedService (PRO)', () => {
 });
 
 describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
-  it('upserts feed records to Supabase PostgREST endpoint with correct headers and payload', async () => {
+  it('upserts feed records using token_hash as the explicit conflict target and RLS capability', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => [{ id: 'feed-1' }],
@@ -187,12 +184,13 @@ describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://test.supabase.co/rest/v1/ownly_calendar_feeds',
+      'https://test.supabase.co/rest/v1/ownly_calendar_feeds?on_conflict=token_hash',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
           apikey: 'test-anon-key',
           Authorization: 'Bearer test-anon-key',
+          'x-ownly-feed-hash': 'hash_xyz',
           'Content-Type': 'application/json',
           Prefer: 'resolution=merge-duplicates',
         }),
@@ -200,7 +198,7 @@ describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
     );
   });
 
-  it('queries enabled feed by token hash from Supabase', async () => {
+  it('queries enabled feed by token hash with the same capability header', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => [
@@ -224,6 +222,11 @@ describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
     const record = await store.getFeedByTokenHash('hash_xyz');
     expect(record?.trip_id).toBe('trip_123');
     expect(record?.token_hash).toBe('hash_xyz');
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/rest/v1/ownly_calendar_feeds?'),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-ownly-feed-hash': 'hash_xyz' }),
+      }),
+    );
   });
 });
-
