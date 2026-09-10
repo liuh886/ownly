@@ -55,7 +55,7 @@ export interface CalendarFeedResponse {
 export interface CalendarFeedStore {
   upsertFeed(record: CalendarFeedRecord): Promise<void>;
   getFeedByTokenHash(tokenHash: string): Promise<CalendarFeedRecord | null>;
-  disableFeed(tripId: string, userId?: string): Promise<void>;
+  disableFeed(tripId: string, userId?: string, tokenHash?: string): Promise<void>;
 }
 
 // In-memory feed store for testing and offline fallback
@@ -79,7 +79,7 @@ export class MemoryCalendarFeedStore implements CalendarFeedStore {
     return record;
   }
 
-  async disableFeed(tripId: string, userId?: string): Promise<void> {
+  async disableFeed(tripId: string, userId?: string, _tokenHash?: string): Promise<void> {
     for (const [hash, record] of this.records.entries()) {
       if (record.trip_id === tripId && (!userId || record.user_id === userId)) {
         this.records.set(hash, { ...record, enabled: false, updated_at: new Date().toISOString() });
@@ -206,10 +206,15 @@ export class CalendarFeedService {
     }
 
     const { trip, userId } = input;
-    await this.store.disableFeed(trip.id, userId);
+    const feedToken = trip.calendar_feed?.feed_token || '';
+    if (!feedToken) {
+      throw new Error('Calendar feed token is required to disable a published feed.');
+    }
+    const tokenHash = await hashFeedToken(feedToken);
+    await this.store.disableFeed(trip.id, userId, tokenHash);
 
     return {
-      feed_token: trip.calendar_feed?.feed_token || '',
+      feed_token: feedToken,
       trip_id: trip.id,
       created_at: trip.calendar_feed?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),

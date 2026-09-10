@@ -33,6 +33,11 @@ function resolveSupabaseConfig(overrides?: SupabaseFeedConfig): {
 /**
  * SupabaseCalendarFeedStore connects CalendarFeedService directly to the
  * production Supabase ownly_calendar_feeds table.
+ *
+ * Anonymous Data API access is capability-scoped: every read/write request
+ * carries the SHA-256 feed hash in x-ownly-feed-hash. Production RLS requires
+ * the header to equal the target row's token_hash, preventing row enumeration
+ * and cross-feed updates while Ownly remains local-first/no-login.
  */
 export class SupabaseCalendarFeedStore implements CalendarFeedStore {
   private config: { url: string; key: string; fetchFn: typeof fetch };
@@ -41,8 +46,17 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     this.config = resolveSupabaseConfig(overrides);
   }
 
+  private headers(tokenHash: string, contentType = false): Record<string, string> {
+    return {
+      apikey: this.config.key,
+      Authorization: `Bearer ${this.config.key}`,
+      'x-ownly-feed-hash': tokenHash,
+      ...(contentType ? { 'Content-Type': 'application/json' } : {}),
+    };
+  }
+
   async upsertFeed(record: CalendarFeedRecord): Promise<void> {
-    const endpoint = `${this.config.url}/rest/v1/ownly_calendar_feeds`;
+    const endpoint = `${this.config.url}/rest/v1/ownly_calendar_feeds?on_conflict=token_hash`;
     const payload = {
       user_id: record.user_id,
       trip_id: record.trip_id,
@@ -55,9 +69,7 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     const res = await this.config.fetchFn(endpoint, {
       method: 'POST',
       headers: {
-        apikey: this.config.key,
-        Authorization: `Bearer ${this.config.key}`,
-        'Content-Type': 'application/json',
+        ...this.headers(record.token_hash, true),
         Prefer: 'resolution=merge-duplicates',
       },
       body: JSON.stringify(payload),
@@ -81,8 +93,7 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     const res = await this.config.fetchFn(endpoint, {
       method: 'GET',
       headers: {
-        apikey: this.config.key,
-        Authorization: `Bearer ${this.config.key}`,
+        ...this.headers(tokenHash),
         Accept: 'application/json',
       },
     });
@@ -96,9 +107,14 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     return records[0];
   }
 
-  async disableFeed(tripId: string, userId?: string): Promise<void> {
+  async disableFeed(tripId: string, userId?: string, tokenHash?: string): Promise<void> {
+    if (!tokenHash) {
+      throw new Error('Calendar feed capability is required to disable a Supabase feed.');
+    }
+
     const query = new URLSearchParams({
       trip_id: `eq.${tripId}`,
+      token_hash: `eq.${tokenHash}`,
     });
     if (userId) query.append('user_id', `eq.${userId}`);
 
@@ -106,11 +122,7 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
 
     const res = await this.config.fetchFn(endpoint, {
       method: 'PATCH',
-      headers: {
-        apikey: this.config.key,
-        Authorization: `Bearer ${this.config.key}`,
-        'Content-Type': 'application/json',
-      },
+      headers: this.headers(tokenHash, true),
       body: JSON.stringify({
         enabled: false,
         updated_at: new Date().toISOString(),
