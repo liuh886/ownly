@@ -212,6 +212,13 @@ export const PLANNER_TRAVEL_MODE_CONFIG: Record<
 
 export function isTransitHubPlace(place: { kind?: PlannerPlaceKind | string; title?: string }): boolean {
   if (place.kind === 'transit' || place.kind === 'transition') return true;
+  // Title matching is a fallback for unclassified places only: food/stay
+  // venues named e.g. "Airport Road Noodle Shop" are real road commutes,
+  // not hubs — matching them hides travel time and breaks inference.
+  if (place.kind === 'food' || place.kind === 'stay') return false;
+  // Title matching is a fallback for untyped places only: food/stay venues
+  // named e.g. "Airport Road Noodle Shop" are road commutes, not hubs.
+  if (place.kind === 'food' || place.kind === 'stay') return false;
   const title = (place.title ?? '').toLowerCase();
   return /(airport|机场|空港|flughafen|aeropuerto|火车站|高铁站|railway|train station|bahnhof|gare|码头|ferry|port|客运站)/i.test(title);
 }
@@ -467,6 +474,9 @@ export interface TripFormPatch {
   start_date: string;
   end_date: string;
   destinations: string[];
+  // Form-owned fields: the manage-trips form always supplies complete values
+  // (empty = clear), so a patch must never be partial for these — otherwise an
+  // omitted field would read as "wipe the stored value".
   currency?: string;
   transport_mode?: PlannerTravelMode;
   tags?: string[];
@@ -476,13 +486,22 @@ export interface TripFormPatch {
 
 /**
  * Drops blank day-timezone overrides so the trip file only stores real ones.
+ * Overrides outside the trip's date range are pruned: shrinking a trip must
+ * not leave ghost zones that resurrect when dates extend again.
  */
-function normalizeDayTimezones(dayTimezones?: Record<string, string>): Record<string, string> | undefined {
+function normalizeDayTimezones(
+  dayTimezones?: Record<string, string>,
+  startDate?: string,
+  endDate?: string,
+): Record<string, string> | undefined {
   if (!dayTimezones) return undefined;
   const clean: Record<string, string> = {};
   for (const [date, tz] of Object.entries(dayTimezones)) {
     const zone = tz?.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && zone) clean[date] = zone;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !zone) continue;
+    if (startDate && date < startDate) continue;
+    if (endDate && date > endDate) continue;
+    clean[date] = zone;
   }
   return Object.keys(clean).length > 0 ? clean : undefined;
 }
@@ -512,7 +531,7 @@ export function applyTripFormPatch(
     transport_mode: patch.transport_mode,
     tags: patch.tags,
     timezone: patch.timezone?.trim() ? patch.timezone.trim() : undefined,
-    day_timezones: normalizeDayTimezones(patch.day_timezones),
+    day_timezones: normalizeDayTimezones(patch.day_timezones, patch.start_date, patch.end_date),
     created_at: existing?.created_at ?? now,
     updated_at: now,
   };
@@ -1750,9 +1769,16 @@ export function detectHotelTransferDays(
 
   tripDates.forEach((date, index) => {
     const isLastDay = index === tripDates.length - 1;
+    // Same canonical order as the timeline (sort_order, start, title) so
+    // first/last picks never diverge from what the user sees.
     const dayPlaces = tripPlaces
       .filter((p) => p.scheduled_date === date)
-      .sort((a, b) => a.sort_order - b.sort_order);
+      .sort((a, b) => {
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        const start = (a.scheduled_start ?? '').localeCompare(b.scheduled_start ?? '');
+        if (start !== 0) return start;
+        return a.title.localeCompare(b.title);
+      });
 
     const checkins = dayPlaces.filter((p) => p.anchor_type === 'stay_checkin');
     const checkouts = dayPlaces.filter((p) => p.anchor_type === 'stay_checkout');
@@ -1804,21 +1830,22 @@ export function detectHotelTransferDays(
     const prevDate = index > 0 ? tripDates[index - 1] : null;
     const prevStay = prevDate ? stayByDate[prevDate] : null;
     const morningCheckout = morningCheckoutByDate[date];
+    // place_id first: a renamed/changed-URL duplicate of the same hotel must
+    // not read as a transfer or reset the consecutive-night count. Union with
+    // the normalized identity so re-created place records still group.
+    const sameStay = (a: PlannerScheduledPlace, b: PlannerScheduledPlace): boolean =>
+      isSameHotelPlace(a, b);
 
     if (
       prevStay &&
       todayStay &&
-      normalizePlaceIdentity(prevStay.source_url || prevStay.title) !==
-        normalizePlaceIdentity(todayStay.source_url || todayStay.title)
+      !sameStay(prevStay, todayStay)
     ) {
-      const baseId = normalizePlaceIdentity(todayStay.source_url || todayStay.title);
       let end = index;
       while (
         end < tripDates.length - 1 &&
         stayByDate[tripDates[end + 1]] &&
-        normalizePlaceIdentity(
-          stayByDate[tripDates[end + 1]]!.source_url || stayByDate[tripDates[end + 1]]!.title,
-        ) === baseId
+        sameStay(stayByDate[tripDates[end + 1]]!, todayStay)
       ) {
         end++;
       }
@@ -1835,14 +1862,11 @@ export function detectHotelTransferDays(
         totalStayNights: totalNights,
       };
     } else if (todayStay) {
-      const baseId = normalizePlaceIdentity(todayStay.source_url || todayStay.title);
       let start = index;
       while (
         start > 0 &&
         stayByDate[tripDates[start - 1]] &&
-        normalizePlaceIdentity(
-          stayByDate[tripDates[start - 1]]!.source_url || stayByDate[tripDates[start - 1]]!.title,
-        ) === baseId
+        sameStay(stayByDate[tripDates[start - 1]]!, todayStay)
       ) {
         start--;
       }
@@ -1852,9 +1876,7 @@ export function detectHotelTransferDays(
       while (
         end < tripDates.length - 1 &&
         stayByDate[tripDates[end + 1]] &&
-        normalizePlaceIdentity(
-          stayByDate[tripDates[end + 1]]!.source_url || stayByDate[tripDates[end + 1]]!.title,
-        ) === baseId
+        sameStay(stayByDate[tripDates[end + 1]]!, todayStay)
       ) {
         end++;
       }

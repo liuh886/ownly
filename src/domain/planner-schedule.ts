@@ -45,7 +45,8 @@ export interface PlannerTimingValidationOptions {
   allowCrossMidnight?: boolean;
 }
 
-const CLOCK_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+export const PLANNER_CLOCK_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const CLOCK_RE = PLANNER_CLOCK_RE;
 
 export function plannerClockToMinutes(value?: string | null): number | null {
   if (!value || !CLOCK_RE.test(value)) return null;
@@ -354,7 +355,11 @@ export function calculateEffectiveDayTiming(
       inferred_start: inferredStart,
     });
 
-    prevEffectiveEnd = end;
+    // A stop running past midnight cannot seed same-day inference: the wrapped
+    // end (e.g. 00:30) belongs to the next day, so the chain breaks here
+    // instead of inferring a 00:50 arrival earlier the same day.
+    const startMin = start ? plannerClockToMinutes(start) : null;
+    prevEffectiveEnd = startMin !== null && duration && startMin + duration < 24 * 60 ? end : undefined;
   }
 
   // 4. Backward pass: a fixed start pulls earlier untimed stops into the chain
@@ -470,6 +475,22 @@ export function evaluatePlannerDayFeasibility(
     const departureTime = fromTiming?.end;
     const departureMinutes = plannerClockToMinutes(departureTime);
     const nextStartMinutes = plannerClockToMinutes(toTiming?.start);
+    if (!Number.isInteger(leg.duration_minutes) || leg.duration_minutes < 0) {
+      // Corrupt leg payload (the !leg case is handled above): never let NaN
+      // or negative durations produce a bogus ok/conflict verdict.
+      transitions.push({
+        from_id: from.id,
+        to_id: to.id,
+        from_title: from.title,
+        to_title: to.title,
+        status: 'unknown',
+        unknown_reason: 'travel_time_missing',
+        leg,
+        departure_time: departureTime ?? undefined,
+        next_start: toTiming?.start,
+      });
+      continue;
+    }
     if (departureMinutes === null || nextStartMinutes === null) {
       transitions.push({
         from_id: from.id,
@@ -627,6 +648,7 @@ export interface PlannerDayLoadTopContributor {
 export interface PlannerDayLoad {
   score: number;
   level: PlannerLoadLevel;
+  /** 游览/活动分钟：只计浏览类停留，stay 住宿休息不计入. */
   activity_minutes: number;
   transit_minutes: number;
   stop_count: number;
@@ -667,8 +689,10 @@ export function calculateDayLoad(
   timeline: PlannerDayExecutionTimeline,
 ): PlannerDayLoad {
   const ordered = sortPlannerScheduledPlaces(dayPlaces);
+  const kindByPlaceId = new Map(ordered.map((p) => [p.place_id, p.kind] as const));
+  // 住宿是休息不是游览：activity 只计非 stay 停留.
   const activity = ordered.reduce(
-    (sum, p) => sum + (Number.isInteger(p.duration_minutes) && (p.duration_minutes ?? 0) > 0 ? (p.duration_minutes ?? 0) : 0),
+    (sum, p) => sum + (p.kind === 'stay' ? 0 : (Number.isInteger(p.duration_minutes) && (p.duration_minutes ?? 0) > 0 ? (p.duration_minutes ?? 0) : 0)),
     0,
   );
 
@@ -729,20 +753,33 @@ export function calculateDayLoad(
   let lunchOk = true;
   let dinnerOk = true;
   if (span !== null && merged.length > 0) {
+    // 坐在餐厅里就是正餐：food 类停留与空闲缺口合并计入 45 分钟.
+    const foodBusy: Array<{ s: number; e: number }> = [];
+    for (const item of timeline.items) {
+      if (item.type !== 'stop') continue;
+      if (kindByPlaceId.get(item.place_id) !== 'food') continue;
+      const s = plannerClockToMinutes(item.start);
+      const e = plannerClockToMinutes(item.end);
+      if (s !== null && e !== null && e > s) foodBusy.push({ s, e });
+    }
+    // food 停留已在 merged 忙碌段内，不在 free 里，不会重复计算.
+    const mealCoveredMinutes = (from: number, to: number) =>
+      freeOverlapMinutes(free, from, to) + freeOverlapMinutes(foodBusy, from, to);
     // Only call out a meal when the day actually spans the whole meal window;
     // a morning-only half day ending at noon needs no lunch warning.
     const dayStart = merged[0].s;
     const dayEnd = merged[merged.length - 1].e;
     if (dayStart <= LOAD_MEAL_WINDOWS.lunch[0] && dayEnd >= LOAD_MEAL_WINDOWS.lunch[1]) {
-      lunchOk = freeOverlapMinutes(free, ...LOAD_MEAL_WINDOWS.lunch) >= LOAD_MEAL_MIN_FREE;
+      lunchOk = mealCoveredMinutes(...LOAD_MEAL_WINDOWS.lunch) >= LOAD_MEAL_MIN_FREE;
     }
     if (dayStart <= LOAD_MEAL_WINDOWS.dinner[0] && dayEnd >= LOAD_MEAL_WINDOWS.dinner[1]) {
-      dinnerOk = freeOverlapMinutes(free, ...LOAD_MEAL_WINDOWS.dinner) >= LOAD_MEAL_MIN_FREE;
+      dinnerOk = mealCoveredMinutes(...LOAD_MEAL_WINDOWS.dinner) >= LOAD_MEAL_MIN_FREE;
     }
   }
 
   let topStop: PlannerDayLoadTopContributor | null = null;
   for (const place of ordered) {
+    if (place.kind === 'stay') continue;
     const minutes = place.duration_minutes ?? 0;
     if (minutes > 0 && (!topStop || minutes > topStop.minutes)) {
       topStop = { kind: 'stop', title: place.title, minutes };
@@ -833,7 +870,7 @@ export function evaluatePlannerDay(
 
   for (const place of dayPlaces) {
     const stop = timeline.items.find(
-      (item): item is PlannerTimelineStopItem => item.type === 'stop' && (item.visit_id === place.visit_id || item.place_id === place.place_id),
+      (item): item is PlannerTimelineStopItem => item.type === 'stop' && (item.visit_id === place.visit_id || (item.visit_id === undefined && item.place_id === place.place_id)),
     );
     const col = checkOpeningHoursCollision(place.open_hours, date, place.preferred_window, stop?.start, stop?.end);
     if (col.isCollision) {
@@ -844,7 +881,7 @@ export function evaluatePlannerDay(
         reason: col.reason || 'Possible opening-hours conflict',
       });
     }
-    if (place.duration_minutes && place.duration_minutes > 0) {
+    if (place.kind !== 'stay' && place.duration_minutes && place.duration_minutes > 0) {
       total_activity_minutes += place.duration_minutes;
     }
   }
@@ -958,11 +995,6 @@ export function evaluatePlannerScheduleProposal(
     }
 
     const effectiveDuration = item.duration_minutes ?? existing?.duration_minutes ?? place.duration_minutes;
-    issues.push(...validatePlannerTiming(
-      item.start,
-      effectiveDuration,
-      { allowCrossMidnight: Boolean(existing?.is_anchor) },
-    ).map((issue) => ({ ...issue, visit_id: visitId, place_id: item.place_id })));
 
     if (existing && isHardConstraint(existing)) {
       const unchanged = item.date === existing.date
@@ -978,9 +1010,18 @@ export function evaluatePlannerScheduleProposal(
           message: `${place.title} has a locked/anchored visit that cannot be moved by an AI schedule proposal.`,
         });
       }
+      // Unchanged hard constraints are grandfathered without re-validation:
+      // legacy data (e.g. a locked overnight span from before midnight rules)
+      // must not make every identical no-op proposal invalid.
       proposed.set(visitId, existing);
       continue;
     }
+
+    issues.push(...validatePlannerTiming(
+      item.start,
+      effectiveDuration,
+      { allowCrossMidnight: Boolean(existing?.is_anchor) },
+    ).map((issue) => ({ ...issue, visit_id: visitId, place_id: item.place_id })));
 
     proposed.set(visitId, {
       schema_version: '0.1',

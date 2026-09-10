@@ -889,6 +889,19 @@ describe('Ownly Planner domain', () => {
     expect(transfers['2026-10-02'].stayHotel?.title).toBe('Hotel B (Nimman)');
   });
 
+  it('keeps consecutive-night counts when the same hotel is renamed across days', () => {
+    const night1 = place('hA', { title: 'Hotel A', kind: 'stay' });
+    const night2 = place('hA', { title: 'Hotel A (Renovated)', kind: 'stay' });
+    const v1 = scheduledPlace(night1, '2026-10-01', 0, { is_anchor: true, anchor_type: 'stay_checkin' });
+    const v2 = scheduledPlace(night2, '2026-10-02', 0, { is_anchor: true, anchor_type: 'stay_checkin' });
+
+    const transfers = detectHotelTransferDays([v1, v2], ['2026-10-01', '2026-10-02']);
+
+    expect(transfers['2026-10-02'].isTransferDay).toBe(false);
+    expect(transfers['2026-10-02'].stayNightIndex).toBe(2);
+    expect(transfers['2026-10-02'].totalStayNights).toBe(2);
+  });
+
   it('respects explicit stay_checkout anchor type on any day', () => {
     const hotelA = place('hA', { title: 'Hotel A (Old Town)', kind: 'stay' });
     const temple = place('t1', { title: 'Wat Phra Singh', kind: 'attraction' });
@@ -1739,6 +1752,9 @@ describe('exportTripToMarkdown', () => {
       expect(isTransitHubPlace({ kind: 'food', title: 'Jay Fai Street Food' })).toBe(false);
       expect(isTransitHubPlace({ kind: 'attraction', title: 'Wat Arun' })).toBe(false);
       expect(isTransitHubPlace({ kind: 'stay', title: 'The Peninsula Bangkok' })).toBe(false);
+      // Food/stay venues with hub substrings are road commutes, not hubs.
+      expect(isTransitHubPlace({ kind: 'food', title: 'Airport Road Noodle Shop' })).toBe(false);
+      expect(isTransitHubPlace({ kind: 'stay', title: 'Airport Hotel Shuttle' })).toBe(false);
     });
 
     it('estimates commute duration accurately across all modes', () => {
@@ -1872,5 +1888,25 @@ describe('applyTripFormPatch', () => {
     expect(trip.calendar_feed?.enabled).toBe(true);
     expect(trip.saved_list_name).toBe('TH26 收藏');
     expect(trip.ignored_duplicate_pair_ids).toEqual(['a|b']);
+  });
+
+  it('prunes day-timezone overrides that fall outside the edited date range', () => {
+    const trip = applyTripFormPatch(null, {
+      title: 'TH26',
+      start_date: '2026-10-05',
+      end_date: '2026-10-10',
+      destinations: ['曼谷'],
+      currency: 'CNY',
+      transport_mode: 'transit',
+      tags: [],
+      timezone: 'Asia/Bangkok',
+      day_timezones: {
+        '2026-10-06': 'Asia/Tokyo',
+        '2026-10-12': 'Asia/Tokyo',
+        'not-a-date': 'Asia/Tokyo',
+        '2026-10-07': '  ',
+      },
+    }, NOW_ISO);
+    expect(trip.day_timezones).toEqual({ '2026-10-06': 'Asia/Tokyo' });
   });
 });

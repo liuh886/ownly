@@ -81,6 +81,18 @@ describe('Planner schedule proposal', () => {
     expect(result.issues.some((issue) => issue.code === 'HARD_CONSTRAINT_CHANGED')).toBe(true);
   });
 
+  it('grandfathers an unchanged locked visit without re-validating its timing', () => {
+    const late = place('late-stop');
+    const locked = visit('visit:late', late.id, {
+      start: '23:30', duration_minutes: 60, sort_order: 0, locked: true,
+    });
+    const result = evaluatePlannerScheduleProposal(trip, [late], [locked], [{
+      visit_id: locked.id, place_id: late.id, date: '2026-10-05', start: '23:30', sort_order: 0, duration_minutes: 60,
+    }]);
+    expect(result.valid).toBe(true);
+    expect(result.issues.some((issue) => issue.code === 'CROSSES_MIDNIGHT')).toBe(false);
+  });
+
   it('rejects deterministic overlap between visit occurrences', () => {
     const a = place('a');
     const b = place('b');
@@ -163,6 +175,17 @@ describe('Planner schedule proposal', () => {
     expect(getScheduledEndTime('23:00', 60)).toBe('00:00');
     expect(getScheduledEndTime(undefined, 60)).toBeNull();
     expect(getScheduledEndTime('09:00', undefined)).toBeNull();
+  });
+
+  it('marks corrupt leg durations unknown instead of a bogus ok', () => {
+    const places = [place('a'), place('b')];
+    const visits = [
+      visit('visit:a', 'a', { start: '09:00', duration_minutes: 90, sort_order: 0 }),
+      visit('visit:b', 'b', { start: '11:00', duration_minutes: 60, sort_order: 1 }),
+    ];
+    const badLeg = { ...travelLeg('a', 'b', 20), duration_minutes: Number.NaN };
+    const result = evaluatePlannerDayFeasibility(trip, scheduled(places, visits), [badLeg], '2026-10-05');
+    expect(result.transitions[0]).toMatchObject({ status: 'unknown', unknown_reason: 'travel_time_missing' });
   });
 });
 
@@ -549,8 +572,7 @@ describe('calculateDayLoad', () => {
     expect(load.span_minutes).toBe(630);
   });
 
-  it('seeds a fully untimed day at 09:00 so load reflects the inferred chain', () => {
-    const places = [place('u1', { duration_minutes: 60 }), place('u2', { duration_minutes: 60 })];
+  it('seeds a fully untimed day at 09:00 so load reflects the inferred chain', () => {    const places = [place('u1', { duration_minutes: 60 }), place('u2', { duration_minutes: 60 })];
     const visits = [
       visit('v:u1', 'u1', { sort_order: 0 }),
       visit('v:u2', 'u2', { sort_order: 1 }),
@@ -564,6 +586,49 @@ describe('calculateDayLoad', () => {
     expect(load.lunch_ok).toBe(true);
     expect(load.dinner_ok).toBe(true);
     expect(load.level).toBe('easy');
+  });
+
+  it('excludes stay rest time from browsing activity minutes', () => {
+    const spots = [
+      place('temple', { duration_minutes: 120 }),
+      place('hotel-nap', { kind: 'stay', duration_minutes: 120 }),
+    ];
+    const visits = [
+      visit('v:temple', 'temple', { start: '09:00', duration_minutes: 120, sort_order: 0 }),
+      visit('v:nap', 'hotel-nap', { start: '13:00', duration_minutes: 120, sort_order: 1 }),
+    ];
+    const legs = [travelLeg('temple', 'hotel-nap', 15)];
+    const list = scheduled(spots, visits);
+    const timeline = buildPlannerDayExecutionTimeline(trip, list, legs, '2026-10-05');
+    const load = calculateDayLoad(list, legs, trip.id, timeline);
+    const assessment = evaluatePlannerDay(trip, list, legs, '2026-10-05');
+
+    expect(load.activity_minutes).toBe(120);
+    expect(assessment.total_activity_minutes).toBe(120);
+    // 酒店休息再长也不应成为“最耗时游览点”.
+    expect(load.top_contributor).toMatchObject({ kind: 'stop', title: 'temple', minutes: 120 });
+  });
+
+  it('counts restaurant dwell time toward the lunch 45-minute requirement', () => {
+    const spots = [
+      place('morning-spot', { duration_minutes: 150 }),
+      place('lunch-spot', { kind: 'food', duration_minutes: 60 }),
+      place('afternoon-spot', { duration_minutes: 120 }),
+    ];
+    const visits = [
+      visit('v:morning', 'morning-spot', { start: '09:00', duration_minutes: 150, sort_order: 0 }),
+      visit('v:lunch', 'lunch-spot', { start: '12:00', duration_minutes: 60, sort_order: 1 }),
+      visit('v:afternoon', 'afternoon-spot', { start: '13:00', duration_minutes: 120, sort_order: 2 }),
+    ];
+    const legs = [travelLeg('morning-spot', 'lunch-spot', 15), travelLeg('lunch-spot', 'afternoon-spot', 15)];
+    const list = scheduled(spots, visits);
+    const timeline = buildPlannerDayExecutionTimeline(trip, list, legs, '2026-10-05');
+    const load = calculateDayLoad(list, legs, trip.id, timeline);
+
+    // 午餐窗口内空闲只有 11:30–12:00 共 30 分钟，不够 45；
+    // 但 12:00–13:00 坐在餐厅里，合并后满足.
+    expect(load.lunch_ok).toBe(true);
+    expect(load.suggestion ?? '').not.toContain('午餐');
   });
 });
 
