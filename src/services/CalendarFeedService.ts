@@ -123,11 +123,17 @@ export class MemoryCalendarFeedStore implements CalendarFeedStore {
     return record;
   }
 
-  async disableFeed(tripId: string, userId?: string, _tokenHash?: string): Promise<void> {
+  async disableFeed(tripId: string, userId?: string, tokenHash?: string): Promise<void> {
     for (const [hash, record] of this.records.entries()) {
-      if (record.trip_id === tripId && (!userId || record.user_id === userId)) {
-        this.records.set(hash, { ...record, enabled: false, updated_at: new Date().toISOString() });
+      // With a bearer capability, trip + hash alone authorize (mirrors the
+      // Supabase RLS equality); user_id must not gate revocation, otherwise an
+      // account-id change makes disable silently miss a still-servable row.
+      if (tokenHash) {
+        if (record.trip_id !== tripId || hash !== tokenHash) continue;
+      } else if (record.trip_id !== tripId || (userId && record.user_id !== userId)) {
+        continue;
       }
+      this.records.set(hash, { ...record, enabled: false, updated_at: new Date().toISOString() });
     }
   }
 }
@@ -200,11 +206,10 @@ export class CalendarFeedService {
 
     const { trip, places, visits, userId } = input;
     if (trip.calendar_feed?.feed_token) {
+      // Disable directly by capability: a read-then-write would leave the old
+      // URL servable whenever the read misses (flaky GET, already-disabled).
       const oldHash = await hashFeedToken(trip.calendar_feed.feed_token);
-      const oldRecord = await this.store.getFeedByTokenHash(oldHash);
-      if (oldRecord) {
-        await this.store.upsertFeed({ ...oldRecord, enabled: false });
-      }
+      await this.store.disableFeed(trip.id, userId, oldHash);
     }
 
     const newToken = generateCalendarFeedToken();
@@ -322,11 +327,9 @@ export class CalendarFeedService {
 
     const { trips, places, visits, userId } = input;
     if (input.currentFeedToken?.trim()) {
+      // Disable directly by capability (see rotateFeed): never read-then-write.
       const oldHash = await hashFeedToken(input.currentFeedToken.trim());
-      const oldRecord = await this.store.getFeedByTokenHash(oldHash);
-      if (oldRecord) {
-        await this.store.upsertFeed({ ...oldRecord, enabled: false });
-      }
+      await this.store.disableFeed(ACCOUNT_FEED_TRIP_ID, userId, oldHash);
     }
 
     return this.publishAccountFeed({

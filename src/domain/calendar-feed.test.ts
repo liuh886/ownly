@@ -420,6 +420,74 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     expect(ics).not.toContain('VALUE=DATE');
   });
 
+  it('never chains inference across dates', () => {
+    const a = makePlace('place-a', { title: 'Day One Stop' });
+    const b = makePlace('place-b', { title: 'Day Two First' });
+    const c = makePlace('place-c', { title: 'Day Two Second' });
+    const vA = makeVisit('visit:a-1', a.id, '2026-10-05', { start: '09:00', duration_minutes: 60, sort_order: 0 });
+    const vB = makeVisit('visit:b-2', b.id, '2026-10-06', { sort_order: 0 });
+    const vC = makeVisit('visit:c-2', c.id, '2026-10-06', { sort_order: 1 });
+    const legs = [{
+      schema_version: '0.1' as const,
+      type: 'trip_leg' as const,
+      id: 'leg:a:b',
+      trip_id: trip.id,
+      from_place_id: a.id,
+      to_place_id: b.id,
+      mode: 'transit' as const,
+      duration_minutes: 600,
+      source: 'manual' as const,
+      created_at: '2026-08-29T00:00:00Z',
+    }];
+    const ics = buildTripCalendarIcs(trip, [a, b, c], [vA, vB, vC], { now: '2026-09-10', legs });
+    // Day two starts from the 09:00 seed, not from day one's evening chain.
+    expect(ics).toContain('DTSTART:20261006T090000\r\n');
+    expect(ics).not.toContain('VALUE=DATE');
+  });
+
+  it('carries floating midnight overflow into the next date', () => {
+    const bar = makePlace('place-a', { title: 'Night Bar' });
+    const vA = makeVisit('visit:a-1', bar.id, '2026-10-05', { start: '23:30', duration_minutes: 60, sort_order: 0, is_anchor: true });
+    const ics = buildTripCalendarIcs(trip, [bar], [vA], { now: '2026-09-10' });
+    expect(ics).toContain('DTSTART:20261005T233000\r\n');
+    expect(ics).toContain('DTEND:20261006T003000\r\n');
+  });
+
+  it('treats a malformed stored start as untimed instead of emitting garbage', () => {
+    const odd = makePlace('place-a', { title: 'Odd Stop' });
+    const vA = makeVisit('visit:a-1', odd.id, '2026-10-05', { sort_order: 0 });
+    (vA as unknown as Record<string, unknown>).start = '8am';
+    const ics = buildTripCalendarIcs(trip, [odd], [vA], { now: '2026-09-10' });
+    expect(ics).not.toContain('8am');
+    // Treated as untimed: day seed projects a tentative block, never raw garbage.
+    expect(ics).toContain('DTSTART:20261005T090000\r\n');
+    expect(ics).toContain('STATUS:TENTATIVE\r\n');
+  });
+
+  it('falls back to the trip zone when a day override is invalid', () => {
+    const zonedTrip: PlannerTrip = { ...trip, timezone: 'Asia/Bangkok', day_timezones: { '2026-10-05': 'Bogus/Zone' } };
+    const placeA = makePlace('place-a', { title: 'Khao Soi' });
+    const vA = makeVisit('visit:a-1', placeA.id, '2026-10-05', { start: '09:00', duration_minutes: 60 });
+    const ics = buildTripCalendarIcs(zonedTrip, [placeA], [vA], { now: '2026-09-10' });
+    expect(ics).toContain('DTSTART:20261005T020000Z\r\n');
+  });
+
+  it('emits no alarm for all-day must tasks', () => {
+    const temple = makePlace('place-b', { title: 'Temple', priority: 'must' });
+    const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', {});
+    const ics = buildTripCalendarIcs(trip, [temple], [vB], { now: '2026-09-10' });
+    expect(ics).not.toContain('BEGIN:VALARM');
+  });
+
+  it('includeAllDates bypasses the one-year window for manual downloads', () => {
+    const old = makePlace('place-old', { title: 'Old Stop' });
+    const vOld = makeVisit('visit:old-1', old.id, '2020-01-02', { start: '09:00', duration_minutes: 60 });
+    const windowed = buildTripCalendarIcs(trip, [old], [vOld], { now: '2026-09-10' });
+    expect(windowed).not.toContain('Old Stop');
+    const full = buildTripCalendarIcs(trip, [old], [vOld], { now: '2026-09-10', includeAllDates: true });
+    expect(full).toContain('Old Stop');
+  });
+
   it('per-day override wins over the trip zone, other days fall back', () => {
     const multiTrip: PlannerTrip = {
       ...trip,

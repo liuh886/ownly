@@ -85,9 +85,10 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const safeName = /^[A-Za-z0-9_-]+$/.test(record.trip_id) ? `trip-${record.trip_id}` : 'ownly';
   const headers = {
     'Content-Type': 'text/calendar; charset=utf-8',
-    'Content-Disposition': `inline; filename="trip-${record.trip_id}.ics"`,
+    'Content-Disposition': `inline; filename="${safeName}.ics"`,
     'Cache-Control': 'public, max-age=1800, stale-while-revalidate=3600',
     'X-Content-Type-Options': 'nosniff',
     'X-Robots-Tag': 'noindex, nofollow',

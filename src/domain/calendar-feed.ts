@@ -16,7 +16,7 @@ import {
 } from './planner-visits';
 import {
   calculateEffectiveDayTiming,
-  getScheduledEndTime,
+  PLANNER_CLOCK_RE,
   type PlannerEffectiveTiming,
 } from './planner-schedule';
 
@@ -43,6 +43,11 @@ export interface CalendarExportOptions {
    * heuristic defaults, mirroring the timeline's effectiveDayLegs.
    */
   legs?: PlannerTripLeg[];
+  /**
+   * Skip the one-year recency window (manual file downloads should export the
+   * whole trip, not just recent visits).
+   */
+  includeAllDates?: boolean;
 }
 
 /**
@@ -242,8 +247,10 @@ export function isValidIanaTimeZone(timeZone: string): boolean {
  * given IANA zone and returns the UTC epoch millis. Iterative Intl-based
  * resolution, so DST offsets are honored without bundled tzdata.
  * Returns null for malformed input or unknown zones (caller falls back to
- * floating local time). A wall time inside a DST gap resolves to the nearest
- * valid instant on the forward side.
+ * floating local time). A wall time inside a DST gap resolves near the gap
+ * (iteration parity decides the side — treat gap times as approximate, and
+ * prefer scheduling outside the transition hour). An ambiguous fall-back time
+ * resolves to its first occurrence.
  */
 export function zonedWallTimeToUtcMs(dateStr: string, timeStr: string, timeZone: string): number | null {
   const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
@@ -300,13 +307,17 @@ export function toIcsUtcString(ms: number): string {
 
 /**
  * Resolves the effective IANA zone for one event date: per-day override wins,
- * then the trip-level zone. Returns undefined when neither is set (caller
- * falls back to floating local time).
+ * then the trip-level zone. An invalid override falls back to the trip zone
+ * (a typo must not silently flip the whole day to floating time). Returns
+ * undefined when neither is set (caller falls back to floating local time).
  */
 export function resolveTripTimeZoneForDate(trip: PlannerTrip, date: string): string | undefined {
   const dayZone = trip.day_timezones?.[date]?.trim();
-  if (dayZone) return dayZone;
+  if (dayZone) {
+    if (isValidIanaTimeZone(dayZone)) return dayZone;
+  }
   const tripZone = trip.timezone?.trim();
+  if (tripZone && isValidIanaTimeZone(tripZone)) return tripZone;
   return tripZone ? tripZone : undefined;
 }
 
@@ -339,8 +350,14 @@ function buildVEvent(
   lines.push(`UID:${uid}`);
   lines.push(`DTSTAMP:${nowTimestamp}`);
 
-  if (place.scheduled_start) {
-    const startTime = place.scheduled_start;
+  // A malformed stored start is treated as untimed (inference/all-day),
+  // never emitted raw — one bad string must not poison the whole feed.
+  const manualStart = place.scheduled_start && PLANNER_CLOCK_RE.test(place.scheduled_start)
+    ? place.scheduled_start
+    : undefined;
+
+  if (manualStart) {
+    const startTime = manualStart;
     const durationMinutes =
       place.duration_minutes && place.duration_minutes > 0 ? place.duration_minutes : 60;
     const startUtcMs = timeZone ? zonedWallTimeToUtcMs(place.scheduled_date, startTime, timeZone) : null;
@@ -351,10 +368,11 @@ function buildVEvent(
       lines.push(`DTSTART:${toIcsUtcString(startUtcMs)}`);
       lines.push(`DTEND:${toIcsUtcString(startUtcMs + durationMinutes * 60000)}`);
     } else {
-      // No (or invalid) trip timezone: legacy floating local time.
-      const endTime = getScheduledEndTime(startTime, place.duration_minutes || 60) || '23:59';
+      // No (or invalid) trip timezone: floating local time, carrying midnight
+      // overflow into the next date so DTEND never precedes DTSTART.
+      const end = addMinutesToWallDateTime(place.scheduled_date, startTime, durationMinutes);
       lines.push(`DTSTART:${toIcsDateTimeString(place.scheduled_date, startTime)}`);
-      lines.push(`DTEND:${toIcsDateTimeString(place.scheduled_date, endTime)}`);
+      lines.push(`DTEND:${toIcsDateTimeString(end.date, end.time)}`);
     }
   } else if (effective?.start) {
     // No fixed time: project the travel-time inference as a tentative block so
@@ -366,11 +384,9 @@ function buildVEvent(
       lines.push(`DTSTART:${toIcsUtcString(startUtcMs)}`);
       lines.push(`DTEND:${toIcsUtcString(startUtcMs + durationMinutes * 60000)}`);
     } else {
-      const endTime = effective.end
-        || getScheduledEndTime(effective.start, durationMinutes)
-        || effective.start;
+      const end = addMinutesToWallDateTime(place.scheduled_date, effective.start, durationMinutes);
       lines.push(`DTSTART:${toIcsDateTimeString(place.scheduled_date, effective.start)}`);
-      lines.push(`DTEND:${toIcsDateTimeString(place.scheduled_date, endTime)}`);
+      lines.push(`DTEND:${toIcsDateTimeString(end.date, end.time)}`);
     }
   } else {
     // Untimed all-day event
@@ -423,12 +439,13 @@ function buildVEvent(
   }
 
   // Inferred blocks are honest about being estimates; alarms only fire on
-  // fixed times so a shifted inference never buzzes at the wrong moment.
-  const isInferred = !place.scheduled_start && Boolean(effective?.start);
+  // fixed, well-formed times so a shifted inference never buzzes at the wrong
+  // moment (all-day tasks carry no alarm either).
+  const isInferred = !manualStart && Boolean(effective?.start);
   lines.push(isInferred ? 'STATUS:TENTATIVE' : 'STATUS:CONFIRMED');
 
   // Alarm reminder for 'must' visits with fixed times
-  if (includeAlarms && place.priority === 'must' && !isInferred) {
+  if (includeAlarms && place.priority === 'must' && Boolean(manualStart) && !isInferred) {
     lines.push(
       'BEGIN:VALARM',
       'ACTION:DISPLAY',
@@ -440,6 +457,25 @@ function buildVEvent(
 
   lines.push('END:VEVENT');
   return lines;
+}
+
+/**
+ * Adds minutes to a wall-clock date+time, carrying midnight overflow into the
+ * next day.
+ */
+export function addMinutesToWallDateTime(
+  dateStr: string,
+  timeStr: string,
+  minutes: number,
+): { date: string; time: string } {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+  const rolled = new Date(Date.UTC(year, month - 1, day, hour, minute + minutes));
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return {
+    date: `${rolled.getUTCFullYear()}-${pad(rolled.getUTCMonth() + 1)}-${pad(rolled.getUTCDate())}`,
+    time: `${pad(rolled.getUTCHours())}:${pad(rolled.getUTCMinutes())}`,
+  };
 }
 
 /**
@@ -470,6 +506,46 @@ function resolveIcsLegs(
 }
 
 /**
+ * Materializes one trip's visits grouped by date BEFORE sorting and inference.
+ * Inference must never chain across dates (a global sort would interleave
+ * sort_order ties from different days and synthesize cross-date legs).
+ * Visits with malformed dates are skipped: emitting garbage DTSTART would
+ * break strict importers for the whole feed.
+ */
+function materializeIcsSchedule(
+  trip: PlannerTrip,
+  tripPlaces: PlannerTripPlace[],
+  tripVisits: PlannerTripVisit[],
+  options: CalendarExportOptions,
+): { scheduled: PlannerScheduledPlace[]; effective: Map<string, PlannerEffectiveTiming> } {
+  const cutoff = getIcsWindowCutoffDate(options.now);
+  const usable = tripVisits.filter((visit) => {
+    if (!VISIT_DATE_PATTERN.test(visit.date ?? '')) return false;
+    if (options.includeAllDates) return true;
+    return isVisitInIcsWindow(visit.date, cutoff);
+  });
+  const dates = [...new Set(usable.map((visit) => visit.date))].sort();
+  const scheduled: PlannerScheduledPlace[] = [];
+  const effective = new Map<string, PlannerEffectiveTiming>();
+  for (const date of dates) {
+    const dayScheduled = sortPlannerScheduledPlaces(
+      materializePlannerScheduledPlaces(tripPlaces, usable.filter((visit) => visit.date === date)),
+    );
+    const dayEffective = calculateEffectiveDayTiming(
+      dayScheduled,
+      resolveIcsLegs(trip, dayScheduled, options.legs),
+      trip.id,
+    );
+    for (const item of dayScheduled) {
+      scheduled.push(item);
+      const timing = dayEffective.get(item.id);
+      if (timing) effective.set(item.id, timing);
+    }
+  }
+  return { scheduled, effective };
+}
+
+/**
  * Builds a deterministic RFC 5545 iCalendar string (.ics) for a trip.
  */
 export function buildTripCalendarIcs(
@@ -480,10 +556,7 @@ export function buildTripCalendarIcs(
 ): string {
   const tripPlaces = places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped');
   const tripVisits = visits.filter((visit) => visit.trip_id === trip.id);
-  const cutoff = getIcsWindowCutoffDate(options.now);
-  const windowedVisits = tripVisits.filter((visit) => isVisitInIcsWindow(visit.date, cutoff));
-  const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
-  const effective = calculateEffectiveDayTiming(scheduled, resolveIcsLegs(trip, scheduled, options.legs), trip.id);
+  const { scheduled, effective } = materializeIcsSchedule(trip, tripPlaces, tripVisits, options);
 
   const nowTimestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
 
@@ -520,7 +593,6 @@ export function buildAccountCalendarIcs(
   options: CalendarExportOptions = {},
 ): { ics: string; tripCount: number; eventCount: number } {
   const nowTimestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
-  const cutoff = getIcsWindowCutoffDate(options.now);
   const orderedTrips = [...trips].sort((a, b) =>
     a.start_date === b.start_date ? (a.id < b.id ? -1 : 1) : (a.start_date < b.start_date ? -1 : 1),
   );
@@ -541,14 +613,10 @@ export function buildAccountCalendarIcs(
   let eventCount = 0;
   for (const trip of orderedTrips) {
     const tripPlaces = places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped');
-    const windowedVisits = visits.filter(
-      (visit) => visit.trip_id === trip.id && isVisitInIcsWindow(visit.date, cutoff),
-    );
-    if (windowedVisits.length === 0) continue;
-    const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
+    const tripVisits = visits.filter((visit) => visit.trip_id === trip.id);
+    const { scheduled, effective } = materializeIcsSchedule(trip, tripPlaces, tripVisits, options);
     if (scheduled.length === 0) continue;
     tripCount += 1;
-    const effective = calculateEffectiveDayTiming(scheduled, resolveIcsLegs(trip, scheduled, options.legs), trip.id);
     scheduled.forEach((place) => {
       rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date), effective.get(place.id)));
     });
@@ -572,10 +640,7 @@ export function buildDayCalendarIcs(
 ): string {
   const tripPlaces = places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped');
   const dayVisits = visits.filter((visit) => visit.trip_id === trip.id && visit.date === date);
-  const cutoff = getIcsWindowCutoffDate(options.now);
-  const windowedVisits = dayVisits.filter((visit) => isVisitInIcsWindow(visit.date, cutoff));
-  const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
-  const effective = calculateEffectiveDayTiming(scheduled, resolveIcsLegs(trip, scheduled, options.legs), trip.id);
+  const { scheduled, effective } = materializeIcsSchedule(trip, tripPlaces, dayVisits, options);
 
   const nowTimestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
 

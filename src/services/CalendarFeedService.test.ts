@@ -202,6 +202,28 @@ describe('CalendarFeedService (PRO)', () => {
     const res = await service.handlePublicFeedRequest(published.feed.feed_token);
     expect(res.status).toBe(404);
   });
+
+  it('revokes across account-id changes: capability, not user_id, authorizes disable', async () => {
+    const published = await service.publishFeed({
+      trip,
+      places: [palace],
+      visits: [visit1],
+      membership: { isPro: true },
+      userId: 'ownly_user',
+      options: { now: '2026-09-10' },
+    });
+
+    const tripWithFeed = { ...trip, calendar_feed: published.feed };
+
+    // Upgraded identity disables with the same bearer token: must 404.
+    await service.disableFeed({
+      trip: tripWithFeed,
+      membership: { isPro: true },
+      userId: 'user_pro_AB12',
+    });
+    const res = await service.handlePublicFeedRequest(published.feed.feed_token);
+    expect(res.status).toBe(404);
+  });
   it('publishes one account feed aggregating all trips under trip_id "*"', async () => {
     const trip2: PlannerTrip = {
       ...trip,

@@ -107,16 +107,19 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     return records[0];
   }
 
-  async disableFeed(tripId: string, userId?: string, tokenHash?: string): Promise<void> {
+  async disableFeed(tripId: string, _userId?: string, tokenHash?: string): Promise<void> {
     if (!tokenHash) {
       throw new Error('Calendar feed capability is required to disable a Supabase feed.');
     }
 
+    // Filter by capability only: the bearer hash IS the authorization (RLS
+    // enforces the same equality). Filtering by user_id as well would make
+    // revocation silently miss when the account id changed (ownly_user →
+    // user_pro_*), leaving the old URL servable while reporting success.
     const query = new URLSearchParams({
       trip_id: `eq.${tripId}`,
       token_hash: `eq.${tokenHash}`,
     });
-    if (userId) query.append('user_id', `eq.${userId}`);
 
     const endpoint = `${this.config.url}/rest/v1/ownly_calendar_feeds?${query.toString()}`;
 
