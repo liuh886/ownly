@@ -171,8 +171,8 @@ export function CalendarSubscriptionModal({
 
             <p className="mt-2 text-xs leading-5 text-stone-600">
               {zh
-                ? '一个账号，一条订阅：在 Google Calendar、Apple 日历或 Outlook 订阅一次，名下所有行程的日程都在里面（标题前带行程名，如【TH26】）。新增行程或调整时间后，点「同步全部行程」即更新，日历自动跟进。'
-                : 'One account, one subscription: subscribe once and every trip appears with its title prefixed (e.g. [TH26]). After adding trips or editing schedules, hit Sync All to refresh.'}
+                ? '一个账号，一条订阅：在 Google Calendar、Apple 日历或 Outlook 订阅一次，名下所有行程的日程都在里面。新增行程或调整时间后，点「同步全部行程」即更新，日历自动跟进。'
+                : 'One account, one subscription: subscribe once and every trip appears. After adding trips or editing schedules, hit Sync All to refresh.'}
             </p>
             <p className="mt-1.5 text-[11px] leading-4.5 text-stone-400">
               {zh

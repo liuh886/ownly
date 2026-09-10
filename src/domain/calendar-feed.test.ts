@@ -401,11 +401,13 @@ describe('Account aggregate ICS (one subscription per account)', () => {
     expect(tripCount).toBe(2);
     expect(eventCount).toBe(2);
     expect(ics).toContain('X-WR-CALNAME:Ownly');
-    expect(ics).toContain('Thailand 2026 Adventure');
-    expect(ics).toContain('Japan 2027');
+    // Event titles stay plain (ticket logic): no trip-name prefix.
+    expect(ics).not.toContain('【');
+    expect(ics).toContain('Grand Palace');
+    expect(ics).toContain('Sensoji');
     expect(ics).not.toContain('Empty Trip');
     // Trip order follows start_date regardless of input order.
-    expect(ics.indexOf('Thailand 2026 Adventure')).toBeLessThan(ics.indexOf('Japan 2027'));
+    expect(ics.indexOf('Grand Palace')).toBeLessThan(ics.indexOf('Sensoji'));
   });
 
   it('keeps per-trip timezones inside the aggregate', () => {

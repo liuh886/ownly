@@ -32,8 +32,6 @@ export interface CalendarExportOptions {
    * Tests should pass an explicit value to stay deterministic.
    */
   now?: Date | string;
-  /** Prefix prepended to every event SUMMARY (e.g. account feeds tag the trip title). */
-  summaryPrefix?: string;
 }
 
 /**
@@ -350,10 +348,8 @@ function buildVEvent(
     lines.push(`DTEND;VALUE=DATE:${getNextDayDateString(place.scheduled_date)}`);
   }
 
-  // Summary (account feeds prefix the trip title so one subscription can
-  // carry many trips without ambiguity).
-  const prefix = options.summaryPrefix ? `${options.summaryPrefix} ` : '';
-  lines.push(`SUMMARY:${escapeIcsText(`${prefix}${icon} ${place.title}`)}`);
+  // Summary
+  lines.push(`SUMMARY:${escapeIcsText(`${icon} ${place.title}`)}`);
 
   // Location
   if (place.address) {
@@ -453,9 +449,8 @@ export function buildTripCalendarIcs(
 
 /**
  * Builds one deterministic RFC 5545 feed aggregating every trip of an account.
- * Each event SUMMARY is prefixed with its trip title (`【TH26】 …`) so the
- * single subscription stays readable; per-trip timezones keep applying, and
- * UIDs stay globally stable (`visit:<id>@ownly`) across re-publishes.
+ * Event titles stay plain (ticket logic); per-trip timezones keep applying,
+ * and UIDs stay globally stable (`visit:<id>@ownly`) across re-publishes.
  */
 export function buildAccountCalendarIcs(
   trips: PlannerTrip[],
@@ -492,9 +487,8 @@ export function buildAccountCalendarIcs(
     const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
     if (scheduled.length === 0) continue;
     tripCount += 1;
-    const tripOptions: CalendarExportOptions = { ...options, summaryPrefix: `【${trip.title}】` };
     scheduled.forEach((place) => {
-      rawLines.push(...buildVEvent(place, tripOptions, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date)));
+      rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date)));
     });
     eventCount += scheduled.length;
   }

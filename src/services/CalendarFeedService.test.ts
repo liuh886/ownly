@@ -236,8 +236,7 @@ describe('CalendarFeedService (PRO)', () => {
     expect(result.tripCount).toBe(2);
     expect(result.eventCount).toBe(2);
     expect(result.ics).toContain('X-WR-CALNAME:Ownly');
-    expect(result.ics).toContain('Bangkok Explorer 2026');
-    expect(result.ics).toContain('Chiang Mai Escape');
+    expect(result.ics).not.toContain('【');
     expect(result.url).toContain('/functions/v1/calendar-feed/');
 
     // Same token refresh keeps the URL stable and serves the aggregate.
