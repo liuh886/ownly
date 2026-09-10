@@ -203,6 +203,18 @@ export function toIcsUtcString(ms: number): string {
 }
 
 /**
+ * Resolves the effective IANA zone for one event date: per-day override wins,
+ * then the trip-level zone. Returns undefined when neither is set (caller
+ * falls back to floating local time).
+ */
+export function resolveTripTimeZoneForDate(trip: PlannerTrip, date: string): string | undefined {
+  const dayZone = trip.day_timezones?.[date]?.trim();
+  if (dayZone) return dayZone;
+  const tripZone = trip.timezone?.trim();
+  return tripZone ? tripZone : undefined;
+}
+
+/**
  * Formats a single scheduled place into a VEVENT string block.
  */
 function buildVEvent(
@@ -340,7 +352,7 @@ export function buildTripCalendarIcs(
   ];
 
   scheduled.forEach((place) => {
-    rawLines.push(...buildVEvent(place, options, nowTimestamp, trip.timezone));
+    rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date)));
   });
 
   rawLines.push('END:VCALENDAR');
@@ -377,7 +389,7 @@ export function buildDayCalendarIcs(
   ];
 
   scheduled.forEach((place) => {
-    rawLines.push(...buildVEvent(place, options, nowTimestamp, trip.timezone));
+    rawLines.push(...buildVEvent(place, options, nowTimestamp, resolveTripTimeZoneForDate(trip, place.scheduled_date)));
   });
 
   rawLines.push('END:VCALENDAR');

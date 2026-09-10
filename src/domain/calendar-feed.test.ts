@@ -12,6 +12,7 @@ import {
   rotateTripCalendarFeed,
   hashFeedToken,
   zonedWallTimeToUtcMs,
+  resolveTripTimeZoneForDate,
 } from './calendar-feed';
 
 const trip: PlannerTrip = {
@@ -304,5 +305,33 @@ describe('Trip timezone → UTC ICS emission', () => {
     expect(zonedWallTimeToUtcMs('not-a-date', '08:00', 'Asia/Bangkok')).toBeNull();
     expect(zonedWallTimeToUtcMs('2026-10-05', '8am', 'Asia/Bangkok')).toBeNull();
     expect(zonedWallTimeToUtcMs('2026-10-05', '08:00', 'Asia/Bangkok')).toBe(Date.UTC(2026, 9, 5, 1, 0, 0));
+  });
+
+  it('per-day override wins over the trip zone, other days fall back', () => {
+    const multiTrip: PlannerTrip = {
+      ...trip,
+      timezone: 'Asia/Bangkok',
+      day_timezones: { '2026-10-06': 'Asia/Tokyo' },
+    };
+    const bkk = makePlace('bkk', { title: 'Bangkok Day' });
+    const tyo = makePlace('tyo', { title: 'Tokyo Day' });
+    const vBkk = makeVisit('visit:b-1', bkk.id, '2026-10-05', { start: '09:00', duration_minutes: 60 });
+    const vTyo = makeVisit('visit:t-1', tyo.id, '2026-10-06', { start: '09:00', duration_minutes: 60 });
+    const ics = buildTripCalendarIcs(multiTrip, [bkk, tyo], [vBkk, vTyo]);
+    // 09:00 ICT (UTC+7) = 02:00Z; 09:00 JST (UTC+9) = 00:00Z
+    expect(ics).toContain('DTSTART:20261005T020000Z\r\n');
+    expect(ics).toContain('DTSTART:20261006T000000Z\r\n');
+  });
+
+  it('resolveTripTimeZoneForDate follows day → trip → undefined', () => {
+    const multiTrip: PlannerTrip = {
+      ...trip,
+      timezone: 'Asia/Bangkok',
+      day_timezones: { '2026-10-06': 'Asia/Tokyo', '2026-10-07': '  ' },
+    };
+    expect(resolveTripTimeZoneForDate(multiTrip, '2026-10-06')).toBe('Asia/Tokyo');
+    expect(resolveTripTimeZoneForDate(multiTrip, '2026-10-05')).toBe('Asia/Bangkok');
+    expect(resolveTripTimeZoneForDate(multiTrip, '2026-10-07')).toBe('Asia/Bangkok');
+    expect(resolveTripTimeZoneForDate(trip, '2026-10-05')).toBeUndefined();
   });
 });

@@ -39,6 +39,11 @@ export interface PlannerTrip {
    * Absent = legacy floating local time.
    */
   timezone?: string;
+  /**
+   * Per-day timezone overrides for multi-zone trips ('YYYY-MM-DD' → IANA zone).
+   * A day set here wins over `timezone`; days absent fall back to it.
+   */
+  day_timezones?: Record<string, string>;
   /** AA ledger participants, persisted so the ledger survives browsers/devices. */
   members?: string[];
   /** User-verified conversion overrides: fx_rates[FROM] = how many trip-currency per 1 FROM. */
@@ -466,6 +471,20 @@ export interface TripFormPatch {
   transport_mode?: PlannerTravelMode;
   tags?: string[];
   timezone?: string;
+  day_timezones?: Record<string, string>;
+}
+
+/**
+ * Drops blank day-timezone overrides so the trip file only stores real ones.
+ */
+function normalizeDayTimezones(dayTimezones?: Record<string, string>): Record<string, string> | undefined {
+  if (!dayTimezones) return undefined;
+  const clean: Record<string, string> = {};
+  for (const [date, tz] of Object.entries(dayTimezones)) {
+    const zone = tz?.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && zone) clean[date] = zone;
+  }
+  return Object.keys(clean).length > 0 ? clean : undefined;
 }
 
 /**
@@ -493,6 +512,7 @@ export function applyTripFormPatch(
     transport_mode: patch.transport_mode,
     tags: patch.tags,
     timezone: patch.timezone?.trim() ? patch.timezone.trim() : undefined,
+    day_timezones: normalizeDayTimezones(patch.day_timezones),
     created_at: existing?.created_at ?? now,
     updated_at: now,
   };

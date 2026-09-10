@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
-import { applyTripFormPatch } from '../../domain/planner';
+import { applyTripFormPatch, listTripDates } from '../../domain/planner';
 import {
   createShareableTripBundle,
   parseTripBundle,
@@ -65,6 +65,7 @@ export function CreateTripModal({
   const [currency, setCurrency] = useState('THB');
   const [transportMode, setTransportMode] = useState<PlannerTravelMode>('transit');
   const [timezone, setTimezone] = useState('');
+  const [dayTimezones, setDayTimezones] = useState<Record<string, string>>({});
   const [tags, setTags] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +119,7 @@ export function CreateTripModal({
     setCurrency('THB');
     setTransportMode('transit');
     setTimezone('');
+    setDayTimezones({});
     setTags('');
     setError(null);
     setRawImport('');
@@ -139,6 +141,7 @@ export function CreateTripModal({
     setCurrency(trip.currency ?? 'THB');
     setTransportMode(trip.transport_mode ?? 'transit');
     setTimezone(trip.timezone ?? '');
+    setDayTimezones({ ...(trip.day_timezones ?? {}) });
     setTags((trip.tags ?? []).join(', '));
     setTab('create');
   };
@@ -227,6 +230,7 @@ export function CreateTripModal({
       transport_mode: transportMode,
       tags: tagList,
       timezone: timezone.trim() || undefined,
+      day_timezones: dayTimezones,
     }, now);
 
     setBusy(true);
@@ -520,6 +524,41 @@ export function CreateTripModal({
                     : 'Timeline times are read as wall-clock in this zone and exported as UTC.'}
                 </div>
               </div>
+
+              {startDate && endDate && startDate <= endDate ? (
+                <details className="rounded-lg border border-stone-200 bg-stone-50/60 px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-bold text-stone-700">
+                    {zh ? '🌍 按天时区覆盖（跨国行程）' : '🌍 Per-day timezone overrides'}
+                  </summary>
+                  <div className="mt-1 text-[11px] text-stone-500">
+                    {zh
+                      ? '哪天换城市就改哪天，不改的天跟随上面的行程时区。'
+                      : 'Override only the days you change cities; the rest follow the trip zone.'}
+                  </div>
+                  <div className="mt-2 max-h-48 space-y-1.5 overflow-auto pr-1">
+                    {listTripDates(startDate, endDate).map((d) => (
+                      <div key={d} className="flex items-center gap-2">
+                        <span className="w-24 shrink-0 text-[11px] font-semibold text-stone-600">{d}</span>
+                        <select
+                          value={dayTimezones[d] ?? ''}
+                          onChange={(e) => setDayTimezones((prev) => {
+                            const next = { ...prev };
+                            if (e.target.value) next[d] = e.target.value;
+                            else delete next[d];
+                            return next;
+                          })}
+                          className="w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                        >
+                          <option value="">{zh ? '跟随行程时区' : 'Follow trip zone'}</option>
+                          {COMMON_TIMEZONES.map((tz) => (
+                            <option key={tz} value={tz}>{tz}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
 
               {/* Tags */}
               <div>
