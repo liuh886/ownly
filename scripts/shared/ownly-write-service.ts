@@ -640,7 +640,7 @@ export class OwnlyWriteService {
         for (const shift of shifts) assertUnchanged(shift.entry.filePath, shift.expected);
         mkdirSync(directory, { recursive: true });
         for (const shift of shifts) {
-          writeFileSync(shift.entry.filePath, serializeMarkdownEntity(shift.next, ''), 'utf8');
+          writeFileSync(shift.entry.filePath, serializeMarkdownEntity(shift.next, shift.entry.body ?? ''), 'utf8');
         }
         writeFileSync(filePath, serializeMarkdownEntity(visit, ''), 'utf8');
         writeAgentLog(this.dataLocation, 'planner_add_visit', visit.id, null, visit);
@@ -682,7 +682,7 @@ export class OwnlyWriteService {
         for (const reindex of reindexes) assertUnchanged(reindex.entry.filePath, reindex.expected);
         unlinkSync(entry.filePath);
         for (const reindex of reindexes) {
-          writeFileSync(reindex.entry.filePath, serializeMarkdownEntity(reindex.next, ''), 'utf8');
+          writeFileSync(reindex.entry.filePath, serializeMarkdownEntity(reindex.next, reindex.entry.body ?? ''), 'utf8');
         }
         writeAgentLog(this.dataLocation, 'planner_remove_visit', visitId, before, null);
         return { visit_id: visitId, removed: true, reindexed_visits: reindexes.length };
@@ -906,7 +906,7 @@ export class OwnlyWriteService {
         for (const shift of shifts) assertUnchanged(shift.entry.filePath, shift.expected);
         for (const target of staleTargets) unlinkSync(target.entry.filePath);
         for (const shift of shifts) {
-          writeFileSync(shift.entry.filePath, serializeMarkdownEntity(shift.next, ''), 'utf8');
+          writeFileSync(shift.entry.filePath, serializeMarkdownEntity(shift.next, shift.entry.body ?? ''), 'utf8');
         }
         if (createTargets.length > 0) mkdirSync(directory, { recursive: true });
         for (const target of createTargets) writeFileSync(target.filePath, serializeMarkdownEntity(target.visit, ''), 'utf8');
@@ -952,7 +952,9 @@ export class OwnlyWriteService {
 
   prepareAddExpense(input: TripExpenseItem): PreparedOwnlyOperation {
     const directory = join(resolve(this.dataLocation), PLANNER_DIRECTORIES.expenses);
-    const fileName = `expense--${input.id}.md`;
+    // Sanitize: a raw id like '../../evil' would otherwise escape the expenses dir.
+    const safeId = input.id.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'entity';
+    const fileName = `expense--${safeId}.md`;
     return this.prepare('planner_add_expense', { expense: input }, () => {
       mkdirSync(directory, { recursive: true });
       writeFileSync(join(directory, fileName), serializeMarkdownEntity({ schema_version: '0.1', type: 'trip_expense', ...input }, ''), 'utf8');
@@ -1043,7 +1045,12 @@ export class OwnlyWriteService {
     const places = placeEntries.map((entry) => entry.frontmatter as PlannerTripPlace);
     const visitEntries = listPlannerVisits(this.dataLocation).filter((entry) => entry.frontmatter.trip_id === tripId);
     const currentVisits = visitEntries.map((entry) => entry.frontmatter as PlannerTripVisit);
-    const normalized = proposal.visits.map((item) => ({ ...item, visit_id: item.visit_id?.trim() || `visit:${randomUUID()}` }));
+    // Normalize to the canonical `visit:` namespace: a bare id would create
+    // a mixed namespace that breaks UID stability and exact-match lookups.
+    const normalized = proposal.visits.map((item) => {
+      const raw = item.visit_id?.trim();
+      return { ...item, visit_id: raw ? (raw.startsWith('visit:') ? raw : `visit:${raw}`) : `visit:${randomUUID()}` };
+    });
     const evaluation = evaluatePlannerScheduleProposal(trip, places, currentVisits, normalized);
     const errors = evaluation.issues.filter((issue) => issue.severity === 'error');
     if (errors.length > 0) {

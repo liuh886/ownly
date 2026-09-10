@@ -158,5 +158,8 @@ export function getPlannerTripCalendarIcs(
   const visits = listPlannerVisits(dataLocation)
     .map((item) => item.frontmatter as unknown as PlannerTripVisit)
     .filter((visit) => visit.trip_id === tripId);
-  return { tripId: trip.id, title: trip.title, ics: buildTripCalendarIcs(trip, places, visits, options) };
+  const legs = listPlannerLegs(dataLocation)
+    .map((item) => item.frontmatter as unknown as PlannerTripLeg)
+    .filter((leg) => leg.trip_id === tripId);
+  return { tripId: trip.id, title: trip.title, ics: buildTripCalendarIcs(trip, places, visits, { ...options, legs }) };
 }
