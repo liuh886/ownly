@@ -171,13 +171,8 @@ export function CalendarSubscriptionModal({
 
             <p className="mt-2 text-xs leading-5 text-stone-600">
               {zh
-                ? '一个账号，一条订阅：在 Google Calendar、Apple 日历或 Outlook 订阅一次，名下所有行程的日程都在里面。新增行程或调整时间后，点「同步全部行程」即更新，日历自动跟进。'
-                : 'One account, one subscription: subscribe once and every trip appears. After adding trips or editing schedules, hit Sync All to refresh.'}
-            </p>
-            <p className="mt-1.5 text-[11px] leading-4.5 text-stone-400">
-              {zh
-                ? '数据去向：订阅内容（含行程标题与地点）经 Ownly 订阅服务存放并提供轮询，不上云盘、不做账号体系。'
-                : 'Data note: feed content (trip titles and places) is hosted by the Ownly subscription service for polling; no cloud drive, no accounts.'}
+                ? '订阅一次，名下所有行程自动同步。改了行程后点「同步全部行程」即可。'
+                : 'Subscribe once; all trips stay in sync. Hit Sync All after changes.'}
             </p>
 
             {!isPro ? (
@@ -216,12 +211,28 @@ export function CalendarSubscriptionModal({
                   </button>
                 </div>
 
-                <div className="rounded-lg bg-stone-100/80 p-2.5 text-[11px] leading-4.5 text-stone-500">
-                  🔗 <strong>{zh ? '关于这个链接：' : 'About this link: '}</strong>
-                  {zh
-                    ? '一个账号对应一个固定链接，覆盖名下全部行程。日常点「同步全部行程」只刷新内容，链接不变；只有手动「重新生成链接」才会作废旧地址。链接只包含近一年内及未来的日程，更早的会自动略过。'
-                    : 'One account, one permanent link covering all trips. Regular syncs refresh content only; the URL changes solely on manual rotation. Only visits from the past year onward are included; older ones are skipped.'}
-                </div>
+                <details className="rounded-lg bg-stone-100/80 px-2.5 py-2 text-[11px] leading-4.5 text-stone-500">
+                  <summary className="cursor-pointer font-semibold text-stone-600">
+                    {zh ? '🔗 了解更多（链接 · 刷新 · 数据去向）' : '🔗 More (link · refresh · data)'}
+                  </summary>
+                  <div className="mt-1.5 space-y-1.5">
+                    <p>
+                      {zh
+                        ? '一个账号对应一个固定链接。「同步全部行程」只刷新内容；「重新生成链接」才会作废旧地址。只含近一年及未来的日程。'
+                        : 'One permanent link per account. Sync refreshes content; rotation revokes the URL. Covers the past year onward.'}
+                    </p>
+                    <p>
+                      {zh
+                        ? 'Google Calendar 约 1–24 小时刷新一次；Apple 可自定间隔。'
+                        : 'Google refreshes every ~1–24h; Apple allows custom intervals.'}
+                    </p>
+                    <p>
+                      {zh
+                        ? '订阅内容经 Ownly 订阅服务存放轮询，不上云盘、不做账号体系。'
+                        : 'Feed content is hosted by the Ownly subscription service; no cloud drive, no accounts.'}
+                    </p>
+                  </div>
+                </details>
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <button
@@ -249,13 +260,6 @@ export function CalendarSubscriptionModal({
                   >
                     🛑 {zh ? '停用订阅' : 'Disable'}
                   </button>
-                </div>
-
-                <div className="rounded-lg bg-stone-100/80 p-2.5 text-[11px] leading-4.5 text-stone-500">
-                  💡 <strong>{zh ? '关于刷新周期：' : 'Refresh interval: '}</strong>
-                  {zh
-                    ? '日历客户端通过定时轮询获取更新。Google Calendar 通常约 1–24 小时刷新一次；Apple Calendar 可在设置中自定义刷新间隔。'
-                    : 'Calendar clients pull updates periodically (Google Calendar typically refreshes every 1-24h; Apple Calendar supports custom refresh rates).'}
                 </div>
               </div>
             ) : (
