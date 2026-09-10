@@ -513,15 +513,15 @@ export function CreateTripModal({
                   onChange={(e) => setTimezone(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
                 >
-                  <option value="">{zh ? '不设置（浮动时间，跟随查看端）' : 'Unset (floating time)'}</option>
+                  <option value="">{zh ? '不设置（机票逻辑：时刻即当地时间）' : 'Unset (ticket logic: times are local)'}</option>
                   {COMMON_TIMEZONES.map((tz) => (
                     <option key={tz} value={tz}>{tz}</option>
                   ))}
                 </select>
                 <div className="mt-1 text-[11px] text-stone-500">
                   {zh
-                    ? '设置后时间线上的时刻按该时区当地时间理解，日历订阅以 UTC 发射，跨时区不错位。'
-                    : 'Timeline times are read as wall-clock in this zone and exported as UTC.'}
+                    ? '就像机票：起飞写北京 08:00、落地写曼谷 12:00，各用各的当地时间。手机切到哪个时区，就按哪个时区读这个数字。设了时区则按 UTC 绝对时刻发射。'
+                    : 'Like a flight ticket: 08:00 departure in Beijing, 12:00 arrival in Bangkok — each in its local time. Set a zone to export absolute UTC instants instead.'}
                 </div>
               </div>
 
