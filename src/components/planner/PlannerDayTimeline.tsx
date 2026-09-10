@@ -139,6 +139,28 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                       (item): item is PlannerExecutionTransitionItem => item.type !== 'stop' && item.from_id === place.id && item.to_id === nextPlace.id,
                     )
                     : [];
+                  // Title-side stay marks, kept minimal by design:
+                  // - genuine checkout (explicit anchor, or checkout hotel with no/different tonight stay) → 🌅 pill
+                  // - tonight's stay → bare 🌙 emoji, no text
+                  // - anything else → no mark
+                  const checkoutHotel = currentDayTransferInfo?.checkoutHotel;
+                  const stayHotel = currentDayTransferInfo?.stayHotel;
+                  const matchesHotel = (
+                    hotel: { id: string; visit_id?: string; place_id?: string } | undefined,
+                    stop: typeof place,
+                  ): boolean => Boolean(
+                    hotel && (
+                      hotel.id === stop.id ||
+                      (hotel.visit_id !== undefined && hotel.visit_id === stop.visit_id) ||
+                      (hotel.place_id !== undefined && stop.place_id !== undefined && hotel.place_id === stop.place_id)
+                    ),
+                  );
+                  const isCheckoutStop = place.kind === 'stay' && (
+                    place.anchor_type === 'stay_checkout' ||
+                    (Boolean(checkoutHotel && matchesHotel(checkoutHotel, place)) &&
+                      (!stayHotel || !matchesHotel(stayHotel, place)))
+                  );
+                  const isTonightStayStop = place.kind === 'stay' && !isCheckoutStop && matchesHotel(stayHotel, place);
                     return (
                     <li
                       key={place.id}
@@ -167,19 +189,15 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 {place.title}
                               </h3>
                               {place.kind === 'stay' ? (
-                                place.anchor_type === 'stay_checkout' ||
-                                (currentDayTransferInfo?.checkoutHotel &&
-                                  (currentDayTransferInfo.checkoutHotel.id === place.id ||
-                                    currentDayTransferInfo.checkoutHotel.visit_id === place.visit_id) &&
-                                  currentDayTransferInfo.stayHotel?.visit_id !== place.visit_id) ? (
+                                isCheckoutStop ? (
                                   <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-0.2 text-[9px] font-bold text-sky-800 shrink-0">
                                     🌅 {zh ? '退房出发' : 'Checkout'}
                                   </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-0.5 rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-bold text-indigo-800 shrink-0">
-                                    🌙 {zh ? '今晚住宿' : 'Stay'}
+                                ) : isTonightStayStop ? (
+                                  <span className="shrink-0 text-[11px]" title={zh ? '今晚住宿' : 'Tonight stay'} aria-label={zh ? '今晚住宿' : 'Tonight stay'}>
+                                    🌙
                                   </span>
-                                )
+                                ) : null
                               ) : null}
                             </div>
 

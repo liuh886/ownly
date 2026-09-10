@@ -858,6 +858,37 @@ describe('Ownly Planner domain', () => {
     expect(transfers['2026-10-03'].stayNightIndex).toBeUndefined();
   });
 
+  it('does not treat a same-hotel morning duplicate as checkout (Oct-12 MARQUIS case)', () => {
+    const marquis = place('marquis', { title: 'MARQUIS HOTEL', kind: 'stay' });
+    const lunch = place('lunch', { title: 'Lunch Spot', kind: 'food' });
+    // Morning plain occurrence + evening check-in of the SAME hotel: no checkout that day.
+    const morningDup = scheduledPlace(marquis, '2026-10-12', 0);
+    const lunchStop = scheduledPlace(lunch, '2026-10-12', 1);
+    const eveningCheckin = scheduledPlace(marquis, '2026-10-12', 2, { is_anchor: true, anchor_type: 'stay_checkin' });
+
+    const transfers = detectHotelTransferDays(
+      [morningDup, lunchStop, eveningCheckin],
+      ['2026-10-12'],
+    );
+
+    expect(transfers['2026-10-12'].isTransferDay).toBe(false);
+    expect(transfers['2026-10-12'].checkoutHotel).toBeUndefined();
+    expect(transfers['2026-10-12'].stayHotel?.title).toBe('MARQUIS HOTEL');
+  });
+
+  it('treats two unanchored different hotels in one day as checkout plus stay', () => {
+    const hotelA = place('hA', { title: 'Hotel A (Old Town)', kind: 'stay' });
+    const hotelB = place('hB', { title: 'Hotel B (Nimman)', kind: 'stay' });
+    const morningA = scheduledPlace(hotelA, '2026-10-02', 0);
+    const eveningB = scheduledPlace(hotelB, '2026-10-02', 1);
+
+    const transfers = detectHotelTransferDays([morningA, eveningB], ['2026-10-02']);
+
+    expect(transfers['2026-10-02'].isTransferDay).toBe(false);
+    expect(transfers['2026-10-02'].checkoutHotel?.title).toBe('Hotel A (Old Town)');
+    expect(transfers['2026-10-02'].stayHotel?.title).toBe('Hotel B (Nimman)');
+  });
+
   it('respects explicit stay_checkout anchor type on any day', () => {
     const hotelA = place('hA', { title: 'Hotel A (Old Town)', kind: 'stay' });
     const temple = place('t1', { title: 'Wat Phra Singh', kind: 'attraction' });

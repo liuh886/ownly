@@ -1738,6 +1738,13 @@ export function detectHotelTransferDays(
   const result: Record<string, DayHotelTransferInfo> = {};
   if (tripDates.length === 0) return result;
 
+  // Same hotel occurring twice in one day (e.g. a morning occurrence plus the
+  // evening check-in) is NOT a checkout — only a different hotel is.
+  const isSameHotelPlace = (a: PlannerScheduledPlace, b: PlannerScheduledPlace): boolean => {
+    if (a.place_id && b.place_id && a.place_id === b.place_id) return true;
+    return normalizePlaceIdentity(a.source_url || a.title) === normalizePlaceIdentity(b.source_url || b.title);
+  };
+
   const stayByDate: Record<string, PlannerScheduledPlace | undefined> = {};
   const morningCheckoutByDate: Record<string, PlannerScheduledPlace | undefined> = {};
 
@@ -1754,7 +1761,7 @@ export function detectHotelTransferDays(
       stayByDate[date] = checkins[0];
       if (checkouts.length > 0) {
         morningCheckoutByDate[date] = checkouts[0];
-      } else if (dayPlaces.length > 1 && dayPlaces[0].kind === 'stay' && dayPlaces[0].id !== checkins[0].id) {
+      } else if (dayPlaces.length > 1 && dayPlaces[0].kind === 'stay' && dayPlaces[0].id !== checkins[0].id && !isSameHotelPlace(dayPlaces[0], checkins[0])) {
         morningCheckoutByDate[date] = dayPlaces[0];
       }
     } else if (checkouts.length > 0) {
@@ -1766,8 +1773,16 @@ export function detectHotelTransferDays(
     } else {
       const hotelStops = dayPlaces.filter((p) => p.kind === 'stay');
       if (hotelStops.length >= 2) {
-        morningCheckoutByDate[date] = hotelStops[0];
-        stayByDate[date] = hotelStops[hotelStops.length - 1];
+        const firstHotel = hotelStops[0];
+        const lastHotel = hotelStops[hotelStops.length - 1];
+        if (isSameHotelPlace(firstHotel, lastHotel)) {
+          // Same hotel twice in one day (morning occurrence + evening stay):
+          // no checkout happened, tonight's stay is this hotel.
+          stayByDate[date] = lastHotel;
+        } else {
+          morningCheckoutByDate[date] = firstHotel;
+          stayByDate[date] = lastHotel;
+        }
       } else if (hotelStops.length === 1) {
         const singleHotel = hotelStops[0];
         const isFirstStop = dayPlaces[0]?.id === singleHotel.id;
