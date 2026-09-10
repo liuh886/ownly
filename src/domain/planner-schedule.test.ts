@@ -392,6 +392,94 @@ describe('evaluatePlannerDay canonical assessment', () => {
   });
 });
 
+describe('Day seed and backward inference', () => {
+  it('seeds a fully untimed day at 09:00 and chains forward', () => {
+    const places = [
+      place('hotel', { duration_minutes: 30 }),
+      place('temple', { duration_minutes: 60 }),
+    ];
+    const visits = [
+      visit('v:hotel', 'hotel', { sort_order: 0 }),
+      visit('v:temple', 'temple', { sort_order: 1 }),
+    ];
+    const legs = [travelLeg('hotel', 'temple', 20)];
+    const list = scheduled(places, visits);
+    const timingMap = calculateEffectiveDayTiming(list, legs, trip.id);
+
+    const first = timingMap.get(list[0].id);
+    expect(first?.start).toBe('09:00');
+    expect(first?.end).toBe('09:30');
+    expect(first?.is_inferred_start).toBe(true);
+
+    const second = timingMap.get(list[1].id);
+    expect(second?.start).toBe('09:50');
+    expect(second?.is_inferred_start).toBe(true);
+  });
+
+  it('pulls earlier untimed stops backward from a fixed dinner', () => {
+    const places = [
+      place('market', { duration_minutes: 60 }),
+      place('massage', { duration_minutes: 90 }),
+      place('dinner', { duration_minutes: 60 }),
+    ];
+    const visits = [
+      visit('v:market', 'market', { sort_order: 0 }),
+      visit('v:massage', 'massage', { sort_order: 1 }),
+      visit('v:dinner', 'dinner', { start: '18:00', duration_minutes: 60, sort_order: 2 }),
+    ];
+    const legs = [
+      travelLeg('market', 'massage', 15),
+      travelLeg('massage', 'dinner', 20),
+    ];
+    const list = scheduled(places, visits);
+    const timingMap = calculateEffectiveDayTiming(list, legs, trip.id);
+
+    // massage: 18:00 − 20m leg − 90m = 16:10; market: 16:10 − 15m − 60m = 14:55.
+    const massage = timingMap.get(list[1].id);
+    expect(massage?.start).toBe('16:10');
+    expect(massage?.end).toBe('17:40');
+    expect(massage?.is_inferred_start).toBe(true);
+
+    const market = timingMap.get(list[0].id);
+    expect(market?.start).toBe('14:55');
+    expect(market?.is_inferred_start).toBe(true);
+  });
+
+  it('leaves pre-midnight stops unknown instead of wrapping', () => {
+    const places = [
+      place('bar', { duration_minutes: 120 }),
+      place('red-eye', { duration_minutes: 60 }),
+    ];
+    const visits = [
+      visit('v:bar', 'bar', { sort_order: 0 }),
+      visit('v:redeye', 'red-eye', { start: '00:30', duration_minutes: 60, sort_order: 1 }),
+    ];
+    const legs = [travelLeg('bar', 'red-eye', 30)];
+    const list = scheduled(places, visits);
+    const timingMap = calculateEffectiveDayTiming(list, legs, trip.id);
+
+    // 00:30 − 30m − 120m < 00:00 → stays unknown, no wrap.
+    expect(timingMap.get(list[0].id)?.start).toBeUndefined();
+  });
+
+  it('never overrides a manual start from either direction', () => {
+    const places = [
+      place('a', { duration_minutes: 60 }),
+      place('b', { duration_minutes: 60 }),
+    ];
+    const visits = [
+      visit('v:a', 'a', { start: '10:00', duration_minutes: 60, sort_order: 0 }),
+      visit('v:b', 'b', { start: '15:00', duration_minutes: 60, sort_order: 1 }),
+    ];
+    const legs = [travelLeg('a', 'b', 15)];
+    const list = scheduled(places, visits);
+    const timingMap = calculateEffectiveDayTiming(list, legs, trip.id);
+
+    expect(timingMap.get(list[0].id)).toMatchObject({ start: '10:00', is_inferred_start: false });
+    expect(timingMap.get(list[1].id)).toMatchObject({ start: '15:00', is_inferred_start: false });
+  });
+});
+
 describe('calculateDayLoad', () => {
   it('scores a light morning as easy without meal warnings', () => {
     const places = [
@@ -461,7 +549,7 @@ describe('calculateDayLoad', () => {
     expect(load.span_minutes).toBe(630);
   });
 
-  it('stays quiet when times are unknown instead of guessing', () => {
+  it('seeds a fully untimed day at 09:00 so load reflects the inferred chain', () => {
     const places = [place('u1', { duration_minutes: 60 }), place('u2', { duration_minutes: 60 })];
     const visits = [
       visit('v:u1', 'u1', { sort_order: 0 }),
@@ -471,7 +559,8 @@ describe('calculateDayLoad', () => {
     const timeline = buildPlannerDayExecutionTimeline(trip, list, [], '2026-10-05');
     const load = calculateDayLoad(list, [], trip.id, timeline);
 
-    expect(load.span_minutes).toBeNull();
+    // Day seed gives u1 09:00–10:00; u2 has no leg to chain from, stays unknown.
+    expect(load.span_minutes).toBe(60);
     expect(load.lunch_ok).toBe(true);
     expect(load.dinner_ok).toBe(true);
     expect(load.level).toBe('easy');

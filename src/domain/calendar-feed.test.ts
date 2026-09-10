@@ -158,13 +158,14 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     expect(ics).toContain('DTEND:20261005T194500\r\n');
   });
 
-  it('projects untimed visits as all-day events using VALUE=DATE', () => {
+  it('seeds a lone untimed visit at 09:00 instead of an all-day task', () => {
     const market = makePlace('chatuchak', { title: 'Chatuchak Weekend Market' });
     const visit = makeVisit('visit-market', market.id, '2026-10-06');
 
     const ics = buildTripCalendarIcs(trip, [market], [visit], { now: FIXED_NOW });
-    expect(ics).toContain('DTSTART;VALUE=DATE:20261006\r\n');
-    expect(ics).toContain('DTEND;VALUE=DATE:20261007\r\n');
+    expect(ics).toContain('DTSTART:20261006T090000\r\n');
+    expect(ics).toContain('STATUS:TENTATIVE\r\n');
+    expect(ics).not.toContain('VALUE=DATE');
   });
 
   it('projects only scheduled Visits into VEVENTs, ignoring floating candidates and dropped places', () => {
@@ -377,12 +378,26 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     expect(ics.match(/BEGIN:VALARM/g)?.length).toBe(1);
   });
 
-  it('keeps truly unreachable stops as all-day tasks', () => {
-    const temple = makePlace('place-b', { title: 'Temple' });
-    const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', {});
-    const ics = buildTripCalendarIcs(trip, [temple], [vB], { now: '2026-09-10' });
+  it('keeps pre-midnight unreachable stops as all-day tasks', () => {
+    const bar = makePlace('place-a', { title: 'Bar' });
+    const flight = makePlace('place-b', { title: 'Red Eye' });
+    const vA = makeVisit('visit:a-1', bar.id, '2026-10-05', { sort_order: 0, duration_minutes: 120 });
+    const vB = makeVisit('visit:b-1', flight.id, '2026-10-05', { sort_order: 1, start: '00:30', duration_minutes: 60 });
+    const legs = [{
+      schema_version: '0.1' as const,
+      type: 'trip_leg' as const,
+      id: 'leg:a:b',
+      trip_id: trip.id,
+      from_place_id: bar.id,
+      to_place_id: flight.id,
+      mode: 'transit' as const,
+      duration_minutes: 30,
+      source: 'manual' as const,
+      created_at: '2026-08-29T00:00:00Z',
+    }];
+    const ics = buildTripCalendarIcs(trip, [bar, flight], [vA, vB], { now: '2026-09-10', legs });
+    // 00:30 − 30m − 120m < 00:00 → no wrap, stays all-day.
     expect(ics).toContain('DTSTART;VALUE=DATE:20261005\r\n');
-    expect(ics).not.toContain('STATUS:TENTATIVE');
   });
 
   it('synthesizes heuristic legs when none are provided', () => {
@@ -392,6 +407,17 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', { sort_order: 1 });
     const ics = buildTripCalendarIcs(trip, [hotel, temple], [vA, vB], { now: '2026-09-10' });
     expect(ics).toContain('STATUS:TENTATIVE\r\n');
+  });
+
+  it('leaves no all-day bars on a fully untimed day: seed starts the chain', () => {
+    const hotel = makePlace('place-a', { title: 'Hotel' });
+    const temple = makePlace('place-b', { title: 'Temple' });
+    const vA = makeVisit('visit:a-1', hotel.id, '2026-10-05', { sort_order: 0 });
+    const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', { sort_order: 1 });
+    const ics = buildTripCalendarIcs(trip, [hotel, temple], [vA, vB], { now: '2026-09-10' });
+    expect(ics).toContain('DTSTART:20261005T090000\r\n');
+    expect(ics).toContain('STATUS:TENTATIVE\r\n');
+    expect(ics).not.toContain('VALUE=DATE');
   });
 
   it('per-day override wins over the trip zone, other days fall back', () => {

@@ -276,6 +276,20 @@ export interface PlannerEffectiveTiming {
   inferred_start?: string;
 }
 
+/**
+ * Day-seed for inference: when a day has no fixed start at all, the chain
+ * starts here (inferred) so every stop still gets an order instead of
+ * collapsing into all-day tasks. Ticket logic — the first stop of an
+ * unpinned day conventionally begins mid-morning.
+ */
+export const DEFAULT_INFERRED_DAY_START = '09:00';
+
+function defaultStopDurationMinutes(place: PlannerScheduledPlace): number {
+  return Number.isInteger(place.duration_minutes) && (place.duration_minutes as number) > 0
+    ? (place.duration_minutes as number)
+    : (isTransitHubPlace(place) ? 15 : 60);
+}
+
 export function calculateEffectiveDayTiming(
   places: PlannerScheduledPlace[],
   legs: PlannerTripLeg[],
@@ -289,6 +303,7 @@ export function calculateEffectiveDayTiming(
   );
 
   let prevEffectiveEnd: string | undefined = undefined;
+  const hasAnyManualStart = places.some((item) => Boolean(item.scheduled_start && CLOCK_RE.test(item.scheduled_start)));
 
   for (let index = 0; index < places.length; index += 1) {
     const place = places[index];
@@ -316,9 +331,15 @@ export function calculateEffectiveDayTiming(
     } else if (inferredStart) {
       start = inferredStart;
       isInferred = true;
+    } else if (index === 0 && !hasAnyManualStart) {
+      // 3. Day seed: nothing fixed all day — start the chain here (inferred)
+      // so every stop keeps an order instead of collapsing to all-day tasks.
+      start = DEFAULT_INFERRED_DAY_START;
+      isInferred = true;
+      inferredStart = DEFAULT_INFERRED_DAY_START;
     }
 
-    const defaultDuration = isTransitHubPlace(place) ? 15 : 60;
+    const defaultDuration = defaultStopDurationMinutes(place);
     const duration = Number.isInteger(place.duration_minutes) && place.duration_minutes && place.duration_minutes > 0
       ? place.duration_minutes
       : (start ? defaultDuration : undefined);
@@ -334,6 +355,45 @@ export function calculateEffectiveDayTiming(
     });
 
     prevEffectiveEnd = end;
+  }
+
+  // 4. Backward pass: a fixed start pulls earlier untimed stops into the chain
+  // (stop start = next start − leg − own duration). Threads through any known
+  // start so multi-anchor days stay continuous; stops before midnight stay unknown.
+  let anchorMinutes: number | undefined = undefined;
+  for (let index = places.length - 1; index >= 0; index -= 1) {
+    const place = places[index];
+    const entry = result.get(place.id);
+    if (!entry) continue;
+    const currentMinutes = plannerClockToMinutes(entry.start);
+    if (currentMinutes !== null) {
+      anchorMinutes = currentMinutes;
+      continue;
+    }
+    if (anchorMinutes === undefined) continue;
+    const nextPlace = places[index + 1];
+    const leg = nextPlace ? legByPair.get(transitionKey(place.place_id, nextPlace.place_id)) : undefined;
+    if (!leg || !Number.isInteger(leg.duration_minutes) || leg.duration_minutes < 0) {
+      anchorMinutes = undefined;
+      continue;
+    }
+    const stopDuration: number = defaultStopDurationMinutes(place);
+    const backStart: number = anchorMinutes - leg.duration_minutes - stopDuration;
+    if (backStart < 0) {
+      anchorMinutes = undefined;
+      continue;
+    }
+    const inferred = formatClockWithinDay(backStart);
+    if (!inferred) {
+      anchorMinutes = undefined;
+      continue;
+    }
+    entry.start = inferred;
+    entry.is_inferred_start = true;
+    entry.inferred_start = inferred;
+    entry.duration_minutes = stopDuration;
+    entry.end = getScheduledEndTime(inferred, stopDuration) ?? undefined;
+    anchorMinutes = backStart;
   }
 
   return result;
