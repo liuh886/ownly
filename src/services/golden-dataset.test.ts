@@ -131,7 +131,7 @@ describe('Golden Dataset Regression — Thailand 2026', () => {
     expect(assessment.opening_hours_warnings).toHaveLength(0);
 
     // ── Step 8: Export iCal ──
-    const ics = await plannerRepository.exportTripIcs(TRIP.id);
+    const ics = await plannerRepository.exportTripIcs(TRIP.id, { now: new Date('2026-09-01T00:00:00Z') });
     expect(ics).toContain('BEGIN:VCALENDAR');
     expect(ics).toContain(`X-WR-CALNAME:${TRIP.title}`);
     expect(ics).toContain('The Grand Palace');
@@ -143,7 +143,7 @@ describe('Golden Dataset Regression — Thailand 2026', () => {
     expect(ics).toContain('END:VCALENDAR');
 
     // ── Step 9: Day iCal ──
-    const dayIcs = await plannerRepository.exportDayIcs(TRIP.id, '2026-10-05');
+    const dayIcs = await plannerRepository.exportDayIcs(TRIP.id, '2026-10-05', { now: new Date('2026-09-01T00:00:00Z') });
     expect(dayIcs).toContain('BEGIN:VCALENDAR');
     expect(dayIcs).toContain('The Grand Palace');
     expect(dayIcs).not.toContain('DTSTART:20261008');

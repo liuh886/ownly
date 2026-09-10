@@ -8,6 +8,7 @@ import {
   foldIcsLine,
   generateCalendarFeedToken,
   getCalendarFeedUrl,
+  getIcsWindowCutoffDate,
   createTripCalendarFeed,
   rotateTripCalendarFeed,
   hashFeedToken,
@@ -63,8 +64,12 @@ function makeVisit(id: string, placeId: string, date: string, overrides: Partial
   };
 }
 
+// Pinned reference date keeps every ICS assertion deterministic no matter
+// when the suite runs. Window cutoff for this value is 2025-09-01.
+const FIXED_NOW = new Date('2026-09-01T00:00:00Z');
+
 describe('RFC 5545 ICS Projection & Calendar Feed', () => {
-  it('covers past/completed trips without date filtering (WS-1 linkage)', () => {
+  it('skips visits older than one year from the ICS window (WS-1 linkage)', () => {
     const finished: PlannerTrip = {
       ...trip,
       status: 'completed',
@@ -74,9 +79,36 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     };
     const palace = makePlace('grand-palace', { title: 'Grand Palace' });
     const visit = makeVisit('visit-gp', palace.id, '2020-01-02', { start: '09:00' });
-    const ics = buildTripCalendarIcs(finished, [palace], [visit]);
-    expect(ics).toContain('Grand Palace');
-    expect(ics).toContain('DTSTART');
+    const ics = buildTripCalendarIcs(finished, [palace], [visit], { now: FIXED_NOW });
+    expect(ics).not.toContain('Grand Palace');
+    expect(ics).not.toContain('BEGIN:VEVENT');
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    // An explicit reference date inside the window restores it (override path).
+    const revived = buildTripCalendarIcs(finished, [palace], [visit], { now: new Date('2020-06-01T00:00:00Z') });
+    expect(revived).toContain('Grand Palace');
+    expect(revived).toContain('DTSTART');
+  });
+
+  it('computes the one-year ICS cutoff date (boundary inclusive)', () => {
+    expect(getIcsWindowCutoffDate(new Date('2026-09-10T00:00:00Z'))).toBe('2025-09-10');
+    expect(getIcsWindowCutoffDate('2026-03-01')).toBe('2025-03-01');
+  });
+
+  it('keeps the exact cutoff day and drops the day before', () => {
+    const place = makePlace('spot', { title: 'Boundary Spot' });
+    const kept = makeVisit('v-kept', place.id, '2025-09-10', {});
+    const dropped = makeVisit('v-dropped', place.id, '2025-09-09', {});
+    const ics = buildTripCalendarIcs(trip, [place], [kept, dropped], { now: new Date('2026-09-10T00:00:00Z') });
+    expect(ics).toContain('UID:v-kept@ownly');
+    expect(ics).not.toContain('UID:v-dropped@ownly');
+  });
+
+  it('buildDayCalendarIcs yields headers but no events for a date outside the window', () => {
+    const place = makePlace('old', { title: 'Old Spot' });
+    const visit = makeVisit('v-old', place.id, '2020-01-02', {});
+    const ics = buildDayCalendarIcs(trip, [place], [visit], '2020-01-02', { now: FIXED_NOW });
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).not.toContain('BEGIN:VEVENT');
   });
 
   it('generates valid RFC 5545 format with CRLF and standard calendar headers', () => {
@@ -91,7 +123,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
       duration_minutes: 120,
     });
 
-    const ics = buildTripCalendarIcs(trip, [palace], [visit1]);
+    const ics = buildTripCalendarIcs(trip, [palace], [visit1], { now: FIXED_NOW });
 
     expect(ics.startsWith('BEGIN:VCALENDAR\r\n')).toBe(true);
     expect(ics.endsWith('END:VCALENDAR\r\n')).toBe(true);
@@ -109,7 +141,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
       duration_minutes: 60,
     });
 
-    const ics = buildTripCalendarIcs(trip, [watPho], [visit]);
+    const ics = buildTripCalendarIcs(trip, [watPho], [visit], { now: FIXED_NOW });
     expect(ics).toContain('UID:visit:wat-pho-999@ownly\r\n');
   });
 
@@ -120,7 +152,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
       duration_minutes: 75,
     });
 
-    const ics = buildTripCalendarIcs(trip, [thipsamai], [visit]);
+    const ics = buildTripCalendarIcs(trip, [thipsamai], [visit], { now: FIXED_NOW });
     expect(ics).toContain('DTSTART:20261005T183000\r\n');
     expect(ics).toContain('DTEND:20261005T194500\r\n');
   });
@@ -129,7 +161,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     const market = makePlace('chatuchak', { title: 'Chatuchak Weekend Market' });
     const visit = makeVisit('visit-market', market.id, '2026-10-06');
 
-    const ics = buildTripCalendarIcs(trip, [market], [visit]);
+    const ics = buildTripCalendarIcs(trip, [market], [visit], { now: FIXED_NOW });
     expect(ics).toContain('DTSTART;VALUE=DATE:20261006\r\n');
     expect(ics).toContain('DTEND;VALUE=DATE:20261007\r\n');
   });
@@ -140,7 +172,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     const scheduledC = makePlace('hotel', { title: 'Oakwood Hotel', kind: 'stay' });
     const visitHotel = makeVisit('visit-hotel-1', scheduledC.id, '2026-10-05');
 
-    const ics = buildTripCalendarIcs(trip, [candidateA, droppedB, scheduledC], [visitHotel]);
+    const ics = buildTripCalendarIcs(trip, [candidateA, droppedB, scheduledC], [visitHotel], { now: FIXED_NOW });
 
     expect(ics).toContain('Oakwood Hotel');
     expect(ics).not.toContain('Floating Ramen Candidate');
@@ -154,7 +186,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     const visitD1 = makeVisit('visit:h-d1', hotel.id, '2026-10-05', { sort_order: 0 });
     const visitD2 = makeVisit('visit:h-d2', hotel.id, '2026-10-06', { sort_order: 0 });
 
-    const ics = buildTripCalendarIcs(trip, [hotel], [visitD1, visitD2]);
+    const ics = buildTripCalendarIcs(trip, [hotel], [visitD1, visitD2], { now: FIXED_NOW });
 
     expect(ics).toContain('UID:visit:h-d1@ownly');
     expect(ics).toContain('UID:visit:h-d2@ownly');
@@ -166,7 +198,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     const mustPlace = makePlace('flight', { title: 'Flight BKK -> CNX', kind: 'transit', priority: 'must' });
     const visit = makeVisit('visit-flight', mustPlace.id, '2026-10-07', { start: '10:00', duration_minutes: 90 });
 
-    const ics = buildTripCalendarIcs(trip, [mustPlace], [visit], { includeAlarms: true, alarmMinutes: 30 });
+    const ics = buildTripCalendarIcs(trip, [mustPlace], [visit], { includeAlarms: true, alarmMinutes: 30, now: FIXED_NOW });
     expect(ics).toContain('BEGIN:VALARM\r\n');
     expect(ics).toContain('TRIGGER:-PT30M\r\n');
     expect(ics).toContain('ACTION:DISPLAY\r\n');
@@ -179,7 +211,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     const v1 = makeVisit('v1', spot1.id, '2026-10-05');
     const v2 = makeVisit('v2', spot2.id, '2026-10-06');
 
-    const ics = buildDayCalendarIcs(trip, [spot1, spot2], [v1, v2], '2026-10-05');
+    const ics = buildDayCalendarIcs(trip, [spot1, spot2], [v1, v2], '2026-10-05', { now: FIXED_NOW });
     expect(ics).toContain('Day 1 Spot');
     expect(ics).not.toContain('Day 2 Spot');
   });
@@ -251,7 +283,7 @@ describe('Trip timezone → UTC ICS emission', () => {
   it('emits UTC instants for a zoned trip', () => {
     const place = makePlace('khao-soi', { title: 'Khao Soi' });
     const visit = makeVisit('visit:ks-1', place.id, '2026-10-05', { start: '08:00', duration_minutes: 60 });
-    const ics = buildTripCalendarIcs(bangkokTrip, [place], [visit]);
+    const ics = buildTripCalendarIcs(bangkokTrip, [place], [visit], { now: FIXED_NOW });
     // 08:00 ICT (UTC+7) = 01:00Z
     expect(ics).toContain('DTSTART:20261005T010000Z\r\n');
     expect(ics).toContain('DTEND:20261005T020000Z\r\n');
@@ -260,7 +292,7 @@ describe('Trip timezone → UTC ICS emission', () => {
   it('rolls the end instant past midnight instead of wrapping to 23:59', () => {
     const place = makePlace('night-mkt', { title: 'Night Market' });
     const visit = makeVisit('visit:nm-1', place.id, '2026-10-05', { start: '23:30', duration_minutes: 60 });
-    const ics = buildTripCalendarIcs(bangkokTrip, [place], [visit]);
+    const ics = buildTripCalendarIcs(bangkokTrip, [place], [visit], { now: FIXED_NOW });
     // 23:30 ICT = 16:30Z; end 00:30+1d ICT = 17:30Z same UTC day
     expect(ics).toContain('DTSTART:20261005T163000Z\r\n');
     expect(ics).toContain('DTEND:20261005T173000Z\r\n');
@@ -269,7 +301,7 @@ describe('Trip timezone → UTC ICS emission', () => {
   it('keeps floating local time when no timezone is set', () => {
     const place = makePlace('khao-soi', { title: 'Khao Soi' });
     const visit = makeVisit('visit:ks-1', place.id, '2026-10-05', { start: '08:00', duration_minutes: 60 });
-    const ics = buildTripCalendarIcs(trip, [place], [visit]);
+    const ics = buildTripCalendarIcs(trip, [place], [visit], { now: FIXED_NOW });
     expect(ics).toContain('DTSTART:20261005T080000\r\n');
     expect(ics).toContain('DTEND:20261005T090000\r\n');
     expect(ics).not.toContain('080000Z');
@@ -294,7 +326,7 @@ describe('Trip timezone → UTC ICS emission', () => {
     const late = makePlace('late', { title: 'Late' });
     const vEarly = makeVisit('visit:e-1', early.id, '2026-03-08', { start: '01:30', duration_minutes: 30 });
     const vLate = makeVisit('visit:l-1', late.id, '2026-03-08', { start: '03:30', duration_minutes: 30 });
-    const ics = buildTripCalendarIcs(nyTrip, [early, late], [vEarly, vLate]);
+    const ics = buildTripCalendarIcs(nyTrip, [early, late], [vEarly, vLate], { now: FIXED_NOW });
     // 01:30 EST (UTC-5) = 06:30Z; 03:30 EDT (UTC-4) = 07:30Z
     expect(ics).toContain('DTSTART:20260308T063000Z\r\n');
     expect(ics).toContain('DTSTART:20260308T073000Z\r\n');
@@ -317,7 +349,7 @@ describe('Trip timezone → UTC ICS emission', () => {
     const tyo = makePlace('tyo', { title: 'Tokyo Day' });
     const vBkk = makeVisit('visit:b-1', bkk.id, '2026-10-05', { start: '09:00', duration_minutes: 60 });
     const vTyo = makeVisit('visit:t-1', tyo.id, '2026-10-06', { start: '09:00', duration_minutes: 60 });
-    const ics = buildTripCalendarIcs(multiTrip, [bkk, tyo], [vBkk, vTyo]);
+    const ics = buildTripCalendarIcs(multiTrip, [bkk, tyo], [vBkk, vTyo], { now: FIXED_NOW });
     // 09:00 ICT (UTC+7) = 02:00Z; 09:00 JST (UTC+9) = 00:00Z
     expect(ics).toContain('DTSTART:20261005T020000Z\r\n');
     expect(ics).toContain('DTSTART:20261006T000000Z\r\n');

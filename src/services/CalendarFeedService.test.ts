@@ -91,6 +91,7 @@ describe('CalendarFeedService (PRO)', () => {
       visits: [visit1],
       membership: { isPro: true },
       userId: 'user_123',
+      options: { now: new Date('2026-09-01T00:00:00Z') },
     });
 
     expect(result.feed.trip_id).toBe('trip-feed-test');
@@ -109,6 +110,43 @@ describe('CalendarFeedService (PRO)', () => {
     expect(publicResponse.body).toBe(result.ics);
   });
 
+  it('keeps the same token and URL across re-publishes (stable subscription address)', async () => {
+    const first = await service.publishFeed({
+      trip,
+      places: [palace],
+      visits: [visit1],
+      membership: { isPro: true },
+      userId: 'user_123',
+    });
+    const second = await service.publishFeed({
+      trip: { ...trip, calendar_feed: first.feed },
+      places: [palace],
+      visits: [visit1],
+      membership: { isPro: true },
+      userId: 'user_123',
+    });
+    expect(second.feed.feed_token).toBe(first.feed.feed_token);
+    expect(second.url).toBe(first.url);
+    expect(second.feed.created_at).toBe(first.feed.created_at);
+  });
+
+  it('skips visits older than one year in the published ICS', async () => {
+    const oldVisit: PlannerTripVisit = {
+      ...visit1,
+      id: 'visit-palace-old',
+      date: '2020-01-02',
+    };
+    const result = await service.publishFeed({
+      trip,
+      places: [palace],
+      visits: [visit1, oldVisit],
+      membership: { isPro: true },
+      userId: 'user_123',
+      options: { now: new Date('2026-09-01T00:00:00Z') },
+    });
+    expect(result.ics).toContain('UID:visit-palace-morning@ownly');
+    expect(result.ics).not.toContain('UID:visit-palace-old@ownly');
+  });
   it('rotates bearer token, immediately persists new ICS projection, and revokes old URL', async () => {
     const published = await service.publishFeed({
       trip,
@@ -116,6 +154,7 @@ describe('CalendarFeedService (PRO)', () => {
       visits: [visit1],
       membership: { isPro: true },
       userId: 'user_123',
+      options: { now: new Date('2026-09-01T00:00:00Z') },
     });
 
     const tripWithFeed = { ...trip, calendar_feed: published.feed };
@@ -126,6 +165,7 @@ describe('CalendarFeedService (PRO)', () => {
       visits: [visit1],
       membership: { isPro: true },
       userId: 'user_123',
+      options: { now: new Date('2026-09-01T00:00:00Z') },
     });
 
     expect(rotated.feed.feed_token).not.toBe(published.feed.feed_token);

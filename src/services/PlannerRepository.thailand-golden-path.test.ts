@@ -287,7 +287,7 @@ describe('Thailand 2026 Golden Path E2E Journey', () => {
     expect(budget.perPersonEstimated).toBe(Math.round(budget.totalEstimated / 4));
 
     // 9. Export Deterministic RFC 5545 ICS Calendar & Calendar Feed
-    const ics = await plannerRepository.exportTripIcs(trip.id);
+    const ics = await plannerRepository.exportTripIcs(trip.id, { now: new Date('2026-09-01T00:00:00Z') });
     expect(ics).toContain('BEGIN:VCALENDAR');
     expect(ics).toContain(`X-WR-CALNAME:${trip.title}`);
     expect(ics).toContain('The Grand Palace');

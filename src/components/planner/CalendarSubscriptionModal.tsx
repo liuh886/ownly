@@ -210,6 +210,13 @@ export function CalendarSubscriptionModal({
                   </button>
                 </div>
 
+                <div className="rounded-lg bg-stone-100/80 p-2.5 text-[11px] leading-4.5 text-stone-500">
+                  🔗 <strong>{zh ? '关于这个链接：' : 'About this link: '}</strong>
+                  {zh
+                    ? '一个行程对应一个固定链接——这里是「泰国」全部日期的完整日程。日常点「更新日历」只刷新内容，链接不变；只有手动「重新生成链接」才会作废旧地址。链接只包含近一年内及未来的日程，更早的会自动略过。'
+                    : 'One trip, one permanent link — this covers the full Thailand itinerary across all dates. Regular updates refresh content only; the URL changes solely on manual rotation. Only visits from the past year onward are included; older ones are skipped.'}
+                </div>
+
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <button
                     type="button"
@@ -223,10 +230,10 @@ export function CalendarSubscriptionModal({
                     type="button"
                     disabled={busy}
                     onClick={() => void handleRotate()}
-                    className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-50 hover:text-stone-900 transition"
+                    className="px-1 py-1.5 text-[11px] font-normal text-stone-400 underline-offset-2 transition hover:text-stone-600 hover:underline disabled:opacity-50"
                     title={zh ? '重新生成订阅 URL，旧链接立即失效' : 'Rotate URL'}
                   >
-                    🔑 {zh ? '重新生成链接' : 'Rotate URL'}
+                    {zh ? '重新生成链接' : 'Rotate URL'}
                   </button>
                   <button
                     type="button"

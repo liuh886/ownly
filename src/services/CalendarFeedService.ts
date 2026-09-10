@@ -2,6 +2,7 @@ import type { PlannerTrip, PlannerTripCalendarFeed, PlannerTripPlace } from '../
 import type { PlannerTripVisit } from '../domain/planner-visits';
 import {
   buildTripCalendarIcs,
+  type CalendarExportOptions,
   generateCalendarFeedToken,
   getCalendarFeedUrl,
   hashFeedToken,
@@ -28,6 +29,7 @@ export interface PublishCalendarFeedInput {
   userId: string;
   feedToken?: string;
   apiBaseUrl?: string;
+  options?: CalendarExportOptions;
 }
 
 export interface RotateCalendarFeedInput {
@@ -37,6 +39,7 @@ export interface RotateCalendarFeedInput {
   membership: Pick<WYQDMembershipState, 'isPro'>;
   userId: string;
   apiBaseUrl?: string;
+  options?: CalendarExportOptions;
 }
 
 export interface DisableCalendarFeedInput {
@@ -114,7 +117,7 @@ export class CalendarFeedService {
     const { trip, places, visits, userId } = input;
     const token = input.feedToken || trip.calendar_feed?.feed_token || generateCalendarFeedToken();
     const tokenHash = await hashFeedToken(token);
-    const ics = buildTripCalendarIcs(trip, places, visits);
+    const ics = buildTripCalendarIcs(trip, places, visits, input.options);
     const now = new Date().toISOString();
 
     const record: CalendarFeedRecord = {
@@ -165,7 +168,7 @@ export class CalendarFeedService {
 
     const newToken = generateCalendarFeedToken();
     const newTokenHash = await hashFeedToken(newToken);
-    const ics = buildTripCalendarIcs(trip, places, visits);
+    const ics = buildTripCalendarIcs(trip, places, visits, input.options);
     const now = new Date().toISOString();
 
     const newRecord: CalendarFeedRecord = {

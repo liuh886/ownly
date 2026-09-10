@@ -242,7 +242,7 @@ describe('PlannerRepository visit lifecycle', () => {
     const visit = await plannerRepository.addVisit('a', '2026-11-01');
     await plannerRepository.updateVisitTiming(visit!.id, { start: '09:00', duration_minutes: 90 });
 
-    const ics = await plannerRepository.exportTripIcs('trip-1');
+    const ics = await plannerRepository.exportTripIcs('trip-1', { now: new Date('2026-10-01T00:00:00Z') });
     expect(ics).toContain('BEGIN:VCALENDAR');
     expect(ics).toContain(`UID:${visit!.id}@ownly`);
     expect(ics).toContain('DTSTART:20261101T090000');

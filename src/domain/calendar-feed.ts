@@ -26,6 +26,35 @@ export interface CalendarExportOptions {
   language?: 'zh' | 'en';
   /** Custom base URL for feed links, defaults to https://calendar.ownly.app */
   feedBaseUrl?: string;
+  /**
+   * Reference "today" for the one-year ICS window. Accepts a Date or a
+   * YYYY-MM-DD string. Defaults to the actual current date.
+   * Tests should pass an explicit value to stay deterministic.
+   */
+  now?: Date | string;
+}
+
+const VISIT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Earliest visit date (inclusive, YYYY-MM-DD) kept in ICS output:
+ * exactly one calendar year before the reference date.
+ * Older occurrences are skipped to bound feed length.
+ */
+export function getIcsWindowCutoffDate(now: Date | string = new Date()): string {
+  const ref = typeof now === 'string' ? new Date(`${now}T00:00:00Z`) : now;
+  const base = Number.isNaN(ref.getTime()) ? new Date() : ref;
+  const cutoff = new Date(Date.UTC(base.getUTCFullYear() - 1, base.getUTCMonth(), base.getUTCDate()));
+  return cutoff.toISOString().slice(0, 10);
+}
+
+/**
+ * Keeps visits inside the one-year ICS window. Malformed dates fail open
+ * (preserved, as before) so a bad string can never silently drop a visit.
+ */
+export function isVisitInIcsWindow(date: string | undefined, cutoff: string): boolean {
+  if (!date || !VISIT_DATE_PATTERN.test(date)) return true;
+  return date >= cutoff;
 }
 
 /**
@@ -335,7 +364,9 @@ export function buildTripCalendarIcs(
 ): string {
   const tripPlaces = places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped');
   const tripVisits = visits.filter((visit) => visit.trip_id === trip.id);
-  const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, tripVisits));
+  const cutoff = getIcsWindowCutoffDate(options.now);
+  const windowedVisits = tripVisits.filter((visit) => isVisitInIcsWindow(visit.date, cutoff));
+  const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
 
   const nowTimestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
 
@@ -372,7 +403,9 @@ export function buildDayCalendarIcs(
 ): string {
   const tripPlaces = places.filter((place) => place.trip_id === trip.id && place.state !== 'dropped');
   const dayVisits = visits.filter((visit) => visit.trip_id === trip.id && visit.date === date);
-  const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, dayVisits));
+  const cutoff = getIcsWindowCutoffDate(options.now);
+  const windowedVisits = dayVisits.filter((visit) => isVisitInIcsWindow(visit.date, cutoff));
+  const scheduled = sortPlannerScheduledPlaces(materializePlannerScheduledPlaces(tripPlaces, windowedVisits));
 
   const nowTimestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
 

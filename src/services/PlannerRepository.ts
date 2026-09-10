@@ -25,6 +25,7 @@ import {
   buildDayCalendarIcs,
   createTripCalendarFeed,
   rotateTripCalendarFeed,
+  type CalendarExportOptions,
 } from '@/domain/calendar-feed';
 import type { PlannerTripCalendarFeed } from '@/domain/planner';
 import { validatePlannerTiming } from '@/domain/planner-schedule';
@@ -1119,22 +1120,22 @@ export class PlannerRepository {
     });
   }
 
-  async exportTripIcs(tripId: string): Promise<string> {
+  async exportTripIcs(tripId: string, options?: CalendarExportOptions): Promise<string> {
     await this.initialize();
     const trip = (await this.listTrips()).find((item) => item.id === tripId);
     if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
     const places = (await this.listPlaces()).filter((place) => place.trip_id === tripId);
     const visits = (await this.listVisits()).filter((visit) => visit.trip_id === tripId);
-    return buildTripCalendarIcs(trip, places, visits);
+    return buildTripCalendarIcs(trip, places, visits, options);
   }
 
-  async exportDayIcs(tripId: string, date: string): Promise<string> {
+  async exportDayIcs(tripId: string, date: string, options?: CalendarExportOptions): Promise<string> {
     await this.initialize();
     const trip = (await this.listTrips()).find((item) => item.id === tripId);
     if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
     const places = (await this.listPlaces()).filter((place) => place.trip_id === tripId);
     const visits = (await this.listVisits()).filter((visit) => visit.trip_id === tripId);
-    return buildDayCalendarIcs(trip, places, visits, date);
+    return buildDayCalendarIcs(trip, places, visits, date, options);
   }
 
   async createOrUpdateCalendarFeed(tripId: string): Promise<PlannerTripCalendarFeed> {
