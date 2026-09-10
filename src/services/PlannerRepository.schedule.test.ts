@@ -244,7 +244,7 @@ describe('PlannerRepository visit lifecycle', () => {
 
     const ics = await plannerRepository.exportTripIcs('trip-1');
     expect(ics).toContain('BEGIN:VCALENDAR');
-    expect(ics).toContain(`UID:visit:${visit!.id}@ownly`);
+    expect(ics).toContain(`UID:${visit!.id}@ownly`);
     expect(ics).toContain('DTSTART:20261101T090000');
     expect(ics).toContain('DTEND:20261101T103000');
     expect(ics).toContain('END:VCALENDAR');

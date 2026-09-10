@@ -15,6 +15,7 @@ import {
   parseTripShareHash,
 } from '../../domain/trip-share-link';
 import { plannerRepository } from '../../services/PlannerRepository';
+import { COMMON_TIMEZONES } from '../../domain/calendar-feed';
 
 /**
  * Chat apps truncate very long URLs. Above this length a share link is likely
@@ -63,6 +64,7 @@ export function CreateTripModal({
   const [destinations, setDestinations] = useState('');
   const [currency, setCurrency] = useState('THB');
   const [transportMode, setTransportMode] = useState<PlannerTravelMode>('transit');
+  const [timezone, setTimezone] = useState('');
   const [tags, setTags] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +117,7 @@ export function CreateTripModal({
     setDestinations('');
     setCurrency('THB');
     setTransportMode('transit');
+    setTimezone('');
     setTags('');
     setError(null);
     setRawImport('');
@@ -135,6 +138,7 @@ export function CreateTripModal({
     setDestinations(trip.destinations.join(', '));
     setCurrency(trip.currency ?? 'THB');
     setTransportMode(trip.transport_mode ?? 'transit');
+    setTimezone(trip.timezone ?? '');
     setTags((trip.tags ?? []).join(', '));
     setTab('create');
   };
@@ -222,6 +226,7 @@ export function CreateTripModal({
       currency: currency.toUpperCase().trim() || 'THB',
       transport_mode: transportMode,
       tags: tagList,
+      timezone: timezone.trim() || undefined,
     }, now);
 
     setBusy(true);
@@ -491,6 +496,28 @@ export function CreateTripModal({
                     <option value="walking">{zh ? '🚶 步行慢游' : '🚶 Walking'}</option>
                     <option value="bicycling">{zh ? '🚲 骑行' : '🚲 Bicycling'}</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700">
+                  {zh ? '目的地时区 (日历导出用)' : 'Destination Timezone (for calendar export)'}
+                </label>
+                <select
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                >
+                  <option value="">{zh ? '不设置（浮动时间，跟随查看端）' : 'Unset (floating time)'}</option>
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+                <div className="mt-1 text-[11px] text-stone-500">
+                  {zh
+                    ? '设置后时间线上的时刻按该时区当地时间理解，日历订阅以 UTC 发射，跨时区不错位。'
+                    : 'Timeline times are read as wall-clock in this zone and exported as UTC.'}
                 </div>
               </div>
 

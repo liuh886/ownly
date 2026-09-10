@@ -11,6 +11,7 @@ import {
   createTripCalendarFeed,
   rotateTripCalendarFeed,
   hashFeedToken,
+  zonedWallTimeToUtcMs,
 } from './calendar-feed';
 
 const trip: PlannerTrip = {
@@ -102,13 +103,13 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
 
   it('uses stable Visit ID as UID for calendar synchronization persistence', () => {
     const watPho = makePlace('wat-pho', { title: 'Wat Pho' });
-    const visit = makeVisit('visit-wat-pho-999', watPho.id, '2026-10-05', {
+    const visit = makeVisit('visit:wat-pho-999', watPho.id, '2026-10-05', {
       start: '13:00',
       duration_minutes: 60,
     });
 
     const ics = buildTripCalendarIcs(trip, [watPho], [visit]);
-    expect(ics).toContain('UID:visit:visit-wat-pho-999@ownly\r\n');
+    expect(ics).toContain('UID:visit:wat-pho-999@ownly\r\n');
   });
 
   it('projects timed events with DTSTART and calculated DTEND', () => {
@@ -149,13 +150,13 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
 
   it('supports multiple visits for a reusable place across multiple days', () => {
     const hotel = makePlace('hotel-bangkok', { title: 'Bangkok Hotel', kind: 'stay' });
-    const visitD1 = makeVisit('visit-h-d1', hotel.id, '2026-10-05', { sort_order: 0 });
-    const visitD2 = makeVisit('visit-h-d2', hotel.id, '2026-10-06', { sort_order: 0 });
+    const visitD1 = makeVisit('visit:h-d1', hotel.id, '2026-10-05', { sort_order: 0 });
+    const visitD2 = makeVisit('visit:h-d2', hotel.id, '2026-10-06', { sort_order: 0 });
 
     const ics = buildTripCalendarIcs(trip, [hotel], [visitD1, visitD2]);
 
-    expect(ics).toContain('UID:visit:visit-h-d1@ownly');
-    expect(ics).toContain('UID:visit:visit-h-d2@ownly');
+    expect(ics).toContain('UID:visit:h-d1@ownly');
+    expect(ics).toContain('UID:visit:h-d2@ownly');
     const veventMatches = ics.match(/BEGIN:VEVENT/g);
     expect(veventMatches?.length).toBe(2);
   });
@@ -207,6 +208,13 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
 
     it('builds subscription URL from feed token', () => {
       const url = getCalendarFeedUrl('abc123tokenXYZ');
+      expect(url).toBe(
+        'https://blgwlycfcwvsupmqyqwn.supabase.co/functions/v1/calendar-feed/abc123tokenXYZ.ics',
+      );
+    });
+
+    it('keeps the legacy /f/ prefix for an explicit short host', () => {
+      const url = getCalendarFeedUrl('abc123tokenXYZ', 'https://calendar.ownly.app');
       expect(url).toBe('https://calendar.ownly.app/f/abc123tokenXYZ.ics');
     });
 
@@ -233,5 +241,68 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
       expect(hash1).toBe(hash2);
       expect(hash1).not.toBe(hashDiff);
     });
+  });
+});
+
+describe('Trip timezone → UTC ICS emission', () => {
+  const bangkokTrip: PlannerTrip = { ...trip, timezone: 'Asia/Bangkok' };
+
+  it('emits UTC instants for a zoned trip', () => {
+    const place = makePlace('khao-soi', { title: 'Khao Soi' });
+    const visit = makeVisit('visit:ks-1', place.id, '2026-10-05', { start: '08:00', duration_minutes: 60 });
+    const ics = buildTripCalendarIcs(bangkokTrip, [place], [visit]);
+    // 08:00 ICT (UTC+7) = 01:00Z
+    expect(ics).toContain('DTSTART:20261005T010000Z\r\n');
+    expect(ics).toContain('DTEND:20261005T020000Z\r\n');
+  });
+
+  it('rolls the end instant past midnight instead of wrapping to 23:59', () => {
+    const place = makePlace('night-mkt', { title: 'Night Market' });
+    const visit = makeVisit('visit:nm-1', place.id, '2026-10-05', { start: '23:30', duration_minutes: 60 });
+    const ics = buildTripCalendarIcs(bangkokTrip, [place], [visit]);
+    // 23:30 ICT = 16:30Z; end 00:30+1d ICT = 17:30Z same UTC day
+    expect(ics).toContain('DTSTART:20261005T163000Z\r\n');
+    expect(ics).toContain('DTEND:20261005T173000Z\r\n');
+  });
+
+  it('keeps floating local time when no timezone is set', () => {
+    const place = makePlace('khao-soi', { title: 'Khao Soi' });
+    const visit = makeVisit('visit:ks-1', place.id, '2026-10-05', { start: '08:00', duration_minutes: 60 });
+    const ics = buildTripCalendarIcs(trip, [place], [visit]);
+    expect(ics).toContain('DTSTART:20261005T080000\r\n');
+    expect(ics).toContain('DTEND:20261005T090000\r\n');
+    expect(ics).not.toContain('080000Z');
+  });
+
+  it('falls back to floating time for an invalid zone', () => {
+    const badTrip: PlannerTrip = { ...trip, timezone: 'Mars/Olympus_Mons' };
+    const place = makePlace('khao-soi', { title: 'Khao Soi' });
+    const visit = makeVisit('visit:ks-1', place.id, '2026-10-05', { start: '08:00', duration_minutes: 60 });
+    const ics = buildTripCalendarIcs(badTrip, [place], [visit]);
+    expect(ics).toContain('DTSTART:20261005T080000\r\n');
+  });
+
+  it('honors DST transitions on both sides of the spring-forward gap', () => {
+    const nyTrip: PlannerTrip = {
+      ...trip,
+      timezone: 'America/New_York',
+      start_date: '2026-03-08',
+      end_date: '2026-03-08',
+    };
+    const early = makePlace('early', { title: 'Early' });
+    const late = makePlace('late', { title: 'Late' });
+    const vEarly = makeVisit('visit:e-1', early.id, '2026-03-08', { start: '01:30', duration_minutes: 30 });
+    const vLate = makeVisit('visit:l-1', late.id, '2026-03-08', { start: '03:30', duration_minutes: 30 });
+    const ics = buildTripCalendarIcs(nyTrip, [early, late], [vEarly, vLate]);
+    // 01:30 EST (UTC-5) = 06:30Z; 03:30 EDT (UTC-4) = 07:30Z
+    expect(ics).toContain('DTSTART:20260308T063000Z\r\n');
+    expect(ics).toContain('DTSTART:20260308T073000Z\r\n');
+  });
+
+  it('zonedWallTimeToUtcMs rejects malformed input', () => {
+    expect(zonedWallTimeToUtcMs('2026-10-05', '08:00', 'Mars/Olympus_Mons')).toBeNull();
+    expect(zonedWallTimeToUtcMs('not-a-date', '08:00', 'Asia/Bangkok')).toBeNull();
+    expect(zonedWallTimeToUtcMs('2026-10-05', '8am', 'Asia/Bangkok')).toBeNull();
+    expect(zonedWallTimeToUtcMs('2026-10-05', '08:00', 'Asia/Bangkok')).toBe(Date.UTC(2026, 9, 5, 1, 0, 0));
   });
 });

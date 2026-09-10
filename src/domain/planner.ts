@@ -33,6 +33,12 @@ export interface PlannerTrip {
   currency?: string;
   transport_mode?: PlannerTravelMode;
   travel_preferences?: string[];
+  /**
+   * IANA destination timezone (e.g. `Asia/Bangkok`) for calendar export.
+   * Timeline wall-clock times are interpreted in this zone and emitted as UTC.
+   * Absent = legacy floating local time.
+   */
+  timezone?: string;
   /** AA ledger participants, persisted so the ledger survives browsers/devices. */
   members?: string[];
   /** User-verified conversion overrides: fx_rates[FROM] = how many trip-currency per 1 FROM. */
@@ -459,6 +465,7 @@ export interface TripFormPatch {
   currency?: string;
   transport_mode?: PlannerTravelMode;
   tags?: string[];
+  timezone?: string;
 }
 
 /**
@@ -485,6 +492,7 @@ export function applyTripFormPatch(
     currency: patch.currency,
     transport_mode: patch.transport_mode,
     tags: patch.tags,
+    timezone: patch.timezone?.trim() ? patch.timezone.trim() : undefined,
     created_at: existing?.created_at ?? now,
     updated_at: now,
   };

@@ -96,7 +96,9 @@ describe('CalendarFeedService (PRO)', () => {
     expect(result.feed.trip_id).toBe('trip-feed-test');
     expect(result.feed.feed_token).toHaveLength(32);
     expect(result.feed.enabled).toBe(true);
-    expect(result.url).toBe(`https://calendar.ownly.app/f/${result.feed.feed_token}.ics`);
+    expect(result.url).toBe(
+      `https://blgwlycfcwvsupmqyqwn.supabase.co/functions/v1/calendar-feed/${result.feed.feed_token}.ics`,
+    );
     expect(result.ics).toContain('BEGIN:VCALENDAR');
     expect(result.ics).toContain('Grand Palace');
 

@@ -98,12 +98,118 @@ export function toIcsDateTimeString(dateStr: string, timeStr: string): string {
 }
 
 /**
+ * Curated IANA zones for the trip timezone picker. Timeline wall-clock times
+ * are interpreted in the trip zone and emitted as UTC for calendar export.
+ */
+export const COMMON_TIMEZONES = [
+  'Asia/Bangkok',
+  'Asia/Jakarta',
+  'Asia/Ho_Chi_Minh',
+  'Asia/Kuala_Lumpur',
+  'Asia/Singapore',
+  'Asia/Manila',
+  'Asia/Taipei',
+  'Asia/Hong_Kong',
+  'Asia/Shanghai',
+  'Asia/Seoul',
+  'Asia/Tokyo',
+  'Asia/Dubai',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Rome',
+  'Europe/Moscow',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+  'Pacific/Honolulu',
+  'America/Anchorage',
+  'America/Los_Angeles',
+  'America/Denver',
+  'America/Chicago',
+  'America/New_York',
+  'America/Toronto',
+  'America/Vancouver',
+  'UTC',
+];
+
+export function isValidIanaTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Interprets a destination wall-clock time ('YYYY-MM-DD' + 'HH:mm') in the
+ * given IANA zone and returns the UTC epoch millis. Iterative Intl-based
+ * resolution, so DST offsets are honored without bundled tzdata.
+ * Returns null for malformed input or unknown zones (caller falls back to
+ * floating local time). A wall time inside a DST gap resolves to the nearest
+ * valid instant on the forward side.
+ */
+export function zonedWallTimeToUtcMs(dateStr: string, timeStr: string, timeZone: string): number | null {
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  const tm = /^(\d{2}):(\d{2})$/.exec(timeStr);
+  if (!dm || !tm || !isValidIanaTimeZone(timeZone)) return null;
+  const y = Number(dm[1]);
+  const mo = Number(dm[2]);
+  const d = Number(dm[3]);
+  const h = Number(tm[1]);
+  const mi = Number(tm[2]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
+
+  const wallAsUtc = Date.UTC(y, mo - 1, d, h, mi, 0);
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  let utc = wallAsUtc;
+  for (let i = 0; i < 3; i += 1) {
+    const parts = fmt.formatToParts(new Date(utc));
+    const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
+    const asUtc = Date.UTC(
+      Number(get('year')),
+      Number(get('month')) - 1,
+      Number(get('day')),
+      Number(get('hour')),
+      Number(get('minute')),
+      Number(get('second')),
+    );
+    const next = utc + (wallAsUtc - asUtc);
+    if (next === utc) break;
+    utc = next;
+  }
+  return utc;
+}
+
+/**
+ * Formats epoch millis as an RFC 5545 UTC timestamp ('YYYYMMDDTHHmmSSZ').
+ */
+export function toIcsUtcString(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return (
+    `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+    `T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
+  );
+}
+
+/**
  * Formats a single scheduled place into a VEVENT string block.
  */
 function buildVEvent(
   place: PlannerScheduledPlace,
   options: CalendarExportOptions,
   nowTimestamp: string,
+  timeZone?: string,
 ): string[] {
   const {
     includeAlarms = true,
@@ -116,16 +222,29 @@ function buildVEvent(
 
   const lines: string[] = ['BEGIN:VEVENT'];
 
-  // Stable UID directly derived from Visit ID (Occurrence Authority)
-  const uid = place.visit_id ? `visit:${place.visit_id}@ownly` : `place:${place.id}@ownly`;
+  // Stable UID directly derived from Visit ID (Occurrence Authority).
+  // visit_id already carries the `visit:` prefix; do not stack another one.
+  const uid = place.visit_id ? `${place.visit_id}@ownly` : `place:${place.id}@ownly`;
   lines.push(`UID:${uid}`);
   lines.push(`DTSTAMP:${nowTimestamp}`);
 
   if (place.scheduled_start) {
     const startTime = place.scheduled_start;
-    const endTime = getScheduledEndTime(startTime, place.duration_minutes || 60) || '23:59';
-    lines.push(`DTSTART:${toIcsDateTimeString(place.scheduled_date, startTime)}`);
-    lines.push(`DTEND:${toIcsDateTimeString(place.scheduled_date, endTime)}`);
+    const durationMinutes =
+      place.duration_minutes && place.duration_minutes > 0 ? place.duration_minutes : 60;
+    const startUtcMs = timeZone ? zonedWallTimeToUtcMs(place.scheduled_date, startTime, timeZone) : null;
+    if (startUtcMs !== null) {
+      // Trip timezone set: emit absolute UTC so subscriber calendars render the
+      // same instant in any display zone. End is start + duration, so midnight
+      // rollover lands on the next day instead of wrapping to 23:59.
+      lines.push(`DTSTART:${toIcsUtcString(startUtcMs)}`);
+      lines.push(`DTEND:${toIcsUtcString(startUtcMs + durationMinutes * 60000)}`);
+    } else {
+      // No (or invalid) trip timezone: legacy floating local time.
+      const endTime = getScheduledEndTime(startTime, place.duration_minutes || 60) || '23:59';
+      lines.push(`DTSTART:${toIcsDateTimeString(place.scheduled_date, startTime)}`);
+      lines.push(`DTEND:${toIcsDateTimeString(place.scheduled_date, endTime)}`);
+    }
   } else {
     // Untimed all-day event
     lines.push(`DTSTART;VALUE=DATE:${toIcsDateString(place.scheduled_date)}`);
@@ -221,7 +340,7 @@ export function buildTripCalendarIcs(
   ];
 
   scheduled.forEach((place) => {
-    rawLines.push(...buildVEvent(place, options, nowTimestamp));
+    rawLines.push(...buildVEvent(place, options, nowTimestamp, trip.timezone));
   });
 
   rawLines.push('END:VCALENDAR');
@@ -258,7 +377,7 @@ export function buildDayCalendarIcs(
   ];
 
   scheduled.forEach((place) => {
-    rawLines.push(...buildVEvent(place, options, nowTimestamp));
+    rawLines.push(...buildVEvent(place, options, nowTimestamp, trip.timezone));
   });
 
   rawLines.push('END:VCALENDAR');
@@ -313,11 +432,30 @@ export async function hashFeedToken(token: string): Promise<string> {
 }
 
 /**
- * Returns the public subscription URL for a given feed token.
+ * Production Supabase project hosting the calendar-feed Edge Function.
+ * calendar.ownly.app is currently a domain-parking page, so feeds resolve
+ * directly against the function URL until a reverse proxy is configured.
  */
-export function getCalendarFeedUrl(feedToken: string, host = 'https://calendar.ownly.app'): string {
-  const cleanHost = host.replace(/\/+$/, '');
-  return `${cleanHost}/f/${feedToken}.ics`;
+const DEFAULT_SUPABASE_URL = 'https://blgwlycfcwvsupmqyqwn.supabase.co';
+
+function getDefaultFeedHost(): string {
+  const base =
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SUPABASE_URL) ||
+    DEFAULT_SUPABASE_URL;
+  return `${base.replace(/\/+$/, '')}/functions/v1/calendar-feed`;
+}
+
+/**
+ * Returns the public subscription URL for a given feed token.
+ * Path-style (`/functions/v1/calendar-feed/<token>.ics`) is matched by the
+ * Edge Function's extractToken pattern, same as the legacy `/f/` prefix.
+ */
+export function getCalendarFeedUrl(feedToken: string, host?: string): string {
+  const cleanHost = (host || getDefaultFeedHost()).replace(/\/+$/, '');
+  // Legacy short host keeps the /f/ prefix; the direct function host is
+  // already scoped to /functions/v1/calendar-feed.
+  const needsPrefix = !/\/functions\/v1\/calendar-feed$/.test(cleanHost);
+  return needsPrefix ? `${cleanHost}/f/${feedToken}.ics` : `${cleanHost}/${feedToken}.ics`;
 }
 
 /**
