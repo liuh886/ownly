@@ -195,7 +195,7 @@ const ZOOM_STEP_BUTTON = 1;
 const ZOOM_STEP_WHEEL = 0.5;
 // Compact (sidebar) maps sit half a zoom level closer after any auto-fit:
 // same coverage logic, less empty air around the stops.
-const COMPACT_FIT_ZOOM_BUMP = 0.5;
+const COMPACT_FIT_ZOOM_BUMP = 1.5;
 
 // Native tooltip shows the place name on line 1 and the recommendation reason (why) on line 2.
 function markerTitle(firstLine: string, why?: string): string {

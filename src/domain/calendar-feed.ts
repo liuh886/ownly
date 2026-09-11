@@ -16,7 +16,12 @@ import {
 } from './planner-visits';
 import {
   calculateEffectiveDayTiming,
+  DEFAULT_INFERRED_DAY_START,
+  defaultStopDurationMinutes,
+  formatClockWithinDay,
+  getScheduledEndTime,
   PLANNER_CLOCK_RE,
+  plannerClockToMinutes,
   type PlannerEffectiveTiming,
 } from './planner-schedule';
 
@@ -531,11 +536,9 @@ function materializeIcsSchedule(
     const dayScheduled = sortPlannerScheduledPlaces(
       materializePlannerScheduledPlaces(tripPlaces, usable.filter((visit) => visit.date === date)),
     );
-    const dayEffective = calculateEffectiveDayTiming(
-      dayScheduled,
-      resolveIcsLegs(trip, dayScheduled, options.legs),
-      trip.id,
-    );
+    const dayLegs = resolveIcsLegs(trip, dayScheduled, options.legs);
+    const dayEffective = calculateEffectiveDayTiming(dayScheduled, dayLegs, trip.id);
+    applyIcsFallbackTiming(dayScheduled, dayLegs, dayEffective);
     for (const item of dayScheduled) {
       scheduled.push(item);
       const timing = dayEffective.get(item.id);
@@ -543,6 +546,54 @@ function materializeIcsSchedule(
     }
   }
   return { scheduled, effective };
+}
+
+/**
+ * Export-only final sweep: every stop leaves with a concrete start so the
+ * feed contains zero all-day blocks — each row is an actionable timed item
+ * (TENTATIVE when inferred). The timeline keeps its honest ~est/all-day
+ * distinction; leaks that reach here are hub→hub pairs with no default leg,
+ * post-midnight tails without an anchor, or backward underflows. Untimed
+ * stops stack back-to-back after the last known end (day seed 09:00 when the
+ * day has no timed stop at all), clamped to 23:00 so nothing spills past
+ * midnight.
+ */
+function applyIcsFallbackTiming(
+  dayScheduled: PlannerScheduledPlace[],
+  legs: PlannerTripLeg[],
+  effective: Map<string, PlannerEffectiveTiming>,
+): void {
+  const seedMinutes = plannerClockToMinutes(DEFAULT_INFERRED_DAY_START) ?? 9 * 60;
+  const legMinutes = new Map(
+    legs.map((leg) => [`${leg.from_place_id}→${leg.to_place_id}`, leg.duration_minutes]),
+  );
+  let cursor: string | undefined;
+  let prevPlaceId: string | undefined;
+  for (const place of dayScheduled) {
+    const entry = effective.get(place.id);
+    if (!entry) {
+      prevPlaceId = place.place_id;
+      continue;
+    }
+    if (!entry.start) {
+      const gap = prevPlaceId !== undefined
+        ? legMinutes.get(`${prevPlaceId}→${place.place_id}`)
+        : undefined;
+      const base = cursor ? (plannerClockToMinutes(cursor) ?? seedMinutes) : seedMinutes;
+      const startMin = Math.min(
+        base + (Number.isInteger(gap) && (gap as number) >= 0 ? (gap as number) : 0),
+        23 * 60,
+      );
+      const start = formatClockWithinDay(startMin) ?? DEFAULT_INFERRED_DAY_START;
+      entry.start = start;
+      entry.is_inferred_start = true;
+      entry.inferred_start = start;
+      entry.duration_minutes = defaultStopDurationMinutes(place);
+      entry.end = getScheduledEndTime(start, entry.duration_minutes) ?? undefined;
+    }
+    cursor = entry.end ?? entry.start ?? cursor;
+    prevPlaceId = place.place_id;
+  }
 }
 
 /**

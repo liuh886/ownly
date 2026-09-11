@@ -378,7 +378,7 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     expect(ics.match(/BEGIN:VALARM/g)?.length).toBe(1);
   });
 
-  it('keeps pre-midnight unreachable stops as all-day tasks', () => {
+  it('falls back to a 09:00 tentative block when backward inference underflows past midnight', () => {
     const bar = makePlace('place-a', { title: 'Bar' });
     const flight = makePlace('place-b', { title: 'Red Eye' });
     const vA = makeVisit('visit:a-1', bar.id, '2026-10-05', { sort_order: 0, duration_minutes: 120 });
@@ -396,8 +396,11 @@ describe('Travel-time inference → tentative ICS blocks', () => {
       created_at: '2026-08-29T00:00:00Z',
     }];
     const ics = buildTripCalendarIcs(trip, [bar, flight], [vA, vB], { now: '2026-09-10', legs });
-    // 00:30 − 30m − 120m < 00:00 → no wrap, stays all-day.
-    expect(ics).toContain('DTSTART;VALUE=DATE:20261005\r\n');
+    // 00:30 − 30m − 120m < 00:00 → no wrap; the export sweep seeds 09:00
+    // tentative instead of an all-day task.
+    expect(ics).not.toContain('VALUE=DATE');
+    expect(ics).toContain('DTSTART:20261005T090000\r\n');
+    expect(ics).toContain('STATUS:TENTATIVE\r\n');
   });
 
   it('synthesizes heuristic legs when none are provided', () => {
@@ -573,5 +576,44 @@ describe('Account aggregate ICS (one subscription per account)', () => {
     // 08:00 ICT = 01:00Z; 09:00 JST = 00:00Z
     expect(ics).toContain('DTSTART:20261005T010000Z\r\n');
     expect(ics).toContain('DTSTART:20270102T000000Z\r\n');
+  });
+});
+
+describe('ICS fallback timing (zero all-day events)', () => {
+  // Airport→airport pairs get no default leg, so forward/backward inference
+  // leaks; the export sweep must still emit concrete times, never VALUE=DATE.
+  const dmk = () => makePlace('dmk', { title: 'Don Mueang Airport' });
+  const cnx = () => makePlace('cnx', { title: 'Chiang Mai Airport' });
+
+  function dtStarts(ics: string): string[] {
+    return [...ics.matchAll(/^DTSTART:([0-9TZ]+)/gm)].map((m) => m[1]!);
+  }
+
+  it('stacks untimed hub-to-hub stops back-to-back as TENTATIVE', () => {
+    const v1 = makeVisit('visit:dmk-1', 'dmk', '2026-10-06', { sort_order: 0 });
+    const v2 = makeVisit('visit:cnx-1', 'cnx', '2026-10-06', { sort_order: 1 });
+    const ics = buildTripCalendarIcs(trip, [dmk(), cnx()], [v1, v2], { now: FIXED_NOW });
+    expect(ics).not.toContain('VALUE=DATE');
+    const starts = dtStarts(ics);
+    expect(starts).toHaveLength(2);
+    expect(starts[0]).toBe('20261006T090000');
+    expect(starts[1]! >= starts[0]!).toBe(true);
+    expect(ics.match(/STATUS:TENTATIVE/g)).toHaveLength(2);
+  });
+
+  it('seeds 09:00 before a lone afternoon anchor without legs', () => {
+    const v1 = makeVisit('visit:dmk-1', 'dmk', '2026-10-06', { sort_order: 0 });
+    const v2 = makeVisit('visit:cnx-1', 'cnx', '2026-10-06', {
+      sort_order: 1,
+      start: '14:00',
+      duration_minutes: 120,
+    });
+    const ics = buildTripCalendarIcs(trip, [dmk(), cnx()], [v1, v2], { now: FIXED_NOW });
+    expect(ics).not.toContain('VALUE=DATE');
+    const starts = dtStarts(ics);
+    expect(starts).toHaveLength(2);
+    expect(starts[0]).toBe('20261006T090000');
+    expect(starts[1]).toBe('20261006T140000');
+    expect(ics).toContain('STATUS:CONFIRMED');
   });
 });

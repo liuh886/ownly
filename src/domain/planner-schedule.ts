@@ -264,7 +264,7 @@ function transitionKey(fromId: string, toId: string): string {
   return `${fromId}→${toId}`;
 }
 
-function formatClockWithinDay(totalMinutes: number): string | undefined {
+export function formatClockWithinDay(totalMinutes: number): string | undefined {
   if (!Number.isInteger(totalMinutes) || totalMinutes < 0 || totalMinutes >= 24 * 60) return undefined;
   return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
 }
@@ -285,7 +285,7 @@ export interface PlannerEffectiveTiming {
  */
 export const DEFAULT_INFERRED_DAY_START = '09:00';
 
-function defaultStopDurationMinutes(place: PlannerScheduledPlace): number {
+export function defaultStopDurationMinutes(place: PlannerScheduledPlace): number {
   return Number.isInteger(place.duration_minutes) && (place.duration_minutes as number) > 0
     ? (place.duration_minutes as number)
     : (isTransitHubPlace(place) ? 15 : 60);
