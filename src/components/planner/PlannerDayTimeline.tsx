@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import type { PlannerTravelMode, PlannerTrip } from '@/domain/planner';
 import {
   calculateDefaultTripLeg,
@@ -54,7 +55,15 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
   } = props;
   const [transferExpanded, setTransferExpanded] = useState(false);
   return (
+    <MotionConfig reducedMotion="user">
           <div className="max-h-[640px] min-h-[400px] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
+            {/* Keyed by day: switching days cross-fades instead of hard-cutting. */}
+            <motion.div
+              key={dayTimeline.date}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.15 }}
+            >
             {currentDayTransferInfo?.isTransferDay ? (
               <div className="mb-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 shadow-2xs">
                 <button
@@ -123,6 +132,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
               </div>
             ) : (
               <ol className="space-y-1">
+                <AnimatePresence initial={false}>
                 {scheduled.map((place, index) => {
                   const timeOverlap = dayAssessment.time_overlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
                   // visit_id-first: the same place twice a day must not share
@@ -165,8 +175,13 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                   );
                   const isTonightStayStop = place.kind === 'stay' && !isCheckoutStop && matchesHotel(stayHotel, place);
                     return (
-                    <li
+                    <motion.li
                       key={place.id}
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{ type: 'spring', bounce: 0, duration: 0.25 }}
                       className="group space-y-1"
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
@@ -669,11 +684,14 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                           })}
                         </div>
                       ) : null}
-                    </li>
+                    </motion.li>
                   );
                 })}
+                </AnimatePresence>
               </ol>
             )}
+            </motion.div>
           </div>
+    </MotionConfig>
   );
 }

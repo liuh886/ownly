@@ -348,7 +348,7 @@ export function PlannerMap({
   );
 
   // Initial bounds: fit the active day (fallback: everything). The auto-fit
-  // effect below takes over with viewport guarding once measured.
+  // effect below takes over afterwards (viewport-guarded on the full map).
   const initial = useMemo(() => {
     const active = points.filter((p) => p.isScheduled && p.isActiveDay !== false);
     const target = active.length > 0 ? active : points;
@@ -471,14 +471,16 @@ export function PlannerMap({
     height: containerSize.height || containerRef.current?.clientHeight || 300,
   }), [containerSize.height, containerSize.width]);
 
-  // Single choke point for every auto-fit: viewport-guarded bounds, compact
-  // sits half a level closer, clamped to the allowed range.
+  // Single choke point for every auto-fit. The full map uses viewport-guarded
+  // bounds; compact skips the guard (its narrow strip would otherwise force
+  // the whole span on screen and read zoomed-out) and instead sits half a
+  // level closer than the span table. Clamped to the allowed range.
   const fitToPoints = useCallback((pts: Array<{ lat: number; lng: number }>) => {
     if (pts.length === 0) return;
-    const computed = calculateBounds(pts, {
-      viewport: viewportSize(),
-      extraZoom: compact ? COMPACT_FIT_ZOOM_BUMP : 0,
-    });
+    const computed = calculateBounds(pts, compact
+      ? { extraZoom: COMPACT_FIT_ZOOM_BUMP }
+      : { viewport: viewportSize() },
+    );
     clearPanTransform();
     setCenter(defaultCenter ?? computed.center);
     setZoom(clampZoom(computed.zoom));
@@ -822,10 +824,11 @@ export function PlannerMap({
     return resolveLayerPoints(points, { showRoutesLayer, showCandidates });
   }, [points, showRoutesLayer, showCandidates]);
 
-  // Every visible point keeps its own identity marker (no clustering of
-  // merely dense pools): candidate pools stay directly plannable; visual
-  // hierarchy comes from marker size grading instead. Only exact-duplicate
-  // coordinates collapse (see markerClusters below).
+  // Every visible point keeps its own identity marker: candidate pools stay
+  // directly plannable and scheduled stops keep their sequence numbers.
+  // Only exact-duplicate coordinates of the same kind collapse (see
+  // markerClusters below); visual hierarchy otherwise comes from marker
+  // size grading.
   const markerLayout = useMemo(() => {
     return visiblePoints.map((p, index) => {
       const x = projectLngToX(p.lng, zoom) - centerX + containerSize.width / 2;
@@ -837,20 +840,25 @@ export function PlannerMap({
   }, [visiblePoints, zoom, centerX, centerY, containerSize]);
 
   // Exact-duplicate coordinates (≈1m) collapse into one cluster marker with a
-  // count badge — e.g. the same café scheduled twice a day. Click drills in
-  // (center + one zoom level). Merely dense pools keep individual markers.
+  // count badge — e.g. the same café scheduled twice a day. Grouping is
+  // kind-separated: a scheduled stop never merges with its own candidate-pool
+  // dot at the same coords (that would swallow the green sequence number).
+  // Positions are render-loop positions (post viewport-cull), matching the
+  // pIdx used at render below.
   const markerClusters = useMemo(() => {
-    const groups = new Map<string, typeof markerLayout>();
-    for (const item of markerLayout) {
-      const key = `${item.p.lat.toFixed(5)}|${item.p.lng.toFixed(5)}`;
+    const groups = new Map<string, number[]>();
+    markerLayout.forEach((item, pos) => {
+      const key = item.p.isScheduled
+        ? `sched|${item.p.dayIndex ?? -1}|${item.p.lat.toFixed(5)}|${item.p.lng.toFixed(5)}`
+        : `cand|${item.p.lat.toFixed(5)}|${item.p.lng.toFixed(5)}`;
       const list = groups.get(key);
-      if (list) list.push(item);
-      else groups.set(key, [item]);
-    }
-    const firstOf = new Map<number, typeof markerLayout>();
-    for (const items of groups.values()) {
-      if (items.length > 1) {
-        for (const item of items) firstOf.set(item.index, items);
+      if (list) list.push(pos);
+      else groups.set(key, [pos]);
+    });
+    const firstOf = new Map<number, number[]>();
+    for (const positions of groups.values()) {
+      if (positions.length > 1) {
+        for (const pos of positions) firstOf.set(pos, positions);
       }
     }
     return firstOf;
@@ -1241,16 +1249,17 @@ export function PlannerMap({
         ))}
 
         {/* POI Markers */}
-        {markerLayout.map(({ p, index: pIdx, x, y }) => {
-          const cluster = markerClusters.get(pIdx);
-          if (cluster && cluster[0].index !== pIdx) return null;
-          if (cluster && cluster.length > 1) {
-            const first = cluster[0];
-            const anyScheduled = cluster.some((item) => item.p.isScheduled);
-            const lit = cluster.some((item) =>
+        {markerLayout.map(({ p, x, y }, pIdx) => {
+          const clusterPos = markerClusters.get(pIdx);
+          if (clusterPos && clusterPos[0] !== pIdx) return null;
+          if (clusterPos && clusterPos.length > 1) {
+            const items = clusterPos.map((pos) => markerLayout[pos]);
+            const first = items[0];
+            const anyScheduled = items.some((item) => item.p.isScheduled);
+            const lit = items.some((item) =>
               highlightedPlaceId === item.p.place.id || selectedPlaceId === item.p.place.id,
             );
-            const names = cluster.map((item) => item.p.place.title).join('、');
+            const names = items.map((item) => item.p.place.title).join('、');
             return (
               <div
                 key={`cluster_${first.p.lat.toFixed(5)}_${first.p.lng.toFixed(5)}`}
@@ -1258,7 +1267,7 @@ export function PlannerMap({
                 data-marker-id={first.p.place.id}
                 role="button"
                 tabIndex={0}
-                aria-label={zh ? `${cluster.length} 个地点在此：${names}（点击放大）` : `${cluster.length} places here (click to zoom in)`}
+                aria-label={zh ? `${items.length} 个地点在此：${names}（点击放大）` : `${items.length} places here (click to zoom in)`}
                 title={zh ? `${names}（点击放大）` : `${names} (click to zoom in)`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1277,7 +1286,7 @@ export function PlannerMap({
                 className={`absolute z-30 flex h-7 min-w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full px-1 text-[11px] font-black text-white shadow-md transition hover:scale-110 ${anyScheduled ? 'bg-emerald-700 ring-2 ring-emerald-300' : 'bg-stone-800 ring-2 ring-white'} ${lit ? 'outline-2 outline-amber-400' : ''}`}
                 style={{ left: `${x}px`, top: `${y}px` }}
               >
-                {cluster.length}
+                {items.length}
               </div>
             );
           }
