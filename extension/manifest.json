@@ -2,7 +2,14 @@
   "manifest_version": 3,
   "name": "Ownly Capture",
   "version": "0.5.2",
+  "_versioning": "Extension version ships independently from Web/PWA (package.json / src/core/runtime.ts WYQD_CORE_TARGET_VERSION). Extension follows Chrome Web Store review cadence; app releases follow docs/VERSIONING.md. Do not force the two versions to match.",
   "description": "Capture travel research from Google Maps, Booking.com, Tabelog and Xiaohongshu into Ownly Planner, with selection FX conversion.",
+  "icons": {
+    "16": "icons/ownly-mark.svg",
+    "48": "icons/ownly-192.svg",
+    "128": "icons/ownly-512.svg"
+  },
+  "_iconNotes": "Icons are wired from public/icons (ownly-mark.svg, ownly-192.svg, ownly-512.svg) and copied by scripts/build-extension.mjs into dist/extension/icons. Chrome Web Store requires 16/48/128 + action.default_icon.",
   "permissions": [
     "sidePanel",
     "storage",
@@ -10,6 +17,13 @@
     "activeTab",
     "tabs"
   ],
+  "_permissionNotes": {
+    "sidePanel": "Required to open the Ownly Capture side panel via the action button.",
+    "storage": "Persists ownlyCaptureStateV3 inbox queue and ownlyCaptureLang in chrome.storage.local; only the MV3 background worker writes the queue.",
+    "scripting": "Injects content scripts on supported travel/mapping hosts for place extraction and list sync.",
+    "activeTab": "Reads the active tab URL/title once when the user captures or re-detects currency.",
+    "tabs": "Finds an open Google Maps tab for enrichment context and reuses an open Ownly planner tab for capture-sync handoff."
+  },
   "host_permissions": [
     "https://www.google.com/*",
     "https://*.google.com/*",
@@ -39,11 +53,21 @@
     "https://www.xiaohongshu.com/*",
     "https://open.er-api.com/*"
   ],
+  "_hostPermissionNotes": {
+    "google_maps_domains": "Page adapters read place facts and saved lists only on Google Maps/Travel paths.",
+    "booking_agoda_tabelog_xiaohongshu": "Provider adapters extract the user's own research facts on those hosts only.",
+    "open_er_api": "open.er-api.com serves reference FX pivot rates for display-only conversion; raw captured price text is never rewritten."
+  },
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Ownly Capture"
+    "default_title": "Ownly Capture",
+    "default_icon": {
+      "16": "icons/ownly-mark.svg",
+      "48": "icons/ownly-192.svg",
+      "128": "icons/ownly-512.svg"
+    }
   },
   "commands": {
     "quick-capture-place": {
@@ -121,5 +145,9 @@
       ],
       "run_at": "document_start"
     }
-  ]
+  ],
+  "_contentScriptNotes": {
+    "fx_tooltip_all_hosts": "fx-tooltip.js intentionally matches http/https everywhere because selection FX must work on any merchant page where the user selects price text. It is toggle-gated in the side panel, runs display-only conversion locally, and never exfiltrates page content. Narrowing to optional_host_permissions would break one-click merchant coverage; review as display-only UX.",
+    "ownly_bridge_origins": "ownly-bridge.js runs only on first-party Ownly origins: liuh886.github.io/ownly (hosted Web/PWA), zhihaol.eu.org (custom domain), localhost/127.0.0.1 (local dev). It validates same-window same-origin postMessage and delegates mutations to the background worker."
+  }
 }

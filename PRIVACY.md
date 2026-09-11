@@ -47,3 +47,12 @@ Users retain direct access to all raw Markdown files through the filesystem and,
 Ownly's storage principle is:
 
 > **Ownly doesn't host your data. You choose where your files live.**
+
+## Extension Appendix (Ownly Capture)
+
+Ownly Capture is a Chromium MV3 side panel for collecting the user's own travel research. English is the store default; switching language in-panel never changes the data model.
+
+- **Local queue (`ownlyCaptureStateV3` in `chrome.storage.local`)**: Capture keeps a pending handoff queue only — `collections`, `places`, `active_collection_id`, and `settings` (currency override, preferences). It does not store trips, schedules, budgets, members, or history. Only the MV3 background service worker writes the queue; the side panel, content scripts, and website bridge send message commands to the worker. After Planner writes pending places to Markdown it acknowledges those IDs and Capture removes only the imported ones.
+- **Google Maps enrichment**: when the user triggers one-click strengthen, the extension resolves the captured place against Google Maps to fill canonical facts (Place ID, coordinates, rating, hours, address). This fetches public place facts; it does not upload the user's ledger.
+- **Reference FX (`open.er-api.com`)**: selection FX and trip display convert mixed-currency prices for display only using built-in USD-pivot reference rates (optionally refreshed from `open.er-api.com`). Raw captured price text is never rewritten, and personal ledger data is not sent with the rate request.
+- **No sale, deletion on demand**: Ownly does not sell personal data. Removing the extension's queue happens by deleting candidates/collections in-panel, clearing `chrome.storage.local` for the extension, or uninstalling the extension. Planner Markdown remains in the user's Ownly data folder until the user archives or permanently deletes it there.
