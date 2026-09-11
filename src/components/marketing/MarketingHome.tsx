@@ -111,6 +111,10 @@ const copy = {
     finalText: 'Start with one real object. Keep the record in a folder you control from day one.',
     github: 'GitHub',
     obsidian: 'Obsidian plugin',
+    capture: 'Capture',
+    cli: 'CLI',
+    mcp: 'MCP',
+    pwaInstall: 'PWA install',
     footer: 'Own less. Live more. Decide better.',
     sample: 'Sample data · no folder access',
   },
@@ -206,6 +210,10 @@ const copy = {
     finalText: '从一个真实对象开始，从第一天起就把记录保存在你自己控制的目录中。',
     github: 'GitHub',
     obsidian: 'Obsidian 插件',
+    capture: '采集扩展',
+    cli: 'CLI',
+    mcp: 'MCP',
+    pwaInstall: 'PWA 安装',
     footer: 'Own less. Live more. Decide better.',
     sample: '示例数据 · 不请求文件夹权限',
   },
@@ -597,7 +605,7 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
       <footer className="border-t border-stone-900/[0.07] bg-[#f6f3ec]">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-8 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
           <div><span className="font-semibold text-stone-900">Ownly</span><span className="ml-3">{text.footer}</span></div>
-          <div className="flex items-center gap-5"><a className="transition hover:text-stone-950" href={githubHref}>{text.github}</a><a className="transition hover:text-stone-950" href={obsidianHref}>{text.obsidian}</a><span>© {new Date().getFullYear()}</span></div>
+          <div className="flex flex-wrap items-center gap-5"><a className="transition hover:text-stone-950" href={githubHref}>{text.github}</a><a className="transition hover:text-stone-950" href={obsidianHref}>{text.obsidian}</a><a className="transition hover:text-stone-950" href={`${githubHref}/blob/main/docs/PLANNER.md#capture-extension`}>{text.capture}</a><a className="transition hover:text-stone-950" href={`${githubHref}/blob/main/docs/USER_GUIDE.md#12-agent-cli-and-mcp`}>{text.cli}</a><a className="transition hover:text-stone-950" href={`${githubHref}/blob/main/docs/MCP.md#install-and-run`}>{text.mcp}</a><a className="transition hover:text-stone-950" href={appHref}>{text.pwaInstall}</a><span>© {new Date().getFullYear()}</span></div>
         </div>
       </footer>
     </main>
