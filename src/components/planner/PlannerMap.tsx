@@ -533,7 +533,8 @@ export function PlannerMap({
   }, [center, zoom]);
 
   // Auto-fit only when necessary so user panning is never yanked away:
-  // first load, active day change, layer change, or new points outside view.
+  // first load, active day change, or new points outside view. Layer toggles
+  // never refit (see needFit below).
   const lastPointsCountRef = useRef<number>(0);
   const lastActiveDayRef = useRef<number>(activeDayIndex);
   const lastLayerSigRef = useRef<string>(layerSig);
@@ -1254,6 +1255,7 @@ export function PlannerMap({
               <div
                 key={`cluster_${first.p.lat.toFixed(5)}_${first.p.lng.toFixed(5)}`}
                 data-map-marker="true"
+                data-marker-id={first.p.place.id}
                 role="button"
                 tabIndex={0}
                 aria-label={zh ? `${cluster.length} 个地点在此：${names}（点击放大）` : `${cluster.length} places here (click to zoom in)`}
