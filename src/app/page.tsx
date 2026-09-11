@@ -14,7 +14,7 @@ const socialImage = 'https://liuh886.github.io/ownly/icons/ownly-512.svg';
 export const metadata: Metadata = {
   title: 'Ownly — Know what deserves to stay',
   description:
-    'A local-first ownership memory and decision ledger for possessions, subscriptions and important experiences, with usage and subscription costs beside real use and review.',
+    'A local-first ownership memory and decision ledger for possessions, subscriptions and important experiences, with usage and subscription costs beside real use and review — turn Google Maps saves into day-by-day trip plans.',
   alternates: {
     canonical: publicUrl,
   },
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Ownly — Know what deserves to stay',
     description:
-      'Remember what entered your life, understand usage and subscription costs, and review before the next purchase or renewal.',
+      'Remember what entered your life, turn Google Maps saves into trips you can walk, and review before the next purchase or renewal.',
     type: 'website',
     url: publicUrl,
     siteName: 'Ownly',
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'Ownly — Know what deserves to stay',
     description:
-      'A local-first ownership memory and decision ledger with portable Markdown data.',
+      'A local-first ownership memory and decision ledger — from Google Maps saves to walkable trip days, with portable Markdown data.',
     images: [socialImage],
   },
 };

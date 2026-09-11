@@ -19,7 +19,7 @@ type WindowChromeProps = {
 
 const copy = {
   en: {
-    nav: ['Understand cost', 'Review decisions', 'Your data'],
+    nav: ['Understand cost', 'Plan trips', 'Review decisions', 'Your data'],
     open: 'Open Ownly',
     heroTitle: 'Know what you own. Decide what deserves to stay.',
     heroDescription:
@@ -85,6 +85,24 @@ const copy = {
       ['Kyoto autumn trip', 'Complete', 'Experience'],
       ['Noise-cancelling headphones', '45 days', 'Condition'],
     ],
+    plannerTitle: 'Saved places, turned into a day you can finish.',
+    plannerDescription:
+      'Sync your Google Maps saves, order them day by day, and walk out with a timeline that works.',
+    plannerWindowLabel: 'Day plan',
+    plannerDay: 'Day 2 · Kyoto',
+    plannerSteps: [
+      ['Sync your saves', 'Bring a Google Maps saved list in with one sync — no retyping.'],
+      ['Order the days', 'Decide which day goes where, and in what order.'],
+      ['Walk it', 'Follow the timeline with maps. Take it to calendar and phone too.'],
+    ],
+    plannerStops: [
+      ['09:30', 'Kiyomizu Temple', 'Start here'],
+      ['Walk 18 min', '', 'leg'],
+      ['10:30', 'Ninenzaka', '60 min'],
+      ['Walk 12 min', '', 'leg'],
+      ['12:00', 'Lunch at Gion', '90 min'],
+    ],
+    plannerCta: 'Plan from your saves',
     localTitle: 'Your data, your folder, your choice.',
     localText:
       'Ownly does not host your personal ledger. Keep the same readable Markdown in a local folder, an Obsidian Vault, or a personal cloud folder you already control. Your sync provider handles synchronization; Ownly keeps one data model.',
@@ -97,7 +115,7 @@ const copy = {
     sample: 'Sample data · no folder access',
   },
   zh: {
-    nav: ['理解成本', '完成回顾', '你的数据'],
+    nav: ['理解成本', '规划行程', '完成回顾', '你的数据'],
     open: '打开 Ownly',
     heroTitle: '记住你拥有什么，决定什么值得留下。',
     heroDescription:
@@ -163,6 +181,23 @@ const copy = {
       ['京都秋日旅行', '已完成', '经历'],
       ['降噪耳机', '45 天', '状态'],
     ],
+    plannerTitle: '收藏夹里的店，排成走得完的行程。',
+    plannerDescription: '同步 Google Maps 收藏，按天排好顺序，带着能走的时间线出发。',
+    plannerWindowLabel: '单日行程',
+    plannerDay: '第 2 天 · 京都',
+    plannerSteps: [
+      ['同步收藏', '收藏夹一键同步，不用一个个重贴。'],
+      ['按天排好', '哪天去哪，先去哪后去哪，排好顺序。'],
+      ['照着出发', '带着时间线加地图出发，日历和手机也能看。'],
+    ],
+    plannerStops: [
+      ['09:30', '清水寺', '从这里开始'],
+      ['步行 18 分钟', '', 'leg'],
+      ['10:30', '二年坂', '停留 60 分钟'],
+      ['步行 12 分钟', '', 'leg'],
+      ['12:00', '祇园午餐', '停留 90 分钟'],
+    ],
+    plannerCta: '从收藏开始规划',
     localTitle: '你的数据，你的目录，由你决定。',
     localText:
       'Ownly 不托管你的个人账本。同一份可读 Markdown 可以放在普通本地目录、Obsidian Vault，或你自己控制的个人云盘目录中。同步由你的服务商负责，Ownly 始终保持一套数据模型。',
@@ -330,6 +365,57 @@ function CostWindow({ brandMarkHref, text }: { brandMarkHref: string; text: type
   );
 }
 
+function PlannerWindow({ brandMarkHref, text }: { brandMarkHref: string; text: typeof copy.en | typeof copy.zh }) {
+  return (
+    <WindowChrome brandMarkHref={brandMarkHref} label={text.plannerWindowLabel}>
+      <div className="p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-800">{text.plannerWindowLabel}</p>
+            <h3 className="mt-1.5 text-xl font-semibold tracking-[-0.04em] sm:text-2xl">{text.plannerDay}</h3>
+          </div>
+          <span className="hidden rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[10px] font-medium text-stone-500 sm:inline-flex">{text.sample}</span>
+        </div>
+
+        <div className="mt-5 space-y-0">
+          {text.plannerStops.map(([time, title, meta]) => {
+            if (meta === 'leg') {
+              return (
+                <div key={time} className="flex items-center gap-3 py-1.5 pl-1">
+                  <span className="ml-[5px] h-6 w-px bg-stone-300" aria-hidden="true" />
+                  <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-medium text-stone-500 ring-1 ring-stone-200">{time}</span>
+                </div>
+              );
+            }
+            return (
+              <div key={`${time}-${title}`} className="flex gap-3">
+                <div className="flex flex-col items-center pt-1.5" aria-hidden="true">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-600 ring-4 ring-emerald-100" />
+                  <span className="mt-1 w-px flex-1 bg-stone-200" />
+                </div>
+                <div className="flex-1 pb-3">
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-stone-200/90 bg-white p-3.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-stone-900">{title}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-stone-500">{meta}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-100">{time}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-stone-950 p-4 text-white">
+          <p className="text-xs font-medium text-stone-200">Maps · Calendar · Phone</p>
+          <span className="rounded-full bg-emerald-400 px-3 py-1.5 text-[10px] font-semibold text-emerald-950">{text.plannerCta}</span>
+        </div>
+      </div>
+    </WindowChrome>
+  );
+}
+
 function ReviewWindow({ brandMarkHref, text }: { brandMarkHref: string; text: typeof copy.en | typeof copy.zh }) {
   return (
     <WindowChrome brandMarkHref={brandMarkHref} label={text.reviewWindowLabel}>
@@ -392,8 +478,9 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
           </a>
           <nav className="hidden items-center gap-7 text-sm text-stone-500 lg:flex" aria-label="Primary navigation">
             <a className="transition hover:text-stone-950" href="#preview">{text.nav[0]}</a>
-            <a className="transition hover:text-stone-950" href="#review">{text.nav[1]}</a>
-            <a className="transition hover:text-stone-950" href="#local">{text.nav[2]}</a>
+            <a className="transition hover:text-stone-950" href="#planner">{text.nav[1]}</a>
+            <a className="transition hover:text-stone-950" href="#review">{text.nav[2]}</a>
+            <a className="transition hover:text-stone-950" href="#local">{text.nav[3]}</a>
           </nav>
           <div className="flex items-center gap-2">
             <button
@@ -457,6 +544,29 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
             <p className="mt-6 max-w-lg text-base leading-7 text-stone-600">{text.reviewDescription}</p>
             <a href={appHref} onClick={() => trackPublicCta('review_open_app')} className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-stone-950 transition hover:text-emerald-800">{text.open}<ArrowIcon /></a>
           </div>
+        </div>
+      </section>
+
+      <section id="planner" data-ownly-scene="planner" className="relative flex min-h-screen scroll-mt-20 items-center overflow-hidden border-y border-stone-900/[0.07] bg-white/58 px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
+        <div className="pointer-events-none absolute left-[-14rem] top-[-12rem] h-[34rem] w-[34rem] rounded-full bg-emerald-200/20 blur-3xl" />
+        <div className="relative mx-auto grid w-full max-w-7xl gap-12 lg:grid-cols-[0.68fr_1.32fr] lg:items-center">
+          <div>
+            <h2 className="max-w-xl text-4xl font-semibold leading-[1.05] tracking-[-0.06em] sm:text-5xl">{text.plannerTitle}</h2>
+            <p className="mt-6 max-w-lg text-base leading-7 text-stone-600">{text.plannerDescription}</p>
+            <div className="mt-8 space-y-4">
+              {text.plannerSteps.map(([title, desc], index) => (
+                <div key={title} className="flex gap-3.5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-stone-950 text-xs font-semibold text-white">0{index + 1}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-stone-900">{title}</p>
+                    <p className="mt-1 text-sm leading-6 text-stone-600">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <a href={appHref} onClick={() => trackPublicCta('planner_open_app')} className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-stone-950 transition hover:text-emerald-800">{text.open}<ArrowIcon /></a>
+          </div>
+          <PlannerWindow brandMarkHref={brandMarkHref} text={text} />
         </div>
       </section>
 
