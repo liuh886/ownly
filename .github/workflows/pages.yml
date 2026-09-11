@@ -98,6 +98,15 @@ jobs:
         if: steps.scope.outputs.any == 'true'
         run: npm ci --no-audit --no-fund
 
+      - name: Restore ESLint cache
+        if: steps.scope.outputs.any == 'true'
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/eslint
+          key: eslint-cache-${{ runner.os }}-${{ hashFiles('eslint.config.mjs', 'package-lock.json') }}
+          restore-keys: |
+            eslint-cache-${{ runner.os }}-
+
       - name: Fast repository validation
         if: steps.scope.outputs.any == 'true'
         run: npm run validate:fast

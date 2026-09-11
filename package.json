@@ -9,7 +9,7 @@
     "build:obsidian": "node scripts/gen-git-sha.mjs && node esbuild.obsidian.mjs --production",
     "build:extension": "node scripts/build-extension.mjs",
     "check:obsidian": "tsc -p tsconfig.obsidian.json --pretty false",
-    "lint:obsidian": "eslint \"src/obsidian/\"",
+    "lint:obsidian": "eslint --cache --cache-location node_modules/.cache/eslint/.eslintcache-obsidian \"src/obsidian/\"",
     "build:all": "npm run build && npm run build:obsidian && npm run build:extension",
     "package:obsidian": "npm run build:obsidian && node scripts/package-obsidian-plugin.mjs",
     "validate:obsidian": "npm run check:obsidian && npm run lint:obsidian && npm run package:obsidian && node scripts/validate-obsidian-release.mjs",
@@ -40,8 +40,10 @@
     "wyqd": "tsx scripts/wyqd-cli.ts",
     "ownly": "tsx scripts/wyqd-cli.ts",
     "start": "next start",
-    "lint": "eslint",
-    "test": "vitest run"
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint/.eslintcache",
+    "lint:no-cache": "eslint --no-cache",
+    "test": "vitest run",
+    "test:quick": "vitest run --changed"
   },
   "dependencies": {
     "d3-geo": "^3.1.1",

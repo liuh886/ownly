@@ -171,8 +171,8 @@ export function CalendarSubscriptionModal({
 
             <p className="mt-2 text-xs leading-5 text-stone-600">
               {zh
-                ? '订阅一次，名下所有行程自动同步。改了行程后点「同步全部行程」即可。'
-                : 'Subscribe once; all trips stay in sync. Hit Sync All after changes.'}
+                ? '订阅一次，名下所有行程自动同步。改了行程后约半分钟自动重发，也可点「同步全部行程」立即刷新。'
+                : 'Subscribe once; all trips stay in sync. Changes auto-republish in ~30s; Sync All refreshes immediately.'}
             </p>
 
             {!isPro ? (
@@ -218,8 +218,8 @@ export function CalendarSubscriptionModal({
                   <div className="mt-1.5 space-y-1.5">
                     <p>
                       {zh
-                        ? '一个账号对应一个固定链接。「同步全部行程」只刷新内容；「重新生成链接」才会作废旧地址。只含近一年及未来的日程。'
-                        : 'One permanent link per account. Sync refreshes content; rotation revokes the URL. Covers the past year onward.'}
+                        ? '一个账号对应一个固定链接。改动约半分钟后自动重发；「同步全部行程」立即刷新内容；「重新生成链接」才会作废旧地址。只含近一年及未来的日程。'
+                        : 'One permanent link per account. Changes auto-republish in ~30s; Sync refreshes content now; rotation revokes the URL. Covers the past year onward.'}
                     </p>
                     <p>
                       {zh

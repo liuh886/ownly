@@ -5,6 +5,7 @@ import type {
   PlannerPlaceKind,
   PlannerTravelMode,
   PlannerTrip,
+  PlannerTripCalendarFeed,
   PlannerTripLeg,
   PlannerTripPlace,
   TripExpenseItem,
@@ -48,6 +49,7 @@ import {
   saveAccountFeedMeta,
   type AccountCalendarFeedMeta,
 } from '@/domain/calendar-feed';
+import { useAutoCalendarSync } from './useAutoCalendarSync';
 import { trackFirstEver } from '@/lib/analytics';
 import { createTripSnapshot, tripSnapshotFileName } from '@/domain/trip-snapshot';
 import { plannerRepository } from '@/services/PlannerRepository';
@@ -238,6 +240,31 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setAccountFeedOwner(currentUserId);
     setAccountFeed(loadAccountFeedWithLegacyAdoption(currentUserId));
   }
+
+  // Persists one trip's refreshed feed meta without reloading; the auto-sync
+  // trigger reloads once after all trips are done.
+  const saveTripFeedMeta = useCallback(async (trip: PlannerTrip, feed: PlannerTripCalendarFeed) => {
+    await plannerRepository.upsertTrip({ ...trip, calendar_feed: feed });
+  }, []);
+  const reloadPlanner = useCallback(async () => {
+    await load();
+  }, [load]);
+
+  // Background trigger: debounced republish of already-published feeds after
+  // itinerary edits settle. Never mints or resurrects feeds.
+  useAutoCalendarSync({
+    trips,
+    places,
+    visits,
+    legs,
+    isPro,
+    currentUserId,
+    language,
+    accountFeed,
+    setAccountFeed,
+    saveTripFeedMeta,
+    reloadPlanner,
+  });
 
   const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
     setNoticeAction({
