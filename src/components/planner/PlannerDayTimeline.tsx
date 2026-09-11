@@ -192,7 +192,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                           : 'border-stone-200/90 bg-white hover:border-stone-300'
                       }`}>
                         {/* Stop Number Circle */}
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white shrink-0 shadow-2xs mt-0.5">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold tabular-nums text-white shrink-0 shadow-2xs mt-0.5">
                           {index + 1}
                         </div>
 
@@ -203,12 +203,12 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                             {/* Title with kind emoji */}
                             <div className="min-w-0 flex-1 flex items-center gap-1.5">
                               <span className="text-xs shrink-0">{PLANNER_KIND_ICONS[place.kind] || '📍'}</span>
-                              <h3 className="truncate text-xs font-bold text-stone-900 leading-tight" title={place.title}>
+                              <h3 className="truncate text-xs font-bold text-stone-900 leading-snug" title={place.title}>
                                 {place.title}
                               </h3>
                               {place.kind === 'stay' ? (
                                 isCheckoutStop ? (
-                                  <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-0.2 text-[9px] font-bold text-sky-800 shrink-0">
+                                  <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-0.2 text-[10px] font-bold text-sky-800 shrink-0">
                                     🌅 {zh ? '退房出发' : 'Checkout'}
                                   </span>
                                 ) : isTonightStayStop ? (
@@ -223,7 +223,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                             <button
                               type="button"
                               onClick={() => setTimingModalPlace(place)}
-                              className={`shrink-0 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px] font-semibold transition hover:scale-102 ${
+                              className={`shrink-0 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition hover:scale-102 ${
                                 timelineStop?.start
                                   ? timelineStop.is_inferred_start
                                     ? 'bg-amber-50/90 text-amber-800 border border-dashed border-amber-300 hover:bg-amber-100 font-mono'
@@ -276,7 +276,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                           setBudgetInitialPlaceId(place.id);
                                           setRightTab('budget');
                                         }}
-                                        className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1 py-0.2 text-[9.5px] font-semibold shrink-0 transition hover:bg-emerald-100"
+                                        className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1 py-0.2 text-[10px] font-semibold tabular-nums shrink-0 transition hover:bg-emerald-100"
                                         title={
                                           zh
                                             ? `实记 ${currencySymbolFor(selectedTrip?.currency)}${dailyActual}/天（总计 ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total}，共 ${stayDays} 晚分摊，共 ${placeExpense.count} 笔），点击前往账本查看`
@@ -292,7 +292,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                   return (
                                     <>
                                       {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates) ? (
-                                        <span className="rounded bg-stone-100 px-1 py-0.2 text-[9.5px] font-semibold text-stone-700 shrink-0">
+                                        <span className="rounded bg-stone-100 px-1 py-0.2 text-[10px] font-semibold tabular-nums text-stone-700 shrink-0">
                                           {formatPlacePriceInTripCurrency(place, selectedTrip?.currency || 'CNY', selectedTrip?.fx_rates)}
                                         </span>
                                       ) : null}
@@ -303,7 +303,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                             setBudgetInitialPlaceId(place.id);
                                             setRightTab('budget');
                                           }}
-                                          className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1 py-0.2 text-[9.5px] font-semibold shrink-0 transition hover:bg-emerald-100"
+                                          className="rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-1 py-0.2 text-[10px] font-semibold tabular-nums shrink-0 transition hover:bg-emerald-100"
                                           title={
                                             zh
                                               ? `实记 ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total}（共 ${placeExpense.count} 笔），点击前往账本查看`
@@ -325,7 +325,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                   href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.address || place.title)}&travelmode=${selectedTrip.transport_mode ?? 'transit'}`}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                  className="inline-flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
                                   title={zh ? '导航到此地' : 'Directions'}
                                 >
                                   🧭
@@ -334,7 +334,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 {place.phone ? (
                                   <a
                                     href={`tel:${place.phone}`}
-                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-stone-200 transition"
+                                    className="inline-flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-stone-200 transition"
                                     title={zh ? `拨打电话: ${place.phone}` : `Call: ${place.phone}`}
                                   >
                                     📞
@@ -346,7 +346,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                     href={place.source_url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                    className="inline-flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
                                     title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
                                   >
                                     🗺️
@@ -356,7 +356,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address || place.title)}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                    className="inline-flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
                                     title={zh ? '在 Google Maps 中搜索' : 'Search on Maps'}
                                   >
                                     🗺️
@@ -368,7 +368,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                     href={place.menu_url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-stone-200 transition"
+                                    className="inline-flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-stone-200 transition"
                                     title={zh ? '查看菜单' : 'Menu'}
                                   >
                                     📖
@@ -380,7 +380,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                     href={place.reservation_url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded border border-amber-300 bg-amber-50 text-[10px] text-amber-900 hover:bg-amber-100 transition shadow-2xs"
+                                    className="inline-flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded border border-amber-300 bg-amber-50 text-[10px] text-amber-900 hover:bg-amber-100 transition shadow-2xs"
                                     title={zh ? '官方预订' : 'Reserve'}
                                   >
                                     🎟️
@@ -391,7 +391,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                   <button
                                     type="button"
                                     onClick={() => onLocatePlace(place)}
-                                    className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
+                                    className="inline-flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded bg-stone-100 text-[10px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 transition"
                                     title={zh ? '在地图上定位此站' : 'Locate on map'}
                                   >
                                     ⌖
@@ -404,7 +404,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                     setBudgetInitialPlaceId(place.id);
                                     setRightTab('budget');
                                   }}
-                                  className="inline-flex h-4.5 w-4.5 items-center justify-center rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 transition"
+                                  className="inline-flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded bg-stone-100 text-[10px] text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 transition"
                                   title={zh ? '为此地点记一笔账' : 'Record expense for this place'}
                                 >
                                   💳
@@ -418,7 +418,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 type="button"
                                 aria-label={place.locked ? (zh ? '取消固定' : 'Unpin') : (zh ? '固定顺位' : 'Pin')}
                                 onClick={() => void handleToggleVisitLock(place.visit_id)}
-                                className={`flex h-4.5 w-4.5 items-center justify-center rounded text-[10px] transition ${
+                                className={`flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded text-[10px] transition ${
                                   place.locked
                                     ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
                                     : 'text-stone-400 hover:bg-white hover:text-stone-700'
@@ -432,7 +432,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 aria-label={zh ? '上移' : 'Move up'}
                                 disabled={index === 0}
                                 onClick={() => void moveScheduled(index, -1)}
-                                className="flex h-4.5 w-4.5 items-center justify-center rounded text-[10px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                className="flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded text-[10px] font-bold leading-none text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
                                 title={zh ? '上移一站' : 'Move up'}
                               >
                                 ↑
@@ -442,7 +442,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 aria-label={zh ? '下移' : 'Move down'}
                                 disabled={index === scheduled.length - 1}
                                 onClick={() => void moveScheduled(index, 1)}
-                                className="flex h-4.5 w-4.5 items-center justify-center rounded text-[10px] font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
+                                className="flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded text-[10px] font-bold leading-none text-stone-500 hover:bg-white hover:text-stone-900 disabled:opacity-20 transition"
                                 title={zh ? '下移一站' : 'Move down'}
                               >
                                 ↓
@@ -451,7 +451,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 type="button"
                                 aria-label={zh ? '从当天日程移除' : 'Remove stop'}
                                 onClick={() => void removeVisit(place)}
-                                className="flex h-4.5 w-4.5 items-center justify-center rounded text-[10px] text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                className="flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded text-[10px] leading-none text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition"
                                 title={zh ? '从当天日程移除（回到待安排候选池）' : 'Remove stop'}
                               >
                                 ✕
@@ -461,7 +461,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
 
                           {/* Warning / Conflict Alerts */}
                           {col?.isCollision ? (
-                            <div className="flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200 leading-tight">
+                            <div className="flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200 leading-snug">
                               <span>⚠️</span>
                               <span>{col.reason}</span>
                             </div>
@@ -469,11 +469,11 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
 
                           {/* Deduplicated Research Note / Why Insight (Only 1 block displayed) */}
                           {place.why ? (
-                            <p className="line-clamp-1 rounded bg-stone-50 px-1.5 py-0.5 text-[10px] text-stone-600 leading-tight">
+                            <p className="line-clamp-1 rounded bg-stone-50 px-1.5 py-0.5 text-[10px] text-stone-600 leading-snug">
                               💡 <strong className="font-semibold text-stone-700">{zh ? '推荐理由:' : 'Why:'}</strong> {place.why}
                             </p>
                           ) : place.notes ? (
-                            <p className="line-clamp-1 text-[10px] text-stone-500 italic pl-0.5 leading-tight">
+                            <p className="line-clamp-1 text-[10px] text-stone-500 italic pl-0.5 leading-snug">
                               📝 {place.notes}
                             </p>
                           ) : null}
@@ -490,9 +490,9 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="rounded-full bg-stone-200 hover:bg-stone-300 px-1.5 py-0.2 text-[9px] font-bold text-stone-800 transition"
+                                className="rounded-full bg-stone-200 hover:bg-stone-300 px-1.5 py-0.2 text-[10px] font-bold text-stone-800 transition"
                               >
-                                Google 路线 ↗
+                                Google 导航 ↗
                               </a>
                             </div>
                           ) : transitionItems.length === 0 ? (
@@ -518,14 +518,14 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                       className="inline-flex items-center gap-1 hover:text-sky-700 hover:underline cursor-pointer transition font-medium"
                                       title={zh ? '点击切换出行方式' : 'Click to change travel mode'}
                                     >
-                                      <span>{icon} {dur} min{distance}</span>
-                                      <span className="text-[8.5px] opacity-70">▾</span>
+                                      <span className="tabular-nums">{icon} <strong className="font-bold">{dur} min</strong>{distance}</span>
+                                      <span className="text-[10px] opacity-70">▾</span>
                                     </button>
                                     <a
                                       href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${modeKey === 'motorcycle' ? 'two_wheeler' : (modeKey ?? 'transit')}`}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[9px] font-bold text-sky-800 transition"
+                                      className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[10px] font-bold text-sky-800 transition"
                                     >
                                       Google 导航 ↗
                                     </a>
@@ -582,13 +582,13 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                         title={zh ? '当前无需交通时间预估，点击可恢复或切换' : 'No travel estimate. Click to switch or restore'}
                                       >
                                         <span>🚫 {zh ? '无预估' : 'No est'}</span>
-                                        <span className="text-[9px] opacity-70">▾</span>
+                                        <span className="text-[10px] opacity-70">▾</span>
                                       </button>
                                       <a
                                         href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="text-[9.5px] text-stone-400 hover:text-stone-700 underline underline-offset-2 transition"
+                                        className="text-[10px] text-stone-400 hover:text-stone-700 underline underline-offset-2 transition"
                                       >
                                         Google 导航 ↗
                                       </a>
@@ -604,15 +604,15 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                         className="inline-flex items-center gap-1 hover:text-stone-800 hover:underline cursor-pointer transition"
                                         title={zh ? '点击切换出行方式或清除预估' : 'Click to change travel mode or clear estimate'}
                                       >
-                                        <span className="font-medium text-stone-600">{icon} {item.duration_minutes} min{distance}{item.source === 'manual' ? (zh ? '（手）' : ' (manual)') : item.source === 'openrouteservice' ? '' : (zh ? '（估）' : ' (est.)')}</span>
-                                        <span className="text-[9px] opacity-70">▾</span>
+                                        <span className="font-medium tabular-nums text-stone-600">{icon} <strong className="font-bold">{item.duration_minutes} min</strong>{distance}{item.source === 'manual' ? (zh ? '（手）' : ' (manual)') : item.source === 'openrouteservice' ? '' : (zh ? '（估）' : ' (est.)')}</span>
+                                        <span className="text-[10px] opacity-70">▾</span>
                                       </button>
-                                      {item.start && item.end ? <span className="font-mono text-stone-400">{item.start}–{item.end}</span> : null}
+                                      <span className="font-mono tabular-nums text-stone-400">{item.start}–{item.end}</span>
                                       <a
                                         href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${item.mode === 'motorcycle' ? 'two_wheeler' : (item.mode ?? selectedTrip.transport_mode ?? 'transit')}`}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="text-[9.5px] text-stone-400 hover:text-stone-700 underline underline-offset-2 transition"
+                                        className="text-[10px] text-stone-400 hover:text-stone-700 underline underline-offset-2 transition"
                                       >
                                         Google 导航 ↗
                                       </a>
@@ -648,7 +648,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                             }
                             if (item.type === 'gap') {
                               return (
-                                <div key={item.id} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-0.5 text-[10px] font-semibold text-emerald-800 shadow-2xs">
+                                <div key={item.id} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-0.5 text-[10px] font-semibold tabular-nums text-emerald-800 shadow-2xs">
                                   <span>◌</span>
                                   <span>{zh ? `机动空闲 ${item.duration_minutes} min` : `${item.duration_minutes} min buffer`} · {item.start}-{item.end}</span>
                                 </div>
@@ -656,7 +656,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                             }
                             if (item.type === 'conflict') {
                               return (
-                                <div key={item.id} className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-0.5 text-[10px] font-semibold text-rose-800 shadow-2xs">
+                                <div key={item.id} className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-0.5 text-[10px] font-semibold tabular-nums text-rose-800 shadow-2xs">
                                   <span>🚨</span>
                                   <span>{zh
                                     ? `衔接冲突 · 最早 ${item.earliest_arrival ?? '次日'} 到达 · 比下一站晚 ${item.late_by_minutes} min`
@@ -673,7 +673,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                     href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="rounded-full bg-amber-100 hover:bg-amber-200 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-900 transition"
+                                    className="rounded-full bg-amber-100 hover:bg-amber-200 px-1.5 py-0.2 text-[10px] font-bold text-amber-900 transition"
                                   >
                                     Google 导航 ↗
                                   </a>

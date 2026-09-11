@@ -510,6 +510,15 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                     ? (zh ? '当前行程暂无候选地点，浏览地图或导入收藏夹即可添加。' : 'No candidates yet.')
                     : (zh ? '没有匹配的候选地点。' : 'No matching candidates.')}
                 </p>
+                {pendingCandidates.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="mt-3 rounded-full bg-stone-900 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                  >
+                    {zh ? '📥 导入候选' : '📥 Import candidates'}
+                  </button>
+                ) : null}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">

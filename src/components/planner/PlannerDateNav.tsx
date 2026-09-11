@@ -52,7 +52,7 @@ export function PlannerDateNav(props: PlannerDateNavProps) {
         >
           <span>🗂️ {zh ? '候选池' : 'Pool'}</span>
           {sortedPendingCandidates.length > 0 ? (
-            <span className={`rounded-full px-1.5 py-0 text-[10px] font-bold ${
+            <span className={`rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums ${
               poolView ? 'bg-emerald-500 text-white' : 'bg-stone-100 text-stone-600'
             }`}>
               {sortedPendingCandidates.length}
@@ -118,7 +118,7 @@ export function PlannerDateNav(props: PlannerDateNavProps) {
                 {formatDay(date, language)}
               </span>
               {dayPlacesCount > 0 ? (
-                <span className={`rounded-full px-1.5 py-0 text-[10px] font-bold ${
+                <span className={`rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums ${
                   isSelected ? 'bg-emerald-500 text-white' : 'bg-stone-100 text-stone-600'
                 }`}>
                   {dayPlacesCount}
