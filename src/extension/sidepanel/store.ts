@@ -15,13 +15,14 @@ export interface SavedListSummary {
   url?: string;
 }
 
+/**
+ * Chrome Web Store default language is English.
+ * Fresh installs start in 'en' to avoid first-paint flicker; a stored
+ * `ownlyCaptureLang` ('zh'|'en') still wins on later loads. In-panel
+ * switching stays in handlers.ts (`langToggle`).
+ */
 function detectDefaultLanguage(): Lang {
-  try {
-    const raw = (chrome.i18n?.getUILanguage?.() || (typeof navigator !== 'undefined' ? navigator.language : 'en')).toLowerCase();
-    return raw.startsWith('zh') ? 'zh' : 'en';
-  } catch {
-    return 'en';
-  }
+  return 'en';
 }
 
 export const store = {

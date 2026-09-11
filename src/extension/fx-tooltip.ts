@@ -1,22 +1,17 @@
 import { convertPriceRange, DEFAULT_USD_PIVOT } from '../domain/planner';
 import { detectPageCurrency } from './currency-detector';
 
+/**
+ * Chrome Web Store default is English, consistent with the side panel
+ * (`sidepanel/store.ts` forces 'en' on fresh installs). Target currency
+ * still upgrades from the background worker (`OWNLY_GET_FX_CONFIG`).
+ */
 function detectDefaultTargetCurrency(): string {
-  try {
-    const raw = (chrome.i18n?.getUILanguage?.() || (typeof navigator !== 'undefined' ? navigator.language : 'en')).toLowerCase();
-    return raw.startsWith('zh') ? 'CNY' : 'USD';
-  } catch {
-    return 'USD';
-  }
+  return 'USD';
 }
 
 function isChineseUi(): boolean {
-  try {
-    const raw = (chrome.i18n?.getUILanguage?.() || (typeof navigator !== 'undefined' ? navigator.language : 'en')).toLowerCase();
-    return raw.startsWith('zh');
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 let targetCurrency = detectDefaultTargetCurrency();

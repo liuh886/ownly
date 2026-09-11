@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -13,154 +13,154 @@
         <strong>Ownly</strong>
       </div>
       <div class="topbar-actions">
-        <label id="lblFxTooltipToggle" class="fx-toggle-label" title="开启后在网页框选价格文字时弹出换算浮窗">
+        <label id="lblFxTooltipToggle" class="fx-toggle-label" title="Show FX converter when selecting price text">
           <input type="checkbox" id="toggleFxTooltip" checked />
-          <span id="txtFxTooltipToggle" class="fx-toggle-text">💱 划词汇率</span>
+          <span id="txtFxTooltipToggle" class="fx-toggle-text">💱 Selection FX</span>
         </label>
-        <label id="lblDebugToggle" class="fx-toggle-label" title="开启诊断与实时调试日志">
+        <label id="lblDebugToggle" class="fx-toggle-label" title="Show diagnostic log console at the bottom">
           <input type="checkbox" id="toggleDebugMode" />
-          <span id="txtDebugToggle" class="fx-toggle-text">🐛 调试</span>
+          <span id="txtDebugToggle" class="fx-toggle-text">🐛 Debug</span>
         </label>
-        <button id="langToggle" class="lang-btn" type="button" title="切换语言 / Switch Language">EN</button>
-        <span id="pending" class="counter mono">0 待同步</span>
+        <button id="langToggle" class="lang-btn" type="button" title="Switch language">中文</button>
+        <span id="pending" class="counter mono">0 pending</span>
       </div>
     </header>
 
     <section class="panel stack">
       <div class="row" style="justify-content: space-between; align-items: center;">
         <div style="min-width: 0;">
-          <div id="lblActiveTrip" class="label">当前合集</div>
+          <div id="lblActiveTrip" class="label">Active trip</div>
           <strong id="captureContextTitle" style="display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Inbox</strong>
-          <span id="captureContextHint" class="url" style="display:block; margin-top:2px;">独立合集 · 可直接收藏，无需 Planner</span>
+          <span id="captureContextHint" class="url" style="display:block; margin-top:2px;">Independent · capture without Planner</span>
         </div>
         <div id="pageCurrencyBar" class="row" style="align-items: center; gap: 3px;">
-          <span style="font-size: 10px; opacity: 0.65;" title="页面货币 / Page currency">💱</span>
-          <select id="currencySelector" class="mini-currency-select" aria-label="页面货币 / Page currency"></select>
-          <button id="btnRedetectCurrency" class="mini-icon-btn" type="button" title="重新自动检测 / Re-detect" aria-label="重新自动检测 / Re-detect">🔄</button>
+          <span style="font-size: 10px; opacity: 0.65;" title="Page currency">💱</span>
+          <select id="currencySelector" class="mini-currency-select" aria-label="Page currency"></select>
+          <button id="btnRedetectCurrency" class="mini-icon-btn" type="button" title="Re-detect" aria-label="Re-detect">🔄</button>
         </div>
       </div>
       <!-- Collection Switcher (independent) -->
       <div class="row" style="gap:4px; margin-top:6px; align-items:center;">
         <select id="collectionSelector" style="flex:1; font-size:11px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface);"></select>
-        <button id="btnCreateCollection" class="secondary" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="新建合集">＋ 新建</button>
-        <button id="btnExportActiveCollection" class="secondary" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="导出当前合集并复制分享链接">📤 分享 / 导出</button>
-        <button id="btnDeleteActiveCollection" class="secondary del" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="删除当前合集">🗑️ 删除</button>
+        <button id="btnCreateCollection" class="secondary" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="New collection">+ New</button>
+        <button id="btnExportActiveCollection" class="secondary" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="Export active collection as JSON">📤 Share / Export</button>
+        <button id="btnDeleteActiveCollection" class="secondary del" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="Delete active collection">Delete</button>
       </div>
       <div id="createCollectionRow" class="row" style="display:none; gap:6px; margin-top:6px;">
-        <input id="inputNewCollection" placeholder="合集名称，如：京都美食" style="flex:1; font-size:11px; padding:4px 6px;" />
-        <button id="btnConfirmCreateCollection" class="primary" type="button" style="font-size:10px; padding:4px 10px;">创建</button>
-        <button id="btnCancelCreateCollection" class="link" type="button" style="font-size:10px;">取消</button>
+        <input id="inputNewCollection" placeholder="Collection name, e.g. Kyoto food" style="flex:1; font-size:11px; padding:4px 6px;" />
+        <button id="btnConfirmCreateCollection" class="primary" type="button" style="font-size:10px; padding:4px 10px;">Create</button>
+        <button id="btnCancelCreateCollection" class="link" type="button" style="font-size:10px;">Cancel</button>
       </div>
     </section>
 
     <!-- Inbox (primary) — Gmail-style saved places -->
     <details id="candidatesDrawer" class="panel stack drawer" open>
       <summary>
-        <span id="sumCandidatesDrawer">📥 案板</span>
+        <span id="sumCandidatesDrawer">📥 Inbox</span>
         <span class="row" style="gap: 6px;">
           <span id="candidatesCountBadge" class="badge">0</span>
-          <button id="btnEnrichCandidates" class="link" type="button" title="从 Google Maps 一键补强评分、评论、价格、分类、地址与坐标" style="font-size: 11px;">⚡ 一键补强</button>
-          <button id="btnBulkToggle" class="link" type="button" title="批量操作" aria-label="批量操作">☑️</button>
+          <button id="btnEnrichCandidates" class="link" type="button" title="Enrich ratings, reviews, prices, categories, addresses and coordinates from Google Maps" style="font-size: 11px;">⚡ Strengthen all</button>
+          <button id="btnBulkToggle" class="link" type="button" title="Bulk actions" aria-label="Bulk actions">☑️</button>
         </span>
       </summary>
-      <input id="candidatesSearch" placeholder="搜索候选地点、区域或标签..." />
+      <input id="candidatesSearch" placeholder="Search places, areas, tags..." />
       <div id="candidatesFilterBar" class="filter-bar"></div>
       <div id="bulkActionBar" class="bulk-bar" style="display: none;">
         <select id="bulkPrioritySelect" class="bulk-select">
-          <option value="">设为优先级…</option>
-          <option value="must">必去 (Must)</option>
-          <option value="want">想去 (Want)</option>
-          <option value="optional">可选 (Optional)</option>
+          <option value="">Set priority…</option>
+          <option value="must">Must</option>
+          <option value="want">Want</option>
+          <option value="optional">Optional</option>
         </select>
-        <button id="btnSelectAllCandidates" class="card-btn" type="button">☑️ 全选</button>
-        <button id="btnBulkEnrich" class="card-btn" type="button">⚡ 一键补强</button>
-        <button id="btnBulkDelete" class="card-btn del" type="button">🗑️ 删除</button>
-        <button id="btnBulkExit" class="link" type="button">退出</button>
+        <button id="btnSelectAllCandidates" class="card-btn" type="button">☑️ Select All</button>
+        <button id="btnBulkEnrich" class="card-btn" type="button">⚡ Strengthen</button>
+        <button id="btnBulkDelete" class="card-btn del" type="button">🗑️ Delete</button>
+        <button id="btnBulkExit" class="link" type="button">Exit</button>
       </div>
       <div id="candidatesListContainer" class="candidates-list"></div>
     </details>
 
     <details id="addPanel" class="panel stack drawer" style="margin-top: 8px;" open>
-      <summary id="sumAddPanel">📍 当前识别地点</summary>
+      <summary id="sumAddPanel">📍 Recognized Place</summary>
     <section class="panel current" id="placePanel" style="border: none; padding: 0; margin: 0;">
       <div class="row">
-        <span id="lblCurrentPlace" class="label">当前识别</span>
+        <span id="lblCurrentPlace" class="label">Detected place</span>
         <div style="display: flex; gap: 8px;">
-          <button id="btnDismissPlace" class="link" type="button" style="color: var(--danger); display: none;">❌ 取消选中</button>
-          <button id="refreshPlace" class="link" type="button">🔄 刷新</button>
+          <button id="btnDismissPlace" class="link" type="button" style="color: var(--danger); display: none;">❌ Dismiss</button>
+          <button id="refreshPlace" class="link" type="button">🔄 Refresh</button>
         </div>
       </div>
       <div class="title-row">
         <span id="placeProvider" class="provider-badge" style="display: none;">🗺️ Maps</span>
-        <h1 id="placeTitle">请在地图或页面中打开地点</h1>
+        <h1 id="placeTitle">Open a place page</h1>
       </div>
-      <p id="placeUrl" class="url">在 Google Maps、Tabelog、小红书浏览时自动识别</p>
+      <p id="placeUrl" class="url">Auto-detects while browsing Google Maps, Tabelog, Xiaohongshu</p>
       <div id="placeCapturedBanner" class="status-banner" style="display: none;">
-          <span id="txtCapturedBanner">✓ 该地点已在案板中</span>
+          <span id="txtCapturedBanner">🟢 In Research Pool · Edit tags &amp; notes here</span>
       </div>
       <div id="placeMetaBadges" class="meta-badges"></div>
 
       <!-- Unified Smart List Sync Area inside Current Recognition Panel -->
       <div id="smartListContainer" class="stack" style="display: none; margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 8px;">
         <div class="row" style="gap: 6px;">
-          <button id="btnSmartSyncAll" class="sync-btn" type="button" style="flex: 3;">⚡ 一键同步全部地点</button>
-          <button id="btnToggleListPreview" class="secondary" type="button" style="flex: 2; font-size: 11px; min-height: 36px; padding: 0 6px;">📋 挑选地点</button>
+          <button id="btnSmartSyncAll" class="sync-btn" type="button" style="flex: 3;">⚡ Sync &amp; Enrich All</button>
+          <button id="btnToggleListPreview" class="secondary" type="button" style="flex: 2; font-size: 11px; min-height: 36px; padding: 0 6px;">📋 Select &amp; Import</button>
         </div>
         <div id="smartListPreviewContainer" class="stack" style="display: none; margin-top: 6px; border-top: 1px dashed var(--accent-border-strong); padding-top: 8px;">
           <div id="batchListContainer" class="batch-list"></div>
           <div class="batch-controls">
-            <button id="btnToggleSelectAll" class="secondary" type="button" style="min-height: 28px; font-size: 11px; padding: 0 8px;">全选 / 取消</button>
-            <button id="btnBatchAdd" class="primary" type="button" style="min-height: 28px; font-size: 11px; padding: 0 10px;">➕ 添加所选</button>
+            <button id="btnToggleSelectAll" class="secondary" type="button" style="min-height: 28px; font-size: 11px; padding: 0 8px;">Select All / None</button>
+            <button id="btnBatchAdd" class="primary" type="button" style="min-height: 28px; font-size: 11px; padding: 0 10px;">➕ Add Selected to Pool</button>
           </div>
         </div>
       </div>
 
       <!-- Bulk Paste / Import places into candidate pool -->
       <details class="new-trip" style="margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px;">
-        <summary id="sumBulkImport" style="font-size: 11px; color: var(--muted); cursor: pointer;">📥 批量导入 / 粘贴地点或列表</summary>
+        <summary id="sumBulkImport" style="font-size: 11px; color: var(--muted); cursor: pointer;">📥 Bulk Import / Paste Places &amp; Links</summary>
         <div class="stack" style="margin-top: 8px;">
-          <label id="lblBulkText" style="font-size: 11px; color: var(--muted);">批量粘贴链接或地点名
-            <textarea id="bulkInputText" rows="3" placeholder="每行一个链接或地点名"></textarea>
+          <label id="lblBulkText" style="font-size: 11px; color: var(--muted);">Paste links or place names (one per line)
+            <textarea id="bulkInputText" rows="3" placeholder="One link or place name per line"></textarea>
           </label>
-          <button id="btnParseBulkImport" class="secondary" type="button">📥 解析并放入案板</button>
+          <button id="btnParseBulkImport" class="secondary" type="button">📥 Parse &amp; Add to Pool</button>
         </div>
       </details>
     </section>
 
     <form id="captureForm" class="panel stack">
       <div class="two">
-        <label id="lblKind">地点类别
+        <label id="lblKind">Place kind
           <select id="kind">
-            <option value="attraction">观光景点</option>
-            <option value="food">餐厅美食</option>
-            <option value="cafe">咖啡甜品</option>
-            <option value="stay">酒店住宿</option>
-            <option value="shopping">购物商场</option>
-            <option value="transit">交通中转</option>
-            <option value="experience">体验活动</option>
-            <option value="other">其它</option>
+            <option value="attraction">Attraction</option>
+            <option value="food">Food / Dining</option>
+            <option value="cafe">Cafe / Dessert</option>
+            <option value="stay">Stay / Hotel</option>
+            <option value="shopping">Shopping</option>
+            <option value="transit">Transit / Station</option>
+            <option value="experience">Experience</option>
+            <option value="other">Other</option>
           </select>
         </label>
-        <label id="lblRating">评分<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label>
+        <label id="lblRating">Rating<input id="rating" type="number" min="1" max="5" step="0.1" placeholder="4.6" /></label>
       </div>
 
       <div class="two">
-        <label id="lblPrice">人均价格 / 预算<input id="price" placeholder="例如：฿3,200 / 晚" /></label>
-        <label id="lblDuration">预计停留 (分钟)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label>
+        <label id="lblPrice">Observed price / budget<input id="price" placeholder="e.g. ~$25 / night" /></label>
+        <label id="lblDuration">Duration (min)<input id="duration" type="number" min="1" max="1440" inputmode="numeric" placeholder="90" /></label>
       </div>
 
-      <label id="lblWhy">选择理由 (Why)<textarea id="why" rows="2" placeholder="为什么选这个地点？"></textarea></label>
+      <label id="lblWhy">Why it matters (Why)<textarea id="why" rows="2" placeholder="Why did this place survive your research? Key highlights?"></textarea></label>
 
       <div>
-        <label id="lblQuickChips">快捷标签</label>
+        <label id="lblQuickChips">Quick tags</label>
         <div id="quickChips" class="chips"></div>
       </div>
 
       <details id="captureAdvanced" class="new-trip" open>
-        <summary id="captureAdvancedSummary">⚙️ 更多设置</summary>
+        <summary id="captureAdvancedSummary">⚙️ More options (area / timing / risks…)</summary>
         <div class="stack" style="margin-top: 8px;">
           <div class="two">
-            <label id="lblWindow">偏好时段<input id="window" placeholder="上午 / 傍晚日落 / 晚上" /></label>
+            <label id="lblWindow">Preferred window<input id="window" placeholder="e.g. early morning / sunset / evening" /></label>
           </div>
           <!-- Hidden: quick chips write to these; area auto-derived from address -->
           <span id="lblArea" hidden></span><input id="area" type="hidden" />
@@ -172,8 +172,8 @@
       </details>
 
       <div class="btn-row">
-          <button id="btnCaptureSubmit" class="primary" type="submit">➕ 放入案板</button>
-        <button id="btnRemoveCandidate" class="danger-btn" type="button" style="display: none;">🗑️ 移出</button>
+          <button id="btnCaptureSubmit" class="primary" type="submit">➕ Add to Inbox</button>
+        <button id="btnRemoveCandidate" class="danger-btn" type="button" style="display: none;">🗑️ Remove</button>
       </div>
     </form>
     </details>
@@ -181,19 +181,19 @@
     <!-- Debug & Diagnostic Logs Drawer (Enhanced) -->
     <details id="debugDrawer" class="panel stack drawer" style="display: none; margin-top: 8px; border-top: 1px solid var(--border);">
       <summary style="font-size: 11px; color: var(--text-3); cursor: pointer; user-select: none;">
-        <span id="sumDebugDrawer">🐛 诊断与调试日志 (Debug Mode)</span>
+        <span id="sumDebugDrawer">🐛 Diagnostics &amp; Logs (Debug Mode)</span>
         <span class="row" style="gap: 4px; flex-wrap: wrap;">
-          <button id="btnCopyDebugLogs" class="link" type="button" style="font-size: 10px;" title="复制全部日志">📋 复制日志</button>
-          <button id="btnExportDiagnostics" class="link" type="button" style="font-size: 10px;" title="导出完整诊断 JSON">📥 导出诊断包</button>
-          <button id="btnCopyAIDiagnostics" class="link" type="button" style="font-size: 10px; background: #059669; color: white; padding: 2px 6px; border-radius: 4px;" title="复制 AI 诊断包（包含 Inbox、状态、日志，一键发给 AI）">🤖 复制 AI 诊断包</button>
-          <button id="btnClearDebugLogs" class="link" type="button" style="font-size: 10px;" title="清空日志" aria-label="清空日志">🗑️</button>
+          <button id="btnCopyDebugLogs" class="link" type="button" style="font-size: 10px;" title="Copy all logs">📋 Copy Logs</button>
+          <button id="btnExportDiagnostics" class="link" type="button" style="font-size: 10px;" title="Export full diagnostics JSON">📥 Export Diagnostics</button>
+          <button id="btnCopyAIDiagnostics" class="link" type="button" style="font-size: 10px; background: #059669; color: white; padding: 2px 6px; border-radius: 4px;" title="Copy AI diagnostics bundle (Inbox, state, logs)">🤖 Copy AI Diagnostics</button>
+          <button id="btnClearDebugLogs" class="link" type="button" style="font-size: 10px;" title="Clear logs" aria-label="Clear logs">🗑️ Clear</button>
         </span>
       </summary>
       <div class="stack" style="margin-top: 6px; gap: 6px;">
         <!-- Filter bar -->
         <div class="row" style="gap: 6px; flex-wrap: wrap; align-items: center;">
           <select id="debugLogLevelFilter" style="font-size: 10px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); max-width: 110px;">
-            <option value="ALL">全部 Level</option>
+            <option value="ALL">All levels</option>
             <option value="ERROR">ERROR</option>
             <option value="WARN">WARN</option>
             <option value="INFO">INFO</option>
@@ -202,9 +202,9 @@
             <option value="PARSER">PARSER</option>
             <option value="MAPS_TAB">MAPS_TAB</option>
           </select>
-          <input id="debugLogSearch" placeholder="🔍 搜索 scope/消息…" style="flex: 1; min-width: 90px; font-size: 10px; padding: 4px 6px;" />
-          <label style="display:inline-flex; align-items:center; gap:3px; font-size:10px; color:var(--text-3); user-select:none;"><input type="checkbox" id="debugLogAutoScroll" checked /> 自动滚动</label>
-          <span id="debugLogStats" style="font-size: 10px; color: var(--text-4); white-space: nowrap;">0 日志</span>
+          <input id="debugLogSearch" placeholder="Search scope/message…" style="flex: 1; min-width: 90px; font-size: 10px; padding: 4px 6px;" />
+          <label style="display:inline-flex; align-items:center; gap:3px; font-size:10px; color:var(--text-3); user-select:none;"><input type="checkbox" id="debugLogAutoScroll" checked /> Auto scroll</label>
+          <span id="debugLogStats" style="font-size: 10px; color: var(--text-4); white-space: nowrap;">0 logs</span>
         </div>
         <div id="debugLogViewer" style="max-height: 260px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; background: rgba(0,0,0,0.35); padding: 8px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; border: 1px solid var(--border); color: #a1a1aa; line-height: 1.45; user-select: text;">[00:00:00] [INFO] [System] Debug Logger Initialized.</div>
       </div>
@@ -213,13 +213,13 @@
     <div id="importReportBanner" class="import-report-banner" style="display: none;">
       <div class="import-report-header">
         <span id="importReportIcon">📥</span>
-        <span id="importReportTitle">导入结果</span>
-          <button id="importReportDismiss" class="link" type="button" style="color: var(--text-4); padding: 0 4px;" aria-label="关闭">✕</button>
+        <span id="importReportTitle">Import result</span>
+          <button id="importReportDismiss" class="link" type="button" style="color: var(--text-4); padding: 0 4px;" aria-label="Close">✕</button>
       </div>
       <div id="importReportStats" class="import-report-stats"></div>
       <div id="importReportFailed" class="import-report-failed" style="display: none;"></div>
     </div>
-    <p id="status" class="status visible" aria-live="polite">就绪。</p>
+    <p id="status" class="status visible" aria-live="polite">Ready.</p>
   </main>
   <script src="sidepanel.js"></script>
 </body>
