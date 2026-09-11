@@ -24,6 +24,10 @@ Capture does **not** store Trip objects, schedule state, lifecycle state, route 
 
 There is no success-ID-only ACK, silent rejection, bidirectional database synchronization, or fallback writer.
 
+## Runtime boundary
+
+Capture bridge Web/PWA-only，不支持直推Obsidian Vault，Obsidian打开同一数据目录即可。Obsidian users keep working on the same Ownly data folder; the browser bridge never writes into a Vault directly.
+
 ## Single writer (MV3 Architecture)
 
 Only the MV3 background service worker writes `ownlyCaptureStateV3` in `chrome.storage.local` via `mutateCaptureStateV3InWorker()`.

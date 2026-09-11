@@ -96,6 +96,7 @@ export const OWNLY_RUNTIME_CAPABILITY_MATRIX = {
     intentionalExceptions: [
       'Obsidian can open and edit source Markdown through native Vault behavior.',
       'The configured Ownly data folder is resolved through plugin settings rather than a browser directory picker.',
+      'Capture bridge is Web/PWA-only and cannot push directly to an Obsidian Vault; open the same Ownly data folder in Obsidian.',
     ],
   },
 } as const satisfies Record<OwnlyProductSurface, OwnlyRuntimeCapabilities>;

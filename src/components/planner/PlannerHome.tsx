@@ -207,7 +207,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
 
   // WS-1 trip retrospective: draft lives in TripReviewModal (preview-only);
   // confirm persists via the standard object path, then backlinks review_id.
-  const { repository } = useOwnlyWorkspace();
+  const { repository, runtimeTarget } = useOwnlyWorkspace();
   const reviewable = selectedTrip ? isTripReviewable(selectedTrip) : false;
   const tripStatusLabel = !selectedTrip
     ? ''
@@ -248,6 +248,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     }
   }, [selectedTrip, repository, handleUpsertTrip, setNotice, zh]);
 
+  // Capture bridge is Web/PWA-only: never fail silently under Obsidian.
+  const syncCaptureWithBoundary = useCallback(() => {
+    if (runtimeTarget === 'obsidian') {
+      setNotice('Capture bridge is Web/PWA-only and cannot push directly to an Obsidian Vault. Open the same Ownly data folder in Obsidian to continue. / Capture bridge 仅支持 Web/PWA，不支持直推 Obsidian Vault，在 Obsidian 中打开同一数据目录即可继续。');
+      return Promise.resolve();
+    }
+    return syncCapture();
+  }, [runtimeTarget, setNotice, syncCapture]);
+
   const poolSectionProps = {
     zh,
     language,
@@ -265,7 +274,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     lastScheduledStop,
     capturePending,
     busy,
-    syncCapture,
+    syncCapture: syncCaptureWithBoundary,
     candidateHotels,
     visibleSuspectedPairs,
     isMultiSelectMode,
@@ -389,8 +398,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     try {
       window.history.replaceState(null, '', window.location.pathname + window.location.hash);
     } catch {}
-    void syncCapture();
-  }, [disabled, syncCapture]);
+    void syncCaptureWithBoundary();
+  }, [disabled, syncCaptureWithBoundary]);
 
   // Multi-day keyboard navigation: [ / ] or ArrowLeft / ArrowRight to switch days
   useEffect(() => {

@@ -88,6 +88,8 @@ Stable frontmatter fields, JSON keys, directory names, and object-type identifie
 
 Avoid describing Web, PWA, Obsidian, CLI, and MCP as separate products. They are interfaces over one data model and one data folder.
 
+Capture bridge Web/PWA-only，不支持直推Obsidian Vault，Obsidian打开同一数据目录即可。
+
 ## Privacy language
 
 Approved:

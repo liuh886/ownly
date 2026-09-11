@@ -89,6 +89,7 @@ Planner deliberately starts manual-first. Manual placement creates a Visit occur
 - collaboration
 - AI proposal generation
 - changes to the existing `components/travel/*` surface
+- Capture bridge Web/PWA-only，不支持直推Obsidian Vault，Obsidian打开同一数据目录即可
 
 ## Travel legs and day feasibility
 
