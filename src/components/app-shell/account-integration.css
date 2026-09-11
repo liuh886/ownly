@@ -108,6 +108,13 @@
   letter-spacing: 0.08em;
 }
 
+.ownly-account-slot--bare {
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
 @media (max-width: 640px) {
   .ownly-account-slot {
     padding: 1px;
