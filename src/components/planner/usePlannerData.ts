@@ -614,11 +614,6 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
 
   const areaCounts = useMemo(() => getTripAreaCounts(tripPlaces), [tripPlaces]);
   const maxAreaCount = Math.max(1, ...areaCounts.map((item) => item.count));
-  const mustTotal = tripPlaces.filter((place) => place.priority === 'must').length;
-  const mustScheduled = new Set(
-    scheduledAll.filter((place) => place.priority === 'must').map((place) => place.place_id),
-  ).size;
-  const scheduledMinutes = scheduled.reduce((sum, place) => sum + (place.duration_minutes ?? 0), 0);
 
   const tripStart = selectedTrip?.start_date ?? '';
   const daysOut = useMemo(() => (tripStart ? daysUntil(tripStart) : -1), [tripStart]);
@@ -770,9 +765,6 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     currentDayTransferInfo,
     areaCounts,
     maxAreaCount,
-    mustTotal,
-    mustScheduled,
-    scheduledMinutes,
     tripStart,
     daysOut,
     weatherRelevant,
