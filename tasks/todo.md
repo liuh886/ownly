@@ -1,5 +1,17 @@
 # Ownly — Task Progress & Review
 
+## Completed: 大地图复查 — 统一小地图比例尺 + 按键切换兜底 (2026-09-13)
+
+- [x] **1. 大地图直接套用小地图比例尺**：
+  - 删掉 `FULL_FIT_ZOOM_BUMP`，大小地图共用同一条 fit 规则（跨度表 `+1.5`，无视口守卫），同批点位算出完全一致的 zoom，即同一比例尺。
+  - 大地图挂载不再继承小地图的共享视口（只保留关闭时小地图继承大地图），打开即按统一规则 fresh-fit，之前“打开沿用旧 zoom 所以看着没变化”的问题消除。
+  - 相关：`src/components/planner/PlannerMap.tsx`（`initial` / `fitToPoints` / mount adoption），`src/domain/planner.ts:calculateBounds`（守卫先行、加成后置，保持不变）。
+- [x] **2. 大地图按键切换兜底**：
+  - 新增大地图专用 `keydown` 监听（`isMapExpanded` 时挂载）：`←`/`→`、`[`/`]` 切天；头部日期 `<select>` 聚焦时原生不支持左右键，这里也接管；文本输入与各弹窗打开时仍让路。
+  - marker 保持 `↑`/`↓` 做 marker 间移动，`←`/`→` 冒泡给切天。
+  - 验证：`validate:fast` 全绿，`test:planner` 14 文件 239 测试通过。
+  - 注意：需在最新 main 上验证（硬刷新），旧构建看不到这次改动。
+
 ## Completed: 大地图调整 (2026-09-12)
 
 - [x] **1. 大地图比例尺放大（对齐小地图，至少放大一倍）**：

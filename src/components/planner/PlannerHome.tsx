@@ -467,6 +467,72 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     confirmRequest,
   ]);
 
+  // Dedicated big-map day switcher: runs only while the expanded map is open,
+  // with a minimal blocker list. Unlike the global handler it also works when
+  // the header day <select> is focused (native select ignores Left/Right, so
+  // we handle them here). Text inputs and open modals still win.
+  useEffect(() => {
+    if (!isMapExpanded) return;
+    const handleBigMapKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (
+        timingModalPlace ||
+        isSwapDaysModalOpen ||
+        isCreateTripOpen ||
+        guideOpen ||
+        isHotelModalOpen ||
+        isImportModalOpen ||
+        isCalendarModalOpen ||
+        isSuspectedModalOpen ||
+        poolView ||
+        optimizeComputation ||
+        confirmRequest
+      ) {
+        return;
+      }
+      if (!tripDates || tripDates.length <= 1) return;
+
+      if (e.key === '[' || e.key === 'ArrowLeft') {
+        if (activeDayIndex > 0) {
+          e.preventDefault();
+          setSelectedDate(tripDates[activeDayIndex - 1]);
+        }
+      } else if (e.key === ']' || e.key === 'ArrowRight') {
+        if (activeDayIndex < tripDates.length - 1) {
+          e.preventDefault();
+          setSelectedDate(tripDates[activeDayIndex + 1]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleBigMapKeyDown);
+    return () => window.removeEventListener('keydown', handleBigMapKeyDown);
+  }, [
+    isMapExpanded,
+    activeDayIndex,
+    tripDates,
+    setSelectedDate,
+    timingModalPlace,
+    isSwapDaysModalOpen,
+    isCreateTripOpen,
+    guideOpen,
+    isHotelModalOpen,
+    isImportModalOpen,
+    isCalendarModalOpen,
+    isSuspectedModalOpen,
+    poolView,
+    optimizeComputation,
+    confirmRequest,
+  ]);
+
   const runOptimizeOrder = () => {
     if (optimizeBusy || !selectedTrip) return;
     setOptimizeBusy(true);

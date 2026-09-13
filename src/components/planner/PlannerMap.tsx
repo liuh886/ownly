@@ -193,12 +193,12 @@ const MIN_ZOOM = 3;
 const MAX_ZOOM = 18;
 const ZOOM_STEP_BUTTON = 1;
 const ZOOM_STEP_WHEEL = 0.5;
-// Compact (sidebar) maps sit closer after any auto-fit: same coverage logic,
-// less empty air around the stops. Full (expanded big map) sits one full level
-// closer (zoom +1 == 2x scale) so scattered stops stay readable, matching the
-// compact feel the user expects.
+// Both variants share one fit rule: span-table zoom plus a fixed bump so the
+// stops fill the view instead of sitting in empty air. The compact sidebar
+// skips the viewport guard (its narrow strip would otherwise force the whole
+// span on screen and read zoomed-out); the expanded big map deliberately uses
+// the exact same rule so its scale (meters per pixel) matches the sidebar.
 const COMPACT_FIT_ZOOM_BUMP = 1.5;
-const FULL_FIT_ZOOM_BUMP = 1;
 
 // Native tooltip shows the place name on line 1 and the recommendation reason (why) on line 2.
 function markerTitle(firstLine: string, why?: string): string {
@@ -350,27 +350,31 @@ export function PlannerMap({
     [scheduledPlaces, candidatePlaces],
   );
 
-  // Initial bounds: fit the active day (fallback: everything). The auto-fit
-  // effect below takes over afterwards (viewport-guarded + bump on full map).
+  // Initial bounds: fit the active day (fallback: everything) with the shared
+  // compact rule. The auto-fit effect below takes over afterwards.
   const initial = useMemo(() => {
     const active = points.filter((p) => p.isScheduled && p.isActiveDay !== false);
     const target = active.length > 0 ? active : points;
-    return calculateBounds(target, { extraZoom: compact ? COMPACT_FIT_ZOOM_BUMP : FULL_FIT_ZOOM_BUMP });
-  }, [points, compact]);
+    return calculateBounds(target, { extraZoom: COMPACT_FIT_ZOOM_BUMP });
+  }, [points]);
   // A shared view adopted at mount suppresses the first auto-fit below.
+  // Only the sidebar adopts: the expanded big map always fresh-fits with the
+  // shared rule so opening it deterministically shows the sidebar-scale view
+  // instead of inheriting a stale zoom.
   const skipInitialFitRef = useRef(false);
   const [center, setCenter] = useState<{ lat: number; lng: number }>(() => defaultCenter ?? initial.center);
   const [zoom, setZoom] = useState(initial.zoom);
   // Mount-only adoption runs before the auto-fit effect (layout vs passive),
   // so an adopted view never flashes through a fitted one.
   useLayoutEffect(() => {
+    if (!compact) return;
     const shared = sharedViewRef?.current;
     if (shared) {
       skipInitialFitRef.current = true;
       setCenter(shared.center);
       setZoom(shared.zoom);
     }
-  }, [sharedViewRef]);
+  }, [sharedViewRef, compact]);
 
   // Viewport continuity: only the visible instance writes; a newly visible
   // instance adopts the last written view instead of auto-fitting.
@@ -474,21 +478,16 @@ export function PlannerMap({
     height: containerSize.height || containerRef.current?.clientHeight || 300,
   }), [containerSize.height, containerSize.width]);
 
-  // Single choke point for every auto-fit. The full map uses viewport-guarded
-  // bounds plus one zoom level closer (2x) so scattered stops stay readable;
-  // compact skips the guard (its narrow strip would otherwise force
-  // the whole span on screen and read zoomed-out) and instead sits closer
-  // than the span table. Clamped to the allowed range.
+  // Single choke point for every auto-fit. Both variants use the identical
+  // shared rule (span table + bump, no viewport guard) so big map and sidebar
+  // render the same scale for the same stops. Clamped to the allowed range.
   const fitToPoints = useCallback((pts: Array<{ lat: number; lng: number }>) => {
     if (pts.length === 0) return;
-    const computed = calculateBounds(pts, compact
-      ? { extraZoom: COMPACT_FIT_ZOOM_BUMP }
-      : { viewport: viewportSize(), extraZoom: FULL_FIT_ZOOM_BUMP },
-    );
+    const computed = calculateBounds(pts, { extraZoom: COMPACT_FIT_ZOOM_BUMP });
     clearPanTransform();
     setCenter(defaultCenter ?? computed.center);
     setZoom(clampZoom(computed.zoom));
-  }, [viewportSize, compact, defaultCenter, clearPanTransform, clampZoom]);
+  }, [defaultCenter, clearPanTransform, clampZoom]);
 
   // Timeline-to-map locate: center on the stop, zoom untouched. Nonce-keyed
   // so both instances consume the same request idempotently; retries every
