@@ -1,5 +1,48 @@
 # Ownly — Task Progress & Review
 
+## Pending: 时间线三处精简（待 review，不提交） (2026-09-13)
+
+- [x] **推荐理由去汉字标签**：时间线 `💡` 行中文不再渲染“推荐理由：”四字，只留 emoji + 内容（英文保留 `Why:`，与地图弹窗/候选池卡片一致）。
+- [x] **清迈机场英文标题纳入隐藏**：`isTimelineNoteHiddenLandmark` 改空白不敏感匹配，`Chiang Mai International Airport` 等英文变体同样隐藏 💡/📝 行。
+- [x] **“无预估”转场去谷歌导航链接**：已清除预估（`duration 0`）的转场只留 `🚫 无预估 ▾`，去掉后面的 Google 导航链接省纵向空间；恢复/切换入口仍在 `▾` 里。
+- 验证：`validate:fast` 全绿，`test:planner` 239 通过。
+
+## Pending: 地图 UI 优化 P1+P2 review 修补（待 review，不提交） (2026-09-13)
+
+- [x] **R1 聚合 key 去碰撞**：`markerClusters` 改按纯坐标归一（`lat|lng`），渲染 key `cluster_lat_lng` 全局唯一；`<>` 换 `<Fragment key>`，消 React key 警告。
+- [x] **R2 跨天/跨类同坐标可达**：归一后 D1+D2 同酒店、排期+候选同坐标全部进同一列表，用现有 `D2·3` / `候选` 徽标区分；切天/切层（`activeDate/activeDayIndex/layerSig`）自动关闭旧列表（带理由的单行 lint 豁免，null 时无多余渲染）。
+- [x] **R3 Esc 内层优先 + select 保护**：`PlannerMap` 内新增 Esc 监听（⋯菜单 → 聚合列表 → 地点卡片逐层关，用 `stopImmediatePropagation` 吞键，子实例先注册故天然内层优先）；`PlannerHome` 大地图 Esc 改内联 effect，select 聚焦时让原生收起下拉。
+- 验证：`validate:fast` 全绿，`test:planner` 239 通过，`npm run build` 成功。
+
+## Pending: 地图 UI 优化 P1+P2（待 review，不提交） (2026-09-13)
+
+**P1 体验主项**
+- [x] **P1-5 统一分段图层控件**：删除大小地图两套按钮语言，统一为一段式 `🟢第N天 / 🌐路线 / 🔵候选池(M)` + `⋯` 底图菜单；去掉语义模糊的“全部”按钮（其恢复默认职责并入“当天”的再点一次）；“当天”聚焦时同时清除点亮的天（真 solo 语义）；候选池 title 注明不影响视野；删掉无用的 `allScheduledCount`。
+- [x] **P1-6 大地图 Day pills**：头部 `‹ select ›` 的 select 换成可横滑的 `D1·n D2·n…` pills（站数来自 `placesByDate`，title 含完整日期），`‹ ›` 与键盘 `←/→` 保留。
+- [x] **P1-7 Esc 关闭大地图**：`useEscapeKey`，任一弹窗/菜单/优化/确认打开时不抢 Esc。
+- [x] **P1-8 图例简化 + 小地图极简图例**：图例只做颜色说明+点亮开关，去掉“回当天”（该入口统一到右上 `⌖`，大小地图一致）；小地图左上新增多天时才出现的圆点 mini 图例，同样的点亮语义。
+**P2 打磨**
+- [x] **P2-9 候选点对比度**：未排期候选由白点改为实心蓝点（白底图上可见，与“🔵候选池”一致），已排期保持浅绿。
+- [x] **P2-12 右上按钮分组**：`+−` 一组、视野组（`⊙` + 多天时 `⌖`）一组，分割线隔开。
+- [x] **P2-11 弹窗加导航入口**：`MapPlaceCard` 新增查看/导航双按钮（复用时间线的链接规则），去掉动作行冗余的 🗺️ 小图标。
+- [x] **P2-10 聚合点展开列表**：同坐标聚合点点击不再只是 zoom，而是弹出成员列表（含 🔍放大看分布 + 逐项 `D2·3` / `候选` 徽标），点项直达该地点卡片；点空白处关闭。
+- 验证：`validate:fast` 全绿，`test:planner` 14 文件 239 通过，`npm run build` 静态导出成功。
+
+## Pending: 地图 UI 优化 P0 正确性（待 review，不提交） (2026-09-13)
+
+- [x] **P0-1 fit 按钮文案与行为对齐**：`⊙` 的 title/aria 由“视野居中所有点 / Fit All Points”改为“适应日程范围 / Fit schedule”，并注明候选池不影响视野（与解绑后的行为一致）。
+- [x] **P0-2 归属行按底图切换**：`BasemapOption` 新增 `attribution` 字段；Carto 系 `© OSM · © CARTO`，OSM 标准仅 `© OSM`（之前误带 CARTO），Esri 卫星 `Powered by Esri · Esri, Maxar, Earthstar Geographics`；footer 改由 `activeBasemap.attribution` 渲染。
+- [x] **P0-3 合并弹窗死分支**：`compact/full` 两套完全相同的 `MapPlaceCard` 合并为一套，宽窄差异仍由外层 clamp 样式承担。
+- [x] **P0-4 选中 marker 位移验证与加固**：实测构建产物确认 Tailwind v4 的 `-translate-1/2` 走独立 `translate` 属性，与内联 `transform: scale()` 不冲突、无漂移；为杜绝混用隐患，内联写法改为独立 `scale` 属性（`scale: 1.2 / 1`）。
+- 验证：`validate:fast` 全绿（含 tsc/eslint），`test:planner` 14 文件 239 测试通过。
+
+## Pending: 候选池与视口解绑 (2026-09-13)
+
+- [x] **候选池改为纯显示/隐藏，不绑定任何比例尺**：
+  - 根因：`fitBounds`、自动重 fit 的越界检查、空日回退都把候选点计入 fit 目标，一开/关候选池视口就被拽走。
+  - `src/components/planner/PlannerMap.tsx` 新增 `scheduleFitBasis`（路线层感知的纯日程集合：当天必含，其它天随“所有路线”层；无日程时才回退到候选池），`initial` / `fitBounds` / `backToActiveDay` / 自动 fit 的检查与目标全部改走它，不再读 `showCandidates`。
+  - 验证：`validate:fast` 全绿，`test:planner` 14 文件 239 测试通过。
+
 ## Completed: 大地图复查 — 统一小地图比例尺 + 按键切换兜底 (2026-09-13)
 
 - [x] **1. 大地图直接套用小地图比例尺**：

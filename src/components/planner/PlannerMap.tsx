@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerTripLeg, PlannerTripPlace } from '@/domain/planner';
 import { plannerTripLegId } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
@@ -106,6 +106,11 @@ function cartoTile(path: string, z: number, x: number, y: number): string {
 
 export type BasemapStyle = 'carto_voyager' | 'carto_voyager_nolabels' | 'carto_positron' | 'carto_dark' | 'osm_standard' | 'esri_satellite';
 
+export interface BasemapAttribution {
+  text: string;
+  href: string;
+}
+
 export interface BasemapOption {
   id: BasemapStyle;
   label: { zh: string; en: string };
@@ -113,7 +118,17 @@ export interface BasemapOption {
   getUrl: (z: number, x: number, y: number) => string;
   fallbackUrl?: (z: number, x: number, y: number) => string;
   bgColor: string;
+  /** Tile-source attribution rendered in the footer (per provider terms). */
+  attribution: BasemapAttribution[];
 }
+
+const OSM_ATTRIBUTION: BasemapAttribution = { text: 'OpenStreetMap', href: 'https://www.openstreetmap.org/copyright' };
+const CARTO_ATTRIBUTION: BasemapAttribution = { text: 'CARTO', href: 'https://carto.com/attributions' };
+const ESRI_ATTRIBUTION: BasemapAttribution = { text: 'Powered by Esri', href: 'https://www.esri.com' };
+const ESRI_SOURCES_ATTRIBUTION: BasemapAttribution = {
+  text: 'Esri, Maxar, Earthstar Geographics',
+  href: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer',
+};
 
 export const BASEMAP_OPTIONS: BasemapOption[] = [
   {
@@ -123,6 +138,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     getUrl: (z, x, y) => cartoTile('rastertiles/voyager', z, x, y),
     fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     bgColor: '#e5e7eb',
+    attribution: [OSM_ATTRIBUTION, CARTO_ATTRIBUTION],
   },
   {
     id: 'carto_voyager_nolabels',
@@ -131,6 +147,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     getUrl: (z, x, y) => cartoTile('rastertiles/voyager_nolabels', z, x, y),
     fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     bgColor: '#e5e7eb',
+    attribution: [OSM_ATTRIBUTION, CARTO_ATTRIBUTION],
   },
   {
     id: 'carto_positron',
@@ -139,6 +156,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     getUrl: (z, x, y) => cartoTile('light_all', z, x, y),
     fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     bgColor: '#f3f4f6',
+    attribution: [OSM_ATTRIBUTION, CARTO_ATTRIBUTION],
   },
   {
     id: 'carto_dark',
@@ -147,6 +165,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     getUrl: (z, x, y) => cartoTile('dark_all', z, x, y),
     fallbackUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     bgColor: '#18181b',
+    attribution: [OSM_ATTRIBUTION, CARTO_ATTRIBUTION],
   },
   {
     id: 'osm_standard',
@@ -155,6 +174,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     getUrl: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
     fallbackUrl: (z, x, y) => cartoTile('rastertiles/voyager', z, x, y),
     bgColor: '#e5e7eb',
+    attribution: [OSM_ATTRIBUTION],
   },
   {
     id: 'esri_satellite',
@@ -163,6 +183,7 @@ export const BASEMAP_OPTIONS: BasemapOption[] = [
     getUrl: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
     fallbackUrl: (z, x, y) => cartoTile('rastertiles/voyager', z, x, y),
     bgColor: '#1c1917',
+    attribution: [ESRI_ATTRIBUTION, ESRI_SOURCES_ATTRIBUTION],
   },
 ];
 
@@ -236,6 +257,9 @@ export function PlannerMap({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  // Open cluster key (exact-duplicate-coordinate stack): shows a member list
+  // so every stacked place stays reachable instead of zoom-only.
+  const [openClusterKey, setOpenClusterKey] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   // Layer model (additive, replaces the old exclusive filterMode + solo):
   // base = active day always; "all routes" and "candidate pool" are overlays;
@@ -296,11 +320,6 @@ export function PlannerMap({
     return result;
   }, [allPlacesByDate, tripDates, activeDate, activeDayIndex]);
 
-  const allScheduledCount = useMemo(() => {
-    if (!allPlacesByDate) return scheduledPlaces.length;
-    return Object.values(allPlacesByDate).reduce((sum, list) => sum + list.length, 0);
-  }, [allPlacesByDate, scheduledPlaces.length]);
-
   // Full point set; visibility is resolved per-layer below. The active day
   // prefers multi-day points (per-day order), falling back to the
   // scheduledPlaces prop for viewers without allPlacesByDate.
@@ -350,13 +369,23 @@ export function PlannerMap({
     [scheduledPlaces, candidatePlaces],
   );
 
-  // Initial bounds: fit the active day (fallback: everything) with the shared
-  // compact rule. The auto-fit effect below takes over afterwards.
+  // Fit basis: the candidate pool is a pure show/hide overlay and never
+  // drives the viewport. All fit targets (initial, fit button, auto-refit,
+  // out-of-view check) are schedule-only; the pool is used only when the
+  // trip has no scheduled stops yet (candidate-only trip).
+  const scheduleFitBasis = useMemo(() => {
+    const layered = resolveLayerPoints(points, { showRoutesLayer, showCandidates: false });
+    if (layered.length > 0) return layered;
+    const scheduled = points.filter((p) => p.isScheduled);
+    if (scheduled.length > 0) return scheduled;
+    return points;
+  }, [points, showRoutesLayer]);
+
+  // Initial bounds with the shared compact rule. The auto-fit effect below
+  // takes over afterwards.
   const initial = useMemo(() => {
-    const active = points.filter((p) => p.isScheduled && p.isActiveDay !== false);
-    const target = active.length > 0 ? active : points;
-    return calculateBounds(target, { extraZoom: COMPACT_FIT_ZOOM_BUMP });
-  }, [points]);
+    return calculateBounds(scheduleFitBasis, { extraZoom: COMPACT_FIT_ZOOM_BUMP });
+  }, [scheduleFitBasis]);
   // A shared view adopted at mount suppresses the first auto-fit below.
   // Only the sidebar adopts: the expanded big map always fresh-fits with the
   // shared rule so opening it deterministically shows the sidebar-scale view
@@ -453,6 +482,38 @@ export function PlannerMap({
     });
   }, []);
 
+  // Stale cluster lists never linger: day or layer changes rebuild the
+  // marker layout, so a coordinate-keyed list from before may no longer exist.
+  // No-op render when already closed (React bails out on identical state).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOpenClusterKey(null);
+  }, [activeDate, activeDayIndex, layerSig]);
+
+  // Esc closes inner map UI first (basemap menu → cluster list → marker
+  // card) and swallows the key so an outer closer (e.g. big-map Esc) never
+  // fires for the same press. SELECT targets are left to native behavior
+  // (collapsing the dropdown).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      if (target && target.tagName === 'SELECT') return;
+      if (controlsMenuOpen) {
+        e.stopImmediatePropagation();
+        setControlsMenuOpen(false);
+      } else if (openClusterKey) {
+        e.stopImmediatePropagation();
+        setOpenClusterKey(null);
+      } else if (selectedPlaceId) {
+        e.stopImmediatePropagation();
+        setSelectedPlaceId(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [controlsMenuOpen, openClusterKey, selectedPlaceId]);
+
   // Dimensions (declared early: fit helpers below read the live size).
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 400, height: 350 });
 
@@ -505,17 +566,18 @@ export function PlannerMap({
     }
   }
 
-  // Fit bounds helper on user button click
+  // Fit bounds helper on user button click (schedule only; pool visibility
+  // never affects the viewport).
   const fitBounds = useCallback(() => {
-    const activePoints = resolveLayerPoints(points, { showRoutesLayer, showCandidates });
-    fitToPoints(activePoints);
-  }, [showRoutesLayer, showCandidates, points, fitToPoints]);
+    fitToPoints(scheduleFitBasis);
+  }, [scheduleFitBasis, fitToPoints]);
 
   // Jump back to the active day: default layers, its route, fit its stops.
   const backToActiveDay = useCallback(() => {
     resetLayers();
     const dayPoints = points.filter((p) => p.isScheduled && p.isActiveDay !== false);
-    const target = dayPoints.length > 0 ? dayPoints : points;
+    const scheduled = points.filter((p) => p.isScheduled);
+    const target = dayPoints.length > 0 ? dayPoints : scheduled.length > 0 ? scheduled : points;
     if (target.length === 0) return;
     fitToPoints(target);
   }, [resetLayers, points, fitToPoints]);
@@ -538,8 +600,9 @@ export function PlannerMap({
   }, [center, zoom]);
 
   // Auto-fit only when necessary so user panning is never yanked away:
-  // first load, active day change, or new points outside view. Layer toggles
-  // never refit (see needFit below).
+  // first load, active day change, or new schedule points outside view. Layer
+  // toggles never refit (see needFit below); the candidate pool in particular
+  // is display-only and excluded from both the check and the fit target.
   const lastPointsCountRef = useRef<number>(0);
   const lastActiveDayRef = useRef<number>(activeDayIndex);
   const lastLayerSigRef = useRef<string>(layerSig);
@@ -558,14 +621,15 @@ export function PlannerMap({
     const pointsAppeared = lastPointsCountRef.current === 0 && points.length > 0;
 
     // Day changes refit; layer toggles never yank the viewport — newly
-    // revealed far points are pulled in by the out-of-view check below.
+    // revealed far schedule points are pulled in by the out-of-view check
+    // below (pool points never trigger it).
     let needFit = pointsAppeared || dayChanged;
     if (!needFit && (points.length !== lastPointsCountRef.current || layerChanged)) {
       const width = containerSize.width || 400;
       const height = containerSize.height || 300;
       const cx = projectLngToX(center.lng, zoom);
       const cy = projectLatToY(center.lat, zoom);
-      needFit = points.some((p) => {
+      needFit = scheduleFitBasis.some((p) => {
         const x = projectLngToX(p.lng, zoom) - cx + width / 2;
         const y = projectLatToY(p.lat, zoom) - cy + height / 2;
         return x < -20 || x > width + 20 || y < -20 || y > height + 20;
@@ -573,15 +637,13 @@ export function PlannerMap({
     }
 
     if (needFit) {
-      const activePoints = resolveLayerPoints(points, { showRoutesLayer, showCandidates });
-      const pointsToFit = activePoints.length > 0 ? activePoints : points;
-      fitToPoints(pointsToFit);
+      fitToPoints(scheduleFitBasis);
     }
 
     lastPointsCountRef.current = points.length;
     lastActiveDayRef.current = activeDayIndex;
     lastLayerSigRef.current = layerSig;
-  }, [points, activeDayIndex, layerSig, showRoutesLayer, showCandidates, center, zoom, containerSize, fitToPoints]);
+  }, [points, activeDayIndex, layerSig, showRoutesLayer, center, zoom, containerSize, scheduleFitBasis, fitToPoints]);
   const screenToGeo = useCallback((sx: number, sy: number) => {
     const { width, height } = viewportSize();
     const view = viewRef.current;
@@ -766,6 +828,7 @@ export function PlannerMap({
         const dist = Math.hypot(e.clientX - pointerDownPosRef.current.x, e.clientY - pointerDownPosRef.current.y);
         if (dist < 6 && (e.target === containerRef.current || (e.target as HTMLElement).tagName === 'IMG' || (e.target as HTMLElement).tagName === 'svg' || (e.target as HTMLElement).tagName === 'polyline')) {
           setSelectedPlaceId(null);
+          setOpenClusterKey(null);
         }
       }
       setIsDragging(false);
@@ -829,9 +892,8 @@ export function PlannerMap({
 
   // Every visible point keeps its own identity marker: candidate pools stay
   // directly plannable and scheduled stops keep their sequence numbers.
-  // Only exact-duplicate coordinates of the same kind collapse (see
-  // markerClusters below); visual hierarchy otherwise comes from marker
-  // size grading.
+  // Only exact-duplicate coordinates collapse (see markerClusters below);
+  // visual hierarchy otherwise comes from marker size grading.
   const markerLayout = useMemo(() => {
     return visiblePoints.map((p, index) => {
       const x = projectLngToX(p.lng, zoom) - centerX + containerSize.width / 2;
@@ -843,17 +905,15 @@ export function PlannerMap({
   }, [visiblePoints, zoom, centerX, centerY, containerSize]);
 
   // Exact-duplicate coordinates (≈1m) collapse into one cluster marker with a
-  // count badge — e.g. the same café scheduled twice a day. Grouping is
-  // kind-separated: a scheduled stop never merges with its own candidate-pool
-  // dot at the same coords (that would swallow the green sequence number).
+  // count badge — e.g. the same café scheduled twice a day, or the same hotel
+  // on two days. Grouping is coordinate-only so every stacked place stays
+  // reachable; the member list badges (D2·3 / 候选） tell kinds apart.
   // Positions are render-loop positions (post viewport-cull), matching the
   // pIdx used at render below.
   const markerClusters = useMemo(() => {
     const groups = new Map<string, number[]>();
     markerLayout.forEach((item, pos) => {
-      const key = item.p.isScheduled
-        ? `sched|${item.p.dayIndex ?? -1}|${item.p.lat.toFixed(5)}|${item.p.lng.toFixed(5)}`
-        : `cand|${item.p.lat.toFixed(5)}|${item.p.lng.toFixed(5)}`;
+      const key = `${item.p.lat.toFixed(5)}|${item.p.lng.toFixed(5)}`;
       const list = groups.get(key);
       if (list) list.push(pos);
       else groups.set(key, [pos]);
@@ -1013,141 +1073,81 @@ export function PlannerMap({
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xs">
-      {/* Map Controls */}
+      {/* Map Controls: one segmented layer switch shared by both variants
+          (compact/full differ only in marker sizes below). Segments:
+          当天 = solo active day (click again to restore defaults),
+          路线 = overlay other days' routes, 候选池 = pool overlay with count. */}
       <div className="flex flex-wrap items-center justify-end gap-1.5 border-b border-stone-100 bg-stone-50/80 px-3 py-2">
-        {compact ? (
-          <>
-            <div
-              role="group"
-              aria-label={zh ? '地图图层' : 'Map layers'}
-              className="flex items-center overflow-hidden rounded-full text-[10px] font-semibold ring-1 ring-stone-200"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (!showRoutesLayer && !showCandidates) resetLayers();
-                  else { setShowRoutesLayer(false); setShowCandidates(false); }
-                }}
-                aria-pressed={!showRoutesLayer && !showCandidates}
-                title={zh ? '只看当天路线' : 'Active day only'}
-                className={`px-2 py-0.5 transition ${!showRoutesLayer && !showCandidates ? 'bg-emerald-700 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
-              >
-                🟢 {zh ? `第${activeDayIndex + 1}天` : `Day ${activeDayIndex + 1}`}
-              </button>
-              <button
-                type="button"
-                onClick={() => { resetLayers(); }}
-                aria-pressed={!showRoutesLayer && showCandidates && coloredDays.length === 0}
-                title={zh ? '回到默认图层' : 'Reset to default layers'}
-                className={`px-2 py-0.5 transition ${!showRoutesLayer && showCandidates && coloredDays.length === 0 ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
-              >
-                {zh ? '全部' : 'All'}
-              </button>
-              {allPlacesByDate && tripDates && tripDates.length > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => setShowRoutesLayer((prev) => !prev)}
-                  title={zh ? '所有路线图层：叠加显示，全灰，需到图例点亮某天' : 'All-routes layer: overlay, all gray until a day is lit in the legend'}
-                  aria-pressed={showRoutesLayer}
-                  className={`px-2 py-0.5 transition ${showRoutesLayer ? 'bg-indigo-700 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
-                >
-                  🌐 {zh ? '路线' : 'Routes'}
-                </button>
-              ) : null}
-            </div>
+        <div
+          role="group"
+          aria-label={zh ? '地图图层' : 'Map layers'}
+          className="flex items-center overflow-hidden rounded-full text-[10px] font-semibold ring-1 ring-stone-200"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              if (!showRoutesLayer && !showCandidates) resetLayers();
+              else { setShowRoutesLayer(false); setShowCandidates(false); setColoredDays([]); }
+            }}
+            aria-pressed={!showRoutesLayer && !showCandidates}
+            title={zh ? '只看当天（再点一次恢复默认）' : 'Active day only (click again to restore)'}
+            className={`px-2 py-0.5 transition ${!showRoutesLayer && !showCandidates ? 'bg-emerald-700 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
+          >
+            🟢 {zh ? `第${activeDayIndex + 1}天` : `Day ${activeDayIndex + 1}`}
+          </button>
+          {allPlacesByDate && tripDates && tripDates.length > 1 ? (
             <button
               type="button"
-              onClick={() => setShowCandidates((prev) => !prev)}
-              title={zh ? '候选池图层开关' : 'Toggle the candidate pool layer'}
-              aria-pressed={showCandidates}
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${showCandidates ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
+              onClick={() => setShowRoutesLayer((prev) => !prev)}
+              title={zh ? '叠加其它天的路线（灰色，可到图例点亮某天）' : 'Overlay other days’ routes (gray until lit in the legend)'}
+              aria-pressed={showRoutesLayer}
+              className={`px-2 py-0.5 transition ${showRoutesLayer ? 'bg-indigo-700 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
             >
-              {showCandidates ? '☑' : '☐'} 🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
+              🌐 {zh ? '路线' : 'Routes'}
             </button>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setControlsMenuOpen((prev) => !prev)}
-                className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100 transition"
-                title={zh ? '更多地图选项' : 'More map options'}
-                aria-expanded={controlsMenuOpen}
-              >
-                ⋯
-              </button>
-              {controlsMenuOpen ? (
-                <>
-                  <div className="fixed inset-0 z-40 cursor-default" onClick={() => setControlsMenuOpen(false)} />
-                  <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-xl">
-                    <div className="px-3 py-1.5">
-                      <div className="mb-1 text-[9px] font-bold text-stone-400">{zh ? '底图' : 'Basemap'}</div>
-                      <select
-                        value={basemapStyle}
-                        onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
-                        className="w-full rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-stone-700 focus:border-stone-400 focus:outline-hidden cursor-pointer"
-                      >
-                        {BASEMAP_OPTIONS.map((opt) => (
-                          <option key={opt.id} value={opt.id}>
-                            {opt.icon} {opt.label[language]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Basemap Style Selector */}
-            <div className="relative inline-flex items-center">
-              <select
-                value={basemapStyle}
-                onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
-                className="rounded-full border border-stone-200 bg-white py-0.5 pl-2 pr-6 text-[10px] font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 focus:border-stone-400 focus:outline-hidden cursor-pointer"
-                title={zh ? '切换免费底图样式' : 'Switch Basemap Style'}
-              >
-                {BASEMAP_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.icon} {opt.label[language]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!showRoutesLayer && !showCandidates) resetLayers();
-                else { setShowRoutesLayer(false); setShowCandidates(false); }
-              }}
-              title={zh ? '只看当天（再点一次恢复）' : 'Focus active day (click again to restore)'}
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${!showRoutesLayer && !showCandidates ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
-            >
-              🟢 {zh ? `第${activeDayIndex + 1}天路线` : `Day ${activeDayIndex + 1}`} ({scheduledPlaces.length})
-            </button>
-            {allPlacesByDate && tripDates && tripDates.length > 1 ? (
-              <button
-                type="button"
-                onClick={() => setShowRoutesLayer((prev) => !prev)}
-                title={zh ? '所有路线图层：叠加显示，全灰，需到图例点亮某天' : 'All-routes layer: overlay, all gray until a day is lit in the legend'}
-                aria-pressed={showRoutesLayer}
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${showRoutesLayer ? 'bg-indigo-700 text-white shadow-xs' : 'bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100'}`}
-              >
-                {showRoutesLayer ? '☑' : '☐'} 🌐 {zh ? '所有路线' : 'All Routes'} ({allScheduledCount})
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setShowCandidates((prev) => !prev)}
-              title={zh ? '候选池图层开关' : 'Toggle the candidate pool layer'}
-              aria-pressed={showCandidates}
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${showCandidates ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
-            >
-              {showCandidates ? '☑' : '☐'} 🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
-            </button>
-          </>
-        )}
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setShowCandidates((prev) => !prev)}
+            title={zh ? '候选池：只显示或隐藏，不影响地图视野' : 'Candidate pool: show or hide only, never moves the view'}
+            aria-pressed={showCandidates}
+            className={`px-2 py-0.5 transition ${showCandidates ? 'bg-blue-700 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
+          >
+            🔵 {zh ? '候选池' : 'Pool'} ({candidatePlaces.length})
+          </button>
+        </div>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setControlsMenuOpen((prev) => !prev)}
+            className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-stone-600 ring-1 ring-stone-200 hover:bg-stone-100 transition"
+            title={zh ? '底图样式' : 'Basemap style'}
+            aria-expanded={controlsMenuOpen}
+          >
+            ⋯
+          </button>
+          {controlsMenuOpen ? (
+            <>
+              <div className="fixed inset-0 z-40 cursor-default" onClick={() => setControlsMenuOpen(false)} />
+              <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-xl">
+                <div className="px-3 py-1.5">
+                  <div className="mb-1 text-[9px] font-bold text-stone-400">{zh ? '底图' : 'Basemap'}</div>
+                  <select
+                    value={basemapStyle}
+                    onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
+                    className="w-full rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-stone-700 focus:border-stone-400 focus:outline-hidden cursor-pointer"
+                  >
+                    {BASEMAP_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.icon} {opt.label[language]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {/* Map Viewport Area */}
@@ -1258,39 +1258,106 @@ export function PlannerMap({
           if (clusterPos && clusterPos.length > 1) {
             const items = clusterPos.map((pos) => markerLayout[pos]);
             const first = items[0];
+            const clusterKey = `cluster_${first.p.lat.toFixed(5)}_${first.p.lng.toFixed(5)}`;
+            const isOpen = openClusterKey === clusterKey;
             const anyScheduled = items.some((item) => item.p.isScheduled);
             const lit = items.some((item) =>
               highlightedPlaceId === item.p.place.id || selectedPlaceId === item.p.place.id,
             );
             const names = items.map((item) => item.p.place.title).join('、');
+            const openList = () => {
+              setSelectedPlaceId(null);
+              setOpenClusterKey(isOpen ? null : clusterKey);
+            };
+            const zoomHere = () => {
+              clearPanTransform();
+              setCenter({ lat: first.p.lat, lng: first.p.lng });
+              const { width, height } = viewportSize();
+              animateZoomAround(viewRef.current.zoom + 1, width / 2, height / 2);
+            };
             return (
-              <div
-                key={`cluster_${first.p.lat.toFixed(5)}_${first.p.lng.toFixed(5)}`}
-                data-map-marker="true"
-                data-marker-id={first.p.place.id}
-                role="button"
-                tabIndex={0}
-                aria-label={zh ? `${items.length} 个地点在此：${names}（点击放大）` : `${items.length} places here (click to zoom in)`}
-                title={zh ? `${names}（点击放大）` : `${names} (click to zoom in)`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearPanTransform();
-                  setCenter({ lat: first.p.lat, lng: first.p.lng });
-                  const { width, height } = viewportSize();
-                  animateZoomAround(viewRef.current.zoom + 1, width / 2, height / 2);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
+              <Fragment key={clusterKey}>
+                <div
+                  data-map-marker="true"
+                  data-marker-id={first.p.place.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={zh ? `${items.length} 个地点在此：${names}（点击展开列表）` : `${items.length} places here (click to expand)`}
+                  title={zh ? `${names}（点击展开列表）` : `${names} (click to expand)`}
+                  onClick={(e) => {
                     e.stopPropagation();
-                    clearPanTransform();
-                    setCenter({ lat: first.p.lat, lng: first.p.lng });
-                  }
-                }}
-                className={`absolute z-30 flex ${compact ? 'h-5 min-w-5 px-0.5 text-[10px]' : 'h-7 min-w-7 text-[11px]'} -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full font-black text-white shadow-md transition hover:scale-110 ${anyScheduled ? 'bg-emerald-700 ring-2 ring-emerald-300' : 'bg-stone-800 ring-2 ring-white'} ${lit ? 'outline-2 outline-amber-400' : ''}`}
-                style={{ left: `${x}px`, top: `${y}px` }}
-              >
-                {items.length}
-              </div>
+                    openList();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openList();
+                    }
+                  }}
+                  className={`absolute z-30 flex ${compact ? 'h-5 min-w-5 px-0.5 text-[10px]' : 'h-7 min-w-7 text-[11px]'} -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full font-black text-white shadow-md transition hover:scale-110 ${anyScheduled ? 'bg-emerald-700 ring-2 ring-emerald-300' : 'bg-stone-800 ring-2 ring-white'} ${lit || isOpen ? 'outline-2 outline-amber-400' : ''}`}
+                  style={{ left: `${x}px`, top: `${y}px` }}
+                >
+                  {items.length}
+                </div>
+                {isOpen ? (
+                  <div
+                    className="absolute z-50 w-max rounded-xl border border-stone-200/95 bg-white/95 p-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95"
+                    style={{
+                      left: `${Math.max(90, Math.min(containerSize.width - 90, x))}px`,
+                      top: `${y + 18}px`,
+                      transform: 'translate(-50%, 0)',
+                      maxWidth: `${Math.max(180, Math.min(280, containerSize.width - 24))}px`,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    role="listbox"
+                    aria-label={zh ? '同坐标地点列表' : 'Places at this location'}
+                  >
+                    <button
+                      type="button"
+                      onClick={zoomHere}
+                      className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-bold text-stone-600 transition hover:bg-stone-100"
+                    >
+                      🔍 {zh ? '放大看分布' : 'Zoom in'}
+                    </button>
+                    <div className="my-1 h-px bg-stone-100" aria-hidden />
+                    <div className="max-h-44 overflow-y-auto">
+                      {items.map((item) => (
+                        <button
+                          key={item.p.isScheduled ? `sched_${item.p.place.id}_${item.p.dayIndex ?? ''}` : `cand_${item.p.place.id}`}
+                          type="button"
+                          role="option"
+                          aria-selected={selectedPlaceId === item.p.place.id}
+                          onClick={() => {
+                            setOpenClusterKey(null);
+                            setSelectedPlaceId(item.p.place.id);
+                          }}
+                          onMouseEnter={() => onHoverPlace?.(item.p.place.id)}
+                          onMouseLeave={() => onHoverPlace?.(null)}
+                          className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[11px] transition hover:bg-emerald-50"
+                          title={item.p.place.title}
+                        >
+                          <span className="shrink-0">{KIND_EMOJI[item.p.place.kind] || '📍'}</span>
+                          <span className="min-w-0 flex-1 truncate font-semibold text-stone-800">{item.p.place.title}</span>
+                          {item.p.isScheduled ? (
+                            <span
+                              className="shrink-0 rounded-full px-1.5 text-[9px] font-bold text-white"
+                              style={{ backgroundColor: plannerDayColor(item.p.dayIndex ?? activeDayIndex) }}
+                            >
+                              D{(item.p.dayIndex ?? 0) + 1}·{item.p.order}
+                            </span>
+                          ) : (
+                            <span className="shrink-0 rounded-full bg-blue-100 px-1.5 text-[9px] font-bold text-blue-800">
+                              {zh ? '候选' : 'Pool'}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </Fragment>
             );
           }
           const isHighlighted = highlightedPlaceId === p.place.id || selectedPlaceId === p.place.id;
@@ -1348,7 +1415,9 @@ export function PlannerMap({
                 left: `${x}px`,
                 top: `${y}px`,
                 zIndex: isHighlighted ? 40 : p.isScheduled ? (p.isActiveDay !== false ? 30 : 25) : 20,
-                transform: isHighlighted ? 'translate(-50%, -50%) scale(1.2)' : 'translate(-50%, -50%) scale(1)',
+                // Independent `scale` property (not `transform`) so it composes
+                // with the -translate-1/2 centering instead of overriding it.
+                scale: isHighlighted ? '1.2' : '1',
               }}
             >
               {/* Timeline-hover highlight pulse (motion-safe only) */}
@@ -1386,13 +1455,14 @@ export function PlannerMap({
                   </div>
                 )
               ) : (
-                // Candidate POI Marker (20px dot, 14px compact; light green when already
-                // scheduled on some day). Hover/selected restores the full size as feedback.
+                // Candidate POI Marker: solid blue dot (white failed on light
+                // basemaps); light green when already scheduled on some day.
+                // Hover/selected restores the full size as feedback.
                 <div
                   className={`flex ${compact ? 'h-3.5 w-3.5 text-[8px]' : 'h-5 w-5 text-[10px]'} items-center justify-center rounded-full border shadow-sm transition-all ${
                     scheduledCount > 0
                       ? `border-emerald-200 bg-emerald-50 ${isHighlighted ? 'ring-3 ring-emerald-400 scale-[1.6]' : 'hover:scale-[1.6]'}`
-                      : `border-white/80 bg-white ${isHighlighted ? 'ring-3 ring-blue-400 scale-[1.6]' : 'hover:scale-[1.6]'}`
+                      : `border-white/90 bg-blue-600 ${isHighlighted ? 'ring-3 ring-blue-300 scale-[1.6]' : 'hover:scale-[1.6]'}`
                   }`}
                   title={markerTitle(
                     scheduledCount > 0 ? `${p.place.title} (已排 ${scheduledCount} 次)` : p.place.title,
@@ -1408,53 +1478,62 @@ export function PlannerMap({
 
 
 
-        {/* Floating Map Action Controls */}
-        <div className="absolute top-2 right-2 flex flex-col gap-1 z-30">
-          <button
-            type="button"
-            onClick={() => {
-              const { width, height } = viewportSize();
-              animateZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, width / 2, height / 2);
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-xs font-bold text-stone-800 shadow-sm hover:bg-stone-50"
-            title={zh ? '放大' : 'Zoom In'}
-            aria-label={zh ? '放大' : 'Zoom In'}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const { width, height } = viewportSize();
-              animateZoomAround(viewRef.current.zoom - ZOOM_STEP_BUTTON, width / 2, height / 2);
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-xs font-bold text-stone-800 shadow-sm hover:bg-stone-50"
-            title={zh ? '缩小' : 'Zoom Out'}
-            aria-label={zh ? '缩小' : 'Zoom Out'}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            onClick={fitBounds}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-xs font-bold text-stone-800 shadow-sm hover:bg-stone-50"
-            title={zh ? '视野居中所有点' : 'Fit All Points'}
-            aria-label={zh ? '视野居中所有点' : 'Fit All Points'}
-          >
-            ⊙
-          </button>
-          {/* Compact maps have no day legend: standalone back-to-active-day entry */}
-          {!showLegend && tripDates && tripDates.length > 1 ? (
+        {/* Floating Map Action Controls: zoom group, then view group. */}
+        <div className="absolute top-2 right-2 z-30 flex flex-col gap-1.5">
+          <div className="flex flex-col overflow-hidden rounded-md border border-stone-200 bg-white/95 shadow-sm">
             <button
               type="button"
-              onClick={backToActiveDay}
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 bg-white/95 text-[11px] font-bold text-stone-800 shadow-sm hover:bg-stone-50"
-              title={zh ? '回到当天路线视野' : 'Back to active day view'}
-              aria-label={zh ? '回到当天路线视野' : 'Back to active day view'}
+              onClick={() => {
+                const { width, height } = viewportSize();
+                animateZoomAround(viewRef.current.zoom + ZOOM_STEP_BUTTON, width / 2, height / 2);
+              }}
+              className="flex h-7 w-7 items-center justify-center text-xs font-bold text-stone-800 hover:bg-stone-50"
+              title={zh ? '放大' : 'Zoom In'}
+              aria-label={zh ? '放大' : 'Zoom In'}
             >
-              ⌖
+              +
             </button>
-          ) : null}
+            <div className="h-px bg-stone-200" aria-hidden />
+            <button
+              type="button"
+              onClick={() => {
+                const { width, height } = viewportSize();
+                animateZoomAround(viewRef.current.zoom - ZOOM_STEP_BUTTON, width / 2, height / 2);
+              }}
+              className="flex h-7 w-7 items-center justify-center text-xs font-bold text-stone-800 hover:bg-stone-50"
+              title={zh ? '缩小' : 'Zoom Out'}
+              aria-label={zh ? '缩小' : 'Zoom Out'}
+            >
+              −
+            </button>
+          </div>
+          <div className="flex flex-col overflow-hidden rounded-md border border-stone-200 bg-white/95 shadow-sm">
+            <button
+              type="button"
+              onClick={fitBounds}
+              className="flex h-7 w-7 items-center justify-center text-xs font-bold text-stone-800 hover:bg-stone-50"
+              title={zh ? '适应日程范围（候选池不影响视野）' : 'Fit schedule (pool does not affect the view)'}
+              aria-label={zh ? '适应日程范围' : 'Fit schedule'}
+            >
+              ⊙
+            </button>
+            {/* Back-to-active-day entry, shared by both variants (the day
+                legend only explains colors and toggles them). */}
+            {tripDates && tripDates.length > 1 ? (
+              <>
+                <div className="h-px bg-stone-200" aria-hidden />
+                <button
+                  type="button"
+                  onClick={backToActiveDay}
+                  className="flex h-7 w-7 items-center justify-center text-[11px] font-bold text-stone-800 hover:bg-stone-50"
+                  title={zh ? '回到当天路线视野' : 'Back to active day view'}
+                  aria-label={zh ? '回到当天路线视野' : 'Back to active day view'}
+                >
+                  ⌖
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
 
         {/* Scale Bar */}
@@ -1465,7 +1544,7 @@ export function PlannerMap({
           </div>
         ) : null}
 
-        {/* Day Color Legend (toggle a day's color display) + Back-to-Day.
+        {/* Day Color Legend: explains colors and toggles a day's color display.
             The active day is always lit; lighting another day auto-enables
             the routes layer so the change is visible. */}
         {showLegend && tripDates && tripDates.length > 1 ? (
@@ -1496,15 +1575,36 @@ export function PlannerMap({
                   </button>
                 );
               })}
-              <button
-                type="button"
-                onClick={backToActiveDay}
-                className="mt-0.5 rounded-md border border-stone-200 bg-white px-1.5 py-0.5 text-[9.5px] font-bold text-stone-700 hover:bg-stone-50 transition"
-                title={zh ? '回到当天路线视野' : 'Back to active day view'}
-              >
-                ⌖ {zh ? '回当天' : 'Today'}
-              </button>
             </div>
+          </div>
+        ) : null}
+
+        {/* Mini day legend for compact maps: same toggle semantics in a dot strip. */}
+        {compact && tripDates && tripDates.length > 1 ? (
+          <div className="absolute top-2 left-2 z-30 flex max-w-[62%] items-center gap-0.5 overflow-x-auto rounded-full bg-white/90 px-2 py-1 shadow-xs backdrop-blur-sm">
+            {tripDates.map((date, dIdx) => {
+              const isActive = dIdx === activeDayIndex;
+              const lit = isActive || coloredDays.includes(dIdx);
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  disabled={isActive}
+                  onClick={() => {
+                    if (!coloredDays.includes(dIdx)) setShowRoutesLayer(true);
+                    toggleDay(dIdx, activeDayIndex);
+                  }}
+                  className={`flex shrink-0 items-center gap-0.5 rounded-full px-1 py-0.5 text-[9px] font-bold transition ${isActive ? 'cursor-default text-stone-900' : lit ? 'text-stone-900 hover:bg-stone-100' : 'text-stone-400 hover:bg-stone-100'}`}
+                  title={isActive
+                    ? (zh ? `当天 D${dIdx + 1}（始终彩色显示）` : `Active day D${dIdx + 1}`)
+                    : (zh ? (lit ? `关闭 D${dIdx + 1} 色彩` : `点亮 D${dIdx + 1} 色彩`) : (lit ? `Unlight D${dIdx + 1}` : `Light D${dIdx + 1}`))}
+                  aria-pressed={lit}
+                >
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: lit ? plannerDayColor(dIdx) : '#d6d3d1' }} />
+                  D{dIdx + 1}
+                </button>
+              );
+            })}
           </div>
         ) : null}
 
@@ -1523,41 +1623,31 @@ export function PlannerMap({
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            {compact ? (
-              <MapPlaceCard
-                place={selectedPlace}
-                zh={zh}
-                activeDayIndex={activeDayIndex}
-                visitCount={visitCountByPlaceId?.get(canonicalPlaceId(selectedPlace)) ?? 0}
-                scheduledPlace={selectedScheduledPlace}
-                dayStopCount={activeDayStopCount}
-                onSchedule={onSchedulePlace}
-                onUnschedule={onUnschedulePlace}
-                onShelve={onShelvePlace}
-                onClose={() => setSelectedPlaceId(null)}
-              />
-            ) : (
-              <MapPlaceCard
-                place={selectedPlace}
-                zh={zh}
-                activeDayIndex={activeDayIndex}
-                visitCount={visitCountByPlaceId?.get(canonicalPlaceId(selectedPlace)) ?? 0}
-                scheduledPlace={selectedScheduledPlace}
-                dayStopCount={activeDayStopCount}
-                onSchedule={onSchedulePlace}
-                onUnschedule={onUnschedulePlace}
-                onShelve={onShelvePlace}
-                onClose={() => setSelectedPlaceId(null)}
-              />
-            )}
+            <MapPlaceCard
+              place={selectedPlace}
+              zh={zh}
+              activeDayIndex={activeDayIndex}
+              visitCount={visitCountByPlaceId?.get(canonicalPlaceId(selectedPlace)) ?? 0}
+              scheduledPlace={selectedScheduledPlace}
+              dayStopCount={activeDayStopCount}
+              onSchedule={onSchedulePlace}
+              onUnschedule={onUnschedulePlace}
+              onShelve={onShelvePlace}
+              onClose={() => setSelectedPlaceId(null)}
+            />
           </div>
         )}
       </div>
 
-      {/* Footer Helper */}
+      {/* Footer Helper: tile-source attribution follows the active basemap. */}
       <div className="border-t border-stone-100 bg-stone-50 px-3 py-1.5 text-[10.5px] text-stone-500">
         <div className="text-[9px] text-stone-400">
-          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="hover:underline">OpenStreetMap</a> · © <a href="https://carto.com/attributions" target="_blank" rel="noreferrer" className="hover:underline">CARTO</a>
+          © {activeBasemap.attribution.map((attr, index) => (
+            <span key={attr.text}>
+              {index > 0 ? ' · ' : null}
+              <a href={attr.href} target="_blank" rel="noreferrer" className="hover:underline">{attr.text}</a>
+            </span>
+          ))}
         </div>
       </div>
     </div>

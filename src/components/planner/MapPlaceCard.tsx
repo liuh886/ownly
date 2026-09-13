@@ -94,6 +94,28 @@ export function MapPlaceCard({
         </p>
       ) : null}
 
+      {/* Navigate: open in Google Maps / get directions (same links as the timeline). */}
+      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold">
+        <a
+          href={place.source_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address || place.title)}`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-stone-100 px-2 py-1 text-stone-700 transition hover:bg-stone-200"
+          title={zh ? '在 Google Maps 中查看' : 'View on Google Maps'}
+        >
+          🗺️ {zh ? '查看' : 'View'}
+        </a>
+        <a
+          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.address || place.title)}`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-stone-100 px-2 py-1 text-stone-700 transition hover:bg-stone-200"
+          title={zh ? '导航到此地' : 'Directions'}
+        >
+          🧭 {zh ? '导航' : 'Go'}
+        </a>
+      </div>
+
       {/* Insert position: default appends at the end; pick a stop number to insert before it */}
       {!scheduledPlace && dayStopCount > 0 ? (
         <label className="mt-1.5 flex items-center gap-1 text-[11px] text-stone-500">
@@ -154,17 +176,6 @@ export function MapPlaceCard({
             <span>🙈</span>
             <span>{zh ? '暂不考虑' : 'Shelve'}</span>
           </button>
-        ) : null}
-        {place.source_url ? (
-          <a
-            href={place.source_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex shrink-0 items-center rounded-lg px-1.5 py-1.5 text-[11px] text-stone-400 transition hover:bg-stone-100 hover:text-emerald-700"
-            title={zh ? '在 Google Maps 中查看' : 'View on Maps'}
-          >
-            🗺️
-          </a>
         ) : null}
       </div>
     </div>

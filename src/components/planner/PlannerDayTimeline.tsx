@@ -47,14 +47,17 @@ export interface PlannerDayTimelineProps {
 /**
  * Well-known landmarks whose timeline 💡/📝 note row is hidden by design:
  * Suvarnabhumi Airport, Chiang Mai Airport, Chiang Mai University.
- * Matches Chinese + English title variants so data stays intact (display-only).
+ * Matches Chinese + English title variants (whitespace-insensitive) so data
+ * stays intact (display-only).
  */
 export function isTimelineNoteHiddenLandmark(place: { title?: string }): boolean {
   const t = (place.title ?? '').toLowerCase();
   if (!t) return false;
-  if (t.includes('素万那普') || t.includes('suvarnabhumi')) return true;
-  if (t.includes('清迈') && (t.includes('机场') || t.includes('airport'))) return true;
-  if (t.includes('清迈大学') || t.includes('chiang mai university')) return true;
+  const squashed = t.replace(/\s+/g, '');
+  if (t.includes('素万那普') || squashed.includes('suvarnabhumi')) return true;
+  const chiangMai = t.includes('清迈') || squashed.includes('chiangmai');
+  if (chiangMai && (t.includes('机场') || t.includes('airport'))) return true;
+  if (t.includes('清迈大学') || (squashed.includes('chiangmai') && squashed.includes('university'))) return true;
   return false;
 }
 
@@ -490,7 +493,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                               Hidden for well-known landmarks (airports + CMU) by design. */}
                           {!isTimelineNoteHiddenLandmark(place) && place.why ? (
                             <p className="line-clamp-1 rounded bg-stone-50 px-1.5 py-0.5 text-[10px] text-stone-600 leading-snug">
-                              💡 <strong className="font-semibold text-stone-700">{zh ? '推荐理由:' : 'Why:'}</strong> {place.why}
+                              💡 {zh ? null : (<><strong className="font-semibold text-stone-700">Why:</strong> </>)}{place.why}
                             </p>
                           ) : !isTimelineNoteHiddenLandmark(place) && place.notes ? (
                             <p className="line-clamp-1 text-[10px] text-stone-500 italic pl-0.5 leading-snug">
@@ -604,14 +607,6 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                         <span>🚫 {zh ? '无预估' : 'No est'}</span>
                                         <span className="text-[10px] opacity-70">▾</span>
                                       </button>
-                                      <a
-                                        href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-[10px] text-stone-400 hover:text-stone-700 underline underline-offset-2 transition"
-                                      >
-                                        Google 导航 ↗
-                                      </a>
                                     </div>
                                   ) : (
                                     <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-stone-500">
