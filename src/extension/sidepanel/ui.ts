@@ -139,7 +139,10 @@ export function applyI18n() {
   el.bulkInputText.placeholder = dict.bulkPlaceholder;
   el.btnParseBulkImport.textContent = dict.btnParseBulkImport;
   el.btnCreateCollection.textContent = store.lang === 'zh' ? '＋ 新建' : '+ New';
-  el.btnExportActiveCollection.textContent = store.lang === 'zh' ? '📤 分享 / 导出' : '📤 Share / Export';
+  el.txtExportActiveCollection.textContent = store.lang === 'zh' ? '导出' : 'Export';
+  el.txtExportMarkdown.textContent = dict.exportMenuMarkdown;
+  el.txtCopyMarkdown.textContent = dict.exportMenuCopy;
+  el.txtExportJson.textContent = dict.exportMenuJson;
   el.btnDeleteActiveCollection.textContent = store.lang === 'zh' ? '🗑️ 删除' : 'Delete';
 
   el.btnToggleSelectAll.textContent = dict.btnSelectAll;
@@ -488,7 +491,7 @@ export function renderState() {
     }
   } else {
     el.captureContextTitle.textContent = store.lang === 'zh' ? 'Inbox' : 'Inbox';
-    el.captureContextHint.textContent = store.lang === 'zh' ? '独立合集 · 可直接收藏，无需 Planner' : 'Independent · capture without Planner';
+    el.captureContextHint.textContent = store.lang === 'zh' ? '独立合集 · 可直接收藏，无需网站、无需登录' : 'Independent · collect without website or login';
   }
   el.btnCaptureSubmit.disabled = !activeCollection;
   // Populate collection selector
@@ -517,9 +520,7 @@ export function renderState() {
         : (store.lang === 'zh' ? `删除合集：${activeCollection?.title}` : `Delete collection: ${activeCollection?.title}`);
     }
     if (el.btnExportActiveCollection) {
-      el.btnExportActiveCollection.title = store.lang === 'zh'
-        ? `导出当前合集「${activeCollection?.title || 'Inbox'}」为 JSON 文件`
-        : `Export active collection "${activeCollection?.title || 'Inbox'}" as JSON`;
+      el.btnExportActiveCollection.title = dict.exportMenuTitle(activeCollection?.title || 'Inbox');
     }
   } catch {}
   renderChips();

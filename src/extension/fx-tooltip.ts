@@ -16,7 +16,9 @@ function isChineseUi(): boolean {
 
 let targetCurrency = detectDefaultTargetCurrency();
 let pivotRates: Record<string, number> = DEFAULT_USD_PIVOT;
-let enabled = true;
+// Store-review posture: selection FX matches every page but stays inert until
+// the user explicitly enables it in the side panel (default off).
+let enabled = false;
 let overrideCurrency: string | undefined;
 
 function setOverride(value?: string): void {
@@ -114,7 +116,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const type = (message as { type?: string }).type;
   if (type === 'OWNLY_FX_TOOLTIP_STATUS_CHANGED') {
-    enabled = (message as { enabled?: boolean }).enabled !== false;
+    enabled = (message as { enabled?: boolean }).enabled === true;
     if (!enabled) hideTooltip();
     sendResponse({ ok: true });
     return;

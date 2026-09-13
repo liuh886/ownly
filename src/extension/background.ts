@@ -451,6 +451,23 @@ const FX_TOOLTIP_ENABLED_KEY = 'ownly_fx_tooltip_enabled';
 const FX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const fxOverrideKey = (tabId: number) => `ownlyFxOverride:${tabId}`;
 
+// One-time migration for the v1.0.0 FX opt-in switch: installs predating the
+// default-off change that never touched the toggle had FX enabled via the old
+// `!== false` default — preserve their behavior once. Fresh installs (no
+// capture state yet) stay off until the user enables the toggle.
+void (async () => {
+  try {
+    const data = await chrome.storage.local.get([FX_TOOLTIP_ENABLED_KEY, 'ownlyCaptureStateV3']);
+    if (FX_TOOLTIP_ENABLED_KEY in data) return;
+    if (data.ownlyCaptureStateV3) {
+      await chrome.storage.local.set({ [FX_TOOLTIP_ENABLED_KEY]: true });
+      logger.info('Background', 'FX tooltip migrated to enabled for pre-1.0 install');
+    }
+  } catch (error) {
+    logger.warn('Background', 'FX tooltip migration check failed', String(error));
+  }
+})();
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!tab.active || (!changeInfo.url && !changeInfo.status)) return;
   const url = changeInfo.url || tab.url || '';
@@ -847,7 +864,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         ok: true,
         targetCurrency,
         rates,
-        enabled: stored[FX_TOOLTIP_ENABLED_KEY] !== false,
+        enabled: stored[FX_TOOLTIP_ENABLED_KEY] === true,
         overrideCurrency,
       });
     })().catch((error: unknown) => sendResponse({ ok: false, error: String(error) }));
@@ -855,7 +872,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (type === 'OWNLY_SET_FX_TOOLTIP_ENABLED') {
-    const enabled = (message as { enabled?: boolean }).enabled !== false;
+    const enabled = (message as { enabled?: boolean }).enabled === true;
     void (async () => {
       await chrome.storage.local.set({ [FX_TOOLTIP_ENABLED_KEY]: enabled });
       const tabs = await chrome.tabs.query({});

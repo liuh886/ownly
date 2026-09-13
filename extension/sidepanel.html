@@ -14,7 +14,7 @@
       </div>
       <div class="topbar-actions">
         <label id="lblFxTooltipToggle" class="fx-toggle-label" title="Show FX converter when selecting price text">
-          <input type="checkbox" id="toggleFxTooltip" checked />
+          <input type="checkbox" id="toggleFxTooltip" />
           <span id="txtFxTooltipToggle" class="fx-toggle-text">💱 Selection FX</span>
         </label>
         <label id="lblDebugToggle" class="fx-toggle-label" title="Show diagnostic log console at the bottom">
@@ -43,7 +43,14 @@
       <div class="row" style="gap:4px; margin-top:6px; align-items:center;">
         <select id="collectionSelector" style="flex:1; font-size:11px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface);"></select>
         <button id="btnCreateCollection" class="secondary" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="New collection">+ New</button>
-        <button id="btnExportActiveCollection" class="secondary" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="Export active collection as JSON">📤 Share / Export</button>
+        <span style="position:relative; display:inline-block;">
+          <button id="btnExportActiveCollection" class="secondary" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="Export active collection" aria-haspopup="menu" aria-expanded="false">📤 <span id="txtExportActiveCollection">导出</span> ▾</button>
+          <span id="exportMenu" role="menu" style="display:none; position:absolute; right:0; top:calc(100% + 4px); z-index:50; min-width:172px; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px;">
+            <button id="btnExportMarkdown" class="secondary" type="button" role="menuitem" style="display:block; width:100%; text-align:left; font-size:11px; padding:6px 8px; border:0;">📝 <span id="txtExportMarkdown">Markdown 文件</span></button>
+            <button id="btnCopyMarkdown" class="secondary" type="button" role="menuitem" style="display:block; width:100%; text-align:left; font-size:11px; padding:6px 8px; border:0;">📋 <span id="txtCopyMarkdown">复制文本</span></button>
+            <button id="btnExportJson" class="secondary" type="button" role="menuitem" style="display:block; width:100%; text-align:left; font-size:11px; padding:6px 8px; border:0;">🧩 <span id="txtExportJson">JSON 文件</span></button>
+          </span>
+        </span>
         <button id="btnDeleteActiveCollection" class="secondary del" type="button" style="font-size:10px; padding:4px 6px; white-space:nowrap;" title="Delete active collection">Delete</button>
       </div>
       <div id="createCollectionRow" class="row" style="display:none; gap:6px; margin-top:6px;">

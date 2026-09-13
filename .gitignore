@@ -22,6 +22,8 @@
 /build
 /dist
 /packages/mcp/dist/
+# local installs inside subpackages (root package-lock.json stays committed)
+/packages/*/package-lock.json
 
 # obsidian plugin build artifacts
 /main.js

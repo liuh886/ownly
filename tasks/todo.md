@@ -1,5 +1,20 @@
 # Ownly — Task Progress & Review
 
+## Pending: 商店首发 + 单机采集器（待 review，不提交） (2026-09-13)
+
+**商店批（Edge 先行）**
+- [x] **PNG 图标**：`ownly-mark.svg` 经 sharp 生成 `ownly-16/48/128.png`，manifest 与 action 图标改指 PNG（SVG 不合规）。
+- [x] **build 剥 `_` 注释键**：`build-extension.mjs` 写 dist manifest 前删除 `_` 开头键，产物已验证零残留。
+- [x] **fx 默认关闭**：content script 初值、`OWNLY_GET_FX_CONFIG` 默认、`SET` 语义、面板 checkbox、HTML 默认勾选五处统一为 opt-in；删死亡 `goo.gl` host（保留活的 `maps.app.goo.gl`）；版本 `0.5.2 → 1.0.0`。
+**单机采集器批**
+- [x] **Markdown 导出 + 复制文本**：`export.ts` 新增 `buildCollectionMarkdown`（编号/类别/评分/地址/营业时间/价格/电话/备注/标签/Maps链接，空字段跳过，中英双语；英文计数用半角括号；空 URL 不输出地图行；slugify 过滤 Windows 非法字符；revoke 延迟 1s）。
+- [x] **导出小菜单**：`📤 导出 ▾` → Markdown 文件 / 复制文本 / JSON 文件（原分享链接逻辑保留在 JSON 项内），Esc/点外部关闭，中英双语；复制失败独立报错（不再误报“无地点”）。
+- [x] **单测 + 门禁**：新增 `src/extension/export.test.ts`（4 用例）并加入 `validate:extension` 列表；删 `exportBtn/exportSaved` 死串。
+- [x] **单机文案**：面板 hint 改“无需网站、无需登录”；`PRIVACY.md` 附录加 standalone 导出句。
+- [x] **自查修补**：fx `STATUS_CHANGED` 改 `=== true`（opt-in 全统一）；`packages/*/package-lock.json` 进 `.gitignore`（根 lock 保持提交）。
+- [x] **FX 老用户一次性迁移**：后台启动时若从未设置过开关且已有采集数据，写一次 `true` 保留旧行为；全新安装保持默认关闭。
+- 验证：`validate:extension` 8 文件 238 测试全绿，`validate:fast` 全绿，dist 产物确认（版本/图标/零 `_` 键）。
+
 ## Pending: 时间线三处精简（待 review，不提交） (2026-09-13)
 
 - [x] **推荐理由去汉字标签**：时间线 `💡` 行中文不再渲染“推荐理由：”四字，只留 emoji + 内容（英文保留 `Why:`，与地图弹窗/候选池卡片一致）。

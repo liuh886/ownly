@@ -1,4 +1,4 @@
-import { rm, mkdir, copyFile, readdir } from 'node:fs/promises';
+import { rm, mkdir, copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { build } from 'esbuild';
 
@@ -27,11 +27,23 @@ await build({
   logLevel: 'info',
 });
 
-for (const file of ['manifest.json', 'sidepanel.html', 'sidepanel.css']) {
+for (const file of ['sidepanel.html', 'sidepanel.css']) {
   await copyFile(path.join(staticDir, file), path.join(outdir, file));
 }
 
-// Store icons: wired from public/icons (existing SVGs) into dist/extension/icons
+// Store packages must not contain the `_`-prefixed authoring notes in
+// extension/manifest.json (Chrome/Edge tolerate unknown keys, but a clean
+// manifest avoids review noise).
+{
+  const manifest = JSON.parse(await readFile(path.join(staticDir, 'manifest.json'), 'utf8'));
+  for (const key of Object.keys(manifest)) {
+    if (key.startsWith('_')) delete manifest[key];
+  }
+  await writeFile(path.join(outdir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+// Store icons: PNG builds of the Ownly mark live in public/icons
+// (ownly-16/48/128.png) and are copied into dist/extension/icons
 // so manifest `icons` + `action.default_icon` (16/48/128) resolve in the package.
 const publicIconsDir = path.join(root, 'public', 'icons');
 const outIconsDir = path.join(outdir, 'icons');

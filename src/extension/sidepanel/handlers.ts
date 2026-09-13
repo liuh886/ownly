@@ -1858,7 +1858,7 @@ export function initHandlers(): void {
   });
 
   void chrome.storage.local.get('ownly_fx_tooltip_enabled').then((data) => {
-    el.toggleFxTooltip.checked = data.ownly_fx_tooltip_enabled !== false;
+    el.toggleFxTooltip.checked = data.ownly_fx_tooltip_enabled === true;
   }).catch(() => {});
 
   el.toggleFxTooltip.addEventListener('change', () => {

@@ -12,6 +12,14 @@ export type ElementMap = {
   collectionSelector: HTMLSelectElement;
   btnCreateCollection: HTMLButtonElement;
   btnExportActiveCollection: HTMLButtonElement;
+  txtExportActiveCollection: HTMLElement;
+  exportMenu: HTMLElement;
+  btnExportMarkdown: HTMLButtonElement;
+  txtExportMarkdown: HTMLElement;
+  btnCopyMarkdown: HTMLButtonElement;
+  txtCopyMarkdown: HTMLElement;
+  btnExportJson: HTMLButtonElement;
+  txtExportJson: HTMLElement;
   btnDeleteActiveCollection: HTMLButtonElement;
   createCollectionRow: HTMLElement;
   inputNewCollection: HTMLInputElement;
@@ -127,6 +135,14 @@ export const el: ElementMap = {
   collectionSelector: required<HTMLSelectElement>('collectionSelector'),
   btnCreateCollection: required<HTMLButtonElement>('btnCreateCollection'),
   btnExportActiveCollection: required<HTMLButtonElement>('btnExportActiveCollection'),
+  txtExportActiveCollection: required('txtExportActiveCollection'),
+  exportMenu: required('exportMenu'),
+  btnExportMarkdown: required<HTMLButtonElement>('btnExportMarkdown'),
+  txtExportMarkdown: required('txtExportMarkdown'),
+  btnCopyMarkdown: required<HTMLButtonElement>('btnCopyMarkdown'),
+  txtCopyMarkdown: required('txtCopyMarkdown'),
+  btnExportJson: required<HTMLButtonElement>('btnExportJson'),
+  txtExportJson: required('txtExportJson'),
   btnDeleteActiveCollection: required<HTMLButtonElement>('btnDeleteActiveCollection'),
   createCollectionRow: required('createCollectionRow'),
   inputNewCollection: required<HTMLInputElement>('inputNewCollection'),
