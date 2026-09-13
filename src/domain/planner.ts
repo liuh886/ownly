@@ -1462,7 +1462,9 @@ export function getMapPointsForFilter<T extends MapPointLike>(
  * - Prunes extreme global outliers (> 800km away when majority are tightly clustered)
  *   while preserving multi-city itineraries (e.g. Bangkok + Pattaya, Tokyo + Hakone).
  * - With `viewport`, steps the zoom back until the span fits (padding kept);
- *   `extraZoom` then sits a small map closer without ever overflowing.
+ *   `extraZoom` is applied AFTER the guard so the caller gets a guaranteed
+ *   closer view (zoom +1 == 2x scale). Full map uses this to sit one level
+ *   closer like the compact map; compact skips the guard and only uses extra.
  */
 export function calculateBounds(
   pts: Array<{ lat: number; lng: number }>,
@@ -1550,10 +1552,10 @@ export function calculateBounds(
   else if (maxSpan > 0.04) z = 12;
   else z = 13;
 
-  z += opts.extraZoom ?? 0;
-
   // Viewport guard: shrink until the span (+padding) fits the smaller side.
   // Degrees-per-pixel at zoom z ≈ 360 / (256 * 2^z), latitude scaled by cos.
+  // Guard runs BEFORE extraZoom so a positive bump guarantees a closer view
+  // (zoom +1 == 2x scale) instead of being eaten by the fit check.
   const viewport = opts.viewport;
   const padding = opts.paddingPx ?? 48;
   if (
@@ -1573,6 +1575,8 @@ export function calculateBounds(
     while (guard > 3 && !spanFits(guard)) guard -= 0.5;
     z = Math.min(z, guard);
   }
+
+  z += opts.extraZoom ?? 0;
 
   return { center: { lat: centerLat, lng: centerLng }, zoom: z };
 }

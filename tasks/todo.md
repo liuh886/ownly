@@ -1,5 +1,26 @@
 # Ownly — Task Progress & Review
 
+## Completed: 大地图调整 (2026-09-12)
+
+- [x] **1. 大地图比例尺放大（对齐小地图，至少放大一倍）**：
+  - `src/domain/planner.ts:calculateBounds` 改为视口守卫先拟合、再叠加 `extraZoom`（之前守卫会吃掉加成），保证 `+1` 即 `2x` 真正生效。
+  - `src/components/planner/PlannerMap.tsx` 新增 `FULL_FIT_ZOOM_BUMP = 1`，`initial` 与 `fitToPoints` 在 full 模式走 `{ viewport, extraZoom: 1 }`，compact 保持 `1.5`。
+- [x] **2. 大地图支持左右切换 Day1/Day2/Day3**：
+  - `PlannerHome.tsx` 全局 `[`/`]`/`←`/`→` 切天不再被 `isMapExpanded` 拦截，大地图内键盘与头部 `‹/›` 按钮一致。
+  - `PlannerMap.tsx` marker 键盘仅保留 `↑`/`↓` 做 marker 间移动，`←`/`→` 冒泡给切天，避免焦点在 marker 上时无法切天。
+  - 头部按钮加 `title` 键盘提示 `←/[`、`→/]` 与 `role="group"`。
+  - 验证：`validate:fast` 全绿，`test:planner` 14 文件 239 测试通过。
+
+## Pending: 时间线与地点备注 (2026-09-12)
+
+- [x] **1. 交通/transit 类地点时间线不显示价格与实记**：
+  - `src/components/planner/PlannerDayTimeline.tsx`：`isTransitHubPlace(place)` 时价格/实记徽标直接 `return null`，快捷 `💳` 记账按钮亦隐藏（账本仍可记，仅时间线不展示）。
+  - 验证：`validate:fast` 全绿，`test:planner` 239 通过。
+- [x] **2. 素万那普机场 / 清迈机场 / 清迈大学隐藏时间线推荐理由行**：
+  - 用户确认位置：时间线卡片底部的 `💡 推荐理由 / 📝 备注` 行。
+  - `src/components/planner/PlannerDayTimeline.tsx` 新增 `isTimelineNoteHiddenLandmark`（中英双语标题匹配：素万那普/suvarnabhumi、清迈+机场/airport、清迈大学/chiang mai university），命中时整行不渲染，仅隐藏显示、数据保留。
+  - 验证：`validate:fast` 全绿，`test:planner` 14 文件 239 测试通过。
+
 ## Completed: Map "Show All Routes" (显示所有路线) Multi-Day Overlay & Cloud Push (2026-09-07)
 - [x] **1. Sync & Push to Remote ("推送云端")**:
   - Staged, committed, and pushed the departure hotel checkout & anchor role updates to `origin/main`.
