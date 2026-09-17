@@ -17,7 +17,20 @@ function getBasePath(): string {
 
 const basePath = getBasePath();
 
+function getSiteUrl(): URL {
+  const configured = process.env.NEXT_PUBLIC_OWNLY_SITE_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured);
+    } catch {
+      // fall through to default
+    }
+  }
+  return new URL("https://liuh886.github.io/ownly");
+}
+
 export const metadata: Metadata = {
+  metadataBase: getSiteUrl(),
   title: "Ownly",
   applicationName: "Ownly",
   description: `${WYQD_PRODUCT_POSITIONING} ${WYQD_PRODUCT_SLOGAN}.`,
@@ -44,8 +57,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1c1917",
-  colorScheme: "light",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafaf9" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0a09" },
+  ],
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
@@ -55,6 +74,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
+      <head>
+        <link rel="preconnect" href="https://www.googletagmanager.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://static.cloudflareinsights.com" crossOrigin="anonymous" />
+      </head>
       <body className="font-sans min-h-full flex flex-col">
         <Providers>{children}</Providers>
         <Script src={`${basePath}/membership-config.js`} strategy="beforeInteractive" />

@@ -51,8 +51,25 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* System stack: --font-geist-* is intentionally unset (no next/font in use).
+     Falls back to platform UI fonts for zero webfont cost. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Restrained motion tokens — keep all transitions on these three */
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
+  --motion-slow: 350ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 body {
@@ -61,32 +78,100 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  /* Mobile texture: kill 300ms tap delay + iOS gray flash, stop pull-to-refresh chains */
+  touch-action: manipulation;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
-  background: rgb(28 25 23 / 0.08);
+  background: rgb(28 25 23 / 0.16);
   color: inherit;
 }
 
 @media (prefers-color-scheme: dark) {
   ::selection {
-    background: rgb(250 250 249 / 0.15);
+    background: rgb(250 250 249 / 0.28);
   }
 }
 
-/* Focus-visible for keyboard navigation */
+/* Global keyboard focus — covers links, inputs and custom tab stops, not just buttons.
+   No border-radius here: browsers trace the element's own radius (rounded-full stays pill-shaped). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid rgb(28 25 23 / 0.45);
+  outline-offset: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline-color: rgb(250 250 249 / 0.55);
+  }
+}
+
+/* Keep the historical scoped rule as a stronger fallback inside the app shell */
 .wyqd-web-shell button:focus-visible,
 .wyqd-web-shell [role="button"]:focus-visible {
   outline: 2px solid rgb(28 25 23 / 0.3);
   outline-offset: 2px;
-  border-radius: 0.5rem;
 }
 @media (prefers-color-scheme: dark) {
   .wyqd-web-shell button:focus-visible,
   .wyqd-web-shell [role="button"]:focus-visible {
     outline-color: rgb(250 250 249 / 0.3);
   }
+}
+
+/* Cross-browser thin scrollbars */
+.wyqd-web-shell,
+.ownly-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+/* Skeleton shimmer for loading states.
+   Static base first; shimmer only under no-preference; dark variants paired
+   with the same motion preference so dark+reduce stays static. */
+@keyframes ownly-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.ownly-skeleton {
+  background: rgb(28 25 23 / 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  .ownly-skeleton {
+    background: rgb(250 250 249 / 0.08);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ownly-skeleton {
+    background: linear-gradient(90deg, rgb(28 25 23 / 0.06) 25%, rgb(28 25 23 / 0.12) 50%, rgb(28 25 23 / 0.06) 75%);
+    background-size: 200% 100%;
+    animation: ownly-shimmer 1.4s ease-in-out infinite;
+  }
+}
+@media (prefers-color-scheme: dark) and (prefers-reduced-motion: no-preference) {
+  .ownly-skeleton {
+    background: linear-gradient(90deg, rgb(250 250 249 / 0.06) 25%, rgb(250 250 249 / 0.12) 50%, rgb(250 250 249 / 0.06) 75%);
+    background-size: 200% 100%;
+    animation: ownly-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+/* Invisible 44px hit-area expansion for dense ghost controls (visuals unchanged).
+   The ::before is part of the element, so it extends the click target. */
+.ownly-hit-expand {
+  position: relative;
+}
+.ownly-hit-expand::before {
+  content: "";
+  position: absolute;
+  inset: var(--ownly-hit-inset, -10px -8px);
+}
+
+/* Below-the-fold marketing scenes render lazily without layout shift */
+.ownly-lazy-scene {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 800px;
 }
 
 /* ===== Dark mode overrides ===== */
@@ -111,9 +196,12 @@ body {
     background-color: var(--text-primary);
     color: var(--surface-card);
   }
-  /* Ensure text inside primary buttons remains high contrast */
-  .wyqd-web-shell .bg-stone-950 .text-white,
-  .wyqd-web-shell .bg-stone-900 .text-white {
+  /* Text on dark surfaces — same-node and :has cases (higher specificity,
+     plain-descendant cases are re-asserted after the generic .text-white rule). */
+  .wyqd-web-shell .bg-stone-950.text-white,
+  .wyqd-web-shell .bg-stone-900.text-white,
+  .wyqd-web-shell button:has(> .bg-stone-950) .text-white,
+  .wyqd-web-shell button:has(> .bg-stone-900) .text-white {
     color: var(--surface-card);
   }
 
@@ -155,6 +243,11 @@ body {
   }
   .wyqd-web-shell .text-white {
     color: var(--text-primary);
+  }
+  /* Genuine white-on-dark nesting must beat the generic rule above (tie-break by order). */
+  .wyqd-web-shell .bg-stone-950 .text-white,
+  .wyqd-web-shell .bg-stone-900 .text-white {
+    color: var(--surface-card);
   }
 
   /* Form elements */

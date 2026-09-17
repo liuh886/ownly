@@ -44,7 +44,7 @@ export function StatusBanner({
           type="button"
           onClick={onConnect}
           disabled={isLoading}
-          className="min-h-10 shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
+          className="min-h-11 shrink-0 touch-manipulation rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-medium text-stone-700 transition duration-150 active:scale-[0.97] hover:border-stone-900 hover:text-stone-950 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
         >
           {isLoading
             ? isWebRuntime ? localDataCopy.connecting : t('connecting')
@@ -70,8 +70,16 @@ export function StatusBanner({
         </div>
       ) : null}
       {error ? (
-        <div role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
+        <div role="alert" className="mt-3 flex items-center justify-between gap-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+          <span className="min-w-0 flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={onConnect}
+            disabled={isLoading}
+            className="min-h-11 shrink-0 touch-manipulation rounded-md border border-red-200 bg-white px-3 py-1.5 font-semibold text-red-700 transition duration-150 active:scale-[0.97] hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {language === 'zh' ? '重试' : 'Retry'}
+          </button>
         </div>
       ) : null}
     </section>

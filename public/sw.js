@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ownly-pwa-v3';
+const CACHE_NAME = 'ownly-pwa-v4';
 const scriptUrl = new URL(self.location.href);
 const siteBase = scriptUrl.pathname.replace(/\/sw\.js$/, '');
 const appUrl = `${siteBase}/app/`;
@@ -12,6 +12,10 @@ const coreAssets = [
   `${siteBase}/icons/ownly-maskable.svg`,
 ];
 
+function isCacheableNextAsset(pathname) {
+  return pathname.includes('/_next/static/') && (pathname.endsWith('.js') || pathname.endsWith('.css'));
+}
+
 async function cachePageAndAssets(cache, pageUrl) {
   const response = await fetch(pageUrl, { cache: 'reload' });
   if (!response.ok) return;
@@ -19,11 +23,13 @@ async function cachePageAndAssets(cache, pageUrl) {
   const html = await response.clone().text();
   await cache.put(pageUrl, response);
 
+  // Whitelist only versioned Next static assets + icons to avoid unbounded precache.
   const assetUrls = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1])
     .filter(Boolean)
     .map((value) => new URL(value, self.location.origin))
-    .filter((url) => url.origin === self.location.origin && url.pathname.startsWith(`${siteBase}/`));
+    .filter((url) => url.origin === self.location.origin && url.pathname.startsWith(`${siteBase}/`))
+    .filter((url) => isCacheableNextAsset(url.pathname) || url.pathname.startsWith(`${siteBase}/icons/`));
 
   await Promise.allSettled(
     assetUrls.map(async (url) => {
@@ -61,15 +67,38 @@ self.addEventListener('activate', (event) => {
         .keys()
         .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
       self.clients.claim(),
+      // Faster navigations on supporting browsers.
+      (async () => {
+        try {
+          if ('navigationPreload' in self.registration) {
+            await self.registration.navigationPreload.enable();
+          }
+        } catch {
+          // ignore — preload is best-effort
+        }
+      })(),
     ]),
   );
 });
 
-async function networkFirst(request) {
+async function networkFirst(request, event) {
   const cache = await caches.open(CACHE_NAME);
   try {
+    if (event && event.preloadResponse) {
+      try {
+        const preloaded = await event.preloadResponse;
+        // Only trust successful preloads; HTTP errors fall through to a
+        // fresh network attempt and, ultimately, the offline app shell.
+        if (preloaded && preloaded.ok) {
+          await cache.put(request, preloaded.clone());
+          return preloaded;
+        }
+      } catch {
+        // fall through to network
+      }
+    }
     const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
+    if (response && response.ok) await cache.put(request, response.clone());
     return response;
   } catch {
     return (await cache.match(request)) || (await cache.match(appUrl)) || Response.error();
@@ -81,9 +110,13 @@ async function cacheFirst(request) {
   const cached = await cache.match(request);
   if (cached) return cached;
 
-  const response = await fetch(request);
-  if (response.ok) await cache.put(request, response.clone());
-  return response;
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch {
+    return Response.error();
+  }
 }
 
 async function staleWhileRevalidate(request) {
@@ -106,18 +139,22 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Matches /app with or without a trailing slash.
+  const appPath = `${siteBase}/app`;
   if (request.mode === 'navigate') {
-    if (!url.pathname.startsWith(appUrl)) return;
-    event.respondWith(networkFirst(request));
+    if (url.pathname !== appPath && !url.pathname.startsWith(`${appPath}/`)) return;
+    event.respondWith(networkFirst(request, event));
     return;
   }
 
   if (!url.pathname.startsWith(`${siteBase}/`)) return;
 
+  // Only fingerprinted Next.js bundles and icons are cache-first safe.
+  // The webmanifest is unversioned and must stay revalidatable so PWA
+  // metadata updates (name, icons, theme) can reach installed clients.
   const isStaticAsset =
     url.pathname.includes('/_next/static/') ||
-    url.pathname.startsWith(`${siteBase}/icons/`) ||
-    url.pathname === manifestUrl;
+    url.pathname.startsWith(`${siteBase}/icons/`);
 
   event.respondWith(isStaticAsset ? cacheFirst(request) : staleWhileRevalidate(request));
 });

@@ -5,21 +5,21 @@
 /** Standard card container */
 export const CARD_CLASS = 'rounded-xl border border-stone-200 bg-white p-5 shadow-sm';
 
-/** Standard form input/select/textarea */
+/** Standard form input/select/textarea — 16px base prevents iOS auto-zoom */
 export const FIELD_CLASS =
-  'w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400';
+  'min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400 sm:text-sm';
 
-/** Standard button (primary) */
+/** Standard button (primary) — 44px target + press feedback */
 export const BUTTON_CLASS =
-  'inline-flex items-center justify-center rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-900/50 disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex min-h-11 touch-manipulation items-center justify-center rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition duration-150 active:scale-[0.98] hover:bg-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-900/50 disabled:cursor-not-allowed disabled:opacity-50';
 
 /** Secondary button */
 export const BUTTON_SECONDARY_CLASS =
-  'inline-flex items-center justify-center rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-700 shadow-sm transition hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex min-h-11 touch-manipulation items-center justify-center rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-700 shadow-sm transition duration-150 active:scale-[0.98] hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-200/50 disabled:cursor-not-allowed disabled:opacity-50';
 
 /** Danger button */
 export const BUTTON_DANGER_CLASS =
-  'inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-600/50 disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex min-h-11 touch-manipulation items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition duration-150 active:scale-[0.98] hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-600/50 disabled:cursor-not-allowed disabled:opacity-50';
 
 /** Standard small tag/chip */
 export const CHIP_CLASS =

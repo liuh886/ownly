@@ -80,8 +80,8 @@ export function ConfirmDialog({
   if (!open) return null;
 
   const confirmBtnClass = destructive
-    ? 'flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-700'
-    : 'flex-1 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800';
+    ? 'min-h-11 flex-1 touch-manipulation rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition duration-150 active:scale-[0.98] hover:bg-red-700'
+    : 'min-h-11 flex-1 touch-manipulation rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition duration-150 active:scale-[0.98] hover:bg-stone-800';
 
   return (
     <div
@@ -102,13 +102,22 @@ export function ConfirmDialog({
 
         {inputLabel && onInputChange ? (
           <div className="mt-3">
-            <label className="mb-1 block text-xs font-medium text-stone-500">{inputLabel}</label>
+            <label htmlFor="ownly-confirm-input" className="mb-1 block text-xs font-medium text-stone-500">{inputLabel}</label>
             <input
               ref={inputRef}
+              id="ownly-confirm-input"
               type="text"
               value={inputValue ?? ''}
               onChange={(e) => onInputChange(e.target.value)}
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  onConfirm(inputValue);
+                }
+              }}
+              autoComplete="off"
+              enterKeyHint="done"
+              className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 sm:text-sm"
             />
           </div>
         ) : null}
@@ -118,7 +127,7 @@ export function ConfirmDialog({
             ref={cancelButtonRef}
             type="button"
             onClick={onCancel}
-            className="flex-1 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:border-stone-900"
+            className="min-h-11 flex-1 touch-manipulation rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition duration-150 active:scale-[0.98] hover:border-stone-900"
           >
             {cancelLabel ?? t('cancel')}
           </button>

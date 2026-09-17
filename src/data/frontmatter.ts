@@ -1,4 +1,4 @@
-import YAML from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 export interface ParsedMarkdown<T extends object> {
   frontmatter: T;
@@ -24,7 +24,7 @@ export function parseMarkdownEntity<T extends object = Record<string, unknown>>(
     throw new Error('Markdown file does not contain YAML frontmatter.');
   }
 
-  const parsed: unknown = YAML.parse(match[1] || '{}');
+  const parsed: unknown = parseYaml(match[1] || '{}');
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('YAML frontmatter is not a valid object.');
@@ -46,7 +46,7 @@ export function serializeMarkdownEntity<T extends object>(
   frontmatter: T,
   body = '',
 ): string {
-  const yaml = YAML.stringify(frontmatter as Record<string, unknown>).trimEnd();
+  const yaml = stringifyYaml(frontmatter as Record<string, unknown>).trimEnd();
   const normalizedBody = body.startsWith('\n') || body.length === 0 ? body : `\n${body}`;
 
   return `---\n${yaml}\n---\n${normalizedBody}`;

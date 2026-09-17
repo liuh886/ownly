@@ -30,7 +30,7 @@ export function IconButton({
     <button
       type="button"
       className={cx(
-        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-sm transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40',
+        'flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-lg border border-stone-200 bg-white text-sm transition duration-150 active:scale-95 hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40',
         className,
       )}
       {...props}
@@ -51,7 +51,7 @@ export function FilterChip({
       type="button"
       aria-pressed={active}
       className={cx(
-        'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition',
+        'ownly-hit-expand min-h-10 shrink-0 touch-manipulation rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97]',
         active
           ? 'bg-stone-950 text-white'
           : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900',

@@ -104,7 +104,7 @@ export function AppInstallGuideModal({
           </button>
         </div>
 
-        <div className="max-h-[65vh] overflow-y-auto p-5 space-y-4">
+        <div className="max-h-[65vh] space-y-4 overflow-y-auto overscroll-contain p-5">
           {activeTab === 'extension' ? (
             <div className="space-y-4">
               <div className="rounded-xl bg-amber-50/70 p-3.5 ring-1 ring-amber-200/60">

@@ -61,7 +61,17 @@ export default function TripSnapshotPage() {
         />
         {error ? (
           <div role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                fileInput.current?.click();
+              }}
+              className="mt-2 min-h-11 touch-manipulation rounded-lg border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-700 transition duration-150 active:scale-[0.97] hover:bg-red-100"
+            >
+              {language === 'zh' ? '重新选择文件' : 'Choose another file'}
+            </button>
           </div>
         ) : null}
       </div>

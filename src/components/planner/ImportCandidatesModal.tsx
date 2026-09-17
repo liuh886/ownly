@@ -146,7 +146,7 @@ export function ImportCandidatesModal({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto overscroll-contain p-5">
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold text-stone-700">

@@ -407,7 +407,7 @@ export function HotelComparisonModal({
         </div>
 
         {/* Modal Content */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
           {candidateHotels.length === 0 ? (
             <div className="rounded-xl border-2 border-dashed border-stone-200 px-6 py-16 text-center text-stone-400">
               <span className="text-4xl">🏨</span>
