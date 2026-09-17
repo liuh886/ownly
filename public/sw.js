@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ownly-pwa-v3';
+const CACHE_NAME = 'ownly-pwa-v4';
 const scriptUrl = new URL(self.location.href);
 const siteBase = scriptUrl.pathname.replace(/\/sw\.js$/, '');
 const appUrl = `${siteBase}/app/`;
@@ -12,6 +12,10 @@ const coreAssets = [
   `${siteBase}/icons/ownly-maskable.svg`,
 ];
 
+function isCacheableNextAsset(pathname) {
+  return pathname.includes('/_next/static/') && (pathname.endsWith('.js') || pathname.endsWith('.css'));
+}
+
 async function cachePageAndAssets(cache, pageUrl) {
   const response = await fetch(pageUrl, { cache: 'reload' });
   if (!response.ok) return;
@@ -19,11 +23,13 @@ async function cachePageAndAssets(cache, pageUrl) {
   const html = await response.clone().text();
   await cache.put(pageUrl, response);
 
+  // Whitelist only versioned Next static assets + icons to avoid unbounded precache.
   const assetUrls = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1])
     .filter(Boolean)
     .map((value) => new URL(value, self.location.origin))
-    .filter((url) => url.origin === self.location.origin && url.pathname.startsWith(`${siteBase}/`));
+    .filter((url) => url.origin === self.location.origin && url.pathname.startsWith(`${siteBase}/`))
+    .filter((url) => isCacheableNextAsset(url.pathname) || url.pathname.startsWith(`${siteBase}/icons/`));
 
   await Promise.allSettled(
     assetUrls.map(async (url) => {
@@ -61,15 +67,36 @@ self.addEventListener('activate', (event) => {
         .keys()
         .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
       self.clients.claim(),
+      // Faster navigations on supporting browsers.
+      (async () => {
+        try {
+          if ('navigationPreload' in self.registration) {
+            await self.registration.navigationPreload.enable();
+          }
+        } catch {
+          // ignore — preload is best-effort
+        }
+      })(),
     ]),
   );
 });
 
-async function networkFirst(request) {
+async function networkFirst(request, event) {
   const cache = await caches.open(CACHE_NAME);
   try {
+    if (event && event.preloadResponse) {
+      try {
+        const preloaded = await event.preloadResponse;
+        if (preloaded) {
+          if (preloaded.ok) await cache.put(request, preloaded.clone());
+          return preloaded;
+        }
+      } catch {
+        // fall through to network
+      }
+    }
     const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
+    if (response && response.ok) await cache.put(request, response.clone());
     return response;
   } catch {
     return (await cache.match(request)) || (await cache.match(appUrl)) || Response.error();
@@ -108,7 +135,7 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     if (!url.pathname.startsWith(appUrl)) return;
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(request, event));
     return;
   }
 

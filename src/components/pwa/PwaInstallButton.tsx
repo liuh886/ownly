@@ -95,7 +95,7 @@ export function PwaInstallButton({ variant = 'default' }: { variant?: 'default' 
       </button>
 
       {showNudge && !installed ? (
-        <aside className="fixed bottom-24 left-4 right-4 z-50 mx-auto max-w-md rounded-2xl border border-stone-200 bg-white/95 p-4 shadow-[0_24px_70px_-28px_rgba(28,25,23,0.55)] backdrop-blur-xl sm:left-auto sm:right-6" aria-label={nudgeTitle}>
+        <aside className="fixed bottom-24 left-4 right-4 z-50 mx-auto max-w-md rounded-2xl border border-stone-200 bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_24px_70px_-28px_rgba(28,25,23,0.55)] backdrop-blur-xl sm:left-auto sm:right-6" aria-label={nudgeTitle}>
           <div className="flex gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-950 text-sm font-semibold text-white">O</span>
             <div>
@@ -104,10 +104,10 @@ export function PwaInstallButton({ variant = 'default' }: { variant?: 'default' 
             </div>
           </div>
           <div className="mt-4 flex items-center justify-end gap-2">
-            <button type="button" onClick={dismissNudge} className="rounded-full px-3 py-2 text-xs font-semibold text-stone-500 transition hover:bg-stone-100 hover:text-stone-800">
+            <button type="button" onClick={dismissNudge} className="min-h-11 touch-manipulation rounded-full px-3 py-2 text-xs font-semibold text-stone-500 transition duration-150 active:scale-[0.97] hover:bg-stone-100 hover:text-stone-800">
               {later}
             </button>
-            <button type="button" onClick={() => void installApp()} className="rounded-full bg-stone-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-stone-800">
+            <button type="button" onClick={() => void installApp()} className="min-h-11 touch-manipulation rounded-full bg-stone-950 px-4 py-2 text-xs font-semibold text-white transition duration-150 active:scale-[0.97] hover:bg-stone-800">
               {zh ? '安装应用' : 'Install app'}
             </button>
           </div>

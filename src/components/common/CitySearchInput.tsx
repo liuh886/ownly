@@ -87,8 +87,12 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
 
   return (
     <div ref={containerRef} className="relative">
+      <label htmlFor="ownly-city-search" className="sr-only">
+        {t('citySearchPlaceholder')}
+      </label>
       <input
         ref={inputRef}
+        id="ownly-city-search"
         type="text"
         value={query}
         onChange={(e) => handleChange(e.target.value)}
@@ -98,7 +102,12 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
         }}
         placeholder={t('citySearchPlaceholder')}
         disabled={disabled}
-        className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-stone-400"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        enterKeyHint="search"
+        spellCheck={false}
+        className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-stone-400 sm:text-sm"
         role="combobox"
         aria-expanded={isOpen}
         aria-controls="city-search-listbox"
@@ -109,7 +118,8 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
           <ul
             id="city-search-listbox"
             role="listbox"
-            className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+            aria-label={t('citySearchPlaceholder')}
+            className="absolute z-10 mt-1 max-h-48 w-full overscroll-contain overflow-auto rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
           >
             {results.map((city, i) => (
               <li

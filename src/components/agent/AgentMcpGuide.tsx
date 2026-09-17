@@ -110,7 +110,7 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
           </button>
         </div>
 
-        <div className="overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
+        <div className="overscroll-contain overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
           <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
             <div className="space-y-4">
               <article className="rounded-xl border border-stone-200 bg-stone-50 p-4 sm:p-5">

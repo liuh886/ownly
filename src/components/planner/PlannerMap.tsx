@@ -1168,6 +1168,9 @@ export function PlannerMap({
               key={`${basemapStyle}/${t.key}`}
               src={activeBasemap.getUrl(intZoom, t.x, t.y)}
               alt=""
+              draggable={false}
+              decoding="async"
+              referrerPolicy="no-referrer"
               className="absolute"
               style={{
                 left: `${t.left}px`,

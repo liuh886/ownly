@@ -57,7 +57,7 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
   return (
     <div className="sticky bottom-0 z-20">
       <div
-        className={`grid transition-all duration-300 motion-reduce:transition-none ${hidden ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}
+        className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${hidden ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}
         aria-hidden={hidden || undefined}
         inert={hidden || undefined}
       >
@@ -73,13 +73,13 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
               type="button"
               onClick={() => onChange(tab.id)}
               aria-current={isActive ? 'page' : undefined}
-              className="relative flex h-10 items-center justify-center rounded-lg transition-colors"
+              className="relative flex min-h-11 touch-manipulation items-center justify-center rounded-lg transition-colors duration-150 active:scale-[0.97]"
             >
               {isActive && (
                 <motion.div
                   layoutId="activeTab"
                   className="absolute inset-0 z-0 rounded-lg bg-stone-950 shadow-sm"
-                  transition={{ type: 'spring' as const, bounce: 0.15, duration: 0.4 }}
+                  transition={{ type: 'tween' as const, duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
                 />
               )}
               <span

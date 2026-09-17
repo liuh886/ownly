@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BottomNav, type AppTab } from './BottomNav';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { createWYQDRuntimeInfo } from '@/core/runtime';
@@ -12,7 +12,7 @@ import {
   FIRST_OBJECT_DISMISSED_KEY,
   shouldPromptForFirstObject,
 } from '@/core/first-object-onboarding';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 
 import { useOwnlyData } from './useOwnlyData';
@@ -27,7 +27,21 @@ import {
 import { AgentMcpGuide } from '@/components/agent/AgentMcpGuide';
 
 export function AppShell() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const [isOffline, setIsOffline] = useState(
+    () => typeof navigator !== 'undefined' && !navigator.onLine,
+  );
+
+  useEffect(() => {
+    const goOffline = () => setIsOffline(true);
+    const goOnline = () => setIsOffline(false);
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', goOnline);
+    };
+  }, []);
   const {
     runtimeTarget,
     isConnected,
@@ -112,14 +126,21 @@ export function AppShell() {
     && data.storedObjects.length === 0;
 
   return (
-    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-24 pt-8 text-stone-950 sm:px-6 sm:pt-10">
-      <div aria-live="polite" aria-atomic="true" className="pointer-events-none fixed inset-x-4 top-4 z-30 mx-auto max-w-2xl">
+    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-8 text-stone-950 sm:px-6 sm:pt-10">
+      <div aria-live="polite" aria-atomic="true" className="pointer-events-none fixed inset-x-4 top-[calc(1rem+env(safe-area-inset-top))] z-30 mx-auto max-w-2xl">
         {notice ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-sm">
             {notice}
           </div>
         ) : null}
       </div>
+      {isOffline ? (
+        <div role="status" className="mx-auto mb-4 max-w-6xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-800">
+          {language === 'zh'
+            ? '当前处于离线状态，更改会保留在本地，联网后可继续同步。'
+            : 'You are offline. Changes stay on this device and sync can resume when back online.'}
+        </div>
+      ) : null}
       <div className="mx-auto max-w-6xl">
         <AppHeader
           activeTab={activeTab}
@@ -144,26 +165,26 @@ export function AppShell() {
         ) : null}
 
         {isConnected && !data.dataLoaded ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="flex items-center gap-3 text-sm text-stone-400">
-              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              {t('loading')}
+          <div className="py-10" role="status" aria-label={t('loading')}>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
+              <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
+              <div className="ownly-skeleton hidden h-24 rounded-xl sm:block" aria-hidden="true" />
             </div>
+            <p className="mt-4 text-center text-xs text-stone-400">{t('loading')}</p>
           </div>
         ) : null}
 
         {isConnected && !data.dataLoaded ? null : (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            >
+          <MotionConfig reducedMotion="user">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+              >
               <TabRenderer
                 activeTab={activeTab}
                 isConnected={isConnected}
@@ -184,7 +205,8 @@ export function AppShell() {
                 setActiveTab={setActiveTab}
               />
             </motion.div>
-          </AnimatePresence>
+            </AnimatePresence>
+          </MotionConfig>
         )}
       </div>
 

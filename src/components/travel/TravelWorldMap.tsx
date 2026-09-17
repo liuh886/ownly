@@ -134,8 +134,9 @@ export function TravelWorldMap({
   if (!countries) {
     return (
       <div className="wyqd-travel-map mt-5">
-        <div className="flex h-[420px] items-center justify-center rounded-lg border border-stone-200 bg-white">
-          <div className="text-sm text-stone-400">{t('loading')}</div>
+        <div className="rounded-lg border border-stone-200 bg-white p-3" role="status" aria-label={t('loading')}>
+          <div className="ownly-skeleton h-[320px] rounded-md sm:h-[420px]" aria-hidden="true" />
+          <p className="mt-3 text-center text-xs text-stone-400">{t('loading')}</p>
         </div>
       </div>
     );

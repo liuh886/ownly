@@ -248,7 +248,7 @@ function WindowChrome({ brandMarkHref, label, children, className = '' }: Window
         <div className="flex items-center justify-between border-b border-stone-200/90 bg-white/75 px-4 py-3.5 backdrop-blur sm:px-5">
           <div className="flex items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element -- Native img used for SVG brand mark in Next.js static export (output: 'export') */}
-            <img src={brandMarkHref} alt="" className="h-8 w-8 rounded-[0.65rem]" />
+            <img src={brandMarkHref} alt="" width={32} height={32} decoding="async" loading="lazy" className="h-8 w-8 rounded-[0.65rem]" />
             <div>
               <p className="text-sm font-semibold tracking-[-0.02em]">Ownly</p>
               <p className="text-[9px] font-medium uppercase tracking-[0.13em] text-stone-400">{label}</p>
@@ -476,12 +476,12 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
   const text = copy[language];
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f6f3ec] text-stone-950">
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-stone-900/[0.06] bg-[#f6f3ec]/84 backdrop-blur-2xl">
+    <main className="min-h-screen overflow-hidden bg-[#f6f3ec] text-stone-950" style={{ colorScheme: "light" }}>
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-stone-900/[0.06] bg-[#f6f3ec]/84 backdrop-blur-2xl pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8 lg:px-10">
           <a href="#top" className="flex items-center gap-2.5" aria-label="Ownly home">
             {/* eslint-disable-next-line @next/next/no-img-element -- Native img used for SVG brand mark in Next.js static export (output: 'export') */}
-            <img src={brandMarkHref} alt="" className="h-9 w-9 rounded-[0.72rem]" />
+            <img src={brandMarkHref} alt="" width={36} height={36} decoding="async" className="h-9 w-9 rounded-[0.72rem]" />
             <span className="text-lg font-semibold tracking-[-0.04em]">Ownly</span>
           </a>
           <nav className="hidden items-center gap-7 text-sm text-stone-500 lg:flex" aria-label="Primary navigation">
@@ -512,8 +512,8 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
 
       <section id="top" data-ownly-scene="overview" className="relative flex min-h-screen items-center overflow-hidden px-5 pb-16 pt-28 sm:px-8 lg:px-10">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(28,25,23,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(28,25,23,0.03)_1px,transparent_1px)] bg-[size:52px_52px] [mask-image:linear-gradient(to_bottom,black,transparent_82%)]" />
-        <div className="pointer-events-none absolute -left-40 top-16 h-[34rem] w-[34rem] rounded-full bg-emerald-300/14 blur-3xl" />
-        <div className="pointer-events-none absolute -right-52 bottom-0 h-[32rem] w-[32rem] rounded-full bg-stone-300/45 blur-3xl" />
+        <div className="pointer-events-none absolute -left-40 top-16 h-[34rem] w-[34rem] rounded-full bg-emerald-300/14 blur-2xl will-change-transform" />
+        <div className="pointer-events-none absolute -right-52 bottom-0 h-[32rem] w-[32rem] rounded-full bg-stone-300/45 blur-2xl will-change-transform" />
 
         <div className="relative mx-auto grid w-full max-w-7xl gap-14 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
           <div>
@@ -531,8 +531,8 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
         </div>
       </section>
 
-      <section id="preview" data-ownly-scene="cost" className="relative flex min-h-screen scroll-mt-20 items-center overflow-hidden border-y border-stone-900/[0.07] bg-white/58 px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
-        <div className="pointer-events-none absolute right-[-14rem] top-[-12rem] h-[34rem] w-[34rem] rounded-full bg-emerald-200/20 blur-3xl" />
+      <section id="preview" data-ownly-scene="cost" className="ownly-lazy-scene relative flex min-h-screen scroll-mt-20 items-center overflow-hidden border-y border-stone-900/[0.07] bg-white/58 px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
+        <div className="pointer-events-none absolute right-[-14rem] top-[-12rem] h-[34rem] w-[34rem] rounded-full bg-emerald-200/20 blur-2xl will-change-transform" />
         <div className="relative mx-auto grid w-full max-w-7xl gap-12 lg:grid-cols-[0.68fr_1.32fr] lg:items-center">
           <div>
             <h2 className="max-w-xl text-4xl font-semibold leading-[1] tracking-[-0.06em] sm:text-5xl">{text.costTitle}</h2>
@@ -543,8 +543,8 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
         </div>
       </section>
 
-      <section id="review" data-ownly-scene="review" className="relative flex min-h-screen scroll-mt-20 items-center overflow-hidden bg-[#ebe7dc] px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
-        <div className="pointer-events-none absolute -left-40 bottom-[-14rem] h-[34rem] w-[34rem] rounded-full bg-stone-400/24 blur-3xl" />
+      <section id="review" data-ownly-scene="review" className="ownly-lazy-scene relative flex min-h-screen scroll-mt-20 items-center overflow-hidden bg-[#ebe7dc] px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
+        <div className="pointer-events-none absolute -left-40 bottom-[-14rem] h-[34rem] w-[34rem] rounded-full bg-stone-400/24 blur-2xl will-change-transform" />
         <div className="relative mx-auto grid w-full max-w-7xl gap-12 lg:grid-cols-[1.28fr_0.72fr] lg:items-center">
           <ReviewWindow brandMarkHref={brandMarkHref} text={text} />
           <div className="lg:order-2">
@@ -555,8 +555,8 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
         </div>
       </section>
 
-      <section id="planner" data-ownly-scene="planner" className="relative flex min-h-screen scroll-mt-20 items-center overflow-hidden border-y border-stone-900/[0.07] bg-white/58 px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
-        <div className="pointer-events-none absolute left-[-14rem] top-[-12rem] h-[34rem] w-[34rem] rounded-full bg-emerald-200/20 blur-3xl" />
+      <section id="planner" data-ownly-scene="planner" className="ownly-lazy-scene relative flex min-h-screen scroll-mt-20 items-center overflow-hidden border-y border-stone-900/[0.07] bg-white/58 px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
+        <div className="pointer-events-none absolute left-[-14rem] top-[-12rem] h-[34rem] w-[34rem] rounded-full bg-emerald-200/20 blur-2xl will-change-transform" />
         <div className="relative mx-auto grid w-full max-w-7xl gap-12 lg:grid-cols-[0.68fr_1.32fr] lg:items-center">
           <div>
             <h2 className="max-w-xl text-4xl font-semibold leading-[1.05] tracking-[-0.06em] sm:text-5xl">{text.plannerTitle}</h2>
@@ -578,7 +578,7 @@ export function MarketingHome({ appHref, githubHref, obsidianHref, brandMarkHref
         </div>
       </section>
 
-      <section id="local" className="scroll-mt-20 bg-stone-950 px-5 py-16 text-white sm:px-8 lg:px-10 lg:py-20">
+      <section id="local" className="ownly-lazy-scene scroll-mt-20 bg-stone-950 px-5 py-16 text-white sm:px-8 lg:px-10 lg:py-20">
         <div className="mx-auto max-w-7xl">
           <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
             <div>

@@ -141,7 +141,7 @@ export function CalendarSubscriptionModal({
           </button>
         </div>
 
-        <div className="p-5 space-y-5 max-h-[80vh] overflow-y-auto">
+        <div className="max-h-[80vh] space-y-5 overflow-y-auto overscroll-contain p-5">
           {notice ? (
             <div className="rounded-lg bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
               {notice}

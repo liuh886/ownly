@@ -84,7 +84,7 @@ export function AppHeader({
           <button
             type="button"
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
-            className="rounded-md px-1.5 py-1 text-[11px] font-medium text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+            className="min-h-9 min-w-9 touch-manipulation rounded-md px-1.5 py-1 text-[11px] font-medium text-stone-400 transition duration-150 active:scale-95 hover:bg-stone-100 hover:text-stone-700"
           >
             {language === 'zh' ? 'EN' : '中文'}
           </button>
@@ -92,7 +92,7 @@ export function AppHeader({
             value={currency}
             onChange={(event) => setCurrency(event.target.value as typeof currency)}
             aria-label={language === 'zh' ? '货币' : 'Currency'}
-            className="cursor-pointer rounded-md bg-transparent px-1 py-1 text-[11px] font-medium text-stone-400 outline-none transition hover:bg-stone-100 hover:text-stone-700"
+            className="min-h-9 cursor-pointer touch-manipulation rounded-md bg-transparent px-1 py-1 text-[11px] font-medium text-stone-400 outline-none transition hover:bg-stone-100 hover:text-stone-700"
           >
             {WYQD_CURRENCIES.map((currentCurrency) => (
               <option key={currentCurrency} value={currentCurrency}>
@@ -121,7 +121,7 @@ export function AppHeader({
               onClick={onConnectVault}
               disabled={isLoading}
               title={connectionTitle}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-wait ${
+              className={`inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-wait ${
                 isConnected && !isLoading
                   ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700'
                   : 'bg-stone-950 text-white shadow-sm hover:bg-stone-800 disabled:hover:bg-stone-950'
