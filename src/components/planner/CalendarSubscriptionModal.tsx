@@ -7,6 +7,7 @@ import {
   type AccountCalendarFeedMeta,
 } from '../../domain/calendar-feed';
 import type { AccountFeedResponse } from '../../services/CalendarFeedService';
+import { dialogBackdropProps } from '@/components/common/use-dialog-dismiss';
 
 interface CalendarSubscriptionModalProps {
   open: boolean;
@@ -138,7 +139,7 @@ export function CalendarSubscriptionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs ownly-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs ownly-fade-in" {...dialogBackdropProps(onClose)}>
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={zh ? '日历与订阅' : 'Calendar & Feed'} className="w-full max-w-xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-4">
