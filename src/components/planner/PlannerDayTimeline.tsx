@@ -209,7 +209,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                           : 'border-stone-200/90 bg-white hover:border-stone-300'
                       }`}>
                         {/* Stop Number Circle */}
-                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-stone-500 text-[9px] font-bold tabular-nums text-white shrink-0 mt-1">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold tabular-nums text-white shrink-0 shadow-2xs self-end mb-0.5">
                           {index + 1}
                         </div>
 
