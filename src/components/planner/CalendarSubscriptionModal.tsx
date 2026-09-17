@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
-import { getCalendarFeedUrl, type AccountCalendarFeedMeta } from '../../domain/calendar-feed';
+import {
+  COMMON_TIMEZONES,
+  getCalendarFeedUrl,
+  isValidIanaTimeZone,
+  type AccountCalendarFeedMeta,
+} from '../../domain/calendar-feed';
 import type { AccountFeedResponse } from '../../services/CalendarFeedService';
 
 interface CalendarSubscriptionModalProps {
   open: boolean;
   onClose: () => void;
   tripCount: number;
+  trips: Array<{ id: string; title: string; timezone?: string }>;
+  onSaveTripTimezone: (tripId: string, timezone: string) => Promise<void>;
   accountFeed: AccountCalendarFeedMeta | null;
   activeDate: string;
   onDownloadFullIcs: () => void;
@@ -23,6 +30,8 @@ export function CalendarSubscriptionModal({
   open,
   onClose,
   tripCount,
+  trips,
+  onSaveTripTimezone,
   accountFeed,
   activeDate,
   onDownloadFullIcs,
@@ -40,6 +49,28 @@ export function CalendarSubscriptionModal({
   const [copied, setCopied] = useState(false);
   const [copiedIcs, setCopiedIcs] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [savingTimezoneTripId, setSavingTimezoneTripId] = useState<string | null>(null);
+
+  const missingTimezoneTrips = trips.filter(
+    (trip) => !trip.timezone?.trim() || !isValidIanaTimeZone(trip.timezone.trim()),
+  );
+
+  async function handleSaveTimezone(tripId: string, timezone: string) {
+    setSavingTimezoneTripId(tripId);
+    setNotice(null);
+    try {
+      await onSaveTripTimezone(tripId, timezone);
+      setNotice(
+        zh
+          ? '✓ 导出时区已保存。订阅内容需重新同步一次（点「同步全部行程」），日历按其刷新周期更新。'
+          : '✓ Export timezone saved. Re-sync once (Sync All Trips); clients update on their refresh cycle.',
+      );
+    } catch (err) {
+      setNotice(String(err));
+    } finally {
+      setSavingTimezoneTripId(null);
+    }
+  }
 
   if (!open) return null;
 
@@ -275,6 +306,58 @@ export function CalendarSubscriptionModal({
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Section 1b: Export Timezones — Google renders zone-less times as
+              UTC, so an unset trip timezone shifts every event by the viewer
+              offset. One tap per trip fixes all exports (feed + file). */}
+          <div className="rounded-xl border border-stone-200 bg-white p-4.5 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-stone-200 px-1.5 py-0.5 text-[10.5px] font-bold text-stone-700">
+                ⏰
+              </span>
+              <h3 className="text-sm font-semibold text-stone-900">{zh ? '导出时区（防日历时间错位）' : 'Export Timezones'}</h3>
+              {missingTimezoneTrips.length === 0 ? (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10.5px] font-bold text-emerald-800">
+                  {zh ? '✓ 全部已设置' : '✓ All set'}
+                </span>
+              ) : (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10.5px] font-bold text-amber-800">
+                  {zh ? `${missingTimezoneTrips.length} 个行程未设置` : `${missingTimezoneTrips.length} unset`}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-stone-500 leading-5">
+              {zh
+                ? 'Google 会把没有时区的时间按 UTC 显示，导致整批事件偏移。给行程设为目的地时区（如曼谷 Asia/Bangkok）后，导出为绝对时刻，各地日历显示正确。设完后要点「同步全部行程」重发一次。'
+                : 'Google renders zone-less times as UTC, shifting every event. Set each trip to its destination zone (e.g. Asia/Bangkok) to export absolute instants, then Sync All Trips once.'}
+            </p>
+            <div className="space-y-2">
+              {trips.map((trip) => {
+                const zone = trip.timezone?.trim() ?? '';
+                const isSet = zone !== '' && isValidIanaTimeZone(zone);
+                const saving = savingTimezoneTripId === trip.id;
+                return (
+                  <div key={trip.id} className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-stone-700" title={trip.title}>
+                      {isSet ? '✓ ' : '○ '}{trip.title}
+                    </span>
+                    <select
+                      value={isSet ? zone : ''}
+                      disabled={saving || busy}
+                      onChange={(e) => void handleSaveTimezone(trip.id, e.target.value)}
+                      aria-label={zh ? `${trip.title} 导出时区` : `${trip.title} export timezone`}
+                      className="min-h-9 shrink-0 touch-manipulation cursor-pointer rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs text-stone-700 outline-none transition hover:border-stone-400 focus:border-stone-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">{zh ? '未设置' : 'Unset'}</option>
+                      {COMMON_TIMEZONES.map((zone) => (
+                        <option key={zone} value={zone}>{zone}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Section 2: Free Tier Direct ICS Download */}
