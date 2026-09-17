@@ -214,7 +214,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                           <div className="flex items-center justify-between gap-1.5">
                             {/* Title with sequence number + kind emoji, all left-aligned */}
                             <div className="min-w-0 flex-1 flex items-center gap-1.5 text-left">
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[9px] font-bold tabular-nums text-white" aria-hidden="true">
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-transparent text-[10px] font-bold tabular-nums text-stone-400" aria-hidden="true">
                                 {index + 1}
                               </span>
                               <span className="text-xs shrink-0">{PLANNER_KIND_ICONS[place.kind] || '📍'}</span>
