@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  COMMON_TIMEZONES,
   getCalendarFeedUrl,
   isValidIanaTimeZone,
   type AccountCalendarFeedMeta,
@@ -11,8 +10,10 @@ interface CalendarSubscriptionModalProps {
   open: boolean;
   onClose: () => void;
   tripCount: number;
+  /** Minimal trip list for the export-timezone status (the zone itself is set in trip management). */
   trips: Array<{ id: string; title: string; timezone?: string }>;
-  onSaveTripTimezone: (tripId: string, timezone: string) => Promise<void>;
+  /** Jump to trip management with the edit form opened for this trip. */
+  onEditTripTimezone: (tripId: string) => void;
   accountFeed: AccountCalendarFeedMeta | null;
   activeDate: string;
   onDownloadFullIcs: () => void;
@@ -31,7 +32,7 @@ export function CalendarSubscriptionModal({
   onClose,
   tripCount,
   trips,
-  onSaveTripTimezone,
+  onEditTripTimezone,
   accountFeed,
   activeDate,
   onDownloadFullIcs,
@@ -49,28 +50,10 @@ export function CalendarSubscriptionModal({
   const [copied, setCopied] = useState(false);
   const [copiedIcs, setCopiedIcs] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [savingTimezoneTripId, setSavingTimezoneTripId] = useState<string | null>(null);
 
   const missingTimezoneTrips = trips.filter(
     (trip) => !trip.timezone?.trim() || !isValidIanaTimeZone(trip.timezone.trim()),
   );
-
-  async function handleSaveTimezone(tripId: string, timezone: string) {
-    setSavingTimezoneTripId(tripId);
-    setNotice(null);
-    try {
-      await onSaveTripTimezone(tripId, timezone);
-      setNotice(
-        zh
-          ? '✓ 导出时区已保存。订阅内容需重新同步一次（点「同步全部行程」），日历按其刷新周期更新。'
-          : '✓ Export timezone saved. Re-sync once (Sync All Trips); clients update on their refresh cycle.',
-      );
-    } catch (err) {
-      setNotice(String(err));
-    } finally {
-      setSavingTimezoneTripId(null);
-    }
-  }
 
   if (!open) return null;
 
@@ -308,57 +291,38 @@ export function CalendarSubscriptionModal({
             )}
           </div>
 
-          {/* Section 1b: Export Timezones — Google renders zone-less times as
-              UTC, so an unset trip timezone shifts every event by the viewer
-              offset. One tap per trip fixes all exports (feed + file). */}
-          <div className="rounded-xl border border-stone-200 bg-white p-4.5 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="rounded bg-stone-200 px-1.5 py-0.5 text-[10.5px] font-bold text-stone-700">
-                ⏰
-              </span>
-              <h3 className="text-sm font-semibold text-stone-900">{zh ? '导出时区（防日历时间错位）' : 'Export Timezones'}</h3>
-              {missingTimezoneTrips.length === 0 ? (
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10.5px] font-bold text-emerald-800">
-                  {zh ? '✓ 全部已设置' : '✓ All set'}
-                </span>
-              ) : (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10.5px] font-bold text-amber-800">
-                  {zh ? `${missingTimezoneTrips.length} 个行程未设置` : `${missingTimezoneTrips.length} unset`}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-stone-500 leading-5">
+          {/* Section 1b: Export timezone status — the zone itself lives in trip
+              management (single source of truth); here only a hint with a
+              deep-link when something is unset. */}
+          {missingTimezoneTrips.length === 0 ? (
+            <p className="rounded-lg bg-stone-100/70 px-3 py-1.5 text-[11px] text-stone-500">
               {zh
-                ? '统一规定：导出一律采用 UTC+0。设了目的地时区（如曼谷 Asia/Bangkok）的按时区换算成绝对时刻，各地日历自动换算显示；没设时区的按填写的当地时间直接标为 UTC——把 Ownly 订阅日历固定为 GMT+0 即看到机票时刻。设完时区后要点「同步全部行程」重发一次。'
-                : 'Unified rule: exports are always UTC+0. Trips with a destination zone convert to absolute instants; trips without one export wall time labeled as UTC — pin the Ownly calendar to GMT+0 to read ticket times. Re-sync once after setting a zone.'}
+                ? '✓ 导出时区就绪（统一 UTC+0 导出）。改了行程后记得「同步全部行程」。'
+                : '✓ Export timezones ready (unified UTC+0 export). Sync All Trips after changes.'}
             </p>
-            <div className="space-y-2">
-              {trips.map((trip) => {
-                const zone = trip.timezone?.trim() ?? '';
-                const isSet = zone !== '' && isValidIanaTimeZone(zone);
-                const saving = savingTimezoneTripId === trip.id;
-                return (
-                  <div key={trip.id} className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-stone-700" title={trip.title}>
-                      {isSet ? '✓ ' : '○ '}{trip.title}
-                    </span>
-                    <select
-                      value={isSet ? zone : ''}
-                      disabled={saving || busy}
-                      onChange={(e) => void handleSaveTimezone(trip.id, e.target.value)}
-                      aria-label={zh ? `${trip.title} 导出时区` : `${trip.title} export timezone`}
-                      className="min-h-9 shrink-0 touch-manipulation cursor-pointer rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs text-stone-700 outline-none transition hover:border-stone-400 focus:border-stone-400 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">{zh ? '未设置' : 'Unset'}</option>
-                      {COMMON_TIMEZONES.map((zone) => (
-                        <option key={zone} value={zone}>{zone}</option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 space-y-2">
+              <p className="text-xs font-semibold text-amber-900">
+                {zh
+                  ? `⏰ ${missingTimezoneTrips.length} 个行程没设时区：导出的时间会整体错位（统一 UTC+0 规则）。去行程管理设为目的地时区即可，设完点「同步全部行程」。`
+                  : `⏰ ${missingTimezoneTrips.length} trip(s) without a timezone: exports will shift (unified UTC+0 rule). Set the destination zone in trip management, then Sync All Trips.`}
+              </p>
+              {missingTimezoneTrips.map((trip) => (
+                <div key={trip.id} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-xs text-amber-800" title={trip.title}>
+                    ○ {trip.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onEditTripTimezone(trip.id)}
+                    className="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100"
+                  >
+                    {zh ? '去设置 →' : 'Set →'}
+                  </button>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
 
           {/* Section 2: Free Tier Direct ICS Download */}
           <div className="rounded-xl border border-stone-200 bg-white p-4.5 space-y-3">

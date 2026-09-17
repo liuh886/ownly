@@ -237,14 +237,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         ? zh ? '进行中' : 'Active'
         : zh ? '规划中' : 'Planning';
 
-  // Calendar export timezone: Google renders zone-less times as UTC, so trips
-  // without a timezone export shifted. One tap here persists the zone on the
-  // trip; all export paths (feed + file) pick it up, then re-sync republishes.
-  const handleSaveTripTimezone = useCallback(async (tripId: string, timezone: string) => {
-    const trip = trips.find((t) => t.id === tripId);
-    if (!trip) return;
-    await handleUpsertTrip({ ...trip, timezone: timezone.trim() || undefined });
-  }, [trips, handleUpsertTrip]);
+  // Calendar export timezone: the zone itself lives in trip management
+  // (single source of truth). The subscription modal only deep-links here.
+  const [timezoneEditTripId, setTimezoneEditTripId] = useState<string | null>(null);
+
+  const openTripTimezoneEditor = useCallback((tripId: string) => {
+    setIsCalendarModalOpen(false);
+    setTimezoneEditTripId(tripId);
+    setIsCreateTripOpen(true);
+  }, []);
 
   const markTripComplete = useCallback(() => {
     if (!selectedTrip) return;
@@ -1219,7 +1220,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
       <CreateTripModal
         key={isCreateTripOpen ? 'open' : 'closed'}
         open={isCreateTripOpen}
-        onClose={() => setIsCreateTripOpen(false)}
+        onClose={() => {
+          setIsCreateTripOpen(false);
+          setTimezoneEditTripId(null);
+        }}
         trips={trips}
         onCreate={handleUpsertTrip}
         onImported={(tripId) => {
@@ -1231,6 +1235,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         disabled={disabled}
         incomingShareHash={shareHash}
         onDismissShare={() => setShareHash(null)}
+        initialEditTripId={timezoneEditTripId}
       />
 
       {selectedTrip ? (
@@ -1240,7 +1245,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           onClose={() => setIsCalendarModalOpen(false)}
           tripCount={trips.length}
           trips={trips.map((trip) => ({ id: trip.id, title: trip.title, timezone: trip.timezone }))}
-          onSaveTripTimezone={handleSaveTripTimezone}
+          onEditTripTimezone={openTripTimezoneEditor}
           accountFeed={accountFeed}
           activeDate={activeDate}
           onDownloadFullIcs={downloadFullIcs}
