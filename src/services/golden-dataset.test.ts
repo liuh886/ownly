@@ -137,9 +137,9 @@ describe('Golden Dataset Regression — Thailand 2026', () => {
     expect(ics).toContain('The Grand Palace');
     expect(ics).toContain('Wat Pho');
     expect(ics).toContain('Thipsamai');
-    expect(ics).toContain('DTSTART:20261005T090000');
-    expect(ics).toContain('DTSTART:20261005T113000');
-    expect(ics).toContain('DTSTART:20261005T170000');
+    expect(ics).toContain('DTSTART:20261005T090000Z');
+    expect(ics).toContain('DTSTART:20261005T113000Z');
+    expect(ics).toContain('DTSTART:20261005T170000Z');
     expect(ics).toContain('END:VCALENDAR');
 
     // ── Step 9: Day iCal ──

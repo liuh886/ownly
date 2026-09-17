@@ -329,8 +329,8 @@ export function CalendarSubscriptionModal({
             </div>
             <p className="text-xs text-stone-500 leading-5">
               {zh
-                ? 'Google 会把没有时区的时间按 UTC 显示，导致整批事件偏移。给行程设为目的地时区（如曼谷 Asia/Bangkok）后，导出为绝对时刻，各地日历显示正确。设完后要点「同步全部行程」重发一次。'
-                : 'Google renders zone-less times as UTC, shifting every event. Set each trip to its destination zone (e.g. Asia/Bangkok) to export absolute instants, then Sync All Trips once.'}
+                ? '统一规定：导出一律采用 UTC+0。设了目的地时区（如曼谷 Asia/Bangkok）的按时区换算成绝对时刻，各地日历自动换算显示；没设时区的按填写的当地时间直接标为 UTC——把 Ownly 订阅日历固定为 GMT+0 即看到机票时刻。设完时区后要点「同步全部行程」重发一次。'
+                : 'Unified rule: exports are always UTC+0. Trips with a destination zone convert to absolute instants; trips without one export wall time labeled as UTC — pin the Ownly calendar to GMT+0 to read ticket times. Re-sync once after setting a zone.'}
             </p>
             <div className="space-y-2">
               {trips.map((trip) => {

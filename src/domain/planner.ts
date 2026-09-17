@@ -34,10 +34,10 @@ export interface PlannerTrip {
   transport_mode?: PlannerTravelMode;
   travel_preferences?: string[];
   /**
-   * IANA destination timezone (e.g. `Asia/Bangkok`) for calendar export.
-   * Timeline wall-clock times are interpreted in this zone and emitted as UTC.
-   * Absent = legacy floating local time.
-   */
+    * IANA destination timezone (e.g. `Asia/Bangkok`) for calendar export.
+    * Set: wall times convert to true UTC instants. Absent: destination wall
+    * time is exported labeled as UTC (unified UTC+0 rule).
+    */
   timezone?: string;
   /**
    * Per-day timezone overrides for multi-zone trips ('YYYY-MM-DD' → IANA zone).

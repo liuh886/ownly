@@ -311,8 +311,8 @@ describe('PlannerRepository visit lifecycle', () => {
     const ics = await plannerRepository.exportTripIcs('trip-1', { now: new Date('2026-10-01T00:00:00Z') });
     expect(ics).toContain('BEGIN:VCALENDAR');
     expect(ics).toContain(`UID:${visit!.id}@ownly`);
-    expect(ics).toContain('DTSTART:20261101T090000');
-    expect(ics).toContain('DTEND:20261101T103000');
+    expect(ics).toContain('DTSTART:20261101T090000Z');
+    expect(ics).toContain('DTEND:20261101T103000Z');
     expect(ics).toContain('END:VCALENDAR');
 
     // Test Calendar Feed management (PRO)
