@@ -208,15 +208,22 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                           ? 'border-emerald-500 ring-2 ring-emerald-300/50 bg-emerald-50/30'
                           : 'border-stone-200/90 bg-white hover:border-stone-300'
                       }`}>
+                        {/* Stop order watermark: sequence lives as a faint background
+                            figure, occupying zero layout space. Content stays
+                            above it via relative positioning. */}
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute -bottom-1 right-1 select-none text-5xl font-black tabular-nums leading-none text-stone-900/[0.05]"
+                        >
+                          {index + 1}
+                        </span>
+
                         {/* Stop Content Body */}
-                        <div className="min-w-0 flex-1 space-y-1">
+                        <div className="relative min-w-0 flex-1 space-y-1">
                           {/* Row 1: Title (left, 1 line clamp) & Time Trigger (right) */}
                           <div className="flex items-center justify-between gap-1.5">
-                            {/* Title with sequence number + kind emoji, all left-aligned */}
+                            {/* Title with kind emoji, all left-aligned */}
                             <div className="min-w-0 flex-1 flex items-center gap-1.5 text-left">
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-transparent text-[10px] font-bold tabular-nums text-stone-400" aria-hidden="true">
-                                {index + 1}
-                              </span>
                               <span className="text-xs shrink-0">{PLANNER_KIND_ICONS[place.kind] || '📍'}</span>
                               <h3 className="truncate text-left text-xs font-bold text-stone-900 leading-snug" title={place.title}>
                                 {place.title}
