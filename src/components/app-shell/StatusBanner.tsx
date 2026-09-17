@@ -17,6 +17,30 @@ export function StatusBanner({
   const { t, language } = useI18n();
   const localDataCopy = getOwnlyLocalDataCopy(language);
 
+  // Connected and healthy: collapse to a quiet one-line strip. The full card
+  // is reserved for disconnected / error states that actually need attention.
+  // Folder switching stays available via the header connection button.
+  if (isConnected && !error) {
+    return (
+      <section className="mb-4 flex items-center gap-2 rounded-lg bg-stone-100/70 px-3 py-1.5 text-xs text-stone-500">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">
+          {isWebRuntime ? localDataCopy.connected : t('vaultConnected')}
+        </span>
+        <button
+          type="button"
+          onClick={onConnect}
+          disabled={isLoading}
+          className="shrink-0 touch-manipulation rounded px-1 py-0.5 font-medium text-stone-400 transition hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isLoading
+            ? isWebRuntime ? localDataCopy.connecting : t('connecting')
+            : isWebRuntime ? localDataCopy.changeFolder : t('reconnectVault')}
+        </button>
+      </section>
+    );
+  }
+
   return (
     <section className="mb-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">

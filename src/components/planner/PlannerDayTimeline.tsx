@@ -513,9 +513,11 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="rounded-full bg-stone-200 hover:bg-stone-300 px-1.5 py-0.2 text-[10px] font-bold text-stone-800 transition"
+                                className="rounded-full bg-stone-200/70 px-1.5 py-0.5 text-[10px] leading-none transition hover:bg-stone-300"
+                                title={zh ? '在 Google 地图中导航' : 'Navigate in Google Maps'}
+                                aria-label={zh ? '在 Google 地图中导航' : 'Navigate in Google Maps'}
                               >
-                                Google 导航 ↗
+                                🧭
                               </a>
                             </div>
                           ) : transitionItems.length === 0 ? (
@@ -548,9 +550,11 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                       href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${modeKey === 'motorcycle' ? 'two_wheeler' : (modeKey ?? 'transit')}`}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="rounded-full bg-sky-100 hover:bg-sky-200 px-1.5 py-0.2 text-[10px] font-bold text-sky-800 transition"
+                                      className="rounded-full bg-sky-100/70 px-1.5 py-0.5 text-[10px] leading-none transition hover:bg-sky-200"
+                                      title={zh ? '在 Google 地图中导航' : 'Navigate in Google Maps'}
+                                      aria-label={zh ? '在 Google 地图中导航' : 'Navigate in Google Maps'}
                                     >
-                                      Google 导航 ↗
+                                      🧭
                                     </a>
                                   </div>
 
@@ -627,9 +631,11 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                         href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${item.mode === 'motorcycle' ? 'two_wheeler' : (item.mode ?? selectedTrip.transport_mode ?? 'transit')}`}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="text-[10px] text-stone-400 hover:text-stone-700 underline underline-offset-2 transition"
+                                        className="text-[10px] leading-none text-stone-400 transition hover:text-stone-700"
+                                        title={zh ? '在 Google 地图中导航' : 'Navigate in Google Maps'}
+                                        aria-label={zh ? '在 Google 地图中导航' : 'Navigate in Google Maps'}
                                       >
-                                        Google 导航 ↗
+                                        🧭
                                       </a>
                                     </div>
                                   )}
@@ -688,9 +694,11 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                     href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(place.address || place.title)}&destination=${encodeURIComponent(nextPlace.address || nextPlace.title)}&travelmode=${selectedTrip.transport_mode === 'motorcycle' ? 'two_wheeler' : (selectedTrip.transport_mode ?? 'transit')}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="rounded-full bg-amber-100 hover:bg-amber-200 px-1.5 py-0.2 text-[10px] font-bold text-amber-900 transition"
+                                    className="rounded-full bg-amber-100/70 px-1.5 py-0.5 text-[10px] leading-none transition hover:bg-amber-200"
+                                    title={zh ? '在 Google 地图中导航' : 'Navigate in Google Maps'}
+                                    aria-label={zh ? '在 Google 地图中导航' : 'Navigate in Google Maps'}
                                   >
-                                    Google 导航 ↗
+                                    🧭
                                   </a>
                                 </div>
                               );

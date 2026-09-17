@@ -1583,35 +1583,6 @@ export function PlannerMap({
           </div>
         ) : null}
 
-        {/* Mini day legend for compact maps: same toggle semantics in a dot strip. */}
-        {compact && tripDates && tripDates.length > 1 ? (
-          <div className="absolute top-2 left-2 z-30 flex max-w-[62%] items-center gap-0.5 overflow-x-auto rounded-full bg-white/90 px-2 py-1 shadow-xs backdrop-blur-sm">
-            {tripDates.map((date, dIdx) => {
-              const isActive = dIdx === activeDayIndex;
-              const lit = isActive || coloredDays.includes(dIdx);
-              return (
-                <button
-                  key={date}
-                  type="button"
-                  disabled={isActive}
-                  onClick={() => {
-                    if (!coloredDays.includes(dIdx)) setShowRoutesLayer(true);
-                    toggleDay(dIdx, activeDayIndex);
-                  }}
-                  className={`flex shrink-0 items-center gap-0.5 rounded-full px-1 py-0.5 text-[9px] font-bold transition ${isActive ? 'cursor-default text-stone-900' : lit ? 'text-stone-900 hover:bg-stone-100' : 'text-stone-400 hover:bg-stone-100'}`}
-                  title={isActive
-                    ? (zh ? `当天 D${dIdx + 1}（始终彩色显示）` : `Active day D${dIdx + 1}`)
-                    : (zh ? (lit ? `关闭 D${dIdx + 1} 色彩` : `点亮 D${dIdx + 1} 色彩`) : (lit ? `Unlight D${dIdx + 1}` : `Light D${dIdx + 1}`))}
-                  aria-pressed={lit}
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: lit ? plannerDayColor(dIdx) : '#d6d3d1' }} />
-                  D{dIdx + 1}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-
         {/* Anchored Mini Popover on Clicked Marker with 3 Emoji Actions */}
         {selectedPlace && selectedPointScreen && selectedPointScreen.x >= -60 && selectedPointScreen.x <= containerSize.width + 60 && selectedPointScreen.y >= -60 && selectedPointScreen.y <= containerSize.height + 60 && (
           <div
