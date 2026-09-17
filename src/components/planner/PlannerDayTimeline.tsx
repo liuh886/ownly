@@ -208,19 +208,17 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                           ? 'border-emerald-500 ring-2 ring-emerald-300/50 bg-emerald-50/30'
                           : 'border-stone-200/90 bg-white hover:border-stone-300'
                       }`}>
-                        {/* Stop Number Circle */}
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold tabular-nums text-white shrink-0 shadow-2xs self-end mb-0.5">
-                          {index + 1}
-                        </div>
-
                         {/* Stop Content Body */}
                         <div className="min-w-0 flex-1 space-y-1">
                           {/* Row 1: Title (left, 1 line clamp) & Time Trigger (right) */}
                           <div className="flex items-center justify-between gap-1.5">
-                            {/* Title with kind emoji */}
-                            <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                            {/* Title with sequence number + kind emoji, all left-aligned */}
+                            <div className="min-w-0 flex-1 flex items-center gap-1.5 text-left">
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[9px] font-bold tabular-nums text-white" aria-hidden="true">
+                                {index + 1}
+                              </span>
                               <span className="text-xs shrink-0">{PLANNER_KIND_ICONS[place.kind] || '📍'}</span>
-                              <h3 className="truncate text-xs font-bold text-stone-900 leading-snug" title={place.title}>
+                              <h3 className="truncate text-left text-xs font-bold text-stone-900 leading-snug" title={place.title}>
                                 {place.title}
                               </h3>
                               {place.kind === 'stay' ? (

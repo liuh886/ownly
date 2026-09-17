@@ -922,14 +922,17 @@ export function PlannerMap({
     for (const positions of groups.values()) {
       if (positions.length > 1) {
         // Degenerate twin: a scheduled stop plus its own candidate-pool twin
-        // (same place.id, same coordinates) would collapse into a "2" badge
-        // and swallow the sequence number as soon as the pool layer opens.
-        // Dissolve exactly such pairs so the numbered marker stays visible
-        // (it renders above the candidate via zIndex); true duplicates
-        // (same place scheduled twice, or distinct stacked places) still cluster.
+        // (same underlying place, same coordinates) would collapse into a "2"
+        // badge and swallow the sequence number as soon as the pool layer
+        // opens. Dissolve exactly such pairs so the numbered marker stays
+        // visible (it renders above the candidate via zIndex); true duplicates
+        // (same place scheduled twice, or distinct stacked places) still
+        // cluster. NOTE: compare canonicalPlaceId, not place.id — scheduled
+        // occurrences carry the visit id in place.id.
         if (
           positions.length === 2 &&
-          markerLayout[positions[0]].p.place.id === markerLayout[positions[1]].p.place.id &&
+          canonicalPlaceId(markerLayout[positions[0]].p.place) ===
+            canonicalPlaceId(markerLayout[positions[1]].p.place) &&
           markerLayout[positions[0]].p.isScheduled !== markerLayout[positions[1]].p.isScheduled
         ) {
           continue;

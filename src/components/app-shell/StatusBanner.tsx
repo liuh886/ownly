@@ -22,8 +22,8 @@ export function StatusBanner({
   // Folder switching stays available via the header connection button.
   if (isConnected && !error) {
     return (
-      <section className="mb-4 flex items-center gap-2 rounded-lg bg-stone-100/70 px-3 py-1.5 text-xs text-stone-500">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+      <section className="mb-3 flex items-center gap-1.5 rounded-md bg-stone-100/50 px-2.5 py-1 text-[11px] text-stone-400">
+        <span className="h-1 w-1 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">
           {isWebRuntime ? localDataCopy.connected : t('vaultConnected')}
         </span>
@@ -31,7 +31,7 @@ export function StatusBanner({
           type="button"
           onClick={onConnect}
           disabled={isLoading}
-          className="shrink-0 touch-manipulation rounded px-1 py-0.5 font-medium text-stone-400 transition hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 touch-manipulation rounded px-1 py-0.5 text-[11px] font-medium text-stone-400 transition hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading
             ? isWebRuntime ? localDataCopy.connecting : t('connecting')
