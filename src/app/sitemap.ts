@@ -9,12 +9,17 @@ function getSiteUrl(): string {
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  // Single marketing landing today; /app, /trip and /c are private or noindex.
+  // Marketing landing + privacy policy are indexable; /app, /trip and /c are private or noindex.
   return [
     {
       url: `${getSiteUrl()}/`,
       changeFrequency: 'monthly',
       priority: 1,
+    },
+    {
+      url: `${getSiteUrl()}/privacy/`,
+      changeFrequency: 'yearly',
+      priority: 0.3,
     },
   ];
 }

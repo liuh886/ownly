@@ -1,5 +1,10 @@
 # Ownly Privacy Policy
 
+- **Effective date**: 2026-09-17
+- **Policy version**: 2026-09-17 (covers Ownly Capture 1.0.0)
+- **Contact / support**: https://github.com/liuh886/ownly/issues
+- **Hosted copy of this policy**: https://liuh886.github.io/ownly/privacy
+
 Ownly is designed as a local-first personal ledger with user-controlled storage.
 
 ## Data Storage
@@ -57,3 +62,27 @@ Ownly Capture is a Chromium MV3 side panel for collecting the user's own travel 
 - **Reference FX (`open.er-api.com`)**: selection FX and trip display convert mixed-currency prices for display only using built-in USD-pivot reference rates (optionally refreshed from `open.er-api.com`). Raw captured price text is never rewritten, and personal ledger data is not sent with the rate request.
 - **No sale, deletion on demand**: Ownly does not sell personal data. Removing the extension's queue happens by deleting candidates/collections in-panel, clearing `chrome.storage.local` for the extension, or uninstalling the extension. Planner Markdown remains in the user's Ownly data folder until the user archives or permanently deletes it there.
 - **Standalone text export**: exporting a collection as Markdown/JSON or copying it to the clipboard is an explicit user-initiated download to the user's own device. It uploads nothing and requires no Ownly account or website.
+
+## Extension Permissions (why each is needed)
+
+Ownly Capture requests the minimum Chromium permissions required for one-click travel research capture. No permission is used for advertising, tracking, or sale of data.
+
+| Permission | Purpose |
+|---|---|
+| `sidePanel` | Opens the Ownly Capture side panel when the user clicks the toolbar action. |
+| `storage` | Persists the pending handoff queue (`ownlyCaptureStateV3`) and language preference in `chrome.storage.local` on-device. Only the MV3 background worker writes the queue. |
+| `scripting` | Injects the place-extraction content script on supported travel/mapping hosts (Google Maps/Travel, Booking.com, Agoda, Tabelog, Xiaohongshu) and the display-only FX tooltip. |
+| `activeTab` | Reads the active tab's URL/title once when the user captures a place or re-detects currency. |
+| `tabs` | Finds an already-open Google Maps tab for enrichment context and reuses an open Ownly Planner tab for the capture-sync handoff. Page contents are never read through this permission. |
+
+Host access is scoped per site (see manifest `host_permissions`): Google Maps domains for place facts and saved lists; Booking.com, Agoda, Tabelog, and Xiaohongshu adapters extract only the research facts visible on the page the user is viewing. The selection FX tooltip (`fx-tooltip.js`) matches all pages because currency conversion must work on any merchant page where the user selects price text — it is **off by default** (opt-in toggle in the side panel), converts locally for display only, and never exfiltrates page content.
+
+## Third Parties and Data Retention
+
+| Third party | Data sent | Retention |
+|---|---|---|
+| Google Maps (maps.google.com and regional domains) | Place lookup for the captured place (public place facts returned) | Governed by Google's privacy policy; Ownly stores only the facts the user keeps. |
+| `open.er-api.com` (reference FX rates) | A rate-table request with no ledger content — no amounts, names, notes, or identifiers | Response cached on-device; governed by the provider's policy. |
+| User's own sync provider (Dropbox, Google Drive, OneDrive, iCloud, if the user points their Ownly folder at one) | The user's own Markdown files, synced by that provider's client | Governed by that provider's policy. |
+
+Ownly does not sell personal data and serves no ads. Users can access their data (plain Markdown files plus the in-panel queue), delete it (delete candidates/collections in-panel, clear `chrome.storage.local` for the extension, or uninstall), and withdraw consent at any time by turning off the FX toggle or removing the extension.
