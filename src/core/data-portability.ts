@@ -1,4 +1,4 @@
-import YAML from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 export const OWNLY_BACKUP_KIND = 'ownly-backup' as const;
 export const OWNLY_BACKUP_FORMAT_VERSION = '1.0' as const;
@@ -494,7 +494,7 @@ async function migrateLegacyMarkdownFile(file: OwnlyBackupFile): Promise<{
   if (!file.path.endsWith('.md')) return { file, changes: [] };
   const match = file.content.match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!match) return { file, changes: [] };
-  const parsed: unknown = YAML.parse(match[1] || '{}');
+  const parsed: unknown = parseYaml(match[1] || '{}');
   if (!isRecord(parsed)) return { file, changes: [] };
 
   const next = { ...parsed };
@@ -509,7 +509,7 @@ async function migrateLegacyMarkdownFile(file: OwnlyBackupFile): Promise<{
   }
   if (changes.length === 0) return { file, changes };
 
-  const yaml = YAML.stringify(next).trimEnd();
+  const yaml = stringifyYaml(next).trimEnd();
   const body = file.content.slice(match[0].length);
   const content = `---\n${yaml}\n---\n${body.startsWith('\n') || body.length === 0 ? body : `\n${body}`}`;
   return { file: await backupFile(file.path, content), changes };

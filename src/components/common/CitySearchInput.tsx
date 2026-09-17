@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { searchCities, type CitySearchResult } from '@/domain/travel';
 import { useI18n } from '@/core/i18n-context';
 
@@ -24,6 +24,9 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Unique per instance: forms can render several city inputs (main + waypoints).
+  const inputId = useId();
+  const listboxId = `${inputId}-listbox`;
 
   const handleChange = useCallback((value: string) => {
     setQuery(value);
@@ -87,12 +90,12 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
 
   return (
     <div ref={containerRef} className="relative">
-      <label htmlFor="ownly-city-search" className="sr-only">
+      <label htmlFor={inputId} className="sr-only">
         {t('citySearchPlaceholder')}
       </label>
       <input
         ref={inputRef}
-        id="ownly-city-search"
+        id={inputId}
         type="text"
         value={query}
         onChange={(e) => handleChange(e.target.value)}
@@ -110,13 +113,13 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
         className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-stone-400 sm:text-sm"
         role="combobox"
         aria-expanded={isOpen}
-        aria-controls="city-search-listbox"
+        aria-controls={listboxId}
         aria-autocomplete="list"
       />
       {isOpen && query.trim().length > 0 ? (
         results.length > 0 ? (
           <ul
-            id="city-search-listbox"
+            id={listboxId}
             role="listbox"
             aria-label={t('citySearchPlaceholder')}
             className="absolute z-10 mt-1 max-h-48 w-full overscroll-contain overflow-auto rounded-lg border border-stone-200 bg-white py-1 shadow-lg"

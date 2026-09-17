@@ -21,8 +21,9 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       // Marketing landing is indexable; the local-first app shell is private.
+      // Per RFC 9309 `/app/` does not match bare `/app`, so list both.
       allow: `${basePath}/`,
-      disallow: `${basePath}/app/`,
+      disallow: [`${basePath}/app/`, `${basePath}/app`],
     },
     sitemap: `${siteUrl}/sitemap.xml`,
   };

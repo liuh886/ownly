@@ -87,8 +87,10 @@ async function networkFirst(request, event) {
     if (event && event.preloadResponse) {
       try {
         const preloaded = await event.preloadResponse;
-        if (preloaded) {
-          if (preloaded.ok) await cache.put(request, preloaded.clone());
+        // Only trust successful preloads; HTTP errors fall through to a
+        // fresh network attempt and, ultimately, the offline app shell.
+        if (preloaded && preloaded.ok) {
+          await cache.put(request, preloaded.clone());
           return preloaded;
         }
       } catch {
@@ -108,9 +110,13 @@ async function cacheFirst(request) {
   const cached = await cache.match(request);
   if (cached) return cached;
 
-  const response = await fetch(request);
-  if (response.ok) await cache.put(request, response.clone());
-  return response;
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch {
+    return Response.error();
+  }
 }
 
 async function staleWhileRevalidate(request) {
@@ -133,18 +139,22 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Matches /app with or without a trailing slash.
+  const appPath = `${siteBase}/app`;
   if (request.mode === 'navigate') {
-    if (!url.pathname.startsWith(appUrl)) return;
+    if (url.pathname !== appPath && !url.pathname.startsWith(`${appPath}/`)) return;
     event.respondWith(networkFirst(request, event));
     return;
   }
 
   if (!url.pathname.startsWith(`${siteBase}/`)) return;
 
+  // Only fingerprinted Next.js bundles and icons are cache-first safe.
+  // The webmanifest is unversioned and must stay revalidatable so PWA
+  // metadata updates (name, icons, theme) can reach installed clients.
   const isStaticAsset =
     url.pathname.includes('/_next/static/') ||
-    url.pathname.startsWith(`${siteBase}/icons/`) ||
-    url.pathname === manifestUrl;
+    url.pathname.startsWith(`${siteBase}/icons/`);
 
   event.respondWith(isStaticAsset ? cacheFirst(request) : staleWhileRevalidate(request));
 });

@@ -95,11 +95,11 @@ body {
   }
 }
 
-/* Global keyboard focus — covers links, inputs and custom tab stops, not just buttons */
+/* Global keyboard focus — covers links, inputs and custom tab stops, not just buttons.
+   No border-radius here: browsers trace the element's own radius (rounded-full stays pill-shaped). */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid rgb(28 25 23 / 0.45);
   outline-offset: 2px;
-  border-radius: 0.5rem;
 }
 @media (prefers-color-scheme: dark) {
   :where(a, button, input, select, textarea, [tabindex]):focus-visible {
@@ -112,7 +112,6 @@ body {
 .wyqd-web-shell [role="button"]:focus-visible {
   outline: 2px solid rgb(28 25 23 / 0.3);
   outline-offset: 2px;
-  border-radius: 0.5rem;
 }
 @media (prefers-color-scheme: dark) {
   .wyqd-web-shell button:focus-visible,
@@ -128,10 +127,20 @@ body {
   scrollbar-color: var(--border-default) transparent;
 }
 
-/* Skeleton shimmer for loading states — disabled under reduced motion */
+/* Skeleton shimmer for loading states.
+   Static base first; shimmer only under no-preference; dark variants paired
+   with the same motion preference so dark+reduce stays static. */
 @keyframes ownly-shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+.ownly-skeleton {
+  background: rgb(28 25 23 / 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  .ownly-skeleton {
+    background: rgb(250 250 249 / 0.08);
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
   .ownly-skeleton {
@@ -140,16 +149,23 @@ body {
     animation: ownly-shimmer 1.4s ease-in-out infinite;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ownly-skeleton {
-    background: rgb(28 25 23 / 0.06);
-  }
-}
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) and (prefers-reduced-motion: no-preference) {
   .ownly-skeleton {
     background: linear-gradient(90deg, rgb(250 250 249 / 0.06) 25%, rgb(250 250 249 / 0.12) 50%, rgb(250 250 249 / 0.06) 75%);
     background-size: 200% 100%;
+    animation: ownly-shimmer 1.4s ease-in-out infinite;
   }
+}
+
+/* Invisible 44px hit-area expansion for dense ghost controls (visuals unchanged).
+   The ::before is part of the element, so it extends the click target. */
+.ownly-hit-expand {
+  position: relative;
+}
+.ownly-hit-expand::before {
+  content: "";
+  position: absolute;
+  inset: var(--ownly-hit-inset, -10px -8px);
 }
 
 /* Below-the-fold marketing scenes render lazily without layout shift */
@@ -180,9 +196,12 @@ body {
     background-color: var(--text-primary);
     color: var(--surface-card);
   }
-  /* Ensure text inside primary buttons remains high contrast */
-  .wyqd-web-shell .bg-stone-950 .text-white,
-  .wyqd-web-shell .bg-stone-900 .text-white {
+  /* Text on dark surfaces — same-node and :has cases (higher specificity,
+     plain-descendant cases are re-asserted after the generic .text-white rule). */
+  .wyqd-web-shell .bg-stone-950.text-white,
+  .wyqd-web-shell .bg-stone-900.text-white,
+  .wyqd-web-shell button:has(> .bg-stone-950) .text-white,
+  .wyqd-web-shell button:has(> .bg-stone-900) .text-white {
     color: var(--surface-card);
   }
 
@@ -224,6 +243,11 @@ body {
   }
   .wyqd-web-shell .text-white {
     color: var(--text-primary);
+  }
+  /* Genuine white-on-dark nesting must beat the generic rule above (tie-break by order). */
+  .wyqd-web-shell .bg-stone-950 .text-white,
+  .wyqd-web-shell .bg-stone-900 .text-white {
+    color: var(--surface-card);
   }
 
   /* Form elements */

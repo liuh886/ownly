@@ -1178,7 +1178,8 @@ export function PlannerMap({
                 width: `${tileSize}px`,
                 height: `${tileSize}px`,
               }}
-              loading="lazy"
+              // No loading="lazy": tiles are already viewport-clipped (+1 ring)
+              // and lazy would demote them to Lowest priority (checkerboarding on pan/zoom).
               onError={(e) => {
                 const img = e.target as HTMLImageElement;
                 if (img.dataset.fallback || !activeBasemap.fallbackUrl) return;

@@ -51,7 +51,7 @@ export function FilterChip({
       type="button"
       aria-pressed={active}
       className={cx(
-        'min-h-10 shrink-0 touch-manipulation rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97]',
+        'ownly-hit-expand min-h-10 shrink-0 touch-manipulation rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97]',
         active
           ? 'bg-stone-950 text-white'
           : 'bg-stone-50 text-stone-500 ring-1 ring-stone-200 hover:text-stone-900',

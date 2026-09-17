@@ -26,6 +26,7 @@ interface BottomNavProps {
 export function BottomNav({ activeTab, onChange }: BottomNavProps) {
   const { t, language } = useI18n();
   const [hidden, setHidden] = useState(false);
+  const [focused, setFocused] = useState(false);
   const lastY = useRef(0);
 
   // Hide on scroll down, reveal on scroll up (or near the top). The wrapper
@@ -54,12 +55,26 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Never hide (or inert) while keyboard focus is inside the nav — otherwise
+  // keyboard users scrolling with PageDown/Space would lock themselves out of
+  // the only tab-switching entry point (WCAG 2.1.1).
+  const effectivelyHidden = hidden && !focused;
+
   return (
     <div className="sticky bottom-0 z-20">
       <div
-        className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${hidden ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}
-        aria-hidden={hidden || undefined}
-        inert={hidden || undefined}
+        onFocus={() => {
+          setFocused(true);
+          setHidden(false);
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setFocused(false);
+          }
+        }}
+        className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none focus-within:grid-rows-[1fr] focus-within:opacity-100 ${effectivelyHidden ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}
+        aria-hidden={effectivelyHidden || undefined}
+        inert={effectivelyHidden || undefined}
       >
         <div className="overflow-hidden">
     <nav className="border-t border-stone-200/70 bg-white/70 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl">

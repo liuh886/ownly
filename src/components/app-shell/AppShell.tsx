@@ -115,6 +115,13 @@ export function AppShell() {
     setFirstObjectPromptHandled(true);
   }, [storageSet]);
 
+  // Bottom-tab switches always restart at the top — otherwise a long list's
+  // scroll position leaks into the newly selected tab.
+  const handleTabChange = useCallback((tab: AppTab) => {
+    setActiveTab(tab);
+    window.scrollTo(0, 0);
+  }, []);
+
   const reopenFirstObject = useCallback(() => {
     storageSet(FIRST_OBJECT_DISMISSED_KEY, 'false');
     setFirstObjectForcedOpen(true);
@@ -126,7 +133,7 @@ export function AppShell() {
     && data.storedObjects.length === 0;
 
   return (
-    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-8 text-stone-950 sm:px-6 sm:pt-10">
+    <main className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-10 pt-8 text-stone-950 sm:px-6 sm:pt-10">
       <div aria-live="polite" aria-atomic="true" className="pointer-events-none fixed inset-x-4 top-[calc(1rem+env(safe-area-inset-top))] z-30 mx-auto max-w-2xl">
         {notice ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-sm">
@@ -208,15 +215,15 @@ export function AppShell() {
             </AnimatePresence>
           </MotionConfig>
         )}
+
+        <footer className="mt-6 pb-2 text-center">
+          <span className="text-[10px] text-stone-300">
+            Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget} · {runtimeCapabilities.dataBehaviorContract} · {runtimeInfo.gitSha}
+          </span>
+        </footer>
       </div>
 
-      <BottomNav activeTab={activeTab} onChange={setActiveTab} />
-
-      <footer className="mt-4 pb-20 text-center">
-        <span className="text-[10px] text-stone-300">
-          Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget} · {runtimeCapabilities.dataBehaviorContract} · {runtimeInfo.gitSha}
-        </span>
-      </footer>
+      <BottomNav activeTab={activeTab} onChange={handleTabChange} />
 
       <FirstObjectOnboarding
         open={firstObjectOpen}

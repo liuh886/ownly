@@ -76,7 +76,7 @@ export function StatusBanner({
             type="button"
             onClick={onConnect}
             disabled={isLoading}
-            className="min-h-9 shrink-0 touch-manipulation rounded-md border border-red-200 bg-white px-2.5 py-1.5 font-semibold text-red-700 transition duration-150 active:scale-[0.97] hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="min-h-11 shrink-0 touch-manipulation rounded-md border border-red-200 bg-white px-3 py-1.5 font-semibold text-red-700 transition duration-150 active:scale-[0.97] hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {language === 'zh' ? '重试' : 'Retry'}
           </button>
