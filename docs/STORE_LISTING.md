@@ -1,0 +1,92 @@
+# Ownly Capture — Store Listing Pack (Edge Add-ons first, Chrome Web Store second)
+
+> Source of truth for submission copy. Extension UI default language is English
+> (`src/extension/sidepanel/store.ts` → `detectDefaultLanguage()` returns `'en'`);
+> in-panel switching never changes the data model. Keep EN and ZH copy in sync.
+
+## Identity
+
+- Name: **Ownly Capture**
+- Short description (EN, ≤132 chars for CWS):
+  `Capture travel research from Google Maps, Booking, Tabelog and Xiaohongshu into Ownly Planner. Local-first, no account.`
+- Short description (ZH):
+  `把 Google 地图、Booking、Tabelog、小红书的旅行灵感一键收进 Ownly Planner。本地优先，无需账号。`
+- Category: Productivity
+- Language matrix: English (default) + Chinese (in-panel toggle)
+- Support URL: https://github.com/liuh886/ownly/issues
+- Privacy URL: https://liuh886.github.io/ownly/privacy
+
+## Full description (EN)
+
+Ownly Capture collects your own travel research into Ownly Planner — a local-first
+trip planner where your data lives as Markdown files in a folder you choose.
+
+- One-click capture on Google Maps, Google Travel, Booking.com, Agoda, Tabelog, and Xiaohongshu
+- Saved-list sync: bring an entire Google Maps list to the planner board
+- Place enrichment: canonical facts (Place ID, coordinates, rating, hours, address) on your request
+- Display-only currency conversion for selected price text (off by default; opt-in in the panel)
+- Export any collection as Markdown/JSON or copy to clipboard — no account, no upload
+- Your ledger stays in your folder. Uninstall wipes the queue; your Markdown remains yours.
+
+Permissions and why: sidePanel (open the panel), storage (on-device queue),
+scripting (place extraction on travel hosts), activeTab (read URL/title once per
+capture), tabs (find an open Maps tab, reuse an open Planner tab). Full details:
+https://liuh886.github.io/ownly/privacy
+
+## Full description (ZH)
+
+Ownly Capture 把你的旅行灵感收进 Ownly Planner —— 本地优先的行程规划，你的数据是以
+Markdown 文件存在你指定的文件夹里。
+
+- Google 地图 / Google Travel / Booking / Agoda / Tabelog / 小红书一键采集
+- 收藏夹同步：整个 Google 地图列表一键搬上案板
+- 地点增强：按需补全 Place ID、坐标、评分、营业时间、地址
+- 划词汇率换算（默认关闭，面板内手动开启，仅本地显示）
+- 任意合集导出 Markdown/JSON 或复制剪贴板 —— 无账号、不上传
+- 账本永远在你的文件夹里。卸载即清空队列；Markdown 归你所有。
+
+权限说明见 https://liuh886.github.io/ownly/privacy
+
+## Review notes (paste into submission questionnaires)
+
+- `tabs`: used only to find an already-open Google Maps tab (enrichment context) and to
+  reuse an open Ownly Planner tab for the capture-sync handoff. Page contents are never
+  read through this permission.
+- `fx-tooltip.js` matches `http(s)://*/*` because currency conversion must work on any
+  merchant page where the user selects price text. It is OFF by default (opt-in toggle),
+  converts locally for display only, and never exfiltrates page content. Record a
+  before/after screen recording with the toggle off → on.
+- `ownly-bridge.js` runs only on first-party Ownly origins (hosted site, custom domain,
+  localhost/127.0.0.1 for local dev) and validates same-origin postMessage.
+- No remote code, no analytics SDK, no ads, no data sale. Version 1.0.0.
+
+## Screenshots — shot list (real browser, 1280×800)
+
+1. `01-sidepanel-empty.png` — side panel open on a Google Maps place, “no place yet” state
+2. `02-maps-capture.png` — Maps place page with in-page quick-capture FAB visible
+3. `03-inbox-board.png` — side panel inbox board with 3+ captured places, tags visible
+4. `04-fx-toggle.png` — FX toggle ON with converted price tooltip on a merchant page
+5. `05-export.png` — export menu (Markdown/JSON/clipboard) open
+
+Promo: Edge 300×300 store logo (reuse `public/icons/ownly-128.png` scaled, verify on
+dark/light); CWS 440×280 small promo tile (same mark + “Ownly Capture” wordmark).
+
+## Packaging
+
+```powershell
+npm run build:extension
+Compress-Archive -Path dist/extension/* -DestinationPath dist/ownly-capture-1.0.0-edge.zip
+```
+
+Upload the zip to Partner Center (Edge) / Developer Dashboard (Chrome). `dist/` is
+gitignored — the zip is built locally at submit time, never committed.
+
+## Pre-submit smoke (Edge + Chrome, both)
+
+- [ ] Load unpacked `dist/extension`, no manifest warnings
+- [ ] Toolbar click auto-opens side panel (`openPanelOnActionClick`)
+- [ ] `Alt+Shift+C` quick-capture works, no shortcut conflict warning
+- [ ] Capture on google.com/maps place → inbox shows place with tags
+- [ ] FX toggle default OFF; select price text shows nothing until enabled
+- [ ] Bridge active only on Ownly origins (check console on other sites: silent)
+- [ ] Uninstall removes queue; Planner Markdown untouched

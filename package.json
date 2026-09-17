@@ -8,6 +8,7 @@
     "build": "node scripts/gen-git-sha.mjs && next build",
     "build:obsidian": "node scripts/gen-git-sha.mjs && node esbuild.obsidian.mjs --production",
     "build:extension": "node scripts/build-extension.mjs",
+    "package:extension": "npm run build:extension && node scripts/package-extension.mjs",
     "check:obsidian": "tsc -p tsconfig.obsidian.json --pretty false",
     "lint:obsidian": "eslint --cache --cache-location node_modules/.cache/eslint/.eslintcache-obsidian \"src/obsidian/\"",
     "build:all": "npm run build && npm run build:obsidian && npm run build:extension",
