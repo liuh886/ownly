@@ -209,7 +209,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                           : 'border-stone-200/90 bg-white hover:border-stone-300'
                       }`}>
                         {/* Stop Number Circle */}
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold tabular-nums text-white shrink-0 shadow-2xs mt-0.5">
+                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-stone-500 text-[9px] font-bold tabular-nums text-white shrink-0 mt-1">
                           {index + 1}
                         </div>
 
@@ -258,7 +258,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                               <span>🕒</span>
                               <span>
                                 {timelineStop?.start
-                                  ? `${timelineStop.is_inferred_start ? '~' : ''}${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}${timelineStop.is_inferred_start ? ` ${zh ? '估' : 'est'}` : ''}`
+                                  ? `${timelineStop.start}${timelineStop.end ? `-${timelineStop.end}${timelineStop.crosses_midnight ? ' +1' : ''}` : ''}`
                                   : (zh ? '设时间' : 'Time')}
                               </span>
                             </button>
@@ -623,7 +623,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                         className="inline-flex items-center gap-1 hover:text-stone-800 hover:underline cursor-pointer transition"
                                         title={zh ? '点击切换出行方式或清除预估' : 'Click to change travel mode or clear estimate'}
                                       >
-                                        <span className="font-medium tabular-nums text-stone-600">{icon} <strong className="font-bold">{item.duration_minutes} min</strong>{distance}{item.source === 'manual' ? (zh ? '（手）' : ' (manual)') : item.source === 'openrouteservice' ? '' : (zh ? '（估）' : ' (est.)')}</span>
+                                        <span className="font-medium tabular-nums text-stone-600">{icon} <strong className="font-bold">{item.duration_minutes} min</strong>{distance}{item.source === 'manual' ? (zh ? '（手）' : ' (manual)') : ''}</span>
                                         <span className="text-[10px] opacity-70">▾</span>
                                       </button>
                                       <span className="font-mono tabular-nums text-stone-400">{item.start}–{item.end}</span>
