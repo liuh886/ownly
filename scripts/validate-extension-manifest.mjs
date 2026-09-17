@@ -55,7 +55,9 @@ if (typeof manifest.description !== 'string' || manifest.description.length === 
   process.exit(1);
 }
 
-// Entry points referenced by the manifest must exist in the source tree
+// Entry points referenced by the manifest must exist. Bundled .js outputs only
+// exist after `npm run build:extension` (CI validates the manifest BEFORE the
+// build), so also accept their src/extension/*.ts sources.
 const entryFiles = [
   ['side_panel.default_path', manifest.side_panel?.default_path],
   ['background.service_worker', manifest.background?.service_worker],
@@ -66,7 +68,8 @@ for (const [label, rel] of entryFiles) {
     console.error(`Manifest ${label} is missing`);
     process.exit(1);
   }
-  if (!existsSync(join('extension', rel)) && !existsSync(join('dist/extension', rel))) {
+  const tsSource = rel.endsWith('.js') ? join('src/extension', rel.slice(0, -3).split('/').pop() + '.ts') : null;
+  if (!existsSync(join('extension', rel)) && !existsSync(join('dist/extension', rel)) && !(tsSource && existsSync(tsSource))) {
     console.error(`Manifest ${label} target missing: ${rel}`);
     process.exit(1);
   }
