@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useDialogDismiss, dialogBackdropProps } from '@/components/common/use-dialog-dismiss';
 import {
   buildTripReviewDraft,
   buildTripReviewStats,
@@ -68,9 +69,12 @@ export function TripReviewModal({
     [trip, places, visits, legs, expenses, language],
   );
   const [body, setBody] = useState(draft.body);
+  // Conditionally mounted by the parent, so always active while present.
+  // onClose already guards the busy state.
+  useDialogDismiss(true, onClose);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-8 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-8 backdrop-blur-sm" {...dialogBackdropProps(onClose)}>
       <section role="dialog" aria-modal="true" aria-label={copy.title} className="max-h-[calc(100vh-4rem)] w-full max-w-xl overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl sm:p-8">
         <h2 className="text-xl font-semibold tracking-tight text-stone-950">{copy.title} — {trip.title}</h2>
         <p className="mt-2 text-sm leading-6 text-stone-600">{copy.intro}</p>

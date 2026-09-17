@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { useDialogDismiss, dialogBackdropProps } from '@/components/common/use-dialog-dismiss';
 import type { PlannerTripPlace } from '@/domain/planner';
 import { getPlannerKindLabel, parseImportPayload, PLANNER_KIND_ICONS } from '@/domain/planner';
 import { capturePlaceToPlannerPlace, isCollectionExport, parseCaptureCollectionExport } from '@/domain/capture';
@@ -113,6 +114,8 @@ export function ImportCandidatesModal({
     }
   }, [parsedPlaces, busy, onImportSuccess, onClose, zh]);
 
+  useDialogDismiss(open, onClose);
+
   if (!open) return null;
 
   return (
@@ -120,6 +123,7 @@ export function ImportCandidatesModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in"
       role="dialog"
       aria-modal="true"
+      {...dialogBackdropProps(onClose)}
     >
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         {/* Header */}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useDialogDismiss } from '@/components/common/use-dialog-dismiss';
 import type { PlannerScheduledPlace, PlannerTripPlace } from '@/domain/planner';
 import {
   calculateHotelProximity,
@@ -123,6 +124,7 @@ export function HotelComparisonModal({
   }, [candidateHotels, hotelCityMap]);
 
   const uniqueCities = useMemo(() => Array.from(cityCounts.keys()), [cityCounts]);
+  useDialogDismiss(open, onClose);
 
   // Filtered & Sorted Hotels
   const processedHotels = useMemo(() => {
