@@ -154,8 +154,8 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     });
 
     const ics = buildTripCalendarIcs(trip, [thipsamai], [visit], { now: FIXED_NOW });
-    expect(ics).toContain('DTSTART:20261005T183000\r\n');
-    expect(ics).toContain('DTEND:20261005T194500\r\n');
+    expect(ics).toContain('DTSTART:20261005T183000Z\r\n');
+    expect(ics).toContain('DTEND:20261005T194500Z\r\n');
   });
 
   it('seeds a lone untimed visit at 09:00 instead of an all-day task', () => {
@@ -163,7 +163,7 @@ describe('RFC 5545 ICS Projection & Calendar Feed', () => {
     const visit = makeVisit('visit-market', market.id, '2026-10-06');
 
     const ics = buildTripCalendarIcs(trip, [market], [visit], { now: FIXED_NOW });
-    expect(ics).toContain('DTSTART:20261006T090000\r\n');
+    expect(ics).toContain('DTSTART:20261006T090000Z\r\n');
     expect(ics).toContain('STATUS:TENTATIVE\r\n');
     expect(ics).not.toContain('VALUE=DATE');
   });
@@ -300,21 +300,20 @@ describe('Trip timezone → UTC ICS emission', () => {
     expect(ics).toContain('DTEND:20261005T173000Z\r\n');
   });
 
-  it('keeps floating local time when no timezone is set', () => {
+  it('labels wall time as UTC when no timezone is set (unified UTC+0 rule)', () => {
     const place = makePlace('khao-soi', { title: 'Khao Soi' });
     const visit = makeVisit('visit:ks-1', place.id, '2026-10-05', { start: '08:00', duration_minutes: 60 });
     const ics = buildTripCalendarIcs(trip, [place], [visit], { now: FIXED_NOW });
-    expect(ics).toContain('DTSTART:20261005T080000\r\n');
-    expect(ics).toContain('DTEND:20261005T090000\r\n');
-    expect(ics).not.toContain('080000Z');
+    expect(ics).toContain('DTSTART:20261005T080000Z\r\n');
+    expect(ics).toContain('DTEND:20261005T090000Z\r\n');
   });
 
-  it('falls back to floating time for an invalid zone', () => {
+  it('labels wall time as UTC for an invalid zone', () => {
     const badTrip: PlannerTrip = { ...trip, timezone: 'Mars/Olympus_Mons' };
     const place = makePlace('khao-soi', { title: 'Khao Soi' });
     const visit = makeVisit('visit:ks-1', place.id, '2026-10-05', { start: '08:00', duration_minutes: 60 });
     const ics = buildTripCalendarIcs(badTrip, [place], [visit]);
-    expect(ics).toContain('DTSTART:20261005T080000\r\n');
+    expect(ics).toContain('DTSTART:20261005T080000Z\r\n');
   });
 
   it('honors DST transitions on both sides of the spring-forward gap', () => {
@@ -363,8 +362,8 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', { sort_order: 1 });
     const ics = buildTripCalendarIcs(trip, [hotel, temple], [vA, vB], { now: '2026-09-10', legs: [legAB] });
     // 09:00 + 60m stay + 30m leg = 10:30 arrival, default 60m duration.
-    expect(ics).toContain('DTSTART:20261005T103000\r\n');
-    expect(ics).toContain('DTEND:20261005T113000\r\n');
+    expect(ics).toContain('DTSTART:20261005T103000Z\r\n');
+    expect(ics).toContain('DTEND:20261005T113000Z\r\n');
     expect(ics).toContain('STATUS:TENTATIVE\r\n');
     expect(ics).toContain('STATUS:CONFIRMED\r\n');
   });
@@ -399,7 +398,7 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     // 00:30 − 30m − 120m < 00:00 → no wrap; the export sweep seeds 09:00
     // tentative instead of an all-day task.
     expect(ics).not.toContain('VALUE=DATE');
-    expect(ics).toContain('DTSTART:20261005T090000\r\n');
+    expect(ics).toContain('DTSTART:20261005T090000Z\r\n');
     expect(ics).toContain('STATUS:TENTATIVE\r\n');
   });
 
@@ -418,7 +417,7 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     const vA = makeVisit('visit:a-1', hotel.id, '2026-10-05', { sort_order: 0 });
     const vB = makeVisit('visit:b-1', temple.id, '2026-10-05', { sort_order: 1 });
     const ics = buildTripCalendarIcs(trip, [hotel, temple], [vA, vB], { now: '2026-09-10' });
-    expect(ics).toContain('DTSTART:20261005T090000\r\n');
+    expect(ics).toContain('DTSTART:20261005T090000Z\r\n');
     expect(ics).toContain('STATUS:TENTATIVE\r\n');
     expect(ics).not.toContain('VALUE=DATE');
   });
@@ -444,16 +443,16 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     }];
     const ics = buildTripCalendarIcs(trip, [a, b, c], [vA, vB, vC], { now: '2026-09-10', legs });
     // Day two starts from the 09:00 seed, not from day one's evening chain.
-    expect(ics).toContain('DTSTART:20261006T090000\r\n');
+    expect(ics).toContain('DTSTART:20261006T090000Z\r\n');
     expect(ics).not.toContain('VALUE=DATE');
   });
 
-  it('carries floating midnight overflow into the next date', () => {
+  it('carries wall-as-UTC midnight overflow into the next date', () => {
     const bar = makePlace('place-a', { title: 'Night Bar' });
     const vA = makeVisit('visit:a-1', bar.id, '2026-10-05', { start: '23:30', duration_minutes: 60, sort_order: 0, is_anchor: true });
     const ics = buildTripCalendarIcs(trip, [bar], [vA], { now: '2026-09-10' });
-    expect(ics).toContain('DTSTART:20261005T233000\r\n');
-    expect(ics).toContain('DTEND:20261006T003000\r\n');
+    expect(ics).toContain('DTSTART:20261005T233000Z\r\n');
+    expect(ics).toContain('DTEND:20261006T003000Z\r\n');
   });
 
   it('treats a malformed stored start as untimed instead of emitting garbage', () => {
@@ -463,7 +462,7 @@ describe('Travel-time inference → tentative ICS blocks', () => {
     const ics = buildTripCalendarIcs(trip, [odd], [vA], { now: '2026-09-10' });
     expect(ics).not.toContain('8am');
     // Treated as untimed: day seed projects a tentative block, never raw garbage.
-    expect(ics).toContain('DTSTART:20261005T090000\r\n');
+    expect(ics).toContain('DTSTART:20261005T090000Z\r\n');
     expect(ics).toContain('STATUS:TENTATIVE\r\n');
   });
 
@@ -596,7 +595,7 @@ describe('ICS fallback timing (zero all-day events)', () => {
     expect(ics).not.toContain('VALUE=DATE');
     const starts = dtStarts(ics);
     expect(starts).toHaveLength(2);
-    expect(starts[0]).toBe('20261006T090000');
+    expect(starts[0]).toBe('20261006T090000Z');
     expect(starts[1]! >= starts[0]!).toBe(true);
     expect(ics.match(/STATUS:TENTATIVE/g)).toHaveLength(2);
   });
@@ -612,8 +611,8 @@ describe('ICS fallback timing (zero all-day events)', () => {
     expect(ics).not.toContain('VALUE=DATE');
     const starts = dtStarts(ics);
     expect(starts).toHaveLength(2);
-    expect(starts[0]).toBe('20261006T090000');
-    expect(starts[1]).toBe('20261006T140000');
+    expect(starts[0]).toBe('20261006T090000Z');
+    expect(starts[1]).toBe('20261006T140000Z');
     expect(ics).toContain('STATUS:CONFIRMED');
   });
 });

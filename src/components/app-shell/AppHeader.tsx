@@ -121,9 +121,9 @@ export function AppHeader({
               onClick={onConnectVault}
               disabled={isLoading}
               title={connectionTitle}
-              className={`inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-wait ${
+              className={`inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400 disabled:cursor-wait ${
                 isConnected && !isLoading
-                  ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700'
+                  ? 'bg-stone-100 text-stone-600 ring-1 ring-stone-200 hover:bg-stone-200/70 hover:text-stone-800'
                   : 'bg-stone-950 text-white shadow-sm hover:bg-stone-800 disabled:hover:bg-stone-950'
               }`}
             >
@@ -137,7 +137,7 @@ export function AppHeader({
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
                 isConnected
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'
                   : 'bg-stone-100 text-stone-500 ring-1 ring-stone-200'
               }`}
             >
@@ -152,13 +152,13 @@ export function AppHeader({
             <div
               role="group"
               aria-label={language === 'zh' ? 'Ownly 外部能力' : 'Ownly external tools'}
-              className="inline-flex overflow-hidden rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+              className="inline-flex overflow-hidden rounded-full text-stone-400 ring-1 ring-stone-200"
             >
               <button
                 type="button"
                 onClick={onOpenAgentGuide}
                 title="Agent / MCP"
-                className="ownly-hit-expand border-r border-emerald-200 px-2.5 py-1.5 text-xs font-semibold transition hover:bg-emerald-100 hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-600"
+                className="ownly-hit-expand border-r border-stone-200 px-2.5 py-1.5 text-xs font-medium transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400"
               >
                 Agent
               </button>
@@ -169,7 +169,7 @@ export function AppHeader({
               type="button"
               onClick={onOpenAgentGuide}
               title="Agent / MCP"
-              className="ownly-hit-expand rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-900"
+              className="ownly-hit-expand rounded-full px-3 py-1.5 text-xs font-medium text-stone-400 ring-1 ring-stone-200 transition hover:bg-stone-100 hover:text-stone-700"
             >
               Agent
             </button>

@@ -293,12 +293,12 @@ describe('Thailand 2026 Golden Path E2E Journey', () => {
     expect(ics).toContain('The Grand Palace');
     expect(ics).toContain('Wat Phra Chetuphon');
     expect(ics).toContain('Thipsamai Padthai Pratoopee');
-    expect(ics).toContain('DTSTART:20261005T090000');
-    expect(ics).toContain('DTEND:20261005T110000');
-    expect(ics).toContain('DTSTART:20261005T113000');
-    expect(ics).toContain('DTEND:20261005T130000');
-    expect(ics).toContain('DTSTART:20261005T170000');
-    expect(ics).toContain('DTEND:20261005T180000');
+    expect(ics).toContain('DTSTART:20261005T090000Z');
+    expect(ics).toContain('DTEND:20261005T110000Z');
+    expect(ics).toContain('DTSTART:20261005T113000Z');
+    expect(ics).toContain('DTEND:20261005T130000Z');
+    expect(ics).toContain('DTSTART:20261005T170000Z');
+    expect(ics).toContain('DTEND:20261005T180000Z');
     expect(ics).toContain('END:VCALENDAR');
 
     // Verify Calendar Feed Creation (PRO)

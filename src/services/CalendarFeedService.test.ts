@@ -315,7 +315,7 @@ describe('CalendarFeedService (PRO)', () => {
       ],
     });
     // 09:00 + 120m + 30m leg = 11:30 inferred arrival.
-    expect(result.ics).toContain('DTSTART:20261101T113000\r\n');
+    expect(result.ics).toContain('DTSTART:20261101T113000Z\r\n');
     expect(result.ics).toContain('STATUS:TENTATIVE\r\n');
   });
 

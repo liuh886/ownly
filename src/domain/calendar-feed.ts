@@ -196,11 +196,19 @@ export function getNextDayDateString(dateStr: string): string {
 
 /**
  * Converts 'YYYY-MM-DD' and 'HH:mm' to 'YYYYMMDDTHHmm00'.
+ * Unified export rule: Ownly always exports UTC. When the trip timezone is
+ * set, wall times are converted to true instants (see zonedWallTimeToUtcMs);
+ * when unset, the destination wall time is labeled as UTC directly. This is
+ * deliberate: Google Calendar renders zone-less (floating) times as UTC
+ * anyway, so explicit `Z` only makes the de-facto behavior RFC-clean without
+ * changing what subscribers see. Pair with a GMT+0-pinned Ownly calendar to
+ * read ticket times verbatim, or set the trip zone for true instants that
+ * follow the viewer across zones.
  */
 export function toIcsDateTimeString(dateStr: string, timeStr: string): string {
   const cleanDate = dateStr.replace(/-/g, '');
   const cleanTime = timeStr.replace(/:/g, '') + '00';
-  return `${cleanDate}T${cleanTime}`;
+  return `${cleanDate}T${cleanTime}Z`;
 }
 
 /**
@@ -251,8 +259,7 @@ export function isValidIanaTimeZone(timeZone: string): boolean {
  * Interprets a destination wall-clock time ('YYYY-MM-DD' + 'HH:mm') in the
  * given IANA zone and returns the UTC epoch millis. Iterative Intl-based
  * resolution, so DST offsets are honored without bundled tzdata.
- * Returns null for malformed input or unknown zones (caller falls back to
- * floating local time). A wall time inside a DST gap resolves near the gap
+ * Returns null for malformed input or unknown zones (caller exports wall-as-UTC). A wall time inside a DST gap resolves near the gap
  * (iteration parity decides the side — treat gap times as approximate, and
  * prefer scheduling outside the transition hour). An ambiguous fall-back time
  * resolves to its first occurrence.
@@ -312,9 +319,8 @@ export function toIcsUtcString(ms: number): string {
 
 /**
  * Resolves the effective IANA zone for one event date: per-day override wins,
- * then the trip-level zone. An invalid override falls back to the trip zone
- * (a typo must not silently flip the whole day to floating time). Returns
- * undefined when neither is set (caller falls back to floating local time).
+ * then the trip-level zone. An invalid override falls back to the trip zone.
+ * Returns undefined when neither is set (caller exports wall-as-UTC).
  */
 export function resolveTripTimeZoneForDate(trip: PlannerTrip, date: string): string | undefined {
   const dayZone = trip.day_timezones?.[date]?.trim();
@@ -373,8 +379,9 @@ function buildVEvent(
       lines.push(`DTSTART:${toIcsUtcString(startUtcMs)}`);
       lines.push(`DTEND:${toIcsUtcString(startUtcMs + durationMinutes * 60000)}`);
     } else {
-      // No (or invalid) trip timezone: floating local time, carrying midnight
-      // overflow into the next date so DTEND never precedes DTSTART.
+      // No (or invalid) trip timezone: destination wall time labeled as UTC
+      // (unified UTC+0 export rule), carrying midnight overflow into the next
+      // date so DTEND never precedes DTSTART.
       const end = addMinutesToWallDateTime(place.scheduled_date, startTime, durationMinutes);
       lines.push(`DTSTART:${toIcsDateTimeString(place.scheduled_date, startTime)}`);
       lines.push(`DTEND:${toIcsDateTimeString(end.date, end.time)}`);

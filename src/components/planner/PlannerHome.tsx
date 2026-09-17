@@ -237,6 +237,15 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         ? zh ? '进行中' : 'Active'
         : zh ? '规划中' : 'Planning';
 
+  // Calendar export timezone: Google renders zone-less times as UTC, so trips
+  // without a timezone export shifted. One tap here persists the zone on the
+  // trip; all export paths (feed + file) pick it up, then re-sync republishes.
+  const handleSaveTripTimezone = useCallback(async (tripId: string, timezone: string) => {
+    const trip = trips.find((t) => t.id === tripId);
+    if (!trip) return;
+    await handleUpsertTrip({ ...trip, timezone: timezone.trim() || undefined });
+  }, [trips, handleUpsertTrip]);
+
   const markTripComplete = useCallback(() => {
     if (!selectedTrip) return;
     setConfirmRequest({
@@ -1230,6 +1239,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           open={isCalendarModalOpen}
           onClose={() => setIsCalendarModalOpen(false)}
           tripCount={trips.length}
+          trips={trips.map((trip) => ({ id: trip.id, title: trip.title, timezone: trip.timezone }))}
+          onSaveTripTimezone={handleSaveTripTimezone}
           accountFeed={accountFeed}
           activeDate={activeDate}
           onDownloadFullIcs={downloadFullIcs}
