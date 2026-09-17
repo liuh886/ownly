@@ -70,7 +70,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                   rightTab === 'map' ? 'bg-stone-900 text-white shadow-xs' : 'text-stone-600 hover:bg-stone-200/60'
                 }`}
               >
-                🗺️ {zh ? '空间建议地图' : 'Spatial Map'}
+                🗺️ {zh ? '地图复合' : 'Spatial Map'}
               </button>
               <button
                 type="button"
@@ -79,7 +79,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                   rightTab === 'context' ? 'bg-stone-900 text-white shadow-xs' : 'text-stone-600 hover:bg-stone-200/60'
                 }`}
               >
-                📊 {zh ? '负荷统计' : 'Context'}
+                📊 {zh ? '复核' : 'Context'}
               </button>
               <button
                 type="button"
@@ -88,7 +88,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                   rightTab === 'budget' ? 'bg-stone-900 text-white shadow-xs' : 'text-stone-600 hover:bg-stone-200/60'
                 }`}
               >
-                💸 {zh ? '预算与账本' : 'Budget'}
+                💸 {zh ? '账本' : 'Budget'}
               </button>
             </div>
             <button
