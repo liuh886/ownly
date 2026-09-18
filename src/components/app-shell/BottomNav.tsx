@@ -77,8 +77,8 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
         inert={effectivelyHidden || undefined}
       >
         <div className="overflow-hidden">
-    <nav className="border-t border-stone-200/70 bg-white/70 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl">
-      <div className="relative mx-auto grid max-w-3xl grid-cols-5 gap-1 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-200">
+    <nav className="border-t border-stone-200/70 bg-white/70 px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl min-[400px]:px-4">
+      <div className="relative mx-auto grid max-w-3xl grid-cols-5 gap-0.5 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-200 min-[400px]:gap-1">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const label = tab.id === 'planner' ? (language === 'zh' ? '规划' : 'Planner') : t(tab.labelKey);

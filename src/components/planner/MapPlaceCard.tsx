@@ -127,7 +127,7 @@ export function MapPlaceCard({
               setInsertPos(value === '' ? '' : Number(value));
             }}
             onClick={(event) => event.stopPropagation()}
-            className="min-w-0 flex-1 cursor-pointer rounded-md border border-stone-200 bg-white px-1 py-0.5 text-[11px] font-medium text-stone-700"
+            className="min-w-0 flex-1 cursor-pointer rounded-md border border-stone-200 bg-white px-1 py-0.5 text-base font-medium text-stone-700 sm:text-[11px]"
             title={zh ? '默认排到末尾；选序号则插入成为新的该号' : 'Defaults to the end; pick a number to become the new stop at that position'}
           >
             <option value="">{zh ? `末尾（共 ${dayStopCount} 站）` : `End (${dayStopCount} stops)`}</option>

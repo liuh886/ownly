@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
@@ -29,6 +30,7 @@ export function AppHeader({
   onOpenAgentGuide: () => void;
 }) {
   const { t, language, setLanguage, currency, setCurrency } = useI18n();
+  const [overflowOpen, setOverflowOpen] = useState(false);
   const { runtimeTarget, isConnected, isLoading, membership, openLicenseModal } = useOwnlyWorkspace();
   const runtimeCapabilities = getWYQDRuntimeCapabilities(runtimeTarget);
   const usesBrowserLocalData = runtimeCapabilities.dataRuntime === 'browser';
@@ -55,8 +57,19 @@ export function AppHeader({
         description: t(tabHeadingKeys[activeTab].description),
       };
 
+  const closeOverflow = () => setOverflowOpen(false);
+
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOverflowOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [overflowOpen]);
+
   return (
-    <header className="mb-6 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+    <header className="mb-6 rounded-2xl border border-stone-200 bg-white shadow-sm">
       {/* ── L1 品牌 / 身份 / 偏好：低频、幽灵样式，不抢视觉 ── */}
       <div className="flex h-10 items-center gap-2 px-4 sm:px-5">
         <span className="text-sm font-extrabold tracking-tight text-stone-950">Ownly</span>
@@ -73,18 +86,18 @@ export function AppHeader({
           href="https://liuh886.gumroad.com/l/ownly"
           target="_blank"
           rel="noopener noreferrer"
-          className="ownly-hit-expand rounded-full px-2 py-0.5 text-[11px] font-medium text-stone-400 transition hover:bg-rose-50 hover:text-rose-600"
+          className="ownly-hit-expand hidden rounded-full px-2 py-0.5 text-[11px] font-medium text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 min-[480px]:inline"
           title={t('sponsor')}
         >
           ♡ {t('sponsor')}
         </a>
         <div className="ml-auto flex items-center gap-1">
           <div className="ownly-account-slot ownly-account-slot--bare" data-account-slot aria-label={t('membership')} />
-          <span className="mx-1 h-3 w-px bg-stone-200" aria-hidden="true" />
+          <span className="mx-1 hidden h-3 w-px bg-stone-200 sm:block" aria-hidden="true" />
           <button
             type="button"
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
-            className="ownly-hit-expand min-h-9 min-w-9 touch-manipulation rounded-md px-1.5 py-1 text-[11px] font-medium text-stone-400 transition duration-150 active:scale-95 hover:bg-stone-100 hover:text-stone-700"
+            className="ownly-hit-expand hidden min-h-9 min-w-9 touch-manipulation rounded-md px-1.5 py-1 text-[11px] font-medium text-stone-400 transition duration-150 active:scale-95 hover:bg-stone-100 hover:text-stone-700 sm:block"
           >
             {language === 'zh' ? 'EN' : '中文'}
           </button>
@@ -92,7 +105,7 @@ export function AppHeader({
             value={currency}
             onChange={(event) => setCurrency(event.target.value as typeof currency)}
             aria-label={language === 'zh' ? '货币' : 'Currency'}
-            className="min-h-9 cursor-pointer touch-manipulation rounded-md bg-transparent px-1 py-1 text-[11px] font-medium text-stone-400 outline-none transition hover:bg-stone-100 hover:text-stone-700"
+            className="hidden min-h-9 cursor-pointer touch-manipulation rounded-md bg-transparent px-1 py-1 text-base font-medium text-stone-400 outline-none transition hover:bg-stone-100 hover:text-stone-700 sm:block sm:text-[11px]"
           >
             {WYQD_CURRENCIES.map((currentCurrency) => (
               <option key={currentCurrency} value={currentCurrency}>
@@ -100,6 +113,73 @@ export function AppHeader({
               </option>
             ))}
           </select>
+          <div className="relative sm:hidden">
+            <button
+              type="button"
+              onClick={() => setOverflowOpen((open) => !open)}
+              aria-expanded={overflowOpen}
+              aria-haspopup="menu"
+              aria-label={language === 'zh' ? '更多选项' : 'More options'}
+              className="ownly-hit-expand flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-md px-1.5 py-1 text-sm font-bold text-stone-400 transition duration-150 active:scale-95 hover:bg-stone-100 hover:text-stone-700"
+            >
+              <span aria-hidden="true">⋯</span>
+            </button>
+            {overflowOpen ? (
+              <button
+                type="button"
+                onClick={closeOverflow}
+                aria-hidden="true"
+                tabIndex={-1}
+                className="fixed inset-0 z-40 cursor-default"
+              />
+            ) : null}
+            {overflowOpen ? (
+              <div
+                role="menu"
+                aria-label={language === 'zh' ? '更多选项' : 'More options'}
+                className="absolute right-0 top-full z-50 mt-1 w-44 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg"
+              >
+                <a
+                  href="https://liuh886.gumroad.com/l/ownly"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  role="menuitem"
+                  className="flex min-h-11 touch-manipulation items-center rounded-lg px-3 py-1.5 text-sm font-medium text-stone-600 transition hover:bg-stone-100 min-[480px]:hidden"
+                >
+                  ♡ {t('sponsor')}
+                </a>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setLanguage(language === 'zh' ? 'en' : 'zh');
+                    closeOverflow();
+                  }}
+                  className="flex min-h-11 w-full touch-manipulation items-center rounded-lg px-3 py-1.5 text-sm font-medium text-stone-600 transition hover:bg-stone-100"
+                >
+                  {language === 'zh' ? 'EN' : '中文'}
+                </button>
+                <label className="flex min-h-11 touch-manipulation items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-stone-600">
+                  <span>{language === 'zh' ? '货币' : 'Currency'}</span>
+                  <select
+                    value={currency}
+                    onChange={(event) => {
+                      setCurrency(event.target.value as typeof currency);
+                      closeOverflow();
+                    }}
+                    aria-label={language === 'zh' ? '货币' : 'Currency'}
+                    className="cursor-pointer rounded-md bg-stone-100 px-1.5 py-1 text-base font-medium text-stone-700 outline-none"
+                  >
+                    {WYQD_CURRENCIES.map((currentCurrency) => (
+                      <option key={currentCurrency} value={currentCurrency}>
+                        {WYQD_CURRENCY_LABELS[currentCurrency]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 

@@ -103,7 +103,7 @@ export function TripReviewModal({
           onChange={(event) => setBody(event.target.value)}
           rows={14}
           disabled={busy}
-          className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50/60 p-3 font-mono text-xs leading-5 text-stone-800 outline-none focus:border-stone-900 focus:bg-white disabled:opacity-60"
+          className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50/60 p-3 font-mono text-base leading-5 text-stone-800 outline-none focus:border-stone-900 focus:bg-white disabled:opacity-60 sm:text-xs"
         />
 
         <div className="mt-5 flex justify-end gap-2">

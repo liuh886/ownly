@@ -684,7 +684,7 @@ export function PlannerBudgetLedger({
                     inputMode="decimal"
                     value={fxDraft[code] ?? String(effectiveFxRate(code, fx) ?? '')}
                     onChange={(e) => setFxDraft((prev) => ({ ...prev, [code]: e.target.value }))}
-                    className="w-24 rounded border border-stone-300 px-1.5 py-0.5 text-right font-mono text-[11px]"
+                    className="w-24 rounded border border-stone-300 px-1.5 py-0.5 text-right font-mono text-base sm:text-[11px]"
                   />
                   <span className="text-stone-500">{baseCurrency}</span>
                 </div>

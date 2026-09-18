@@ -1,5 +1,35 @@
 # Ownly — Task Progress & Review
 
+## Completed: Mobile sheet primitive + touch input floor (2026-09-18)
+
+- [x] **Sheet 原语**：新增 `src/components/common/Sheet.tsx`（<sm 底部抽屉 / sm+ 居中对话框，焦点陷阱、焦点还原、Esc、`role="dialog"`、`aria-modal`、dvh 高度、安全区 footer）+ `Sheet.test.tsx` 7 用例。
+- [x] **四个 planner 弹窗迁移**：`CreateTripModal`、`OptimizeOrderModal`、`PlaceTimingModal`、`SwapDaysModal` 改用 Sheet（footer 动作聚合、触控尺寸 `min-h-11`、提交按钮 `form` 关联）。
+- [x] **移动端输入 16px 下限**：`globals.css` 增加 `.wyqd-web-shell` 输入 16px 守卫（≥sm 还原 14px）；`MapPlaceCard`、`CalendarSubscriptionModal`、`PlannerBudgetLedger`、`ResearchPoolSection` 内联字段改 `text-base sm:text-[11px]`。
+- [x] **移动端数据目录文案**：`local-data-copy.ts` 新增 `mobileNotSupported` 与 `isMobileDevice()`，`WebShell` 按设备给差异化提示。
+- [x] **布局微调**：`AppHeader` 品牌行/动作行重构、`BottomNav` 小屏间距（`min-[400px]`）、`layout.tsx` `interactiveWidget: resizes-content`。
+- 验证：`validate:fast` 全绿，`Sheet.test.tsx` + `local-data-copy.test.ts` 10 用例通过。
+
+## Completed: Review PR #152 Round 2 (Commit cf79409) (2026-09-17)
+
+- [x] **运行全量门禁与测试**：执行 `npm run validate:fast`、`npm run validate:web` 与核心单元测试，门禁全绿，构建与静态导出零错误。
+- [x] **逐项复核 Round 1 提出的 4 个 P0 阻断性问题**：
+  - [x] P0-1: 深色模式白底白字修复验证（`globals.css` 增加复合选择器、`:has` 兄弟匹配与后代顺序重排，文字对比度恢复正常）。
+  - [x] P0-2: SW `manifestUrl` 移出 `cacheFirst` 验证（从 `isStaticAsset` 剥离，走 `staleWhileRevalidate`，解决 Manifest 永久缓存锁死）。
+  - [x] P0-3: SW `preloadResponse` 错误状态处理验证（仅 `preloaded && preloaded.ok` 时返回，非 2xx 降级至实时网络与离线 Shell）。
+  - [x] P0-4: BottomNav inert / 键盘死锁与 focus-within 保护验证（`effectivelyHidden = hidden && !focused`，键盘用户不再被 `inert` 封锁）。
+- [x] **逐项复核 Round 1 提出的 P1 与 P2 改进项**：
+  - [x] P1-1: CitySearchInput React `useId()` 唯一 ID 验证（彻底消除多地点表单 duplicate ID）。
+  - [x] P1-2: AppShell 底部 Safe-Area、Footer 位置与 Tab 切换滚动重置验证（Footer 移入内容区，消除 176px 留白；Tab 切换调用 `window.scrollTo(0, 0)`）。
+  - [x] P1-3: 移动端触控尺寸调整验证（引入 `.ownly-hit-expand` 伪元素扩区至 44px；重试按钮提升至 `min-h-11`）。
+  - [x] P1-4: 全局 focus-visible 去除 `border-radius: 0.5rem` 验证（胶囊按钮在键盘聚焦时不再突变为圆角矩形）。
+  - [x] P1-5: 骨骼屏深色模式与 reduced-motion 层叠顺序验证（静态基础样式先行，深色+减少动效保持纯色静态）。
+  - [x] P1-6: ConfirmDialog `Enter` 键确认验证（`onKeyDown` 捕获 Enter 直接触发 `onConfirm`）。
+  - [x] P1-7: SW 离线 cacheFirst try-catch 兜底验证（增加 `try...catch` 返回 `Response.error()`，避免未捕获异常）。
+  - [x] P1-8: SW 导航守卫与 robots.txt 适配不带斜杠的 `/app`（`robots.ts` 同时声明两项；SW 识别 `/app` 与 `/app/`）。
+  - [x] P2 项: PlannerMap 地图瓦片 `loading="lazy"` 移除、`/c/page.tsx` 补充“返回首页”链接、YAML 具名导入在 `data-portability.ts` 统一。
+- [x] **是否引入新 Regression 分析**：全量比对差异，无任何新增类型错误、构建错误或体验回归。
+- [x] **最终评估与合并建议**：**完全满足合并条件，建议批准并合并 (Approved & Ready to Merge)**。
+
 ## Pending: 商店首发 + 单机采集器（待 review，不提交） (2026-09-13)
 
 **商店批（Edge 先行）**

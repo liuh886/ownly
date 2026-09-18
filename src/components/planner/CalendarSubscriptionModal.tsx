@@ -214,7 +214,7 @@ export function CalendarSubscriptionModal({
                     type="text"
                     readOnly
                     value={feedUrl}
-                    className="flex-1 rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-xs font-mono text-stone-800 select-all focus:outline-hidden"
+                    className="flex-1 rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-base font-mono text-stone-800 select-all focus:outline-hidden sm:text-xs"
                   />
                   <button
                     type="button"

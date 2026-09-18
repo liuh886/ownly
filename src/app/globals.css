@@ -353,6 +353,47 @@ body {
   box-shadow: var(--shadow-dropdown);
 }
 
+/* ===== Mobile sheet (bottom sheet <sm, centered dialog ≥sm) ===== */
+@keyframes ownly-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ownly-sheet-panel {
+  animation: ownly-sheet-up var(--motion-base) var(--ease-out);
+}
+@media (min-width: 640px) {
+  .ownly-sheet-panel {
+    animation-duration: var(--motion-fast);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ownly-sheet-panel {
+    animation: none;
+  }
+}
+
+/* ===== Mobile input floor: 16px on touch screens stops iOS auto-zoom.
+   Prefer explicit `text-base sm:text-sm` on each field (see ConfirmDialog);
+   this guard catches misses. Desktop restores text-sm. ===== */
+.wyqd-web-shell input,
+.wyqd-web-shell select,
+.wyqd-web-shell textarea {
+  font-size: 16px;
+}
+@media (min-width: 640px) {
+  .wyqd-web-shell input,
+  .wyqd-web-shell select,
+  .wyqd-web-shell textarea {
+    font-size: 0.875rem;
+  }
+}
+
 /* ===== Planner map route flow dots (marching direction cue) ===== */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes ownly-route-flow {

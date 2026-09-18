@@ -110,7 +110,7 @@ function PoolPlaceEditZone({
         <select
           value={place.kind}
           onChange={(e) => onKindChange(e.target.value as PlannerPlaceKind)}
-          className="min-w-0 flex-1 cursor-pointer rounded-md border border-sky-200 bg-white px-1 py-0.5 text-[11px] font-semibold text-stone-800"
+          className="min-w-0 flex-1 cursor-pointer rounded-md border border-sky-200 bg-white px-1 py-0.5 text-base font-semibold text-stone-800 sm:text-[11px]"
           title={zh ? '纠正分类（后续抓取不会覆盖）' : 'Correct kind (future captures keep it)'}
         >
           {KIND_OPTIONS.map((kind) => (
@@ -129,7 +129,7 @@ function PoolPlaceEditZone({
           onBlur={() => onSaveFields({ observed_price: priceDraft })}
           onKeyDown={(e) => { if (e.key === 'Enter') priceRef.current?.blur(); }}
           placeholder={zh ? '如 350 / ฿350' : 'e.g. 350'}
-          className="min-w-0 flex-1 rounded-md border border-sky-200 bg-white px-1 py-0.5 text-[11px] text-stone-800 placeholder:text-stone-400"
+          className="min-w-0 flex-1 rounded-md border border-sky-200 bg-white px-1 py-0.5 text-base text-stone-800 placeholder:text-stone-400 sm:text-[11px]"
         />
       </label>
       <label className="flex items-start gap-1.5 text-[11px] text-stone-600">
@@ -141,7 +141,7 @@ function PoolPlaceEditZone({
           onBlur={() => onSaveFields({ why: noteDraft })}
           rows={2}
           placeholder={zh ? '为什么值得去…' : 'Why go…'}
-          className="min-w-0 flex-1 resize-none rounded-md border border-sky-200 bg-white px-1 py-0.5 text-[11px] leading-5 text-stone-800 placeholder:text-stone-400"
+          className="min-w-0 flex-1 resize-none rounded-md border border-sky-200 bg-white px-1 py-0.5 text-base leading-5 text-stone-800 placeholder:text-stone-400 sm:text-[11px]"
         />
       </label>
     </div>

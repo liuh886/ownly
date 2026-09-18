@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { OwnlyWorkspaceProvider } from '@/core/ownly-workspace-context';
 import { type WYQDMembershipState } from '@/core/membership';
-import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
+import { getOwnlyLocalDataCopy, isMobileDevice } from '@/core/local-data-copy';
 import { markdownEntityRepository } from '@/services/MarkdownEntityRepository';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import { AppShell } from '@/components/app-shell/AppShell';
@@ -60,7 +60,7 @@ export function WebShell() {
   const connect = useCallback(async (): Promise<boolean> => {
     setError(null);
     if (typeof window.showDirectoryPicker !== 'function') {
-      setError(localDataCopy.browserNotSupported);
+      setError(isMobileDevice() ? localDataCopy.mobileNotSupported : localDataCopy.browserNotSupported);
       return false;
     }
     setOnboardingOpen(true);
@@ -73,7 +73,7 @@ export function WebShell() {
     setError(null);
     try {
       if (typeof window.showDirectoryPicker !== 'function') {
-        setError(localDataCopy.browserNotSupported);
+        setError(isMobileDevice() ? localDataCopy.mobileNotSupported : localDataCopy.browserNotSupported);
         return false;
       }
 

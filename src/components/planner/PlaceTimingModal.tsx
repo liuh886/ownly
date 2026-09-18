@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Sheet } from '@/components/common/Sheet';
 import type { PlannerVisitAnchorType } from '@/domain/planner';
 import { checkOpeningHoursCollision } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
@@ -166,25 +167,28 @@ export function PlaceTimingModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-      <div
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-5 overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-stone-100 pb-3">
-          <div className="min-w-0">
-            <h2 className="flex items-center gap-1.5 text-base font-bold text-stone-900"><span>🕒</span><span>{zh ? '调整行程时间' : 'Adjust Schedule Timing'}</span></h2>
-            <p className="mt-0.5 max-w-xs truncate text-xs font-medium text-stone-500">{place.title} · {place.scheduled_date}</p>
+    <Sheet
+      open
+      onClose={onClose}
+      title={zh ? '🕒 调整行程时间' : '🕒 Adjust Schedule Timing'}
+      description={`${place.title} · ${place.scheduled_date}`}
+      size="sm"
+      footer={(
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" onClick={() => void handleClear()} disabled={saving || (!place.scheduled_start && !place.duration_minutes && !startTime && durationMinutes === '' && !anchorDirty)} className="min-h-11 touch-manipulation rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition duration-150 active:scale-[0.98] hover:bg-rose-50 disabled:opacity-40">{zh ? '清除时间' : 'Clear Timing'}</button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClose} className="min-h-11 touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 transition duration-150 active:scale-[0.98] hover:bg-stone-50">{zh ? '取消' : 'Cancel'}</button>
+            <button type="button" onClick={() => void handleSave()} disabled={saving || timingErrors.length > 0} className="min-h-11 touch-manipulation rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white transition duration-150 active:scale-[0.98] hover:bg-stone-800 disabled:opacity-50">{saving ? '…' : (zh ? '保存时段' : 'Save Timing')}</button>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700" aria-label={zh ? '关闭' : 'Close'}>✕</button>
         </div>
-
+      )}
+    >
+      <div className="space-y-5">
         <div className="space-y-2">
           <label className="block text-xs font-semibold text-stone-700">{zh ? '1. 开始时间 (24小时制)' : '1. Start Time (24-hour)'}</label>
           <div className="flex items-center gap-2">
-            <input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-800 shadow-2xs focus:border-stone-900 focus:outline-none" />
-            {startTime ? <button type="button" onClick={() => setStartTime('')} className="rounded-lg border border-stone-200 px-2.5 py-2 text-xs font-medium text-stone-500 hover:bg-stone-50">{zh ? '清空' : 'Clear'}</button> : null}
+            <input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="min-h-11 flex-1 touch-manipulation rounded-lg border border-stone-300 px-3 py-2 text-base font-medium text-stone-800 shadow-2xs focus:border-stone-900 focus:outline-none sm:text-sm" />
+            {startTime ? <button type="button" onClick={() => setStartTime('')} className="min-h-11 touch-manipulation rounded-lg border border-stone-200 px-2.5 py-2 text-sm font-medium text-stone-500 transition duration-150 active:scale-[0.98] hover:bg-stone-50">{zh ? '清空' : 'Clear'}</button> : null}
           </div>
           {inferredStartTime ? (
             <div className="flex items-center justify-between rounded-lg bg-amber-50/90 border border-amber-200/80 px-2.5 py-1.5 text-xs text-amber-900">
@@ -202,7 +206,7 @@ export function PlaceTimingModal({
             </div>
           ) : null}
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {QUICK_START_TIMES.map((item) => <button key={item.value} type="button" onClick={() => setStartTime(item.value)} className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${startTime === item.value ? 'bg-stone-900 font-semibold text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>{zh ? item.labelZh : item.labelEn}</button>)}
+            {QUICK_START_TIMES.map((item) => <button key={item.value} type="button" onClick={() => setStartTime(item.value)} className={`min-h-9 touch-manipulation rounded-md px-2 py-1 text-xs font-medium transition duration-150 active:scale-[0.97] ${startTime === item.value ? 'bg-stone-900 font-semibold text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>{zh ? item.labelZh : item.labelEn}</button>)}
           </div>
         </div>
 
@@ -220,12 +224,12 @@ export function PlaceTimingModal({
                 const value = event.target.value;
                 setDurationMinutes(value === '' ? '' : Number(value));
               }}
-              className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-800 shadow-2xs focus:border-stone-900 focus:outline-none"
+              className="min-h-11 flex-1 touch-manipulation rounded-lg border border-stone-300 px-3 py-2 text-base font-medium text-stone-800 shadow-2xs focus:border-stone-900 focus:outline-none sm:text-sm"
             />
             <span className="text-xs font-medium text-stone-500">{zh ? '分钟' : 'mins'}</span>
           </div>
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {QUICK_DURATIONS.map((item) => <button key={item.minutes} type="button" onClick={() => setDurationMinutes(item.minutes)} className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${durationMinutes === item.minutes ? 'bg-stone-900 font-semibold text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>{zh ? item.labelZh : item.labelEn}</button>)}
+            {QUICK_DURATIONS.map((item) => <button key={item.minutes} type="button" onClick={() => setDurationMinutes(item.minutes)} className={`min-h-9 touch-manipulation rounded-md px-2 py-1 text-xs font-medium transition duration-150 active:scale-[0.97] ${durationMinutes === item.minutes ? 'bg-stone-900 font-semibold text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>{zh ? item.labelZh : item.labelEn}</button>)}
           </div>
         </div>
 
@@ -297,16 +301,8 @@ export function PlaceTimingModal({
         {timingErrors.length > 0 ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-900">{timingErrors.map((issue) => <p key={issue.code}>{timingIssueText(issue.code, zh)}</p>)}</div> : null}
         {hoursWarning ? <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900"><span className="text-base leading-none">⚠️</span><div className="flex-1"><span className="font-semibold">{zh ? '营业日 / 偏好时段提示:' : 'Opening day / preferred-window warning:'}</span><p className="mt-0.5 text-[11px] text-amber-800">{hoursWarning}</p></div></div> : null}
         {overlapWarning ? <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-900"><span className="text-base leading-none">⚠️</span><div className="flex-1"><span className="font-semibold">{zh ? '时段重叠预警:' : 'Time Overlap Warning:'}</span><p className="mt-0.5 text-[11px] text-rose-800">{overlapWarning}</p></div></div> : null}
-        {saveError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-[11px] text-rose-800">{saveError}</div> : null}
-
-        <div className="flex items-center justify-between border-t border-stone-100 pt-2">
-          <button type="button" onClick={() => void handleClear()} disabled={saving || (!place.scheduled_start && !place.duration_minutes && !startTime && durationMinutes === '' && !anchorDirty)} className="rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40">{zh ? '清除时间' : 'Clear Timing'}</button>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50">{zh ? '取消' : 'Cancel'}</button>
-            <button type="button" onClick={() => void handleSave()} disabled={saving || timingErrors.length > 0} className="rounded-lg bg-stone-900 px-4 py-2 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50">{saving ? '…' : (zh ? '保存时段' : 'Save Timing')}</button>
-          </div>
-        </div>
+        {saveError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800">{saveError}</div> : null}
       </div>
-    </div>
+    </Sheet>
   );
 }
