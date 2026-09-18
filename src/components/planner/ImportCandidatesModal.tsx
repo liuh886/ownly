@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import type { PlannerTripPlace } from '@/domain/planner';
 import { getPlannerKindLabel, parseImportPayload, PLANNER_KIND_ICONS } from '@/domain/planner';
 import { capturePlaceToPlannerPlace, isCollectionExport, parseCaptureCollectionExport } from '@/domain/capture';
@@ -28,6 +29,9 @@ export function ImportCandidatesModal({
   const [parsedPlaces, setParsedPlaces] = useState<PlannerTripPlace[]>([]);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useDialogA11y({ open, onClose, panelRef });
 
   const handleTextChange = useCallback(
     (text: string) => {
@@ -120,8 +124,9 @@ export function ImportCandidatesModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs ownly-fade-in"
       role="dialog"
       aria-modal="true"
+      aria-label={zh ? '导入外部研究候选' : 'Import Research Candidates'}
     >
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+      <div ref={panelRef} tabIndex={-1} className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-4">
           <div>

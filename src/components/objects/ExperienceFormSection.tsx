@@ -180,6 +180,7 @@ export function ExperienceFormSection({
                   <span className="text-[11px] font-medium text-stone-500">{t('stopN').replace('{n}', String(idx + 2))}</span>
                   <button type="button" onClick={() => setExtraLocations(extraLocations.filter((_, i) => i !== idx))}
                     className="text-[11px] text-stone-500 hover:text-red-600 transition"
+                    aria-label={t('delete')} title={t('delete')}
                     disabled={disabled || isSaving}>✕</button>
                 </div>
                 <CitySearchInput

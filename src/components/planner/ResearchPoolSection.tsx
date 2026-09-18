@@ -247,6 +247,8 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
               <button
                 type="button"
                 onClick={() => setPoolSearch('')}
+                aria-label={zh ? '清除搜索' : 'Clear search'}
+                title={zh ? '清除搜索' : 'Clear search'}
                 className="absolute right-2 top-1.5 text-xs text-stone-500 hover:text-stone-700"
               >
                 ✕

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useRef } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
 import { getFirstObjectCopy, type FirstObjectChoice } from '@/core/first-object-copy';
 
@@ -22,14 +23,9 @@ export function FirstObjectOnboarding({
   const { language } = useI18n();
   const copy = getFirstObjectCopy(language);
 
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onDismiss();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onDismiss]);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useDialogA11y({ open, onClose: onDismiss, panelRef });
 
   if (!open) return null;
 
@@ -39,6 +35,8 @@ export function FirstObjectOnboarding({
         role="dialog"
         aria-modal="true"
         aria-labelledby="first-object-title"
+        ref={panelRef}
+        tabIndex={-1}
         className="w-full max-w-3xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
       >
         <div className="border-b border-stone-100 bg-gradient-to-br from-stone-50 to-emerald-50/40 px-6 py-6 sm:px-8">

@@ -583,6 +583,8 @@ export function PlannerBudgetLedger({
                 <button
                   type="button"
                   onClick={() => handleRemoveMember(m)}
+                  aria-label={zh ? '移出成员' : 'Remove member'}
+                  title={zh ? '移出成员' : 'Remove member'}
                   className="text-[10px] text-stone-500 hover:text-rose-600"
                 >
                   ✕
@@ -905,6 +907,8 @@ export function PlannerBudgetLedger({
                         setIsAddingInlinePayer(false);
                         setInlinePayerName('');
                       }}
+                      aria-label={zh ? '取消付款人' : 'Cancel payer'}
+                      title={zh ? '取消付款人' : 'Cancel payer'}
                       className="rounded-lg border border-stone-200 px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100"
                     >
                       ✕
@@ -1011,6 +1015,8 @@ export function PlannerBudgetLedger({
                           setIsAddingInlinePayer(false);
                           setInlinePayerName('');
                         }}
+                        aria-label={zh ? '取消付款人' : 'Cancel payer'}
+                        title={zh ? '取消付款人' : 'Cancel payer'}
                         className="rounded border border-stone-200 px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100"
                       >
                         ✕

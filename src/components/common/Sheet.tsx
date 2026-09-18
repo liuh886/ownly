@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
+import { useDialogA11y } from './useDialogA11y';
 
 export type SheetSize = 'sm' | 'md' | 'lg';
 
@@ -22,15 +23,13 @@ const SIZE_CLASS: Record<SheetSize, string> = {
   lg: 'sm:max-w-xl',
 };
 
-const FOCUSABLE_SELECTOR =
-  'button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])';
-
 /**
  * Shared mobile-first dialog primitive.
  *
  * - <sm: bottom sheet (slide up, drag handle, sticky footer, dvh sizing).
  * - sm+: centered dialog (same role/a11y contract, desktop visuals unchanged).
  *
+ * Behaviour: Escape, Tab trap, focus restore, body scroll lock.
  * Form-type modals should migrate here; small confirm dialogs stay on the
  * lightweight ConfirmDialog primitives.
  */
@@ -45,58 +44,9 @@ export function Sheet({
   dismissible = true,
 }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
+  const titleId = useId();
 
-  useEffect(() => {
-    if (!open) return;
-    const doc = typeof window !== 'undefined' ? window.document : undefined;
-    previousFocusRef.current =
-      doc?.activeElement instanceof HTMLElement ? doc.activeElement : null;
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        if (dismissible) onCloseRef.current();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const items = Array.from(
-        panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
-      ).filter((item) => !item.hasAttribute('disabled'));
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && doc?.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && doc?.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    doc?.addEventListener('keydown', handleKeyDown);
-    // Focus the first field when present, otherwise the panel itself so
-    // keyboard and screen-reader users land inside the sheet.
-    window.setTimeout(() => {
-      const firstField = panelRef.current?.querySelector<HTMLElement>(
-        'input, select, textarea',
-      );
-      if (firstField && !firstField.hasAttribute('disabled')) {
-        firstField.focus();
-      } else {
-        panelRef.current?.focus();
-      }
-    }, 0);
-
-    return () => {
-      doc?.removeEventListener('keydown', handleKeyDown);
-      previousFocusRef.current?.focus();
-    };
-  }, [dismissible, open]);
+  useDialogA11y({ open, onClose, panelRef, dismissible });
 
   if (!open) return null;
 
@@ -111,32 +61,32 @@ export function Sheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         tabIndex={-1}
-        className={`ownly-sheet-panel flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-stone-200 bg-white shadow-2xl sm:mx-auto sm:max-h-[calc(100vh-4rem)] sm:rounded-2xl ${SIZE_CLASS[size]}`}
+        className={`ownly-sheet-panel flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-surface shadow-2xl sm:mx-auto sm:max-h-[calc(100vh-4rem)] sm:rounded-2xl ${SIZE_CLASS[size]}`}
       >
         <button
           type="button"
           onClick={() => {
             if (dismissible) onClose();
           }}
-          aria-label={title}
+          aria-hidden="true"
           tabIndex={-1}
           className="mx-auto shrink-0 touch-manipulation px-8 pb-1 pt-2.5 sm:hidden"
         >
-          <span aria-hidden="true" className="block h-1 w-10 rounded-full bg-stone-300" />
+          <span aria-hidden="true" className="block h-1 w-10 rounded-full bg-surface-sunken" />
         </button>
         <div className="shrink-0 px-5 pb-3 pt-1 sm:px-6 sm:pt-5">
-          <h2 className="text-base font-semibold tracking-tight text-stone-950">{title}</h2>
+          <h2 id={titleId} className="text-base font-semibold tracking-tight text-ink">{title}</h2>
           {description ? (
-            <p className="mt-1 text-sm leading-6 text-stone-500">{description}</p>
+            <p className="mt-1 text-sm leading-6 text-ink-muted">{description}</p>
           ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 sm:px-6">
           {children}
         </div>
         {footer ? (
-          <div className="shrink-0 border-t border-stone-100 bg-white/95 px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-3 backdrop-blur sm:px-6">
+          <div className="shrink-0 border-t border-line bg-surface px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-3 sm:px-6">
             {footer}
           </div>
         ) : null}

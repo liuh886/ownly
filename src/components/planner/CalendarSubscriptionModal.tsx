@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import {
   getCalendarFeedUrl,
   isValidIanaTimeZone,
@@ -49,6 +50,9 @@ export function CalendarSubscriptionModal({
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedIcs, setCopiedIcs] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useDialogA11y({ open, onClose, panelRef });
   const [notice, setNotice] = useState<string | null>(null);
 
   const missingTimezoneTrips = trips.filter(
@@ -134,7 +138,7 @@ export function CalendarSubscriptionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs ownly-fade-in">
-      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={zh ? '日历与订阅' : 'Calendar & Feed'} className="w-full max-w-xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -149,6 +153,8 @@ export function CalendarSubscriptionModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label={zh ? '关闭' : 'Close'}
+            title={zh ? '关闭' : 'Close'}
             className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-200/60 hover:text-stone-700 transition"
           >
             ✕

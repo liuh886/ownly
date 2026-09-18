@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
 import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
 
@@ -25,14 +26,9 @@ export function WebDataOnboarding({
   const copy = getOwnlyLocalDataCopy(language);
   const [storageIntent, setStorageIntent] = useState<StorageIntent>('local');
 
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isLoading) onContinueDemo();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, isLoading, onContinueDemo]);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useDialogA11y({ open, onClose: onContinueDemo, panelRef, dismissible: !isLoading });
 
   if (!open) return null;
 
@@ -42,6 +38,8 @@ export function WebDataOnboarding({
         role="dialog"
         aria-modal="true"
         aria-labelledby="ownly-onboarding-title"
+        ref={panelRef}
+        tabIndex={-1}
         className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[calc(100vh-4rem)]"
       >
         <div className="border-b border-stone-100 bg-gradient-to-br from-stone-50 to-emerald-50/40 px-6 py-6 sm:px-8">

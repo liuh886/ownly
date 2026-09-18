@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import type { PlannerScheduledPlace, PlannerTripPlace } from '@/domain/planner';
 import {
   calculateHotelProximity,
@@ -50,6 +51,9 @@ export function HotelComparisonModal({
 }: HotelComparisonModalProps) {
   const zh = language === 'zh';
   const totalDays = tripDates.length || 1;
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useDialogA11y({ open, onClose, panelRef });
 
   // Stay Slot & Range Selection (填空式槽位)
   const [stayStartIndex, setStayStartIndex] = useState<number>(activeDayIndex);
@@ -182,6 +186,11 @@ export function HotelComparisonModal({
       onClick={onClose}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={zh ? '酒店对比' : 'Hotel comparison'}
         className="flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -226,6 +235,8 @@ export function HotelComparisonModal({
               <button
                 type="button"
                 onClick={onClose}
+                aria-label={zh ? '关闭' : 'Close'}
+                title={zh ? '关闭' : 'Close'}
                 className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-200 hover:text-stone-700"
               >
                 ✕

@@ -64,7 +64,9 @@ describe('Sheet', () => {
     });
     const dialog = container.querySelector('[role="dialog"]');
     expect(dialog?.getAttribute('aria-modal')).toBe('true');
-    expect(dialog?.getAttribute('aria-label')).toBe('Test sheet');
+    const labelledBy = dialog?.getAttribute('aria-labelledby');
+    expect(labelledBy).toBeTruthy();
+    expect(container.querySelector(`#${labelledBy}`)?.textContent).toBe('Test sheet');
     expect(container.textContent).toContain('Sheet description');
     expect(container.textContent).toContain('Save');
   });

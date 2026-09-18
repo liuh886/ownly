@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
 
 export interface AppInstallGuideModalProps {
@@ -24,14 +25,9 @@ export function AppInstallGuideModal({
   const activeTab = userTab ?? defaultTab;
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useDialogA11y({ open, onClose, panelRef });
 
   async function copyText(key: string, text: string) {
     try {
@@ -56,6 +52,8 @@ export function AppInstallGuideModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="install-modal-title"
+        ref={panelRef}
+        tabIndex={-1}
         className="w-full max-w-lg overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4">

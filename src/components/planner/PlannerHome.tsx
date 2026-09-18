@@ -14,7 +14,7 @@ import { PlannerMap } from './PlannerMap';
 import { HotelComparisonModal } from './HotelComparisonModal';
 import { ImportCandidatesModal } from './ImportCandidatesModal';
 import { PlaceTimingModal } from './PlaceTimingModal';
-import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { formatDay } from './planner-home-shared';
 import { CreateTripModal } from './CreateTripModal';
 import { PlannerDateNav } from './PlannerDateNav';
@@ -866,7 +866,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
 
       {confirmRequest ? (
         <ConfirmDialog
-          zh={zh}
+          open
+          destructive
           title={confirmRequest.title}
           message={confirmRequest.message}
           confirmLabel={confirmRequest.confirmLabel}
@@ -875,7 +876,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             setConfirmRequest(null);
             void run();
           }}
-          onClose={() => setConfirmRequest(null)}
+          onCancel={() => setConfirmRequest(null)}
         />
       ) : null}
 
@@ -1296,6 +1297,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
               <button
                 type="button"
                 onClick={() => setIsSuspectedModalOpen(false)}
+                aria-label={zh ? '关闭' : 'Close'}
+                title={zh ? '关闭' : 'Close'}
                 className="rounded-full p-1.5 text-stone-500 hover:bg-stone-200 hover:text-stone-700 transition"
               >
                 ✕
