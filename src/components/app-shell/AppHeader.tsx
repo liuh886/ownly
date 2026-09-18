@@ -121,7 +121,7 @@ export function AppHeader({
               onClick={onConnectVault}
               disabled={isLoading}
               title={connectionTitle}
-              className={`inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400 disabled:cursor-wait ${
+              className={`ownly-hit-expand inline-flex touch-manipulation items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400 disabled:cursor-wait ${
                 isConnected && !isLoading
                   ? 'bg-stone-100 text-stone-600 ring-1 ring-stone-200 hover:bg-stone-200/70 hover:text-stone-800'
                   : 'bg-stone-950 text-white shadow-sm hover:bg-stone-800 disabled:hover:bg-stone-950'
