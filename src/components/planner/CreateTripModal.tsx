@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Sheet } from '@/components/common/Sheet';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
 import { applyTripFormPatch, listTripDates } from '../../domain/planner';
 import {
@@ -322,30 +323,73 @@ export function CreateTripModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-lg rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between border-b border-stone-100 pb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">✈️</span>
-            <h2 className="text-base font-bold text-stone-900">
-              {zh ? '行程管理' : 'Manage Trips'}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-          >
-            ✕
-          </button>
+    <Sheet
+      open={open}
+      onClose={handleClose}
+      title={zh ? '✈️ 行程管理' : '✈️ Manage Trips'}
+      size="lg"
+      footer={(
+        <div className="flex items-center justify-end gap-2">
+          {tab === 'manage' ? (
+            <button type="button" onClick={handleClose} className="min-h-11 flex-1 touch-manipulation rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-600 transition duration-150 active:scale-[0.98] hover:bg-stone-50 sm:flex-none">
+              {zh ? '关闭' : 'Close'}
+            </button>
+          ) : tab === 'create' ? (
+            <>
+              {editingTrip ? (
+                <button type="button" onClick={() => { setEditingTrip(null); resetForm(); }} className="min-h-11 touch-manipulation rounded-lg border border-stone-200 px-4 py-2 text-sm font-semibold text-stone-600 transition duration-150 active:scale-[0.98] hover:bg-stone-50">
+                  {zh ? '取消编辑' : 'Cancel edit'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="min-h-11 touch-manipulation rounded-lg border border-stone-200 px-4 py-2 text-sm font-semibold text-stone-600 transition duration-150 active:scale-[0.98] hover:bg-stone-50"
+                >
+                  {zh ? '取消' : 'Cancel'}
+                </button>
+              )}
+              <button
+                type="submit"
+                form="ownly-trip-form"
+                disabled={busy}
+                className="min-h-11 flex-1 touch-manipulation rounded-lg bg-stone-950 px-5 py-2 text-sm font-bold text-white transition duration-150 active:scale-[0.98] hover:bg-stone-800 disabled:opacity-50 sm:flex-none"
+              >
+                {busy ? (zh ? '保存中…' : 'Saving…') : editingTrip ? (zh ? '保存修改' : 'Save changes') : (zh ? '确认创建行程' : 'Create Trip')}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="min-h-11 touch-manipulation rounded-lg border border-stone-200 px-4 py-2 text-sm font-semibold text-stone-600 transition duration-150 active:scale-[0.98] hover:bg-stone-50"
+              >
+                {zh ? '取消' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={busy || (!sharedBundle && !importPreview.bundle) || disabled}
+                onClick={() => void handleImport()}
+                className="min-h-11 flex-1 touch-manipulation rounded-lg bg-emerald-700 px-5 py-2 text-sm font-bold text-white transition duration-150 active:scale-[0.98] hover:bg-emerald-600 disabled:opacity-50 sm:flex-none"
+              >
+                {busy
+                  ? (zh ? '导入中…' : 'Importing…')
+                  : disabled
+                    ? (zh ? '请先连接数据目录' : 'Connect data folder')
+                    : (zh ? '✓ 导入为我的行程' : '✓ Import as my trip')}
+              </button>
+            </>
+          )}
         </div>
-
+      )}
+    >
         {/* Tab Navigation */}
-        <div className="grid grid-cols-3 border-b border-stone-100 bg-stone-50/70 p-1.5 mt-4 rounded-lg">
+        <div className="grid grid-cols-3 rounded-lg border-b border-stone-100 bg-stone-50/70 p-1.5" role="tablist">
           <button
             type="button"
             onClick={() => { setTab('manage'); setError(null); setImportNotice(''); }}
-            className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+            className={`min-h-11 touch-manipulation rounded-lg px-3 py-2 text-xs font-bold transition duration-150 active:scale-[0.97] ${
               tab === 'manage' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
@@ -354,7 +398,7 @@ export function CreateTripModal({
           <button
             type="button"
             onClick={() => { setTab('create'); setError(null); setImportNotice(''); }}
-            className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+            className={`min-h-11 touch-manipulation rounded-lg px-3 py-2 text-xs font-bold transition duration-150 active:scale-[0.97] ${
               tab === 'create' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
@@ -363,7 +407,7 @@ export function CreateTripModal({
           <button
             type="button"
             onClick={() => { setTab('import'); setError(null); setImportNotice(''); }}
-            className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+            className={`min-h-11 touch-manipulation rounded-lg px-3 py-2 text-xs font-bold transition duration-150 active:scale-[0.97] ${
               tab === 'import' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
@@ -399,9 +443,9 @@ export function CreateTripModal({
                         <div className="text-[11px] text-stone-500">{trip.start_date} → {trip.end_date} · {trip.destinations.join(', ')}</div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
-                        <button type="button" onClick={() => startEdit(trip)} className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-[11px] font-semibold text-stone-600 hover:bg-stone-50" title={zh ? '编辑' : 'Edit'}>✏️</button>
-                        <button type="button" disabled={actionBusy === trip.id} onClick={() => void handleExportTrip(trip)} className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-[11px] font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-50" title={zh ? '导出' : 'Export'}>📤</button>
-                        <button type="button" disabled={actionBusy === trip.id} onClick={() => void handleShareTrip(trip)} className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-[11px] font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-50" title={zh ? '分享' : 'Share'}>🔗</button>
+                        <button type="button" onClick={() => startEdit(trip)} className="flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-600 transition duration-150 active:scale-95 hover:bg-stone-50" title={zh ? '编辑' : 'Edit'}>✏️</button>
+                        <button type="button" disabled={actionBusy === trip.id} onClick={() => void handleExportTrip(trip)} className="flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-600 transition duration-150 active:scale-95 hover:bg-stone-50 disabled:opacity-50" title={zh ? '导出' : 'Export'}>📤</button>
+                        <button type="button" disabled={actionBusy === trip.id} onClick={() => void handleShareTrip(trip)} className="flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-600 transition duration-150 active:scale-95 hover:bg-stone-50 disabled:opacity-50" title={zh ? '分享' : 'Share'}>🔗</button>
                         <button
                           type="button"
                           disabled={deleteBusy === trip.id}
@@ -420,7 +464,7 @@ export function CreateTripModal({
                               setDeleteBusy(null);
                             }
                           }}
-                          className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                          className="flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 transition duration-150 active:scale-95 hover:bg-rose-100 disabled:opacity-50"
                           title={zh ? '删除' : 'Delete'}
                         >
                           {deleteBusy === trip.id ? '…' : '🗑️'}
@@ -430,14 +474,9 @@ export function CreateTripModal({
                   ))}
                 </ul>
               )}
-              <div className="flex justify-end border-t border-stone-100 pt-3">
-                <button type="button" onClick={handleClose} className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50">
-                  {zh ? '关闭' : 'Close'}
-                </button>
-              </div>
             </div>
           ) : tab === 'create' ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form id="ownly-trip-form" onSubmit={handleSubmit} className="space-y-4">
               {/* Title */}
               <div>
                 <label className="block text-xs font-bold text-stone-700">
@@ -449,12 +488,12 @@ export function CreateTripModal({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={zh ? '例如：Thailand 2026 曼谷普吉' : 'e.g. Thailand 2026'}
-                  className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
+                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                 />
               </div>
 
               {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
                 <div>
                   <label className="block text-xs font-bold text-stone-700">
                     {zh ? '出发日期 *' : 'Start Date *'}
@@ -467,7 +506,7 @@ export function CreateTripModal({
                       setStartDate(e.target.value);
                       if (!endDate || endDate < e.target.value) setEndDate(e.target.value);
                     }}
-                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                    className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                   />
                 </div>
                 <div>
@@ -480,7 +519,7 @@ export function CreateTripModal({
                     min={startDate}
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                    className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                   />
                 </div>
               </div>
@@ -495,12 +534,12 @@ export function CreateTripModal({
                   value={destinations}
                   onChange={(e) => setDestinations(e.target.value)}
                   placeholder={zh ? '例如：Bangkok, Chiang Mai, Pattaya' : 'e.g. Tokyo, Kyoto, Osaka'}
-                  className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
+                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                 />
               </div>
 
               {/* Currency & Transport Mode */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
                 <div>
                   <label className="block text-xs font-bold text-stone-700">
                     {zh ? '行程本币 (Currency)' : 'Base Currency'}
@@ -508,7 +547,7 @@ export function CreateTripModal({
                   <select
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                    className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                   >
                     {COMMON_CURRENCIES.map((c) => (
                       <option key={c} value={c}>{c}</option>
@@ -522,7 +561,7 @@ export function CreateTripModal({
                   <select
                     value={transportMode}
                     onChange={(e) => setTransportMode(e.target.value as PlannerTravelMode)}
-                    className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                    className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                   >
                     <option value="transit">{zh ? '🚇 公共交通 / 打车' : '🚇 Transit'}</option>
                     <option value="driving">{zh ? '🚗 自驾租车' : '🚗 Driving'}</option>
@@ -541,7 +580,7 @@ export function CreateTripModal({
                 <select
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                 >
                   <option value="">{zh ? '不设置（机票逻辑：时刻即当地时间）' : 'Unset (ticket logic: times are local)'}</option>
                   {COMMON_TIMEZONES.map((tz) => (
@@ -577,7 +616,7 @@ export function CreateTripModal({
                             else delete next[d];
                             return next;
                           })}
-                          className="w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs text-stone-900 focus:border-stone-950 focus:outline-hidden"
+                          className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                         >
                           <option value="">{zh ? '跟随行程时区' : 'Follow trip zone'}</option>
                           {COMMON_TIMEZONES.map((tz) => (
@@ -600,36 +639,13 @@ export function CreateTripModal({
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
                   placeholder={zh ? '例如：度假, 美食打卡' : 'e.g. vacation, food'}
-                  className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden"
+                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                 />
               </div>
 
               {editingTrip ? (
                 <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">✏️ {zh ? `正在编辑「${editingTrip.title}」` : `Editing "${editingTrip.title}"`}</div>
               ) : null}
-              {/* Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-                {editingTrip ? (
-                  <button type="button" onClick={() => { setEditingTrip(null); resetForm(); }} className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50">
-                    {zh ? '取消编辑' : 'Cancel edit'}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
-                  >
-                    {zh ? '取消' : 'Cancel'}
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="rounded-lg bg-stone-950 px-5 py-2 text-xs font-bold text-white hover:bg-stone-800 disabled:opacity-50 transition"
-                >
-                  {busy ? (zh ? '保存中…' : 'Saving…') : editingTrip ? (zh ? '保存修改' : 'Save changes') : (zh ? '确认创建行程' : 'Create Trip')}
-                </button>
-              </div>
             </form>
           ) : (
             <div className="space-y-4">
@@ -646,7 +662,7 @@ export function CreateTripModal({
                 onChange={(e) => setRawImport(e.target.value)}
                 placeholder={'{\n  "kind": "ownly.trip.bundle", ...\n}'}
                 rows={8}
-                className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 p-3 font-mono text-[10px] leading-4 text-stone-700 focus:border-stone-950 focus:outline-hidden"
+                className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 p-3 font-mono text-xs leading-4 text-stone-700 focus:border-stone-950 focus:outline-hidden sm:text-[10px]"
               />
 
               {/* Shared link card */}
@@ -657,7 +673,7 @@ export function CreateTripModal({
                     <button
                       type="button"
                       onClick={dismissShare}
-                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-400 hover:bg-sky-100 hover:text-stone-600"
+                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-500 hover:bg-sky-100 hover:text-stone-600"
                     >
                       {zh ? '忽略链接' : 'Dismiss'}
                     </button>
@@ -697,33 +713,9 @@ export function CreateTripModal({
                   </div>
                 )
               ) : null}
-
-              {/* Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="rounded-lg border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50"
-                >
-                  {zh ? '取消' : 'Cancel'}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || (!sharedBundle && !importPreview.bundle) || disabled}
-                  onClick={() => void handleImport()}
-                  className="rounded-lg bg-emerald-700 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50 transition"
-                >
-                  {busy
-                    ? (zh ? '导入中…' : 'Importing…')
-                    : disabled
-                      ? (zh ? '请先连接数据目录' : 'Connect data folder')
-                      : (zh ? '✓ 导入为我的行程' : '✓ Import as my trip')}
-                </button>
-              </div>
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }

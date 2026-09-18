@@ -190,7 +190,7 @@ export function ObjectComposer({
                   ))}
                 </div>
               ) : (
-                <p className="text-[11px] text-stone-400 mt-1">{t('quickEntryNoParse')}</p>
+                <p className="text-[11px] text-stone-500 mt-1">{t('quickEntryNoParse')}</p>
               )}
             </label>
             <div className="flex gap-2 overflow-x-auto pb-0.5">

@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
 import { getAgentMcpCopy } from '@/core/agent-mcp-copy';
 
@@ -46,14 +48,9 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
   const copy = getAgentMcpCopy(language);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useDialogA11y({ open, onClose, panelRef });
 
   async function copyCommand(key: string, value: string) {
     try {
@@ -80,6 +77,8 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
         role="dialog"
         aria-modal="true"
         aria-labelledby="ownly-agent-mcp-title"
+        ref={panelRef}
+        tabIndex={-1}
         className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
       >
         <div className="flex items-start gap-4 border-b border-stone-100 bg-gradient-to-br from-stone-50 via-white to-emerald-50/50 px-5 py-5 sm:px-7 sm:py-6">
@@ -106,7 +105,7 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
             aria-label={copy.closeLabel}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-lg text-stone-500 ring-1 ring-stone-200 transition hover:bg-stone-100 hover:text-stone-900"
           >
-            ×
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 

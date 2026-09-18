@@ -22,7 +22,7 @@ export default function TripSnapshotPage() {
 
   if (!snapshot) {
     return (
-      <div className="mx-auto max-w-xl p-6 text-center sm:p-12">
+      <main className="mx-auto max-w-xl p-6 text-center sm:p-12">
         <div className="text-4xl">📱</div>
         <h1 className="mt-3 text-xl font-bold tracking-tight text-stone-950">
           {language === 'zh' ? '打开行程快照' : 'Open a trip snapshot'}
@@ -74,12 +74,12 @@ export default function TripSnapshotPage() {
             </button>
           </div>
         ) : null}
-      </div>
+      </main>
     );
   }
 
   return (
-    <div>
+    <main>
       <div className="mx-auto flex max-w-3xl items-center justify-end gap-2 px-4 pt-3 sm:px-6">
         <button
           type="button"
@@ -97,6 +97,6 @@ export default function TripSnapshotPage() {
         </button>
       </div>
       <TripSnapshotViewer snapshot={snapshot} language={language} />
-    </div>
+    </main>
   );
 }

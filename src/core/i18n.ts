@@ -605,6 +605,7 @@ const translations = {
     // Web app - Common
     loading: 'Loading',
     close: 'Close',
+    skipToContent: 'Skip to main content',
     search: 'Search',
     noData: 'No data.',
     currency: 'CNY',
@@ -1313,6 +1314,7 @@ const translations = {
     // Web app - Common
     loading: '加载中',
     close: '关闭',
+    skipToContent: '跳到主要内容',
     search: '搜索',
     noData: '暂无数据。',
     currency: 'CNY',

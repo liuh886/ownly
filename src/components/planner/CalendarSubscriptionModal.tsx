@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import { X } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import {
   getCalendarFeedUrl,
   isValidIanaTimeZone,
@@ -49,6 +51,9 @@ export function CalendarSubscriptionModal({
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedIcs, setCopiedIcs] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useDialogA11y({ open, onClose, panelRef });
   const [notice, setNotice] = useState<string | null>(null);
 
   const missingTimezoneTrips = trips.filter(
@@ -133,15 +138,15 @@ export function CalendarSubscriptionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs animate-in fade-in">
-      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs ownly-fade-in">
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={zh ? '日历与订阅' : 'Calendar & Feed'} className="w-full max-w-xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-4">
           <div className="flex items-center gap-2.5">
             <span className="text-xl">📅</span>
             <div>
               <h2 className="text-base font-bold text-stone-900">{zh ? '日历与订阅' : 'Calendar & Feed'}</h2>
-              <p className="text-xs text-stone-400">
+              <p className="text-xs text-stone-500">
                 {zh ? `全部行程 · 共 ${tripCount} 个` : `All trips · ${tripCount} total`}
               </p>
             </div>
@@ -149,9 +154,11 @@ export function CalendarSubscriptionModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-200/60 hover:text-stone-700 transition"
+            aria-label={zh ? '关闭' : 'Close'}
+            title={zh ? '关闭' : 'Close'}
+            className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-200/60 hover:text-stone-700 transition"
           >
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
@@ -214,7 +221,7 @@ export function CalendarSubscriptionModal({
                     type="text"
                     readOnly
                     value={feedUrl}
-                    className="flex-1 rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-xs font-mono text-stone-800 select-all focus:outline-hidden"
+                    className="flex-1 rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-base font-mono text-stone-800 select-all focus:outline-hidden sm:text-xs"
                   />
                   <button
                     type="button"
@@ -261,7 +268,7 @@ export function CalendarSubscriptionModal({
                     type="button"
                     disabled={busy}
                     onClick={() => void handleRotate()}
-                    className="px-1 py-1.5 text-[11px] font-normal text-stone-400 underline-offset-2 transition hover:text-stone-600 hover:underline disabled:opacity-50"
+                    className="px-1 py-1.5 text-[11px] font-normal text-stone-500 underline-offset-2 transition hover:text-stone-600 hover:underline disabled:opacity-50"
                     title={zh ? '重新生成订阅 URL，旧链接立即失效' : 'Rotate URL'}
                   >
                     {zh ? '重新生成链接' : 'Rotate URL'}

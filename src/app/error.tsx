@@ -124,7 +124,7 @@ export default function Error({
   };
 
   return (
-    <div className="flex h-full min-h-screen flex-col items-center justify-center bg-stone-50 p-6 text-stone-900">
+    <main className="flex h-full min-h-screen flex-col items-center justify-center bg-stone-50 p-6 text-stone-900">
       <div className="rounded-2xl border border-stone-200 bg-white p-8 shadow-sm max-w-xl w-full space-y-6">
         <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${isChunkLoadError ? 'bg-amber-100' : 'bg-red-100'}`}>
           {isChunkLoadError ? (
@@ -137,9 +137,9 @@ export default function Error({
         </div>
 
         <div className="text-center">
-          <h2 className="text-xl font-bold text-stone-900">
+          <h1 className="text-xl font-bold text-stone-900">
             {isChunkLoadError ? '应用版本已更新 (Version Updated)' : 'Something went wrong'}
-          </h2>
+          </h1>
           <p className="mt-2 text-sm text-stone-600 leading-relaxed">
             {isChunkLoadError
               ? '检测到 Ownly 已部署新版本，浏览器缓存的旧代码脚本已失效。请点击下方按钮硬刷新以加载最新代码。'
@@ -239,6 +239,6 @@ export default function Error({
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useRef } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
 
 const STORAGE_KEY = 'ownly:capture-onboarding:dismissed';
@@ -27,12 +28,9 @@ export function CaptureOnboarding({
   const { language } = useI18n();
   const zh = language === 'zh';
 
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onDismiss(); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onDismiss]);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useDialogA11y({ open, onClose: onDismiss, panelRef });
 
   if (!open) return null;
 
@@ -48,7 +46,7 @@ export function CaptureOnboarding({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-8 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" className="w-full max-w-3xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+      <section ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={zh ? '30 秒了解 Ownly' : 'Ownly in 30 seconds'} className="w-full max-w-3xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         <div className="border-b border-stone-100 bg-gradient-to-br from-stone-50 to-emerald-50/40 px-6 py-6 sm:px-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
             {zh ? '30 秒了解 Ownly' : 'Ownly in 30 seconds'}
@@ -66,7 +64,7 @@ export function CaptureOnboarding({
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-100 text-lg">{s.icon}</span>
               <span className="mt-4 text-sm font-semibold text-stone-950">{s.title}</span>
               <span className="mt-2 text-xs leading-5 text-stone-600">{s.desc}</span>
-              <span className="mt-auto pt-4 text-[11px] text-stone-400">{s.ex}</span>
+              <span className="mt-auto pt-4 text-[11px] text-stone-500">{s.ex}</span>
             </div>
           ))}
         </div>

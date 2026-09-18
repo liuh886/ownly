@@ -55,12 +55,12 @@ export function HomeCostSection({
         <div className={CARD_CLASS}>
           <div className="text-xs font-medium text-stone-500">{t('dailyCostAvg')}（{metrics.ownedPhysicalCount}）</div>
           <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{avgDailyCost > 0 ? formatDailyMoney(avgDailyCost) : t('noData')}</div>
-          <div className="mt-0.5 text-[11px] text-stone-400">{t('physicalAsset')}</div>
+          <div className="mt-0.5 text-[11px] text-stone-500">{t('physicalAsset')}</div>
         </div>
         <div className={CARD_CLASS}>
           <div className="text-xs font-medium text-stone-500">{t('monthlyFixedCostAvg')}（{metrics.activeSubscriptionCount}）</div>
           <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{formatMoney(metrics.monthlyFixedCost, t('noData'))}</div>
-          <div className="mt-0.5 text-[11px] text-stone-400">{t('subscriptionService')}</div>
+          <div className="mt-0.5 text-[11px] text-stone-500">{t('subscriptionService')}</div>
         </div>
         <div className={CARD_CLASS}>
           <div className="text-xs font-medium text-stone-500">{t('observeAmount')}（{pendingDecisionCount}）</div>
@@ -84,7 +84,7 @@ export function HomeCostSection({
         />
         <div className="flex flex-col rounded-xl border border-dashed border-stone-200 bg-transparent p-4">
           <div className="text-xs font-medium text-stone-500">{t('quickEntry')}</div>
-          <div className="mt-1 flex-1 text-xs text-stone-400">{t('quickEntryDesc')}</div>
+          <div className="mt-1 flex-1 text-xs text-stone-500">{t('quickEntryDesc')}</div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <button
               type="button"

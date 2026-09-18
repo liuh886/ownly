@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import type { PlannerScheduledPlace, PlannerTripPlace } from '@/domain/planner';
 import {
   calculateHotelProximity,
@@ -50,6 +52,9 @@ export function HotelComparisonModal({
 }: HotelComparisonModalProps) {
   const zh = language === 'zh';
   const totalDays = tripDates.length || 1;
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useDialogA11y({ open, onClose, panelRef });
 
   // Stay Slot & Range Selection (填空式槽位)
   const [stayStartIndex, setStayStartIndex] = useState<number>(activeDayIndex);
@@ -178,10 +183,15 @@ export function HotelComparisonModal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-2 sm:p-4 backdrop-blur-xs ownly-fade-in"
       onClick={onClose}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={zh ? '酒店对比' : 'Hotel comparison'}
         className="flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -226,9 +236,11 @@ export function HotelComparisonModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700"
+                aria-label={zh ? '关闭' : 'Close'}
+                title={zh ? '关闭' : 'Close'}
+                className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-200 hover:text-stone-700"
               >
-                ✕
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -337,7 +349,7 @@ export function HotelComparisonModal({
                             🏨 {scheduledStay.title}
                           </span>
                         ) : (
-                          <span className="text-stone-400 italic">⚪ 待选空位</span>
+                          <span className="text-stone-500 italic">⚪ 待选空位</span>
                         )}
                       </div>
                     </button>
@@ -409,19 +421,19 @@ export function HotelComparisonModal({
         {/* Modal Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
           {candidateHotels.length === 0 ? (
-            <div className="rounded-xl border-2 border-dashed border-stone-200 px-6 py-16 text-center text-stone-400">
+            <div className="rounded-xl border-2 border-dashed border-stone-200 px-6 py-16 text-center text-stone-500">
               <span className="text-4xl">🏨</span>
               <h4 className="mt-3 text-sm font-semibold text-stone-700">
                 {zh ? '当前暂无候选酒店' : 'No candidate hotels found'}
               </h4>
-              <p className="mt-1 text-xs text-stone-400">
+              <p className="mt-1 text-xs text-stone-500">
                 {zh
                   ? '在 Google Maps / 扩展中采集属于“住宿 (stay)”类别的地点，即可在此进行同屏多维比选。'
                   : 'Capture places with kind "stay" in Google Maps to compare them here.'}
               </p>
             </div>
           ) : processedHotels.length === 0 ? (
-            <div className="rounded-xl border-2 border-dashed border-stone-200 px-6 py-12 text-center text-stone-400">
+            <div className="rounded-xl border-2 border-dashed border-stone-200 px-6 py-12 text-center text-stone-500">
               <span className="text-3xl">🔍</span>
               <p className="mt-2 text-xs text-stone-500">
                 {zh ? '未找到符合当前城市或搜索条件的酒店' : 'No hotels match the current filter or search'}
@@ -505,7 +517,7 @@ export function HotelComparisonModal({
                             ) : null}
                           </div>
                           {hotel.address ? (
-                            <p className="mt-1 text-[10px] text-stone-400 line-clamp-1 max-w-[260px]" title={hotel.address}>
+                            <p className="mt-1 text-[10px] text-stone-500 line-clamp-1 max-w-[260px]" title={hotel.address}>
                               {hotel.address}
                             </p>
                           ) : null}
@@ -530,7 +542,7 @@ export function HotelComparisonModal({
                               ) : null}
                             </div>
                           ) : (
-                            <span className="text-stone-400 text-xs italic">{zh ? '暂无价格' : 'N/A'}</span>
+                            <span className="text-stone-500 text-xs italic">{zh ? '暂无价格' : 'N/A'}</span>
                           )}
                         </td>
 
@@ -542,13 +554,13 @@ export function HotelComparisonModal({
                                 ★ {hotel.observed_rating}
                               </div>
                               {hotel.observed_review_count ? (
-                                <span className="mt-0.5 block text-[10px] text-stone-400">
+                                <span className="mt-0.5 block text-[10px] text-stone-500">
                                   ({hotel.observed_review_count > 999 ? `${(hotel.observed_review_count / 1000).toFixed(1)}k` : hotel.observed_review_count} {zh ? '条点评' : 'reviews'})
                                 </span>
                               ) : null}
                             </div>
                           ) : (
-                            <span className="text-stone-400 text-[11px]">—</span>
+                            <span className="text-stone-500 text-[11px]">—</span>
                           )}
                           {hotel.source_category ? (
                             <div className="mt-1">
@@ -616,7 +628,7 @@ export function HotelComparisonModal({
                               ) : null}
                             </div>
                           ) : (
-                            <span className="text-[10px] text-stone-400 italic">{zh ? '未解析坐标' : 'No coords'}</span>
+                            <span className="text-[10px] text-stone-500 italic">{zh ? '未解析坐标' : 'No coords'}</span>
                           )}
                         </td>
 
@@ -724,7 +736,7 @@ export function HotelComparisonModal({
                           <button
                             type="button"
                             onClick={() => onDropHotel(hotel.id)}
-                            className="mt-1.5 text-[10px] text-stone-400 hover:text-rose-600 transition"
+                            className="mt-1.5 text-[10px] text-stone-500 hover:text-rose-600 transition"
                           >
                             {zh ? '暂不考虑' : 'Shelve'}
                           </button>
@@ -792,7 +804,7 @@ export function HotelComparisonModal({
                               ★ {hotel.observed_rating}
                             </div>
                             {hotel.observed_review_count ? (
-                              <span className="mt-0.5 text-[9.5px] text-stone-400">
+                              <span className="mt-0.5 text-[9.5px] text-stone-500">
                                 {hotel.observed_review_count > 999 ? `${(hotel.observed_review_count / 1000).toFixed(1)}k` : hotel.observed_review_count} {zh ? '条点评' : 'reviews'}
                               </span>
                             ) : null}
@@ -867,24 +879,24 @@ export function HotelComparisonModal({
                             ) : singleMetrics ? (
                               <>
                                 <div className="flex justify-between">
-                                  <span className="text-stone-400">{zh ? '距景点中心:' : 'To Centroid:'}</span>
+                                  <span className="text-stone-500">{zh ? '距景点中心:' : 'To Centroid:'}</span>
                                   <span className="font-semibold text-stone-800">{singleMetrics.centerDistanceKm} km</span>
                                 </div>
                                 {singleMetrics.closestPlaceTitle ? (
                                   <div className="flex justify-between truncate">
-                                    <span className="text-stone-400">{zh ? '距最近点' : 'Closest'}:</span>
+                                    <span className="text-stone-500">{zh ? '距最近点' : 'Closest'}:</span>
                                     <span className="font-semibold text-stone-800 truncate">{singleMetrics.closestPlaceTitle} ({singleMetrics.minDistanceKm}km)</span>
                                   </div>
                                 ) : null}
                                 <div className="flex justify-between">
-                                  <span className="text-stone-400">{zh ? '平均直线:' : 'Avg Distance:'}</span>
+                                  <span className="text-stone-500">{zh ? '平均直线:' : 'Avg Distance:'}</span>
                                   <span className="font-semibold text-stone-800">{singleMetrics.avgDistanceKm} km</span>
                                 </div>
                               </>
                             ) : null}
                           </div>
                         ) : (
-                          <p className="text-[10px] text-stone-400 italic">
+                          <p className="text-[10px] text-stone-500 italic">
                             {zh ? '未解析到经纬度' : 'No coordinates available'}
                           </p>
                         )}
@@ -979,7 +991,7 @@ export function HotelComparisonModal({
                         <button
                           type="button"
                           onClick={() => onDropHotel(hotel.id)}
-                          className="text-stone-400 hover:text-rose-600 transition"
+                          className="text-stone-500 hover:text-rose-600 transition"
                           title={zh ? '设为暂不考虑，可随时在候选池折叠区中重新考虑' : 'Shelve this hotel, recoverable anytime in Research Pool'}
                         >
                           {zh ? '暂不考虑' : 'Shelve'}

@@ -8,6 +8,7 @@ export interface OwnlyLocalDataCopy {
   changeFolder: string;
   connecting: string;
   browserNotSupported: string;
+  mobileNotSupported: string;
   connectFailed: string;
   initializeFailed: string;
   createdNotice: string;
@@ -45,6 +46,7 @@ const COPY: Record<WYQDLanguage, OwnlyLocalDataCopy> = {
     changeFolder: 'Change data folder',
     connecting: 'Connecting data…',
     browserNotSupported: 'This browser does not support direct folder access, or authorization was cancelled. Use a current desktop Chrome or Microsoft Edge browser.',
+    mobileNotSupported: 'Phone browsers cannot open data folders directly. Continue in demo mode to explore, then connect your data folder from desktop Chrome or Microsoft Edge.',
     connectFailed: 'Failed to connect the data folder.',
     initializeFailed: 'Failed to initialize Ownly data.',
     createdNotice: 'Ownly data folder created.',
@@ -80,6 +82,7 @@ const COPY: Record<WYQDLanguage, OwnlyLocalDataCopy> = {
     changeFolder: '更换数据目录',
     connecting: '正在连接数据…',
     browserNotSupported: '当前浏览器不支持直接访问目录，或授权已取消。请使用最新版桌面 Chrome 或 Microsoft Edge。',
+    mobileNotSupported: '手机浏览器无法直接打开数据目录。请先使用演示模式体验，再到桌面 Chrome 或 Edge 连接你的数据目录。',
     connectFailed: '连接数据目录失败。',
     initializeFailed: '初始化 Ownly 数据失败。',
     createdNotice: 'Ownly 数据目录已创建。',
@@ -111,4 +114,10 @@ const COPY: Record<WYQDLanguage, OwnlyLocalDataCopy> = {
 
 export function getOwnlyLocalDataCopy(language: WYQDLanguage): OwnlyLocalDataCopy {
   return COPY[language];
+}
+
+/** True for phone/tablet browsers, which never offer direct folder access. */
+export function isMobileDevice(userAgent?: string): boolean {
+  const ua = userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '');
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
 }

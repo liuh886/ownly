@@ -135,10 +135,10 @@ export function ObjectDetailPanel({
             value={bodyDraft}
             onChange={(e) => setBodyDraft(e.target.value)}
             rows={6}
-            className="mt-2 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2.5 font-mono text-xs leading-5 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
+            className="mt-2 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2.5 font-mono text-xs leading-5 text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
             disabled={disabled}
           />
-          <p className="mt-1 text-[11px] text-stone-400">{t('markdownBodyLabel')}</p>
+          <p className="mt-1 text-[11px] text-stone-500">{t('markdownBodyLabel')}</p>
         </div>
       </motion.section>
     );
@@ -156,7 +156,7 @@ export function ObjectDetailPanel({
         <div className="min-w-0">
           <div className="text-xs font-medium text-stone-500">{getTypeLabels(t)[object.object_type]}</div>
           <h2 className="mt-1 break-words text-xl font-semibold tracking-tight text-stone-950">{object.title}</h2>
-          <p className="mt-1 break-all text-xs text-stone-400">{stored.fileName}</p>
+          <p className="mt-1 break-all text-xs text-stone-500">{stored.fileName}</p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
           {onSave ? (
@@ -193,7 +193,7 @@ export function ObjectDetailPanel({
       <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {detailRows.map((row) => (
           <div key={row.label} className="rounded-lg bg-stone-50 px-3 py-2">
-            <div className="text-xs text-stone-400">{row.label}</div>
+            <div className="text-xs text-stone-500">{row.label}</div>
             <div className="mt-1 break-words text-sm font-medium text-stone-900">{row.value}</div>
           </div>
         ))}
@@ -249,13 +249,13 @@ export function ObjectDetailPanel({
                         {badge.label}
                       </span>
                       {date && (
-                        <span className="text-stone-400">
+                        <span className="text-stone-500">
                           {date}
                         </span>
                       )}
                     </div>
                     {log.source && (
-                      <span className="text-[10px] text-stone-400 font-mono">
+                      <span className="text-[10px] text-stone-500 font-mono">
                         {log.source}
                       </span>
                     )}
@@ -282,7 +282,7 @@ export function ObjectDetailPanel({
             })}
           </div>
         ) : (
-          <p className="mt-3 text-xs text-stone-400 leading-relaxed">
+          <p className="mt-3 text-xs text-stone-500 leading-relaxed">
             {t('objectExperienceLogsEmpty')}
           </p>
         )}

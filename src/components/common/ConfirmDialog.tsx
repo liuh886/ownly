@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useId, useRef } from 'react';
 import { useI18n } from '@/core/i18n-context';
+import { useDialogA11y } from './useDialogA11y';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -33,55 +34,21 @@ export function ConfirmDialog({
   const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const cancelButtonRef = useRef<HTMLButtonElement>(null);
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const inputId = useId();
+  const titleId = useId();
 
-  useEffect(() => {
-    if (!open) return;
-    const doc: Document | undefined = typeof activeDocument !== 'undefined' ? activeDocument : (typeof window !== 'undefined' ? window.document : undefined);
-    previousFocusRef.current = doc?.activeElement instanceof HTMLElement ? doc.activeElement : null;
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onCancel();
-      if (e.key !== 'Tab') return;
-
-      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])',
-      );
-      const items = focusable ? Array.from(focusable).filter((item) => !item.hasAttribute('disabled')) : [];
-      if (items.length === 0) return;
-
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && doc?.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && doc?.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    if (doc) doc.addEventListener('keydown', handleKeyDown);
-    window.setTimeout(() => {
-      inputRef.current?.focus();
-      if (!inputRef.current) {
-        (destructive ? cancelButtonRef.current : confirmButtonRef.current)?.focus();
-      }
-    }, 0);
-
-    return () => {
-      if (doc) doc.removeEventListener('keydown', handleKeyDown);
-      previousFocusRef.current?.focus();
-    };
-  }, [destructive, open, onCancel]);
+  useDialogA11y({
+    open,
+    onClose: onCancel,
+    panelRef: dialogRef,
+    initialFocusSelector: 'input, select, textarea, [data-confirm-default]',
+  });
 
   if (!open) return null;
 
   const confirmBtnClass = destructive
     ? 'min-h-11 flex-1 touch-manipulation rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition duration-150 active:scale-[0.98] hover:bg-red-700'
-    : 'min-h-11 flex-1 touch-manipulation rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition duration-150 active:scale-[0.98] hover:bg-stone-800';
+    : 'min-h-11 flex-1 touch-manipulation rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary transition duration-150 active:scale-[0.98] hover:bg-primary-hover';
 
   return (
     <div
@@ -92,20 +59,20 @@ export function ConfirmDialog({
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-lg"
+        className="w-full max-w-sm rounded-xl border border-line bg-surface p-5 shadow-lg"
         role="alertdialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
       >
-        <h2 className="text-base font-semibold tracking-tight text-stone-950">{title}</h2>
-        <p className="mt-1 text-sm text-stone-500">{message}</p>
+        <h2 id={titleId} className="text-base font-semibold tracking-tight text-ink">{title}</h2>
+        <p className="mt-1 text-sm text-ink-muted">{message}</p>
 
         {inputLabel && onInputChange ? (
           <div className="mt-3">
-            <label htmlFor="ownly-confirm-input" className="mb-1 block text-xs font-medium text-stone-500">{inputLabel}</label>
+            <label htmlFor={inputId} className="mb-1 block text-xs font-medium text-ink-muted">{inputLabel}</label>
             <input
               ref={inputRef}
-              id="ownly-confirm-input"
+              id={inputId}
               type="text"
               value={inputValue ?? ''}
               onChange={(e) => onInputChange(e.target.value)}
@@ -117,24 +84,24 @@ export function ConfirmDialog({
               }}
               autoComplete="off"
               enterKeyHint="done"
-              className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 sm:text-sm"
+              className="min-h-11 w-full touch-manipulation rounded-lg border border-line bg-surface px-3 py-2.5 text-base text-ink outline-none transition placeholder:text-ink-muted focus:border-line-strong focus:ring-2 focus:ring-line sm:text-sm"
             />
           </div>
         ) : null}
 
         <div className="mt-4 flex gap-2">
           <button
-            ref={cancelButtonRef}
             type="button"
             onClick={onCancel}
-            className="min-h-11 flex-1 touch-manipulation rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition duration-150 active:scale-[0.98] hover:border-stone-900"
+            data-confirm-default={destructive ? '' : undefined}
+            className="min-h-11 flex-1 touch-manipulation rounded-lg border border-line-strong bg-surface px-4 py-2.5 text-sm font-medium text-ink-secondary transition duration-150 active:scale-[0.98] hover:border-ink"
           >
             {cancelLabel ?? t('cancel')}
           </button>
           <button
-            ref={confirmButtonRef}
             type="button"
             onClick={() => onConfirm(inputValue)}
+            data-confirm-default={destructive ? undefined : ''}
             className={confirmBtnClass}
           >
             {confirmLabel ?? t('confirm')}

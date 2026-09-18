@@ -87,7 +87,7 @@ export function PwaInstallButton({ variant = 'default' }: { variant?: 'default' 
         type="button"
         onClick={() => setShowModal(true)}
         className={variant === 'segmented'
-          ? 'px-2.5 py-1.5 text-xs font-medium transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400'
+          ? 'px-2.5 py-1.5 text-xs font-medium transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-muted'
           : 'rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-900'}
         title={title}
       >

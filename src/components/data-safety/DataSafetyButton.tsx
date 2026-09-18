@@ -1,6 +1,8 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
 import type { RestorePlan } from '@/core/data-portability';
 import {
@@ -109,6 +111,9 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
   const [status, setStatus] = useState<string | null>(null);
   const [inspection, setInspection] = useState<BrowserBackupInspection | null>(null);
   const [migration, setMigration] = useState<BrowserMigrationInspection | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useDialogA11y({ open, onClose: () => setOpen(false), panelRef });
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -190,13 +195,13 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-8 backdrop-blur-sm">
-          <section role="dialog" aria-modal="true" className="max-h-[calc(100vh-4rem)] w-full max-w-xl overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl sm:p-8">
+          <section ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={copy.title} className="max-h-[calc(100vh-4rem)] w-full max-w-xl overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl sm:p-8">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold tracking-tight text-stone-950">{copy.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">{copy.description}</p>
               </div>
-              <button type="button" onClick={() => setOpen(false)} className="text-sm text-stone-400 hover:text-stone-900">×</button>
+              <button type="button" onClick={() => setOpen(false)} aria-label={copy.close} title={copy.close} className="text-sm text-stone-500 hover:text-stone-900"><X size={18} aria-hidden="true" /></button>
             </div>
 
             <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">{copy.localOnly}</p>

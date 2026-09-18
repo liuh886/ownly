@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type {
   PlannerScheduledPlace,
@@ -501,7 +502,7 @@ export function PlannerBudgetLedger({
               {item.notes ? (
                 <>
                   <span>·</span>
-                  <span className="italic text-stone-400">💬 {item.notes}</span>
+                  <span className="italic text-stone-500">💬 {item.notes}</span>
                 </>
               ) : null}
             </div>
@@ -515,7 +516,7 @@ export function PlannerBudgetLedger({
           <button
             type="button"
             onClick={() => startEditExpense(item)}
-            className="rounded p-1 text-stone-400 hover:bg-stone-200 hover:text-emerald-700"
+            className="rounded p-1 text-stone-500 hover:bg-stone-200 hover:text-emerald-700"
             title={zh ? '编辑该笔消费' : 'Edit expense'}
           >
             ✎
@@ -523,10 +524,10 @@ export function PlannerBudgetLedger({
           <button
             type="button"
             onClick={() => onDeleteExpense(item.id)}
-            className="rounded p-1 text-stone-400 hover:bg-stone-200 hover:text-rose-600"
+            className="rounded p-1 text-stone-500 hover:bg-stone-200 hover:text-rose-600"
             title={zh ? '删除该笔消费' : 'Delete expense'}
           >
-            ✕
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -583,9 +584,11 @@ export function PlannerBudgetLedger({
                 <button
                   type="button"
                   onClick={() => handleRemoveMember(m)}
-                  className="text-[10px] text-stone-400 hover:text-rose-600"
+                  aria-label={zh ? '移出成员' : 'Remove member'}
+                  title={zh ? '移出成员' : 'Remove member'}
+                  className="text-[10px] text-stone-500 hover:text-rose-600"
                 >
-                  ✕
+                  <X size={12} aria-hidden="true" />
                 </button>
               ) : null}
             </span>
@@ -676,7 +679,7 @@ export function PlannerBudgetLedger({
               {fxRowCodes.map((code) => (
                 <div key={code} className="flex items-center gap-2 text-[11px]">
                   <span className="w-12 font-bold text-sky-900">{code}</span>
-                  <span className="text-stone-400">=</span>
+                  <span className="text-stone-500">=</span>
                   <input
                     type="number"
                     step="any"
@@ -684,7 +687,7 @@ export function PlannerBudgetLedger({
                     inputMode="decimal"
                     value={fxDraft[code] ?? String(effectiveFxRate(code, fx) ?? '')}
                     onChange={(e) => setFxDraft((prev) => ({ ...prev, [code]: e.target.value }))}
-                    className="w-24 rounded border border-stone-300 px-1.5 py-0.5 text-right font-mono text-[11px]"
+                    className="w-24 rounded border border-stone-300 px-1.5 py-0.5 text-right font-mono text-base sm:text-[11px]"
                   />
                   <span className="text-stone-500">{baseCurrency}</span>
                 </div>
@@ -714,7 +717,7 @@ export function PlannerBudgetLedger({
                   ✓ {zh ? '保存汇率' : 'Save rates'}
                 </button>
               </div>
-              <p className="text-[9.5px] leading-4 text-stone-400">
+              <p className="text-[9.5px] leading-4 text-stone-500">
                 {zh
                   ? '默认为内置近似参考值，仅供本地折算展示；修改后仅保存在行程文件中，不影响原始价格记录。'
                   : 'Defaults are built-in reference values for local display only; overrides persist on the trip file and never alter captured prices.'}
@@ -905,9 +908,11 @@ export function PlannerBudgetLedger({
                         setIsAddingInlinePayer(false);
                         setInlinePayerName('');
                       }}
+                      aria-label={zh ? '取消付款人' : 'Cancel payer'}
+                      title={zh ? '取消付款人' : 'Cancel payer'}
                       className="rounded-lg border border-stone-200 px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100"
                     >
-                      ✕
+                      <X size={14} aria-hidden="true" />
                     </button>
                   </div>
                 ) : (
@@ -936,7 +941,7 @@ export function PlannerBudgetLedger({
                         className={`rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium transition ${
                           isChecked
                             ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
-                            : 'border-stone-200 bg-stone-100 text-stone-400'
+                            : 'border-stone-200 bg-stone-100 text-stone-500'
                         }`}
                       >
                         {isChecked ? '✓ ' : ''}{m}
@@ -953,7 +958,7 @@ export function PlannerBudgetLedger({
                   <div className="text-[11px] font-semibold text-stone-700">
                     {zh ? '实际已经支付了多少' : 'Actual payment contributions'}
                   </div>
-                  <div className="mt-0.5 text-[9.5px] text-stone-400">
+                  <div className="mt-0.5 text-[9.5px] text-stone-500">
                     {zh ? '默认主要垫付人支付全额；若有人当场付回或多人一起付款，可按人记录金额。' : 'Defaults to one payer; record per-person amounts for reimbursements or shared payment.'}
                   </div>
                 </div>
@@ -1011,9 +1016,11 @@ export function PlannerBudgetLedger({
                           setIsAddingInlinePayer(false);
                           setInlinePayerName('');
                         }}
+                        aria-label={zh ? '取消付款人' : 'Cancel payer'}
+                        title={zh ? '取消付款人' : 'Cancel payer'}
                         className="rounded border border-stone-200 px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100"
                       >
-                        ✕
+                        <X size={14} aria-hidden="true" />
                       </button>
                     </div>
                   ) : null}
@@ -1022,7 +1029,7 @@ export function PlannerBudgetLedger({
                       <label key={member} className="rounded-md border border-stone-200 bg-white p-1.5">
                         <span className="block truncate text-[10px] font-semibold text-stone-600">{member}</span>
                         <div className="mt-1 flex items-center gap-1">
-                          <span className="text-[9px] text-stone-400">{currency}</span>
+                          <span className="text-[9px] text-stone-500">{currency}</span>
                           <input
                             type="number"
                             min="0"
@@ -1090,7 +1097,7 @@ export function PlannerBudgetLedger({
 
         <div className="mt-3 space-y-1.5">
           {expenses.length === 0 ? (
-            <p className="py-4 text-center text-xs italic text-stone-400">
+            <p className="py-4 text-center text-xs italic text-stone-500">
               {zh ? '暂无账目，点击上方“+ 记一笔”快速录入' : 'No expenses recorded yet'}
             </p>
           ) : expensesWithPayments.map(renderExpenseItem)}
@@ -1115,7 +1122,7 @@ export function PlannerBudgetLedger({
         </div>
 
         {copyNotice ? (
-          <div className="mt-2 rounded-lg bg-emerald-100 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 animate-in fade-in">
+          <div className="mt-2 rounded-lg bg-emerald-100 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 ownly-fade-in">
             {copyNotice}
           </div>
         ) : null}
@@ -1175,7 +1182,7 @@ export function PlannerBudgetLedger({
                     >
                       <div className="flex items-center gap-1.5">
                         <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-800">{t.from}</span>
-                        <span className="text-stone-400">{zh ? '👉 转账给' : '👉 Transfer to'}</span>
+                        <span className="text-stone-500">{zh ? '👉 转账给' : '👉 Transfer to'}</span>
                         <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">{t.to}</span>
                       </div>
                       <strong className="font-bold text-emerald-800">

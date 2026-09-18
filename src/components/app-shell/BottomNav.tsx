@@ -77,8 +77,8 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
         inert={effectivelyHidden || undefined}
       >
         <div className="overflow-hidden">
-    <nav className="border-t border-stone-200/70 bg-white/70 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl">
-      <div className="relative mx-auto grid max-w-3xl grid-cols-5 gap-1 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-200">
+    <nav className="ownly-bottom-nav border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl min-[400px]:px-4">
+      <div className="relative mx-auto grid max-w-3xl grid-cols-5 gap-0.5 rounded-xl bg-surface-subtle p-1 ring-1 ring-line min-[400px]:gap-1">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const label = tab.id === 'planner' ? (language === 'zh' ? '规划' : 'Planner') : t(tab.labelKey);
@@ -93,13 +93,13 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
               {isActive && (
                 <motion.div
                   layoutId="activeTab"
-                  className="absolute inset-0 z-0 rounded-lg bg-stone-950 shadow-sm"
+                  className="absolute inset-0 z-0 rounded-lg bg-primary shadow-sm"
                   transition={{ type: 'tween' as const, duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
                 />
               )}
               <span
                 className={`relative z-10 text-[11px] font-medium tracking-tight transition-colors duration-300 sm:text-xs ${
-                  isActive ? 'text-white' : 'text-stone-500 hover:text-stone-700'
+                  isActive ? 'text-on-primary' : 'text-ink-muted hover:text-ink-secondary'
                 }`}
               >
                 {label}

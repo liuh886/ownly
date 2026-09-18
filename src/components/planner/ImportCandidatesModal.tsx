@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import type { PlannerTripPlace } from '@/domain/planner';
 import { getPlannerKindLabel, parseImportPayload, PLANNER_KIND_ICONS } from '@/domain/planner';
 import { capturePlaceToPlannerPlace, isCollectionExport, parseCaptureCollectionExport } from '@/domain/capture';
@@ -28,6 +29,9 @@ export function ImportCandidatesModal({
   const [parsedPlaces, setParsedPlaces] = useState<PlannerTripPlace[]>([]);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useDialogA11y({ open, onClose, panelRef });
 
   const handleTextChange = useCallback(
     (text: string) => {
@@ -117,11 +121,12 @@ export function ImportCandidatesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs ownly-fade-in"
       role="dialog"
       aria-modal="true"
+      aria-label={zh ? '导入外部研究候选' : 'Import Research Candidates'}
     >
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+      <div ref={panelRef} tabIndex={-1} className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-4">
           <div>
@@ -138,7 +143,7 @@ export function ImportCandidatesModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-200/60 hover:text-stone-700 transition"
+            className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-200/60 hover:text-stone-700 transition"
             aria-label="Close"
           >
             ✕
@@ -188,7 +193,7 @@ export function ImportCandidatesModal({
                 <span className="text-xs font-bold text-stone-800">
                   {zh ? `解析成功：共 ${parsedPlaces.length} 个候选地点` : `Parsed ${parsedPlaces.length} places`}
                 </span>
-                <span className="text-[11px] text-stone-400">
+                <span className="text-[11px] text-stone-500">
                   {zh ? '将以 candidate 状态加入灵感池' : 'Will be added as candidates'}
                 </span>
               </div>
@@ -203,7 +208,7 @@ export function ImportCandidatesModal({
                       </span>
                     </div>
                     {p.address ? (
-                      <span className="text-[10px] text-stone-400 truncate max-w-[180px]" title={p.address}>
+                      <span className="text-[10px] text-stone-500 truncate max-w-[180px]" title={p.address}>
                         {p.address}
                       </span>
                     ) : null}

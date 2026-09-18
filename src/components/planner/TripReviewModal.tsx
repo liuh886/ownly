@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useDialogA11y } from '@/components/common/useDialogA11y';
 import {
   buildTripReviewDraft,
   buildTripReviewStats,
@@ -68,10 +69,13 @@ export function TripReviewModal({
     [trip, places, visits, legs, expenses, language],
   );
   const [body, setBody] = useState(draft.body);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useDialogA11y({ open: true, onClose, panelRef });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-8 backdrop-blur-sm">
-      <section role="dialog" aria-modal="true" aria-label={copy.title} className="max-h-[calc(100vh-4rem)] w-full max-w-xl overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl sm:p-8">
+      <section ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={copy.title} className="max-h-[calc(100vh-4rem)] w-full max-w-xl overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl sm:p-8">
         <h2 className="text-xl font-semibold tracking-tight text-stone-950">{copy.title} — {trip.title}</h2>
         <p className="mt-2 text-sm leading-6 text-stone-600">{copy.intro}</p>
 
@@ -103,7 +107,7 @@ export function TripReviewModal({
           onChange={(event) => setBody(event.target.value)}
           rows={14}
           disabled={busy}
-          className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50/60 p-3 font-mono text-xs leading-5 text-stone-800 outline-none focus:border-stone-900 focus:bg-white disabled:opacity-60"
+          className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50/60 p-3 font-mono text-base leading-5 text-stone-800 outline-none focus:border-stone-900 focus:bg-white disabled:opacity-60 sm:text-xs"
         />
 
         <div className="mt-5 flex justify-end gap-2">

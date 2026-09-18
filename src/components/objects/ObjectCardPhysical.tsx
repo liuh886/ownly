@@ -158,13 +158,13 @@ export function ObjectCardPhysical({
 
           <div className="flex shrink-0 items-center gap-4 text-right">
             <div className="hidden sm:block">
-              <div className="text-[10px] uppercase tracking-wider text-stone-400">{t('totalAcquisitionCost')}</div>
+              <div className="text-[10px] uppercase tracking-wider text-stone-500">{t('totalAcquisitionCost')}</div>
               <div className="mt-0.5 font-mono text-[13px] font-medium text-stone-900">
                 {object.purchase_price ? formatMoney(object.purchase_price) : '—'}
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-stone-400">{t('dailyCostAvg')}</div>
+              <div className="text-[10px] uppercase tracking-wider text-stone-500">{t('dailyCostAvg')}</div>
               <div className="mt-0.5 font-mono text-[13px] font-medium text-stone-900">
                 {dailyCost ? formatMoney(dailyCost) : '—'}
               </div>

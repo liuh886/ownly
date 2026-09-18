@@ -22,16 +22,16 @@ export default function CollectionPage() {
 
   if (!checked) {
     return (
-      <div className="mx-auto max-w-3xl p-12" role="status" aria-label="加载中">
+      <main className="mx-auto max-w-3xl p-12" role="status" aria-label="加载中">
         <div className="ownly-skeleton h-8 w-1/3 rounded-full" aria-hidden="true" />
         <div className="ownly-skeleton mt-4 h-40 rounded-xl" aria-hidden="true" />
         <p className="mt-4 text-center text-sm text-stone-500">加载中…</p>
-      </div>
+      </main>
     );
   }
   if (!data) {
     return (
-      <div className="mx-auto max-w-3xl p-12 text-center">
+      <main className="mx-auto max-w-3xl p-12 text-center">
         <p className="text-sm text-stone-500">链接无效或已过期</p>
         <div className="mt-4 flex items-center justify-center gap-2">
           <button
@@ -48,8 +48,12 @@ export default function CollectionPage() {
             返回首页
           </a>
         </div>
-      </div>
+      </main>
     );
   }
-  return <CollectionPreview data={data} />;
+  return (
+    <main>
+      <CollectionPreview data={data} />
+    </main>
+  );
 }

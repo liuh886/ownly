@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { useI18n } from '@/core/i18n-context';
 import { FIELD_CLASS } from '@/lib/ui-constants';
 import { CitySearchInput } from '@/components/common/CitySearchInput';
@@ -177,10 +178,11 @@ export function ExperienceFormSection({
             {extraLocations.map((loc, idx) => (
               <div key={idx} className="mb-2 rounded-lg border border-stone-200 bg-stone-50 p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-medium text-stone-400">{t('stopN').replace('{n}', String(idx + 2))}</span>
+                  <span className="text-[11px] font-medium text-stone-500">{t('stopN').replace('{n}', String(idx + 2))}</span>
                   <button type="button" onClick={() => setExtraLocations(extraLocations.filter((_, i) => i !== idx))}
-                    className="text-[11px] text-stone-400 hover:text-red-600 transition"
-                    disabled={disabled || isSaving}>✕</button>
+                    className="text-[11px] text-stone-500 hover:text-red-600 transition"
+                    aria-label={t('delete')} title={t('delete')}
+                    disabled={disabled || isSaving}><X size={12} aria-hidden="true" /></button>
                 </div>
                 <CitySearchInput
                   initialValue={loc.city || undefined}

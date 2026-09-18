@@ -1,0 +1,6 @@
+{
+  "/": { "jsGzip": 228000, "cssGzip": 30000 },
+  "/app/": { "jsGzip": 365000, "cssGzip": 30000 },
+  "/c/": { "jsGzip": 305000, "cssGzip": 30000 },
+  "/trip/": { "jsGzip": 250000, "cssGzip": 30000 }
+}

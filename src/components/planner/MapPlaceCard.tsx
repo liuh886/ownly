@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { useState } from 'react';
 import type { PlannerTripPlace } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
@@ -70,10 +71,10 @@ export function MapPlaceCard({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 cursor-pointer rounded p-0.5 text-stone-400 transition hover:text-stone-700"
+          className="shrink-0 cursor-pointer rounded p-0.5 text-stone-500 transition hover:text-stone-700"
           title={zh ? '关闭' : 'Close'}
         >
-          ✕
+          <X size={14} aria-hidden="true" />
         </button>
       </div>
 
@@ -127,7 +128,7 @@ export function MapPlaceCard({
               setInsertPos(value === '' ? '' : Number(value));
             }}
             onClick={(event) => event.stopPropagation()}
-            className="min-w-0 flex-1 cursor-pointer rounded-md border border-stone-200 bg-white px-1 py-0.5 text-[11px] font-medium text-stone-700"
+            className="min-w-0 flex-1 cursor-pointer rounded-md border border-stone-200 bg-white px-1 py-0.5 text-base font-medium text-stone-700 sm:text-[11px]"
             title={zh ? '默认排到末尾；选序号则插入成为新的该号' : 'Defaults to the end; pick a number to become the new stop at that position'}
           >
             <option value="">{zh ? `末尾（共 ${dayStopCount} 站）` : `End (${dayStopCount} stops)`}</option>

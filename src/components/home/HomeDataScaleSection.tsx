@@ -80,7 +80,7 @@ export function HomeDataScaleSection({
             <div>
               <div className="text-xs font-medium text-stone-500">{t('fixedCostCoverage')}</div>
               <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">
-                {fixedCostCoverage} <span className="text-xs font-medium text-stone-400">{t('monthsUnit')}</span>
+                {fixedCostCoverage} <span className="text-xs font-medium text-stone-500">{t('monthsUnit')}</span>
               </div>
             </div>
           ) : null}

@@ -251,7 +251,7 @@ function WindowChrome({ brandMarkHref, label, children, className = '' }: Window
             <img src={brandMarkHref} alt="" width={32} height={32} decoding="async" loading="lazy" className="h-8 w-8 rounded-[0.65rem]" />
             <div>
               <p className="text-sm font-semibold tracking-[-0.02em]">Ownly</p>
-              <p className="text-[9px] font-medium uppercase tracking-[0.13em] text-stone-400">{label}</p>
+              <p className="text-[9px] font-medium uppercase tracking-[0.13em] text-stone-500">{label}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5" aria-hidden="true">
@@ -282,7 +282,7 @@ function OverviewWindow({ brandMarkHref, text }: { brandMarkHref: string; text: 
           {text.overviewMetrics.map(([value, label]) => (
             <div key={label} className="rounded-2xl border border-stone-200/90 bg-white p-3 sm:p-4">
               <p className="text-xl font-semibold tracking-[-0.045em] sm:text-2xl">{value}</p>
-              <p className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.1em] text-stone-400 sm:text-[10px]">{label}</p>
+              <p className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.1em] text-stone-500 sm:text-[10px]">{label}</p>
             </div>
           ))}
         </div>
@@ -335,19 +335,19 @@ function CostWindow({ brandMarkHref, text }: { brandMarkHref: string; text: type
               [text.uses, text.usesValue],
             ].map(([label, value]) => (
               <div key={label} className="rounded-2xl border border-stone-200 bg-white p-3.5">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-stone-400">{label}</p>
+                <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-stone-500">{label}</p>
                 <p className="mt-3 text-lg font-semibold tracking-[-0.04em] sm:text-xl">{value}</p>
               </div>
             ))}
           </div>
 
           <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
-            <div className="flex items-center justify-between"><p className="text-xs font-semibold">{text.usageHistory}</p><span className="text-[9px] uppercase tracking-[0.12em] text-stone-400">{text.sixMonths}</span></div>
+            <div className="flex items-center justify-between"><p className="text-xs font-semibold">{text.usageHistory}</p><span className="text-[9px] uppercase tracking-[0.12em] text-stone-500">{text.sixMonths}</span></div>
             <div className="mt-6 flex h-36 items-end gap-2.5">
               {bars.map((height, index) => (
                 <div key={text.usageMonths[index]} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
                   <div className="w-full rounded-t-md bg-emerald-700/90" style={{ height: `${height}%` }} />
-                  <span className="text-[9px] text-stone-400">{text.usageMonths[index]}</span>
+                  <span className="text-[9px] text-stone-500">{text.usageMonths[index]}</span>
                 </div>
               ))}
             </div>
@@ -360,7 +360,7 @@ function CostWindow({ brandMarkHref, text }: { brandMarkHref: string; text: type
             {text.subscriptionRows.map(([name, amount, state], index) => (
               <div key={name} className="rounded-2xl border border-stone-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div><p className="text-sm font-semibold">{name}</p><p className="mt-1 text-[10px] text-stone-400">{state}</p></div>
+                  <div><p className="text-sm font-semibold">{name}</p><p className="mt-1 text-[10px] text-stone-500">{state}</p></div>
                   <p className="text-xs font-semibold text-stone-600">{amount}</p>
                 </div>
                 <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-stone-100"><div className={`h-full rounded-full ${index === 3 ? 'bg-amber-400' : 'bg-emerald-600'}`} style={{ width: `${[82, 54, 71, 24][index]}%` }} /></div>
@@ -444,9 +444,9 @@ function ReviewWindow({ brandMarkHref, text }: { brandMarkHref: string; text: ty
 
           <div className="mt-7 rounded-2xl bg-stone-950 p-4 text-white">
             <div className="grid grid-cols-3 gap-3 text-center">
-              <div><p className="text-xl font-semibold">2</p><p className="mt-1 text-[9px] uppercase tracking-[0.1em] text-stone-400">{text.usesSixMonths}</p></div>
-              <div><p className="text-xl font-semibold">$1,240</p><p className="mt-1 text-[9px] uppercase tracking-[0.1em] text-stone-400">{text.acquired}</p></div>
-              <div><p className="text-xl font-semibold">183</p><p className="mt-1 text-[9px] uppercase tracking-[0.1em] text-stone-400">{text.daysOwned}</p></div>
+              <div><p className="text-xl font-semibold">2</p><p className="mt-1 text-[9px] uppercase tracking-[0.1em] text-stone-500">{text.usesSixMonths}</p></div>
+              <div><p className="text-xl font-semibold">$1,240</p><p className="mt-1 text-[9px] uppercase tracking-[0.1em] text-stone-500">{text.acquired}</p></div>
+              <div><p className="text-xl font-semibold">183</p><p className="mt-1 text-[9px] uppercase tracking-[0.1em] text-stone-500">{text.daysOwned}</p></div>
             </div>
           </div>
         </div>
@@ -457,7 +457,7 @@ function ReviewWindow({ brandMarkHref, text }: { brandMarkHref: string; text: ty
             {text.reviewRows.map(([title, timing, kind], index) => (
               <div key={title} className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-4">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-100 text-xs font-semibold text-stone-600">0{index + 1}</span>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{title}</p><p className="mt-1 text-[10px] text-stone-400">{kind}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{title}</p><p className="mt-1 text-[10px] text-stone-500">{kind}</p></div>
                 <span className="shrink-0 text-xs font-semibold text-stone-500">{timing}</span>
               </div>
             ))}

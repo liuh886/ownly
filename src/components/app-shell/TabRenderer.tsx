@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { HomeDashboard } from '@/components/home/HomeDashboard';
-import { ObjectList, type ObjectListFocus } from '@/components/objects/ObjectList';
-import { ObjectInsightsPanel } from '@/components/objects/ObjectInsightsPanel';
-import { ObjectComposer } from '@/components/objects/ObjectComposer';
-import { ArchivePanel } from '@/components/archive/ArchivePanel';
-import { AccountsOverview } from '@/components/accounts/AccountsOverview';
-import { ReviewHome } from '@/components/reviews/ReviewHome';
-import { PlannerHome } from '@/components/planner/PlannerHome';
+import dynamic from 'next/dynamic';
+import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { extractTripSharePayload } from '@/domain/trip-share-link';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
@@ -19,6 +13,50 @@ import type { WYQDStoredEntity, WYQDArchivedStoredEntity } from '@/core/reposito
 
 import type { HomeMetrics } from '@/domain/types';
 import type { useOwnlyActions } from './useOwnlyActions';
+
+/** Deferred tabs keep the initial /app bundle to the active screen only. */
+const tabLoading = () => (
+  <div className="py-10" role="status">
+    <div className="grid gap-2 sm:grid-cols-3">
+      <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
+      <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
+      <div className="ownly-skeleton hidden h-24 rounded-xl sm:block" aria-hidden="true" />
+    </div>
+  </div>
+);
+
+const HomeDashboard = dynamic(
+  () => import('@/components/home/HomeDashboard').then((mod) => mod.HomeDashboard),
+  { loading: tabLoading },
+);
+const ObjectInsightsPanel = dynamic(
+  () => import('@/components/objects/ObjectInsightsPanel').then((mod) => mod.ObjectInsightsPanel),
+  { loading: tabLoading },
+);
+const ObjectComposer = dynamic(
+  () => import('@/components/objects/ObjectComposer').then((mod) => mod.ObjectComposer),
+  { loading: tabLoading },
+);
+const ObjectList = dynamic(
+  () => import('@/components/objects/ObjectList').then((mod) => mod.ObjectList),
+  { loading: tabLoading },
+);
+const ArchivePanel = dynamic(
+  () => import('@/components/archive/ArchivePanel').then((mod) => mod.ArchivePanel),
+  { loading: tabLoading },
+);
+const AccountsOverview = dynamic(
+  () => import('@/components/accounts/AccountsOverview').then((mod) => mod.AccountsOverview),
+  { loading: tabLoading },
+);
+const ReviewHome = dynamic(
+  () => import('@/components/reviews/ReviewHome').then((mod) => mod.ReviewHome),
+  { loading: tabLoading },
+);
+const PlannerHome = dynamic(
+  () => import('@/components/planner/PlannerHome').then((mod) => mod.PlannerHome),
+  { loading: tabLoading },
+);
 
 export interface FirstObjectRequest {
   token: number;
