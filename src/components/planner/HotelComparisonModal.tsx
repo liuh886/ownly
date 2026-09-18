@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
 import type { PlannerScheduledPlace, PlannerTripPlace } from '@/domain/planner';
@@ -239,7 +240,7 @@ export function HotelComparisonModal({
                 title={zh ? '关闭' : 'Close'}
                 className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-200 hover:text-stone-700"
               >
-                ✕
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
           </div>

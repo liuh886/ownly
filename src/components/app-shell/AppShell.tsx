@@ -142,7 +142,7 @@ export function AppShell() {
       </a>
       <main
         id="ownly-main-content"
-        className="wyqd-web-shell min-h-screen bg-stone-50 px-5 pb-10 pt-8 text-stone-950 sm:px-6 sm:pt-10"
+        className="wyqd-web-shell min-h-screen bg-surface-subtle px-5 pb-10 pt-8 text-ink sm:px-6 sm:pt-10"
       >
       <div aria-live="polite" aria-atomic="true" className="pointer-events-none fixed inset-x-4 top-[calc(1rem+env(safe-area-inset-top))] z-30 mx-auto max-w-2xl">
         {notice ? (
@@ -188,7 +188,7 @@ export function AppShell() {
               <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
               <div className="ownly-skeleton hidden h-24 rounded-xl sm:block" aria-hidden="true" />
             </div>
-            <p className="mt-4 text-center text-xs text-stone-500">{t('loading')}</p>
+            <p className="mt-4 text-center text-xs text-ink-muted">{t('loading')}</p>
           </div>
         ) : null}
 
@@ -227,7 +227,7 @@ export function AppShell() {
         )}
 
         <footer className="mt-6 pb-2 text-center">
-          <span className="text-[10px] text-stone-500">
+          <span className="text-[10px] text-ink-muted">
             Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget} · {runtimeCapabilities.dataBehaviorContract} · {runtimeInfo.gitSha}
           </span>
         </footer>

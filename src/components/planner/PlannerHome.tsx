@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { type PlannerScheduledPlace } from '@/domain/planner-visits';
@@ -887,7 +888,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             className="shrink-0 rounded p-0.5 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-900 transition"
             title={zh ? '关闭提示' : 'Dismiss'}
           >
-            ✕
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       ) : null}
@@ -1331,7 +1332,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 title={zh ? '关闭' : 'Close'}
                 className="rounded-full p-1.5 text-stone-500 hover:bg-stone-200 hover:text-stone-700 transition"
               >
-                ✕
+                <X size={16} aria-hidden="true" />
               </button>
             </div>
 

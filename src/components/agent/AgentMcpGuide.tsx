@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
@@ -104,7 +105,7 @@ export function AgentMcpGuide({ open, onClose }: { open: boolean; onClose: () =>
             aria-label={copy.closeLabel}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-lg text-stone-500 ring-1 ring-stone-200 transition hover:bg-stone-100 hover:text-stone-900"
           >
-            ×
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 

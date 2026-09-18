@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type {
   PlannerScheduledPlace,
@@ -526,7 +527,7 @@ export function PlannerBudgetLedger({
             className="rounded p-1 text-stone-500 hover:bg-stone-200 hover:text-rose-600"
             title={zh ? '删除该笔消费' : 'Delete expense'}
           >
-            ✕
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -587,7 +588,7 @@ export function PlannerBudgetLedger({
                   title={zh ? '移出成员' : 'Remove member'}
                   className="text-[10px] text-stone-500 hover:text-rose-600"
                 >
-                  ✕
+                  <X size={12} aria-hidden="true" />
                 </button>
               ) : null}
             </span>
@@ -911,7 +912,7 @@ export function PlannerBudgetLedger({
                       title={zh ? '取消付款人' : 'Cancel payer'}
                       className="rounded-lg border border-stone-200 px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100"
                     >
-                      ✕
+                      <X size={14} aria-hidden="true" />
                     </button>
                   </div>
                 ) : (
@@ -1019,7 +1020,7 @@ export function PlannerBudgetLedger({
                         title={zh ? '取消付款人' : 'Cancel payer'}
                         className="rounded border border-stone-200 px-1.5 py-1 text-xs text-stone-500 hover:bg-stone-100"
                       >
-                        ✕
+                        <X size={14} aria-hidden="true" />
                       </button>
                     </div>
                   ) : null}

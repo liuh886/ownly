@@ -332,18 +332,6 @@ body {
   .wyqd-web-shell .border-sky-200 { border-color: rgb(2 132 199 / 0.3); }
   .wyqd-web-shell .bg-sky-500 { background-color: var(--accent-info); }
 
-  /* Bottom nav */
-  .wyqd-web-shell nav {
-    background-color: rgb(12 10 9 / 0.9);
-    border-color: var(--border-default);
-  }
-  .wyqd-web-shell nav .bg-stone-50 {
-    background-color: var(--surface-secondary);
-  }
-  .wyqd-web-shell nav .ring-stone-200 {
-    --tw-ring-color: var(--border-default);
-  }
-
   /* SVG charts — adjust stroke colors */
   .wyqd-web-shell svg polyline[stroke="#1c1917"] {
     stroke: var(--text-primary);
@@ -471,6 +459,13 @@ body {
   .wyqd-web-shell textarea {
     font-size: 0.875rem;
   }
+}
+
+/* Frosted bottom navigation — color-mix keeps token-driven translucency in
+   both themes (Tailwind drops opacity modifiers on var()-based theme colors). */
+.ownly-bottom-nav {
+  background-color: color-mix(in srgb, var(--ds-surface) 70%, transparent);
+  border-color: color-mix(in srgb, var(--ds-line) 70%, transparent);
 }
 
 /* ===== Planner map route flow dots (marching direction cue) ===== */

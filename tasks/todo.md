@@ -1,5 +1,16 @@
 # Ownly — Task Progress & Review
 
+## Completed: Frontend taste / detail / efficiency pass — Phases 0-4 (2026-09-18)
+
+- [x] **Phase 0 基线**：WIP（Sheet + 移动端输入下限）门禁全绿后落为分支 `feat/frontend-polish-efficiency` 首提交。
+- [x] **Phase 1 Token 地基**：`globals.css` 新增 `--ds-*` 语义 token（surface/line/ink/primary）+ `@theme` 映射（生成 `bg-surface`、`border-line`、`text-ink`、`bg-primary`、`text-on-primary` 等，暗色自动跟随）；`ui-constants.ts` 全量改用语义 token；`text-stone-400`→`text-stone-500` 194 处提对比度；focus ring 0.3/0.45 alpha → 0.75/0.8；12 个文件里的死类 `animate-in/fade-in/zoom-in-95/slide-in-from-*` 替换为真实存在的 `ownly-fade-in/pop-in/drop-in`（尊重 reduced-motion）；阴影全档位映射到 `--shadow-card/dropdown`。
+- [x] **Phase 2 对话框与无障碍**：新增 `useDialogA11y`（Escape/Tab 陷阱/焦点还原/滚动锁/初始焦点）；`Sheet` 与 `ConfirmDialog` 接入并改用 `aria-labelledby`；删除 planner 重复 `ConfirmDialog`，PlannerHome 统一走 common 版；10 个手写弹层接入 a11y hook（DataSafetyButton、AppInstallGuideModal、AgentMcpGuide、onboarding ×3、TripReviewModal、ImportCandidatesModal、HotelComparisonModal、CalendarSubscriptionModal）并补齐 role/可访问名称；LicenseKeyModal 迁移到 Sheet；11 个纯图标按钮补 `aria-label`+`title`；AppShell 增加 skip link + `main#ownly-main-content`；`/c`、`/trip`、`error.tsx` 补 `<main>`，error 标题层级 h2→h1。
+- [x] **Phase 3 效率**：新增 `scripts/validate-bundle-size.mjs` + `bundle-budgets.json`，接入 `validate:pages`（gzip 硬预算）；`TabRenderer` 五 Tab 全部 `next/dynamic` 拆包、`PlannerHome` 8 个弹窗懒加载、`TripSnapshotViewer` 懒加载 `PlannerMap`、`ReviewHome` 的 Travel Insights 展开才 mount 且面板本身 dynamic；`PlannerMap` 瓦片数组 `useMemo`。
+  - 实测：`/app/` 首载 **498.2 KB → 346.7 KB gzip（-30%）**；`/` 213.0、`/c/` 289.2、`/trip/` 236.7 KB，全部在预算内。
+- [x] **Phase 4 图标与暗色收敛**：引入 `lucide-react` 替换 chrome 图标（关闭/更多/搜索清除/移除等 17 处，emoji 保留内容语义）；AppHeader/BottomNav/AppShell/Sheet/ConfirmDialog/LicenseKeyModal/ui-constants 迁移到语义 token（底部导航用 `.ownly-bottom-nav` + `color-mix` 保持毛玻璃），删除 nav 专属暗色覆盖。
+- [x] **验证**：`tsc --noEmit`、`npm run lint`、`npm test`（79 文件 792 用例）、`npm run build`、`validate:pages`（含预算门禁）全部通过；`docs/UI_REFINEMENT_SPEC.md` 追加 Token/Dialog/Budget 三节。
+- 未竟事项（列入后续）：planner/i18n 收敛为统一 `t()`、417 处 <12px 任意字号收敛、剩余手写弹层（PlannerHome 内联两处）迁移、暗色覆盖层随屏幕迁移逐段删除。
+
 ## Completed: Mobile sheet primitive + touch input floor (2026-09-18)
 
 - [x] **Sheet 原语**：新增 `src/components/common/Sheet.tsx`（<sm 底部抽屉 / sm+ 居中对话框，焦点陷阱、焦点还原、Esc、`role="dialog"`、`aria-modal`、dvh 高度、安全区 footer）+ `Sheet.test.tsx` 7 用例。

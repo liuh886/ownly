@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { formatPlacePriceInTripCurrency, PLANNER_KIND_ICONS, PLANNER_KIND_LABELS, type PlannerPlaceKind, type PlannerTripPlace } from '@/domain/planner';
 import { formatDistanceBadge, getDisplayTags, placeMeta } from './planner-home-shared';
@@ -251,7 +252,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                 title={zh ? '清除搜索' : 'Clear search'}
                 className="absolute right-2 top-1.5 text-xs text-stone-500 hover:text-stone-700"
               >
-                ✕
+                <X size={14} aria-hidden="true" />
               </button>
             ) : null}
           </div>
@@ -498,7 +499,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                     className="rounded-lg border border-stone-700 bg-stone-900 px-2 py-1.5 text-xs text-stone-500 hover:text-white transition"
                     title={zh ? '退出多选' : 'Exit Select'}
                   >
-                    ✕
+                    <X size={14} aria-hidden="true" />
                   </button>
                 </div>
               </div>

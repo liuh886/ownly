@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import type { PlannerTravelMode, PlannerTrip } from '@/domain/planner';
@@ -481,7 +482,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                 className="flex h-4.5 w-4.5 [@media(hover:none)]:h-6 [@media(hover:none)]:w-6 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded text-[10px] leading-none text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition"
                                 title={zh ? '从当天日程移除（回到待安排候选池）' : 'Remove stop'}
                               >
-                                ✕
+                                <X size={12} aria-hidden="true" />
                               </button>
                             </div>
                           </div>

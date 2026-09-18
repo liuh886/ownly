@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
@@ -200,7 +201,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
                 <h2 className="text-xl font-semibold tracking-tight text-stone-950">{copy.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">{copy.description}</p>
               </div>
-              <button type="button" onClick={() => setOpen(false)} aria-label={copy.close} title={copy.close} className="text-sm text-stone-500 hover:text-stone-900">×</button>
+              <button type="button" onClick={() => setOpen(false)} aria-label={copy.close} title={copy.close} className="text-sm text-stone-500 hover:text-stone-900"><X size={18} aria-hidden="true" /></button>
             </div>
 
             <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">{copy.localOnly}</p>

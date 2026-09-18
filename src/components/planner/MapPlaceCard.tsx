@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { useState } from 'react';
 import type { PlannerTripPlace } from '@/domain/planner';
 import type { PlannerScheduledPlace } from '@/domain/planner-visits';
@@ -73,7 +74,7 @@ export function MapPlaceCard({
           className="shrink-0 cursor-pointer rounded p-0.5 text-stone-500 transition hover:text-stone-700"
           title={zh ? '关闭' : 'Close'}
         >
-          ✕
+          <X size={14} aria-hidden="true" />
         </button>
       </div>
 

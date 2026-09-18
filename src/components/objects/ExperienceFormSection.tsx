@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { useI18n } from '@/core/i18n-context';
 import { FIELD_CLASS } from '@/lib/ui-constants';
 import { CitySearchInput } from '@/components/common/CitySearchInput';
@@ -181,7 +182,7 @@ export function ExperienceFormSection({
                   <button type="button" onClick={() => setExtraLocations(extraLocations.filter((_, i) => i !== idx))}
                     className="text-[11px] text-stone-500 hover:text-red-600 transition"
                     aria-label={t('delete')} title={t('delete')}
-                    disabled={disabled || isSaving}>✕</button>
+                    disabled={disabled || isSaving}><X size={12} aria-hidden="true" /></button>
                 </div>
                 <CitySearchInput
                   initialValue={loc.city || undefined}
