@@ -37,6 +37,11 @@ interface CreateTripModalProps {
   /** Raw `#ownly-trip=` payload from the location hash; decoded into the import tab. */
   incomingShareHash?: string | null;
   onDismissShare?: () => void;
+  /**
+   * Deep-link into editing one trip (e.g. from the calendar export timezone
+   * hint). Consumed once when the modal opens; the parent clears it on close.
+   */
+  initialEditTripId?: string | null;
 }
 
 const COMMON_CURRENCIES = ['THB', 'JPY', 'CNY', 'USD', 'EUR', 'GBP', 'SGD', 'MYR', 'KRW', 'TWD', 'HKD', 'AUD'];
@@ -52,21 +57,46 @@ export function CreateTripModal({
   disabled = false,
   incomingShareHash = null,
   onDismissShare,
+  initialEditTripId = null,
 }: CreateTripModalProps) {
   const zh = language === 'zh';
-  const [tab, setTab] = useState<TabMode>('manage');
+  // Deep-link entry: open directly in the edit form for one trip.
+  // The modal remounts on every open (see parent `key`), so lazy useState
+  // initializers below consume the entry exactly once per open — no effect
+  // needed, and typing into the form can never be reset by a re-run.
+  // The parent clears the id on close.
+  const [initialEditForm] = useState(() => {
+    const target = open && initialEditTripId
+      ? trips.find((trip) => trip.id === initialEditTripId) ?? null
+      : null;
+    if (!target) return null;
+    return {
+      trip: target,
+      tab: 'create' as TabMode,
+      title: target.title,
+      startDate: target.start_date,
+      endDate: target.end_date,
+      destinations: target.destinations.join(', '),
+      currency: target.currency ?? 'THB',
+      transportMode: target.transport_mode ?? 'transit',
+      timezone: target.timezone ?? '',
+      dayTimezones: { ...(target.day_timezones ?? {}) },
+      tags: (target.tags ?? []).join(', '),
+    };
+  });
+  const [tab, setTab] = useState<TabMode>(initialEditForm?.tab ?? 'manage');
   const [deleteBusy, setDeleteBusy] = useState<string | null>(null);
-  const [editingTrip, setEditingTrip] = useState<PlannerTrip | null>(null);
+  const [editingTrip, setEditingTrip] = useState<PlannerTrip | null>(initialEditForm?.trip ?? null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const [title, setTitle] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [destinations, setDestinations] = useState('');
-  const [currency, setCurrency] = useState('THB');
-  const [transportMode, setTransportMode] = useState<PlannerTravelMode>('transit');
-  const [timezone, setTimezone] = useState('');
-  const [dayTimezones, setDayTimezones] = useState<Record<string, string>>({});
-  const [tags, setTags] = useState('');
+  const [title, setTitle] = useState(initialEditForm?.title ?? '');
+  const [startDate, setStartDate] = useState(initialEditForm?.startDate ?? '');
+  const [endDate, setEndDate] = useState(initialEditForm?.endDate ?? '');
+  const [destinations, setDestinations] = useState(initialEditForm?.destinations ?? '');
+  const [currency, setCurrency] = useState(initialEditForm?.currency ?? 'THB');
+  const [transportMode, setTransportMode] = useState<PlannerTravelMode>(initialEditForm?.transportMode ?? 'transit');
+  const [timezone, setTimezone] = useState(initialEditForm?.timezone ?? '');
+  const [dayTimezones, setDayTimezones] = useState<Record<string, string>>(initialEditForm?.dayTimezones ?? {});
+  const [tags, setTags] = useState(initialEditForm?.tags ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +139,20 @@ export function CreateTripModal({
     legs: importPreview.bundle?.legs.length ?? 0,
   }), [importPreview.bundle]);
 
+  const startEdit = (trip: PlannerTrip) => {
+    setEditingTrip(trip);
+    setTitle(trip.title);
+    setStartDate(trip.start_date);
+    setEndDate(trip.end_date);
+    setDestinations(trip.destinations.join(', '));
+    setCurrency(trip.currency ?? 'THB');
+    setTransportMode(trip.transport_mode ?? 'transit');
+    setTimezone(trip.timezone ?? '');
+    setDayTimezones({ ...(trip.day_timezones ?? {}) });
+    setTags((trip.tags ?? []).join(', '));
+    setTab('create');
+  };
+
   if (!open) return null;
 
   const resetForm = () => {
@@ -130,20 +174,6 @@ export function CreateTripModal({
   const handleClose = () => {
     resetForm();
     onClose();
-  };
-
-  const startEdit = (trip: PlannerTrip) => {
-    setEditingTrip(trip);
-    setTitle(trip.title);
-    setStartDate(trip.start_date);
-    setEndDate(trip.end_date);
-    setDestinations(trip.destinations.join(', '));
-    setCurrency(trip.currency ?? 'THB');
-    setTransportMode(trip.transport_mode ?? 'transit');
-    setTimezone(trip.timezone ?? '');
-    setDayTimezones({ ...(trip.day_timezones ?? {}) });
-    setTags((trip.tags ?? []).join(', '));
-    setTab('create');
   };
 
   const handleExportTrip = async (trip: PlannerTrip) => {

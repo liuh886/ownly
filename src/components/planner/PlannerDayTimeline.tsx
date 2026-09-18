@@ -488,7 +488,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
 
                           {/* Warning / Conflict Alerts */}
                           {col?.isCollision ? (
-                            <div className="flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200 leading-snug">
+                            <div className="flex items-center gap-1 rounded bg-amber-50/50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200/60 leading-snug">
                               <span>⚠️</span>
                               <span>{col.reason}</span>
                             </div>
@@ -497,7 +497,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                           {/* Deduplicated Research Note / Why Insight (Only 1 block displayed).
                               Hidden for well-known landmarks (airports + CMU) by design. */}
                           {!isTimelineNoteHiddenLandmark(place) && place.why ? (
-                            <p className="line-clamp-1 rounded bg-stone-50 px-1.5 py-0.5 text-[10px] text-stone-600 leading-snug">
+                            <p className="line-clamp-1 rounded bg-stone-100/40 px-1.5 py-0.5 text-[10px] text-stone-600 leading-snug">
                               💡 {zh ? null : (<><strong className="font-semibold text-stone-700">Why:</strong> </>)}{place.why}
                             </p>
                           ) : !isTimelineNoteHiddenLandmark(place) && place.notes ? (
