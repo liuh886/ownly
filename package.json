@@ -27,6 +27,7 @@
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
     "smoke:web": "python tests/smoke/web_smoke.py",
     "smoke:site": "python tests/smoke/site_functionality.py",
+    "smoke:mobile": "python tests/smoke/mobile_smoke.py",
     "test:e2e": "npm run smoke:web && npm run smoke:site",
     "test:e2e:data": "vitest run src/services/MarkdownEntityRepository.contract.test.ts",
     "test:cli": "vitest run scripts/cli/wyqd-cli.process.test.ts",

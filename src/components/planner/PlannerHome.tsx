@@ -71,7 +71,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
   const [highlightedPlaceId, setHighlightedPlaceId] = useState<string | null>(null);
-  const [rightTab, setRightTab] = useState<'map' | 'context' | 'budget'>('map');
+  // Mobile-first: phones open on the list/context tab so the heavy map
+  // instance is never mounted until the user explicitly asks for it.
+  const [rightTab, setRightTab] = useState<'map' | 'context' | 'budget'>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 1024 ? 'context' : 'map',
+  );
   const [poolView, setPoolView] = useState(false);
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
@@ -1086,7 +1090,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                       type="button"
                       disabled={activeDayIndex <= 0}
                       onClick={() => setSelectedDate(tripDates[activeDayIndex - 1])}
-                      className="shrink-0 rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex min-h-9 min-w-9 shrink-0 touch-manipulation items-center justify-center rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-700 transition duration-150 active:scale-95 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                       title={zh ? '前一天 (← / [)' : 'Previous day (← / [)'}
                       aria-label={zh ? '前一天' : 'Previous day'}
                     >
@@ -1118,7 +1122,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                       type="button"
                       disabled={activeDayIndex >= tripDates.length - 1}
                       onClick={() => setSelectedDate(tripDates[activeDayIndex + 1])}
-                      className="shrink-0 rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex min-h-9 min-w-9 shrink-0 touch-manipulation items-center justify-center rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-700 transition duration-150 active:scale-95 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                       title={zh ? '后一天 (→ / ])' : 'Next day (→ / ])'}
                       aria-label={zh ? '后一天' : 'Next day'}
                     >
@@ -1130,7 +1134,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
               <button
                 type="button"
                 onClick={() => setIsMapExpanded(false)}
-                className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                className="min-h-11 shrink-0 touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-semibold text-stone-700 transition duration-150 active:scale-[0.98] hover:bg-stone-100 sm:text-xs"
               >
                 ✕ {zh ? '退出大地图' : 'Close Map'}
               </button>
