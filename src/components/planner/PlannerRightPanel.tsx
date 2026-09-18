@@ -167,7 +167,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
               <div className="mt-5">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold text-stone-700">{zh ? '区域分布' : 'Area load'}</h3>
-                  <span className="text-[10px] text-stone-400">{areaCounts.length}</span>
+                  <span className="text-[10px] text-stone-500">{areaCounts.length}</span>
                 </div>
                 <div className="mt-2 space-y-2">
                   {areaCounts.slice(0, 6).map((item) => (
@@ -176,7 +176,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
                       <div className="h-1.5 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-stone-700" style={{ width: `${Math.max(12, item.count / maxAreaCount * 100)}%` }} /></div>
                     </div>
                   ))}
-                  {areaCounts.length === 0 ? <p className="text-[11px] leading-5 text-stone-400">{zh ? '采集时填写区域，后续 AI 才能更好地做空间聚类。' : 'Add areas while researching so future AI planning can cluster places spatially.'}</p> : null}
+                  {areaCounts.length === 0 ? <p className="text-[11px] leading-5 text-stone-500">{zh ? '采集时填写区域，后续 AI 才能更好地做空间聚类。' : 'Add areas while researching so future AI planning can cluster places spatially.'}</p> : null}
                 </div>
               </div>
 

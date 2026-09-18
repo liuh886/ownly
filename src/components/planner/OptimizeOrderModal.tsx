@@ -77,7 +77,7 @@ export function OptimizeOrderModal({
               <span className="text-xs text-stone-500">{zh ? '原始' : 'Original'}</span>
               <span className="text-sm font-bold text-stone-700">{computation.originalMinutes}{zh ? ' 分钟' : ' min'}</span>
             </div>
-            <span className="text-stone-400">→</span>
+            <span className="text-stone-500">→</span>
             <div className="flex items-baseline gap-2">
               <span className="text-xs text-stone-500">{zh ? '优化后' : 'Optimized'}</span>
               <span className="text-sm font-bold text-stone-700">{computation.optimizedMinutes}{zh ? ' 分钟' : ' min'}</span>
@@ -110,7 +110,7 @@ export function OptimizeOrderModal({
               <ol className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-stone-200 bg-stone-50/50 p-2 text-xs">
                 {computation.originalPlaces.map((place, index) => (
                   <li key={place.id} className="flex items-center gap-2">
-                    <span className="w-4 shrink-0 text-right text-[10px] font-bold text-stone-400">{index + 1}</span>
+                    <span className="w-4 shrink-0 text-right text-[10px] font-bold text-stone-500">{index + 1}</span>
                     <span className="truncate text-stone-600" title={place.title}>{place.title}</span>
                     {place.is_anchor ? <span title={zh ? '锚点' : 'anchor'}>⚓</span> : null}
                     {place.locked ? <span title={zh ? '已锁定' : 'locked'}>🔒</span> : null}
@@ -135,7 +135,7 @@ export function OptimizeOrderModal({
             </div>
           </div>
 
-          <p className="text-[11px] text-stone-400">
+          <p className="text-[11px] text-stone-500">
             {zh
               ? `调整 ${movedCount} 个游览点的先后顺序；锁定 🔒 与锚点 ⚓ 不会移动。应用后各点时间推断与营业时间告警将自动重算。`
               : `Reorders ${movedCount} stops; locked 🔒 and anchored ⚓ stops stay put. Inferred times and opening-hour warnings recompute after applying.`}

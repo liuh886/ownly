@@ -1147,7 +1147,7 @@ export function PlannerMap({
               <div className="fixed inset-0 z-40 cursor-default" onClick={() => setControlsMenuOpen(false)} />
               <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-xl">
                 <div className="px-3 py-1.5">
-                  <div className="mb-1 text-[9px] font-bold text-stone-400">{zh ? '底图' : 'Basemap'}</div>
+                  <div className="mb-1 text-[9px] font-bold text-stone-500">{zh ? '底图' : 'Basemap'}</div>
                   <select
                     value={basemapStyle}
                     onChange={(e) => handleBasemapChange(e.target.value as BasemapStyle)}
@@ -1322,7 +1322,7 @@ export function PlannerMap({
                 </div>
                 {isOpen ? (
                   <div
-                    className="absolute z-50 w-max rounded-xl border border-stone-200/95 bg-white/95 p-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95"
+                    className="absolute z-50 w-max rounded-xl border border-stone-200/95 bg-white/95 p-1.5 shadow-xl backdrop-blur-md ownly-pop-in"
                     style={{
                       left: `${Math.max(90, Math.min(containerSize.width - 90, x))}px`,
                       top: `${y + 18}px`,
@@ -1582,7 +1582,7 @@ export function PlannerMap({
                       if (!coloredDays.includes(dIdx)) setShowRoutesLayer(true);
                       toggleDay(dIdx, activeDayIndex);
                     }}
-                    className={`flex items-center gap-1.5 rounded px-0.5 text-[9.5px] font-semibold transition ${isActive ? 'cursor-default text-stone-900' : lit ? 'text-stone-900 ring-1 ring-stone-400 hover:bg-stone-100' : 'text-stone-400 hover:bg-stone-100'}`}
+                    className={`flex items-center gap-1.5 rounded px-0.5 text-[9.5px] font-semibold transition ${isActive ? 'cursor-default text-stone-900' : lit ? 'text-stone-900 ring-1 ring-stone-400 hover:bg-stone-100' : 'text-stone-500 hover:bg-stone-100'}`}
                     title={isActive
                       ? (zh ? '当天始终彩色显示' : 'The active day is always colored')
                       : (zh ? (lit ? '关闭本天色彩' : '点亮本天色彩') : (lit ? 'Unlight this day' : 'Light this day'))}
@@ -1602,7 +1602,7 @@ export function PlannerMap({
         {/* Anchored Mini Popover on Clicked Marker with 3 Emoji Actions */}
         {selectedPlace && selectedPointScreen && selectedPointScreen.x >= -60 && selectedPointScreen.x <= containerSize.width + 60 && selectedPointScreen.y >= -60 && selectedPointScreen.y <= containerSize.height + 60 && (
           <div
-            className="absolute z-50 rounded-xl border border-stone-200/95 bg-white/95 p-2.5 shadow-xl backdrop-blur-md transition-all duration-150 animate-in fade-in zoom-in-95 select-text"
+            className="absolute z-50 rounded-xl border border-stone-200/95 bg-white/95 p-2.5 shadow-xl backdrop-blur-md transition-all duration-150 ownly-pop-in select-text"
             style={{
               left: `${Math.max(compact ? 80 : 130, Math.min(containerSize.width - (compact ? 80 : 130), selectedPointScreen.x))}px`,
               top: selectedPointScreen.y > 170 ? `${selectedPointScreen.y - 12}px` : `${selectedPointScreen.y + 26}px`,
@@ -1632,7 +1632,7 @@ export function PlannerMap({
 
       {/* Footer Helper: tile-source attribution follows the active basemap. */}
       <div className="border-t border-stone-100 bg-stone-50 px-3 py-1.5 text-[10.5px] text-stone-500">
-        <div className="text-[9px] text-stone-400">
+        <div className="text-[9px] text-stone-500">
           © {activeBasemap.attribution.map((attr, index) => (
             <span key={attr.text}>
               {index > 0 ? ' · ' : null}

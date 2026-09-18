@@ -14,7 +14,7 @@ export default function Loading() {
           <div className="ownly-skeleton h-20 rounded-xl" aria-hidden="true" />
           <div className="ownly-skeleton h-20 rounded-xl" aria-hidden="true" />
         </div>
-        <p className="mt-4 text-center text-xs font-medium text-stone-400">Loading Ownly…</p>
+        <p className="mt-4 text-center text-xs font-medium text-stone-500">Loading Ownly…</p>
       </div>
     </div>
   );

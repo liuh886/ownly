@@ -116,7 +116,7 @@ export function TravelTimeline({
             {year > 0 && (
               <div className="relative flex items-center gap-3 pb-4">
                 <div className="absolute left-0 z-10 h-[15px] w-[15px] rounded-full border-2 border-stone-300 bg-white" />
-                <span className="ml-6 text-xs font-semibold text-stone-400 tracking-wide">
+                <span className="ml-6 text-xs font-semibold text-stone-500 tracking-wide">
                   {year}
                 </span>
               </div>
@@ -186,7 +186,7 @@ export function TravelTimeline({
                             {getStatusLabel(exp.status, t)}
                           </span>
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-stone-400">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-stone-500">
                           {cityCountry && <span>{cityCountry}</span>}
                           {days != null && (
                             <>
@@ -209,7 +209,7 @@ export function TravelTimeline({
                             {formatMoney(actual || budget)}
                           </div>
                           {hasBudgetData && actual > 0 && budget > 0 && (
-                            <div className="text-[10px] text-stone-400">
+                            <div className="text-[10px] text-stone-500">
                               {t('travelBudgetVsActual')
                                 .replace('{actual}', formatMoney(actual) || '')
                                 .replace('{budget}', formatMoney(budget) || '')}
@@ -262,7 +262,7 @@ export function TravelTimeline({
 
         {/* Empty state */}
         {grouped.length === 0 && (
-          <div className="pl-6 text-sm text-stone-400">{t('travelNoExperiences')}</div>
+          <div className="pl-6 text-sm text-stone-500">{t('travelNoExperiences')}</div>
         )}
       </div>
     </div>

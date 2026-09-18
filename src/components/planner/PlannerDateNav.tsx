@@ -106,7 +106,7 @@ export function PlannerDateNav(props: PlannerDateNavProps) {
                 isDragOver
                   ? 'ring-2 ring-emerald-500 bg-emerald-50 text-emerald-900 border-emerald-400 scale-105 shadow-md z-10'
                   : isDraggingThis
-                    ? 'opacity-40 border-dashed border-stone-400 bg-stone-100 text-stone-400'
+                    ? 'opacity-40 border-dashed border-stone-400 bg-stone-100 text-stone-500'
                     : isSelected
                       ? 'bg-stone-900 text-white shadow-xs'
                       : 'border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900'
@@ -114,7 +114,7 @@ export function PlannerDateNav(props: PlannerDateNavProps) {
               title={zh ? '点击切换视图；按住可拖拽至其它天整体互换路线日程' : 'Click to select; drag to swap day itinerary with another day'}
             >
               <span>{zh ? `第${index + 1}天` : `Day ${index + 1}`}</span>
-              <span className={`text-[11px] ${isSelected ? 'text-stone-300' : 'text-stone-400 group-hover:text-stone-500'}`}>
+              <span className={`text-[11px] ${isSelected ? 'text-stone-300' : 'text-stone-500 group-hover:text-stone-500'}`}>
                 {formatDay(date, language)}
               </span>
               {dayPlacesCount > 0 ? (

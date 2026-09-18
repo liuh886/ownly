@@ -66,7 +66,7 @@ export function FirstObjectOnboarding({
                 </span>
                 <span className="mt-4 text-sm font-semibold text-stone-950">{item.title}</span>
                 <span className="mt-2 text-xs leading-5 text-stone-600">{item.description}</span>
-                <span className="mt-auto pt-4 text-[11px] text-stone-400">{item.example}</span>
+                <span className="mt-auto pt-4 text-[11px] text-stone-500">{item.example}</span>
               </button>
             );
           })}

@@ -70,7 +70,7 @@ export function MapPlaceCard({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 cursor-pointer rounded p-0.5 text-stone-400 transition hover:text-stone-700"
+          className="shrink-0 cursor-pointer rounded p-0.5 text-stone-500 transition hover:text-stone-700"
           title={zh ? '关闭' : 'Close'}
         >
           ✕

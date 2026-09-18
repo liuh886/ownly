@@ -196,7 +196,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
                 <h2 className="text-xl font-semibold tracking-tight text-stone-950">{copy.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">{copy.description}</p>
               </div>
-              <button type="button" onClick={() => setOpen(false)} className="text-sm text-stone-400 hover:text-stone-900">×</button>
+              <button type="button" onClick={() => setOpen(false)} className="text-sm text-stone-500 hover:text-stone-900">×</button>
             </div>
 
             <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">{copy.localOnly}</p>

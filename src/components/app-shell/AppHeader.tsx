@@ -86,7 +86,7 @@ export function AppHeader({
           href="https://liuh886.gumroad.com/l/ownly"
           target="_blank"
           rel="noopener noreferrer"
-          className="ownly-hit-expand hidden rounded-full px-2 py-0.5 text-[11px] font-medium text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 min-[480px]:inline"
+          className="ownly-hit-expand hidden rounded-full px-2 py-0.5 text-[11px] font-medium text-stone-500 transition hover:bg-rose-50 hover:text-rose-600 min-[480px]:inline"
           title={t('sponsor')}
         >
           ♡ {t('sponsor')}
@@ -97,7 +97,7 @@ export function AppHeader({
           <button
             type="button"
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
-            className="ownly-hit-expand hidden min-h-9 min-w-9 touch-manipulation rounded-md px-1.5 py-1 text-[11px] font-medium text-stone-400 transition duration-150 active:scale-95 hover:bg-stone-100 hover:text-stone-700 sm:block"
+            className="ownly-hit-expand hidden min-h-9 min-w-9 touch-manipulation rounded-md px-1.5 py-1 text-[11px] font-medium text-stone-500 transition duration-150 active:scale-95 hover:bg-stone-100 hover:text-stone-700 sm:block"
           >
             {language === 'zh' ? 'EN' : '中文'}
           </button>
@@ -105,7 +105,7 @@ export function AppHeader({
             value={currency}
             onChange={(event) => setCurrency(event.target.value as typeof currency)}
             aria-label={language === 'zh' ? '货币' : 'Currency'}
-            className="hidden min-h-9 cursor-pointer touch-manipulation rounded-md bg-transparent px-1 py-1 text-base font-medium text-stone-400 outline-none transition hover:bg-stone-100 hover:text-stone-700 sm:block sm:text-[11px]"
+            className="hidden min-h-9 cursor-pointer touch-manipulation rounded-md bg-transparent px-1 py-1 text-base font-medium text-stone-500 outline-none transition hover:bg-stone-100 hover:text-stone-700 sm:block sm:text-[11px]"
           >
             {WYQD_CURRENCIES.map((currentCurrency) => (
               <option key={currentCurrency} value={currentCurrency}>
@@ -120,7 +120,7 @@ export function AppHeader({
               aria-expanded={overflowOpen}
               aria-haspopup="menu"
               aria-label={language === 'zh' ? '更多选项' : 'More options'}
-              className="ownly-hit-expand flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-md px-1.5 py-1 text-sm font-bold text-stone-400 transition duration-150 active:scale-95 hover:bg-stone-100 hover:text-stone-700"
+              className="ownly-hit-expand flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-md px-1.5 py-1 text-sm font-bold text-stone-500 transition duration-150 active:scale-95 hover:bg-stone-100 hover:text-stone-700"
             >
               <span aria-hidden="true">⋯</span>
             </button>
@@ -189,8 +189,8 @@ export function AppHeader({
           <h1 className="text-lg font-semibold tracking-tight text-stone-950 sm:text-xl">
             {heading.title}
           </h1>
-          <p className="mt-0.5 text-xs text-stone-400">{heading.description}</p>
-          <p className="mt-1 text-[11px] tabular-nums text-stone-400">
+          <p className="mt-0.5 text-xs text-stone-500">{heading.description}</p>
+          <p className="mt-1 text-[11px] tabular-nums text-stone-500">
             {objectCount} {t('objects')} · {snapshotCount} {t('snapshots')}
           </p>
         </div>
@@ -201,7 +201,7 @@ export function AppHeader({
               onClick={onConnectVault}
               disabled={isLoading}
               title={connectionTitle}
-              className={`ownly-hit-expand inline-flex touch-manipulation items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400 disabled:cursor-wait ${
+              className={`ownly-hit-expand inline-flex touch-manipulation items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-muted disabled:cursor-wait ${
                 isConnected && !isLoading
                   ? 'bg-stone-100 text-stone-600 ring-1 ring-stone-200 hover:bg-stone-200/70 hover:text-stone-800'
                   : 'bg-stone-950 text-white shadow-sm hover:bg-stone-800 disabled:hover:bg-stone-950'
@@ -232,13 +232,13 @@ export function AppHeader({
             <div
               role="group"
               aria-label={language === 'zh' ? 'Ownly 外部能力' : 'Ownly external tools'}
-              className="inline-flex overflow-hidden rounded-full text-stone-400 ring-1 ring-stone-200"
+              className="inline-flex overflow-hidden rounded-full text-stone-500 ring-1 ring-stone-200"
             >
               <button
                 type="button"
                 onClick={onOpenAgentGuide}
                 title="Agent / MCP"
-                className="ownly-hit-expand border-r border-stone-200 px-2.5 py-1.5 text-xs font-medium transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-stone-400"
+                className="ownly-hit-expand border-r border-stone-200 px-2.5 py-1.5 text-xs font-medium transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-muted"
               >
                 Agent
               </button>
@@ -249,7 +249,7 @@ export function AppHeader({
               type="button"
               onClick={onOpenAgentGuide}
               title="Agent / MCP"
-              className="ownly-hit-expand rounded-full px-3 py-1.5 text-xs font-medium text-stone-400 ring-1 ring-stone-200 transition hover:bg-stone-100 hover:text-stone-700"
+              className="ownly-hit-expand rounded-full px-3 py-1.5 text-xs font-medium text-stone-500 ring-1 ring-stone-200 transition hover:bg-stone-100 hover:text-stone-700"
             >
               Agent
             </button>

@@ -117,7 +117,7 @@ export function ConfirmDialog({
               }}
               autoComplete="off"
               enterKeyHint="done"
-              className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 sm:text-sm"
+              className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50 sm:text-sm"
             />
           </div>
         ) : null}

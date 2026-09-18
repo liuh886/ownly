@@ -103,7 +103,7 @@ export function AccountsForm({
             disabled={disabled || isSaving}
           />
           {parsedAssetBalances.length > 0 && !hasInvalidAssetLines ? (
-            <p className="mt-1 text-xs text-stone-400">
+            <p className="mt-1 text-xs text-stone-500">
               {t('snapshotParsedPreview').replace('{count}', String(parsedAssetBalances.length)).replace('{total}', formatMoney(sumBalances(parsedAssetBalances)) ?? '')}
             </p>
           ) : null}
@@ -128,7 +128,7 @@ export function AccountsForm({
             disabled={disabled || isSaving}
           />
           {parsedLiabilityBalances.length > 0 && !hasInvalidLiabilityLines ? (
-            <p className="mt-1 text-xs text-stone-400">
+            <p className="mt-1 text-xs text-stone-500">
               {t('snapshotParsedPreview').replace('{count}', String(parsedLiabilityBalances.length)).replace('{total}', formatMoney(sumBalances(parsedLiabilityBalances)) ?? '')}
             </p>
           ) : null}

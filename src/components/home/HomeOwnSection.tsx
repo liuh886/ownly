@@ -197,7 +197,7 @@ export function HomeOwnSection({
             {latestSnapshot ? formatCompactMoney(latestSnapshot.net_worth ?? 0) : '—'}
           </div>
           {latestSnapshot?.snapshot_at ? (
-            <div className="mt-0.5 text-[11px] text-stone-400">{latestSnapshot.snapshot_at}</div>
+            <div className="mt-0.5 text-[11px] text-stone-500">{latestSnapshot.snapshot_at}</div>
           ) : null}
         </div>
       </div>

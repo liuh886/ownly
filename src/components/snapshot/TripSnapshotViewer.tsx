@@ -93,7 +93,7 @@ export function TripSnapshotViewer({
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 pb-16 sm:p-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="text-[11px] font-medium text-stone-400">{copy.readOnly}</div>
+        <div className="text-[11px] font-medium text-stone-500">{copy.readOnly}</div>
         <h1 className="mt-1 text-xl font-bold tracking-tight text-stone-950">📱 {trip.title}</h1>
         <div className="mt-1 text-xs text-stone-500">
           {trip.start_date} → {trip.end_date} · {(trip.destinations ?? []).join(', ')}
@@ -156,7 +156,7 @@ export function TripSnapshotViewer({
               <ol className="mt-1 space-y-1">
                 {day.stops.map((stop, index) => (
                   <li key={`${day.date}-${index}`} className="flex items-baseline gap-2 text-sm">
-                    <span className="w-6 shrink-0 text-right font-bold text-stone-400">{index + 1}</span>
+                    <span className="w-6 shrink-0 text-right font-bold text-stone-500">{index + 1}</span>
                     <span className="min-w-0 flex-1 truncate font-medium text-stone-900">{stop.title}</span>
                     {stop.time ? <span className="shrink-0 text-xs text-stone-500">{stop.time}</span> : null}
                   </li>
@@ -164,20 +164,20 @@ export function TripSnapshotViewer({
               </ol>
             </div>
           ))}
-          {view.days.length === 0 ? <p className="text-xs text-stone-400">{copy.noStops}</p> : null}
+          {view.days.length === 0 ? <p className="text-xs text-stone-500">{copy.noStops}</p> : null}
         </div>
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
         <h2 className="text-sm font-bold text-stone-900">📦 {copy.pool}</h2>
         {view.pool.length === 0 ? (
-          <p className="mt-1 text-xs text-stone-400">{copy.emptyPool}</p>
+          <p className="mt-1 text-xs text-stone-500">{copy.emptyPool}</p>
         ) : (
           <ul className="mt-2 space-y-1">
             {view.pool.map((place) => (
               <li key={place.id} className="flex items-baseline justify-between gap-2 text-sm">
                 <span className="min-w-0 flex-1 truncate text-stone-800">{place.title}</span>
-                {place.area ? <span className="shrink-0 text-xs text-stone-400">{place.area}</span> : null}
+                {place.area ? <span className="shrink-0 text-xs text-stone-500">{place.area}</span> : null}
               </li>
             ))}
           </ul>
@@ -203,7 +203,7 @@ export function TripSnapshotViewer({
             </ul>
           </div>
         ) : (
-          <p className="mt-1 text-xs text-stone-400">{copy.expensesExcluded}</p>
+          <p className="mt-1 text-xs text-stone-500">{copy.expensesExcluded}</p>
         )}
       </section>
     </div>

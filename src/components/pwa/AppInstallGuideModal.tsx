@@ -70,7 +70,7 @@ export function AppInstallGuideModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="rounded-full p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-700"
             aria-label={zh ? '关闭' : 'Close'}
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

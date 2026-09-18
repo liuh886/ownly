@@ -35,11 +35,11 @@ export function AccountsConsole({
 
       <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-stone-200 bg-stone-950 px-3 py-3 text-white">
-          <div className="text-xs font-medium text-stone-300">{t('netWorth')}</div>
+          <div className="text-xs font-medium text-stone-500">{t('netWorth')}</div>
           <div className="mt-2 font-mono text-xl font-semibold tracking-tight">
             {formatMoney(latest?.net_worth, t('noData'))}
           </div>
-          <div className="mt-1 text-xs text-stone-400">{t('latestAccountFact')}</div>
+          <div className="mt-1 text-xs text-stone-500">{t('latestAccountFact')}</div>
         </div>
         <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
           <div className="text-xs font-medium text-stone-500">{t('accountCount')}</div>
@@ -67,7 +67,7 @@ export function AccountsConsole({
       <div className="mt-5 border-t border-stone-100 pt-5">
         <div className="flex items-center justify-between gap-3">
           <h3 className={SECTION_TITLE_CLASS}>{t('accountList')}</h3>
-          <span className="text-xs text-stone-400">
+          <span className="text-xs text-stone-500">
             {latest ? t('snapshotDateLabel').replace('{date}', latest.snapshot_at) : t('notRecordedYet')}
           </span>
         </div>
@@ -77,7 +77,7 @@ export function AccountsConsole({
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className={SECTION_TITLE_CLASS}>{t('assetAccounts')}</h2>
-                <span className="text-xs text-stone-400">{formatMoney(latest.total_assets)}</span>
+                <span className="text-xs text-stone-500">{formatMoney(latest.total_assets)}</span>
               </div>
               <div className="space-y-2">
                 {latest.asset_balances.map((balance) => (
@@ -100,7 +100,7 @@ export function AccountsConsole({
               <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <h2 className={SECTION_TITLE_CLASS}>{t('liabilityAccounts')}</h2>
-                  <span className="text-xs text-stone-400">
+                  <span className="text-xs text-stone-500">
                     {formatMoney(latest.total_liabilities)}
                   </span>
                 </div>

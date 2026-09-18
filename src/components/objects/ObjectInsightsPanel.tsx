@@ -116,7 +116,7 @@ export function ObjectInsightsPanel({
         <div className="flex min-w-0 flex-col">
           <h3 className="text-sm font-semibold text-stone-900">{copy.subscriptions}</h3>
           {groups.length === 0 ? (
-            <p className="mt-1 text-xs text-stone-400">—</p>
+            <p className="mt-1 text-xs text-stone-500">—</p>
           ) : (
             <>
               <div className="mt-2 h-40 space-y-3 overflow-hidden">
@@ -125,13 +125,13 @@ export function ObjectInsightsPanel({
                   const visible = truncated ? group.rows.slice(0, MAX_ROWS - 1) : group.rows;
                   return (
                     <div key={group.currency}>
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">{group.currency}</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{group.currency}</div>
                       <ul className="mt-1 space-y-1">
                         {visible.map((row) => (
                           <li key={row.id} className="flex items-baseline justify-between gap-2 text-xs">
                             <span className="min-w-0 flex-1 truncate text-stone-700">
                               {row.title}
-                              {row.provider ? <span className="text-stone-400"> · {row.provider}</span> : null}
+                              {row.provider ? <span className="text-stone-500"> · {row.provider}</span> : null}
                             </span>
                             <span className="shrink-0 font-medium text-stone-900">
                               {row.annualized !== null
@@ -141,7 +141,7 @@ export function ObjectInsightsPanel({
                           </li>
                         ))}
                         {truncated ? (
-                          <li className="text-xs text-stone-400">
+                          <li className="text-xs text-stone-500">
                             {copy.moreItems.replace('{n}', String(group.rows.length - visible.length))}
                           </li>
                         ) : null}
@@ -166,7 +166,7 @@ export function ObjectInsightsPanel({
         <div className="flex min-w-0 flex-col">
           <h3 className="text-sm font-semibold text-stone-900">{copy.netWorth}</h3>
           {trend.length === 0 ? (
-            <p className="mt-1 text-xs text-stone-400">{copy.noSnapshots}</p>
+            <p className="mt-1 text-xs text-stone-500">{copy.noSnapshots}</p>
           ) : (
             <>
               <div className="mt-2 h-40 overflow-hidden">
@@ -180,7 +180,7 @@ export function ObjectInsightsPanel({
                     </li>
                   ))}
                   {recentTruncated ? (
-                    <li className="text-xs text-stone-400">
+                    <li className="text-xs text-stone-500">
                       {copy.moreItems.replace('{n}', String(recent.length - recentVisible.length))}
                     </li>
                   ) : null}

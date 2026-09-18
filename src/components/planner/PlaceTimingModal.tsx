@@ -280,7 +280,7 @@ export function PlaceTimingModal({
                 <button
                   type="button"
                   onClick={() => { setAnchorType(undefined); setAnchorDirty(true); }}
-                  className="text-[11px] text-stone-400 hover:text-stone-700 transition"
+                  className="text-[11px] text-stone-500 hover:text-stone-700 transition"
                 >
                   {zh ? '↺ 恢复系统自动识别' : '↺ Reset to Auto-detect'}
                 </button>

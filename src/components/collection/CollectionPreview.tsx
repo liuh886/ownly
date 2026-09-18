@@ -71,7 +71,7 @@ export function CollectionPreview({
           {data.collection.place_count} places · {data.exported_at.slice(0, 10)}
           {data.provenance?.creator ? ` · 来自 ${data.provenance.creator}` : ''}
         </p>
-        <p className="mt-1 text-xs text-stone-400">{data.collection.source_url ?? ''}</p>
+        <p className="mt-1 text-xs text-stone-500">{data.collection.source_url ?? ''}</p>
       </header>
 
       <div className="mb-4 flex gap-2">
@@ -102,14 +102,14 @@ export function CollectionPreview({
               </div>
             </div>
             {p.source.url ? (
-              <a href={p.source.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-stone-400 underline">
+              <a href={p.source.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-stone-500 underline">
                 地图
               </a>
             ) : null}
           </li>
         ))}
       </ul>
-      {hasMore ? <p className="mt-3 text-center text-xs text-stone-400">还有 {data.places.length - 20} 个地点未展示，导入后查看全部</p> : null}
+      {hasMore ? <p className="mt-3 text-center text-xs text-stone-500">还有 {data.places.length - 20} 个地点未展示，导入后查看全部</p> : null}
     </div>
   );
 }

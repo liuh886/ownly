@@ -110,7 +110,7 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
         autoCapitalize="off"
         enterKeyHint="search"
         spellCheck={false}
-        className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-stone-400 sm:text-sm"
+        className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-500 focus:border-stone-400 sm:text-sm"
         role="combobox"
         aria-expanded={isOpen}
         aria-controls={listboxId}
@@ -143,7 +143,7 @@ export function CitySearchInput({ onSelect, initialValue, disabled }: CitySearch
             ))}
           </ul>
         ) : (
-          <div className="absolute z-10 mt-1 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-400 shadow-lg">
+          <div className="absolute z-10 mt-1 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-500 shadow-lg">
             {t('citySearchNoResults')}
           </div>
         )

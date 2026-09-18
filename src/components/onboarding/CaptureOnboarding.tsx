@@ -66,7 +66,7 @@ export function CaptureOnboarding({
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-100 text-lg">{s.icon}</span>
               <span className="mt-4 text-sm font-semibold text-stone-950">{s.title}</span>
               <span className="mt-2 text-xs leading-5 text-stone-600">{s.desc}</span>
-              <span className="mt-auto pt-4 text-[11px] text-stone-400">{s.ex}</span>
+              <span className="mt-auto pt-4 text-[11px] text-stone-500">{s.ex}</span>
             </div>
           ))}
         </div>

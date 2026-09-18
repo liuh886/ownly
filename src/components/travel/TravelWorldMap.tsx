@@ -136,7 +136,7 @@ export function TravelWorldMap({
       <div className="wyqd-travel-map mt-5">
         <div className="rounded-lg border border-stone-200 bg-white p-3" role="status" aria-label={t('loading')}>
           <div className="ownly-skeleton h-[320px] rounded-md sm:h-[420px]" aria-hidden="true" />
-          <p className="mt-3 text-center text-xs text-stone-400">{t('loading')}</p>
+          <p className="mt-3 text-center text-xs text-stone-500">{t('loading')}</p>
         </div>
       </div>
     );
@@ -261,7 +261,7 @@ export function TravelWorldMap({
             {fallbackExperiences.map((experience) => (
               <li key={experience.id} className="flex items-center justify-between gap-3">
                 <span className="truncate">{experience.title}</span>
-                <span className="shrink-0 text-stone-400">
+                <span className="shrink-0 text-stone-500">
                   {[experience.location?.city, experience.location?.country].filter(Boolean).join(', ') ||
                     t('travelNoLocation')}
                 </span>

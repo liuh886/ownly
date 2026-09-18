@@ -315,11 +315,11 @@ export function TrustStatusSection({ itemVariants }: { itemVariants: Variants })
           </button>
         );
       case 'export-backup':
-        return <span className="shrink-0 text-[11px] text-stone-400">{copy.hintExport}</span>;
+        return <span className="shrink-0 text-[11px] text-stone-500">{copy.hintExport}</span>;
       case 'validate-backup':
-        return <span className="shrink-0 text-[11px] text-stone-400">{copy.hintValidate}</span>;
+        return <span className="shrink-0 text-[11px] text-stone-500">{copy.hintValidate}</span>;
       case 'install-pwa':
-        return <span className="shrink-0 text-[11px] text-stone-400">{copy.hintInstallPwa}</span>;
+        return <span className="shrink-0 text-[11px] text-stone-500">{copy.hintInstallPwa}</span>;
       default:
         return null;
     }
@@ -373,7 +373,7 @@ export function TrustStatusSection({ itemVariants }: { itemVariants: Variants })
 
       {drill ? (
         <div className={CARD_CLASS}>
-          <p className="text-xs text-stone-400">{copy.drillNote}</p>
+          <p className="text-xs text-stone-500">{copy.drillNote}</p>
           <div className="mt-2 space-y-1.5">
             {drill.steps.map((step) => (
               <div key={step.id} className="flex items-start gap-2 text-xs">

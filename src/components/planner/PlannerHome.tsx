@@ -783,11 +783,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             <div className="inline-flex items-center gap-1.5 rounded-lg bg-stone-100/80 px-2.5 py-1 text-xs font-medium text-stone-600">
               <span>📅</span>
               <span>{selectedTrip.start_date} → {selectedTrip.end_date}</span>
-              <span className="text-stone-400">·</span>
+              <span className="text-stone-500">·</span>
               <span>{tripDates.length}{zh ? '天' : 'd'}</span>
-              <span className="text-stone-400">·</span>
+              <span className="text-stone-500">·</span>
               <span>{tripPlaces.length} {zh ? '地点' : 'places'}</span>
-              <span className="text-stone-400">·</span>
+              <span className="text-stone-500">·</span>
               <span>{tripVisits.length} {zh ? '行程' : 'visits'}</span>
             </div>
           </div>
@@ -834,7 +834,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
       </header>
 
       {notice ? (
-        <div aria-live="polite" className="flex items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 shadow-2xs animate-in fade-in duration-150">
+        <div aria-live="polite" className="flex items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 shadow-2xs ownly-fade-in">
           <span className="min-w-0 flex-1">{notice}</span>
           {noticeAction && noticeAction.text === notice ? (
             <button
@@ -904,7 +904,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             <div className="flex flex-wrap items-center gap-2">
               <div>
                 <h2 className="text-sm font-semibold text-stone-900">{zh ? '执行时间线' : 'Execution Timeline'}</h2>
-                <p className="text-[11px] text-stone-400">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
+                <p className="text-[11px] text-stone-500">{activeDate} · {scheduled.length} {zh ? '个游览点' : 'stops'}</p>
               </div>
               {dayAssessment.status !== 'unknown' ? (
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -1044,12 +1044,12 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
 
 
       {isMapExpanded && selectedTrip ? (
-        <div className="fixed inset-0 z-50 flex flex-col bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex flex-col bg-stone-950/60 p-3 sm:p-6 backdrop-blur-xs ownly-fade-in">
           <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-4 py-3">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="truncate text-sm font-bold text-stone-900">🗺️ {selectedTrip.title} · {zh ? `第${activeDayIndex + 1}天空间地图` : `Day ${activeDayIndex + 1} Spatial Map`}</span>
-                <span className="shrink-0 text-xs text-stone-400">({activeDate})</span>
+                <span className="shrink-0 text-xs text-stone-500">({activeDate})</span>
                 {tripDates.length > 1 ? (
                   <div className="flex min-w-0 items-center gap-1" role="group" aria-label={zh ? '切换天' : 'Switch day'}>
                     <button
@@ -1296,7 +1296,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
               <button
                 type="button"
                 onClick={() => setIsSuspectedModalOpen(false)}
-                className="rounded-full p-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 transition"
+                className="rounded-full p-1.5 text-stone-500 hover:bg-stone-200 hover:text-stone-700 transition"
               >
                 ✕
               </button>
@@ -1325,7 +1325,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                     <button
                       type="button"
                       onClick={() => void handleIgnoreSuspectedPair(pair.pairId)}
-                      className="text-[11px] font-medium text-stone-400 hover:text-stone-600 transition"
+                      className="text-[11px] font-medium text-stone-500 hover:text-stone-600 transition"
                     >
                       {zh ? '不是同类 (忽略)' : 'Ignore (keep separate)'}
                     </button>
@@ -1343,7 +1343,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                             </span>
                           ) : null}
                         </div>
-                        <p className="mt-0.5 text-[11px] text-stone-400 truncate">{pair.primaryPlace.address || pair.primaryPlace.source_category || '—'}</p>
+                        <p className="mt-0.5 text-[11px] text-stone-500 truncate">{pair.primaryPlace.address || pair.primaryPlace.source_category || '—'}</p>
                         <div className="mt-1 flex flex-wrap gap-1">
                           {pair.primaryPlace.observed_rating ? (
                             <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">★ {pair.primaryPlace.observed_rating}</span>
@@ -1373,7 +1373,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                             </span>
                           ) : null}
                         </div>
-                        <p className="mt-0.5 text-[11px] text-stone-400 truncate">{pair.secondaryPlace.address || pair.secondaryPlace.source_category || '—'}</p>
+                        <p className="mt-0.5 text-[11px] text-stone-500 truncate">{pair.secondaryPlace.address || pair.secondaryPlace.source_category || '—'}</p>
                         <div className="mt-1 flex flex-wrap gap-1">
                           {pair.secondaryPlace.observed_rating ? (
                             <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[9.5px] text-stone-600">★ {pair.secondaryPlace.observed_rating}</span>

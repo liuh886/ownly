@@ -32,7 +32,7 @@ export function AccountsTrend({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold tracking-tight text-stone-950">{t('netWorthHistory')}</h2>
-            <p className="mt-1 text-xs text-stone-400">
+            <p className="mt-1 text-xs text-stone-500">
               {t('recentSnapshotsN').replace('{count}', String(trendSnapshots.length))}
             </p>
           </div>
@@ -41,7 +41,7 @@ export function AccountsTrend({
               <div className="text-sm font-semibold text-stone-950">
                 {formatCompactMoney(trendValues[trendValues.length - 1] || 0)}
               </div>
-              <div className="text-xs text-stone-400">{t('latestNetWorth')}</div>
+              <div className="text-xs text-stone-500">{t('latestNetWorth')}</div>
             </div>
           ) : null}
         </div>
@@ -82,7 +82,7 @@ export function AccountsTrend({
                 );
               })}
             </svg>
-            <div className="mt-2 flex items-center justify-between gap-3 text-xs text-stone-400">
+            <div className="mt-2 flex items-center justify-between gap-3 text-xs text-stone-500">
               <span>{trendSnapshots[0]?.snapshot_at}</span>
               <span>{trendSnapshots[trendSnapshots.length - 1]?.snapshot_at}</span>
             </div>
@@ -106,7 +106,7 @@ export function AccountsTrend({
             <div className="text-sm font-semibold text-stone-950">
               {formatMoney(latestFixedCost)}
             </div>
-            <div className="text-xs text-stone-400">{t('monthlyDeduction')}</div>
+            <div className="text-xs text-stone-500">{t('monthlyDeduction')}</div>
           </div>
         </div>
 
@@ -152,7 +152,7 @@ export function AccountsTrend({
                 );
               })}
             </svg>
-            <div className="mt-2 flex justify-between text-[11px] text-stone-400">
+            <div className="mt-2 flex justify-between text-[11px] text-stone-500">
               <span>{trendSnapshots[0]?.snapshot_at}</span>
               <span>{trendSnapshots[trendSnapshots.length - 1]?.snapshot_at}</span>
             </div>

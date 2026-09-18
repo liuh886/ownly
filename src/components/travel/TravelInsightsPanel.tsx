@@ -55,7 +55,7 @@ export function TravelInsightsPanel({
         </div>
         <div className="mt-4 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-4 py-8 text-center">
           <p className="text-sm text-stone-500">{t('travelNoExperiences')}</p>
-          <p className="mt-1 text-xs text-stone-400">{t('travelDiscoveryDesc')}</p>
+          <p className="mt-1 text-xs text-stone-500">{t('travelDiscoveryDesc')}</p>
         </div>
       </section>
     );

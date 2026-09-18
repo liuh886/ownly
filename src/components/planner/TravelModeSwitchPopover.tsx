@@ -73,7 +73,7 @@ export function TravelModeSwitchPopover({
         placement === 'top' ? 'bottom-full mb-1.5 origin-bottom-left' : 'top-full mt-1.5 origin-top-left'
       }`}
     >
-      <div className="px-2 py-0.5 text-[9.5px] font-bold text-stone-400 uppercase tracking-wider">
+      <div className="px-2 py-0.5 text-[9.5px] font-bold text-stone-500 uppercase tracking-wider">
         {zh ? '交通方式与预估' : 'Travel Mode & Estimate'}
       </div>
       {(['driving', 'walking', 'motorcycle', 'bicycling', 'transit'] as PlannerTravelMode[]).map((m) => {
@@ -96,7 +96,7 @@ export function TravelModeSwitchPopover({
               <span>{cfg.emoji}</span>
               <span>{zh ? cfg.labelZh : cfg.labelEn}</span>
             </span>
-            <span className="text-[10px] text-stone-400 font-mono">
+            <span className="text-[10px] text-stone-500 font-mono">
               ~{previewDuration}m {isCurrent ? '✓' : ''}
             </span>
           </button>

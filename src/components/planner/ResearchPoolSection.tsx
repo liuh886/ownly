@@ -129,7 +129,7 @@ function PoolPlaceEditZone({
           onBlur={() => onSaveFields({ observed_price: priceDraft })}
           onKeyDown={(e) => { if (e.key === 'Enter') priceRef.current?.blur(); }}
           placeholder={zh ? '如 350 / ฿350' : 'e.g. 350'}
-          className="min-w-0 flex-1 rounded-md border border-sky-200 bg-white px-1 py-0.5 text-base text-stone-800 placeholder:text-stone-400 sm:text-[11px]"
+          className="min-w-0 flex-1 rounded-md border border-sky-200 bg-white px-1 py-0.5 text-base text-stone-800 placeholder:text-stone-500 sm:text-[11px]"
         />
       </label>
       <label className="flex items-start gap-1.5 text-[11px] text-stone-600">
@@ -141,7 +141,7 @@ function PoolPlaceEditZone({
           onBlur={() => onSaveFields({ why: noteDraft })}
           rows={2}
           placeholder={zh ? '为什么值得去…' : 'Why go…'}
-          className="min-w-0 flex-1 resize-none rounded-md border border-sky-200 bg-white px-1 py-0.5 text-base leading-5 text-stone-800 placeholder:text-stone-400 sm:text-[11px]"
+          className="min-w-0 flex-1 resize-none rounded-md border border-sky-200 bg-white px-1 py-0.5 text-base leading-5 text-stone-800 placeholder:text-stone-500 sm:text-[11px]"
         />
       </label>
     </div>
@@ -228,7 +228,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
               </span>
             ) : null}
           </div>
-          <p className="hidden lg:block text-xs text-stone-400">
+          <p className="hidden lg:block text-xs text-stone-500">
             {zh ? '所有候选地点，可直接排入当天或拖拽至日程（排入后仍保留在池中）' : 'All candidates. Schedule to day or drag. Places stay in pool after scheduling.'}
           </p>
         </div>
@@ -241,13 +241,13 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
               value={poolSearch}
               onChange={(e) => setPoolSearch(e.target.value)}
               placeholder={zh ? '🔍 搜索候选地点、区域或标签...' : '🔍 Search candidates, areas, tags...'}
-              className="w-44 sm:w-60 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:outline-hidden"
+              className="w-44 sm:w-60 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs text-stone-900 placeholder:text-stone-500 focus:border-stone-400 focus:outline-hidden"
             />
             {poolSearch ? (
               <button
                 type="button"
                 onClick={() => setPoolSearch('')}
-                className="absolute right-2 top-1.5 text-xs text-stone-400 hover:text-stone-700"
+                className="absolute right-2 top-1.5 text-xs text-stone-500 hover:text-stone-700"
               >
                 ✕
               </button>
@@ -353,7 +353,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                 {activeFilter === 'dropped'
                   ? (zh ? '暂不考虑' : 'Shelved')
                   : (zh ? '待安排地点' : 'Pending Scheduling')}
-                <span className="ml-1.5 text-[11px] font-normal text-stone-400">
+                <span className="ml-1.5 text-[11px] font-normal text-stone-500">
                   ({sortedPendingCandidates.length})
                 </span>
               </h3>
@@ -432,7 +432,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
             </div>
 
             {isMultiSelectMode && activeFilter !== 'dropped' ? (
-              <div className="sticky top-2 z-20 mb-4 flex items-center justify-between flex-wrap gap-3 rounded-2xl border border-stone-800 bg-stone-950/95 px-4 py-2.5 text-white shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+              <div className="sticky top-2 z-20 mb-4 flex items-center justify-between flex-wrap gap-3 rounded-2xl border border-stone-800 bg-stone-950/95 px-4 py-2.5 text-white shadow-xl backdrop-blur-md ownly-drop-in">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-bold text-emerald-400">
                     ✓ {zh ? `已选 ${selectedCandidateIds.size} 项` : `${selectedCandidateIds.size} selected`}
@@ -493,7 +493,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                       setIsMultiSelectMode(false);
                       setSelectedCandidateIds(new Set());
                     }}
-                    className="rounded-lg border border-stone-700 bg-stone-900 px-2 py-1.5 text-xs text-stone-400 hover:text-white transition"
+                    className="rounded-lg border border-stone-700 bg-stone-900 px-2 py-1.5 text-xs text-stone-500 hover:text-white transition"
                     title={zh ? '退出多选' : 'Exit Select'}
                   >
                     ✕
@@ -503,7 +503,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
             ) : null}
 
             {sortedPendingCandidates.length === 0 ? (
-              <div className="py-12 text-center text-xs text-stone-400">
+              <div className="py-12 text-center text-xs text-stone-500">
                 <p className="text-3xl mb-2">📭</p>
                 <p className="font-medium text-stone-600">
                   {pendingCandidates.length === 0
@@ -570,7 +570,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                       </div>
 
                       {/* Meta Line */}
-                      <p className="mt-0.5 truncate text-[11px] text-stone-400">{placeMeta(place, language)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-stone-500">{placeMeta(place, language)}</p>
 
                       {/* Edit zone (edit mode only): kind + price + note in one compact box */}
                       {isEditMode ? (
@@ -728,7 +728,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
                                 e.stopPropagation();
                                 void handleDropPlace(place.id);
                               }}
-                              className="flex h-6 w-6 items-center justify-center rounded-md border border-stone-200 bg-stone-50 text-xs text-stone-400 hover:text-stone-700 hover:border-stone-300 transition shadow-2xs"
+                              className="flex h-6 w-6 items-center justify-center rounded-md border border-stone-200 bg-stone-50 text-xs text-stone-500 hover:text-stone-700 hover:border-stone-300 transition shadow-2xs"
                               title={zh ? '暂不考虑' : 'Shelve'}
                             >
                               🙈

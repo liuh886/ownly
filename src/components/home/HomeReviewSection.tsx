@@ -38,7 +38,7 @@ export function HomeReviewSection({
         <div className={CARD_CLASS}>
           <div className="text-xs font-medium text-stone-500">{t('todayActions')}</div>
           <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-stone-950">{actionCount}</div>
-          <div className="mt-0.5 text-[11px] text-stone-400">{t('todayActionsDesc')}</div>
+          <div className="mt-0.5 text-[11px] text-stone-500">{t('todayActionsDesc')}</div>
         </div>
         <div className={CARD_CLASS}>
           <div className="text-xs font-medium text-stone-500">{t('pendingReviews')}</div>

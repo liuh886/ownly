@@ -178,7 +178,7 @@ export function AppShell() {
               <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
               <div className="ownly-skeleton hidden h-24 rounded-xl sm:block" aria-hidden="true" />
             </div>
-            <p className="mt-4 text-center text-xs text-stone-400">{t('loading')}</p>
+            <p className="mt-4 text-center text-xs text-stone-500">{t('loading')}</p>
           </div>
         ) : null}
 
@@ -217,7 +217,7 @@ export function AppShell() {
         )}
 
         <footer className="mt-6 pb-2 text-center">
-          <span className="text-[10px] text-stone-300">
+          <span className="text-[10px] text-stone-500">
             Ownly v{runtimeInfo.coreTargetVersion} · {runtimeTarget} · {runtimeCapabilities.dataBehaviorContract} · {runtimeInfo.gitSha}
           </span>
         </footer>

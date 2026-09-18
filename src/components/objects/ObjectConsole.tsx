@@ -96,7 +96,7 @@ export function ObjectConsole({
             <div className={MUTED_TEXT_CLASS}>{t('dailyCostAvg')}（{ownedPhysicalObjectsCount}）</div>
             <div className="mt-1 font-mono text-2xl font-semibold tracking-tight text-stone-950">
               {formatMoney(averageDailyCost)}
-              <span className="ml-1 text-xs font-medium text-stone-400">{t('perDay')}</span>
+              <span className="ml-1 text-xs font-medium text-stone-500">{t('perDay')}</span>
             </div>
           </div>
           <div>
@@ -166,7 +166,7 @@ export function ObjectConsole({
                 applyControlBucket(null);
               }}
               placeholder={t('searchByNameCategoryStatus')}
-              className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
+              className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
             />
           </label>
           <label className="shrink-0">

@@ -488,7 +488,7 @@ export function CreateTripModal({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={zh ? '例如：Thailand 2026 曼谷普吉' : 'e.g. Thailand 2026'}
-                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden sm:text-sm"
+                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                 />
               </div>
 
@@ -534,7 +534,7 @@ export function CreateTripModal({
                   value={destinations}
                   onChange={(e) => setDestinations(e.target.value)}
                   placeholder={zh ? '例如：Bangkok, Chiang Mai, Pattaya' : 'e.g. Tokyo, Kyoto, Osaka'}
-                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden sm:text-sm"
+                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                 />
               </div>
 
@@ -639,7 +639,7 @@ export function CreateTripModal({
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
                   placeholder={zh ? '例如：度假, 美食打卡' : 'e.g. vacation, food'}
-                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-400 focus:border-stone-950 focus:outline-hidden sm:text-sm"
+                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 focus:border-stone-950 focus:outline-hidden sm:text-sm"
                 />
               </div>
 
@@ -673,7 +673,7 @@ export function CreateTripModal({
                     <button
                       type="button"
                       onClick={dismissShare}
-                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-400 hover:bg-sky-100 hover:text-stone-600"
+                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-500 hover:bg-sky-100 hover:text-stone-600"
                     >
                       {zh ? '忽略链接' : 'Dismiss'}
                     </button>

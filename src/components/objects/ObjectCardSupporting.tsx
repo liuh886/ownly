@@ -211,7 +211,7 @@ export function ObjectCardSupporting({
 
             <div className="flex shrink-0 items-center gap-4 text-right">
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-stone-400">{visual.amountLabel}</div>
+                <div className="text-[10px] uppercase tracking-wider text-stone-500">{visual.amountLabel}</div>
                 <div className="mt-0.5 font-mono text-[13px] font-medium text-stone-900">
                   {formatMoney(getPrimaryAmount(object))}
                 </div>

@@ -88,7 +88,7 @@ export function PlannerDoctorSection({ itemVariants }: { itemVariants?: Variants
                   <span className="text-stone-600">[{iss.category}] {iss.message}</span>
                 </div>
               ))}
-              {report.issues.length > 20 ? <div className="text-xs text-stone-400">…还有 {report.issues.length - 20} 项</div> : null}
+              {report.issues.length > 20 ? <div className="text-xs text-stone-500">…还有 {report.issues.length - 20} 项</div> : null}
             </div>
           ) : null}
         </div>
