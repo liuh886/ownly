@@ -866,23 +866,38 @@ export function PlannerMap({
   const startTileY = Math.floor((centerY - containerSize.height / 2) / tileSize) - 1;
   const endTileY = Math.floor((centerY + containerSize.height / 2) / tileSize) + 1;
 
-  const tiles = [];
-  for (let tx = startTileX; tx <= endTileX; tx++) {
-    for (let ty = startTileY; ty <= endTileY; ty++) {
-      const wrappedX = ((tx % numTiles) + numTiles) % numTiles;
-      if (ty >= 0 && ty < numTiles) {
-        const left = tx * tileSize - (centerX - containerSize.width / 2);
-        const top = ty * tileSize - (centerY - containerSize.height / 2);
-        tiles.push({
-          key: `${intZoom}/${wrappedX}/${ty}`,
-          x: wrappedX,
-          y: ty,
-          left,
-          top,
-        });
+  const tiles = useMemo(() => {
+    const result: Array<{ key: string; x: number; y: number; left: number; top: number }> = [];
+    for (let tx = startTileX; tx <= endTileX; tx++) {
+      for (let ty = startTileY; ty <= endTileY; ty++) {
+        const wrappedX = ((tx % numTiles) + numTiles) % numTiles;
+        if (ty >= 0 && ty < numTiles) {
+          const left = tx * tileSize - (centerX - containerSize.width / 2);
+          const top = ty * tileSize - (centerY - containerSize.height / 2);
+          result.push({
+            key: `${intZoom}/${wrappedX}/${ty}`,
+            x: wrappedX,
+            y: ty,
+            left,
+            top,
+          });
+        }
       }
     }
-  }
+    return result;
+  }, [
+    centerX,
+    centerY,
+    containerSize.height,
+    containerSize.width,
+    endTileX,
+    endTileY,
+    intZoom,
+    numTiles,
+    startTileX,
+    startTileY,
+    tileSize,
+  ]);
 
   // Layer-resolved display points: active-day base always, other days with
   // the routes layer, candidates with the pool layer.

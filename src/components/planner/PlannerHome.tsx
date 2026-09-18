@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { type PlannerScheduledPlace } from '@/domain/planner-visits';
 import {
   buildGoogleMapsRouteUrl,
@@ -11,26 +12,53 @@ import type { PlannerTimelineStopItem } from '@/domain/planner-schedule';
 import type { PlannerDayOptimizationComputation } from '@/domain/planner-optimization';
 import { AppInstallGuideModal } from '@/components/pwa/AppInstallGuideModal';
 import { PlannerMap } from './PlannerMap';
-import { HotelComparisonModal } from './HotelComparisonModal';
-import { ImportCandidatesModal } from './ImportCandidatesModal';
-import { PlaceTimingModal } from './PlaceTimingModal';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { formatDay } from './planner-home-shared';
-import { CreateTripModal } from './CreateTripModal';
 import { PlannerDateNav } from './PlannerDateNav';
 import { PlannerDayTimeline } from './PlannerDayTimeline';
 import { PlannerRightPanel } from './PlannerRightPanel';
 import { ResearchPoolSection } from './ResearchPoolSection';
-import { SwapDaysModal } from './SwapDaysModal';
 import { useEscapeKey } from './use-escape-key';
 import { extractTripSharePayload } from '@/domain/trip-share-link';
-import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
-import { TripReviewModal } from './TripReviewModal';
 import { isTripReviewable, type TripReviewDraft } from '@/domain/trip-review';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
-import { OptimizeOrderModal } from './OptimizeOrderModal';
 import { DayRiskSummary } from './PlannerDayStatsPanel';
 import { usePlannerController } from './usePlannerController';
+
+/** Modal bodies split out so they download only when first opened. */
+const modalLoading = () => <div className="ownly-skeleton h-64 rounded-xl" aria-hidden="true" />;
+const HotelComparisonModal = dynamic(
+  () => import('./HotelComparisonModal').then((mod) => mod.HotelComparisonModal),
+  { loading: modalLoading },
+);
+const ImportCandidatesModal = dynamic(
+  () => import('./ImportCandidatesModal').then((mod) => mod.ImportCandidatesModal),
+  { loading: modalLoading },
+);
+const PlaceTimingModal = dynamic(
+  () => import('./PlaceTimingModal').then((mod) => mod.PlaceTimingModal),
+  { loading: modalLoading },
+);
+const CreateTripModal = dynamic(
+  () => import('./CreateTripModal').then((mod) => mod.CreateTripModal),
+  { loading: modalLoading },
+);
+const SwapDaysModal = dynamic(
+  () => import('./SwapDaysModal').then((mod) => mod.SwapDaysModal),
+  { loading: modalLoading },
+);
+const CalendarSubscriptionModal = dynamic(
+  () => import('./CalendarSubscriptionModal').then((mod) => mod.CalendarSubscriptionModal),
+  { loading: modalLoading },
+);
+const TripReviewModal = dynamic(
+  () => import('./TripReviewModal').then((mod) => mod.TripReviewModal),
+  { loading: modalLoading },
+);
+const OptimizeOrderModal = dynamic(
+  () => import('./OptimizeOrderModal').then((mod) => mod.OptimizeOrderModal),
+  { loading: modalLoading },
+);
 
 interface PlannerHomeProps {
   disabled: boolean;
@@ -1140,18 +1168,19 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         <ResearchPoolSection {...poolSectionProps} />
       )}
 
-      <ImportCandidatesModal
-        key={`import-${selectedTrip.id}-${isImportModalOpen}`}
-        open={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        tripId={selectedTrip.id}
-        tripTitle={selectedTrip.title}
-        onImportSuccess={(count) => {
-          void load();
-          setNotice(zh ? `成功导入 ${count} 个候选地点！` : `Successfully imported ${count} places!`);
-        }}
-        language={language}
-      />
+      {isImportModalOpen ? (
+        <ImportCandidatesModal
+          open
+          onClose={() => setIsImportModalOpen(false)}
+          tripId={selectedTrip.id}
+          tripTitle={selectedTrip.title}
+          onImportSuccess={(count) => {
+            void load();
+            setNotice(zh ? `成功导入 ${count} 个候选地点！` : `Successfully imported ${count} places!`);
+          }}
+          language={language}
+        />
+      ) : null}
 
       {optimizeComputation ? (
         <OptimizeOrderModal
@@ -1174,43 +1203,44 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         />
       ) : null}
 
-      <HotelComparisonModal
-        key={`hotel-cmp-${activeDate}-${isHotelModalOpen}`}
-        open={isHotelModalOpen}
-        onClose={() => setIsHotelModalOpen(false)}
-        candidateHotels={candidateHotels}
-        scheduledPlaces={scheduled}
-        placesByDate={placesByDate}
-        tripDates={tripDates}
-        activeDate={activeDate}
-        activeDayIndex={activeDayIndex}
-        onSelectHotelForStaySpan={handleSelectHotelForStaySpan}
-        onDropHotel={handleDropPlace}
-        destinations={selectedTrip?.destinations}
-        tripCurrency={selectedTrip?.currency || 'CNY'}
-        fxRates={selectedTrip?.fx_rates}
-        language={language}
-      />
+      {isHotelModalOpen ? (
+        <HotelComparisonModal
+          open
+          onClose={() => setIsHotelModalOpen(false)}
+          candidateHotels={candidateHotels}
+          scheduledPlaces={scheduled}
+          placesByDate={placesByDate}
+          tripDates={tripDates}
+          activeDate={activeDate}
+          activeDayIndex={activeDayIndex}
+          onSelectHotelForStaySpan={handleSelectHotelForStaySpan}
+          onDropHotel={handleDropPlace}
+          destinations={selectedTrip?.destinations}
+          tripCurrency={selectedTrip?.currency || 'CNY'}
+          fxRates={selectedTrip?.fx_rates}
+          language={language}
+        />
+      ) : null}
 
-      <PlaceTimingModal
-        key={`timing-${timingModalPlace?.id}-${timingModalPlace?.scheduled_start}-${timingModalPlace?.duration_minutes}`}
-        open={Boolean(timingModalPlace)}
-        place={timingModalPlace}
-        dayOtherPlaces={scheduled.filter((p) => p.id !== timingModalPlace?.id)}
-        inferredStartTime={(() => {
-          if (!timingModalPlace) return undefined;
-          // visit_id-first: the same place twice a day must not borrow the
-          // other occurrence's inference.
-          const stop = dayTimeline.items.find(
-            (item): item is PlannerTimelineStopItem =>
-              item.type === 'stop' && (item.visit_id === timingModalPlace.visit_id || item.id === `stop:${timingModalPlace.id}`),
-          );
-          return stop?.inferred_start || (stop?.is_inferred_start ? stop.start : undefined);
-        })()}
-        onClose={() => setTimingModalPlace(null)}
-        onSave={handleSavePlaceTiming}
-        language={language}
-      />
+      {timingModalPlace ? (
+        <PlaceTimingModal
+          open
+          place={timingModalPlace}
+          dayOtherPlaces={scheduled.filter((p) => p.id !== timingModalPlace.id)}
+          inferredStartTime={(() => {
+            // visit_id-first: the same place twice a day must not borrow the
+            // other occurrence's inference.
+            const stop = dayTimeline.items.find(
+              (item): item is PlannerTimelineStopItem =>
+                item.type === 'stop' && (item.visit_id === timingModalPlace.visit_id || item.id === `stop:${timingModalPlace.id}`),
+            );
+            return stop?.inferred_start || (stop?.is_inferred_start ? stop.start : undefined);
+          })()}
+          onClose={() => setTimingModalPlace(null)}
+          onSave={handleSavePlaceTiming}
+          language={language}
+        />
+      ) : null}
 
       <AppInstallGuideModal
         open={guideOpen}
@@ -1218,31 +1248,31 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         defaultTab="extension"
       />
 
-      <CreateTripModal
-        key={isCreateTripOpen ? 'open' : 'closed'}
-        open={isCreateTripOpen}
-        onClose={() => {
-          setIsCreateTripOpen(false);
-          setTimezoneEditTripId(null);
-        }}
-        trips={trips}
-        onCreate={handleUpsertTrip}
-        onImported={(tripId) => {
-          void load();
-          setSelectedTripId(tripId);
-        }}
-        onDeleteTrip={handleDeleteTrip}
-        language={language}
-        disabled={disabled}
-        incomingShareHash={shareHash}
-        onDismissShare={() => setShareHash(null)}
-        initialEditTripId={timezoneEditTripId}
-      />
+      {isCreateTripOpen ? (
+        <CreateTripModal
+          open
+          onClose={() => {
+            setIsCreateTripOpen(false);
+            setTimezoneEditTripId(null);
+          }}
+          trips={trips}
+          onCreate={handleUpsertTrip}
+          onImported={(tripId) => {
+            void load();
+            setSelectedTripId(tripId);
+          }}
+          onDeleteTrip={handleDeleteTrip}
+          language={language}
+          disabled={disabled}
+          incomingShareHash={shareHash}
+          onDismissShare={() => setShareHash(null)}
+          initialEditTripId={timezoneEditTripId}
+        />
+      ) : null}
 
-      {selectedTrip ? (
+      {selectedTrip && isCalendarModalOpen ? (
         <CalendarSubscriptionModal
-          key={`calendar-account-${accountFeed?.feed_token ?? 'none'}-${accountFeed?.enabled ?? false}-${isCalendarModalOpen}`}
-          open={isCalendarModalOpen}
+          open
           onClose={() => setIsCalendarModalOpen(false)}
           tripCount={trips.length}
           trips={trips.map((trip) => ({ id: trip.id, title: trip.title, timezone: trip.timezone }))}
@@ -1412,18 +1442,20 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         </div>
       ) : null}
 
-      <SwapDaysModal
-        isSwapDaysModalOpen={isSwapDaysModalOpen}
-        setIsSwapDaysModalOpen={setIsSwapDaysModalOpen}
-        tripDates={tripDates}
-        activeDate={activeDate}
-        placesByDate={placesByDate}
-        swapTargetDate={swapTargetDate}
-        setSwapTargetDate={setSwapTargetDate}
-        handleSwapDays={handleSwapDays}
-        zh={zh}
-        language={language}
-      />
+      {isSwapDaysModalOpen ? (
+        <SwapDaysModal
+          isSwapDaysModalOpen
+          setIsSwapDaysModalOpen={setIsSwapDaysModalOpen}
+          tripDates={tripDates}
+          activeDate={activeDate}
+          placesByDate={placesByDate}
+          swapTargetDate={swapTargetDate}
+          setSwapTargetDate={setSwapTargetDate}
+          handleSwapDays={handleSwapDays}
+          zh={zh}
+          language={language}
+        />
+      ) : null}
     </section>
   );
 }

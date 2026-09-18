@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useI18n } from '@/core/i18n-context';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
@@ -10,8 +11,13 @@ import type { WYQDStoredEntity } from '@/core/repository';
 import type { WYQDMembershipState } from '@/core/membership';
 import { parseScore, todayISO } from '@/lib/format';
 import { useFormatMoney } from '@/lib/use-format';
-import { TravelInsightsPanel } from '@/components/travel/TravelInsightsPanel';
 import { FIELD_CLASS, CARD_CLASS } from '@/lib/ui-constants';
+
+/** Travel insights (world map + d3/topojson) load only when the section opens. */
+const TravelInsightsPanel = dynamic(
+  () => import('@/components/travel/TravelInsightsPanel').then((mod) => mod.TravelInsightsPanel),
+  { loading: () => <div className="ownly-skeleton h-40 rounded-xl" aria-hidden="true" /> },
+);
 
 function getExperienceAmount(object: WYQDObject): number {
   if (object.object_type !== 'one_time_experience') return 0;
@@ -283,6 +289,7 @@ export function ReviewHome({
 }) {
   const { t } = useI18n();
   const { formatMoney } = useFormatMoney();
+  const [travelInsightsOpen, setTravelInsightsOpen] = useState(false);
   const [summary, setSummary] = useState('');
   const [foodScore, setFoodScore] = useState('');
   const [sceneryScore, setSceneryScore] = useState('');
@@ -692,19 +699,24 @@ export function ReviewHome({
         </div>
       </details>
 
-      {/* Travel Insights — collapsed by default */}
-      <details className="group rounded-xl border border-stone-200 bg-white">
-        <summary className="cursor-pointer p-5 text-sm font-semibold text-stone-700 hover:text-stone-950 select-none">
+      {/* Travel Insights — collapsed by default; panel mounts on first open */}
+      <details
+        className="group rounded-xl border border-line bg-surface"
+        onToggle={(event) => setTravelInsightsOpen(event.currentTarget.open)}
+      >
+        <summary className="cursor-pointer p-5 text-sm font-semibold text-ink-secondary hover:text-ink select-none">
           {t('travelDiscoveryTitle')}
         </summary>
         <div className="px-5 pb-5">
-          <TravelInsightsPanel
-            objects={objects}
-            reviews={reviews.map((r) => r.entity)}
-            membership={membership}
-            onSelectReview={(id) => { const rev = reviews.find((r) => r.entity.id === id); if (rev) selectReview(rev.fileName); }}
-            onSelectExperience={(expId) => { const exp = objects.find((o) => o.id === expId); if (exp) startExperienceReview(exp); }}
-          />
+          {travelInsightsOpen ? (
+            <TravelInsightsPanel
+              objects={objects}
+              reviews={reviews.map((r) => r.entity)}
+              membership={membership}
+              onSelectReview={(id) => { const rev = reviews.find((r) => r.entity.id === id); if (rev) selectReview(rev.fileName); }}
+              onSelectExperience={(expId) => { const exp = objects.find((o) => o.id === expId); if (exp) startExperienceReview(exp); }}
+            />
+          ) : null}
         </div>
       </details>
 

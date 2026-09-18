@@ -22,7 +22,7 @@
     "validate:shared": "npm test && npm run validate:runtime-parity && npm run test:e2e:data && npm run test:cli && npm run test:mcp && npm run test:planner && npm run test:onboarding && npm run test:portability && npm run test:runtime-parity",
     "validate:web": "npm run build && npm run validate:pages",
     "validate": "npm run validate:fast && npm run validate:shared && npm run validate:web && npm run validate:obsidian && npm run validate:extension",
-    "validate:pages": "node scripts/validate-static-export.mjs && node scripts/validate-pwa.mjs && vitest run src/services/ownly-data-layout.test.ts",
+    "validate:pages": "node scripts/validate-static-export.mjs && node scripts/validate-pwa.mjs && node scripts/validate-bundle-size.mjs && vitest run src/services/ownly-data-layout.test.ts",
     "validate:pwa": "node scripts/validate-pwa.mjs",
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
     "smoke:web": "python tests/smoke/web_smoke.py",

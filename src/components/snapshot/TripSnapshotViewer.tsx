@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { PlannerMap } from '@/components/planner/PlannerMap';
+import dynamic from 'next/dynamic';
 import { listTripDates } from '@/domain/planner';
 import { materializePlannerScheduledPlaces } from '@/domain/planner-visits';
 import {
@@ -15,6 +15,16 @@ import {
 // no repository, no workspace context, and no planner actions. The map's
 // mutation callbacks below are dead ends by construction — there is no store
 // reachable from this tree. A static test pins the import boundary.
+
+/** Map tiles + projection code load only after a snapshot is opened. */
+const PlannerMap = dynamic(
+  () => import('@/components/planner/PlannerMap').then((mod) => mod.PlannerMap),
+  {
+    loading: () => (
+      <div className="ownly-skeleton h-72 rounded-xl" aria-hidden="true" />
+    ),
+  },
+);
 
 const COPY = {
   en: {
