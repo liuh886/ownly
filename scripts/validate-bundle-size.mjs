@@ -43,10 +43,27 @@ function assetPathsFromHtml(html) {
   return [...paths];
 }
 
+/**
+ * Resolve an HTML-referenced asset to a path inside out/. Handles `basePath`
+ * deployments (e.g. OWNLY_BASE_PATH=/ownly) by progressively dropping leading
+ * path segments until the file exists.
+ */
+function resolveAsset(relPath) {
+  const candidates = [relPath];
+  const segments = relPath.split('/').filter(Boolean);
+  for (let i = 1; i < segments.length; i += 1) {
+    candidates.push(segments.slice(i).join('/'));
+  }
+  for (const candidate of candidates) {
+    if (existsSync(join(outDir, candidate))) return candidate;
+  }
+  return null;
+}
+
 function gzipSize(relPath) {
-  const abs = join(outDir, relPath);
-  if (!existsSync(abs)) return null;
-  return gzipSync(readFileSync(abs)).length;
+  const resolved = resolveAsset(relPath);
+  if (resolved === null) return null;
+  return gzipSync(readFileSync(join(outDir, resolved))).length;
 }
 
 let failed = false;
