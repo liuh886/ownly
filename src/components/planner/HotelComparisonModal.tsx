@@ -75,7 +75,9 @@ export function HotelComparisonModal({
   const [selectedCity, setSelectedCity] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<HotelSortOption>('proximity');
-  const [viewMode, setViewMode] = useState<HotelViewMode>('table');
+  const [viewMode, setViewMode] = useState<HotelViewMode>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'cards' : 'table',
+  );
 
   // Derive target stay dates
   const targetStayDates = useMemo(() => {
@@ -216,7 +218,7 @@ export function HotelComparisonModal({
                 <button
                   type="button"
                   onClick={() => setViewMode('table')}
-                  className={`rounded-md px-2.5 py-1 font-semibold transition ${
+                  className={`hidden min-h-9 touch-manipulation rounded-md px-2.5 py-1 font-semibold transition duration-150 active:scale-[0.97] sm:block ${
                     viewMode === 'table' ? 'bg-stone-900 text-white shadow-xs' : 'text-stone-600 hover:text-stone-900'
                   }`}
                 >
@@ -225,7 +227,7 @@ export function HotelComparisonModal({
                 <button
                   type="button"
                   onClick={() => setViewMode('cards')}
-                  className={`rounded-md px-2.5 py-1 font-semibold transition ${
+                  className={`min-h-9 touch-manipulation rounded-md px-2.5 py-1 font-semibold transition duration-150 active:scale-[0.97] ${
                     viewMode === 'cards' ? 'bg-stone-900 text-white shadow-xs' : 'text-stone-600 hover:text-stone-900'
                   }`}
                 >
@@ -367,7 +369,7 @@ export function HotelComparisonModal({
               <button
                 type="button"
                 onClick={() => setSelectedCity('ALL')}
-                className={`rounded-full px-3 py-0.5 text-xs font-medium transition ${
+                className={`min-h-8 touch-manipulation rounded-full px-3 py-0.5 text-xs font-medium transition duration-150 active:scale-[0.97] ${
                   selectedCity === 'ALL'
                     ? 'bg-emerald-700 text-white shadow-xs'
                     : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
@@ -383,7 +385,7 @@ export function HotelComparisonModal({
                     key={city}
                     type="button"
                     onClick={() => setSelectedCity(city)}
-                    className={`rounded-full px-3 py-0.5 text-xs font-medium transition ${
+                    className={`min-h-8 touch-manipulation rounded-full px-3 py-0.5 text-xs font-medium transition duration-150 active:scale-[0.97] ${
                       isSelected
                         ? 'bg-emerald-700 text-white shadow-xs'
                         : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
@@ -402,12 +404,12 @@ export function HotelComparisonModal({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={zh ? '🔍 搜索酒店、区域或亮点…' : '🔍 Search hotel/highlights…'}
-                className="h-7 w-44 sm:w-56 rounded-lg border border-stone-200 bg-white px-2.5 text-xs text-stone-800 placeholder-stone-400 focus:border-emerald-500 focus:outline-none"
+                className="h-11 w-44 touch-manipulation rounded-lg border border-stone-200 bg-white px-2.5 text-base text-stone-800 placeholder-stone-400 focus:border-emerald-500 focus:outline-none sm:h-7 sm:w-56 sm:text-xs"
               />
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as HotelSortOption)}
-                className="h-7 rounded-lg border border-stone-200 bg-white px-2 text-xs font-medium text-stone-700 focus:border-emerald-500 focus:outline-none"
+                className="h-11 touch-manipulation rounded-lg border border-stone-200 bg-white px-2 text-base font-medium text-stone-700 focus:border-emerald-500 focus:outline-none sm:h-7 sm:text-xs"
               >
                 <option value="proximity">🎯 {zh ? '顺路通勤优先' : 'Closest First'}</option>
                 <option value="price">💰 {zh ? '价格从低到高' : 'Price: Low to High'}</option>

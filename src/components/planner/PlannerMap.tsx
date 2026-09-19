@@ -1330,7 +1330,7 @@ export function PlannerMap({
                       openList();
                     }
                   }}
-                  className={`absolute z-30 flex ${compact ? 'h-5 min-w-5 px-0.5 text-[10px]' : 'h-7 min-w-7 text-[11px]'} -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full font-black text-white shadow-md transition hover:scale-110 ${anyScheduled ? 'bg-emerald-700 ring-2 ring-emerald-300' : 'bg-stone-800 ring-2 ring-white'} ${lit || isOpen ? 'outline-2 outline-amber-400' : ''}`}
+                  className={`absolute z-30 flex touch-manipulation ${compact ? 'h-5 min-w-5 px-0.5 text-[10px]' : 'h-7 min-w-7 text-[11px]'} -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full font-black text-white shadow-md transition hover:scale-110 ${anyScheduled ? 'bg-emerald-700 ring-2 ring-emerald-300' : 'bg-stone-800 ring-2 ring-white'} ${lit || isOpen ? 'outline-2 outline-amber-400' : ''}`}
                   style={{ left: `${x}px`, top: `${y}px` }}
                 >
                   {items.length}

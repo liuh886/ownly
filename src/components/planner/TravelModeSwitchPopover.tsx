@@ -86,7 +86,7 @@ export function TravelModeSwitchPopover({
             key={m}
             type="button"
             onClick={() => onSelectMode(m)}
-            className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-[11px] text-left transition ${
+            className={`flex min-h-11 touch-manipulation items-center justify-between rounded-lg px-2 py-1.5 text-xs text-left transition duration-150 active:scale-[0.99] sm:text-[11px] ${
               isCurrent
                 ? 'bg-sky-50 font-bold text-sky-900 ring-1 ring-sky-300/60'
                 : 'text-stone-700 hover:bg-stone-50 hover:text-stone-900'
@@ -107,7 +107,7 @@ export function TravelModeSwitchPopover({
         <button
           type="button"
           onClick={onClearEstimate}
-          className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-left transition ${
+          className={`flex min-h-11 touch-manipulation items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs text-left transition duration-150 active:scale-[0.99] sm:text-[11px] ${
             isCleared
               ? 'bg-stone-100 font-bold text-stone-900 ring-1 ring-stone-300'
               : 'text-stone-600 hover:bg-rose-50 hover:text-rose-700'
@@ -121,7 +121,7 @@ export function TravelModeSwitchPopover({
         <button
           type="button"
           onClick={onRecalculateEstimate}
-          className="flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-stone-600 transition hover:bg-sky-50 hover:text-sky-800"
+          className="flex min-h-11 touch-manipulation items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs text-stone-600 transition duration-150 active:scale-[0.99] hover:bg-sky-50 hover:text-sky-800 sm:text-[11px]"
           title={zh ? '按行程默认交通方式重新计算本段' : 'Recalculate this leg with the trip default mode'}
         >
           <span>↻</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { BottomNav, type AppTab } from './BottomNav';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { createWYQDRuntimeInfo } from '@/core/runtime';
@@ -26,22 +26,25 @@ import {
 } from '@/components/onboarding/FirstObjectOnboarding';
 import { AgentMcpGuide } from '@/components/agent/AgentMcpGuide';
 
+function subscribeOnlineStatus(notify: () => void): () => void {
+  window.addEventListener('online', notify);
+  window.addEventListener('offline', notify);
+  return () => {
+    window.removeEventListener('online', notify);
+    window.removeEventListener('offline', notify);
+  };
+}
+
 export function AppShell() {
   const { t, language } = useI18n();
-  const [isOffline, setIsOffline] = useState(
-    () => typeof navigator !== 'undefined' && !navigator.onLine,
+  // Server snapshot is online so prerender and hydration match; the true
+  // status is read from navigator right after hydration.
+  const isOnline = useSyncExternalStore(
+    subscribeOnlineStatus,
+    () => navigator.onLine,
+    () => true,
   );
-
-  useEffect(() => {
-    const goOffline = () => setIsOffline(true);
-    const goOnline = () => setIsOffline(false);
-    window.addEventListener('offline', goOffline);
-    window.addEventListener('online', goOnline);
-    return () => {
-      window.removeEventListener('offline', goOffline);
-      window.removeEventListener('online', goOnline);
-    };
-  }, []);
+  const isOffline = !isOnline;
   const {
     runtimeTarget,
     isConnected,
