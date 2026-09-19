@@ -26,6 +26,7 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -65,4 +66,5 @@ jobs:
         run: node scripts/enforce-production-audit.mjs npm-audit-full.json "Full dependency"
 
       - name: Enforce production dependency gate
+        if: github.event_name != 'schedule'
         run: node scripts/enforce-production-audit.mjs npm-audit-production.json "Production dependency"
