@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
+import { dialogBackdropProps } from '@/components/common/use-dialog-dismiss';
 import type { PlannerTripPlace } from '@/domain/planner';
 import { getPlannerKindLabel, parseImportPayload, PLANNER_KIND_ICONS } from '@/domain/planner';
 import { capturePlaceToPlannerPlace, isCollectionExport, parseCaptureCollectionExport } from '@/domain/capture';
@@ -125,6 +126,7 @@ export function ImportCandidatesModal({
       role="dialog"
       aria-modal="true"
       aria-label={zh ? '导入外部研究候选' : 'Import Research Candidates'}
+      {...dialogBackdropProps(onClose)}
     >
       <div ref={panelRef} tabIndex={-1} className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         {/* Header */}

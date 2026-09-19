@@ -26,6 +26,7 @@
     "validate:pages": "node scripts/validate-static-export.mjs && node scripts/validate-pwa.mjs && node scripts/validate-bundle-size.mjs && vitest run src/services/ownly-data-layout.test.ts",
     "validate:pwa": "node scripts/validate-pwa.mjs",
     "smoke:install": "python -m pip install -r requirements-smoke.txt && python -m playwright install chromium",
+    "smoke:extension": "python scripts/smoke-extension.py",
     "smoke:web": "python tests/smoke/web_smoke.py",
     "smoke:site": "python tests/smoke/site_functionality.py",
     "smoke:mobile": "python tests/smoke/mobile_smoke.py",
