@@ -149,7 +149,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                 {zh ? '把 Research Pool 的候选拖进这一天，或点击“+ 当天”。' : 'Drag a researched candidate here, or use “+ Day”.'}
               </div>
             ) : (
-              <ol className="space-y-1">
+              <ol className="space-y-0.5">
                 <AnimatePresence initial={false}>
                 {scheduled.map((place, index) => {
                   const timeOverlap = dayAssessment.time_overlaps.find((overlap) => overlap.fromId === place.id || overlap.toId === place.id);
@@ -200,7 +200,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0, scale: 0.98 }}
                       transition={{ type: 'spring', bounce: 0, duration: 0.25 }}
-                      className="group space-y-1"
+                      className="group space-y-0.5"
                       onMouseEnter={() => setHighlightedPlaceId(place.id)}
                       onMouseLeave={() => setHighlightedPlaceId(null)}
                     >
@@ -511,7 +511,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
 
                       {/* Travel Transition Rail (Between Stops) */}
                       {index < scheduled.length - 1 ? (
-                        <div className="relative ml-3 border-l-2 border-dashed border-stone-200 py-1 pl-3.5 space-y-1">
+                        <div className="relative ml-3 border-l-2 border-dashed border-stone-200 py-0.5 pl-3.5 space-y-0.5">
                           {isTransitHubPlace(place) && isTransitHubPlace(nextPlace) && transitionItems.length === 0 ? (
                             <div className="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-stone-200 bg-stone-100/90 px-2.5 py-0.5 text-[10px] font-semibold text-stone-700 shadow-2xs">
                               <span>✈️ {zh ? '跨城交通 · 依据票务时间' : 'Intercity Transit (Ticket-based)'}</span>
