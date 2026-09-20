@@ -74,7 +74,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
   const [transferExpanded, setTransferExpanded] = useState(false);
   return (
     <MotionConfig reducedMotion="user">
-          <div className="max-h-[640px] min-h-[400px] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
+          <div className="ownly-scroll-area max-h-[640px] min-h-[400px] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
             {/* Keyed by day: switching days cross-fades instead of hard-cutting. */}
             <motion.div
               key={dayTimeline.date}

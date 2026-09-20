@@ -154,10 +154,43 @@ body {
 }
 
 /* Cross-browser thin scrollbars */
-.wyqd-web-shell,
-.ownly-scroll-area {
+.wyqd-web-shell {
   scrollbar-width: thin;
   scrollbar-color: var(--border-default) transparent;
+}
+
+/* Auto-hiding scroll area — thumb stays invisible until the user hovers or
+   focuses the region, so dense lists (e.g. the execution timeline) read as
+   clean content instead of a permanently parked scrollbar. */
+.ownly-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color var(--motion-fast, 150ms) var(--ease-out);
+}
+.ownly-scroll-area:hover,
+.ownly-scroll-area:focus-within {
+  scrollbar-color: var(--border-default) transparent;
+}
+.ownly-scroll-area::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.ownly-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ownly-scroll-area::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: content-box;
+  transition: background-color var(--motion-fast, 150ms) var(--ease-out);
+}
+.ownly-scroll-area:hover::-webkit-scrollbar-thumb,
+.ownly-scroll-area:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--border-default);
+}
+.ownly-scroll-area::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ds-line-strong);
 }
 
 /* Skeleton shimmer for loading states.
