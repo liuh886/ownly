@@ -98,7 +98,7 @@ Release checks:
 
 - [x] Round-trip Trip / Place / Visit / Leg / Expense Markdown without field loss.
 - [x] Verify CSV, KML, Markdown, and ICS exports with multilingual text and formula-safe CSV cells.
-- [ ] Verify Web local data, Obsidian workspace, extension Capture, CLI, and MCP read the same canonical Place/Visit semantics.
+- [x] Verify Web local data, Obsidian workspace, extension Capture, CLI, and MCP read the same canonical Place/Visit semantics.
 - [x] Verify backup/restore and browser reload preserve Trips, shelved state, Visits, expenses, and pending Capture queue.
 - [x] Verify a strong-identity merge does not leave duplicate Markdown Place files or stale Visit references.
 
