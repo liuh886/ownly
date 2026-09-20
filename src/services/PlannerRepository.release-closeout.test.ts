@@ -7,6 +7,12 @@ import {
   type TripExpenseItem,
 } from '@/domain/planner';
 import type { PlannerTripVisit } from '@/domain/planner-visits';
+import {
+  createOwnlyBackup,
+  restoreOwnlyBackup,
+  type OwnlyTextFileAdapter,
+} from '@/core/data-portability';
+import { WYQD_CORE_TARGET_VERSION } from '@/core/runtime';
 import { PlannerRepository, type PlannerFileStore } from './PlannerRepository';
 
 class MemoryStore implements PlannerFileStore {
@@ -22,6 +28,20 @@ class MemoryStore implements PlannerFileStore {
     if (this.failDeleteContaining && fileName.includes(this.failDeleteContaining)) throw new Error('simulated_delete_failure');
     this.files.delete(`${directory}/${fileName}`);
   }
+}
+
+/** Bridges the planner file store onto the shared portability adapter shape. */
+class StoreTextAdapter implements OwnlyTextFileAdapter {
+  constructor(private readonly store: MemoryStore) {}
+  async listFiles() { return [...this.store.files.keys()].sort(); }
+  async exists(path: string) { return this.store.files.has(path); }
+  async readText(path: string) {
+    const content = this.store.files.get(path);
+    if (content === undefined) throw new Error(`missing ${path}`);
+    return content;
+  }
+  async writeText(path: string, content: string) { this.store.files.set(path, content); }
+  async deleteText(path: string) { this.store.files.delete(path); }
 }
 
 const trip: PlannerTrip = {
@@ -247,5 +267,38 @@ describe('Planner release closeout invariants', () => {
     expect(reloadedExpense.currency).toBe('THB');
     expect(reloadedExpense.split_members).toEqual(['me', '伴侣']);
     expect(reloadedExpense.notes).toBe('现金');
+  });
+
+  it('backup and restore preserve planner entities through the shared portability path', async () => {
+    await repo.upsertPlace(place('a', 'Alpha'));
+    await repo.upsertPlace(place('shelved', 'Shelved spot'));
+    await repo.dropPlace('shelved');
+    const visit = await repo.addVisit('a', '2026-10-06');
+    await repo.upsertLeg({
+      schema_version: '0.1', type: 'trip_leg', id: 'leg-a', trip_id: trip.id,
+      from_place_id: 'a', to_place_id: 'a', mode: 'walking', duration_minutes: 10,
+      distance_meters: 700, source: 'manual', created_at: '2026-09-02T00:00:00.000Z',
+    } as PlannerTripLeg);
+    await repo.upsertExpense({
+      id: 'exp-a', trip_id: trip.id, title: 'Snack', category: 'food', amount: 120,
+      currency: 'THB', paid_by: 'me', split_members: ['me'], created_at: '2026-10-06T00:00:00.000Z',
+    } as TripExpenseItem);
+
+    const bundle = await createOwnlyBackup(new StoreTextAdapter(store), {
+      runtime: 'test',
+      ownly_version: WYQD_CORE_TARGET_VERSION,
+    });
+
+    const restoredStore = new MemoryStore();
+    await restoreOwnlyBackup(bundle, new StoreTextAdapter(restoredStore), { collisionPolicy: 'reject' });
+
+    const restoredRepo = new PlannerRepository(restoredStore);
+    expect((await restoredRepo.listTrips()).map((item) => item.id)).toEqual([trip.id]);
+    const restoredPlaces = await restoredRepo.listPlaces();
+    expect(restoredPlaces.map((item) => item.id).sort()).toEqual(['a', 'shelved']);
+    expect(restoredPlaces.find((item) => item.id === 'shelved')?.state).toBe('dropped');
+    expect((await restoredRepo.listVisits()).map((item) => item.id)).toEqual([visit!.id]);
+    expect((await restoredRepo.listLegs()).map((item) => item.id)).toEqual(['leg-a']);
+    expect((await restoredRepo.listExpenses()).map((item) => item.id)).toEqual(['exp-a']);
   });
 });
