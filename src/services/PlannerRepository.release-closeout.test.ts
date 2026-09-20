@@ -73,6 +73,30 @@ describe('Planner release closeout invariants', () => {
     expect((await repo.listVisits()).find((item) => item.id === visit!.id)?.place_id).toBe('secondary');
   });
 
+  it('merges strong-identity duplicates without leaving files or stale visit references', async () => {
+    await repo.upsertPlace(place('primary', 'Primary', 'same-google-id'));
+    await repo.upsertPlace(place('secondary', 'Secondary', 'same-google-id'));
+    const visit = await repo.addVisit('primary', '2026-10-06');
+    expect(visit).toBeTruthy();
+
+    const result = await repo.deduplicateTripPlaces(trip.id);
+    expect(result).toEqual({ mergedCount: 1, removedCount: 1 });
+
+    const places = await repo.listPlaces();
+    expect(places.map((item) => item.id)).toEqual(['primary']);
+    expect(places[0].source_place_id).toBe('same-google-id');
+
+    // No duplicate Markdown file remains for the merged-away place.
+    expect([...store.files.keys()].some((key) => key.includes('place--secondary'))).toBe(false);
+    expect([...store.files.keys()].some((key) => key.includes('place--primary'))).toBe(true);
+
+    // Every visit still points at a live place.
+    const placeIds = new Set(places.map((item) => item.id));
+    const visits = await repo.listVisits();
+    expect(visits.find((item) => item.id === visit!.id)?.place_id).toBe('primary');
+    expect(visits.every((item) => placeIds.has(item.place_id))).toBe(true);
+  });
+
   it('supports repeated visits while preventing shelve/delete from orphaning them', async () => {
     await repo.upsertPlace(place('repeat', 'Repeat place'));
     const first = await repo.addVisit('repeat', '2026-10-06');

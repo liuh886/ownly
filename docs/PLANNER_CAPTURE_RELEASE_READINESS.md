@@ -100,7 +100,7 @@ Release checks:
 - [x] Verify CSV, KML, Markdown, and ICS exports with multilingual text and formula-safe CSV cells.
 - [ ] Verify Web local data, Obsidian workspace, extension Capture, CLI, and MCP read the same canonical Place/Visit semantics.
 - [ ] Verify backup/restore and browser reload preserve Trips, shelved state, Visits, expenses, and pending Capture queue.
-- [ ] Verify a strong-identity merge does not leave duplicate Markdown Place files or stale Visit references.
+- [x] Verify a strong-identity merge does not leave duplicate Markdown Place files or stale Visit references.
 
 ## P1 — Existing modal and auxiliary-feature completion
 
