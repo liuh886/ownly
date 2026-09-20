@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { formatPlacePriceInTripCurrency, PLANNER_KIND_ICONS, PLANNER_KIND_LABELS, type PlannerPlaceKind, type PlannerTripPlace } from '@/domain/planner';
 import { formatDistanceBadge, getDisplayTags, placeMeta } from './planner-home-shared';
+import { resolvePoolEmptyReason } from './pool-empty-state';
 import { useEscapeKey } from './use-escape-key';
 import type { PlannerControllerReturn } from './usePlannerController';
 
@@ -202,6 +203,7 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
     disabled,
     className = 'mt-4 w-full overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm flex flex-col transition-all',
   } = props;
+  const poolEmptyReason = resolvePoolEmptyReason(pendingCandidates.length, sortedPendingCandidates.length);
   const [tidyMenuOpen, setTidyMenuOpen] = useState(false);
   useEscapeKey(tidyMenuOpen, () => setTidyMenuOpen(false));
   // Edit mode (entered from 整理): cards expose an inline edit zone
@@ -505,15 +507,15 @@ export function ResearchPoolSection(props: ResearchPoolSectionProps) {
               </div>
             ) : null}
 
-            {sortedPendingCandidates.length === 0 ? (
+            {poolEmptyReason ? (
               <div className="py-12 text-center text-xs text-stone-500">
                 <p className="text-3xl mb-2">📭</p>
                 <p className="font-medium text-stone-600">
-                  {pendingCandidates.length === 0
+                  {poolEmptyReason === 'empty'
                     ? (zh ? '当前行程暂无候选地点，浏览地图或导入收藏夹即可添加。' : 'No candidates yet.')
                     : (zh ? '没有匹配的候选地点。' : 'No matching candidates.')}
                 </p>
-                {pendingCandidates.length === 0 ? (
+                {poolEmptyReason === 'empty' ? (
                   <button
                     type="button"
                     onClick={() => setIsImportModalOpen(true)}
