@@ -33,8 +33,10 @@ function parseEntityId(fileName: string, content: string): string {
 
 function inferType(fileName: string, content: string): string {
   if (fileName.includes('Places') || content.includes('type: trip_place')) return 'place';
-  if (fileName.includes('Trips') || content.includes('type: trip')) return 'trip';
+  // Check the more specific visit/leg markers before the bare "type: trip"
+  // prefix, which would otherwise shadow them.
   if (content.includes('type: trip_visit')) return 'visit';
+  if (fileName.includes('Trips') || content.includes('type: trip')) return 'trip';
   return 'unknown';
 }
 
@@ -91,6 +93,24 @@ class IndexStore {
     });
   }
 
+  async deleteAll(fileNames: string[]): Promise<void> {
+    for (const name of fileNames) this.mem.delete(name);
+    if (!this.useIdb) return;
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.open(DB_NAME, INDEX_VERSION);
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE_FILES)) { resolve(); return; }
+        const tx = db.transaction(STORE_FILES, 'readwrite');
+        const store = tx.objectStore(STORE_FILES);
+        for (const name of fileNames) store.delete(name);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      };
+      req.onerror = () => resolve();
+    });
+  }
+
   async clear(): Promise<void> {
     this.mem.clear();
     if (!this.useIdb) return;
@@ -136,9 +156,16 @@ export class VaultIndexer {
     }
     // remove deleted files from index
     const live = new Set(allFiles.map((f) => f.fileName));
-    for (const key of [...existing.keys()]) if (!live.has(key)) existing.delete(key);
+    const staleKeys: string[] = [];
+    for (const key of [...existing.keys()]) {
+      if (!live.has(key)) {
+        existing.delete(key);
+        staleKeys.push(key);
+      }
+    }
 
     await this.store.putAll(toPut);
+    if (staleKeys.length > 0) await this.store.deleteAll(staleKeys);
     const records: IndexRecord[] = index.map((r) => ({ id: r.entityId, type: r.type, updatedAt: r.updatedAt }));
     return { changed, index, records };
   }
