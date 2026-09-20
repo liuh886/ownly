@@ -15,6 +15,24 @@
 - **First-object onboarding policy (`npm run test:onboarding`):** ✅ Passed
 - **Browser smoke tests (`npm run test:e2e`):** ✅ Passed
 
+## Next-phase workstream coverage (verified 2026-09-20)
+
+The four workstreams in `docs/PRODUCT_NEXT_PHASE_SPEC.md` are implemented and
+carry domain-level coverage. All suites below run under `npm test`.
+
+| Workstream | Domain suite | Status |
+|---|---|---|
+| WS-1 trip retrospective | `src/domain/trip-review.test.ts` (stats, draft, schema validity, reviewable) | ✅ |
+| WS-2 trust Gate 1 + Gate 2 | `src/domain/trust-status.test.ts`, `src/domain/recovery-drill.test.ts` (read-only + cleanup assertions) | ✅ |
+| WS-3 mobile snapshot | `src/domain/trip-snapshot.test.ts`, `src/components/snapshot/snapshot-readonly.test.ts` (import-boundary) | ✅ domain; iPhone Safari field check pending user |
+| WS-4 object insights + calendar feed PRO | `src/domain/object-insights.test.ts`, `src/services/CalendarFeedService.test.ts` | ✅ |
+
+Regression fixed during verification: a completed trip with empty `destinations`
+(CLI/MCP/imported data) previously produced a schema-invalid `travel_worldview`
+experience (missing `location`). `buildTripReviewDraft` now degrades to a
+location-less experience instead of fabricating a city, pinned by
+`src/domain/trip-review.test.ts`.
+
 ## Core data mutation coverage
 
 `src/services/MarkdownEntityRepository.contract.test.ts` exercises the Web/PWA Markdown repository against deterministic persisted storage rather than UI-button mocks.

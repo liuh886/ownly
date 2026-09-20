@@ -23,10 +23,12 @@
 **不做**：不自动落库（始终经用户确认）、不做多行程批量复盘、不做 AI 文案生成。
 
 **验收**：
-- [ ] 行程完结后一键生成草稿，frontmatter 字段与手动录入格式完全一致（schema 校验通过）
-- [ ] 草稿在确认前不进入任何统计口径
-- [ ] 确认后看世界统计数字变化正确
-- [ ] domain 层聚合逻辑（visit/expense/legs 统计）有单元测试
+- [x] 行程完结后一键生成草稿，frontmatter 字段与手动录入格式完全一致（schema 校验通过）
+- [x] 草稿在确认前不进入任何统计口径
+- [x] 确认后看世界统计数字变化正确
+- [x] domain 层聚合逻辑（visit/expense/legs 统计）有单元测试
+
+> 验证补丁（2026-09-20）：无 `destinations` 的行程（CLI/MCP/导入来源）原会产出 schema 非法的 `travel_worldview`（缺 location）。因禁止臆造事实，现优雅降级为无 location 的普通经验对象，不再声明 travel 子类型。回归见 `src/domain/trip-review.test.ts`（schema 校验 + 无目的地降级）。
 
 ## WS-2 信任底座：Gate 1 状态面板 + Gate 2 恢复演练
 
@@ -42,9 +44,9 @@
 - **硬边界**：永不覆盖活动数据文件夹；复用现有 versioned backup / validation / restore preflight / rollback 机制，只做引导 UI 与编排
 
 **验收**：
-- [ ] Gate 1 面板覆盖 governance 10 项状态且全部为本地确定性检查
-- [ ] drill 全流程跑通并输出 pass/fail；断言（测试级）确认活动文件夹未被写入
-- [ ] 演练数据清除后无残留
+- [x] Gate 1 面板覆盖 governance 10 项状态且全部为本地确定性检查
+- [x] drill 全流程跑通并输出 pass/fail；断言（测试级）确认活动文件夹未被写入
+- [x] 演练数据清除后无残留
 
 ## WS-3 行中移动：Trip Bundle + 移动只读视图
 
@@ -62,10 +64,10 @@
 **不做**：不做手机端写回（绝不从 bundle 反向同步）、不做 Ownly 托管云、不做账号体系（governance deferred 列表红线）。
 
 **验收**：
-- [ ] snapshot 含声明的实体且 schema 校验通过；缺失实体优雅降级；旧分享 Bundle 文件被投入快照入口时报明确错误（不误解析）
+- [x] snapshot 含声明的实体且 schema 校验通过；缺失实体优雅降级；旧分享 Bundle 文件被投入快照入口时报明确错误（不误解析）
 - [ ] iPhone Safari 实测（**由用户验收**，执行方无法覆盖）：导入 snapshot → 只读浏览候选池/时间线/地图可用
-- [ ] 只读视图下无任何写路径：机制为**只读 Repository adapter（写操作抛错）+ 无写路径测试**，隐藏按钮不算数
-- [ ] snapshot 标注生成时间并显示已过时长；>24h 显示"可能已过期"（启发式阈值，非精确语义）
+- [x] 只读视图下无任何写路径：机制为**只读 Repository adapter（写操作抛错）+ 无写路径测试**，隐藏按钮不算数
+- [x] snapshot 标注生成时间并显示已过时长；>24h 显示"可能已过期"（启发式阈值，非精确语义）
 
 ## WS-4 Pro 第二支柱：对象侧洞察 + 日历 feed PRO 化
 
@@ -85,10 +87,10 @@
 **用户知情事项**（评审补丁，非阻塞）：持续订阅 feed 依赖 `calendar.ownly.app` + Supabase 存 ICS（含行程标题/地点，属个人内容上 Ownly 服务端）。把 feed 立为 Pro 支柱前，请确认接受该依赖；建议在订阅 UI 加一行数据去向说明。
 
 **验收**：
-- [ ] 对象侧洞察在 Web 与 Obsidian 对同一 Vault 数据输出一致
-- [ ] 无坐标/无评分数据优雅降级（同 Travel Insights 先例）
-- [ ] 日历 feed 在 Obsidian 免费态被门禁、激活后可用、离线重启后状态保持（沿用 PRO_ACTIVATION 契约）
-- [ ] domain 聚合逻辑单元测试
+- [x] 对象侧洞察在 Web 与 Obsidian 对同一 Vault 数据输出一致
+- [x] 无坐标/无评分数据优雅降级（同 Travel Insights 先例）
+- [x] 日历 feed 在 Obsidian 免费态被门禁、激活后可用、离线重启后状态保持（沿用 PRO_ACTIVATION 契约）
+- [x] domain 聚合逻辑单元测试
 
 ---
 
