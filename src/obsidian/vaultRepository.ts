@@ -417,7 +417,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     const extension = extensionIndex >= 0 ? path.slice(extensionIndex) : '';
 
     for (let index = 2; index < 1000; index += 1) {
-      const candidate = `${base}-${index}${extension}`;
+      const candidate = `${base}--${index}${extension}`;
       if (!this.vault.getAbstractFileByPath(candidate)) {
         return candidate;
       }

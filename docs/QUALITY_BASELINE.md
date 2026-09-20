@@ -105,7 +105,7 @@ The first-object journey is implemented in the shared AppShell and reuses the no
 | First real object policy and routing | ✅ | Trigger, dismissal, templates, copy, and successful-save completion are protected |
 | Full composer-to-filesystem browser interaction | ❌ | Repository and onboarding policy are covered; browser UI automation remains |
 | Archive/restore through browser UI | ❌ | Repository behavior is covered; UI interaction remains |
-| Obsidian mutation contract | ⚠️ Partial | Package/type validation passes; shared adapter contract remains part of runtime-parity work |
+| Obsidian mutation contract | ✅ | `src/obsidian/vaultRepository.contract.test.ts` runs the create/update/archive/restore/delete lifecycle against a fake Vault; filename collision scheme aligned with Web (`--n`) |
 | Language switching | ✅ | Existing smoke coverage |
 | Currency switching | ❌ | Not yet behavior-tested |
 
@@ -118,7 +118,7 @@ The first-object journey is implemented in the shared AppShell and reuses the no
 ### Major
 
 - Browser-level File System Access API behavior still needs a controlled test double covering permission loss, picker cancellation, write failure, and reconnect.
-- The Obsidian adapter must run the same mutation contract or an equivalent shared-adapter suite before Web/PWA/Obsidian parity can be claimed.
+- The Obsidian adapter now runs a mutation contract (`src/obsidian/vaultRepository.contract.test.ts`) covering create/update/archive/restore/delete, archive-before-delete, rollback on failed source delete, and collision-safe naming. This surfaced and fixed a filename-collision drift (Obsidian used `-n`, Web used `--n`).
 - CLI compatibility is protected for representative read/write/error flows, but future command additions must extend the process matrix rather than relying only on compilation.
 - Versioned backup, restore preflight, and schema migration remain tracked by #34.
 
