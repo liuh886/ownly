@@ -106,11 +106,11 @@ Release checks:
 
 No new modal/features should be introduced for this release. Existing ones must be completed:
 
-- [ ] Import Candidates: duplicate handling, counts, cancellation, and retry.
+- [x] Import Candidates: duplicate handling, counts, cancellation, and retry.
 - [x] Place Timing: validation, persistence, repeated Visit targeting.
-- [ ] Hotel Comparison: select/drop behavior and stay-span consistency.
+- [x] Hotel Comparison: select/drop behavior and stay-span consistency.
 - [x] Calendar Subscription: Free/Pro state, publish/rotate/disable, and generated ICS consistency.
-- [ ] Create Trip: validation, default selection, and immediate Capture context update.
+- [x] Create Trip: validation, default selection, and immediate Capture context update.
 - [x] Duplicate Review: Merge/Ignore, evidence clarity, stale-pair refresh.
 - [x] Budget/ledger: reload persistence, member updates, currency conversion, and deletion.
 
