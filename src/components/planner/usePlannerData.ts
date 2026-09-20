@@ -10,6 +10,7 @@ import type {
   TripExpenseItem,
 } from '@/domain/planner';
 import {
+  countPlannerPlaceStates,
   materializePlannerScheduledPlaces,
   sortPlannerScheduledPlaces,
   type PlannerScheduledPlace,
@@ -411,6 +412,11 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
 
   const pendingCandidates = allCandidatePlaces;
 
+  const placeStateCounts = useMemo(
+    () => countPlannerPlaceStates(tripAllPlaces, tripVisits),
+    [tripAllPlaces, tripVisits],
+  );
+
   const droppedPlaces = useMemo(
     () =>
       [...tripAllPlaces]
@@ -424,7 +430,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
 
   const filterChips = useMemo(() => {
     const chips: Array<{ id: string; label: string; count: number; type: 'all' | 'priority' | 'kind' | 'tag' | 'status' }> = [
-      { id: 'all', label: zh ? '全部' : 'All', count: pendingCandidates.length, type: 'all' },
+      { id: 'all', label: zh ? '全部' : 'All', count: placeStateCounts.active, type: 'all' },
     ];
 
     const mustCount = pendingCandidates.filter((p) => p.priority === 'must').length;
@@ -433,10 +439,9 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     const wantCount = pendingCandidates.filter((p) => p.priority === 'want').length;
     if (wantCount > 0) chips.push({ id: 'want', label: zh ? '想去' : 'Want', count: wantCount, type: 'priority' });
 
-    if (droppedPlaces.length > 0) chips.push({ id: 'dropped', label: zh ? '🙈 暂不考虑' : '🙈 Shelved', count: droppedPlaces.length, type: 'status' });
+    if (placeStateCounts.shelved > 0) chips.push({ id: 'dropped', label: zh ? '🙈 暂不考虑' : '🙈 Shelved', count: placeStateCounts.shelved, type: 'status' });
 
-    const scheduledCount = pendingCandidates.filter((p) => (visitCountByPlaceId.get(p.id) || 0) > 0).length;
-    if (scheduledCount > 0) chips.push({ id: 'scheduled', label: zh ? '📅 已排入' : '📅 Scheduled', count: scheduledCount, type: 'status' });
+    if (placeStateCounts.scheduled > 0) chips.push({ id: 'scheduled', label: zh ? '📅 已排入' : '📅 Scheduled', count: placeStateCounts.scheduled, type: 'status' });
 
     const allKinds: PlannerPlaceKind[] = ['stay', 'food', 'cafe', 'attraction', 'experience', 'shopping', 'transit', 'service', 'other'];
     for (const kind of allKinds) {
@@ -477,7 +482,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     }
 
     return chips;
-  }, [pendingCandidates, droppedPlaces, zh, language, tripTags, visitCountByPlaceId]);
+  }, [pendingCandidates, placeStateCounts, zh, language, tripTags]);
 
   const scheduledAll = useMemo(
     () => materializePlannerScheduledPlaces(tripPlaces, tripVisits),

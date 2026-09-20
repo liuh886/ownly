@@ -7,6 +7,7 @@ import {
   type TripExpenseItem,
 } from '@/domain/planner';
 import type { PlannerTripVisit } from '@/domain/planner-visits';
+import { countPlannerPlaceStates } from '@/domain/planner-visits';
 import {
   createOwnlyBackup,
   restoreOwnlyBackup,
@@ -300,5 +301,34 @@ describe('Planner release closeout invariants', () => {
     expect((await restoredRepo.listVisits()).map((item) => item.id)).toEqual([visit!.id]);
     expect((await restoredRepo.listLegs()).map((item) => item.id)).toEqual(['leg-a']);
     expect((await restoredRepo.listExpenses()).map((item) => item.id)).toEqual(['exp-a']);
+  });
+
+  it('keeps Candidate / Scheduled / Shelved counts reconciled after drop, restore, merge, and delete', async () => {
+    await repo.upsertPlace(place('a', 'Alpha', 'id-a'));
+    await repo.upsertPlace(place('b', 'Beta', 'id-b'));
+    await repo.upsertPlace(place('c', 'Gamma', 'id-c'));
+    await repo.upsertPlace(place('dup', 'Alpha', 'id-a'));
+    const visit = await repo.addVisit('a', '2026-10-06');
+
+    const counts = async () =>
+      countPlannerPlaceStates(await repo.listPlaces(), await repo.listVisits());
+
+    expect(await counts()).toEqual({ active: 4, scheduled: 1, shelved: 0 });
+
+    await repo.dropPlace('c');
+    expect(await counts()).toEqual({ active: 3, scheduled: 1, shelved: 1 });
+
+    await repo.restorePlace('c');
+    expect(await counts()).toEqual({ active: 4, scheduled: 1, shelved: 0 });
+
+    // Strong-ID merge folds the duplicate into the scheduled primary.
+    await repo.deduplicateTripPlaces(trip.id);
+    expect(await counts()).toEqual({ active: 3, scheduled: 1, shelved: 0 });
+
+    await repo.deletePlace('b');
+    expect(await counts()).toEqual({ active: 2, scheduled: 1, shelved: 0 });
+
+    await repo.removeVisit(visit!.id);
+    expect(await counts()).toEqual({ active: 2, scheduled: 0, shelved: 0 });
   });
 });

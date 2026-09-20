@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { plannerTripLegId, type PlannerTrip, type PlannerTripLeg, type PlannerTripPlace } from './planner';
-import { materializePlannerScheduledPlaces, type PlannerTripVisit } from './planner-visits';
+import { materializePlannerScheduledPlaces, countPlannerPlaceStates, type PlannerTripVisit } from './planner-visits';
 import {
   buildPlannerDayExecutionTimeline,
   calculateDayLoad,
@@ -47,6 +47,26 @@ function travelLeg(from: string, to: string, minutes: number): PlannerTripLeg {
     distance_meters: 1200, source: 'manual', created_at: '2026-08-29T00:00:00Z',
   };
 }
+
+describe('countPlannerPlaceStates (Candidate / Scheduled / Shelved)', () => {
+  it('separates active, scheduled, and shelved counts', () => {
+    const places = [place('a'), place('b'), place('c', { state: 'dropped' })];
+    const visits = [visit('v1', 'a')];
+    expect(countPlannerPlaceStates(places, visits)).toEqual({ active: 2, scheduled: 1, shelved: 1 });
+  });
+
+  it('counts a place scheduled multiple times only once', () => {
+    const places = [place('a')];
+    const visits = [visit('v1', 'a'), visit('v2', 'a')];
+    expect(countPlannerPlaceStates(places, visits).scheduled).toBe(1);
+  });
+
+  it('ignores visits pointing at shelved or unknown places', () => {
+    const places = [place('a'), place('shelved', { state: 'dropped' })];
+    const visits = [visit('v1', 'shelved'), visit('v2', 'ghost')];
+    expect(countPlannerPlaceStates(places, visits)).toEqual({ active: 1, scheduled: 0, shelved: 1 });
+  });
+});
 
 describe('Planner schedule proposal', () => {
   it('creates an explicit visit without consuming or locking the reusable place', () => {

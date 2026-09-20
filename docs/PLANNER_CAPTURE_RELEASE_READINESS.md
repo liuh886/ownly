@@ -44,7 +44,7 @@ Explicitly out of scope until after release: AI planner expansion, collaboration
 - [x] Verify Candidate → Scheduled → Shelved state restrictions and all user-facing error messages.
 - [x] Verify repeat scheduling of one Place on the same day and across days never duplicates or consumes the Place entity.
 - [x] Verify Drop/Delete cannot orphan scheduled Visits; release regression blocks Place removal while Visits exist.
-- [ ] Reconcile all Candidate/Shelved/Scheduled counts with repository state after sync, filter, search, restore, merge, and delete.
+- [x] Reconcile all Candidate/Shelved/Scheduled counts with repository state after sync, filter, search, restore, merge, and delete.
 - [ ] Verify all empty states accurately explain why no cards are visible.
 
 ## P0 — Suspected Duplicate review flow

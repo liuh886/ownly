@@ -49,6 +49,39 @@ export function materializePlannerScheduledPlaces(
   });
 }
 
+export interface PlannerPlaceStateCounts {
+  /** Non-dropped places — the full candidate pool (scheduled places included). */
+  active: number;
+  /** Active places with at least one Visit occurrence. */
+  scheduled: number;
+  /** Shelved (dropped) places, recoverable via Restore. */
+  shelved: number;
+}
+
+/**
+ * Canonical Candidate / Scheduled / Shelved counts. Derived directly from the
+ * repository read model so UI chips can never drift from persisted state after
+ * sync, restore, merge, or delete.
+ */
+export function countPlannerPlaceStates(
+  places: PlannerTripPlace[],
+  visits: PlannerTripVisit[],
+): PlannerPlaceStateCounts {
+  const visitedPlaceIds = new Set(visits.map((visit) => visit.place_id));
+  let active = 0;
+  let scheduled = 0;
+  let shelved = 0;
+  for (const place of places) {
+    if (place.state === 'dropped') {
+      shelved += 1;
+      continue;
+    }
+    active += 1;
+    if (visitedPlaceIds.has(place.id)) scheduled += 1;
+  }
+  return { active, scheduled, shelved };
+}
+
 export function createPlannerTripVisit(
   place: PlannerTripPlace,
   date: string,
