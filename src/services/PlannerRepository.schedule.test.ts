@@ -287,6 +287,17 @@ describe('PlannerRepository visit lifecycle', () => {
     expect(placeRestored?.title).toBe(placeBefore?.title);
   });
 
+  it('blocks scheduling a shelved Place until it is restored', async () => {
+    expect(await plannerRepository.dropPlace('a')).toBe(true);
+    // Shelved/dropped places are not schedulable candidates.
+    expect(await plannerRepository.addVisit('a', '2026-11-01')).toBeNull();
+
+    expect(await plannerRepository.restorePlace('a')).toBe(true);
+    const visit = await plannerRepository.addVisit('a', '2026-11-01');
+    expect(visit?.place_id).toBe('a');
+    expect(visit?.date).toBe('2026-11-01');
+  });
+
   it('clears fixed timing with null so the visit falls back to travel inference', async () => {
     const visit = await plannerRepository.addVisit('a', '2026-11-01');
     await plannerRepository.updateVisitTiming(visit!.id, { start: '09:00', duration_minutes: 90 });
