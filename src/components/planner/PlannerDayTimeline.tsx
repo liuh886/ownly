@@ -309,7 +309,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                             : `Actual: ${currencySymbolFor(selectedTrip?.currency)}${dailyActual}/day (Total ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total} across ${stayDays} nights, ${placeExpense.count} expenses), click to view in budget`
                                         }
                                       >
-                                        💳 {zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip?.currency)}{dailyActual}{stayDays > 1 ? (zh ? '/天' : '/d') : ''}
+                                        💳 {currencySymbolFor(selectedTrip?.currency)}{dailyActual}{stayDays > 1 ? (zh ? '/天' : '/d') : ''}
                                       </button>
                                     );
                                   }
@@ -336,7 +336,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                                               : `Actual: ${currencySymbolFor(selectedTrip?.currency)}${placeExpense.total} (${placeExpense.count} expenses), click to view in budget`
                                           }
                                         >
-                                          💳 {zh ? '实记' : 'Act'}: {currencySymbolFor(selectedTrip?.currency)}{placeExpense.total}
+                                          💳 {currencySymbolFor(selectedTrip?.currency)}{placeExpense.total}
                                         </button>
                                       ) : null}
                                     </>
@@ -511,7 +511,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
 
                       {/* Travel Transition Rail (Between Stops) */}
                       {index < scheduled.length - 1 ? (
-                        <div className="relative ml-3 border-l-2 border-dashed border-stone-200 py-0.5 pl-3.5 space-y-0.5">
+                        <div className="relative ml-3 border-l-2 border-dashed border-stone-200 py-px pl-3.5 space-y-0.5">
                           {isTransitHubPlace(place) && isTransitHubPlace(nextPlace) && transitionItems.length === 0 ? (
                             <div className="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-stone-200 bg-stone-100/90 px-2.5 py-0.5 text-[10px] font-semibold text-stone-700 shadow-2xs">
                               <span>✈️ {zh ? '跨城交通 · 依据票务时间' : 'Intercity Transit (Ticket-based)'}</span>

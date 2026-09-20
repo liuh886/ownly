@@ -1064,7 +1064,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                   className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
                   title={zh ? '按交通时间优化当天游览顺序 (预览后应用)' : 'Optimize day order by travel time (preview first)'}
                 >
-                  {optimizeBusy ? '⏳' : '✨'} {zh ? '优化顺序' : 'Optimize'}
+                  {optimizeBusy ? '⏳' : '✨'} {zh ? '优化' : 'Optimize'}
                 </button>
               </div>
             ) : null}
