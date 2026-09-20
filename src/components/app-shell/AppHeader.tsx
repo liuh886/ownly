@@ -87,7 +87,7 @@ export function AppHeader({
           href="https://liuh886.gumroad.com/l/ownly"
           target="_blank"
           rel="noopener noreferrer"
-          className="ownly-hit-expand hidden rounded-full px-2 py-0.5 text-[11px] font-medium text-ink-muted transition hover:bg-rose-50 hover:text-rose-600 min-[480px]:inline"
+          className="ownly-hit-expand hidden shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium text-ink-muted transition hover:bg-rose-50 hover:text-rose-600 min-[480px]:inline"
           title={t('sponsor')}
         >
           <Heart size={13} aria-hidden="true" /> {t('sponsor')}
@@ -145,7 +145,7 @@ export function AppHeader({
                   target="_blank"
                   rel="noopener noreferrer"
                   role="menuitem"
-                  className="flex min-h-11 touch-manipulation items-center rounded-lg px-3 py-1.5 text-sm font-medium text-ink-secondary transition hover:bg-surface-muted min-[480px]:hidden"
+                  className="flex min-h-11 touch-manipulation items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-ink-secondary transition hover:bg-surface-muted min-[480px]:hidden"
                 >
                   <Heart size={13} aria-hidden="true" /> {t('sponsor')}
                 </a>
