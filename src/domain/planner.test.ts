@@ -758,6 +758,21 @@ describe('Ownly Planner domain', () => {
     expect(csv).toContain("\"'+SUM(A1)\"");
   });
 
+  it('neutralizes every spreadsheet formula trigger and escapes quotes in CSV', () => {
+    const triggers = ['=cmd|calc', '+1+1', '-2+3', '@import', '\tTabbed', '\rCarriage'];
+    for (const trigger of triggers) {
+      const csv = exportPlacesToCSV([place('x', { title: 'T', why: trigger })]);
+      expect(csv).toContain(`"'${trigger}"`);
+    }
+    // Benign values are not prefixed, and embedded quotes are doubled.
+    const csv = exportPlacesToCSV([
+      place('y', { title: '浅草寺', why: 'normal text', notes: 'say "hi"' }),
+    ]);
+    expect(csv).toContain('"normal text"');
+    expect(csv).toContain('"say ""hi"""');
+    expect(csv).toContain('"浅草寺"');
+  });
+
   it('calculates Haversine spherical distance between coordinates', () => {
     // Tokyo Tower (35.6586, 139.7454) to Sensoji (35.7147, 139.7966) is approx 7.8 km
     const dist = haversineDistanceKm(

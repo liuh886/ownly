@@ -74,7 +74,7 @@ Release checks:
 - [x] Persist Ignore decisions on the Trip; an ignored pair does not reappear after reload.
 - [x] Show concise review evidence for each pair: reason, match score, and distance when available.
 - [x] Ensure a merge preserves the preferred primary Place, facts, all Visits, and canonical identity; failed secondary deletion rolls back the mutation.
-- [ ] Add tests for one Place appearing in multiple weak pairs so review cannot create stale pair references after a merge.
+- [x] Add tests for one Place appearing in multiple weak pairs so review cannot create stale pair references after a merge.
 
 ## P1 — Planner card and mobile interaction completion
 
@@ -96,8 +96,8 @@ Release checks:
 
 ## P1 — Persistence, export, and runtime parity
 
-- [ ] Round-trip Trip / Place / Visit / Leg / Expense Markdown without field loss.
-- [ ] Verify CSV, KML, Markdown, and ICS exports with multilingual text and formula-safe CSV cells.
+- [x] Round-trip Trip / Place / Visit / Leg / Expense Markdown without field loss.
+- [x] Verify CSV, KML, Markdown, and ICS exports with multilingual text and formula-safe CSV cells.
 - [ ] Verify Web local data, Obsidian workspace, extension Capture, CLI, and MCP read the same canonical Place/Visit semantics.
 - [ ] Verify backup/restore and browser reload preserve Trips, shelved state, Visits, expenses, and pending Capture queue.
 - [ ] Verify a strong-identity merge does not leave duplicate Markdown Place files or stale Visit references.
