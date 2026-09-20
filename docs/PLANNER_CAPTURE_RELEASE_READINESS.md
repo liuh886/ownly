@@ -90,7 +90,7 @@ Release checks:
 - [ ] Verify add/remove/reorder, locked Visits, timing edits, and repeated occurrences.
 - [ ] Verify opening-hours warnings and travel conflicts do not treat missing optional facts as hard failures.
 - [ ] Verify hotel stay spans, check-out/check-in transfer days, and hotel replacement leave no stale Visits.
-- [ ] Verify map projection collapses repeated Visits for one Place while the timeline retains every occurrence.
+- [x] Verify map projection collapses repeated Visits for one Place while the timeline retains every occurrence.
 - [ ] Verify route links and segmentation for walking, transit, cycling, and driving where supported.
 - [ ] Verify timing modal changes persist after reload and exports use Visit timing rather than Place defaults.
 
