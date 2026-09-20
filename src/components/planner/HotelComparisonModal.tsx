@@ -11,6 +11,7 @@ import {
   getPlaceConvertedNumericPrice,
   inferPlaceCity,
 } from '@/domain/planner';
+import { resolveHotelStayDates } from './hotel-stay-span';
 
 interface HotelComparisonModalProps {
   open: boolean;
@@ -80,14 +81,10 @@ export function HotelComparisonModal({
   );
 
   // Derive target stay dates
-  const targetStayDates = useMemo(() => {
-    if (isFullTripStay && tripDates.length > 0) {
-      return tripDates;
-    }
-    const start = Math.min(Math.max(stayStartIndex, 0), totalDays - 1);
-    const end = Math.min(Math.max(stayEndIndex, start), totalDays - 1);
-    return tripDates.length > 0 ? tripDates.slice(start, end + 1) : [activeDate];
-  }, [isFullTripStay, tripDates, stayStartIndex, stayEndIndex, totalDays, activeDate]);
+  const targetStayDates = useMemo(
+    () => resolveHotelStayDates({ isFullTripStay, tripDates, stayStartIndex, stayEndIndex, activeDate }),
+    [isFullTripStay, tripDates, stayStartIndex, stayEndIndex, activeDate],
+  );
 
   const stayNightsCount = targetStayDates.length;
   const isMultiNight = stayNightsCount > 1;
