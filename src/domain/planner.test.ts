@@ -583,6 +583,24 @@ describe('Ownly Planner domain', () => {
     expect(url).toContain('waypoints=Tokyo%2C%20Sumida%20City');
   });
 
+  it('carries every supported travel mode into route links and Visit segments', () => {
+    const stops = [
+      place('1', { title: 'A', address: 'Addr A' }),
+      place('2', { title: 'B', address: 'Addr B' }),
+      place('3', { title: 'C', address: 'Addr C' }),
+    ];
+    for (const mode of ['walking', 'transit', 'bicycling', 'driving'] as const) {
+      expect(buildGoogleMapsRouteUrl(stops, mode)).toContain(`travelmode=${mode}`);
+    }
+
+    const scheduled = Array.from({ length: 6 }, (_, index) =>
+      scheduledPlace(place(String(index + 1), { address: `Addr ${index + 1}` }), '2026-10-20', index),
+    );
+    const segments = buildGoogleMapsDirectionsSegments(scheduled, 'walking');
+    expect(segments).toHaveLength(2);
+    expect(segments.every((segment) => segment.includes('travelmode=walking'))).toBe(true);
+  });
+
   it('exports valid KML and CSV format for Google My Maps', () => {
     const stops = [
       place('1', { title: '浅草寺', kind: 'attraction', observed_rating: 4.6, address: 'Tokyo, Asakusa', coordinates: { lat: 35.7147, lng: 139.7967 } }),

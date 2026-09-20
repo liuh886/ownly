@@ -87,12 +87,12 @@ Release checks:
 
 ## P1 — Timeline, routing, hotel, and schedule correctness
 
-- [ ] Verify add/remove/reorder, locked Visits, timing edits, and repeated occurrences.
-- [ ] Verify opening-hours warnings and travel conflicts do not treat missing optional facts as hard failures.
-- [ ] Verify hotel stay spans, check-out/check-in transfer days, and hotel replacement leave no stale Visits.
+- [x] Verify add/remove/reorder, locked Visits, timing edits, and repeated occurrences.
+- [x] Verify opening-hours warnings and travel conflicts do not treat missing optional facts as hard failures.
+- [x] Verify hotel stay spans, check-out/check-in transfer days, and hotel replacement leave no stale Visits.
 - [x] Verify map projection collapses repeated Visits for one Place while the timeline retains every occurrence.
-- [ ] Verify route links and segmentation for walking, transit, cycling, and driving where supported.
-- [ ] Verify timing modal changes persist after reload and exports use Visit timing rather than Place defaults.
+- [x] Verify route links and segmentation for walking, transit, cycling, and driving where supported.
+- [x] Verify timing modal changes persist after reload and exports use Visit timing rather than Place defaults.
 
 ## P1 — Persistence, export, and runtime parity
 
