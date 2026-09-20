@@ -47,7 +47,6 @@ import {
   assertTripDate,
   assertTripDates,
   plannerTripLegFileName,
-  type FxSettings,
   type PlannerTrip,
   type PlannerTripLeg,
   type PlannerTripPlace,
@@ -575,10 +574,6 @@ export class OwnlyWriteService {
       throw new OwnlyMutationError(`Planner place was not found: ${placeId}`, 'NOT_FOUND' as OwnlyMutationErrorCode);
     }
     return entry;
-  }
-
-  private tripBaseFx(): FxSettings {
-    return { base: 'CNY', overrides: undefined };
   }
 
   private plannerVisitEntry(visitId: string) {

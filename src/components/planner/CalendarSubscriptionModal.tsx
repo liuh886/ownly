@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
 import {
   getCalendarFeedUrl,
