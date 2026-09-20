@@ -4,6 +4,7 @@ import {
   buildTripReviewStats,
   isTripReviewable,
 } from './trip-review';
+import { validateObject } from './schema';
 import type {
   PlannerTrip,
   PlannerTripLeg,
@@ -155,6 +156,29 @@ describe('buildTripReviewDraft (WS-1)', () => {
     const { object, body } = buildTripReviewDraft(t, stats, { language: 'en' });
     expect(object.actual_total).toBeUndefined();
     expect(body).toContain('No expenses recorded');
+  });
+
+  it('produces an object that passes schema validation', () => {
+    const t = trip();
+    const stats = buildTripReviewStats(t, [place()], [], [], [
+      expense({ amount: 200, currency: 'CNY' }),
+    ]);
+    const { object } = buildTripReviewDraft(t, stats);
+    const errors = validateObject(object).issues.filter((issue) => issue.severity === 'error');
+    expect(errors).toEqual([]);
+  });
+
+  it('degrades to a location-less experience when a trip has no destinations', () => {
+    const t = trip({ destinations: [] });
+    const stats = buildTripReviewStats(t, [], [], [], []);
+    const { object } = buildTripReviewDraft(t, stats);
+    // A travel_worldview without a location would fail the schema rule, so the
+    // draft must not claim the travel subtype or fabricate a city.
+    expect(object.experience_subtype).toBeUndefined();
+    expect(object.location).toBeUndefined();
+    expect(object.locations).toBeUndefined();
+    const errors = validateObject(object).issues.filter((issue) => issue.severity === 'error');
+    expect(errors).toEqual([]);
   });
 });
 

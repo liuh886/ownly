@@ -145,6 +145,12 @@ export function buildTripReviewDraft(
     options?.idFactory?.() ?? `obj_${date.replaceAll('-', '')}_${now.getTime()}`;
 
   const destinations = trip.destinations ?? [];
+  // A travel_worldview experience must carry a location (schema rule), and we
+  // never fabricate one. Trips created through the UI always fall back to the
+  // title, so an empty-destination trip only arrives from CLI/MCP/imported
+  // data; degrade to a location-less experience instead of writing an invalid
+  // travel record that travel insights would misplace.
+  const hasDestination = destinations.length > 0;
   const expenseItems: ExperienceExpenseItem[] = stats.topExpenses.map((item) => ({
     name: item.title,
     amount: item.amount,
@@ -158,11 +164,11 @@ export function buildTripReviewDraft(
     object_type: 'one_time_experience',
     status: 'completed',
     title: trip.title,
-    experience_subtype: 'travel_worldview',
+    experience_subtype: hasDestination ? 'travel_worldview' : undefined,
     started_at: trip.start_date,
     ended_at: trip.end_date,
-    location: destinations.length > 0 ? { city: destinations[0] } : undefined,
-    locations: destinations.map((city) => ({ city })),
+    location: hasDestination ? { city: destinations[0] } : undefined,
+    locations: hasDestination ? destinations.map((city) => ({ city })) : undefined,
     budget_total: undefined,
     actual_total: stats.expenseTotal ?? undefined,
     expense_items: expenseItems.length > 0 ? expenseItems : undefined,
