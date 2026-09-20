@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from '@/components/common/Sheet';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
-import { applyTripFormPatch, listTripDates } from '../../domain/planner';
+import { applyTripFormPatch, listTripDates, resolveTripDestinations, splitTripList, validateTripForm } from '../../domain/planner';
 import {
   createShareableTripBundle,
   parseTripBundle,
@@ -232,22 +232,21 @@ export function CreateTripModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanTitle = title.trim();
-    if (!cleanTitle) {
-      setError(zh ? '请输入行程名称。' : 'Please enter a trip title.');
-      return;
-    }
-    if (!startDate || !endDate) {
-      setError(zh ? '请选择出发和结束日期。' : 'Please select start and end dates.');
-      return;
-    }
-    if (startDate > endDate) {
-      setError(zh ? '结束日期不能早于出发日期。' : 'End date cannot be earlier than start date.');
+    const formError = validateTripForm({ title, start_date: startDate, end_date: endDate });
+    if (formError) {
+      setError(
+        formError === 'title'
+          ? (zh ? '请输入行程名称。' : 'Please enter a trip title.')
+          : formError === 'dates'
+            ? (zh ? '请选择出发和结束日期。' : 'Please select start and end dates.')
+            : (zh ? '结束日期不能早于出发日期。' : 'End date cannot be earlier than start date.'),
+      );
       return;
     }
 
     const now = new Date().toISOString();
-    const destList = destinations.split(/[,，、]/).map((d) => d.trim()).filter(Boolean);
-    const tagList = tags.split(/[,，、]/).map((t) => t.trim()).filter(Boolean);
+    const destList = resolveTripDestinations(destinations, cleanTitle);
+    const tagList = splitTripList(tags);
 
     // NB: applyTripFormPatch merges over editingTrip so fields the form does not
     // own (members, fx_rates, calendar_feed, …) survive an edit — the repo upsert
@@ -256,7 +255,7 @@ export function CreateTripModal({
       title: cleanTitle,
       start_date: startDate,
       end_date: endDate,
-      destinations: destList.length > 0 ? destList : [cleanTitle],
+      destinations: destList,
       currency: currency.toUpperCase().trim() || 'THB',
       transport_mode: transportMode,
       tags: tagList,

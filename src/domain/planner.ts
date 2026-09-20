@@ -507,6 +507,34 @@ function normalizeDayTimezones(
 }
 
 /**
+ * Deterministic validation for the create/edit trip form. Returns the first
+ * failing field so the UI can show a specific message instead of a generic one.
+ */
+export type TripFormFieldError = 'title' | 'dates' | 'range';
+
+export function validateTripForm(input: {
+  title: string;
+  start_date: string;
+  end_date: string;
+}): TripFormFieldError | null {
+  if (!input.title.trim()) return 'title';
+  if (!input.start_date || !input.end_date) return 'dates';
+  if (input.start_date > input.end_date) return 'range';
+  return null;
+}
+
+/** Split a delimited destination/tag string into trimmed, non-empty items. */
+export function splitTripList(raw: string): string[] {
+  return raw.split(/[,，、]/).map((item) => item.trim()).filter(Boolean);
+}
+
+/** Destinations fall back to the trip title so a trip always has a destination. */
+export function resolveTripDestinations(raw: string, title: string): string[] {
+  const list = splitTripList(raw);
+  return list.length > 0 ? list : [title.trim()];
+}
+
+/**
  * Builds the trip entity to persist from the manage-trips form.
  * Editing must preserve every field the form does not own (members, fx_rates,
  * calendar_feed, saved_list_name, ignored_duplicate_pair_ids, …) because the

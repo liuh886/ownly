@@ -46,6 +46,9 @@ import {
   convertPriceRange,
   parseImportPayload,
   parsePlaceExpenseEstimate,
+  resolveTripDestinations,
+  splitTripList,
+  validateTripForm,
   type OwnlyCaptureState,
   type TripExpenseItem,
   type PlannerScheduledPlace,
@@ -1876,6 +1879,27 @@ describe('exportTripToMarkdown', () => {
     });
   });
 });
+describe('trip form helpers', () => {
+  it('validates title, required dates, and date order', () => {
+    expect(validateTripForm({ title: '  ', start_date: '2026-10-05', end_date: '2026-10-13' })).toBe('title');
+    expect(validateTripForm({ title: 'Trip', start_date: '', end_date: '2026-10-13' })).toBe('dates');
+    expect(validateTripForm({ title: 'Trip', start_date: '2026-10-05', end_date: '' })).toBe('dates');
+    expect(validateTripForm({ title: 'Trip', start_date: '2026-10-13', end_date: '2026-10-05' })).toBe('range');
+    expect(validateTripForm({ title: 'Trip', start_date: '2026-10-05', end_date: '2026-10-05' })).toBeNull();
+  });
+
+  it('splits comma/Chinese-comma/enumeration delimited lists', () => {
+    expect(splitTripList('曼谷, 清迈、大城，芭提雅')).toEqual(['曼谷', '清迈', '大城', '芭提雅']);
+    expect(splitTripList('   ')).toEqual([]);
+  });
+
+  it('falls back to the trip title when no destinations are given', () => {
+    expect(resolveTripDestinations('曼谷, 清迈', 'TH26')).toEqual(['曼谷', '清迈']);
+    expect(resolveTripDestinations('', 'TH26')).toEqual(['TH26']);
+    expect(resolveTripDestinations('  ', 'TH26')).toEqual(['TH26']);
+  });
+});
+
 describe('applyTripFormPatch', () => {
   const NOW_ISO = '2026-09-08T00:00:00.000Z';
 
