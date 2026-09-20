@@ -117,7 +117,7 @@ The first-object journey is implemented in the shared AppShell and reuses the no
 
 ### Major
 
-- Browser-level File System Access API behavior still needs a controlled test double covering permission loss, picker cancellation, write failure, and reconnect.
+- Browser-level File System Access recovery is covered by a controlled test double (`src/core/workspace-recovery.test.ts`) for permission loss, picker cancellation, moved/expired handles, offline, and reconnect. The native picker interaction itself remains manual.
 - The Obsidian adapter now runs a mutation contract (`src/obsidian/vaultRepository.contract.test.ts`) covering create/update/archive/restore/delete, archive-before-delete, rollback on failed source delete, and collision-safe naming. This surfaced and fixed a filename-collision drift (Obsidian used `-n`, Web used `--n`).
 - CLI compatibility is protected for representative read/write/error flows, but future command additions must extend the process matrix rather than relying only on compilation.
 - Versioned backup, restore preflight, and schema migration remain tracked by #34.

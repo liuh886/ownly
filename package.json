@@ -38,7 +38,7 @@
     "test:mcp:process": "vitest run scripts/mcp/ownly-mcp.process.test.ts",
     "test:onboarding": "vitest run src/core/first-object-onboarding.test.ts",
     "test:portability": "vitest run src/core/data-portability.test.ts scripts/cli/portability.process.test.ts",
-    "test:runtime-parity": "vitest run src/core/runtime-parity.test.ts scripts/cli/planner-storage.parity.test.ts",
+    "test:runtime-parity": "vitest run src/core/runtime-parity.test.ts src/core/workspace-recovery.test.ts scripts/cli/planner-storage.parity.test.ts",
     "deps:reset": "node -e \"require('node:fs').rmSync('node_modules',{recursive:true,force:true})\" && npm ci",
     "wyqd": "tsx scripts/wyqd-cli.ts",
     "ownly": "tsx scripts/wyqd-cli.ts",
