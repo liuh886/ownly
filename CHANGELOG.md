@@ -1,16 +1,33 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-09-21)
 
 ### Added
 
-- Added opt-in Ownly MCP writes for objects, lifecycle actions, logs, reviews, snapshots, and recoverable archive/restore.
-- Added short-lived before/after previews, explicit commit/discard tools, safety backups, idempotent retries, and stale-write conflict detection.
+- **Planner trip retrospective:** a finished trip generates a travel-experience review draft (auto stats for places/visits/legs, transport mix, converted spend, top-rated place) that saves through the normal review path and feeds Travel Insights. Nothing is written until you confirm.
+- **Trip snapshot + mobile read-only view:** export a trip as `.ownly-trip-snapshot.json` and open it in the PWA on iOS Safari (timeline, candidate pool, map, staleness badge). Expenses are opt-in; the view has no write path.
+- **Object insights (Pro):** annualized subscription cost ranking per currency, net-worth trend, and an "unused for X days" list — the "Own less" outlet.
+- **Calendar feed is now a Pro feature:** continuous subscription feeds require membership; one-time `.ics` export stays free.
+- **Trust center:** browser capability and data-safety status panel (ten local checks) plus a guided, non-destructive recovery drill.
+- **Capture/Planner:** strong-identity place merge, suspected-duplicate review (Merge/Ignore, persisted), a first-class Shelved filter, hotel transfer-day detection, and mobile-safe multi-day route segmentation.
+- **Agent/MCP:** opt-in writes for objects, lifecycle actions, logs, reviews, snapshots, and recoverable archive/restore, with two-phase preview/commit, safety backups, idempotent retries, and stale-write conflict detection.
 
 ### Improved
 
 - Unified CLI and MCP data-root resolution: `Ownly/` remains the default folder, while a custom root containing `Objects/` can be passed directly.
 - Fixed local-date formatting so positive-offset time zones do not report recurring billing dates one day early.
+- Obsidian filename collision suffix now matches the Web runtime (`--n`), backed by a shared adapter mutation contract.
+- Added controlled coverage for File System Access recovery states (permission loss, picker cancellation, moved folders, reconnect).
+
+### Fixed
+
+- Trip retrospective draft is now always schema-valid; a trip with no destinations degrades to a location-less experience instead of an invalid travel record.
+- Index cache purges deleted files and classifies `trip_visit` correctly.
+- Planner CSV export neutralizes every spreadsheet formula trigger; the map collapses repeated visits while the timeline keeps each occurrence; candidate/scheduled/shelved counts stay reconciled after merge, delete, and restore.
+
+### Packaging
+
+- The Obsidian plugin now publishes from a generated standalone repository (`liuh886/ownly-obsidian`) that contains only the plugin dependency closure, so the community review no longer scans the Web app or the Chrome extension. Release tags sync it automatically.
 
 ## 1.1.0 (2026-06-23)
 
