@@ -68,7 +68,13 @@ describe('sumAmounts / calculateNetWorth', () => {
 
   it('derives net worth from assets minus liabilities', () => {
     const result = calculateNetWorth(
-      snapshot({ asset_balances: [{ amount: 1000 }, { amount: 500 }], liability_balances: [{ amount: 200 }] }),
+      snapshot({
+        asset_balances: [
+          { account: 'Cash', account_id: 'a1', amount: 1000 },
+          { account: 'Bank', account_id: 'a2', amount: 500 },
+        ],
+        liability_balances: [{ account: 'Card', account_id: 'l1', amount: 200 }],
+      }),
     );
     expect(result.total_assets).toBe(1500);
     expect(result.total_liabilities).toBe(200);
@@ -198,8 +204,8 @@ describe('calculateHomeMetrics', () => {
       physical({ id: 'p2', status: 'observing', purchase_price: 300 }),
     ];
     const metrics = calculateHomeMetrics(objects, [
-      snapshot({ id: 'jan', snapshot_at: '2026-01-31', is_month_end: true, asset_balances: [{ amount: 100 }] }),
-      snapshot({ id: 'feb', snapshot_at: '2026-02-28', is_month_end: true, asset_balances: [{ amount: 150 }] }),
+      snapshot({ id: 'jan', snapshot_at: '2026-01-31', is_month_end: true, asset_balances: [{ account: 'Cash', account_id: 'a1', amount: 100 }] }),
+      snapshot({ id: 'feb', snapshot_at: '2026-02-28', is_month_end: true, asset_balances: [{ account: 'Cash', account_id: 'a1', amount: 150 }] }),
     ]);
     expect(metrics.netWorth).toBe(150);
     expect(metrics.netWorthDeltaFromPreviousMonth).toBe(50);

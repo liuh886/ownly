@@ -9,6 +9,7 @@ import {
 import type { WYQDStoredEntity } from './repository';
 import type {
   AccountSnapshot,
+  BaseEntity,
   ObjectLogEntry,
   PhysicalObject,
   ReviewEntry,
@@ -17,7 +18,7 @@ import type {
 
 const CHECKED_AT = '2026-09-08T00:00:00.000Z';
 
-function stored<T extends { id: string }>(entity: T, fileName = `${entity.id}.md`): WYQDStoredEntity<T> {
+function stored<T extends BaseEntity>(entity: T, fileName = `${entity.id}.md`): WYQDStoredEntity<T> {
   return { fileName, path: `Ownly/${fileName}`, entity, body: '' };
 }
 
@@ -33,7 +34,7 @@ function snapshot(overrides: Partial<AccountSnapshot> = {}): AccountSnapshot {
   return {
     schema_version: '0.1', id: 'snap-1', type: 'snapshot', title: 'Net worth',
     created_at: '2026-08-01', snapshot_type: 'net_worth', snapshot_at: '2026-08-01',
-    asset_balances: [{ amount: 100 }], liability_balances: [], net_worth: 100,
+    asset_balances: [{ account: 'Cash', account_id: 'a1', amount: 100 }], liability_balances: [], net_worth: 100,
     ...overrides,
   };
 }
@@ -94,7 +95,7 @@ describe('runWYQDDoctor', () => {
 
   it('warns on unsupported schema versions', async () => {
     const report = await runWYQDDoctor(
-      adapter({ objects: [stored(physical({ schema_version: '9.9' } as Partial<PhysicalObject>))] }),
+      adapter({ objects: [stored(physical({ schema_version: '9.9' } as unknown as Partial<PhysicalObject>))] }),
       CHECKED_AT,
     );
     expect(ids(report)).toContain('entity.schema.unsupported');

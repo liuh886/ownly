@@ -30,7 +30,7 @@ function review(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
     type: 'review',
     title: 'Trip review',
     created_at: '2026-01-10',
-    review_type: 'experience_review',
+    review_type: 'object_review',
     target_id: 'exp-1',
     target_type: 'one_time_experience',
     summary: 'Great',
