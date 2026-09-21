@@ -118,6 +118,15 @@ export function getOwnlyLocalDataCopy(language: WYQDLanguage): OwnlyLocalDataCop
 
 /** True for phone/tablet browsers, which never offer direct folder access. */
 export function isMobileDevice(userAgent?: string): boolean {
-  const ua = userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '');
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  // Explicit UA (tests / callers with their own source) keeps the classic check.
+  if (userAgent !== undefined) {
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+  }
+  // Avoid UA sniffing (Obsidian bans navigator.userAgent/platform): a coarse
+  // pointer without hover is the reliable touch-first signal and works in both
+  // the Web runtime and Obsidian's mobile webview.
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(pointer: coarse)').matches;
 }
