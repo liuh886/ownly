@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.1 (2026-09-21)
+
+### Fixed
+
+- Obsidian: raised `minAppVersion` to 1.8.7. The plugin uses `App.loadLocalStorage`/`saveLocalStorage` for the language preference, which Obsidian added in 1.8.7; the previous 1.8.0 declaration triggered the community directory's "uses APIs newer than minAppVersion" error.
+
+### Packaging
+
+- The generated Obsidian plugin repository now pins its dependencies to exact versions instead of semver ranges.
+
 ## 1.2.0 (2026-09-21)
 
 ### Added

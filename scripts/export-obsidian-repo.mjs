@@ -66,9 +66,26 @@ for (const rel of [
 await copyInto('src/obsidian/styles.css');
 await copyInto('src/obsidian/tailwind-input.css');
 
-// 5. Generated package.json — only the deps the closure actually needs.
-const pick = (deps, list) =>
-  Object.fromEntries(list.filter((k) => deps[k]).map((k) => [k, deps[k]]));
+// 5. Generated package.json — only the deps the closure actually needs, pinned
+// to the exact versions this monorepo built and validated against (the Obsidian
+// directory flags broad ranges and prefers reproducible builds).
+async function installedVersion(name) {
+  try {
+    const meta = JSON.parse(await readFile(join('node_modules', name, 'package.json'), 'utf8'));
+    return typeof meta.version === 'string' ? meta.version : null;
+  } catch {
+    return null;
+  }
+}
+
+async function pinned(deps, list) {
+  const out = {};
+  for (const name of list) {
+    if (!deps[name]) continue;
+    out[name] = (await installedVersion(name)) ?? deps[name];
+  }
+  return out;
+}
 
 const outPkg = {
   name: 'ownly-obsidian',
@@ -83,7 +100,7 @@ const outPkg = {
     check: 'tsc -p tsconfig.json --noEmit',
     validate: 'npm run package && node scripts/validate-obsidian-release.mjs',
   },
-  dependencies: pick(pkg.dependencies, [
+  dependencies: await pinned(pkg.dependencies, [
     'd3-geo',
     'framer-motion',
     'idb-keyval',
@@ -94,7 +111,7 @@ const outPkg = {
     'topojson-client',
     'yaml',
   ]),
-  devDependencies: pick(pkg.devDependencies, [
+  devDependencies: await pinned(pkg.devDependencies, [
     '@tailwindcss/postcss',
     '@types/d3-geo',
     '@types/node',

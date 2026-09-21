@@ -1,6 +1,6 @@
 # Ownly Quality Baseline
 
-**Current Version:** 1.2.0
+**Current Version:** 1.2.1
 
 ## Validation and test results
 
