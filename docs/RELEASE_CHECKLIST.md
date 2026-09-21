@@ -139,9 +139,15 @@ the Next.js web app (`src/app`) or the Chrome extension (`src/extension`).
 - Export: `npm run export:obsidian-repo` → `dist/obsidian-repo`
 - Sync: `.github/workflows/release.yml` pushes the closure on every release tag and publishes the release assets there
 
+Submission and updates are handled by the **Obsidian Community directory**
+(https://community.obsidian.md), not by a pull request to `obsidianmd/obsidian-releases`
+(that repository is now only a mirror). The directory reads the `manifest.json`
+at the default-branch HEAD and the GitHub release whose tag matches it, and runs
+the automated review described below.
+
 The workflow requires a repository secret `OBSIDIAN_REPO_TOKEN`: a fine-grained
 personal access token with **Contents: Read and write** on `liuh886/ownly-obsidian`.
-Without it the sync and release steps fail.
+Without it the sync and release steps are skipped.
 
 ## 9. Data safety
 
@@ -173,5 +179,6 @@ Ownly exposes facts and validated mutations through explicit interfaces; do not 
 1. Align the version across `package.json`, `manifest.json`, `versions.json`, and `src/core/runtime.ts`.
 2. Create a tag matching the release version in this monorepo.
 3. The release workflow builds the plugin, exports the standalone closure, force-pushes it to `liuh886/ownly-obsidian`, and publishes the release assets (`main.js`, `manifest.json`, `styles.css`) there.
-4. Link the hosted Web app and relevant storage/recovery notes.
-5. Publish only after required CI and manual checks pass.
+4. In the [Obsidian Community directory](https://community.obsidian.md), review the entry's scan results and use **Request review** / **Review branch** if needed. Warnings do not block; errors must be fixed and a new release published.
+5. Link the hosted Web app and relevant storage/recovery notes.
+6. Publish only after required CI and manual checks pass.
