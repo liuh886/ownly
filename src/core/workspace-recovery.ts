@@ -33,7 +33,7 @@ export async function checkWorkspaceRecovery(
       if (perm !== 'granted') return { state: 'PERMISSION_REQUIRED', message: 'Permission required — please allow access.', actionLabel: 'Allow' };
     }
     // Try to read to detect moved/deleted folder
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- iterating one entry only probes folder readability
     for await (const _item of (handle as unknown as { values: () => AsyncIterableIterator<unknown> }).values()) { break; }
     return { state: 'CONNECTED', message: 'Connected' };
   } catch (e) {

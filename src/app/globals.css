@@ -193,6 +193,20 @@ body {
   background-color: var(--ds-line-strong);
 }
 
+/* Imperative DOM utilities — kept as classes so runtime code toggles
+   classList instead of assigning inline styles. Shared by Web and Obsidian. */
+.ownly-map-panning {
+  will-change: transform;
+}
+body.ownly-scroll-locked {
+  overflow: hidden;
+}
+.ownly-clipboard-proxy {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+}
+
 /* Skeleton shimmer for loading states.
    Static base first; shimmer only under no-preference; dark variants paired
    with the same motion preference so dark+reduce stays static. */

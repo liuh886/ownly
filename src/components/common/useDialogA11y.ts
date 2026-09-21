@@ -11,14 +11,14 @@ let scrollLockCount = 0;
 function lockBodyScroll() {
   scrollLockCount += 1;
   if (scrollLockCount === 1 && typeof document !== 'undefined') {
-    document.body.style.overflow = 'hidden';
+    document.body.classList.add('ownly-scroll-locked');
   }
 }
 
 function unlockBodyScroll() {
   scrollLockCount = Math.max(0, scrollLockCount - 1);
   if (scrollLockCount === 0 && typeof document !== 'undefined') {
-    document.body.style.overflow = '';
+    document.body.classList.remove('ownly-scroll-locked');
   }
 }
 

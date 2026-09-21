@@ -1077,3 +1077,17 @@
   padding: 6px 10px;
   line-height: 1;
 }
+
+/* Imperative DOM utilities shared with the Web runtime. Runtime code toggles
+   these classes instead of assigning inline styles. */
+.ownly-map-panning {
+  will-change: transform;
+}
+body.ownly-scroll-locked {
+  overflow: hidden;
+}
+.ownly-clipboard-proxy {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+}

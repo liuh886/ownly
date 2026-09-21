@@ -426,9 +426,7 @@ export function PlannerBudgetLedger({
       try {
         const textarea = document.createElement('textarea');
         textarea.value = settlement.summaryText;
-        textarea.style.position = 'fixed';
-        textarea.style.left = '-9999px';
-        textarea.style.top = '-9999px';
+        textarea.className = 'ownly-clipboard-proxy';
         document.body.appendChild(textarea);
         textarea.focus();
         textarea.select();

@@ -447,22 +447,22 @@ export function PlannerMap({
     const transform = `translate3d(${dx}px, ${dy}px, 0)`;
     if (tilesWrapRef.current) {
       tilesWrapRef.current.style.transform = transform;
-      tilesWrapRef.current.style.willChange = 'transform';
+      tilesWrapRef.current.classList.add('ownly-map-panning');
     }
     if (routesWrapRef.current) {
       routesWrapRef.current.style.transform = transform;
-      routesWrapRef.current.style.willChange = 'transform';
+      routesWrapRef.current.classList.add('ownly-map-panning');
     }
   }, []);
   const clearPanTransform = useCallback(() => {
     panOffsetRef.current = null;
     if (tilesWrapRef.current) {
-      tilesWrapRef.current.style.transform = '';
-      tilesWrapRef.current.style.willChange = '';
+      tilesWrapRef.current.style.removeProperty('transform');
+      tilesWrapRef.current.classList.remove('ownly-map-panning');
     }
     if (routesWrapRef.current) {
-      routesWrapRef.current.style.transform = '';
-      routesWrapRef.current.style.willChange = '';
+      routesWrapRef.current.style.removeProperty('transform');
+      routesWrapRef.current.classList.remove('ownly-map-panning');
     }
   }, []);
 
@@ -487,7 +487,7 @@ export function PlannerMap({
   // marker layout, so a coordinate-keyed list from before may no longer exist.
   // No-op render when already closed (React bails out on identical state).
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset transient cluster UI when the active day or layer changes
     setOpenClusterKey(null);
   }, [activeDate, activeDayIndex, layerSig]);
 
@@ -1175,7 +1175,7 @@ export function PlannerMap({
         {/* Dynamic Basemap Tiles (translated imperatively during pans) */}
         <div ref={tilesWrapRef} className="absolute inset-0 pointer-events-none">
           {tiles.map((t) => (
-            // eslint-disable-next-line @next/next/no-img-element
+            // eslint-disable-next-line @next/next/no-img-element -- basemap tiles are remote map image URLs, not optimizable local assets
             <img
               key={`${basemapStyle}/${t.key}`}
               src={activeBasemap.getUrl(intZoom, t.x, t.y)}
