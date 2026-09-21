@@ -46,6 +46,10 @@ jobs:
         env:
           PLUGIN_REPO_TOKEN: ${{ secrets.OBSIDIAN_REPO_TOKEN }}
         run: |
+          if [ -z "$PLUGIN_REPO_TOKEN" ]; then
+            echo "OBSIDIAN_REPO_TOKEN is not configured; skipping plugin repo sync."
+            exit 0
+          fi
           cd dist/obsidian-repo
           git init -q
           git config user.name "github-actions[bot]"
@@ -61,6 +65,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.OBSIDIAN_REPO_TOKEN }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "OBSIDIAN_REPO_TOKEN is not configured; skipping plugin release."
+            exit 0
+          fi
           gh release create "${GITHUB_REF_NAME}" \
             dist/obsidian/ownly/main.js \
             dist/obsidian/ownly/styles.css \
