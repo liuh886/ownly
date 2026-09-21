@@ -1,48 +1,93 @@
 name: Release Obsidian Plugin
 
+# Sync mechanism: the dedicated plugin repo (liuh886/ownly-obsidian) mirrors a
+# *release*, never raw development commits. Its default-branch manifest.json must
+# always equal the latest released version, which is what the Obsidian community
+# directory reads.
+#
+#   tag push  -> gate -> build -> export -> push source -> publish release assets
+#   manual    -> same pipeline, source-only (dry_run=true builds without pushing)
+#
+# See docs/OBSIDIAN_PLUGIN_SYNC.md for the full contract.
 on:
   push:
     tags:
       - '*'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and export only; do not push or publish'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   id-token: write
   attestations: write
 
+# Never race two force-pushes to the plugin repo.
+concurrency:
+  group: obsidian-plugin-sync
+  cancel-in-progress: false
+
 jobs:
   release-plugin:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
-      - run: npm ci
-      - run: npm run validate
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A tag that does not match manifest.json would publish an unreachable
+      # version, so fail fast and loudly.
+      - name: Verify tag matches manifest version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$TAG" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag '$TAG' does not match manifest.json version '$MANIFEST_VERSION'." >&2
+            exit 1
+          fi
+
+      - name: Validate
+        run: npm run validate
       - run: npm run test:runtime-parity
 
-      - name: Build Obsidian plugin
+      - name: Build Obsidian plugin package
         run: npm run package:obsidian
 
       - name: Export standalone plugin source
-        run: node scripts/export-obsidian-repo.mjs dist/obsidian-repo
+        run: npm run export:obsidian-repo
+
+      # The exported tree is a copy of the plugin closure; prove it is
+      # self-consistent (builds and passes release validation) before pushing.
+      - name: Verify exported tree
+        working-directory: dist/obsidian-repo
+        run: |
+          set -euo pipefail
+          node esbuild.obsidian.mjs --production
+          node scripts/package-obsidian-plugin.mjs
+          node scripts/validate-obsidian-release.mjs
 
       - name: Generate artifact attestation
+        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             dist/obsidian/ownly/main.js
             dist/obsidian/ownly/styles.css
 
-      # The Obsidian community review lints every *.ts in the submitted repo, so
-      # the plugin lives in a dedicated repo that excludes the web app and the
-      # Chrome extension. This push mirrors the computed plugin closure.
       - name: Sync plugin source to liuh886/ownly-obsidian
+        if: github.event_name == 'push' || inputs.dry_run == false
         env:
           PLUGIN_REPO_TOKEN: ${{ secrets.OBSIDIAN_REPO_TOKEN }}
         run: |
