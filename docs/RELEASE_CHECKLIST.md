@@ -127,6 +127,22 @@ Verify:
 
 See [OBSIDIAN_REVIEWER_CHECKLIST.md](OBSIDIAN_REVIEWER_CHECKLIST.md).
 
+### Dedicated plugin repository
+
+The Obsidian community review runs `eslint-plugin-obsidianmd` over every `*.ts`
+in the submitted repository, so the plugin is published from a generated,
+standalone repository that contains only the plugin's dependency closure — never
+the Next.js web app (`src/app`) or the Chrome extension (`src/extension`).
+
+- Generated repo: [liuh886/ownly-obsidian](https://github.com/liuh886/ownly-obsidian) (do not edit by hand)
+- Source of truth: this monorepo
+- Export: `npm run export:obsidian-repo` → `dist/obsidian-repo`
+- Sync: `.github/workflows/release.yml` pushes the closure on every release tag and publishes the release assets there
+
+The workflow requires a repository secret `OBSIDIAN_REPO_TOKEN`: a fine-grained
+personal access token with **Contents: Read and write** on `liuh886/ownly-obsidian`.
+Without it the sync and release steps fail.
+
 ## 9. Data safety
 
 For any storage or schema change:
@@ -154,8 +170,8 @@ Ownly exposes facts and validated mutations through explicit interfaces; do not 
 
 ## 11. Publish
 
-1. Create a tag matching the release version.
-2. Draft the GitHub Release.
-3. Attach Obsidian release assets when applicable: `main.js`, `manifest.json`, `styles.css`.
+1. Align the version across `package.json`, `manifest.json`, `versions.json`, and `src/core/runtime.ts`.
+2. Create a tag matching the release version in this monorepo.
+3. The release workflow builds the plugin, exports the standalone closure, force-pushes it to `liuh886/ownly-obsidian`, and publishes the release assets (`main.js`, `manifest.json`, `styles.css`) there.
 4. Link the hosted Web app and relevant storage/recovery notes.
 5. Publish only after required CI and manual checks pass.
