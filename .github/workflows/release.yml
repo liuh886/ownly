@@ -4,17 +4,20 @@ on:
   push:
     tags:
       - '*'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
   attestations: write
 
 jobs:
-  gate:
+  release-plugin:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -23,21 +26,11 @@ jobs:
       - run: npm run validate
       - run: npm run test:runtime-parity
 
-  build:
-    needs: gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-
-      - run: npm ci
-
       - name: Build Obsidian plugin
         run: npm run package:obsidian
+
+      - name: Export standalone plugin source
+        run: node scripts/export-obsidian-repo.mjs dist/obsidian-repo
 
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
@@ -46,12 +39,32 @@ jobs:
             dist/obsidian/ownly/main.js
             dist/obsidian/ownly/styles.css
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/obsidian/ownly/main.js
-            dist/obsidian/ownly/styles.css
-            dist/obsidian/ownly/manifest.json
-          draft: false
-          generate_release_notes: true
+      # The Obsidian community review lints every *.ts in the submitted repo, so
+      # the plugin lives in a dedicated repo that excludes the web app and the
+      # Chrome extension. This push mirrors the computed plugin closure.
+      - name: Sync plugin source to liuh886/ownly-obsidian
+        env:
+          PLUGIN_REPO_TOKEN: ${{ secrets.OBSIDIAN_REPO_TOKEN }}
+        run: |
+          cd dist/obsidian-repo
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "sync: ${GITHUB_REF_NAME}"
+          git branch -M main
+          git remote add origin "https://x-access-token:${PLUGIN_REPO_TOKEN}@github.com/liuh886/ownly-obsidian.git"
+          git push -f origin main
+
+      - name: Publish release in liuh886/ownly-obsidian
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.OBSIDIAN_REPO_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/obsidian/ownly/main.js \
+            dist/obsidian/ownly/styles.css \
+            dist/obsidian/ownly/manifest.json \
+            --repo liuh886/ownly-obsidian \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
