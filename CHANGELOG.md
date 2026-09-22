@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.2 (2026-09-22)
+
+### Improved
+
+- Reduced the Obsidian community-review findings from 2340 to 22. The bulk was a single root cause: the generated plugin repository omitted type-only modules, so the type checker degraded and reported thousands of unsafe-access warnings. The export now resolves type-only imports with the TypeScript resolver.
+- Added the plugin's `package-lock.json` and a deterministic build stamp so the published `main.js` is byte-for-byte reproducible from the committed source (the directory's build verification now passes).
+- Removed redundant type assertions, wrapped floating/void-returning handlers, replaced inline styles with CSS classes, and adopted the app's confirm dialog instead of native `confirm`.
+
+The remaining 22 findings are either deprecation recommendations (Obsidian settings `display`/`setWarning` require a newer `minAppVersion`) or Obsidian-only rules that cannot apply to modules shared with the Node CLI/MCP runtime (`globalThis`, bare timers, `fetch`).
+
 ## 1.2.1 (2026-09-21)
 
 ### Fixed
