@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { createDetachedElement } from '@/lib/dom';
 import type {
   PlannerScheduledPlace,
   PlannerTrip,
@@ -424,7 +425,7 @@ export function PlannerBudgetLedger({
     }
     if (!copied && typeof window.document !== 'undefined') {
       try {
-        const textarea = window.document.createElement('textarea');
+        const textarea = createDetachedElement('textarea');
         textarea.value = settlement.summaryText;
         textarea.className = 'ownly-clipboard-proxy';
         window.document.body.appendChild(textarea);

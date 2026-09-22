@@ -113,6 +113,13 @@ console.log('Build stamp (version): ' + version);
 `;
 await writeFile(join(outRoot, 'scripts', 'gen-git-sha.mjs'), genGitSha);
 
+// 4c. Commit a deterministic git-sha module so the type checker resolves
+// GIT_SHA without running a build first (it is regenerated identically at build).
+await writeFile(
+  join(outRoot, 'src', 'core', 'git-sha.ts'),
+  `// Auto-generated at build time - do not edit\nexport const GIT_SHA = '${pkg.version}';\n`,
+);
+
 // 5. Generated package.json — only the deps the closure actually needs, pinned
 // to the exact versions this monorepo built and validated against (the Obsidian
 // directory flags broad ranges and prefers reproducible builds).
@@ -216,7 +223,7 @@ await writeFile(join(outRoot, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2
 // source stylesheet at src/obsidian/styles.css, breaking a fresh-clone build.
 await writeFile(
   join(outRoot, '.gitignore'),
-  ['/node_modules/', '/dist/', '/main.js', '/main.css', '/styles.css', '/src/core/git-sha.ts', ''].join('\n'),
+  ['/node_modules/', '/dist/', '/main.js', '/main.css', '/styles.css', ''].join('\n'),
 );
 
 await writeFile(

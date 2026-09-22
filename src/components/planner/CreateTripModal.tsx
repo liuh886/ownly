@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from '@/components/common/Sheet';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
+import { createDetachedElement } from '@/lib/dom';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
 import { applyTripFormPatch, listTripDates, resolveTripDestinations, splitTripList, validateTripForm } from '../../domain/planner';
 import {
@@ -192,7 +193,7 @@ export function CreateTripModal({
       const json = JSON.stringify(bundle, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = window.document.createElement('a');
+      const a = createDetachedElement('a');
       a.href = url;
       a.download = tripBundleFileName(trip.title);
       a.click();

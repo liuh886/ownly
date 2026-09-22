@@ -51,6 +51,7 @@ import {
 } from '@/domain/calendar-feed';
 import { useAutoCalendarSync } from './useAutoCalendarSync';
 import { trackFirstEver } from '@/lib/analytics';
+import { createDetachedElement } from '@/lib/dom';
 import { createTripSnapshot, tripSnapshotFileName } from '@/domain/trip-snapshot';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { calendarFeedService } from '@/services/CalendarFeedService';
@@ -1097,7 +1098,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const kmlContent = exportPlacesToKML(selectedTrip.title, activeDate, scheduled);
     const blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml' });
     const url = URL.createObjectURL(blob);
-    const a = window.document.createElement('a');
+    const a = createDetachedElement('a');
     a.href = url;
     a.download = `${selectedTrip.title}_${activeDate}.kml`;
     a.click();
@@ -1117,7 +1118,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     );
     const blob = new Blob([`${JSON.stringify(snapshot, null, 2)}\n`], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = window.document.createElement('a');
+    const a = createDetachedElement('a');
     a.href = url;
     a.download = tripSnapshotFileName(selectedTrip.title);
     a.click();
@@ -1132,7 +1133,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const csvContent = exportPlacesToCSV(scheduled);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = window.document.createElement('a');
+    const a = createDetachedElement('a');
     a.href = url;
     a.download = `${selectedTrip.title}_${activeDate}.csv`;
     a.click();
@@ -1152,7 +1153,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language, legs, includeAllDates: true });
     const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = window.document.createElement('a');
+    const a = createDetachedElement('a');
     a.href = url;
     a.download = `${selectedTrip.title || 'trip'}.ics`;
     a.click();
@@ -1166,7 +1167,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       const ics = buildDayCalendarIcs(selectedTrip, places, visits, date, { language, legs, includeAllDates: true });
       const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      const a = window.document.createElement('a');
+      const a = createDetachedElement('a');
       a.href = url;
       a.download = `${selectedTrip.title || 'trip'}-${date}.ics`;
       a.click();

@@ -102,7 +102,10 @@ function review(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
 
 function setup() {
   const vault = new FakeVault();
-  const repository = new ObsidianVaultRepository(vault as never, { dataFolder: 'Ownly' });
+  // Production constructs this with an App (which has a FileManager); the
+  // repository deletes through FileManager.trashFile.
+  const app = { vault, fileManager: { trashFile: (file: InstanceType<typeof TFile>) => vault.trash(file) } };
+  const repository = new ObsidianVaultRepository(app as never, { dataFolder: 'Ownly' });
   return { vault, repository };
 }
 
@@ -133,7 +136,10 @@ describe('ObsidianVaultRepository mutation contract', () => {
     const fileName = await repository.saveObject(physical(), 'Initial body');
     await repository.updateObject(fileName, physical({ status: 'using' }), 'Updated body');
 
-    const reloaded = new ObsidianVaultRepository(vault as never, { dataFolder: 'Ownly' });
+    const reloaded = new ObsidianVaultRepository(
+      { vault, fileManager: { trashFile: (file: InstanceType<typeof TFile>) => vault.trash(file) } } as never,
+      { dataFolder: 'Ownly' },
+    );
     const [entry] = await reloaded.listObjects();
     expect(entry.entity.status).toBe('using');
     expect(entry.body).toContain('Updated body');

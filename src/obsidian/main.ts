@@ -429,13 +429,13 @@ class WYQDSettingTab extends PluginSettingTab {
     const hero = shell.createDiv({ cls: 'wyqd-settings-hero' });
     const heroCopy = hero.createDiv();
     const eyebrow = heroCopy.createDiv({ cls: 'wyqd-eyebrow' });
-    eyebrow.createEl('span', { text: `Ownly ${WYQD_CORE_TARGET_VERSION}` });
-    eyebrow.createEl('span', { text: t('localVaultOnly') });
+    eyebrow.createSpan({ text: `Ownly ${WYQD_CORE_TARGET_VERSION}` });
+    eyebrow.createSpan({ text: t('localVaultOnly') });
     new Setting(heroCopy).setHeading();
     heroCopy.createEl('p', { text: t('workspaceSubtitle') });
     heroCopy.createEl('p', { cls: 'wyqd-slogan', text: WYQD_PRODUCT_SLOGAN });
     const membershipCard = hero.createDiv({ cls: 'wyqd-settings-membership' });
-    membershipCard.createEl('span', { text: t('membership') });
+    membershipCard.createSpan({ text: t('membership') });
     membershipCard.createEl('strong', { text: membership.planLabel });
     membershipCard.createEl('small', { text: membership.statusLabel });
 
@@ -541,7 +541,7 @@ class WYQDSettingTab extends PluginSettingTab {
     if (membership.isPro) {
       // Pro unlocked — show status + sponsor link
       const activeBanner = membershipPanel.createDiv({ cls: 'wyqd-settings-active-banner' });
-      activeBanner.createEl('span', { text: `${t('activationActive')} — ${membership.planLabel}` });
+      activeBanner.createSpan({ text: `${t('activationActive')} — ${membership.planLabel}` });
 
       new Setting(membershipPanel)
         .setName(t('plan'))

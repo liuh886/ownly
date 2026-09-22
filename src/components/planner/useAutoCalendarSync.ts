@@ -108,7 +108,7 @@ export interface AutoCalendarSyncInput {
 export function useAutoCalendarSync(input: AutoCalendarSyncInput): void {
   const latestRef = useRef(input);
   const syncedFingerprintRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<number | null>(null);
   const syncingRef = useRef(false);
 
   // Mirror latest props for async callbacks (effect context, never render).
@@ -205,14 +205,14 @@ export function useAutoCalendarSync(input: AutoCalendarSyncInput): void {
       return;
     }
     if (syncedFingerprintRef.current === fingerprint) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
       void runSync();
     }, AUTO_CALENDAR_SYNC_DEBOUNCE_MS);
     return () => {
       if (timerRef.current) {
-        clearTimeout(timerRef.current);
+        window.clearTimeout(timerRef.current);
         timerRef.current = null;
       }
     };
@@ -225,7 +225,7 @@ export function useAutoCalendarSync(input: AutoCalendarSyncInput): void {
     const onVisibility = (): void => {
       if (document.visibilityState === 'hidden') {
         if (timerRef.current) {
-          clearTimeout(timerRef.current);
+          window.clearTimeout(timerRef.current);
           timerRef.current = null;
         }
         void runSync();

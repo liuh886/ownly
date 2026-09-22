@@ -14,6 +14,7 @@ import {
   type RestoreResult,
 } from '@/core/data-portability';
 import { WYQD_CORE_TARGET_VERSION } from '@/core/runtime';
+import { createDetachedElement } from '@/lib/dom';
 import {
   browserOwnlyTextFileAdapter,
   BrowserOwnlyTextFileAdapter,
@@ -43,7 +44,7 @@ function timestampToken(date = new Date()): string {
 function downloadText(content: string, fileName: string): void {
   const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const anchor = window.document.createElement('a');
+  const anchor = createDetachedElement('a');
   anchor.href = url;
   anchor.download = fileName;
   anchor.hidden = true;
