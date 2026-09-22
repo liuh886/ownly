@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.3 (2026-09-22)
+
+### Fixed
+
+- Removed an `eslint-disable` for `obsidianmd/prefer-file-manager-trash-file`; that rule cannot be disabled, so it was reported as a review **error**. Deletion now always goes through `FileManager.trashFile()` (the repository requires an App with a FileManager, as production already provides).
+- Replaced `createEl('span', …)` with `createSpan(…)` and routed cross-runtime element creation through a shared type-erased helper, clearing the `obsidianmd/prefer-create-el` findings.
+- Committed a deterministic `git-sha` module so the type checker resolves `GIT_SHA` without a build.
+- Fixed popout-window timer usage in the calendar auto-sync hook.
+
+### Improved
+
+- Upgraded the local `eslint-plugin-obsidianmd` to 0.4.2 to match the community-directory scanner.
+
+The remaining findings are deprecation recommendations (Obsidian settings `display`/`setWarning` and declarative settings require a newer `minAppVersion`) and Obsidian-only rules that cannot apply to modules shared with the Node CLI/MCP runtime (`globalThis`, `fetch`).
+
 ## 1.2.2 (2026-09-22)
 
 ### Improved
