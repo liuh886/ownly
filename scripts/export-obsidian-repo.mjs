@@ -166,9 +166,11 @@ const tsconfig = {
 await writeFile(join(outRoot, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2) + '\n');
 
 // 7. .gitignore — build artifacts and the generated git-sha module.
+// Patterns are root-anchored: an unanchored "styles.css" would also ignore the
+// source stylesheet at src/obsidian/styles.css, breaking a fresh-clone build.
 await writeFile(
   join(outRoot, '.gitignore'),
-  ['node_modules/', 'dist/', 'main.js', 'main.css', 'styles.css', 'src/core/git-sha.ts', ''].join('\n'),
+  ['/node_modules/', '/dist/', '/main.js', '/main.css', '/styles.css', '/src/core/git-sha.ts', ''].join('\n'),
 );
 
 await writeFile(
