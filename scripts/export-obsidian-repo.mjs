@@ -8,6 +8,7 @@
 //
 // Usage: node scripts/export-obsidian-repo.mjs [outDir]
 import esbuild from 'esbuild';
+import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -126,6 +127,20 @@ const outPkg = {
   ]),
 };
 await writeFile(join(outRoot, 'package.json'), JSON.stringify(outPkg, null, 2) + '\n');
+
+// 5b. Lockfile — lets the plugin repo build reproducibly (npm ci) and lets the
+// Obsidian directory's build verification run instead of reporting it as
+// unavailable. Network is required; fall back gracefully when offline.
+try {
+  execSync('npm install --package-lock-only --ignore-scripts --no-audit --no-fund', {
+    cwd: outRoot,
+    stdio: 'inherit',
+  });
+} catch (error) {
+  console.warn(
+    `export: package-lock.json was not generated (${error instanceof Error ? error.message : error}); the directory's build check will be skipped.`,
+  );
+}
 
 // 6. Standalone tsconfig for type checking the closure.
 const tsconfig = {

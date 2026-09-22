@@ -62,19 +62,24 @@ jobs:
         run: npm run validate
       - run: npm run test:runtime-parity
 
-      - name: Build Obsidian plugin package
-        run: npm run package:obsidian
-
       - name: Export standalone plugin source
         run: npm run export:obsidian-repo
 
-      # The exported tree is a copy of the plugin closure; prove it is
-      # self-consistent (builds and passes release validation) before pushing.
-      - name: Verify exported tree
+      # Build the release from the exported repository + its lockfile, so the
+      # published assets are byte-reproducible from the committed source. The
+      # Obsidian directory's build verification compares exactly this.
+      - name: Install plugin dependencies (lockfile)
+        working-directory: dist/obsidian-repo
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build plugin from the exported repository
+        working-directory: dist/obsidian-repo
+        run: npm run build
+
+      - name: Package and validate plugin release
         working-directory: dist/obsidian-repo
         run: |
           set -euo pipefail
-          node esbuild.obsidian.mjs --production
           node scripts/package-obsidian-plugin.mjs
           node scripts/validate-obsidian-release.mjs
 
@@ -83,8 +88,8 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            dist/obsidian/ownly/main.js
-            dist/obsidian/ownly/styles.css
+            dist/obsidian-repo/dist/obsidian/ownly/main.js
+            dist/obsidian-repo/dist/obsidian/ownly/styles.css
 
       - name: Sync plugin source to liuh886/ownly-obsidian
         if: github.event_name == 'push' || inputs.dry_run == false
@@ -115,9 +120,9 @@ jobs:
             exit 0
           fi
           gh release create "${GITHUB_REF_NAME}" \
-            dist/obsidian/ownly/main.js \
-            dist/obsidian/ownly/styles.css \
-            dist/obsidian/ownly/manifest.json \
+            dist/obsidian-repo/dist/obsidian/ownly/main.js \
+            dist/obsidian-repo/dist/obsidian/ownly/styles.css \
+            dist/obsidian-repo/dist/obsidian/ownly/manifest.json \
             --repo liuh886/ownly-obsidian \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes

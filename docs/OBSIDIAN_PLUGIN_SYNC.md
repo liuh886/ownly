@@ -50,11 +50,17 @@ syncs at once):
 1. `npm ci`
 2. **Version guard** — a tag must equal `manifest.json` version, else fail fast.
 3. `npm run validate` and `npm run test:runtime-parity` — the gate.
-4. `npm run package:obsidian` — builds `dist/obsidian/ownly/{main.js,styles.css,manifest.json,versions.json}`.
-5. `npm run export:obsidian-repo` — generates `dist/obsidian-repo`.
-6. **Export self-check** — builds and validates the exported tree in place.
-7. **Sync** — force-pushes the exported tree to `liuh886/ownly-obsidian` `main`.
-8. **Publish** — creates/updates the release in `liuh886/ownly-obsidian` with the three assets (tags only).
+4. `npm run export:obsidian-repo` — generates `dist/obsidian-repo`, including a
+   `package-lock.json` so the plugin repo builds reproducibly.
+5. `npm ci` in `dist/obsidian-repo` — installs exactly the locked dependencies.
+6. `npm run build` in `dist/obsidian-repo` — builds the plugin **from the
+   exported repository**, so the published assets are byte-reproducible from the
+   committed source (this is what the directory's build verification checks).
+7. `package` + `validate-obsidian-release` in `dist/obsidian-repo`.
+8. **Sync** — force-pushes the exported tree (source + lockfile) to
+   `liuh886/ownly-obsidian` `main`.
+9. **Publish** — creates/updates the release in `liuh886/ownly-obsidian` with the
+   three assets built in step 6 (tags only).
 
 ## Required secret
 
