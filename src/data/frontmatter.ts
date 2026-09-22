@@ -46,7 +46,7 @@ export function serializeMarkdownEntity<T extends object>(
   frontmatter: T,
   body = '',
 ): string {
-  const yaml = stringifyYaml(frontmatter as Record<string, unknown>).trimEnd();
+  const yaml = stringifyYaml(frontmatter).trimEnd();
   const normalizedBody = body.startsWith('\n') || body.length === 0 ? body : `\n${body}`;
 
   return `---\n${yaml}\n---\n${normalizedBody}`;

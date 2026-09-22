@@ -65,7 +65,7 @@ export function resolveExpensePayments(expense: TripExpenseWithPayments): Expens
     return explicit;
   }
 
-  const splits = (expense.split_members ?? []).map((member) => member?.trim()).filter(Boolean) as string[];
+  const splits = (expense.split_members ?? []).map((member) => member?.trim()).filter(Boolean);
   if (expense.confirmation === LEGACY_SETTLED_CONFIRMATION && amount > 0 && splits.length > 0) {
     const perMember = amount / splits.length;
     return splits.map((member, index) => ({
@@ -129,7 +129,7 @@ export function calculateTripSettlementWithPayments(
       paidMap[payment.member] = (paidMap[payment.member] ?? 0) + converted;
     });
 
-    const splits = (expense.split_members ?? []).map((member) => member?.trim()).filter(Boolean) as string[];
+    const splits = (expense.split_members ?? []).map((member) => member?.trim()).filter(Boolean);
     const effectiveSplits = splits.length > 0 ? splits : members;
     const perShare = effectiveSplits.length > 0 ? amount / effectiveSplits.length : 0;
     effectiveSplits.forEach((member) => {

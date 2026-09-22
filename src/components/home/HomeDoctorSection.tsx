@@ -41,7 +41,7 @@ export function HomeDoctorSection({
   const previewRepairs = useCallback(async () => {
     setRepairLoading(true);
     try {
-      const plan = await inspectReviewRefRepairs(repository as Parameters<typeof inspectReviewRefRepairs>[0]);
+      const plan = await inspectReviewRefRepairs(repository);
       setRepairPlan(plan);
     } catch {
       setRepairPlan(null);
@@ -60,7 +60,7 @@ export function HomeDoctorSection({
     setRepairPlan(null);
     try {
       const result = await applyReviewRefRepairs(
-        repository as Parameters<typeof applyReviewRefRepairs>[0],
+        repository,
         repairPlan,
       );
       setLastRepairResult(

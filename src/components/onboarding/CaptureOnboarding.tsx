@@ -9,11 +9,11 @@ const STORAGE_KEY = 'ownly:capture-onboarding:dismissed';
 export function shouldShowCaptureOnboarding(isEmpty: boolean): boolean {
   if (!isEmpty) return false;
   if (typeof window === 'undefined') return false;
-  return localStorage.getItem(STORAGE_KEY) !== '1';
+  return window.localStorage.getItem(STORAGE_KEY) !== '1';
 }
 
 export function dismissCaptureOnboarding(): void {
-  localStorage.setItem(STORAGE_KEY, '1');
+  window.localStorage.setItem(STORAGE_KEY, '1');
 }
 
 export function CaptureOnboarding({

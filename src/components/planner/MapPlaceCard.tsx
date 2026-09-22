@@ -15,9 +15,9 @@ export interface MapPlaceCardProps {
   scheduledPlace: PlannerScheduledPlace | null;
   /** Numbered-stop count of the active day; drives the insert-position picker. */
   dayStopCount?: number;
-  onSchedule: (placeId: string, sortOrder?: number) => void;
-  onUnschedule: (place: PlannerScheduledPlace) => void;
-  onShelve?: (placeId: string) => void;
+  onSchedule: (placeId: string, sortOrder?: number) => void | Promise<void>;
+  onUnschedule: (place: PlannerScheduledPlace) => void | Promise<void>;
+  onShelve?: (placeId: string) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -146,7 +146,7 @@ export function MapPlaceCard({
         {scheduledPlace ? (
           <button
             type="button"
-            onClick={() => onUnschedule(scheduledPlace)}
+            onClick={() => void onUnschedule(scheduledPlace)}
             className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-800 transition hover:bg-emerald-100"
             title={zh ? '已排入当天日程，点击移出（回到待安排候选池）' : 'Scheduled on active day. Click to remove'}
           >
@@ -156,7 +156,7 @@ export function MapPlaceCard({
         ) : (
           <button
             type="button"
-            onClick={() => onSchedule((place as PlannerScheduledPlace).place_id ?? place.id, insertPos === '' ? undefined : insertPos - 1)}
+            onClick={() => void onSchedule((place as PlannerScheduledPlace).place_id ?? place.id, insertPos === '' ? undefined : insertPos - 1)}
             className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-stone-900 px-2 py-1.5 text-[11px] font-bold text-white transition hover:bg-stone-700"
             title={zh ? `排入第 ${activeDayIndex + 1} 天路线` : `Add to Day ${activeDayIndex + 1}`}
           >
@@ -168,7 +168,7 @@ export function MapPlaceCard({
           <button
             type="button"
             onClick={() => {
-              onShelve(place.id);
+              void onShelve(place.id);
               onClose();
             }}
             className="flex items-center justify-center gap-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-[11px] font-bold text-stone-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"

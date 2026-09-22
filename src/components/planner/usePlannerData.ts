@@ -146,7 +146,7 @@ function pickTripIdOnLoad(
   let stored = '';
   try {
     stored = typeof window !== 'undefined' ? window.localStorage.getItem(SELECTED_TRIP_STORAGE_KEY) || '' : '';
-  } catch {}
+  } catch { /* best-effort; failure is non-fatal */ }
   return resolveInitialTripId(nextTrips, nextPlaces, nextVisits, stored);
 }
 
@@ -168,16 +168,16 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     title: string;
     message: string;
     confirmLabel: string;
-    run: () => void;
+    run: () => void | Promise<void>;
   } | null>(null);
 
   useEffect(() => {
     if (!notice) return;
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       setNotice('');
       setNoticeAction(null);
     }, 8000);
-    return () => clearTimeout(timer);
+    return () => window.clearTimeout(timer);
   }, [notice]);
 
   // Remember the trip being edited so reopening Planner restores it.
@@ -185,7 +185,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     if (!selectedTripId) return;
     try {
       window.localStorage.setItem(SELECTED_TRIP_STORAGE_KEY, selectedTripId);
-    } catch {}
+    } catch { /* best-effort; failure is non-fatal */ }
   }, [selectedTripId]);
 
   const [expensesByTrip, setExpensesByTrip] = useState<Record<string, TripExpenseItem[]>>({});

@@ -267,7 +267,7 @@ export function computeDayTravelRefresh(
     trip,
     stops,
     existingLegs,
-    ors ? new Map([[mode, ors]]) : new Map(),
+    ors ? new Map<PlannerTravelMode, OrsMatrixInput>([[mode, ors]]) : new Map<PlannerTravelMode, OrsMatrixInput>(),
     mode,
     now,
   );

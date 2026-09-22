@@ -10,7 +10,6 @@ import {
 } from './planner';
 import type { PlannerTripVisit } from './planner-visits';
 import type {
-  CurrencyCode,
   ExperienceExpenseItem,
   OneTimeExperienceObject,
 } from './types';
@@ -154,7 +153,7 @@ export function buildTripReviewDraft(
   const expenseItems: ExperienceExpenseItem[] = stats.topExpenses.map((item) => ({
     name: item.title,
     amount: item.amount,
-    currency: item.currency as CurrencyCode,
+    currency: item.currency,
   }));
 
   const object: OneTimeExperienceObject = {
@@ -172,7 +171,7 @@ export function buildTripReviewDraft(
     budget_total: undefined,
     actual_total: stats.expenseTotal ?? undefined,
     expense_items: expenseItems.length > 0 ? expenseItems : undefined,
-    currency: (trip.currency as CurrencyCode | undefined) ?? undefined,
+    currency: (trip.currency) ?? undefined,
     tags: ['ownly', 'experience', 'travel', 'trip-review'],
     created_at: now.toISOString(),
     updated_at: now.toISOString(),

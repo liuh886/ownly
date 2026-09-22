@@ -177,7 +177,7 @@ async function fetchMotorcyclePairMatrix(
       console.warn('[Planner] Travel refresh motorcycle leg failed; keeping estimate', error);
     }
     // Stay comfortably under the 40/min rate limit on pair-heavy days.
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => window.setTimeout(resolve, 200));
   }
   if (!attempted) return null;
   return { order: matrixStops, facts: { durations_minutes, distances_meters } };
@@ -229,7 +229,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   }, [setNotice, zh]);
 
   // Account-level calendar feed: one subscription per account across all trips.
-  // The raw bearer token lives in localStorage; only its SHA-256 reaches the server.
+  // The raw bearer token lives in window.localStorage; only its SHA-256 reaches the server.
   // currentUserId resolves after workspace load, so re-derive when it changes
   // (render-time adjustment, no effect needed).
   const [accountFeedOwner, setAccountFeedOwner] = useState(currentUserId);
@@ -1097,7 +1097,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const kmlContent = exportPlacesToKML(selectedTrip.title, activeDate, scheduled);
     const blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = window.document.createElement('a');
     a.href = url;
     a.download = `${selectedTrip.title}_${activeDate}.kml`;
     a.click();
@@ -1117,7 +1117,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     );
     const blob = new Blob([`${JSON.stringify(snapshot, null, 2)}\n`], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = window.document.createElement('a');
     a.href = url;
     a.download = tripSnapshotFileName(selectedTrip.title);
     a.click();
@@ -1132,7 +1132,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const csvContent = exportPlacesToCSV(scheduled);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = window.document.createElement('a');
     a.href = url;
     a.download = `${selectedTrip.title}_${activeDate}.csv`;
     a.click();
@@ -1152,7 +1152,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const ics = buildTripCalendarIcs(selectedTrip, places, visits, { language, legs, includeAllDates: true });
     const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = window.document.createElement('a');
     a.href = url;
     a.download = `${selectedTrip.title || 'trip'}.ics`;
     a.click();
@@ -1166,7 +1166,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       const ics = buildDayCalendarIcs(selectedTrip, places, visits, date, { language, legs, includeAllDates: true });
       const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = window.document.createElement('a');
       a.href = url;
       a.download = `${selectedTrip.title || 'trip'}-${date}.ics`;
       a.click();
@@ -1508,7 +1508,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   // them silently in the background (debounced). Anything left over keeps its
   // heuristic estimate and the timeline marks it （估）/ (est.).
   const autoRefreshSigRef = useRef(new Map<string, string>());
-  const autoRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoRefreshTimerRef = useRef<number | null>(null);
   useEffect(() => {
     if (!selectedTrip || disabled || busy || !activeDate) return;
     const trip = selectedTrip;
@@ -1516,7 +1516,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     const dayStops = sortPlannerScheduledPlaces(scheduledAll.filter((place) => place.scheduled_date === activeDate));
     if (dayStops.length < 2) return;
     const stopsForCompute = materializeStopCoordinates(resolveStopCoordinates(dayStops));
-    const coordsByPlaceId = new Map(stopsForCompute.map((stop) => [(stop.place_id || stop.id) as string, Boolean(stop.coordinates)]));
+    const coordsByPlaceId = new Map(stopsForCompute.map((stop) => [(stop.place_id || stop.id), Boolean(stop.coordinates)]));
     const pairModes = resolvePairEffectiveModes(trip.id, dayStops, legs, defaultMode);
     const parts: string[] = [];
     let needsOrs = false;
@@ -1545,12 +1545,12 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     if (autoRefreshSigRef.current.get(activeDate) === signature) return;
     if (!loadOrsApiKey().trim()) return;
     autoRefreshSigRef.current.set(activeDate, signature);
-    if (autoRefreshTimerRef.current) clearTimeout(autoRefreshTimerRef.current);
-    autoRefreshTimerRef.current = setTimeout(() => {
+    if (autoRefreshTimerRef.current) window.clearTimeout(autoRefreshTimerRef.current);
+    autoRefreshTimerRef.current = window.setTimeout(() => {
       void refreshTravelTimes('day', { silent: true });
     }, 900);
     return () => {
-      if (autoRefreshTimerRef.current) clearTimeout(autoRefreshTimerRef.current);
+      if (autoRefreshTimerRef.current) window.clearTimeout(autoRefreshTimerRef.current);
     };
   }, [selectedTrip, disabled, busy, activeDate, scheduledAll, legs, refreshTravelTimes]);
 

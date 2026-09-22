@@ -340,7 +340,7 @@ export function capturePlaceToPlannerPlace(
     price_currency: capture.price?.currency,
     price_min: capture.price?.min,
     price_max: capture.price?.max,
-    price_unit: capture.price?.unit as PlannerTripPlaceLike['price_unit'],
+    price_unit: capture.price?.unit,
     price_level: capture.price?.level,
     open_hours: capture.open_hours,
     address: capture.address,
@@ -397,7 +397,7 @@ export function capturePlaceToPlannerPlace(
 
 export function parseCaptureCollectionExport(data: unknown): OwnlyCollectionExportV1 | null {
   if (!isCollectionExport(data)) return null;
-  const d = data as OwnlyCollectionExportV1;
+  const d = data;
   if (!d.places || !Array.isArray(d.places)) return null;
   if (!d.collection || typeof d.collection !== 'object') return null;
   return d;

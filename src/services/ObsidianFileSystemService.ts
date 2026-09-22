@@ -87,7 +87,7 @@ export class ObsidianFileSystemService {
 
   async createLocalData(): Promise<boolean> {
     try {
-      const picker = window.showDirectoryPicker;
+      const picker = window.showDirectoryPicker?.bind(window);
       if (!picker) return false;
 
       const selectedDirectory = await picker({ mode: 'readwrite' });
@@ -112,7 +112,7 @@ export class ObsidianFileSystemService {
 
   async openLocalData(): Promise<boolean> {
     try {
-      const picker = window.showDirectoryPicker;
+      const picker = window.showDirectoryPicker?.bind(window);
       if (!picker) return false;
       const selectedDirectory = await picker({ mode: 'readwrite' });
       const hasObsidianConfig = await this.hasDirectory(selectedDirectory, OBSIDIAN_CONFIG_DIR);
@@ -173,7 +173,7 @@ export class ObsidianFileSystemService {
       if (typeof parsed.dataFolder === 'string' && parsed.dataFolder.trim()) {
         return parsed.dataFolder.trim().replace(/^\/+|\/+$/g, '');
       }
-    } catch {}
+    } catch { /* best-effort; failure is non-fatal */ }
 
     return OWNLY_DATA_ROOT_NAME;
   }

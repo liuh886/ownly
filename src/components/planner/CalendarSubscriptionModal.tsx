@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
+import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import {
   getCalendarFeedUrl,
   isValidIanaTimeZone,
@@ -53,6 +54,7 @@ export function CalendarSubscriptionModal({
   const [copied, setCopied] = useState(false);
   const [copiedIcs, setCopiedIcs] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const { confirm, dialog } = useConfirmDialog();
 
   useDialogA11y({ open, onClose, panelRef });
   const [notice, setNotice] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export function CalendarSubscriptionModal({
     if (!feedUrl) return;
     await navigator.clipboard.writeText(feedUrl);
     setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
+    window.setTimeout(() => setCopied(false), 3000);
   };
 
   const handleCopyIcs = async () => {
@@ -79,7 +81,7 @@ export function CalendarSubscriptionModal({
     try {
       await onCopyIcs();
       setCopiedIcs(true);
-      setTimeout(() => setCopiedIcs(false), 3000);
+      window.setTimeout(() => setCopiedIcs(false), 3000);
     } finally {
       setBusy(false);
     }
@@ -103,7 +105,7 @@ export function CalendarSubscriptionModal({
   };
 
   const handleRotate = async () => {
-    if (!confirm(zh ? '确定要重新生成订阅链接吗？旧链接将立即失效，需要在日历中重新添加。' : 'Rotate subscription URL? Existing subscribers will need the new link.')) {
+    if (!(await confirm({ title: zh ? '日历订阅' : 'Calendar subscription', message: zh ? '确定要重新生成订阅链接吗？旧链接将立即失效，需要在日历中重新添加。' : 'Rotate subscription URL? Existing subscribers will need the new link.', destructive: true }))) {
       return;
     }
     setBusy(true);
@@ -123,7 +125,7 @@ export function CalendarSubscriptionModal({
   };
 
   const handleDisable = async () => {
-    if (!confirm(zh ? '确定要停用此日历订阅吗？' : 'Disable this calendar feed?')) {
+    if (!(await confirm({ title: zh ? '日历订阅' : 'Calendar subscription', message: zh ? '确定要停用此日历订阅吗？' : 'Disable this calendar feed?', destructive: true }))) {
       return;
     }
     setBusy(true);
@@ -139,6 +141,7 @@ export function CalendarSubscriptionModal({
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs ownly-fade-in" {...dialogBackdropProps(onClose)}>
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={zh ? '日历与订阅' : 'Calendar & Feed'} className="w-full max-w-xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
         {/* Modal Header */}
@@ -389,5 +392,7 @@ export function CalendarSubscriptionModal({
         </div>
       </div>
     </div>
+    {dialog}
+    </>
   );
 }

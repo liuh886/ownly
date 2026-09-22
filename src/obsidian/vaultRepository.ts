@@ -76,7 +76,7 @@ const REVIEW_CONFIG: EntityConfig<ReviewEntry> = {
 };
 
 const OBJECT_LOG_CONFIG: EntityConfig<ObjectLogEntry> = {
-  type: 'object_log' as EntityFolderKey,
+  type: 'object_log',
   folderName: 'Logs/Object Experiences',
   entityType: 'object_log',
   createFileName: (entity: ObjectLogEntry) =>
@@ -119,6 +119,7 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     if (this.fileManager) {
       await this.fileManager.trashFile(file);
     } else {
+      // eslint-disable-next-line obsidianmd/prefer-file-manager-trash-file -- fallback only when constructed from a bare Vault (tests); production passes an App with a FileManager
       await this.vault.trash(file, true);
     }
   }

@@ -117,7 +117,7 @@ export function validateObject(obj: WYQDObject): ValidationResult {
     case 'recurring_cost': return validateRecurring(obj);
     case 'one_time_experience': return validateExperience(obj);
     default:
-      return createResult([{ message: `Unknown object type: ${(obj as unknown as Record<string, unknown>).object_type}`, severity: 'error' }]);
+      return createResult([{ message: `Unknown object type: ${String((obj as unknown as Record<string, unknown>).object_type)}`, severity: 'error' }]);
   }
 }
 
@@ -327,6 +327,6 @@ export function validateEntity(entity: unknown): ValidationResult {
     case 'trip_leg': return validateTripLeg(entity as PlannerTripLeg);
     case 'trip_expense': return validateTripExpense(entity as TripExpenseItem);
     default:
-      return createResult([{ field: 'type', message: `Unknown entity type: ${entityRecord.type}`, severity: 'error' }]);
+      return createResult([{ field: 'type', message: `Unknown entity type: ${String(entityRecord.type)}`, severity: 'error' }]);
   }
 }

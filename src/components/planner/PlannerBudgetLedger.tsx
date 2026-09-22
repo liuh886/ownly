@@ -28,12 +28,12 @@ interface PlannerBudgetLedgerProps {
   initialPlaceId?: string | null;
   onClearInitialPlaceId?: () => void;
   expenses: TripExpenseItem[];
-  onAddExpense: (expense: Omit<TripExpenseItem, 'id' | 'created_at'>) => void;
-  onUpdateExpense?: (expense: TripExpenseItem) => void;
-  onDeleteExpense: (expenseId: string) => void;
+  onAddExpense: (expense: Omit<TripExpenseItem, 'id' | 'created_at'>) => void | Promise<void>;
+  onUpdateExpense?: (expense: TripExpenseItem) => void | Promise<void>;
+  onDeleteExpense: (expenseId: string) => void | Promise<void>;
   members: string[];
-  onUpdateMembers: (members: string[]) => void;
-  onUpdateFxRates?: (rates: Record<string, number>) => void;
+  onUpdateMembers: (members: string[]) => void | Promise<void>;
+  onUpdateFxRates?: (rates: Record<string, number>) => void | Promise<void>;
   language?: 'zh' | 'en';
 }
 
@@ -242,7 +242,7 @@ export function PlannerBudgetLedger({
       return;
     }
     const next = [...members, trimmed];
-    onUpdateMembers(next);
+    void onUpdateMembers(next);
     setSelectedSplits((prev) => (prev.length === members.length ? next : [...prev, trimmed]));
     if (paymentDraft) {
       setPaymentDraft({ ...paymentDraft, [trimmed]: '' });
@@ -303,17 +303,17 @@ export function PlannerBudgetLedger({
   const paymentDifference = roundMoney(parsedExpenseAmount - paymentTotal);
   const paymentDraftValid = paymentDraft === null || (parsedExpenseAmount > 0 && Math.abs(paymentDifference) <= 0.01);
 
-  const handleAddMember = (e: React.FormEvent) => {
+  const handleAddMember = (e: React.SyntheticEvent) => {
     e.preventDefault();
     const trimmed = newMemberName.trim();
     if (!trimmed) return;
     if (members.includes(trimmed)) {
       setMemberNotice(zh ? `'${trimmed}' 已存在` : `'${trimmed}' already exists`);
-      setTimeout(() => setMemberNotice(''), 2500);
+      window.setTimeout(() => setMemberNotice(''), 2500);
       return;
     }
     const next = [...members, trimmed];
-    onUpdateMembers(next);
+    void onUpdateMembers(next);
     setSelectedSplits(next);
     if (paymentDraft) setPaymentDraft({ ...paymentDraft, [trimmed]: '' });
     setNewMemberName('');
@@ -324,7 +324,7 @@ export function PlannerBudgetLedger({
   const handleRemoveMember = (name: string) => {
     if (members.length <= 1) return;
     const next = members.filter((m) => m !== name);
-    onUpdateMembers(next);
+    void onUpdateMembers(next);
     setSelectedSplits((prev) => prev.filter((m) => m !== name));
     if (paymentDraft) {
       const nextPayments = { ...paymentDraft };
@@ -356,7 +356,7 @@ export function PlannerBudgetLedger({
     setPaymentDraft(next);
   };
 
-  const handleSubmitExpense = (e: React.FormEvent) => {
+  const handleSubmitExpense = (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!title.trim() || parsedExpenseAmount <= 0 || !paymentDraftValid) return;
 
@@ -378,9 +378,9 @@ export function PlannerBudgetLedger({
         created_at: existing?.created_at || new Date().toISOString(),
       };
       if (onUpdateExpense) {
-        onUpdateExpense(updatedItem);
+        void onUpdateExpense(updatedItem);
       } else {
-        onAddExpense(updatedItem);
+        void onAddExpense(updatedItem);
       }
     } else {
       const item: Omit<TripExpenseWithPayments, 'id' | 'created_at'> = {
@@ -396,7 +396,7 @@ export function PlannerBudgetLedger({
         notes: notes.trim() || undefined,
         payments: explicitPayments,
       };
-      onAddExpense(item);
+      void onAddExpense(item);
     }
 
     setEditingExpenseId(null);
@@ -420,26 +420,26 @@ export function PlannerBudgetLedger({
       try {
         await navigator.clipboard.writeText(settlement.summaryText);
         copied = true;
-      } catch {}
+      } catch { /* best-effort; failure is non-fatal */ }
     }
-    if (!copied && typeof document !== 'undefined') {
+    if (!copied && typeof window.document !== 'undefined') {
       try {
-        const textarea = document.createElement('textarea');
+        const textarea = window.document.createElement('textarea');
         textarea.value = settlement.summaryText;
         textarea.className = 'ownly-clipboard-proxy';
-        document.body.appendChild(textarea);
+        window.document.body.appendChild(textarea);
         textarea.focus();
         textarea.select();
-        copied = document.execCommand('copy');
-        document.body.removeChild(textarea);
-      } catch {}
+        copied = window.document.execCommand('copy');
+        window.document.body.removeChild(textarea);
+      } catch { /* best-effort; failure is non-fatal */ }
     }
     setCopyNotice(
       copied
         ? (zh ? '✓ 已复制 AA 结账清单，可直接发微信群！' : '✓ Copied settlement text to clipboard!')
         : (zh ? '⚠️ 复制失败，请手动长按复制' : '⚠️ Copy failed, please copy manually'),
     );
-    setTimeout(() => setCopyNotice(''), 3500);
+    window.setTimeout(() => setCopyNotice(''), 3500);
   };
 
   const toggleSplitMember = (m: string) => {
@@ -521,7 +521,7 @@ export function PlannerBudgetLedger({
           </button>
           <button
             type="button"
-            onClick={() => onDeleteExpense(item.id)}
+            onClick={() => void onDeleteExpense(item.id)}
             className="rounded p-1 text-stone-500 hover:bg-stone-200 hover:text-rose-600"
             title={zh ? '删除该笔消费' : 'Delete expense'}
           >
@@ -706,7 +706,7 @@ export function PlannerBudgetLedger({
                       const num = parseFloat(raw);
                       if (Number.isFinite(num) && num > 0) next[code] = num;
                     }
-                    onUpdateFxRates?.(next);
+                    void onUpdateFxRates?.(next);
                     setShowFxEditor(false);
                     setFxDraft({});
                   }}

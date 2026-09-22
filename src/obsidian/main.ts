@@ -454,7 +454,7 @@ class WYQDSettingTab extends PluginSettingTab {
           await this.wyqdPlugin.saveSettings();
           this.wyqdPlugin.refreshWorkspaceViews();
           this.wyqdPlugin.refreshCommands();
-          await this.display();
+          this.display();
         });
       });
 
@@ -517,7 +517,7 @@ class WYQDSettingTab extends PluginSettingTab {
           suggestionsEl.addClass('wyqd-folder-suggestions--hidden');
         }
       };
-      const doc = typeof activeDocument !== 'undefined' ? activeDocument : document;
+      const doc = typeof activeDocument !== 'undefined' ? activeDocument : window.document;
       doc.addEventListener('click', hideSuggestionsOnOutsideClick);
       this.displayCleanupCallbacks.push(() => {
         doc.removeEventListener('click', hideSuggestionsOnOutsideClick);
@@ -569,7 +569,7 @@ class WYQDSettingTab extends PluginSettingTab {
               await this.wyqdPlugin.saveSettings();
               this.wyqdPlugin.refreshWorkspaceViews();
               new Notice(t('activationDeactivated'));
-              await this.display();
+              this.display();
             }),
         );
     } else {
@@ -607,7 +607,7 @@ class WYQDSettingTab extends PluginSettingTab {
             new Notice(t('activationSuccess'));
             // Open Gumroad sponsor link after activation
             window.open(GUMROAD_STORE_URL, '_blank');
-            await this.display();
+            this.display();
           }),
       );
 

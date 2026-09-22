@@ -460,7 +460,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     captureSyncRanRef.current = true;
     try {
       window.history.replaceState(null, '', window.location.pathname + window.location.hash);
-    } catch {}
+    } catch { /* best-effort; failure is non-fatal */ }
     void syncCaptureWithBoundary();
   }, [disabled, syncCaptureWithBoundary]);
 

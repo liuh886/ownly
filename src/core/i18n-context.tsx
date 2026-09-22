@@ -20,7 +20,7 @@ function defaultCurrency(language: WYQDLanguage): WYQDCurrency {
 function browserLanguagePreferences(): readonly string[] {
   if (typeof navigator === 'undefined') return [];
   if (Array.isArray(navigator.languages) && navigator.languages.length > 0) {
-    return navigator.languages;
+    return Array.from(navigator.languages as readonly string[]);
   }
   return navigator.language ? [navigator.language] : [];
 }
@@ -79,19 +79,19 @@ export function I18nProvider({
   });
 
   useEffect(() => {
-    if (typeof document === 'undefined') return;
+    if (typeof window.document === 'undefined') return;
 
     const htmlLanguage = language === 'zh' ? 'zh-CN' : 'en';
-    document.documentElement.lang = htmlLanguage;
-    document.documentElement.dataset.ownlyLanguage = language;
-    document.title = language === 'zh'
+    window.document.documentElement.lang = htmlLanguage;
+    window.document.documentElement.dataset.ownlyLanguage = language;
+    window.document.title = language === 'zh'
       ? 'Ownly — 本地优先的所有权记忆与决策账本'
       : 'Ownly — Local-first ownership memory';
 
     const description = language === 'zh'
       ? '在本地 Markdown 中记录物品、订阅、体验与复盘，不上传个人记录。'
       : 'Track possessions, subscriptions, experiences, and reviews in local Markdown without uploading personal records.';
-    const descriptionMeta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    const descriptionMeta = window.document.querySelector<HTMLMetaElement>('meta[name="description"]');
     if (descriptionMeta) descriptionMeta.content = description;
   }, [language]);
 

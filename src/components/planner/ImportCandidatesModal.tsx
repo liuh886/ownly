@@ -60,10 +60,10 @@ export function ImportCandidatesModal({
       const target = event.target;
       const reader = new FileReader();
       reader.onload = (e) => {
-        const content = String(e.target?.result || '');
+        const content = typeof e.target?.result === 'string' ? e.target.result : '';
         target.value = '';
         try {
-          const parsed = JSON.parse(content);
+          const parsed: unknown = JSON.parse(content);
           if (isCollectionExport(parsed)) {
             const exportData = parseCaptureCollectionExport(parsed);
             if (exportData) {

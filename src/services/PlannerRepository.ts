@@ -210,7 +210,7 @@ export class PlannerRepository {
   private root = '';
   private mutationChain: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly store: PlannerFileStore = obsidianService as PlannerFileStore) {}
+  constructor(private readonly store: PlannerFileStore = obsidianService) {}
 
   async initialize(): Promise<void> {
     this.root = await this.store.getDataFolder();
@@ -254,7 +254,7 @@ export class PlannerRepository {
         const parsed = parseMarkdownEntity<Record<string, unknown>>(file.content);
         if (parsed.frontmatter.type !== type) {
           if (options?.strict) {
-            throw new Error(`Mismatched entity type in ${file.fileName}: expected ${type}, got ${parsed.frontmatter.type}`);
+            throw new Error(`Mismatched entity type in ${file.fileName}: expected ${type}, got ${String(parsed.frontmatter.type)}`);
           }
           continue;
         }
@@ -306,7 +306,7 @@ export class PlannerRepository {
         const parsed = parseMarkdownEntity<Record<string, unknown>>(file.content);
         if (parsed.frontmatter.type !== 'trip_expense') {
           if (options?.strict) {
-            throw new Error(`Mismatched entity type in expense file ${file.fileName}: ${parsed.frontmatter.type}`);
+            throw new Error(`Mismatched entity type in expense file ${file.fileName}: ${String(parsed.frontmatter.type)}`);
           }
           continue;
         }
@@ -376,7 +376,7 @@ export class PlannerRepository {
       const indexPlace = (place: PlannerTripPlace) => {
         byId.set(place.id, place);
         const keys = getStrongPlaceIdentityKeys(place);
-        const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+        const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place);
         for (const key of effective) {
           byStrongIdentity.set(`${place.trip_id}::${key}`, place);
         }
@@ -410,7 +410,7 @@ export class PlannerRepository {
         let existingPlace = byId.get(incoming.id);
         if (!existingPlace) {
           const sKeys = getStrongPlaceIdentityKeys(incoming);
-          const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+          const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming);
           for (const key of effective) {
             const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
             if (match) { existingPlace = match; break; }
@@ -552,7 +552,7 @@ export class PlannerRepository {
       const indexPlace = (place: PlannerTripPlace) => {
         byId.set(place.id, place);
         const keys = getStrongPlaceIdentityKeys(place);
-        const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+        const effective = keys.length > 0 ? keys : PlaceIdentityService.getResilientKeys(place);
         for (const key of effective) {
           byStrongIdentity.set(`${place.trip_id}::${key}`, place);
         }
@@ -606,7 +606,7 @@ export class PlannerRepository {
           traceEntry.matched_title = existingPlace.title;
         } else {
           const sKeys = getStrongPlaceIdentityKeys(incoming);
-          const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming as unknown as import('@/domain/place-identity').PlaceIdentityLike);
+          const effective = sKeys.length > 0 ? sKeys : PlaceIdentityService.getResilientKeys(incoming);
           for (const key of effective) {
             const match = byStrongIdentity.get(`${incoming.trip_id}::${key}`);
             if (match) {

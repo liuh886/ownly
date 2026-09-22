@@ -77,7 +77,7 @@ export async function fetchWeather(lat: number, lng: number, startDate: string, 
       + `&timezone=auto&start_date=${startDate}&end_date=${endDate}`;
     const res = await fetch(url);
     if (!res.ok) return [];
-    return summarizeWeather(await res.json());
+    return summarizeWeather((await res.json()) as OpenMeteoResponse);
   } catch {
     return [];
   }

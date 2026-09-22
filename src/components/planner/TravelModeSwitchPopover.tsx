@@ -36,7 +36,7 @@ export function TravelModeSwitchPopover({
   useEffect(() => {
     if (popoverRef.current) {
       const rect = popoverRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const viewportHeight = window.innerHeight || window.document.documentElement.clientHeight;
       const spaceBelow = viewportHeight - rect.top;
       const neededHeight = 250;
       if (spaceBelow < neededHeight && rect.top > spaceBelow) {
@@ -58,11 +58,11 @@ export function TravelModeSwitchPopover({
         onClose();
       }
     }
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
+    window.document.addEventListener('pointerdown', handlePointerDown);
+    window.document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
+      window.document.removeEventListener('pointerdown', handlePointerDown);
+      window.document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose]);
 

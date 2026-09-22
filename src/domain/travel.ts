@@ -196,7 +196,7 @@ let _cityDatabase: CityEntry[] | null = null;
 
 async function getCityDatabase(): Promise<CityEntry[]> {
   if (!_cityDatabase) {
-    _cityDatabase = (await import('@/data/cities.json')).default as CityEntry[];
+    _cityDatabase = (await import('@/data/cities.json')).default;
   }
   return _cityDatabase;
 }

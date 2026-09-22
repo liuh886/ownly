@@ -55,7 +55,7 @@ export function toGooglePlaceIdentity(place: PlaceIdentityLike): GooglePlaceIden
       if (cid && /^\d+$/.test(cid) && !base.cid) base.cid = cid;
       const qpid = u.searchParams.get('query_place_id');
       if (qpid && /^ChIJ/.test(qpid) && !base.placeId) base.placeId = qpid;
-    } catch {}
+    } catch { /* best-effort; failure is non-fatal */ }
     const m0x = /0x[0-9a-f]+:0x[0-9a-f]+/i.exec(url)?.[0];
     if (m0x && !base.featureId) base.featureId = m0x;
     const mChIJ = /ChIJ[A-Za-z0-9_-]{8,}/.exec(url)?.[0];

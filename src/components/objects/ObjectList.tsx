@@ -114,7 +114,7 @@ export function ObjectList({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpenActionMenuFileName(null);
     }
-    const doc: Document = typeof window !== 'undefined' ? window.document : document;
+    const doc: Document = window.document;
     doc.addEventListener('mousedown', handleClickOutside);
     doc.addEventListener('keydown', handleKeyDown);
     return () => {

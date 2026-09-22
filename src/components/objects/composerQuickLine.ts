@@ -222,7 +222,7 @@ export function isDateLike(value: string): boolean {
 
 function splitParts(value: string): string[] {
   return value
-    .split(/[\/／，,|\t]/)
+    .split(/[/／，,|\t]/)
     .map((part) => part.trim())
     .filter(Boolean);
 }

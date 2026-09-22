@@ -25,8 +25,8 @@ interface HotelComparisonModalProps {
   destinations?: string[];
   tripCurrency?: string;
   fxRates?: Record<string, number>;
-  onSelectHotelForStaySpan: (hotel: PlannerTripPlace, stayDates: string[]) => void;
-  onDropHotel: (hotelId: string) => void;
+  onSelectHotelForStaySpan: (hotel: PlannerTripPlace, stayDates: string[]) => void | Promise<void>;
+  onDropHotel: (hotelId: string) => void | Promise<void>;
   onHoverHotel?: (hotelId: string | null) => void;
   language?: 'zh' | 'en';
 }
@@ -709,7 +709,7 @@ export function HotelComparisonModal({
                           <button
                             type="button"
                             onClick={() => {
-                              onSelectHotelForStaySpan(hotel, targetStayDates);
+                              void onSelectHotelForStaySpan(hotel, targetStayDates);
                               onClose();
                             }}
                             className="w-full rounded-md bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition"
@@ -724,7 +724,7 @@ export function HotelComparisonModal({
                                 const nextEnd = Math.min(totalDays - 1, stayEndIndex + 1);
                                 setStayEndIndex(nextEnd);
                                 const nextDates = tripDates.slice(stayStartIndex, nextEnd + 1);
-                                onSelectHotelForStaySpan(hotel, nextDates);
+                                void onSelectHotelForStaySpan(hotel, nextDates);
                               }}
                               className="mt-1 w-full rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
                               title={zh ? `连住+1天（连住至第 ${stayEndIndex + 2} 天）` : `Extend +1 night`}
@@ -734,7 +734,7 @@ export function HotelComparisonModal({
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => onDropHotel(hotel.id)}
+                            onClick={() => void onDropHotel(hotel.id)}
                             className="mt-1.5 text-[10px] text-stone-500 hover:text-rose-600 transition"
                           >
                             {zh ? '暂不考虑' : 'Shelve'}
@@ -955,7 +955,7 @@ export function HotelComparisonModal({
                       <button
                         type="button"
                         onClick={() => {
-                          onSelectHotelForStaySpan(hotel, targetStayDates);
+                          void onSelectHotelForStaySpan(hotel, targetStayDates);
                           onClose();
                         }}
                         className="w-full rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-2 text-xs font-semibold text-white transition shadow-2xs"
@@ -970,7 +970,7 @@ export function HotelComparisonModal({
                             const nextEnd = Math.min(totalDays - 1, stayEndIndex + 1);
                             setStayEndIndex(nextEnd);
                             const nextDates = tripDates.slice(stayStartIndex, nextEnd + 1);
-                            onSelectHotelForStaySpan(hotel, nextDates);
+                            void onSelectHotelForStaySpan(hotel, nextDates);
                           }}
                           className="w-full rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
                         >
@@ -989,7 +989,7 @@ export function HotelComparisonModal({
                         </a>
                         <button
                           type="button"
-                          onClick={() => onDropHotel(hotel.id)}
+                          onClick={() => void onDropHotel(hotel.id)}
                           className="text-stone-500 hover:text-rose-600 transition"
                           title={zh ? '设为暂不考虑，可随时在候选池折叠区中重新考虑' : 'Shelve this hotel, recoverable anytime in Research Pool'}
                         >

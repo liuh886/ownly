@@ -37,7 +37,7 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
-      requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
         ticking = false;
         const y = Math.max(0, window.scrollY);
         const dy = y - lastY.current;
@@ -68,7 +68,7 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
           setHidden(false);
         }}
         onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
             setFocused(false);
           }
         }}

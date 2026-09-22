@@ -8,6 +8,7 @@
 //
 // Usage: node scripts/export-obsidian-repo.mjs [outDir]
 import esbuild from 'esbuild';
+import ts from 'typescript';
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -24,6 +25,11 @@ async function copyInto(relPath) {
 }
 
 // 1. Compute the exact plugin dependency closure.
+//
+// esbuild gives the runtime graph (JS/CSS/JSON actually bundled), but it does
+// not resolve `import type` specifiers — so type-only modules such as
+// src/domain/types.ts would be missing and the type checker would degrade every
+// downstream value to `any`. The TypeScript resolver is added to capture them.
 const build = await esbuild.build({
   entryPoints: ['src/obsidian/main.ts'],
   bundle: true,
@@ -41,8 +47,32 @@ const build = await esbuild.build({
   logLevel: 'silent',
 });
 
-const srcFiles = Object.keys(build.metafile.inputs)
-  .map((p) => p.replace(/\\/g, '/'))
+const runtimeFiles = Object.keys(build.metafile.inputs).map((p) => p.replace(/\\/g, '/'));
+
+function typeClosure(entry) {
+  const configPath = ts.findConfigFile('.', ts.sys.fileExists, 'tsconfig.json');
+  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+  const { options } = ts.parseJsonConfigFileContent(configFile.config, ts.sys, '.');
+  const seen = new Set();
+  const queue = [entry];
+  while (queue.length) {
+    const file = queue.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const content = ts.sys.readFile(file);
+    if (content === undefined) continue;
+    const { importedFiles } = ts.preProcessFile(content, true, true);
+    for (const { fileName } of importedFiles) {
+      const resolved = ts.resolveModuleName(fileName, file, options, ts.sys).resolvedModule;
+      if (!resolved || resolved.isExternalLibraryImport) continue;
+      const name = resolved.resolvedFileName.replace(/\\/g, '/');
+      if (name.startsWith('src/') && !name.endsWith('.d.ts')) queue.push(name);
+    }
+  }
+  return [...seen].filter((f) => f.startsWith('src/'));
+}
+
+const srcFiles = [...new Set([...runtimeFiles, ...typeClosure('src/obsidian/main.ts')])]
   .filter((p) => p.startsWith('src/'));
 
 await rm(outRoot, { recursive: true, force: true });
@@ -173,7 +203,7 @@ const tsconfig = {
     resolveJsonModule: true,
     isolatedModules: false,
     jsx: 'react-jsx',
-    types: [],
+    types: ['node'],
     paths: { '@/*': ['./src/*'] },
   },
   include: ['src/**/*.ts', 'src/**/*.tsx'],

@@ -43,11 +43,11 @@ function timestampToken(date = new Date()): string {
 function downloadText(content: string, fileName: string): void {
   const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
+  const anchor = window.document.createElement('a');
   anchor.href = url;
   anchor.download = fileName;
   anchor.hidden = true;
-  document.body.appendChild(anchor);
+  window.document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);

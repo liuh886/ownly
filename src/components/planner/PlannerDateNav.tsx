@@ -85,13 +85,13 @@ export function PlannerDateNav(props: PlannerDateNavProps) {
               onDragLeave={() => {
                 if (dragOverDate === date) setDragOverDate(null);
               }}
-              onDrop={async (e) => {
+              onDrop={(e) => {
                 e.preventDefault();
                 const sourceDate = e.dataTransfer.getData('text/plain') || draggingDate;
                 setDraggingDate(null);
                 setDragOverDate(null);
                 if (sourceDate && sourceDate !== date) {
-                  await handleSwapDays(sourceDate, date);
+                  void handleSwapDays(sourceDate, date);
                 }
               }}
               onDragEnd={() => {

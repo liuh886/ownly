@@ -10,15 +10,15 @@ let scrollLockCount = 0;
 
 function lockBodyScroll() {
   scrollLockCount += 1;
-  if (scrollLockCount === 1 && typeof document !== 'undefined') {
-    document.body.classList.add('ownly-scroll-locked');
+  if (scrollLockCount === 1 && typeof window.document !== 'undefined') {
+    window.document.body.classList.add('ownly-scroll-locked');
   }
 }
 
 function unlockBodyScroll() {
   scrollLockCount = Math.max(0, scrollLockCount - 1);
-  if (scrollLockCount === 0 && typeof document !== 'undefined') {
-    document.body.classList.remove('ownly-scroll-locked');
+  if (scrollLockCount === 0 && typeof window.document !== 'undefined') {
+    window.document.body.classList.remove('ownly-scroll-locked');
   }
 }
 

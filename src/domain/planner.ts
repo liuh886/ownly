@@ -210,7 +210,7 @@ export const PLANNER_TRAVEL_MODE_CONFIG: Record<
   transit: { emoji: '🚇', labelZh: '公共交通', labelEn: 'Transit', defaultDuration: 20 },
 };
 
-export function isTransitHubPlace(place: { kind?: PlannerPlaceKind | string; title?: string }): boolean {
+export function isTransitHubPlace(place: { kind?: string; title?: string }): boolean {
   if (place.kind === 'transit' || place.kind === 'transition') return true;
   // Title matching is a fallback for unclassified places only: food/stay
   // venues named e.g. "Airport Road Noodle Shop" are real road commutes,
@@ -692,7 +692,7 @@ export function normalizePlaceIdentity(rawUrl: string): string {
     }
     parsed.hash = '';
     return `u:${parsed.hostname.toLowerCase()}${parsed.pathname}${parsed.search}`.toLowerCase();
-  } catch {}
+  } catch { /* best-effort; failure is non-fatal */ }
   return `u:${trimmed.toLowerCase()}`;
 }
 
@@ -723,8 +723,8 @@ export function findExistingTripPlace(
 export function cleanCanonicalTitle(title?: string | null): string {
   if (!title) return '';
   return title
-    .replace(/^[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+/u, '')
-    .replace(/[\p{Emoji}\p{Symbol}\s·•\-🍜☕🏨📍⭐🏷️]+$/u, '')
+    .replace(/^[\p{Emoji}\p{Symbol}\s·•-]+/u, '')
+    .replace(/[\p{Emoji}\p{Symbol}\s·•-]+$/u, '')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
@@ -736,7 +736,7 @@ export function extractPlaceCid(place: { source_place_id?: string | null; source
     if (match?.[1]) {
       try {
         return BigInt('0x' + match[1]).toString();
-      } catch {}
+      } catch { /* best-effort; failure is non-fatal */ }
     }
     if (/^\d{8,}$/.test(place.source_place_id.trim())) {
       return place.source_place_id.trim();
@@ -752,12 +752,12 @@ export function extractPlaceCid(place: { source_place_id?: string | null; source
       if (cid && /^\d+$/.test(cid)) return cid;
       const qpid = url.searchParams.get('query_place_id');
       if (qpid) return qpid.toLowerCase();
-    } catch {}
+    } catch { /* best-effort; failure is non-fatal */ }
     const fidMatch = /0x[0-9a-f]+:0x([0-9a-f]+)/i.exec(place.source_url);
     if (fidMatch?.[1]) {
       try {
         return BigInt('0x' + fidMatch[1]).toString();
-      } catch {}
+      } catch { /* best-effort; failure is non-fatal */ }
     }
   }
   return null;
@@ -2840,7 +2840,7 @@ export function calculateTripSettlement(
       paidMap[payer] = amt;
     }
 
-    const rawSplits = (exp.split_members || []).map((m) => m?.trim()).filter(Boolean) as string[];
+    const rawSplits = (exp.split_members || []).map((m) => m?.trim()).filter(Boolean);
     const splits = rawSplits.length > 0 ? rawSplits : members;
     const perShare = splits.length > 0 ? amt / splits.length : 0;
     splits.forEach((sm) => {
@@ -3052,26 +3052,28 @@ export function parseImportPayload(rawText: string, tripId: string): PlannerTrip
   // 1. Try JSON
   if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
     try {
-      const parsed = JSON.parse(trimmed);
-      const items = Array.isArray(parsed) ? parsed : [parsed];
+      const parsed: unknown = JSON.parse(trimmed);
+      const items: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+      const asText = (v: unknown): string => (typeof v === 'string' ? v : '');
       for (const item of items) {
         if (typeof item === 'object' && item !== null) {
-          const title = String(item.title || item.name || item.placeName || '').trim();
+          const record = item as Record<string, unknown>;
+          const title = (asText(record.title) || asText(record.name) || asText(record.placeName)).trim();
           if (!title) continue;
-          const coords = item.coordinates || (
-            typeof item.lat === 'number' && typeof item.lng === 'number'
-              ? { lat: item.lat, lng: item.lng }
+          const coords = record.coordinates || (
+            typeof record.lat === 'number' && typeof record.lng === 'number'
+              ? { lat: record.lat, lng: record.lng }
               : undefined
           );
           results.push(makePlace({
-            ...item,
+            ...(record as Partial<PlannerTripPlace>),
             title,
-            coordinates: coords,
+            coordinates: coords as PlannerTripPlace['coordinates'],
           }));
         }
       }
       if (results.length > 0) return results;
-    } catch {}
+    } catch { /* best-effort; failure is non-fatal */ }
   }
 
   // 2. Try KML

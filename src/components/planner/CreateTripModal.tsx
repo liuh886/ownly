@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from '@/components/common/Sheet';
+import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type { PlannerTravelMode, PlannerTrip } from '../../domain/planner';
 import { applyTripFormPatch, listTripDates, resolveTripDestinations, splitTripList, validateTripForm } from '../../domain/planner';
 import {
@@ -100,6 +101,7 @@ export function CreateTripModal({
   const [tags, setTags] = useState(initialEditForm?.tags ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirmDialog();
 
   // Import state
   const [rawImport, setRawImport] = useState('');
@@ -190,7 +192,7 @@ export function CreateTripModal({
       const json = JSON.stringify(bundle, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = window.document.createElement('a');
       a.href = url;
       a.download = tripBundleFileName(trip.title);
       a.click();
@@ -229,7 +231,7 @@ export function CreateTripModal({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     const cleanTitle = title.trim();
     const formError = validateTripForm({ title, start_date: startDate, end_date: endDate });
@@ -322,6 +324,7 @@ export function CreateTripModal({
   };
 
   return (
+    <>
     <Sheet
       open={open}
       onClose={handleClose}
@@ -448,20 +451,22 @@ export function CreateTripModal({
                         <button
                           type="button"
                           disabled={deleteBusy === trip.id}
-                          onClick={async () => {
-                            const ok = window.confirm(zh ? `确定删除行程「${trip.title}」？该操作会同步删除其下的地点、日程与费用，且不可撤销。` : `Delete trip "${trip.title}"? This will also delete its places, visits and expenses.`);
-                            if (!ok) return;
-                            setError(null);
-                            setDeleteBusy(trip.id);
-                            try {
-                              if (onDeleteTrip) await onDeleteTrip(trip.id);
-                              else await plannerRepository.deleteTrip(trip.id);
-                              setImportNotice(zh ? `已删除「${trip.title}」` : `Deleted "${trip.title}"`);
-                            } catch (err) {
-                              setError(err instanceof Error ? err.message : String(err));
-                            } finally {
-                              setDeleteBusy(null);
-                            }
+                          onClick={() => {
+                            void (async () => {
+                              const ok = await confirm({ title: zh ? '删除行程' : 'Delete trip', message: zh ? `确定删除行程「${trip.title}」？该操作会同步删除其下的地点、日程与费用，且不可撤销。` : `Delete trip "${trip.title}"? This will also delete its places, visits and expenses.`, destructive: true });
+                              if (!ok) return;
+                              setError(null);
+                              setDeleteBusy(trip.id);
+                              try {
+                                if (onDeleteTrip) await onDeleteTrip(trip.id);
+                                else await plannerRepository.deleteTrip(trip.id);
+                                setImportNotice(zh ? `已删除「${trip.title}」` : `Deleted "${trip.title}"`);
+                              } catch (err) {
+                                setError(err instanceof Error ? err.message : String(err));
+                              } finally {
+                                setDeleteBusy(null);
+                              }
+                            })();
                           }}
                           className="flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 transition duration-150 active:scale-95 hover:bg-rose-100 disabled:opacity-50"
                           title={zh ? '删除' : 'Delete'}
@@ -475,7 +480,7 @@ export function CreateTripModal({
               )}
             </div>
           ) : tab === 'create' ? (
-            <form id="ownly-trip-form" onSubmit={handleSubmit} className="space-y-4">
+            <form id="ownly-trip-form" onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
               {/* Title */}
               <div>
                 <label className="block text-xs font-bold text-stone-700">
@@ -716,5 +721,7 @@ export function CreateTripModal({
           )}
         </div>
     </Sheet>
+    {dialog}
+    </>
   );
 }

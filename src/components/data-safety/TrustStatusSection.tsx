@@ -259,8 +259,8 @@ export function TrustStatusSection({ itemVariants }: { itemVariants: Variants })
   // auto-run the check on mount instead of waiting for a manual click.
   // Deferred past mount to satisfy set-state-in-effect.
   useEffect(() => {
-    const timer = setTimeout(() => void runCheck(), 0);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => void runCheck(), 0);
+    return () => window.clearTimeout(timer);
   }, [runCheck]);
 
   // Backup export/validation updates trust timestamps; refresh the rows when

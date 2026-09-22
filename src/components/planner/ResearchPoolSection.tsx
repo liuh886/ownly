@@ -95,11 +95,11 @@ function PoolPlaceEditZone({
   const priceRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    if (document.activeElement === priceRef.current) return;
+    if (window.document.activeElement === priceRef.current) return;
     setPriceDraft(place.observed_price ?? '');
   }, [place.id, place.observed_price]);
   useEffect(() => {
-    if (document.activeElement === noteRef.current) return;
+    if (window.document.activeElement === noteRef.current) return;
     setNoteDraft(place.why ?? '');
   }, [place.id, place.why]);
   return (

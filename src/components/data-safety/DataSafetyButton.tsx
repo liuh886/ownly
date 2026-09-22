@@ -3,6 +3,7 @@
 import { X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
+import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { useI18n } from '@/core/i18n-context';
 import type { RestorePlan } from '@/core/data-portability';
 import {
@@ -112,6 +113,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
   const [inspection, setInspection] = useState<BrowserBackupInspection | null>(null);
   const [migration, setMigration] = useState<BrowserMigrationInspection | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const { confirm, dialog } = useConfirmDialog();
 
   useDialogA11y({ open, onClose: () => setOpen(false), panelRef });
 
@@ -154,7 +156,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
 
   async function restore(overwrite: boolean) {
     if (!inspection) return;
-    if (overwrite && !window.confirm(copy.overwriteConfirm)) return;
+    if (overwrite && !(await confirm({ title: copy.button, message: copy.overwriteConfirm, destructive: true }))) return;
     await run(async () => {
       await browserDataPortabilityService.restore(inspection.bundle, overwrite);
       setStatus(copy.restored);
@@ -173,7 +175,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
   }
 
   async function applyMigration() {
-    if (!migration || !window.confirm(copy.migrationConfirm)) return;
+    if (!migration || !(await confirm({ title: copy.button, message: copy.migrationConfirm, destructive: true }))) return;
     await run(async () => {
       await browserDataPortabilityService.applyMigration(migration);
       setMigration(null);
@@ -184,6 +186,7 @@ export function DataSafetyButton({ disabled }: { disabled: boolean }) {
 
   return (
     <>
+      {dialog}
       <button
         type="button"
         onClick={() => setOpen(true)}

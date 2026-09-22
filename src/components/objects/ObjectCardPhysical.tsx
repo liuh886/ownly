@@ -100,7 +100,7 @@ export function ObjectCardPhysical({
       ) : isDetailing ? (
         <div className="p-1">
           <ObjectDetailPanel
-            stored={stored as WYQDStoredEntity<WYQDObject>}
+            stored={stored}
             logs={logs}
             onClose={() => setSelectedFileName(null)}
             onSave={async (updatedObject, body) => {

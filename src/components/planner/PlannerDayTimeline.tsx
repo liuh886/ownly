@@ -3,7 +3,7 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
-import type { PlannerTravelMode, PlannerTrip } from '@/domain/planner';
+import type { PlannerTrip } from '@/domain/planner';
 import {
   calculateDefaultTripLeg,
   currencySymbolFor,
@@ -595,7 +595,7 @@ export function PlannerDayTimeline(props: PlannerDayTimelineProps) {
                             if (item.type === 'travel') {
                               const isPairSwitching = activeModeSwitchPair === `${place.id}->${nextPlace.id}`;
                               const isCleared = item.duration_minutes === 0;
-                              const modeKey = (item.mode as PlannerTravelMode) || 'driving';
+                              const modeKey = (item.mode) || 'driving';
                               const modeConfig = PLANNER_TRAVEL_MODE_CONFIG[modeKey] ?? PLANNER_TRAVEL_MODE_CONFIG.driving;
                               const icon = modeConfig.emoji;
                               const distance = item.distance_meters === undefined

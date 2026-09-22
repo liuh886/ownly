@@ -39,10 +39,10 @@ interface PlannerMapProps {
   activeDate?: string;
   activeDayIndex: number;
   highlightedPlaceId?: string | null;
-  onSchedulePlace: (placeId: string, sortOrder?: number) => void;
-  onUnschedulePlace: (place: PlannerScheduledPlace) => void;
-  onShelvePlace?: (placeId: string) => void;
-  onDeletePlace?: (placeId: string, placeTitle?: string) => void;
+  onSchedulePlace: (placeId: string, sortOrder?: number) => void | Promise<void>;
+  onUnschedulePlace: (place: PlannerScheduledPlace) => void | Promise<void>;
+  onShelvePlace?: (placeId: string) => void | Promise<void>;
+  onDeletePlace?: (placeId: string, placeTitle?: string) => void | Promise<void>;
   onHoverPlace?: (placeId: string | null) => void;
   visitCountByPlaceId?: Map<string, number>;
   language?: 'zh' | 'en';
@@ -272,11 +272,11 @@ export function PlannerMap({
   const [basemapStyle, setBasemapStyle] = useState<BasemapStyle>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('ownly_planner_basemap_style') as BasemapStyle | null;
+        const saved = window.localStorage.getItem('ownly_planner_basemap_style') as BasemapStyle | null;
         if (saved && BASEMAP_OPTIONS.some((opt) => opt.id === saved)) {
           return saved;
         }
-      } catch {}
+      } catch { /* best-effort; failure is non-fatal */ }
     }
     return 'carto_positron';
   });
@@ -284,8 +284,8 @@ export function PlannerMap({
   const handleBasemapChange = useCallback((newStyle: BasemapStyle) => {
     setBasemapStyle(newStyle);
     try {
-      localStorage.setItem('ownly_planner_basemap_style', newStyle);
-    } catch {}
+      window.localStorage.setItem('ownly_planner_basemap_style', newStyle);
+    } catch { /* best-effort; failure is non-fatal */ }
   }, []);
 
   const activeBasemap = useMemo(
@@ -694,7 +694,7 @@ export function PlannerMap({
   const scheduleViewFrame = useCallback((frame: () => void) => {
     pendingViewFrameRef.current = frame;
     if (!viewRafRef.current) {
-      viewRafRef.current = requestAnimationFrame(() => {
+      viewRafRef.current = window.requestAnimationFrame(() => {
         viewRafRef.current = 0;
         const run = pendingViewFrameRef.current;
         pendingViewFrameRef.current = null;
@@ -720,9 +720,9 @@ export function PlannerMap({
       const z = fromZoom + (zoomTo - fromZoom) * eased;
       setCenter(centerForAnchor(geo, z, sx, sy));
       setZoom(z);
-      zoomGlideRef.current = t < 1 ? requestAnimationFrame(step) : 0;
+      zoomGlideRef.current = t < 1 ? window.requestAnimationFrame(step) : 0;
     };
-    zoomGlideRef.current = requestAnimationFrame(step);
+    zoomGlideRef.current = window.requestAnimationFrame(step);
   }, [cancelZoomGlide, clampZoom, screenToGeo, centerForAnchor]);
 
   const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -743,7 +743,7 @@ export function PlannerMap({
     if (!isInteractiveTarget) {
       try {
         containerRef.current?.setPointerCapture(e.pointerId);
-      } catch {}
+      } catch { /* best-effort; failure is non-fatal */ }
     }
 
     if (activePointers.current.size === 2) {
@@ -847,7 +847,7 @@ export function PlannerMap({
       const sx = event.clientX - rect.left;
       const sy = event.clientY - rect.top;
       const step = event.deltaY < 0 ? ZOOM_STEP_WHEEL : -ZOOM_STEP_WHEEL;
-      requestAnimationFrame(() => applyZoomAround(viewRef.current.zoom + step, sx, sy));
+      window.requestAnimationFrame(() => applyZoomAround(viewRef.current.zoom + step, sx, sy));
     };
     el.addEventListener('wheel', onWheelNative, { passive: false });
     return () => el.removeEventListener('wheel', onWheelNative);
@@ -1420,7 +1420,7 @@ export function PlannerMap({
                   const delta = e.key === 'ArrowDown' ? 1 : -1;
                   const next = ids[(current + delta + ids.length) % ids.length];
                   setSelectedPlaceId(next);
-                  document.querySelector<HTMLElement>(`[data-marker-id="${next}"]`)?.focus();
+                  window.document.querySelector<HTMLElement>(`[data-marker-id="${next}"]`)?.focus();
                 }
               }}
               data-marker-id={p.place.id}
