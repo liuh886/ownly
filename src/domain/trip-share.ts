@@ -55,17 +55,31 @@ export function withTripShareAliasSuffix(alias: string, suffix: number): string 
 }
 
 const DEFAULT_SUPABASE_URL = 'https://blgwlycfcwvsupmqyqwn.supabase.co';
+const DEFAULT_SHARE_BASE = 'https://liuh886.github.io/ownly/s';
 
-function getDefaultShareHost(): string {
-  const base =
-    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SUPABASE_URL) ||
-    DEFAULT_SUPABASE_URL;
-  return `${base.replace(/\/+$/, '')}/functions/v1/trip-share`;
+/**
+ * Supabase Edge Functions cannot serve HTML (GET `text/html` is rewritten to
+ * `text/plain`), so the hosted link points at the static `/s/` viewer on the
+ * Ownly web host, which fetches the stored document and renders it.
+ */
+function getDefaultShareBase(): string {
+  const basePath =
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_OWNLY_BASE_PATH) || '';
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${basePath}/s`;
+  }
+  return DEFAULT_SHARE_BASE;
 }
 
-export function getTripShareUrl(alias: string, host?: string): string {
-  const cleanHost = (host || getDefaultShareHost()).replace(/\/+$/, '');
-  return `${cleanHost}/${encodeURIComponent(normalizeTripShareAlias(alias))}`;
+export function getTripShareUrl(alias: string, base?: string): string {
+  const cleanBase = (base || getDefaultShareBase()).replace(/\/+$/, '');
+  return `${cleanBase}/?t=${encodeURIComponent(normalizeTripShareAlias(alias))}`;
+}
+
+/** Direct data endpoint (returns the stored document as text). */
+export function getTripShareApiUrl(alias: string, host?: string): string {
+  const base = (host || DEFAULT_SUPABASE_URL).replace(/\/+$/, '');
+  return `${base}/functions/v1/trip-share/${encodeURIComponent(normalizeTripShareAlias(alias))}`;
 }
 
 /** Convenience: the default alias for a trip is its name. */

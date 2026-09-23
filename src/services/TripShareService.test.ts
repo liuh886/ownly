@@ -118,7 +118,7 @@ describe('TripShareService', () => {
     });
 
     expect(response.share.alias).toBe('清迈 5 日');
-    expect(decodeURIComponent(response.url.split('/').pop() ?? '')).toBe('清迈 5 日');
+    expect(decodeURIComponent(response.url.split('?t=')[1] ?? '')).toBe('清迈 5 日');
     expect(response.html).toContain('Grand Palace');
     expect(response.html).toContain('该快照未包含费用');
     expect(response.html).not.toContain('<script');
@@ -226,7 +226,7 @@ describe('buildPublicShareResponse', () => {
     ).toBe(404);
   });
 
-  it('serves the HTML with a strict, noindex header set', () => {
+  it('serves the document as text with open CORS (Supabase rewrites HTML)', () => {
     const response = buildPublicShareResponse({
       user_id: 'u',
       trip_id: 't',
@@ -237,9 +237,8 @@ describe('buildPublicShareResponse', () => {
     });
     expect(response.status).toBe(200);
     expect(response.body).toBe('<html></html>');
-    expect(response.headers['Content-Type']).toBe('text/html; charset=utf-8');
+    expect(response.headers['Content-Type']).toBe('text/plain; charset=utf-8');
     expect(response.headers['X-Robots-Tag']).toContain('noindex');
-    expect(response.headers['Content-Security-Policy']).toContain("default-src 'none'");
-    expect(response.headers['Content-Security-Policy']).toContain("frame-ancestors 'none'");
+    expect(response.headers['Access-Control-Allow-Origin']).toBe('*');
   });
 });

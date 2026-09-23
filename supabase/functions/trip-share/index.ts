@@ -1,18 +1,34 @@
 // ============================================================================
 // Supabase Edge Function: trip-share
-// Serves the PRO self-contained itinerary HTML at /trip-share/:alias.
+// Serves the PRO self-contained itinerary document as TEXT at
+// /trip-share/:alias.
+//
+// Supabase rewrites HTML responses to text/plain, so the public link renders
+// through the static /s/ viewer on the Ownly web host, which fetches this
+// endpoint and renders the document. CORS is open because the alias is public
+// and the document is scriptless.
 //
 // The alias is the trip name (public by design), so lookups run server-side
-// with service_role and the table has no anonymous SELECT policy. The document
-// is scriptless (inline styles only), so a strict CSP still renders it while
-// blocking every external fetch; X-Robots-Tag keeps the link out of search
-// indexes.
+// with service_role and the table has no anonymous SELECT policy.
 // ============================================================================
 
 import { createClient } from 'npm:@supabase/supabase-js@2.111.0';
 
 const ALIAS_MAX_LENGTH = 64;
 const FORBIDDEN_ALIAS_RE = /[/\\?#%\u0000-\u001f]/;
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+  'Access-Control-Allow-Headers': 'content-type',
+};
+
+function textResponse(body: string, status: number, extra: Record<string, string> = {}): Response {
+  return new Response(body, {
+    status,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS, ...extra },
+  });
+}
 
 function extractAlias(req: Request): string | null {
   const url = new URL(req.url);
@@ -37,26 +53,23 @@ function validAlias(alias: string | null): alias is string {
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS });
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    return new Response('Method Not Allowed', {
-      status: 405,
-      headers: { Allow: 'GET, HEAD' },
-    });
+    return textResponse('Method Not Allowed', 405, { Allow: 'GET, HEAD, OPTIONS' });
   }
 
   const alias = extractAlias(req);
   if (!validAlias(alias)) {
-    return new Response('Share link not found', {
-      status: 404,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    });
+    return textResponse('Share link not found', 404);
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   if (!supabaseUrl || !serviceRoleKey) {
     console.error('trip-share: Supabase server credentials unavailable');
-    return new Response('Share unavailable', { status: 500 });
+    return textResponse('Share unavailable', 500);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -72,29 +85,23 @@ Deno.serve(async (req: Request) => {
 
   if (error) {
     console.error('trip-share lookup failed', error);
-    return new Response('Share unavailable', { status: 500 });
+    return textResponse('Share unavailable', 500);
   }
 
   if (!record?.enabled) {
-    return new Response('Share link not found or expired', {
-      status: 404,
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'X-Robots-Tag': 'noindex, nofollow',
-      },
+    return textResponse('Share link not found or expired', 404, {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'X-Robots-Tag': 'noindex, nofollow',
     });
   }
 
   const headers = {
-    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Type': 'text/plain; charset=utf-8',
     'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
-    'Content-Security-Policy':
-      "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-    'X-Content-Type-Options': 'nosniff',
     'X-Robots-Tag': 'noindex, nofollow',
     'Referrer-Policy': 'no-referrer',
     'X-Published-By': 'Ownly Trip Share Service',
+    ...CORS,
     ETag: `W/"${alias}-${record.updated_at}"`,
   };
 

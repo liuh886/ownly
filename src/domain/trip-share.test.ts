@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   defaultTripShareAlias,
+  getTripShareApiUrl,
   getTripShareUrl,
   normalizeTripShareAlias,
   validateTripShareAlias,
@@ -37,10 +38,14 @@ describe('trip share alias (trip name)', () => {
     expect(defaultTripShareAlias({ title: '  日本 2027 ' })).toBe('日本 2027');
   });
 
-  it('builds a path-style URL with the name percent-encoded', () => {
-    const url = getTripShareUrl('清迈 5 日', 'https://x.supabase.co/functions/v1/trip-share');
-    expect(url.startsWith('https://x.supabase.co/functions/v1/trip-share/')).toBe(true);
-    expect(decodeURIComponent(url.split('/').pop() ?? '')).toBe('清迈 5 日');
-    expect(getTripShareUrl('TH26')).toContain('/functions/v1/trip-share/TH26');
+  it('builds a viewer URL with the name percent-encoded, plus a data endpoint', () => {
+    const url = getTripShareUrl('清迈 5 日', 'https://x.example/s');
+    expect(url.startsWith('https://x.example/s/?t=')).toBe(true);
+    expect(decodeURIComponent(url.split('?t=')[1] ?? '')).toBe('清迈 5 日');
+    expect(getTripShareUrl('TH26')).toContain('/s/?t=TH26');
+
+    expect(getTripShareApiUrl('清迈 5 日', 'https://x.supabase.co')).toBe(
+      'https://x.supabase.co/functions/v1/trip-share/' + encodeURIComponent('清迈 5 日'),
+    );
   });
 });

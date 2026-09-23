@@ -208,6 +208,7 @@ export function buildPublicShareResponse(record: TripShareRecord | null): Public
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'X-Robots-Tag': 'noindex, nofollow',
+        'Access-Control-Allow-Origin': '*',
       },
       body: 'Share link not found or expired',
     };
@@ -215,13 +216,11 @@ export function buildPublicShareResponse(record: TripShareRecord | null): Public
   return {
     status: 200,
     headers: {
-      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Type': 'text/plain; charset=utf-8',
       'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
-      'Content-Security-Policy':
-        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-      'X-Content-Type-Options': 'nosniff',
       'X-Robots-Tag': 'noindex, nofollow',
       'Referrer-Policy': 'no-referrer',
+      'Access-Control-Allow-Origin': '*',
       'X-Published-By': 'Ownly Trip Share Service',
     },
     body: record.html_content,

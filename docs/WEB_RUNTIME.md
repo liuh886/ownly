@@ -103,7 +103,7 @@ Direct folder access depends on the File System Access API.
 - Ownly reads and writes only the filesystem folder explicitly selected by the user and permitted by the browser.
 - GitHub Pages does not receive or store the contents of the selected Ownly data folder.
 - Ownly does not require a backend API, cloud account, or provider OAuth flow for folder access.
-- PRO fixed share links host the self-contained itinerary HTML on the Ownly trip-share service (Supabase), addressed by the trip name. Expenses are never included, the page is served `noindex`, and the owner can disable the link at any time. The public name is not the authorization secret: publishing and revocation require a device-local write token.
+- PRO fixed share links host the self-contained itinerary HTML on the Ownly trip-share service (Supabase), addressed by the trip name. Supabase cannot serve HTML from Edge Functions (GET `text/html` is rewritten to `text/plain`), so the link points at a static `/s/` viewer on the Ownly web host that fetches and renders the stored document. Expenses are never included, the page is served `noindex`, and the owner can disable the link at any time. The public name is not the authorization secret: publishing and revocation require a device-local write token.
 - The service worker caches only same-origin application resources; it does not cache personal Markdown files.
 - If the selected folder is synchronized by a third-party provider, that provider may upload and synchronize the files under its own privacy, security, retention, and account policies.
 - Ownly does not inspect provider account state or infer provider identity from local paths for analytics.
