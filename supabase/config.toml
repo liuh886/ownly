@@ -5,3 +5,9 @@
 
 [functions.calendar-feed]
 verify_jwt = false
+
+# Public readers open the share link in a plain browser with no Supabase JWT.
+# The alias is validated inside the trip-share handler, so JWT verification
+# must remain disabled.
+[functions.trip-share]
+verify_jwt = false

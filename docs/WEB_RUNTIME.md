@@ -94,7 +94,7 @@ Direct folder access depends on the File System Access API.
 
 - Recommended: current desktop Chrome or Microsoft Edge.
 - Unsupported browsers remain in demo mode and cannot connect real Ownly data.
-- Mobile browser support is not a production target for direct filesystem access.
+- Mobile browser support is not a production target for direct filesystem access. To read an itinerary on a phone, export the single-file HTML itinerary from the desktop Planner (Export → Itinerary HTML) and open the file directly; it is self-contained (inline styles, no scripts, no external assets), needs no server or network, and never writes back.
 - Install availability is controlled by the browser. The in-app installation button appears only when the browser emits an install prompt.
 - Personal cloud folder support depends on the provider exposing the synchronized location as a usable local filesystem folder; Ownly does not provide a remote-drive API fallback.
 
@@ -103,6 +103,7 @@ Direct folder access depends on the File System Access API.
 - Ownly reads and writes only the filesystem folder explicitly selected by the user and permitted by the browser.
 - GitHub Pages does not receive or store the contents of the selected Ownly data folder.
 - Ownly does not require a backend API, cloud account, or provider OAuth flow for folder access.
+- PRO fixed share links host the self-contained itinerary HTML on the Ownly trip-share service (Supabase), addressed by a public alias. Expenses are never included, the page is served `noindex`, and the owner can rotate or disable the link at any time. The public alias is not the authorization secret: publishing and revocation require a device-local write token.
 - The service worker caches only same-origin application resources; it does not cache personal Markdown files.
 - If the selected folder is synchronized by a third-party provider, that provider may upload and synchronize the files under its own privacy, security, retention, and account policies.
 - Ownly does not inspect provider account state or infer provider identity from local paths for analytics.

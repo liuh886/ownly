@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **PRO fixed share links:** each trip can publish a permanent link (e.g. `…/trip-share/TH26`) that serves the self-contained itinerary HTML. Published/rotated/disabled from the planner; auto-republishes ~30s after itinerary edits. Expenses are never included, the page is `noindex`, and writes require a device-local write token (the public alias is not the authorization secret). Requires deploying the `ownly_trip_shares` migration and the `trip-share` Edge Function.
+
+### Changed
+
+- Replaced the JSON trip snapshot (`.ownly-trip-snapshot.json`) and the `/trip` read-only viewer with a **single-file HTML itinerary export** (`Export → Itinerary HTML`). The HTML is self-contained (inline CSS, no scripts, no external assets), opens offline on any phone, keeps the same privacy line (expenses opt-in; members/calendar feed/review backlink stripped), and never writes back. Removed the `/trip` route and its bundle-size budget.
+
 ## 1.2.3 (2026-09-22)
 
 ### Fixed

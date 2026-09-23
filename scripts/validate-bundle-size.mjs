@@ -25,7 +25,7 @@ if (!existsSync(outDir)) {
   process.exit(1);
 }
 
-const routes = ['/', '/app/', '/c/', '/trip/'];
+const routes = ['/', '/app/', '/c/'];
 const budgets = JSON.parse(readFileSync(join(root, 'scripts', 'bundle-budgets.json'), 'utf8'));
 
 function assetPathsFromHtml(html) {

@@ -48,26 +48,52 @@
 - [x] drill 全流程跑通并输出 pass/fail；断言（测试级）确认活动文件夹未被写入
 - [x] 演练数据清除后无残留
 
-## WS-3 行中移动：Trip Bundle + 移动只读视图
+## WS-3 行中移动：单文件 HTML 行程（取代初版 JSON 快照 + /trip 视图）
 
 **目标**：绕过 iOS 无 File System Access API 的现实约束，让行程在手机上可用（行中是旅行产品主战场）。
 
-**范围**：
-1. **Trip Snapshot 导出**（评审补丁 P0：与现有分享 Bundle 硬隔离）：
-   - 现有 `trip-bundle.ts`（kind `ownly.trip.bundle` v1、`.ownly-trip.json`）是**分享**语种：expenses/members/calendar_feed 按隐私设计**故意排除**，且已有 share-link 导入链路。移动快照是另一语种，**不得复用同 kind/同扩展名**，否则两类文件不可区分、旧解析器会误吞新文件。
-   - 新制品：kind `ownly.trip.snapshot` v1，扩展名 `.ownly-trip-snapshot.json`，含 trip + places + visits + legs + expenses 五类实体 + `exported_at` + schema_version；members/calendar_feed 默认排除（与分享 Bundle 同等隐私线）。
-   - **expenses 含入需用户显式勾选**（财务数据随文件经微信/AirDrop 流转，默认不含，勾选即知情同意）；未勾选时快照仍可生成（四类实体），移动端对应费用区显示"未包含"。
-   - 入口在 Trip 详情"分享/导出"组，与现有 📤 分享导出并列但文案区分（"分享" vs "手机快照"）
-2. **移动只读视图**：PWA 内新增 bundle 导入入口（`<input type=file>`，iOS Safari 可用，无需 FSA）→ 内存态渲染只读的候选池 + 时间线 + 地图（复用现有组件，禁用全部 mutation）
-3. **桌面↔手机流转**：导出文件经系统分享/AirDrop/微信传输到手机即可打开；数据仍以桌面数据文件夹为唯一真源（bundle 是快照，明确标注"生成时间"，过期提示）
+**方案（v2，已取代初版 JSON 快照）**：导出**自包含单文件 `.html`**，传到手机后直接点开、离线可读——无需部署、无需联网、无需客户端。它只是"手机阅读成型行程"的另一种方式，不是可导入制品；桌面数据文件夹仍是唯一真源。
 
-**不做**：不做手机端写回（绝不从 bundle 反向同步）、不做 Ownly 托管云、不做账号体系（governance deferred 列表红线）。
+**范围**：
+1. **生成器**（`src/domain/trip-itinerary-html.ts`，纯函数 `buildTripItineraryHtml`）：
+   - 输入 trip + places + visits + expenses，输出完整 HTML 文档。
+   - 硬约束：内联 CSS、**零外部资源**（无 `<script>`、无字体/CDN/图片）；每天 `<details open>`，**无 JS 亦可完整阅读**；地图为每站 + 每天路线深链，不做内嵌地图。
+   - 每站展示：顺序 · 时间 · 类别 · 名称 · 区域 · 理由/备注 · 动作链接（来源 / 地图 / 电话）。
+   - 隐私线与分享 Bundle 一致：members/calendar_feed/重复对簿记/复盘回链剥离；**费用默认不含，显式勾选才含**。
+   - 生成时间与"只读快照"说明固定写入页面（无 JS，故无动态过期徽标）。
+2. **入口**：桌面 Planner 导出菜单 `📱 分享行程 (HTML)` / `分享行程（含费用）`（`usePlannerActions.downloadTripItineraryHtml`）。
+3. **取代初版**：删除 `ownly.trip.snapshot` JSON 语种、`/trip` 只读视图与 `TripSnapshotViewer`；`/trip` 路由与 bundle 预算一并移除。
+
+**不做**：不做手机端写回（绝不从文件反向同步）、不做 Ownly 托管云、不做账号体系（governance deferred 列表红线）。
 
 **验收**：
-- [x] snapshot 含声明的实体且 schema 校验通过；缺失实体优雅降级；旧分享 Bundle 文件被投入快照入口时报明确错误（不误解析）
-- [ ] iPhone Safari 实测（**由用户验收**，执行方无法覆盖）：导入 snapshot → 只读浏览候选池/时间线/地图可用
-- [x] 只读视图下无任何写路径：机制为**只读 Repository adapter（写操作抛错）+ 无写路径测试**，隐藏按钮不算数
-- [x] snapshot 标注生成时间并显示已过时长；>24h 显示"可能已过期"（启发式阈值，非精确语义）
+- [x] HTML 单文件零外部资源、无脚本仍可完整阅读（自包含断言测试）
+- [x] 全部用户文本 HTML 转义；不安全链接 scheme 被丢弃（XSS 回归）
+- [x] 费用默认不含，显式勾选才含
+- [x] 每站地图深链 + 多站日路线深链
+- [ ] iPhone Safari 实测（**由用户验收**）：传到手机直接打开可读
+
+## WS-3b 固定分享链接（PRO）
+
+**目标**：在单文件 HTML 之外，给 PRO 账户一个**固定链接**（如 `…/trip-share/TH26`），手机打开即读、无需部署或传文件。
+
+**范围**：
+1. **服务端**（克隆 calendar-feed）：表 `ownly_trip_shares`（`alias` 唯一、`write_token_hash`、`html_content`、`enabled`）；Edge Function `trip-share` 按别名以 service_role 读取并返回 HTML（严格 CSP、`noindex`、`frame-ancestors 'none'`）。匿名端**无 SELECT**，别名无法经 Data API 枚举。
+2. **授权**：别名公开且低熵，故**不作为写入凭据**；写操作要求所有者设备上的高熵 `write_token`（仅其 SHA-256 上行，RLS 校验 `x-ownly-share-write-hash`）。
+3. **客户端**：`TripShareService`（PRO 门禁 + 发布/轮换/停用）、`SupabaseTripShareStore`、本地 meta（localStorage，含 write_token）、`useAutoTripShareSync`（编辑后 ~30s 自动重发）、`TripShareModal`。
+4. **隐私线**：内容**永远不含费用**；`members`/`calendar_feed`/复盘回链照旧剥离；页面带公开警示（别名可被猜到）。
+
+**不做**：不做账号体系、不做 Obsidian/扩展端。
+
+**部署（由所有者执行）**：
+- `supabase db push` 应用 `supabase/migrations/20260923_trip_shares.sql`
+- `supabase functions deploy trip-share`（`verify_jwt = false`，见 `supabase/config.toml`）
+
+**验收**：
+- [x] 发布/轮换/停用 + PRO 门禁 + 别名校验（单测）
+- [x] 内容自包含、无脚本、无外部资源；费用永远排除
+- [x] 公开响应带严格 CSP/noindex（单测）
+- [ ] 部署后 iPhone 实测：`…/trip-share/<alias>` 可打开
 
 ## WS-4 Pro 第二支柱：对象侧洞察 + 日历 feed PRO 化
 

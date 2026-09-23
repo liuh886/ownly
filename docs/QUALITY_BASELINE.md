@@ -24,7 +24,8 @@ carry domain-level coverage. All suites below run under `npm test`.
 |---|---|---|
 | WS-1 trip retrospective | `src/domain/trip-review.test.ts` (stats, draft, schema validity, reviewable) | ✅ |
 | WS-2 trust Gate 1 + Gate 2 | `src/domain/trust-status.test.ts`, `src/domain/recovery-drill.test.ts` (read-only + cleanup assertions) | ✅ |
-| WS-3 mobile snapshot | `src/domain/trip-snapshot.test.ts`, `src/components/snapshot/snapshot-readonly.test.ts` (import-boundary) | ✅ domain; iPhone Safari field check pending user |
+| WS-3 mobile reading | `src/domain/trip-itinerary-html.test.ts` (structure, HTML escaping, self-contained asset assertions, expenses opt-in) | ✅ domain; single-file offline HTML replaces the earlier JSON snapshot + `/trip` viewer |
+| WS-3b PRO share link | `src/domain/trip-share.test.ts`, `src/services/TripShareService.test.ts` (alias rules, PRO gate, publish/rotate/disable, always-no-expenses, public response headers) | ✅ domain/service; Supabase migration + `trip-share` function pending owner deploy |
 | WS-4 object insights + calendar feed PRO | `src/domain/object-insights.test.ts`, `src/services/CalendarFeedService.test.ts` | ✅ |
 
 Regression fixed during verification: a completed trip with empty `destinations`

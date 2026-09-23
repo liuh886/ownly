@@ -21,6 +21,7 @@ import { PlannerRightPanel } from './PlannerRightPanel';
 import { ResearchPoolSection } from './ResearchPoolSection';
 import { useEscapeKey } from './use-escape-key';
 import { extractTripSharePayload } from '@/domain/trip-share-link';
+import { suggestTripShareAlias } from '@/domain/trip-share';
 import { isTripReviewable, type TripReviewDraft } from '@/domain/trip-review';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { DayRiskSummary } from './PlannerDayStatsPanel';
@@ -50,6 +51,10 @@ const SwapDaysModal = dynamic(
 );
 const CalendarSubscriptionModal = dynamic(
   () => import('./CalendarSubscriptionModal').then((mod) => mod.CalendarSubscriptionModal),
+  { loading: modalLoading },
+);
+const TripShareModal = dynamic(
+  () => import('./TripShareModal').then((mod) => mod.TripShareModal),
   { loading: modalLoading },
 );
 const TripReviewModal = dynamic(
@@ -94,6 +99,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSuspectedModalOpen, setIsSuspectedModalOpen] = useState(false);
   const [timingModalPlace, setTimingModalPlace] = useState<PlannerScheduledPlace | null>(null);
   const [draggingDate, setDraggingDate] = useState<string | null>(null);
@@ -222,7 +228,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleSwapDays,
     downloadKML,
     downloadCSV,
-    downloadTripSnapshot,
+    downloadTripItineraryHtml,
     copyMarkdownItinerary,
     downloadFullIcs,
     downloadDayIcs,
@@ -231,6 +237,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleCreateOrUpdateAccountFeed,
     handleRotateAccountFeed,
     handleDisableAccountFeed,
+    tripShareMeta,
+    handlePublishTripShare,
+    handleRotateTripShare,
+    handleDisableTripShare,
     copyItineraryText,
     optimizeDayOrder,
     applyDayOptimization,
@@ -242,7 +252,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   // (native dropdown collapse).
   const bigMapEscActive = isMapExpanded && !timingModalPlace && !isSwapDaysModalOpen &&
     !isCreateTripOpen && !guideOpen && !isHotelModalOpen && !isImportModalOpen &&
-    !isCalendarModalOpen && !isSuspectedModalOpen && !isReviewModalOpen &&
+    !isCalendarModalOpen && !isShareModalOpen && !isSuspectedModalOpen && !isReviewModalOpen &&
     !poolView && !optimizeComputation && !confirmRequest && !exportMenuOpen;
   useEffect(() => {
     if (!bigMapEscActive) return;
@@ -485,6 +495,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         isHotelModalOpen ||
         isImportModalOpen ||
         isCalendarModalOpen ||
+        isShareModalOpen ||
         isSuspectedModalOpen ||
         poolView ||
         optimizeComputation ||
@@ -520,6 +531,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     isHotelModalOpen,
     isImportModalOpen,
     isCalendarModalOpen,
+    isShareModalOpen,
     isSuspectedModalOpen,
     poolView,
     optimizeComputation,
@@ -550,6 +562,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         isHotelModalOpen ||
         isImportModalOpen ||
         isCalendarModalOpen ||
+        isShareModalOpen ||
         isSuspectedModalOpen ||
         poolView ||
         optimizeComputation ||
@@ -586,6 +599,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     isHotelModalOpen,
     isImportModalOpen,
     isCalendarModalOpen,
+    isShareModalOpen,
     isSuspectedModalOpen,
     poolView,
     optimizeComputation,
@@ -1027,19 +1041,19 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setExportMenuOpen(false); downloadTripSnapshot(false); }}
+                          onClick={() => { setExportMenuOpen(false); downloadTripItineraryHtml(false); }}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                          title={zh ? '导出手机快照（不含费用），传到手机后在 /trip 页只读打开' : 'Export phone snapshot (no expenses); open read-only on the /trip page'}
+                          title={zh ? '导出自包含单文件 HTML 行程（不含费用），传到手机直接点开、离线可读' : 'Export a self-contained single-file HTML itinerary (no expenses); open it on your phone offline'}
                         >
-                          📱 {zh ? '手机快照' : 'Snapshot'}
+                          📱 {zh ? '分享行程 (HTML)' : 'Itinerary (HTML)'}
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setExportMenuOpen(false); downloadTripSnapshot(true); }}
+                          onClick={() => { setExportMenuOpen(false); downloadTripItineraryHtml(true); }}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                          title={zh ? '导出含费用的手机快照——费用将随文件流转，请确认知晓' : 'Export snapshot WITH expenses — expenses travel with the file, confirm you understand'}
+                          title={zh ? '导出含费用的单文件 HTML 行程——费用将随文件流转，请确认知晓' : 'Export single-file HTML itinerary WITH expenses — expenses travel with the file, confirm you understand'}
                         >
-                          📱 {zh ? '快照（含费用）' : 'Snapshot + costs'}
+                          📱 {zh ? '分享行程（含费用）' : 'Itinerary + costs'}
                         </button>
                       </div>
                     </>
@@ -1052,6 +1066,14 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                   title={zh ? '日历导出与订阅 (.ics / Feed)' : 'Calendar (.ics / Feed)'}
                 >
                   📅 {zh ? '日历' : 'Calendar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsShareModalOpen(true)}
+                  className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
+                  title={zh ? '生成固定分享链接 (PRO)' : 'Permanent share link (PRO)'}
+                >
+                  🔗 {zh ? '分享链接' : 'Share link'}
                 </button>
                 <button
                   type="button"
@@ -1289,6 +1311,22 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           isPro={isPro}
           onUpgradePro={openLicenseModal}
           language={language}
+        />
+      ) : null}
+
+      {selectedTrip && isShareModalOpen ? (
+        <TripShareModal
+          open
+          onClose={() => setIsShareModalOpen(false)}
+          trip={{ id: selectedTrip.id, title: selectedTrip.title }}
+          meta={tripShareMeta}
+          suggestedAlias={suggestTripShareAlias(selectedTrip)}
+          isPro={isPro}
+          onUpgradePro={openLicenseModal}
+          language={language}
+          onPublish={handlePublishTripShare}
+          onRotate={handleRotateTripShare}
+          onDisable={handleDisableTripShare}
         />
       ) : null}
 

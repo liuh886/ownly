@@ -52,9 +52,12 @@ import {
 import { useAutoCalendarSync } from './useAutoCalendarSync';
 import { trackFirstEver } from '@/lib/analytics';
 import { createDetachedElement } from '@/lib/dom';
-import { createTripSnapshot, tripSnapshotFileName } from '@/domain/trip-snapshot';
+import { buildTripItineraryHtml, tripItineraryHtmlFileName } from '@/domain/trip-itinerary-html';
+import { loadTripShareMeta, saveTripShareMeta, type TripShareMeta } from '@/domain/trip-share';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { calendarFeedService } from '@/services/CalendarFeedService';
+import { tripShareService } from '@/services/TripShareService';
+import { useAutoTripShareSync } from './useAutoTripShareSync';
 import {
   applyCaptureImportReport,
   pullCaptureState,
@@ -221,6 +224,15 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setAccountFeed(loadAccountFeedWithLegacyAdoption(currentUserId));
   }
 
+  const [tripShareOwner, setTripShareOwner] = useState(selectedTripId);
+  const [tripShareMeta, setTripShareMeta] = useState<TripShareMeta | null>(() =>
+    selectedTripId ? loadTripShareMeta(selectedTripId) : null,
+  );
+  if (tripShareOwner !== selectedTripId) {
+    setTripShareOwner(selectedTripId);
+    setTripShareMeta(selectedTripId ? loadTripShareMeta(selectedTripId) : null);
+  }
+
   // Persists one trip's refreshed feed meta without reloading; the auto-sync
   // trigger reloads once after all trips are done.
   const saveTripFeedMeta = useCallback(async (trip: PlannerTrip, feed: PlannerTripCalendarFeed) => {
@@ -244,6 +256,16 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setAccountFeed,
     saveTripFeedMeta,
     reloadPlanner,
+  });
+
+  useAutoTripShareSync({
+    trips,
+    places,
+    visits,
+    legs,
+    isPro,
+    currentUserId,
+    language,
   });
 
   const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
@@ -1085,27 +1107,88 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setNotice(zh ? '已导出 Google My Maps (KML) 路线文件！' : 'Exported Google My Maps (KML) route file!');
   }, [selectedTrip, scheduled, activeDate, zh, setNotice]);
 
-  const downloadTripSnapshot = useCallback((includeExpenses: boolean) => {
+  const downloadTripItineraryHtml = useCallback((includeExpenses: boolean) => {
     if (!selectedTrip) return;
-    const snapshot = createTripSnapshot(
-      selectedTrip,
+    const html = buildTripItineraryHtml({
+      trip: selectedTrip,
       places,
       visits,
-      legs,
-      currentExpenses ?? [],
-      { includeExpenses },
-    );
-    const blob = new Blob([`${JSON.stringify(snapshot, null, 2)}\n`], { type: 'application/json;charset=utf-8' });
+      expenses: currentExpenses ?? [],
+      language,
+      includeExpenses,
+    });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = createDetachedElement('a');
     a.href = url;
-    a.download = tripSnapshotFileName(selectedTrip.title);
+    a.download = tripItineraryHtmlFileName(selectedTrip.title);
     a.click();
     URL.revokeObjectURL(url);
     setNotice(zh
-      ? `已导出手机快照「${selectedTrip.title}」（${includeExpenses ? '含费用' : '不含费用'}），传到手机后在 /trip 页打开。`
-      : `Exported phone snapshot for "${selectedTrip.title}" (${includeExpenses ? 'with' : 'without'} expenses); open it on the /trip page.`);
-  }, [selectedTrip, places, visits, legs, currentExpenses, zh, setNotice]);
+      ? `已导出单文件行程「${selectedTrip.title}」（${includeExpenses ? '含费用' : '不含费用'}）。传到手机后直接点开即可离线阅读，无需联网或部署。`
+      : `Exported a single-file itinerary for "${selectedTrip.title}" (${includeExpenses ? 'with' : 'without'} expenses). Open it directly on your phone — no server or network needed.`);
+  }, [selectedTrip, places, visits, currentExpenses, language, zh, setNotice]);
+
+  const handlePublishTripShare = useCallback(async (alias: string) => {
+    if (!selectedTrip) throw new Error(zh ? '请先选择行程。' : 'Select a trip first.');
+    const response = await tripShareService.publishShare({
+      trip: selectedTrip,
+      places,
+      visits,
+      membership: { isPro },
+      userId: currentUserId,
+      alias,
+      writeToken: tripShareMeta?.write_token,
+      language,
+    });
+    const meta: TripShareMeta = {
+      alias: response.share.alias,
+      write_token: response.write_token,
+      updated_at: response.share.updated_at,
+      enabled: true,
+    };
+    saveTripShareMeta(selectedTrip.id, meta);
+    setTripShareMeta(meta);
+    return response;
+  }, [selectedTrip, places, visits, isPro, currentUserId, tripShareMeta, language, zh]);
+
+  const handleRotateTripShare = useCallback(async (newAlias: string) => {
+    if (!selectedTrip) throw new Error(zh ? '请先选择行程。' : 'Select a trip first.');
+    const response = await tripShareService.rotateShare({
+      trip: selectedTrip,
+      places,
+      visits,
+      membership: { isPro },
+      userId: currentUserId,
+      currentAlias: tripShareMeta?.alias,
+      currentWriteToken: tripShareMeta?.write_token,
+      newAlias,
+      language,
+    });
+    const meta: TripShareMeta = {
+      alias: response.share.alias,
+      write_token: response.write_token,
+      updated_at: response.share.updated_at,
+      enabled: true,
+    };
+    saveTripShareMeta(selectedTrip.id, meta);
+    setTripShareMeta(meta);
+    return response;
+  }, [selectedTrip, places, visits, isPro, currentUserId, tripShareMeta, language, zh]);
+
+  const handleDisableTripShare = useCallback(async () => {
+    if (!selectedTrip || !tripShareMeta) return;
+    await tripShareService.disableShare({
+      tripId: selectedTrip.id,
+      membership: { isPro },
+      userId: currentUserId,
+      alias: tripShareMeta.alias,
+      writeToken: tripShareMeta.write_token,
+    });
+    const meta: TripShareMeta = { ...tripShareMeta, enabled: false };
+    saveTripShareMeta(selectedTrip.id, meta);
+    setTripShareMeta(meta);
+  }, [selectedTrip, tripShareMeta, isPro, currentUserId]);
 
   const downloadCSV = useCallback(() => {
     if (!selectedTrip || scheduled.length === 0) return;
@@ -1571,7 +1654,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleSwapDays,
     downloadKML,
     downloadCSV,
-    downloadTripSnapshot,
+    downloadTripItineraryHtml,
     copyMarkdownItinerary,
     downloadFullIcs,
     downloadDayIcs,
@@ -1583,6 +1666,10 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleCreateOrUpdateAccountFeed,
     handleRotateAccountFeed,
     handleDisableAccountFeed,
+    tripShareMeta,
+    handlePublishTripShare,
+    handleRotateTripShare,
+    handleDisableTripShare,
     copyItineraryText,
     optimizeDayOrder,
     applyDayOptimization,

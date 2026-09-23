@@ -58,9 +58,9 @@ Rules:
 - Form dialogs use `src/components/common/Sheet.tsx` (bottom sheet <sm, centered ≥sm).
 - Any hand-rolled overlay must call `useDialogA11y` (`src/components/common/useDialogA11y.ts`) for Escape, Tab trap, focus restore, scroll lock, and initial focus.
 - Panels carry `role="dialog"` + `aria-modal="true"` + `aria-labelledby`/`aria-label`; icon-only controls keep `aria-label` + `title`.
-- The app shell exposes a skip link (`#ownly-main-content`); `/c`, `/trip`, and `error.tsx` render inside `<main>`.
+- The app shell exposes a skip link (`#ownly-main-content`); `/c` and `error.tsx` render inside `<main>`.
 
 ## Performance Budget (2026-09-18)
 
-`scripts/validate-bundle-size.mjs` (wired into `validate:pages`) enforces per-route gzip budgets from `scripts/bundle-budgets.json`. Current budgets: `/` 228 KB, `/app/` 365 KB, `/c/` 305 KB, `/trip/` 250 KB JS (+30 KB CSS each). Raise a budget only in the same PR that earns it, with a reviewed reason.
+`scripts/validate-bundle-size.mjs` (wired into `validate:pages`) enforces per-route gzip budgets from `scripts/bundle-budgets.json`. Current budgets: `/` 228 KB, `/app/` 365 KB, `/c/` 305 KB JS (+30 KB CSS each). Raise a budget only in the same PR that earns it, with a reviewed reason.
 
