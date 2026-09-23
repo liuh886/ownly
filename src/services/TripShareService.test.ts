@@ -8,12 +8,12 @@ import { hashFeedToken } from '../domain/calendar-feed';
 import type { PlannerTrip, PlannerTripPlace } from '../domain/planner';
 import type { PlannerTripVisit } from '../domain/planner-visits';
 
-function trip(): PlannerTrip {
+function trip(overrides: Partial<PlannerTrip> = {}): PlannerTrip {
   return {
     schema_version: '0.1',
     type: 'trip',
     id: 'trip-1',
-    title: 'Bangkok Week',
+    title: '清迈 5 日',
     status: 'active',
     start_date: '2026-10-05',
     end_date: '2026-10-07',
@@ -21,6 +21,7 @@ function trip(): PlannerTrip {
     currency: 'THB',
     transport_mode: 'driving',
     created_at: '2026-09-01T00:00:00.000Z',
+    ...overrides,
   } as PlannerTrip;
 }
 
@@ -73,12 +74,12 @@ describe('TripShareService', () => {
         visits: VISITS,
         membership: { isPro: false },
         userId: 'ownly_user',
-        alias: 'TH26',
+        alias: '清迈 5 日',
       }),
     ).rejects.toThrow(/PRO/);
   });
 
-  it('requires a user id and a valid alias', async () => {
+  it('requires a user id and a valid name', async () => {
     const service = new TripShareService(new MemoryTripShareStore());
     await expect(
       service.publishShare({
@@ -87,7 +88,7 @@ describe('TripShareService', () => {
         visits: VISITS,
         membership: { isPro: true },
         userId: '',
-        alias: 'TH26',
+        alias: '清迈 5 日',
       }),
     ).rejects.toThrow(/User ID/);
     await expect(
@@ -97,12 +98,12 @@ describe('TripShareService', () => {
         visits: VISITS,
         membership: { isPro: true },
         userId: 'ownly_user',
-        alias: 'not valid!',
+        alias: 'a/b',
       }),
-    ).rejects.toThrow(/别名/);
+    ).rejects.toThrow(/行程名/);
   });
 
-  it('publishes self-contained HTML that always excludes expenses', async () => {
+  it('publishes self-contained HTML under the trip name, always excluding expenses', async () => {
     const store = new MemoryTripShareStore();
     const service = new TripShareService(store);
     const response = await service.publishShare({
@@ -111,24 +112,24 @@ describe('TripShareService', () => {
       visits: VISITS,
       membership: { isPro: true },
       userId: 'ownly_user',
-      alias: 'th26',
+      alias: '清迈 5 日',
       language: 'zh',
       now: '2026-10-01T00:00:00.000Z',
     });
 
-    expect(response.share.alias).toBe('TH26');
-    expect(response.url).toContain('/functions/v1/trip-share/TH26');
+    expect(response.share.alias).toBe('清迈 5 日');
+    expect(decodeURIComponent(response.url.split('/').pop() ?? '')).toBe('清迈 5 日');
     expect(response.html).toContain('Grand Palace');
     expect(response.html).toContain('该快照未包含费用');
     expect(response.html).not.toContain('<script');
     expect(response.write_token).toHaveLength(32);
 
-    const record = store.getShareByAlias('TH26');
+    const record = store.getShareByAlias('清迈 5 日');
     expect(record?.enabled).toBe(true);
     expect(record?.html_content).toBe(response.html);
   });
 
-  it('reuses an owner write token to update the same alias row in place', async () => {
+  it('reuses an owner write token to update the same row in place', async () => {
     const store = new MemoryTripShareStore();
     const service = new TripShareService(store);
     const first = await service.publishShare({
@@ -137,7 +138,7 @@ describe('TripShareService', () => {
       visits: VISITS,
       membership: { isPro: true },
       userId: 'ownly_user',
-      alias: 'TH26',
+      alias: '清迈 5 日',
     });
     const second = await service.publishShare({
       trip: trip(),
@@ -145,38 +146,36 @@ describe('TripShareService', () => {
       visits: VISITS,
       membership: { isPro: true },
       userId: 'ownly_user',
-      alias: 'TH26',
+      alias: '清迈 5 日',
       writeToken: first.write_token,
       now: '2026-10-02T00:00:00.000Z',
     });
     expect(second.write_token).toBe(first.write_token);
-    expect(store.getShareByAlias('TH26')?.write_token_hash).toBe(await hashFeedToken(first.write_token));
-    expect(store.getShareByAlias('TH26')?.updated_at).toBe('2026-10-02T00:00:00.000Z');
+    expect(store.getShareByAlias('清迈 5 日')?.write_token_hash).toBe(await hashFeedToken(first.write_token));
+    expect(store.getShareByAlias('清迈 5 日')?.updated_at).toBe('2026-10-02T00:00:00.000Z');
   });
 
-  it('rotates by revoking the old alias and publishing the new one', async () => {
+  it('auto-suffixes when the trip name is already taken by another share', async () => {
     const store = new MemoryTripShareStore();
     const service = new TripShareService(store);
     const first = await service.publishShare({
-      trip: trip(),
+      trip: trip({ id: 'trip-1' }),
       places: PLACES,
       visits: VISITS,
       membership: { isPro: true },
       userId: 'ownly_user',
-      alias: 'TH26',
+      alias: '清迈 5 日',
     });
-    await service.rotateShare({
-      trip: trip(),
-      places: PLACES,
-      visits: VISITS,
+    const second = await service.publishShare({
+      trip: trip({ id: 'trip-2' }),
+      places: [],
+      visits: [],
       membership: { isPro: true },
       userId: 'ownly_user',
-      currentAlias: 'TH26',
-      currentWriteToken: first.write_token,
-      newAlias: 'TH27',
+      alias: '清迈 5 日',
     });
-    expect(store.getShareByAlias('TH26')?.enabled).toBe(false);
-    expect(store.getShareByAlias('TH27')?.enabled).toBe(true);
+    expect(first.share.alias).toBe('清迈 5 日');
+    expect(second.share.alias).toBe('清迈 5 日-2');
   });
 
   it('disables only with the matching write capability', async () => {
@@ -188,27 +187,27 @@ describe('TripShareService', () => {
       visits: VISITS,
       membership: { isPro: true },
       userId: 'ownly_user',
-      alias: 'TH26',
+      alias: '清迈 5 日',
     });
 
     await service.disableShare({
       tripId: 'trip-1',
       membership: { isPro: true },
       userId: 'ownly_user',
-      alias: 'TH26',
+      alias: '清迈 5 日',
       writeToken: 'wrong-token',
     });
-    expect(store.getShareByAlias('TH26')?.enabled).toBe(true);
+    expect(store.getShareByAlias('清迈 5 日')?.enabled).toBe(true);
 
     const disabled = await service.disableShare({
       tripId: 'trip-1',
       membership: { isPro: true },
       userId: 'ownly_user',
-      alias: 'TH26',
+      alias: '清迈 5 日',
       writeToken: response.write_token,
     });
     expect(disabled.enabled).toBe(false);
-    expect(store.getShareByAlias('TH26')?.enabled).toBe(false);
+    expect(store.getShareByAlias('清迈 5 日')?.enabled).toBe(false);
   });
 });
 
@@ -219,7 +218,7 @@ describe('buildPublicShareResponse', () => {
       buildPublicShareResponse({
         user_id: 'u',
         trip_id: 't',
-        alias: 'TH26',
+        alias: '清迈 5 日',
         write_token_hash: 'x',
         html_content: '<html></html>',
         enabled: false,
@@ -231,7 +230,7 @@ describe('buildPublicShareResponse', () => {
     const response = buildPublicShareResponse({
       user_id: 'u',
       trip_id: 't',
-      alias: 'TH26',
+      alias: '清迈 5 日',
       write_token_hash: 'x',
       html_content: '<html></html>',
       enabled: true,

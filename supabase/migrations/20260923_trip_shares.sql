@@ -4,11 +4,11 @@
 -- Boundary: Planner owns travel state authority; this table only hosts a
 -- read-only HTML projection. Expenses are never included in the projection.
 --
--- Alias is public and low-entropy by design (e.g. TH26), so it is NOT the
--- authorization secret: writes require the owner's high-entropy write token,
--- whose SHA-256 must match x-ownly-share-write-hash. Anonymous SELECT is not
--- granted, so aliases cannot be enumerated through the Data API; public reads
--- are served by the trip-share Edge Function with service_role.
+-- The alias is the trip name (public and low-entropy by design), so it is NOT
+-- the authorization secret: writes require the owner's high-entropy write
+-- token, whose SHA-256 must match x-ownly-share-write-hash. Anonymous SELECT is
+-- not granted, so aliases cannot be enumerated through the Data API; public
+-- reads are served by the trip-share Edge Function with service_role.
 -- ============================================================================
 
 create table if not exists public.ownly_trip_shares (
@@ -22,7 +22,8 @@ create table if not exists public.ownly_trip_shares (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint ownly_trip_shares_alias_key unique (alias),
-  constraint ownly_trip_shares_alias_format_check check (alias ~ '^[A-Z0-9][A-Z0-9-]{1,23}$'),
+  constraint ownly_trip_shares_alias_format_check
+    check (char_length(alias) between 1 and 64 and alias !~ '[/\\?#%]'),
   constraint ownly_trip_shares_write_hash_format_check check (write_token_hash ~ '^[0-9a-f]{64}$'),
   constraint ownly_trip_shares_user_id_length_check check (char_length(user_id) between 1 and 200)
 );

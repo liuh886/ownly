@@ -2,22 +2,38 @@
 // Supabase Edge Function: trip-share
 // Serves the PRO self-contained itinerary HTML at /trip-share/:alias.
 //
-// The alias is public by design, so lookups run server-side with service_role
-// and the table has no anonymous SELECT policy. The document is scriptless
-// (inline styles only), so a strict CSP still renders it while blocking every
-// external fetch; X-Robots-Tag keeps the link out of search indexes.
+// The alias is the trip name (public by design), so lookups run server-side
+// with service_role and the table has no anonymous SELECT policy. The document
+// is scriptless (inline styles only), so a strict CSP still renders it while
+// blocking every external fetch; X-Robots-Tag keeps the link out of search
+// indexes.
 // ============================================================================
 
 import { createClient } from 'npm:@supabase/supabase-js@2.111.0';
 
-const ALIAS_RE = /^[A-Z0-9][A-Z0-9-]{1,23}$/;
+const ALIAS_MAX_LENGTH = 64;
+const FORBIDDEN_ALIAS_RE = /[/\\?#%\u0000-\u001f]/;
 
 function extractAlias(req: Request): string | null {
   const url = new URL(req.url);
-  const queryAlias = url.searchParams.get('alias')?.trim();
-  if (queryAlias) return queryAlias.toUpperCase();
-  const match = url.pathname.match(/trip-share\/([A-Za-z0-9-]+)$/);
-  return match?.[1]?.toUpperCase() || null;
+  const queryAlias = url.searchParams.get('alias');
+  if (queryAlias !== null) return queryAlias.trim();
+  const match = url.pathname.match(/trip-share\/(.+)$/);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]).trim();
+  } catch {
+    return null;
+  }
+}
+
+function validAlias(alias: string | null): alias is string {
+  return Boolean(
+    alias &&
+      alias.length >= 1 &&
+      alias.length <= ALIAS_MAX_LENGTH &&
+      !FORBIDDEN_ALIAS_RE.test(alias),
+  );
 }
 
 Deno.serve(async (req: Request) => {
@@ -29,7 +45,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const alias = extractAlias(req);
-  if (!alias || !ALIAS_RE.test(alias)) {
+  if (!validAlias(alias)) {
     return new Response('Share link not found', {
       status: 404,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },

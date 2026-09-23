@@ -5,6 +5,7 @@ import {
   getTripShareUrl,
   normalizeTripShareAlias,
   validateTripShareAlias,
+  withTripShareAliasSuffix,
   type TripShareLink,
 } from '../domain/trip-share';
 import { buildTripItineraryHtml } from '../domain/trip-itinerary-html';
@@ -34,6 +35,9 @@ export class MemoryTripShareStore implements TripShareStore {
   async upsertShare(record: TripShareRecord): Promise<void> {
     const alias = normalizeTripShareAlias(record.alias);
     const existing = this.records.get(alias);
+    if (existing && existing.write_token_hash !== record.write_token_hash) {
+      throw new Error('Alias already taken by another share (403).');
+    }
     this.records.set(alias, {
       ...existing,
       ...record,
@@ -63,22 +67,10 @@ export interface PublishTripShareInput {
   visits: PlannerTripVisit[];
   membership: Pick<WYQDMembershipState, 'isPro'>;
   userId: string;
+  /** The share alias; defaults to the trip name. */
   alias: string;
   /** Reuse an existing owner write token to update the same row in place. */
   writeToken?: string;
-  language?: 'zh' | 'en';
-  now?: string;
-}
-
-export interface RotateTripShareInput {
-  trip: PlannerTrip;
-  places: PlannerTripPlace[];
-  visits: PlannerTripVisit[];
-  membership: Pick<WYQDMembershipState, 'isPro'>;
-  userId: string;
-  currentAlias?: string;
-  currentWriteToken?: string;
-  newAlias: string;
   language?: 'zh' | 'en';
   now?: string;
 }
@@ -101,16 +93,24 @@ export interface TripShareResponse {
 function requireValidAlias(input: string): string {
   const result = validateTripShareAlias(input);
   if (result.ok) return result.alias;
-  if (result.reason === 'empty') throw new Error('分享别名不能为空。');
-  if (result.reason === 'reserved') throw new Error('该分享别名已被系统保留，请换一个。');
-  throw new Error('分享别名需为 2–24 位大写字母、数字或连字符（如 TH26）。');
+  if (result.reason === 'empty') throw new Error('行程名为空，无法生成分享链接。');
+  throw new Error('行程名过长或包含 / ? # % 等字符，无法作为分享链接。');
+}
+
+/** The trip name, then `name-2 … name-9` if the name is already taken. */
+function aliasCandidates(base: string): string[] {
+  const list = [base];
+  for (let n = 2; n <= 9; n += 1) list.push(withTripShareAliasSuffix(base, n));
+  return list;
 }
 
 /**
  * TripShareService orchestrates PRO per-trip share links: it enforces the PRO
  * entitlement, builds the self-contained itinerary HTML (expenses always
  * excluded), hashes the owner write token before remote persistence, and
- * produces a stable alias URL. The raw write token never reaches the server.
+ * produces a stable alias URL. The alias defaults to the trip name; a numeric
+ * suffix is added only when that name is already taken. The raw write token
+ * never reaches the server.
  */
 export class TripShareService {
   constructor(private store: TripShareStore = defaultTripShareStore) {}
@@ -130,7 +130,7 @@ export class TripShareService {
   async publishShare(input: PublishTripShareInput): Promise<TripShareResponse> {
     this.assertPro(input.membership);
     this.assertUser(input.userId);
-    const alias = requireValidAlias(input.alias);
+    const baseAlias = requireValidAlias(input.alias);
     const writeToken = input.writeToken?.trim() || generateCalendarFeedToken();
     const writeTokenHash = await hashFeedToken(writeToken);
     const now = input.now ?? new Date().toISOString();
@@ -144,41 +144,29 @@ export class TripShareService {
       generatedAt: now,
     });
 
-    await this.store.upsertShare({
-      user_id: input.userId,
-      trip_id: input.trip.id,
-      alias,
-      write_token_hash: writeTokenHash,
-      html_content: html,
-      enabled: true,
-      updated_at: now,
-    });
-
-    return {
-      share: { alias, trip_id: input.trip.id, enabled: true, updated_at: now },
-      url: getTripShareUrl(alias),
-      write_token: writeToken,
-      html,
-    };
-  }
-
-  async rotateShare(input: RotateTripShareInput): Promise<TripShareResponse> {
-    this.assertPro(input.membership);
-    this.assertUser(input.userId);
-    if (input.currentAlias?.trim() && input.currentWriteToken?.trim()) {
-      const oldHash = await hashFeedToken(input.currentWriteToken.trim());
-      await this.store.disableShare(normalizeTripShareAlias(input.currentAlias), oldHash);
+    let lastError: unknown = null;
+    for (const alias of aliasCandidates(baseAlias)) {
+      try {
+        await this.store.upsertShare({
+          user_id: input.userId,
+          trip_id: input.trip.id,
+          alias,
+          write_token_hash: writeTokenHash,
+          html_content: html,
+          enabled: true,
+          updated_at: now,
+        });
+        return {
+          share: { alias, trip_id: input.trip.id, enabled: true, updated_at: now },
+          url: getTripShareUrl(alias),
+          write_token: writeToken,
+          html,
+        };
+      } catch (error) {
+        lastError = error;
+      }
     }
-    return this.publishShare({
-      trip: input.trip,
-      places: input.places,
-      visits: input.visits,
-      membership: input.membership,
-      userId: input.userId,
-      alias: input.newAlias,
-      language: input.language,
-      now: input.now,
-    });
+    throw lastError instanceof Error ? lastError : new Error('Failed to publish the share link.');
   }
 
   async disableShare(input: DisableTripShareInput): Promise<TripShareLink> {

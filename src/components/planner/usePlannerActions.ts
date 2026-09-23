@@ -1129,8 +1129,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       : `Exported a single-file itinerary for "${selectedTrip.title}" (${includeExpenses ? 'with' : 'without'} expenses). Open it directly on your phone — no server or network needed.`);
   }, [selectedTrip, places, visits, currentExpenses, language, zh, setNotice]);
 
-  const handlePublishTripShare = useCallback(async (alias: string) => {
+  const handlePublishTripShare = useCallback(async () => {
     if (!selectedTrip) throw new Error(zh ? '请先选择行程。' : 'Select a trip first.');
+    const alias = tripShareMeta?.alias?.trim() || selectedTrip.title;
     const response = await tripShareService.publishShare({
       trip: selectedTrip,
       places,
@@ -1139,30 +1140,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       userId: currentUserId,
       alias,
       writeToken: tripShareMeta?.write_token,
-      language,
-    });
-    const meta: TripShareMeta = {
-      alias: response.share.alias,
-      write_token: response.write_token,
-      updated_at: response.share.updated_at,
-      enabled: true,
-    };
-    saveTripShareMeta(selectedTrip.id, meta);
-    setTripShareMeta(meta);
-    return response;
-  }, [selectedTrip, places, visits, isPro, currentUserId, tripShareMeta, language, zh]);
-
-  const handleRotateTripShare = useCallback(async (newAlias: string) => {
-    if (!selectedTrip) throw new Error(zh ? '请先选择行程。' : 'Select a trip first.');
-    const response = await tripShareService.rotateShare({
-      trip: selectedTrip,
-      places,
-      visits,
-      membership: { isPro },
-      userId: currentUserId,
-      currentAlias: tripShareMeta?.alias,
-      currentWriteToken: tripShareMeta?.write_token,
-      newAlias,
       language,
     });
     const meta: TripShareMeta = {
@@ -1668,7 +1645,6 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleDisableAccountFeed,
     tripShareMeta,
     handlePublishTripShare,
-    handleRotateTripShare,
     handleDisableTripShare,
     copyItineraryText,
     optimizeDayOrder,

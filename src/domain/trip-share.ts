@@ -1,35 +1,23 @@
 import type { PlannerTrip } from './planner';
 
 /**
- * PRO per-trip share links. The owner picks a short human alias (e.g. `TH26`)
- * and Ownly hosts the single-file itinerary HTML at a stable URL served by the
- * `trip-share` Edge Function. Aliases are public and low-entropy by design:
- * anyone who guesses the alias can read the itinerary, so the UI warns about
- * it and the server content always excludes expenses. Writes are authorized by
- * a separate high-entropy write token kept only on the owner's device.
+ * PRO per-trip share links. The alias is simply the trip name (no manual
+ * entry): Ownly hosts the single-file itinerary HTML at a stable URL served by
+ * the `trip-share` Edge Function. Aliases are public and low-entropy by design:
+ * anyone who has or guesses the name can read the itinerary, so the UI warns
+ * about it and the server content always excludes expenses. Writes are
+ * authorized by a separate high-entropy write token kept only on the owner's
+ * device.
  */
 
-export const TRIP_SHARE_ALIAS_RE = /^[A-Z0-9][A-Z0-9-]{1,23}$/;
+export const TRIP_SHARE_ALIAS_MAX_LENGTH = 64;
 
-/** Paths that could collide with service routes or invite abuse. */
-const RESERVED_ALIASES = new Set([
-  'APP',
-  'API',
-  'ADMIN',
-  'ASSETS',
-  'C',
-  'F',
-  'PRIVACY',
-  'ROBOTS',
-  'SITEMAP',
-  'STATIC',
-  'TRIP-SHARE',
-  'SHARE',
-]);
+/** Characters that cannot appear in an alias (URL/path/query hazards). */
+const FORBIDDEN_ALIAS_RE = /[/\\?#%\u0000-\u001f]/;
 
 export type TripShareAliasValidation =
   | { ok: true; alias: string }
-  | { ok: false; reason: 'empty' | 'format' | 'reserved' };
+  | { ok: false; reason: 'empty' | 'format' };
 
 export interface TripShareLink {
   alias: string;
@@ -46,36 +34,24 @@ export interface TripShareMeta {
   enabled: boolean;
 }
 
+/** Trims and collapses internal whitespace; preserves case and scripts. */
 export function normalizeTripShareAlias(input: string): string {
-  return input.trim().toUpperCase();
+  return input.trim().replace(/\s+/g, ' ');
 }
 
 export function validateTripShareAlias(input: string): TripShareAliasValidation {
   const alias = normalizeTripShareAlias(input);
   if (!alias) return { ok: false, reason: 'empty' };
-  if (!TRIP_SHARE_ALIAS_RE.test(alias)) return { ok: false, reason: 'format' };
-  if (RESERVED_ALIASES.has(alias)) return { ok: false, reason: 'reserved' };
+  if (alias.length > TRIP_SHARE_ALIAS_MAX_LENGTH) return { ok: false, reason: 'format' };
+  if (FORBIDDEN_ALIAS_RE.test(alias)) return { ok: false, reason: 'format' };
   return { ok: true, alias };
 }
 
-function asciiLetters(text: string): string {
-  return text.toUpperCase().replace(/[^A-Z]/g, '');
-}
-
-/**
- * Suggests a memorable alias from the destination (or title) plus the start
- * year, e.g. Thailand 2026 → `TH26`. Falls back to `TRIP` when no ASCII code
- * can be derived (e.g. all-CJK destinations).
- */
-export function suggestTripShareAlias(
-  trip: Pick<PlannerTrip, 'destinations' | 'title' | 'start_date'>,
-): string {
-  const destination = (trip.destinations ?? [])[0] ?? '';
-  let code = asciiLetters(destination).slice(0, 2);
-  if (code.length < 2) code = asciiLetters(trip.title).slice(0, 2);
-  if (code.length < 2) code = 'TRIP';
-  const year = /^\d{4}/.test(trip.start_date) ? trip.start_date.slice(2, 4) : '';
-  return `${code}${year}`.slice(0, 24);
+/** Appends a numeric suffix (for name collisions), staying within the limit. */
+export function withTripShareAliasSuffix(alias: string, suffix: number): string {
+  const base = normalizeTripShareAlias(alias);
+  const tag = `-${suffix}`;
+  return `${base.slice(0, TRIP_SHARE_ALIAS_MAX_LENGTH - tag.length)}${tag}`;
 }
 
 const DEFAULT_SUPABASE_URL = 'https://blgwlycfcwvsupmqyqwn.supabase.co';
@@ -90,6 +66,11 @@ function getDefaultShareHost(): string {
 export function getTripShareUrl(alias: string, host?: string): string {
   const cleanHost = (host || getDefaultShareHost()).replace(/\/+$/, '');
   return `${cleanHost}/${encodeURIComponent(normalizeTripShareAlias(alias))}`;
+}
+
+/** Convenience: the default alias for a trip is its name. */
+export function defaultTripShareAlias(trip: Pick<PlannerTrip, 'title'>): string {
+  return normalizeTripShareAlias(trip.title);
 }
 
 function tripShareStorageKey(tripId: string): string {

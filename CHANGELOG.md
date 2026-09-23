@@ -4,7 +4,7 @@
 
 ### Added
 
-- **PRO fixed share links:** each trip can publish a permanent link (e.g. `…/trip-share/TH26`) that serves the self-contained itinerary HTML. Published/rotated/disabled from the planner; auto-republishes ~30s after itinerary edits. Expenses are never included, the page is `noindex`, and writes require a device-local write token (the public alias is not the authorization secret). Requires deploying the `ownly_trip_shares` migration and the `trip-share` Edge Function.
+- **PRO fixed share links:** each trip can publish a permanent link named after the trip (e.g. `…/trip-share/清迈5日`) that serves the self-contained itinerary HTML. One-tap enable from a mobile-first sheet, with native share and copy fallback; auto-republishes ~30s after itinerary edits and auto-suffixes on name collisions. Expenses are never included, the page is `noindex`, and writes require a device-local write token (the public name is not the authorization secret). Requires deploying the `ownly_trip_shares` migration and the `trip-share` Edge Function.
 
 ### Changed
 

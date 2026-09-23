@@ -21,7 +21,6 @@ import { PlannerRightPanel } from './PlannerRightPanel';
 import { ResearchPoolSection } from './ResearchPoolSection';
 import { useEscapeKey } from './use-escape-key';
 import { extractTripSharePayload } from '@/domain/trip-share-link';
-import { suggestTripShareAlias } from '@/domain/trip-share';
 import { isTripReviewable, type TripReviewDraft } from '@/domain/trip-review';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { DayRiskSummary } from './PlannerDayStatsPanel';
@@ -239,7 +238,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     handleDisableAccountFeed,
     tripShareMeta,
     handlePublishTripShare,
-    handleRotateTripShare,
     handleDisableTripShare,
     copyItineraryText,
     optimizeDayOrder,
@@ -1320,12 +1318,10 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           onClose={() => setIsShareModalOpen(false)}
           trip={{ id: selectedTrip.id, title: selectedTrip.title }}
           meta={tripShareMeta}
-          suggestedAlias={suggestTripShareAlias(selectedTrip)}
           isPro={isPro}
           onUpgradePro={openLicenseModal}
           language={language}
           onPublish={handlePublishTripShare}
-          onRotate={handleRotateTripShare}
           onDisable={handleDisableTripShare}
         />
       ) : null}

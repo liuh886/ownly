@@ -75,25 +75,25 @@
 
 ## WS-3b 固定分享链接（PRO）
 
-**目标**：在单文件 HTML 之外，给 PRO 账户一个**固定链接**（如 `…/trip-share/TH26`），手机打开即读、无需部署或传文件。
+**目标**：在单文件 HTML 之外，给 PRO 账户一个**固定链接**（别名即行程名，如 `…/trip-share/清迈5日`），手机打开即读、无需部署或传文件。
 
 **范围**：
 1. **服务端**（克隆 calendar-feed）：表 `ownly_trip_shares`（`alias` 唯一、`write_token_hash`、`html_content`、`enabled`）；Edge Function `trip-share` 按别名以 service_role 读取并返回 HTML（严格 CSP、`noindex`、`frame-ancestors 'none'`）。匿名端**无 SELECT**，别名无法经 Data API 枚举。
 2. **授权**：别名公开且低熵，故**不作为写入凭据**；写操作要求所有者设备上的高熵 `write_token`（仅其 SHA-256 上行，RLS 校验 `x-ownly-share-write-hash`）。
-3. **客户端**：`TripShareService`（PRO 门禁 + 发布/轮换/停用）、`SupabaseTripShareStore`、本地 meta（localStorage，含 write_token）、`useAutoTripShareSync`（编辑后 ~30s 自动重发）、`TripShareModal`。
+3. **客户端**：`TripShareService`（PRO 门禁 + 发布/停用；别名默认取行程名，重名自动加 `-2`）、`SupabaseTripShareStore`、本地 meta（localStorage，含 write_token）、`useAutoTripShareSync`（编辑后 ~30s 自动重发）、`TripShareModal`（移动优先 Sheet、一键开启、原生分享、复制回退）。
 4. **隐私线**：内容**永远不含费用**；`members`/`calendar_feed`/复盘回链照旧剥离；页面带公开警示（别名可被猜到）。
 
-**不做**：不做账号体系、不做 Obsidian/扩展端。
+**不做**：不做账号体系、不做 Obsidian/扩展端、不做手动别名输入/轮换（改链接=改行程名）。
 
 **部署（由所有者执行）**：
 - `supabase db push` 应用 `supabase/migrations/20260923_trip_shares.sql`
 - `supabase functions deploy trip-share`（`verify_jwt = false`，见 `supabase/config.toml`）
 
 **验收**：
-- [x] 发布/轮换/停用 + PRO 门禁 + 别名校验（单测）
+- [x] 发布/停用 + PRO 门禁 + 行程名校验（含重名自动后缀）（单测）
 - [x] 内容自包含、无脚本、无外部资源；费用永远排除
 - [x] 公开响应带严格 CSP/noindex（单测）
-- [ ] 部署后 iPhone 实测：`…/trip-share/<alias>` 可打开
+- [ ] 部署后 iPhone 实测：`…/trip-share/<行程名>` 可打开
 
 ## WS-4 Pro 第二支柱：对象侧洞察 + 日历 feed PRO 化
 
