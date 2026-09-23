@@ -42,7 +42,9 @@ export function TripShareModal({
 
   const isActive = Boolean(meta?.enabled && meta.alias);
   const url = isActive && meta ? getTripShareUrl(meta.alias) : '';
-  const projectedAlias = defaultTripShareAlias(trip);
+  // Once a link exists its alias is stable (even while disabled), so the
+  // preview shows the stored name instead of silently following renames.
+  const projectedAlias = meta?.alias?.trim() || defaultTripShareAlias(trip);
   const projectedUrl = getTripShareUrl(projectedAlias);
   const nameCheck = validateTripShareAlias(trip.title);
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
