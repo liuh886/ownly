@@ -372,7 +372,7 @@ export function ObjectCardSupporting({
                 } finally {
                   setExitingFileName(null);
                 }
-              })()}
+              })().catch(() => { /* failure notice already shown by the action */ })}
             >
               <div>
                 <label className="block text-xs font-medium text-stone-500">

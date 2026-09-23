@@ -102,15 +102,6 @@ export function saveAccountFeedMeta(userId: string, meta: AccountCalendarFeedMet
   }
 }
 
-export function clearAccountFeedMeta(userId: string): void {
-  if (typeof window === 'undefined' || !userId) return;
-  try {
-    window.localStorage.removeItem(accountFeedStorageKey(userId));
-  } catch {
-    // ignore
-  }
-}
-
 const VISIT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /**

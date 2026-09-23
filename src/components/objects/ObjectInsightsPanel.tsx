@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { AccountSnapshot, WYQDObject } from '@/domain/types';
+import type { AccountSnapshot, ObjectLogEntry, WYQDObject } from '@/domain/types';
 import type { WYQDMembershipState } from '@/core/membership';
 import { canUseWYQDProFeature } from '@/core/membership';
 import {
   buildNetWorthTrend,
   getSubscriptionRanking,
+  getUnusedObjects,
 } from '@/domain/object-insights';
 import { Panel } from '../common/ui-primitives';
 
@@ -24,6 +25,10 @@ const COPY = {
     latest: 'Latest',
     previous: 'Previous',
     change: 'Change',
+    unused: 'Idle items',
+    unusedDesc: 'No recorded use in the last {days} days.',
+    daysUnused: '{n} days unused',
+    noUnused: 'No idle items — everything is in use.',
     moreItems: '… {n} more',
     noSnapshots: 'Record snapshots in the Accounts tab to start the trend.',
     empty: 'Add objects to unlock insights about what you own.',
@@ -41,11 +46,18 @@ const COPY = {
     latest: '最新',
     previous: '上期',
     change: '变化',
+    unused: '闲置提醒',
+    unusedDesc: '最近 {days} 天没有使用记录。',
+    daysUnused: '已 {n} 天未使用',
+    noUnused: '没有闲置物品，都在使用中。',
     moreItems: '… 还有 {n} 项',
     noSnapshots: '去「账户」页记录快照后开始趋势统计。',
     empty: '添加对象后开始洞察你的持有。',
   },
 } as const;
+
+/** Public default for the idle alert; surfaced in copy so thresholds stay honest. */
+const UNUSED_THRESHOLD_DAYS = 90;
 
 function formatAmount(currency: string, amount: number): string {
   return `${currency} ${amount.toLocaleString('en-US')}`;
@@ -54,11 +66,13 @@ function formatAmount(currency: string, amount: number): string {
 export function ObjectInsightsPanel({
   objects,
   snapshots,
+  logs = [],
   membership,
   language,
 }: {
   objects: WYQDObject[];
   snapshots: AccountSnapshot[];
+  logs?: ObjectLogEntry[];
   membership: WYQDMembershipState;
   language: 'zh' | 'en';
 }) {
@@ -67,6 +81,10 @@ export function ObjectInsightsPanel({
 
   const groups = useMemo(() => getSubscriptionRanking(objects), [objects]);
   const trend = useMemo(() => buildNetWorthTrend(snapshots), [snapshots]);
+  const unused = useMemo(
+    () => getUnusedObjects(objects, logs, new Date(), UNUSED_THRESHOLD_DAYS),
+    [objects, logs],
+  );
 
   if (!isPro) {
     return (
@@ -202,6 +220,34 @@ export function ObjectInsightsPanel({
             </>
           )}
         </div>
+      </div>
+
+      <div className="mt-4 border-t border-stone-100 pt-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold text-stone-900">{copy.unused}</h3>
+          <span className="text-[11px] text-stone-500">
+            {copy.unusedDesc.replace('{days}', String(UNUSED_THRESHOLD_DAYS))}
+          </span>
+        </div>
+        {unused.length === 0 ? (
+          <p className="mt-1 text-xs text-stone-500">{copy.noUnused}</p>
+        ) : (
+          <ul className="mt-2 space-y-1">
+            {unused.slice(0, MAX_ROWS).map((row) => (
+              <li key={row.id} className="flex items-baseline justify-between gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate text-stone-700">{row.title}</span>
+                <span className="shrink-0 text-stone-500">
+                  {copy.daysUnused.replace('{n}', String(row.daysUnused))}
+                </span>
+              </li>
+            ))}
+            {unused.length > MAX_ROWS ? (
+              <li className="text-xs text-stone-500">
+                {copy.moreItems.replace('{n}', String(unused.length - MAX_ROWS))}
+              </li>
+            ) : null}
+          </ul>
+        )}
       </div>
     </section>
   );

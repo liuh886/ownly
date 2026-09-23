@@ -1,5 +1,5 @@
 import type { CurrentResearchPlace, DetectedSavedList } from '../content';
-import { readCaptureStateV3, rebaseOntoTruth, saveCaptureStateV3ViaWorker, writeCaptureStateV3 } from '../capture-state';
+import { readCaptureStateV3, rebaseOntoTruth, saveCaptureStateV3ViaWorker } from '../capture-state';
 import { DEFAULT_INBOX_TITLE, EMPTY_CAPTURE_STATE_V3, ensureInboxCollection, findExistingPlaceByIdentity, getInboxCollection as getInboxCollectionDomain, type CaptureCollection, type CapturePlace, type OwnlyCaptureStateV3 } from '../../domain/capture';
 import { I18N, type Lang } from '../i18n';
 import { sessionStorage } from '../session-storage';
@@ -272,10 +272,4 @@ export function takeDeferredExternalState(): boolean {
   }));
   logger.info('Sidepanel', 'Applied deferred external change', { places: store.stateV3.places.length });
   return true;
-}
-
-/** Write V3 state directly (for restore). */
-export async function writeState(next: OwnlyCaptureStateV3): Promise<void> {
-  await writeCaptureStateV3(next);
-  store.setState(next);
 }

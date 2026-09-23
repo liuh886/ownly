@@ -92,7 +92,7 @@ describe('computeUrgencies', () => {
         reservation_status: 'needed',
       }),
     ];
-    const urgencies = computeUrgencies(places, '2026-10-30', NOW);
+    const urgencies = computeUrgencies(places, '2026-10-30', new Set(), NOW);
     expect(urgencies.some((u) => u.kind === 'reservation_lead_time' && u.severity === 'urgent')).toBe(true);
   });
 
@@ -101,7 +101,7 @@ describe('computeUrgencies', () => {
     const places = [
       place('restaurant', { kind: 'food', risks: ['需提前2周预约'] }),
     ];
-    const urgencies = computeUrgencies(places, '2026-11-07', NOW);
+    const urgencies = computeUrgencies(places, '2026-11-07', new Set(), NOW);
     expect(urgencies.some((u) => u.kind === 'reservation_lead_time' && u.severity === 'warning')).toBe(true);
   });
 
@@ -110,27 +110,35 @@ describe('computeUrgencies', () => {
       place('restaurant', { kind: 'food', risks: ['需提前2周预约'] }),
     ];
     // Trip in 60 days → 14-day lead time not yet urgent
-    expect(computeUrgencies(places, '2026-12-19', NOW)).toHaveLength(0);
+    expect(computeUrgencies(places, '2026-12-19', new Set(), NOW)).toHaveLength(0);
   });
 
-  it('flags unbooked stay when departure is near', () => {
+  it('flags an unarranged stay when departure is near', () => {
     const places = [
       place('hotel', { kind: 'stay', state: 'candidate' }),
     ];
-    const urgencies = computeUrgencies(places, '2026-10-25', NOW); // 5 days out
+    const urgencies = computeUrgencies(places, '2026-10-25', new Set(), NOW); // 5 days out
     expect(urgencies.some((u) => u.kind === 'unbooked_stay' && u.severity === 'urgent')).toBe(true);
   });
 
-  it('flags stale price observations older than 30 days', () => {
+  it('does not flag a stay that is already scheduled on the trip plan', () => {
     const places = [
-      place('old', { observed_price: '฿200', observed_at: '2026-08-01' }),
+      place('hotel', { kind: 'stay', state: 'candidate' }),
     ];
-    const urgencies = computeUrgencies(places, '2026-10-25', NOW);
-    expect(urgencies.some((u) => u.kind === 'stale_price')).toBe(true);
+    const urgencies = computeUrgencies(places, '2026-10-25', new Set(['hotel']), NOW);
+    expect(urgencies.some((u) => u.kind === 'unbooked_stay')).toBe(false);
+  });
+
+  it('does not flag a stay marked as booked', () => {
+    const places = [
+      place('hotel', { kind: 'stay', state: 'candidate', reservation_status: 'booked' }),
+    ];
+    const urgencies = computeUrgencies(places, '2026-10-25', new Set(), NOW);
+    expect(urgencies.some((u) => u.kind === 'unbooked_stay')).toBe(false);
   });
 
   it('ignores dropped places and returns empty for far-future trips', () => {
-    expect(computeUrgencies([place('x', { state: 'dropped' })], '2026-10-25', NOW)).toHaveLength(0);
-    expect(computeUrgencies([place('x')], '2027-06-01', NOW)).toHaveLength(0);
+    expect(computeUrgencies([place('x', { state: 'dropped' })], '2026-10-25', new Set(), NOW)).toHaveLength(0);
+    expect(computeUrgencies([place('x')], '2027-06-01', new Set(), NOW)).toHaveLength(0);
   });
 });

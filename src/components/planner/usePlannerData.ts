@@ -649,8 +649,12 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
 
   const urgencies = useMemo(() => {
     if (!selectedTrip) return [];
-    return computeUrgencies(places, selectedTrip.start_date);
-  }, [places, selectedTrip]);
+    // Scheduling lives in Trip Visits: a place's own `state` never becomes
+    // 'scheduled', so pass the visited ids to avoid nagging about stays that
+    // are already arranged.
+    const scheduledPlaceIds = new Set(tripVisits.map((visit) => visit.place_id));
+    return computeUrgencies(tripPlaces, selectedTrip.start_date, scheduledPlaceIds);
+  }, [tripPlaces, selectedTrip, tripVisits]);
 
   const activeDayWeather = useMemo(
     () => weather.find((w) => w.date === activeDate) ?? null,

@@ -1231,11 +1231,11 @@ describe('computeUrgencies', () => {
     };
   }
   it('flags lead-time risk as urgent when past deadline', () => {
-    const u = computeUrgencies([dp('r', { risks: ['需提前2周预约'], reservation_status: 'needed' })], '2026-10-30', NOW);
+    const u = computeUrgencies([dp('r', { risks: ['需提前2周预约'], reservation_status: 'needed' })], '2026-10-30', new Set(), NOW);
     expect(u.some((x) => x.severity === 'urgent')).toBe(true);
   });
   it('does not flag when plenty of time remains', () => {
-    expect(computeUrgencies([dp('r', { risks: ['需提前2周预约'] })], '2026-12-19', NOW)).toHaveLength(0);
+    expect(computeUrgencies([dp('r', { risks: ['需提前2周预约'] })], '2026-12-19', new Set(), NOW)).toHaveLength(0);
   });
 });
 

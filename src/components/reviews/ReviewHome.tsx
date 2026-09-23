@@ -808,7 +808,7 @@ export function ReviewHome({
                       </span>
                     </button>
                     {isReviewingThis ? (
-                      <form ref={reviewFormRef} onSubmit={(e) => void handleSubmit(e)} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+                      <form ref={reviewFormRef} onSubmit={(e) => void handleSubmit(e).catch(() => { /* failure notice already shown by the action */ })} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
                         <textarea value={summary} onChange={(event) => setSummary(event.target.value)} placeholder={t('reviewSummaryPlaceholder')} rows={3} aria-label={t('summary')} className={`${fieldClass} resize-none`} disabled={disabled || isSaving} />
                         <div className="grid gap-2 sm:grid-cols-3">
                           <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />

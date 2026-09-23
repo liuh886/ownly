@@ -95,10 +95,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
   });
 }
 
-export function recordPerf(key: keyof OwnlyDiagnosticsBundleV2['performance'], ms: number): void {
-  lastPerf[key] = ms;
-}
-
 export async function buildDiagnosticsBundle(opts: {
   store?: {
     lang: string;
@@ -316,17 +312,4 @@ export async function buildDiagnosticsBundle(opts: {
 
 export function bundleToText(bundle: OwnlyDiagnosticsBundleV2): string {
   return JSON.stringify(bundle, null, 2);
-}
-
-export async function copyDiagnosticsBundle(storeArg?: { lang: string; debugModeEnabled: boolean; stateV3: unknown; currentPlace: unknown; detectedSavedList: unknown; detectedAllLists: unknown[]; pageDetectedCurrency?: string; mapCurrencyOverride?: string }): Promise<{ ok: boolean; text: string }> {
-  const bundle = await buildDiagnosticsBundle({ store: storeArg as unknown as never });
-  const text = bundleToText(bundle);
-  try {
-    await navigator.clipboard.writeText(text);
-    logger.info('Diagnostics', 'Diagnostics bundle copied to clipboard', { sessionId: bundle.sessionId, places: bundle.capture.stats.totalPlaces });
-    return { ok: true, text };
-  } catch (e) {
-    logger.warn('Diagnostics', 'Clipboard write failed for diagnostics', String(e));
-    return { ok: false, text };
-  }
 }

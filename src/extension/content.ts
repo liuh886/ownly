@@ -18,9 +18,6 @@ import {
   googleMapsPreviewPlaceUrl,
 } from './google-maps-research';
 import { logger } from './logger';
-import type {
-  ExtractionSnapshot,
-} from './maps/saved-list-parser';
 import { getAdapterForUrl } from './adapters/registry';
 import {
   scanAllGoogleMapsPlaces,
@@ -32,17 +29,6 @@ import type { CurrentResearchPlace, DetectedSavedList, SavedListCardSummary } fr
 
 export type { CurrentResearchPlace, DetectedSavedList, SavedListCardSummary };
 export { detectCurrencyFromPage };
-
-let lastExtractionSnapshot: ExtractionSnapshot | null = null;
-const EXTRACTION_SNAPSHOT_STORAGE_KEY = 'ownlyExtractionSnapshot';
-
-export function persistSnapshot(snap: ExtractionSnapshot): void {
-  lastExtractionSnapshot = snap;
-  try {
-    void chrome.storage?.local?.set({ [EXTRACTION_SNAPSHOT_STORAGE_KEY]: snap });
-  } catch {}
-  logger.info('Content', 'Extraction snapshot', snap);
-}
 
 const ENRICH_CACHE_TTL_MS = 5 * 60 * 1000;
 const ENRICH_CACHE_MAX = 20;
@@ -182,15 +168,6 @@ export async function enrichFromPlaceHtml(
     if (oldest !== undefined) enrichCache.delete(oldest);
   }
   return place;
-}
-
-export async function enrichPlaceFromHtml(
-  place: CurrentResearchPlace,
-  options?: { soft?: boolean },
-  overrideCurrency?: string,
-  hintCurrency?: string,
-): Promise<CurrentResearchPlace> {
-  return enrichFromPlaceHtml(place, options, overrideCurrency, hintCurrency);
 }
 
 function isGenericNavigationTitleLocal(text: string): boolean {
@@ -670,11 +647,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const target = (message as { targetCurrency?: string }).targetCurrency;
     const detected = detectCurrencyFromPage(window.location.href, undefined, target);
     sendResponse({ detectedCurrency: detected });
-    return true;
-  }
-
-  if (msgType === 'OWNLY_GET_EXTRACTION_SNAPSHOT') {
-    sendResponse({ snapshot: lastExtractionSnapshot });
     return true;
   }
 });

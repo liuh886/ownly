@@ -125,7 +125,7 @@ export function ObjectComposer({
   return (
     <form
       onKeyDown={handleKeyDown}
-      onSubmit={(e) => void handleSubmit(e)}
+      onSubmit={(e) => void handleSubmit(e).catch(() => { /* failure notice already shown by the action */ })}
       className={CARD_CLASS}
     >
       <div className="mb-4 flex items-start justify-between gap-4">

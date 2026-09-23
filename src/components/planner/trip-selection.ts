@@ -1,7 +1,8 @@
 import type { PlannerTrip, PlannerTripPlace } from '@/domain/planner';
 import type { PlannerTripVisit } from '@/domain/planner-visits';
+import { PLANNER_SELECTED_TRIP_STORAGE_KEY } from '@/core/planner-focus';
 
-export const SELECTED_TRIP_STORAGE_KEY = 'ownly_planner_selected_trip_id';
+export const SELECTED_TRIP_STORAGE_KEY = PLANNER_SELECTED_TRIP_STORAGE_KEY;
 
 function tripTouchTimestamp(
   trip: PlannerTrip,

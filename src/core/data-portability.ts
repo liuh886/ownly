@@ -203,31 +203,6 @@ export async function readDatasetSchemaVersion(
   return metadata.schema_version;
 }
 
-export async function ensureDatasetMetadata(
-  adapter: OwnlyTextFileAdapter,
-  now = new Date(),
-): Promise<OwnlyDatasetMetadata> {
-  const timestamp = now.toISOString();
-  let initializedAt = timestamp;
-  if (await adapter.exists(OWNLY_DATASET_METADATA_PATH)) {
-    const existing = parseDatasetMetadata(
-      await adapter.readText(OWNLY_DATASET_METADATA_PATH),
-    );
-    if (existing) initializedAt = existing.initialized_at;
-  }
-  const metadata: OwnlyDatasetMetadata = {
-    kind: 'ownly-dataset',
-    schema_version: OWNLY_DATASET_SCHEMA_VERSION,
-    initialized_at: initializedAt,
-    updated_at: timestamp,
-  };
-  await adapter.writeText(
-    OWNLY_DATASET_METADATA_PATH,
-    `${JSON.stringify(metadata, null, 2)}\n`,
-  );
-  return metadata;
-}
-
 export async function createOwnlyBackup(
   adapter: OwnlyTextFileAdapter,
   source: OwnlyBackupSource,
@@ -599,25 +574,4 @@ export async function migrateOwnlyBackup(
     warnings,
     migrated_bundle: current,
   };
-}
-
-export async function migrateOwnlyDataset(
-  adapter: OwnlyTextFileAdapter,
-  source: OwnlyBackupSource,
-  options: { targetVersion?: string; dryRun?: boolean; now?: Date } = {},
-): Promise<LiveMigrationResult> {
-  const now = options.now ?? new Date();
-  const originalBackup = await createOwnlyBackup(adapter, source, now);
-  const migration = await migrateOwnlyBackup(
-    originalBackup,
-    options.targetVersion ?? OWNLY_DATASET_SCHEMA_VERSION,
-  );
-  if (options.dryRun || migration.applied_steps.length === 0) {
-    return { dry_run: Boolean(options.dryRun), original_backup: originalBackup, migration };
-  }
-  const restore = await restoreOwnlyBackup(migration.migrated_bundle, adapter, {
-    collisionPolicy: 'overwrite',
-    safetyBackup: originalBackup,
-  });
-  return { dry_run: false, original_backup: originalBackup, migration, restore };
 }

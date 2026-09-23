@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import type { PlannerControllerReturn } from './usePlannerController';
 import { formatDay } from './planner-home-shared';
+
+const INTEL_PIN_STORAGE_KEY = 'ownly_planner_departure_intel_pinned';
 
 export interface PlannerDateNavProps {
   zh: boolean;
@@ -24,8 +27,6 @@ export interface PlannerDateNavProps {
   selectedTrip: PlannerControllerReturn['selectedTrip'];
   urgencies: PlannerControllerReturn['urgencies'];
   daysOut: number;
-  weatherRelevant: boolean;
-  weather: PlannerControllerReturn['weather'];
 }
 
 export function PlannerDateNav(props: PlannerDateNavProps) {
@@ -33,8 +34,38 @@ export function PlannerDateNav(props: PlannerDateNavProps) {
     zh, language, dateNavRef, poolView, setPoolView, sortedPendingCandidates,
     tripDates, activeDate, placesByDate, setSelectedDate, draggingDate, setDraggingDate,
     dragOverDate, setDragOverDate, handleSwapDays, setSwapTargetDate, setIsSwapDaysModalOpen,
-    selectedTrip, urgencies, daysOut, weatherRelevant, weather,
+    selectedTrip, urgencies, daysOut,
   } = props;
+  const [intelClosed, setIntelClosed] = useState(false);
+  const [intelExpanded, setIntelExpanded] = useState(false);
+  const [intelPinned, setIntelPinned] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return window.localStorage.getItem(INTEL_PIN_STORAGE_KEY) === '1';
+      } catch { /* private mode / storage disabled — fall back to unpinned */ }
+    }
+    return false;
+  });
+
+  const toggleIntelPinned = () => {
+    setIntelPinned((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(INTEL_PIN_STORAGE_KEY, next ? '1' : '0');
+      } catch { /* best-effort persistence */ }
+      return next;
+    });
+  };
+
+  const urgentCount = urgencies.filter((u) => u.severity === 'urgent').length;
+  const warningCount = urgencies.length - urgentCount;
+  const intelExpandedNow = intelPinned || intelExpanded;
+  const summary = (
+    <>
+      {urgentCount > 0 ? <span className="text-red-600">🔴 {urgentCount}</span> : null}
+      {warningCount > 0 ? <span className="text-amber-600">🟡 {warningCount}</span> : null}
+    </>
+  );
   return (
     <>
       <nav ref={dateNavRef} className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label={zh ? '日期导航' : 'Date navigation'}>
@@ -146,47 +177,71 @@ export function PlannerDateNav(props: PlannerDateNavProps) {
         ) : null}
       </nav>
 
-      {/* Departure Intelligence Bar */}
-      {(urgencies.length > 0 || (weatherRelevant && weather.length > 0)) && selectedTrip ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 shadow-2xs">
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
-              ⏰ {zh ? '出发情报' : 'Departure Intel'}
-              <span className="ml-1 rounded-full bg-amber-200/70 px-1.5 py-0 text-[9px] font-bold text-amber-800">
-                {daysOut >= 0 ? `D-${daysOut}` : ''}
-              </span>
-            </span>
-            {weatherRelevant ? (
-              <div className="flex gap-1">
-                {weather.slice(0, 7).map((w) => (
-                  <span
-                    key={w.date}
-                    className={`inline-flex flex-col items-center rounded-md px-1.5 py-0.5 text-[9px] leading-tight ${
-                      w.date === activeDate
-                        ? 'bg-white ring-1 ring-amber-400 font-bold'
-                        : 'bg-white/60 text-stone-500'
-                    }`}
-                    title={w.date}
-                  >
-                    <span>{w.label}</span>
-                    <span>{w.temp_min}°~{w.temp_max}°</span>
-                    {w.is_rainy ? <span className="text-sky-600">🌧️</span> : null}
-                  </span>
-                ))}
+      {/* Departure Intelligence Bar — collapsed by default, dismissible / pinnable */}
+      {urgencies.length > 0 && selectedTrip ? (
+        intelClosed ? (
+          <button
+            type="button"
+            onClick={() => setIntelClosed(false)}
+            className="self-start inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50/60 px-3 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 transition"
+            title={zh ? '展开出发情报' : 'Show departure intel'}
+          >
+            <span>⏰ {zh ? '出发情报' : 'Departure Intel'}</span>
+            <span className="tabular-nums">{summary}</span>
+          </button>
+        ) : (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 shadow-2xs">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => { if (!intelPinned) setIntelExpanded((prev) => !prev); }}
+                className="flex items-center gap-1 text-xs font-bold text-amber-900"
+                aria-expanded={intelExpandedNow}
+                title={intelPinned ? (zh ? '已钉住，始终展开' : 'Pinned, always expanded') : (zh ? '展开/收起详情' : 'Expand/collapse details')}
+              >
+                ⏰ {zh ? '出发情报' : 'Departure Intel'}
+                <span className="ml-1 rounded-full bg-amber-200/70 px-1.5 py-0 text-[9px] font-bold text-amber-800">
+                  {daysOut >= 0 ? `D-${daysOut}` : ''}
+                </span>
+                <span className="flex items-center gap-1 text-[10px] font-bold">
+                  {summary}
+                  {!intelPinned ? <span className="text-amber-700">{intelExpanded ? '▴' : '▾'}</span> : null}
+                </span>
+              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={toggleIntelPinned}
+                  aria-pressed={intelPinned}
+                  className={`rounded-md px-1.5 py-0.5 text-[11px] transition ${
+                    intelPinned ? 'bg-amber-300 text-amber-900' : 'text-amber-700 hover:bg-amber-100'
+                  }`}
+                  title={intelPinned ? (zh ? '取消钉住' : 'Unpin') : (zh ? '钉住：始终展开' : 'Pin: always expanded')}
+                >
+                  📌
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIntelClosed(true); setIntelExpanded(false); }}
+                  className="rounded-md px-1.5 py-0.5 text-[11px] text-amber-700 hover:bg-amber-100 transition"
+                  title={zh ? '暂时关闭（可随时重新展开）' : 'Dismiss (reopen anytime)'}
+                >
+                  ✕
+                </button>
               </div>
+            </div>
+            {intelExpandedNow ? (
+              <ul className="space-y-0.5 mt-2">
+                {urgencies.slice(0, 5).map((u, i) => (
+                  <li key={i} className="flex items-center gap-1.5 text-[11px] leading-4">
+                    <span className={u.severity === 'urgent' ? 'text-red-600 font-bold' : 'text-amber-600'}>{u.severity === 'urgent' ? '🔴' : '🟡'}</span>
+                    <span className="text-stone-700">{u.message}</span>
+                  </li>
+                ))}
+              </ul>
             ) : null}
           </div>
-          {urgencies.length > 0 ? (
-            <ul className="space-y-0.5 mt-1">
-              {urgencies.slice(0, 5).map((u, i) => (
-                <li key={i} className="flex items-center gap-1.5 text-[11px] leading-4">
-                  <span className={u.severity === 'urgent' ? 'text-red-600 font-bold' : 'text-amber-600'}>{u.severity === 'urgent' ? '🔴' : '🟡'}</span>
-                  <span className="text-stone-700">{u.message}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        )
       ) : null}
     </>
   );

@@ -521,10 +521,3 @@ export async function applyReviewRefRepairs(
   }
   return { fixedMismatches, clearedDangling };
 }
-
-export async function autoRepairReviewRefs(
-  adapter: WYQDDoctorRepairAdapter,
-): Promise<WYQDDoctorRepairResult> {
-  const plan = await inspectReviewRefRepairs(adapter);
-  return applyReviewRefRepairs(adapter, plan);
-}

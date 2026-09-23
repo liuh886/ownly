@@ -177,8 +177,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     areaCounts,
     maxAreaCount,
     daysOut,
-    weatherRelevant,
-    weather,
     urgencies,
     activeDayWeather,
     isMultiSelectMode,
@@ -441,8 +439,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     selectedTrip,
     urgencies,
     daysOut,
-    weatherRelevant,
-    weather,
   };
 
   // One-click direct send from the Capture sidepanel (?capture-sync=1):

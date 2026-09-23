@@ -282,32 +282,6 @@ export async function saveCaptureStateV3ViaWorker(
   return { ok: true, state: response.state };
 }
 
-export async function mergeWriteCaptureStateV3(
-  local: OwnlyCaptureStateV3,
-  locallyDeletedIds?: ReadonlySet<string>,
-): Promise<OwnlyCaptureStateV3> {
-  return (await saveCaptureStateV3ViaWorker(local, locallyDeletedIds)).state;
-}
-
-export async function writeCaptureStateV3(next: OwnlyCaptureStateV3): Promise<void> {
-  await sendWorkerV3<void>({ type: 'CAPTURE_REPLACE_STATE_V3', state: next });
-}
-
-export async function setCollectionViaWorker(collection: CaptureCollection): Promise<{ ok: true }> {
-  await sendWorkerV3<void>({ type: 'CAPTURE_SET_COLLECTION', collection });
-  return { ok: true };
-}
-
-export async function setActiveCollectionViaWorker(collectionId: string): Promise<{ ok: true }> {
-  await sendWorkerV3<void>({ type: 'CAPTURE_SET_ACTIVE_COLLECTION', collectionId });
-  return { ok: true };
-}
-
-export async function setPlannerTargetViaWorker(target: { trip_id: string; title: string } | null): Promise<{ ok: true }> {
-  await sendWorkerV3<void>({ type: 'CAPTURE_SET_PLANNER_TARGET', target });
-  return { ok: true };
-}
-
 // ─── Lost-update guard ───────────────────────────────────────────────────────
 
 export interface RebaseTombstones {
