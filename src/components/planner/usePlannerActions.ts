@@ -106,8 +106,6 @@ export interface UsePlannerActionsProps {
   disabled: boolean;
 }
 
-export const AUTO_REFRESH_LEGS_STORAGE_KEY = 'ownly_planner_auto_refresh_legs';
-
 /**
  * Loads the account feed token, adopting the pre-upgrade identity's token
  * (ownly_user → user_pro_*) so upgrades neither orphan the old servable row
@@ -119,25 +117,6 @@ function loadAccountFeedWithLegacyAdoption(userId: string): AccountCalendarFeedM
   const legacy = loadAccountFeedMeta('ownly_user');
   if (legacy) saveAccountFeedMeta(userId, legacy);
   return legacy;
-}
-
-/** Auto-refresh legs after schedule edits. Defaults ON; explicit '0' disables. */
-export function loadAutoRefreshLegsPref(): boolean {
-  if (typeof window === 'undefined') return true;
-  try {
-    return window.localStorage.getItem(AUTO_REFRESH_LEGS_STORAGE_KEY) !== '0';
-  } catch {
-    return true;
-  }
-}
-
-export function saveAutoRefreshLegsPref(enabled: boolean): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(AUTO_REFRESH_LEGS_STORAGE_KEY, enabled ? '1' : '0');
-  } catch {
-    // storage unavailable — preference stays session-only
-  }
 }
 
 /**

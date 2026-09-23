@@ -88,7 +88,7 @@ export async function fetchWeather(lat: number, lng: number, startDate: string, 
 export interface UrgencyItem {
   place_id: string;
   title: string;
-  kind: 'reservation_lead_time' | 'stale_price' | 'unbooked_stay';
+  kind: 'reservation_lead_time' | 'unbooked_stay';
   message: string;
   severity: 'urgent' | 'warning';
 }
@@ -115,11 +115,10 @@ function extractLeadTimeDays(riskText: string): number | null {
   return null;
 }
 
-const STALE_PRICE_DAYS = 30;
-
 export function computeUrgencies(
   places: PlannerTripPlace[],
   tripStart: string,
+  scheduledPlaceIds: ReadonlySet<string> = new Set(),
   now = new Date(),
 ): UrgencyItem[] {
   const d = daysUntil(tripStart, now);
@@ -149,29 +148,18 @@ export function computeUrgencies(
       }
     }
 
-    // Unbooked stay within 14 days of departure
-    if (p.kind === 'stay' && p.state === 'candidate' && d <= 14) {
+    // Unbooked stay: a stay candidate that has no visit on the trip plan and is
+    // not marked booked is genuinely unarranged. `state` never becomes
+    // 'scheduled' (scheduling lives in Trip Visits), so without this check every
+    // arranged hotel would keep reporting "still in the pool".
+    if (p.kind === 'stay' && p.reservation_status !== 'booked' && !scheduledPlaceIds.has(p.id) && d <= 14) {
       result.push({
         place_id: p.id,
         title: p.title,
         kind: 'unbooked_stay',
-        message: `${p.title} 仍在候选池，出发仅 ${d} 天`,
+        message: `${p.title} 尚未排入行程，出发仅 ${d} 天`,
         severity: d <= 7 ? 'urgent' : 'warning',
       });
-    }
-
-    // Stale price observation
-    if (p.observed_at && d <= 30) {
-      const age = Math.round((now.getTime() - new Date(p.observed_at).getTime()) / 86400000);
-      if (age > STALE_PRICE_DAYS) {
-        result.push({
-          place_id: p.id,
-          title: p.title,
-          kind: 'stale_price',
-          message: `${p.title} 价格采集于 ${age} 天前，可能已变动`,
-          severity: 'warning',
-        });
-      }
     }
   }
 

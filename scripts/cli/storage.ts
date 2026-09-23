@@ -8,7 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { parseMarkdownEntity, serializeMarkdownEntity } from '../../src/data/frontmatter';
 import { validateEntity } from '../../src/domain/schema';
 import type {
@@ -333,10 +333,6 @@ export function writeAgentLog(
     after,
   };
   appendFileSync(logFile, `${JSON.stringify(entry)}\n`, 'utf8');
-}
-
-export function archivedBasename(entry: StoredEntry): string {
-  return basename(entry.filePath);
 }
 
 export type ObjectEntry = StoredEntry<WYQDObject>;

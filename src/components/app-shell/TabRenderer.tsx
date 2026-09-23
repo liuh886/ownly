@@ -4,6 +4,7 @@ import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { extractTripSharePayload } from '@/domain/trip-share-link';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+import { focusPlannerTrip } from '@/core/planner-focus';
 import type { FirstObjectChoice } from '@/core/first-object-copy';
 import { firstObjectTemplateType } from '@/core/first-object-onboarding';
 import { getQuickLineTemplates } from '@/components/objects/composerQuickLine';
@@ -148,6 +149,11 @@ export function TabRenderer({
     setActiveTab('objects');
   }, [quickLineTemplates, setActiveTab, setAutoFocusComposer, setObjectListFocus]);
 
+  const openPlannerTrip = useCallback((tripId: string) => {
+    focusPlannerTrip(tripId);
+    setActiveTab('planner');
+  }, [setActiveTab]);
+
   const firstObjectQuickEntryRequest = useMemo(() => {
     if (!firstObjectRequest) return undefined;
     const templateKind = firstObjectTemplateType(firstObjectRequest.choice);
@@ -169,6 +175,7 @@ export function TabRenderer({
         objects={objects}
         snapshots={snapshots}
         onOpenObjects={openObjectsWithFocus}
+        onOpenTrip={openPlannerTrip}
       />
     );
   }
@@ -179,6 +186,7 @@ export function TabRenderer({
         <ObjectInsightsPanel
           objects={objects}
           snapshots={snapshots}
+          logs={storedLogs?.map((stored) => stored.entity) ?? []}
           membership={membership}
           language={language}
         />

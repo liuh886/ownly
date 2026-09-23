@@ -136,15 +136,3 @@ export function checkPlannerIntegrity(input: PlannerIntegrityInput): PlannerInte
     fixable,
   };
 }
-
-/** I/O wrapper for PlannerRepository. */
-export async function runPlannerIntegrity(
-  repo: {
-    listTrips(): Promise<Array<{ id: string }>>;
-    listPlaces(): Promise<PlannerTripPlace[]>;
-    listVisits(): Promise<PlannerTripVisit[]>;
-  },
-): Promise<PlannerIntegrityReport> {
-  const [trips, places, visits] = await Promise.all([repo.listTrips(), repo.listPlaces(), repo.listVisits()]);
-  return checkPlannerIntegrity({ trips, places, visits });
-}

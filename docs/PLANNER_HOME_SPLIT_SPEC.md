@@ -20,7 +20,7 @@
 | — 派生 memo | ~1214–1290 | `hotelStayDaysMap`、transferDaysInfo、urgencies 等 |
 | — 顶部空态/行程选择 | ~1290–1415 | |
 | — 日期导航 nav | 1416–1520 | `dateNavRef`（键盘导航引用它） |
-| — 出发情报条 | 1521–1568 | 天气 / urgency 列表 |
+| — 出发情报条 | 1521–1568 | urgency 列表（默认收起；无情报不渲染；可关闭/钉住） |
 | — 主网格 + 时间线头部 | 1570–1745 | 优化顺序按钮、导出菜单、换宿横幅 |
 | — 日时间线 stops | 1746–2303 | StopCard（编号、时间触发、meta/emoji、动作组）、Travel Transition Rail、Mode Switch Popover ×2 |
 | — 右侧面板 aside | 2305–2385 | tab 切换（map/context/budget）+ PlannerMap + PlannerDayStatsPanel + PlannerBudgetLedger |
@@ -51,7 +51,7 @@
 ### Phase 4 — 日期导航 + 出发情报条
 - 1416–1568 → `src/components/planner/PlannerDateNav.tsx`
 - ⚠️ `dateNavRef` 所有权：键盘导航 hook 滚动导航条到当前日，ref 必须由 PlannerHome 持有（或随 Phase 1 的键盘 hook 一起传入），传 ref 进组件
-- 需要的数据多（tripDates / activeDate / poolView / transferInfo / weather / urgencies），用聚合 props 对象（同 poolSectionProps 模式）
+- 需要的数据多（tripDates / activeDate / poolView / transferInfo / urgencies），用聚合 props 对象（同 poolSectionProps 模式）。注意：天气已从情报条移除（当天天气 chip 在执行时间线头部，由 `activeDayWeather` 提供），日期导航不再需要 `weather` / `weatherRelevant`
 - 预期收益：~150 行
 
 ### Phase 5 — 日时间线（最大件，最后做）

@@ -7,6 +7,7 @@ import { HomeCostSection } from './HomeCostSection';
 import { HomeReviewSection } from './HomeReviewSection';
 import { HomeDataScaleSection } from './HomeDataScaleSection';
 import { HomeDoctorSection } from './HomeDoctorSection';
+import { PlannerDoctorSection } from '@/components/planner/PlannerDoctorSection';
 import { TrustStatusSection } from '@/components/data-safety/TrustStatusSection';
 import { CaptureOnboarding, dismissCaptureOnboarding, shouldShowCaptureOnboarding } from '@/components/onboarding/CaptureOnboarding';
 import { useState } from 'react';
@@ -41,11 +42,13 @@ export function HomeDashboard({
   objects,
   snapshots,
   onOpenObjects,
+  onOpenTrip,
 }: {
   metrics: HomeMetrics;
   objects: WYQDObject[];
   snapshots: AccountSnapshot[];
   onOpenObjects: (focus: Omit<ObjectListFocus, 'token'>) => void;
+  onOpenTrip?: (tripId: string) => void;
 }) {
   const [dismissed, setDismissed] = useState(false);
   const showOnboarding = !dismissed && shouldShowCaptureOnboarding(objects.length === 0);
@@ -89,6 +92,7 @@ export function HomeDashboard({
         itemVariants={itemVariants}
       />
       <HomeDoctorSection itemVariants={itemVariants} />
+      <PlannerDoctorSection itemVariants={itemVariants} onOpenTrip={onOpenTrip} />
       <TrustStatusSection itemVariants={itemVariants} />
     </motion.section>
   );

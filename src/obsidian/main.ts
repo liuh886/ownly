@@ -27,6 +27,7 @@ import YAML from 'yaml';
 import type { AccountSnapshot, ReviewEntry, WYQDObject } from '@/domain/types';
 import { ObsidianVaultRepository } from './vaultRepository';
 import { ObsidianWorkspaceProvider } from './ObsidianWorkspaceProvider';
+import { registerDataPortabilityCommands } from './data-portability-commands';
 import { AppShell } from '@/components/app-shell/AppShell';
 
 const WYQD_VIEW_TYPE = 'wyqd-workspace';
@@ -108,6 +109,10 @@ export default class WYQDPlugin extends Plugin {
     };
 
     this.registerLocalizedCommands();
+
+    // Data portability (backup / validate / restore / migrate) — shares the
+    // same domain layer as the Web and CLI runtimes.
+    registerDataPortabilityCommands(this, () => this.settings.dataFolder);
 
     this.addSettingTab(new WYQDSettingTab(this.app, this));
   }

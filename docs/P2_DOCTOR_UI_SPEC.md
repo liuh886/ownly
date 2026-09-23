@@ -65,11 +65,16 @@ export async function runPlannerIntegrity(repo: PlannerRepository): Promise<Plan
 
 ## 4. 验收标准
 
-- [ ] UI 与 `scripts/data-integrity.ts` 同源，同一入参产出一致 `issues`
-- [ ] 对 3 个历史机场 orphan visit 场景：点击 `[自动修复]` 后 `orphan_visit` 错误清零，Visit 重新关联，新 Place 带 `reconstructed` tag
-- [ ] `duplicate_identity` 仅警告，不自动合并；提供「查看详情」跳转至 `PlannerHome` 对应 Trip
-- [ ] 空状态友好：`0 错误` 时显示 `✓ 数据健康`（emerald dot，与 `HomeDoctorSection.tsx:111` 一致）
-- [ ] 无新增全量测试回归（444 tests 仍 pass）+ 新增 4 个 `planner-integrity.test.ts` 用例（orphan/duplicate/missing_identity/修复后重跑）
+> 实现状态（2026-09）：PR-1/PR-2/PR-3 全部落地。`PlannerDoctorSection` 已挂载到
+> `HomeDashboard`（与 `HomeDoctorSection` 并列，中英双语）；`duplicate_identity`
+> 等带 `tripId` 的问题渲染「查看详情」按钮，经 `core/planner-focus.ts` 写入所选
+> Trip 并切到 Planner tab。domain 单测见 `planner-integrity.test.ts`。
+
+- [x] UI 与 `scripts/data-integrity.ts` 同源，同一入参产出一致 `issues`
+- [x] 对 3 个历史机场 orphan visit 场景：点击 `[自动修复]` 后 `orphan_visit` 错误清零，Visit 重新关联，新 Place 带 `reconstructed` tag
+- [x] `duplicate_identity` 仅警告，不自动合并；提供「查看详情」跳转至 `PlannerHome` 对应 Trip
+- [x] 空状态友好：`0 错误` 时显示 `✓ 数据健康`（emerald dot，与 `HomeDoctorSection.tsx:111` 一致）
+- [x] 无新增全量测试回归（444 tests 仍 pass）+ 新增 4 个 `planner-integrity.test.ts` 用例（orphan/duplicate/missing_identity/修复后重跑）
 
 ---
 

@@ -13,11 +13,6 @@ function toCurrencyLocale(language: string): WYQDCurrencyLocale {
   return language === 'en' ? 'en' : 'zh';
 }
 
-export function useCurrencyLocale(): WYQDCurrencyLocale {
-  const { language } = useI18n();
-  return toCurrencyLocale(language);
-}
-
 export function useFormatMoney() {
   const { t, language, currency } = useI18n();
   const locale = toCurrencyLocale(language);

@@ -84,6 +84,10 @@ export function AppShell() {
     data.loadVaultData,
     data.storedObjects,
     completeFirstObjectOnboarding,
+    {
+      snapshots: data.storedSnapshots.length,
+      reviews: data.storedReviews.length,
+    },
   );
 
   const automaticFirstObjectPrompt = runtimeCapabilities.firstObjectOnboarding

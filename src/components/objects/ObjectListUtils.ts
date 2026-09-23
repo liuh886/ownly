@@ -1,7 +1,6 @@
 import type { WYQDObject, PhysicalObject, RecurringCostObject, OneTimeExperienceObject, PhysicalStatus } from '@/domain/types';
 import type { ObjectStatusGroupFilter, ObjectTypeFilter } from './useObjectFilterSort';
 import { calculatePhysicalAcquisitionCost, calculatePhysicalDailyCost, calculateRecurringMonthlyCost } from '@/domain/calculations';
-import { calculateInclusiveDays, todayLocalDate } from '@/domain/date';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { formatMoney, formatOptional, todayISO } from '@/lib/format';
 
@@ -54,46 +53,6 @@ export function getBillingCycleLabels(t: TranslateFn): Record<string, string> {
     annual: t('billingCycleAnnual'),
     custom: t('billingCycleCustom'),
   };
-}
-
-export function getObjectIcon(object: WYQDObject): string {
-  if (object.object_type === 'physical') {
-    const cat = (object.category || '').toLowerCase();
-    if (cat.includes('电子') || cat.includes('electronics') || cat.includes('tech')) return '💻';
-    if (cat.includes('摄影') || cat.includes('camera') || cat.includes('photo')) return '📷';
-    if (cat.includes('衣') || cat.includes('cloth') || cat.includes('fashion')) return '👔';
-    if (cat.includes('家居') || cat.includes('home') || cat.includes('house')) return '🏠';
-    if (cat.includes('交通') || cat.includes('transport') || cat.includes('car') || cat.includes('auto')) return '🚗';
-    if (cat.includes('运动') || cat.includes('sport') || cat.includes('fitness')) return '⚽';
-    if (cat.includes('书') || cat.includes('book')) return '📚';
-    if (cat.includes('food') || cat.includes('厨房') || cat.includes('kitchen')) return '🍳';
-    return '📦';
-  }
-
-  if (object.object_type === 'recurring_cost') {
-    const title = (object.title || '').toLowerCase();
-    if (title.includes('chatgpt') || title.includes('openai') || title.includes('claude') || title.includes('ai')) return '🤖';
-    if (title.includes('netflix') || title.includes('disney') || title.includes('hbo') || title.includes('video')) return '🎬';
-    if (title.includes('spotify') || title.includes('music') || title.includes('apple music')) return '🎵';
-    if (title.includes('icloud') || title.includes('google') || title.includes('dropbox') || title.includes('storage')) return '☁️';
-    if (title.includes('github') || title.includes('code') || title.includes('dev')) return '⌨️';
-    if (title.includes('gym') || title.includes('fitness') || title.includes('sport')) return '💪';
-    if (title.includes('insurance') || title.includes('保险')) return '🛡️';
-    if (title.includes('rent') || title.includes('房租') || title.includes('mortgage')) return '🏡';
-    if (title.includes('phone') || title.includes('mobile') || title.includes('phone') || title.includes('手机')) return '📱';
-    if (title.includes('internet') || title.includes('broadband') || title.includes('宽带')) return '🌐';
-    return '🔄';
-  }
-
-  const title = (object.title || '').toLowerCase();
-  if (title.includes('trip') || title.includes('travel') || title.includes('旅行') || title.includes('tour')) return '✈️';
-  if (title.includes('food') || title.includes('restaurant') || title.includes('美食') || title.includes('餐')) return '🍽️';
-  if (title.includes('concert') || title.includes('show') || title.includes('演出') || title.includes('音乐')) return '🎵';
-  if (title.includes('museum') || title.includes('gallery') || title.includes('博物馆') || title.includes('展览')) return '🏛️';
-  if (title.includes('hiking') || title.includes('camp') || title.includes('户外') || title.includes('徒步')) return '🥾';
-  if (title.includes('beach') || title.includes('sea') || title.includes('海') || title.includes('beach')) return '🏖️';
-  if (title.includes('ski') || title.includes('snow') || title.includes('滑雪')) return '⛷️';
-  return '🌍';
 }
 
 export function translateCategory(category: string | undefined, t: TranslateFn): string {
@@ -151,21 +110,6 @@ export function getPrimaryAmount(object: WYQDObject): number {
 export function getDailyCost(object: WYQDObject): number | null {
   if (object.object_type !== 'physical') return null;
   return calculatePhysicalDailyCost(object);
-}
-
-export function getServiceDaysInfo(object: WYQDObject): { elapsed: number; total: number | null } | null {
-  if (object.object_type !== 'physical') return null;
-  const today = todayLocalDate();
-  const endDate = object.ended_at ? object.ended_at : undefined;
-  const elapsedToToday = calculateInclusiveDays(object.purchased_at, undefined, today);
-  if (!elapsedToToday) return null;
-  if (endDate) {
-    const total = calculateInclusiveDays(object.purchased_at, endDate, today);
-    if (!total) return null;
-    const elapsed = Math.min(elapsedToToday, total);
-    return { elapsed, total };
-  }
-  return { elapsed: elapsedToToday, total: null };
 }
 
 export function formatDateRange(object: WYQDObject, t: TranslateFn): string {

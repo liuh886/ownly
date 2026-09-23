@@ -330,11 +330,6 @@ export interface OwnlyCaptureState {
   lastImportReport?: ImportReport;
 }
 
-export const EMPTY_CAPTURE_STATE: OwnlyCaptureState = {
-  activeContext: null,
-  pendingPlaces: [],
-};
-
 export function applyCaptureImportReport(
   state: OwnlyCaptureState,
   report: ImportReport,
@@ -391,28 +386,6 @@ export function mergeCaptureState(
     pendingPlaces: [...localPlaces, ...backgroundOnly],
     lastImportReport: local.lastImportReport ?? fresh.lastImportReport,
   };
-}
-
-/**
- * Reorders a visible subset of places (e.g. the filtered candidate pool) while
- * keeping every hidden entry pinned to its original slot.
- */
-export function reorderPendingPlaces(
-  pendingPlaces: PlannerTripPlace[],
-  orderedVisibleIds: string[],
-): PlannerTripPlace[] {
-  const visibleIds = orderedVisibleIds.filter((id) => pendingPlaces.some((p) => p.id === id));
-  if (visibleIds.length === 0) return [...pendingPlaces];
-  const slots: number[] = [];
-  pendingPlaces.forEach((place, index) => {
-    if (visibleIds.includes(place.id)) slots.push(index);
-  });
-  const next = [...pendingPlaces];
-  visibleIds.forEach((id, i) => {
-    const source = pendingPlaces.find((p) => p.id === id)!;
-    next[slots[i]] = source;
-  });
-  return next;
 }
 
 function parseDateOnly(value: string): Date | null {
@@ -696,10 +669,6 @@ export function normalizePlaceIdentity(rawUrl: string): string {
   return `u:${trimmed.toLowerCase()}`;
 }
 
-export function placeIdentityKey(tripId: string, sourceUrl: string): string {
-  return `${tripId}::${normalizePlaceIdentity(sourceUrl)}`;
-}
-
 export function findExistingTripPlace(
   places: PlannerTripPlace[],
   tripId: string,
@@ -728,39 +697,6 @@ export function cleanCanonicalTitle(title?: string | null): string {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
-}
-
-export function extractPlaceCid(place: { source_place_id?: string | null; source_url?: string | null }): string | null {
-  if (place.source_place_id) {
-    const match = /:0x([0-9a-f]+)$/i.exec(place.source_place_id.trim());
-    if (match?.[1]) {
-      try {
-        return BigInt('0x' + match[1]).toString();
-      } catch { /* best-effort; failure is non-fatal */ }
-    }
-    if (/^\d{8,}$/.test(place.source_place_id.trim())) {
-      return place.source_place_id.trim();
-    }
-    if (/^ChIJ[A-Za-z0-9_-]{8,}$/.test(place.source_place_id.trim())) {
-      return place.source_place_id.trim().toLowerCase();
-    }
-  }
-  if (place.source_url) {
-    try {
-      const url = new URL(place.source_url);
-      const cid = url.searchParams.get('cid');
-      if (cid && /^\d+$/.test(cid)) return cid;
-      const qpid = url.searchParams.get('query_place_id');
-      if (qpid) return qpid.toLowerCase();
-    } catch { /* best-effort; failure is non-fatal */ }
-    const fidMatch = /0x[0-9a-f]+:0x([0-9a-f]+)/i.exec(place.source_url);
-    if (fidMatch?.[1]) {
-      try {
-        return BigInt('0x' + fidMatch[1]).toString();
-      } catch { /* best-effort; failure is non-fatal */ }
-    }
-  }
-  return null;
 }
 
 export interface SuspectedDuplicatePair {
@@ -2454,25 +2390,6 @@ export function isPlausibleCustomTag(
   if (/[0-9]+[街路巷弄号]/.test(trimmed)) return false;
   if (/^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9.-]+$/.test(trimmed)) return false;
   return true;
-}
-
-/** Maps Google taxonomy types onto our place kinds; more specific wins. */
-const TYPE_KIND_RULES: Array<[RegExp, PlannerPlaceKind]> = [
-  [/lodging|hotel|motel|hostel|guest_house|bed_and_breakfast|ryokan|resort|accommodation|serviced_apartment|villa|extended_stay/i, 'stay'],
-  [/cafe|coffee_shop|tea_house|dessert|bakery|ice_cream/i, 'cafe'],
-  [/restaurant|bar\b|pub|food|meal_takeaway|meal_delivery|ramen|sushi|izakaya|bistro|steak_house/i, 'food'],
-  [/transit_station|subway_station|bus_station|airport|train_station|ferry_terminal|light_rail_station/i, 'transit'],
-  [/shopping_mall|department_store|store|market|bazaar|outlet|supermarket|clothing_store/i, 'shopping'],
-  [/spa|gym|fitness|bowling|amusement_park|water_park|night_club|experience|diving|ski_resort|hot_spring/i, 'experience'],
-  [/museum|art_gallery|tourist_attraction|place_of_worship|historical|castle|park\b|zoo|aquarium|viewpoint|beach|point_of_interest|landmark/i, 'attraction'],
-];
-
-export function inferKindFromTypes(types?: string[]): PlannerPlaceKind | null {
-  if (!types || types.length === 0) return null;
-  for (const [pattern, kind] of TYPE_KIND_RULES) {
-    if (types.some((t) => pattern.test(t))) return kind;
-  }
-  return null;
 }
 
 export interface ParsedPriceDetail {

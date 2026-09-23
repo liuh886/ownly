@@ -67,7 +67,3 @@ export function resolveOwnlyDataRoot(
   }
   return detected.path;
 }
-
-export function ownsRequiredObjectsDirectory(dataRoot: string): boolean {
-  return looksLikeDataRoot(dataRoot);
-}

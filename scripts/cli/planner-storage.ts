@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseMarkdownEntity } from '../../src/data/frontmatter';
@@ -61,17 +60,6 @@ export function listPlannerLegs(dataLocation: string) {
 }
 export function listPlannerExpenses(dataLocation: string) {
   return readPlannerDir<TripExpenseItem>(dataLocation, PLANNER_DIRECTORIES.expenses, 'trip_expense');
-}
-
-/** sha256 of file bytes; used as a conflict guard between prepare and commit. */
-export function plannerFingerprint(filePath: string): string {
-  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
-}
-
-export function assertPlannerUnchanged(filePath: string, expected: string): void {
-  if (!existsSync(filePath)) throw new Error(`CONFLICT:${filePath} no longer exists`);
-  const actual = plannerFingerprint(filePath);
-  if (actual !== expected) throw new Error(`CONFLICT:${filePath} changed after preparation`);
 }
 
 export function findPlannerEntry<T extends object>(

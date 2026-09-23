@@ -1,5 +1,6 @@
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { useI18n } from '@/core/i18n-context';
+import { checkWYQDCapacity } from '@/core/membership';
 import type { WYQDObject, AccountSnapshot, ReviewEntry } from '@/domain/types';
 import type { WYQDStoredEntity, WYQDArchiveEntityType } from '@/core/repository';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
@@ -10,15 +11,33 @@ interface ReviewRankings {
   experienceScore: number | null;
 }
 
+export interface OwnlyCapacityCounts {
+  snapshots: number;
+  reviews: number;
+}
+
 export function useOwnlyActions(
   loadVaultData: () => Promise<void>,
   storedObjects: WYQDStoredEntity<WYQDObject>[],
   onObjectCreated?: () => void,
+  capacityCounts: OwnlyCapacityCounts = { snapshots: 0, reviews: 0 },
 ) {
   const { t } = useI18n();
-  const { repository, showNotice } = useOwnlyWorkspace();
+  const { repository, showNotice, membership } = useOwnlyWorkspace();
+
+  /**
+   * Free-tier capacity gate. Pro is unlimited; on the free tier a full bucket
+   * surfaces the upgrade message and aborts the write so no silent data loss
+   * or over-limit state can occur.
+   */
+  function guardCapacity(kind: 'objects' | 'snapshots' | 'reviews', currentCount: number): void {
+    if (checkWYQDCapacity(membership, kind, currentCount).allowed) return;
+    showNotice(membership.upgradeMessage);
+    throw new Error(membership.upgradeMessage);
+  }
 
   async function createObject(object: WYQDObject, body: string) {
+    guardCapacity('objects', storedObjects.length);
     try {
       await repository.saveObject(object, body);
       await loadVaultData();
@@ -60,6 +79,7 @@ export function useOwnlyActions(
     body: string,
   ) {
     if (object.object_type !== 'one_time_experience') return;
+    guardCapacity('reviews', capacityCounts.reviews);
 
     const date = new Date().toISOString().split('T')[0];
     const review: ReviewEntry = {
@@ -106,6 +126,7 @@ export function useOwnlyActions(
   }
 
   async function createSnapshot(snapshot: AccountSnapshot, body: string) {
+    guardCapacity('snapshots', capacityCounts.snapshots);
     try {
       await repository.saveSnapshot(snapshot, body);
       await loadVaultData();
@@ -139,6 +160,7 @@ export function useOwnlyActions(
   }
 
   async function createReview(review: ReviewEntry, body: string) {
+    guardCapacity('reviews', capacityCounts.reviews);
     try {
       await repository.saveReview(review, body);
 
