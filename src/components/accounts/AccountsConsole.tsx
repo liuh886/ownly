@@ -1,12 +1,20 @@
 import type { AccountSnapshot } from '@/domain/types';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
+import { daysUntil, formatDueLabel } from '@/lib/format';
+
+function dueChipClass(days: number): string {
+  if (days < 0) return 'bg-red-600 text-white';
+  if (days <= 30) return 'bg-amber-500 text-white';
+  return 'bg-white text-red-900/70';
+}
 
 export interface AccountsConsoleProps {
   latest: AccountSnapshot | null;
   accountCount: number;
   totalMonthlyFixedCost: number;
   annualFixedCost: number;
+  previousNetWorthDelta: number | null;
   t: (key: WYQDTranslationKey) => string;
   formatMoney: (val: number | null | undefined, fallback?: string) => string;
 }
@@ -16,9 +24,23 @@ export function AccountsConsole({
   accountCount,
   totalMonthlyFixedCost,
   annualFixedCost,
+  previousNetWorthDelta,
   t,
   formatMoney,
 }: AccountsConsoleProps) {
+  const sortedLiabilities = latest
+    ? [...latest.liability_balances].sort((a, b) => {
+        if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+        if (a.due_date) return -1;
+        if (b.due_date) return 1;
+        return 0;
+      })
+    : [];
+  const liabilityRatio =
+    latest && latest.total_assets && latest.total_assets > 0
+      ? Math.round(((latest.total_liabilities ?? 0) / latest.total_assets) * 100)
+      : null;
+
   return (
     <div className={CARD_CLASS}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -39,7 +61,14 @@ export function AccountsConsole({
           <div className="mt-2 font-mono text-xl font-semibold tracking-tight">
             {formatMoney(latest?.net_worth, t('noData'))}
           </div>
-          <div className="mt-1 text-xs text-stone-500">{t('latestAccountFact')}</div>
+          <div className="mt-1 text-xs text-stone-500">
+            {previousNetWorthDelta === null
+              ? t('latestAccountFact')
+              : t('vsLastSnapshot').replace(
+                  '{value}',
+                  `${previousNetWorthDelta >= 0 ? '+' : '-'}${formatMoney(Math.abs(previousNetWorthDelta))}`,
+                )}
+          </div>
         </div>
         <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
           <div className="text-xs font-medium text-stone-500">{t('accountCount')}</div>
@@ -102,22 +131,40 @@ export function AccountsConsole({
                   <h2 className={SECTION_TITLE_CLASS}>{t('liabilityAccounts')}</h2>
                   <span className="text-xs text-stone-500">
                     {formatMoney(latest.total_liabilities)}
+                    {liabilityRatio !== null
+                      ? ` · ${t('liabilityRatio').replace('{percent}', `${liabilityRatio}%`)}`
+                      : ''}
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {latest.liability_balances.map((balance) => (
-                    <div
-                      key={balance.account_id || balance.account}
-                      className="flex items-center justify-between gap-3 rounded-lg bg-red-50 px-3 py-2"
-                    >
-                      <div className="min-w-0 truncate text-sm font-medium text-red-900">
-                        {balance.account}
+                  {sortedLiabilities.map((balance) => {
+                    const days = balance.due_date ? daysUntil(balance.due_date) : null;
+                    return (
+                      <div
+                        key={balance.account_id || balance.account}
+                        className="flex items-center justify-between gap-3 rounded-lg bg-red-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-red-900">
+                            {balance.account}
+                          </div>
+                          {balance.due_date && days !== null ? (
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${dueChipClass(days)}`}>
+                                {formatDueLabel(balance.due_date, t)}
+                              </span>
+                              <span className="text-[11px] text-red-900/60">
+                                {balance.due_date.replaceAll('-', '/')}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="shrink-0 text-sm font-semibold text-red-900">
+                          {formatMoney(balance.amount)}
+                        </div>
                       </div>
-                      <div className="shrink-0 text-sm font-semibold text-red-900">
-                        {formatMoney(balance.amount)}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : null}

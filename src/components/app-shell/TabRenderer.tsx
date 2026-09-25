@@ -176,6 +176,7 @@ export function TabRenderer({
         snapshots={snapshots}
         onOpenObjects={openObjectsWithFocus}
         onOpenTrip={openPlannerTrip}
+        onOpenAccounts={() => setActiveTab('accounts')}
       />
     );
   }

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -151,6 +151,52 @@ describe('Ownly CLI process contract', { timeout: 30000 }, () => {
     ]);
     expect(invalid.status).toBe(1);
     expect(JSON.parse(invalid.stderr)).toMatchObject({ code: 'INVALID_INPUT' });
+  });
+
+  it('preserves snapshot account detail when totals are unchanged', () => {
+    const root = createDataLocation();
+    const snapshotsDir = join(root, 'Ownly', 'Snapshots');
+    mkdirSync(join(root, 'Ownly', 'Objects'), { recursive: true });
+    mkdirSync(snapshotsDir, { recursive: true });
+    const filePath = join(snapshotsDir, 'snapshot--2026-01-31.md');
+    const frontmatter = {
+      schema_version: '0.1',
+      id: 'snap_manual',
+      type: 'snapshot',
+      title: 'Account Snapshot 2026-01-31',
+      snapshot_at: '2026-01-31',
+      is_month_end: true,
+      currency: 'CNY',
+      asset_balances: [
+        { account: 'CMB Bank', account_id: 'asset_cmb_bank', amount: 32000, currency: 'CNY' },
+      ],
+      liability_balances: [
+        { account: 'Credit Card', account_id: 'liability_credit_card', amount: 4200, currency: 'CNY', due_date: '2027-10-01' },
+      ],
+      total_assets: 32000,
+      total_liabilities: 4200,
+      net_worth: 27800,
+      created_at: '2026-01-31',
+    };
+    writeFileSync(filePath, `---\n${YAML.stringify(frontmatter)}---\n\n## Notes\n`, 'utf8');
+
+    const update = runCli(root, ['snapshot', 'update', '--id', 'snap_manual', '--date', '2026-02-28', '--json']);
+    expect(update.status).toBe(0);
+    expect(parseFrontmatter(filePath)).toMatchObject({
+      snapshot_at: '2026-02-28',
+      liability_balances: [
+        { account: 'Credit Card', account_id: 'liability_credit_card', amount: 4200, due_date: '2027-10-01' },
+      ],
+    });
+
+    const overwrite = runCli(root, ['snapshot', 'update', '--id', 'snap_manual', '--liabilities', '5000', '--json']);
+    expect(overwrite.status).toBe(0);
+    expect(parseFrontmatter(filePath)).toMatchObject({
+      total_liabilities: 5000,
+      liability_balances: [
+        { account: 'Total Liabilities', account_id: 'acct_total_liabilities', amount: 5000 },
+      ],
+    });
   });
 
   it('exposes summary and Doctor as deterministic fact surfaces', () => {

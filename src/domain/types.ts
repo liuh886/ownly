@@ -149,6 +149,7 @@ export interface AccountBalance {
   account_id: string;
   amount: number;
   currency?: CurrencyCode;
+  due_date?: string;
 }
 
 export interface AccountSnapshot extends BaseEntity {

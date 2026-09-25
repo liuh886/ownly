@@ -18,6 +18,7 @@ export interface AccountsFormProps {
   hasInvalidAssetLines: boolean;
   parsedLiabilityBalances: AccountBalance[];
   hasInvalidLiabilityLines: boolean;
+  hasInvalidLiabilityDate: boolean;
   latest: AccountSnapshot | null;
   isUsingLatestSnapshotPrefill: boolean;
   refillFromLatestSnapshot: () => void;
@@ -45,6 +46,7 @@ export function AccountsForm({
   hasInvalidAssetLines,
   parsedLiabilityBalances,
   hasInvalidLiabilityLines,
+  hasInvalidLiabilityDate,
   latest,
   isUsingLatestSnapshotPrefill,
   refillFromLatestSnapshot,
@@ -57,6 +59,7 @@ export function AccountsForm({
   formatMoney,
 }: AccountsFormProps) {
   const fieldClass = FIELD_CLASS;
+  const liabilityWithDueDateCount = parsedLiabilityBalances.filter((balance) => balance.due_date).length;
 
   return (
     <form
@@ -127,14 +130,16 @@ export function AccountsForm({
             className={`${fieldClass} resize-none`}
             disabled={disabled || isSaving}
           />
+          <p className="mt-1 text-xs text-stone-400">{t('liabilityDueHint')}</p>
           {parsedLiabilityBalances.length > 0 && !hasInvalidLiabilityLines ? (
             <p className="mt-1 text-xs text-stone-500">
               {t('snapshotParsedPreview').replace('{count}', String(parsedLiabilityBalances.length)).replace('{total}', formatMoney(sumBalances(parsedLiabilityBalances)) ?? '')}
+              {liabilityWithDueDateCount > 0 ? ` · ${t('dueDateCount').replace('{count}', String(liabilityWithDueDateCount))}` : ''}
             </p>
           ) : null}
           {hasInvalidLiabilityLines ? (
             <span className="mt-1 block text-xs text-red-600">
-              {t('invalidLiabilityLine')}
+              {hasInvalidLiabilityDate ? t('invalidLiabilityDate') : t('invalidLiabilityLine')}
             </span>
           ) : null}
         </label>

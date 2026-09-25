@@ -796,24 +796,31 @@ export function snapshotCommand(context: CommandContext, command: string): void 
       entry.frontmatter.total_liabilities ?? 0,
     ) ?? 0;
     if (assets === undefined) throw new CliError('Snapshot total assets are missing.');
+    const currency = entry.frontmatter.currency ?? 'CNY';
+    const totalAssetsUnchanged = assets === entry.frontmatter.total_assets;
+    const totalLiabilitiesUnchanged = liabilities === (entry.frontmatter.total_liabilities ?? 0);
     const next: AccountSnapshot = {
       ...entry.frontmatter,
       snapshot_at: optionalString(context.options, 'date') ?? entry.frontmatter.snapshot_at,
       is_month_end: context.options.month_end === undefined
         ? entry.frontmatter.is_month_end
         : hasFlag(context.options, 'month_end'),
-      asset_balances: [{
-        account: 'Total Assets',
-        account_id: 'acct_total_assets',
-        amount: assets,
-        currency: entry.frontmatter.currency ?? 'CNY',
-      }],
-      liability_balances: [{
-        account: 'Total Liabilities',
-        account_id: 'acct_total_liabilities',
-        amount: liabilities,
-        currency: entry.frontmatter.currency ?? 'CNY',
-      }],
+      asset_balances: totalAssetsUnchanged && entry.frontmatter.asset_balances.length > 0
+        ? entry.frontmatter.asset_balances
+        : [{
+            account: 'Total Assets',
+            account_id: 'acct_total_assets',
+            amount: assets,
+            currency,
+          }],
+      liability_balances: totalLiabilitiesUnchanged && entry.frontmatter.liability_balances.length > 0
+        ? entry.frontmatter.liability_balances
+        : [{
+            account: 'Total Liabilities',
+            account_id: 'acct_total_liabilities',
+            amount: liabilities,
+            currency,
+          }],
       total_assets: assets,
       total_liabilities: liabilities,
       net_worth: assets - liabilities,

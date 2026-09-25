@@ -17,6 +17,7 @@ import { useFormatMoney } from '@/lib/use-format';
 import {
   parseBalanceLines,
   hasInvalidBalanceLines,
+  hasInvalidDueDateLines,
   serializeBalanceLines,
   groupRecurringCostsByAccount,
   createSnapshotDraft,
@@ -25,6 +26,7 @@ import { AccountsConsole } from './AccountsConsole';
 import { AccountsTrend } from './AccountsTrend';
 import { AccountsForm } from './AccountsForm';
 import { AccountsHistory } from './AccountsHistory';
+import { LiabilityDuePanel } from './LiabilityDuePanel';
 
 export function AccountsOverview({
   disabled,
@@ -64,6 +66,10 @@ export function AccountsOverview({
   const sorted = [...calculatedSnapshots].sort((a, b) =>
     b.entity.snapshot_at.localeCompare(a.entity.snapshot_at),
   );
+  const previousNetWorthDelta =
+    sorted.length > 1
+      ? (sorted[0].entity.net_worth ?? 0) - (sorted[1].entity.net_worth ?? 0)
+      : null;
   const [snapshotAt, setSnapshotAt] = useState(todayISO());
   const [assetBalancesText, setAssetBalancesText] = useState('');
   const [liabilityBalancesText, setLiabilityBalancesText] = useState('');
@@ -84,6 +90,7 @@ export function AccountsOverview({
   const parsedLiabilityBalances = parseBalanceLines(displayedLiabilityBalancesText, 'liability');
   const hasInvalidAssetLines = hasInvalidBalanceLines(displayedAssetBalancesText, 'asset');
   const hasInvalidLiabilityLines = hasInvalidBalanceLines(displayedLiabilityBalancesText, 'liability');
+  const hasInvalidLiabilityDate = hasInvalidDueDateLines(displayedLiabilityBalancesText);
   const trendSnapshots = [...calculatedSnapshots]
     .sort((a, b) => a.entity.snapshot_at.localeCompare(b.entity.snapshot_at))
     .slice(-12)
@@ -184,6 +191,14 @@ export function AccountsOverview({
         accountCount={accountCount}
         totalMonthlyFixedCost={totalMonthlyFixedCost}
         annualFixedCost={annualFixedCost}
+        previousNetWorthDelta={previousNetWorthDelta}
+        t={t}
+        formatMoney={formatMoney}
+      />
+
+      <LiabilityDuePanel
+        latest={latest ?? null}
+        onEditLatest={sorted.length > 0 ? () => startEditingSnapshot(sorted[0]) : undefined}
         t={t}
         formatMoney={formatMoney}
       />
@@ -215,6 +230,7 @@ export function AccountsOverview({
         hasInvalidAssetLines={hasInvalidAssetLines}
         parsedLiabilityBalances={parsedLiabilityBalances}
         hasInvalidLiabilityLines={hasInvalidLiabilityLines}
+        hasInvalidLiabilityDate={hasInvalidLiabilityDate}
         latest={latest ?? null}
         isUsingLatestSnapshotPrefill={isUsingLatestSnapshotPrefill}
         refillFromLatestSnapshot={refillFromLatestSnapshot}

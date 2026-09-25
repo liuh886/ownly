@@ -90,6 +90,7 @@ Archive metadata such as `archived_at`, `archived_from`, and `original_file_name
 - Entity type: `snapshot`
 - Snapshot type: `net_worth`
 - Fields include `snapshot_at`, asset and liability balances, totals, net worth, and optional ownership metrics.
+- A liability balance may carry an optional `due_date` (`YYYY-MM-DD`) for repayment reminders. It is not required, does not change the schema version, and is ignored by totals.
 
 ### 7. Accounts
 

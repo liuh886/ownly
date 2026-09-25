@@ -22,23 +22,67 @@ export function slugifyAccountName(input: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
+interface DueDateSplit {
+  body: string;
+  dueDate: string | null;
+  invalidDueDate: boolean;
+}
+
+export function normalizeDueDate(
+  year: string | number,
+  month: string | number,
+  day: string | number,
+): string | null {
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+
+  return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function splitTrailingDueDate(input: string): DueDateSplit {
+  const numeric = input.match(/^(.*?)[,，\s:：]+(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  const localized = input.match(/^(.*?)[,，\s:：]+(\d{4})年(\d{1,2})月(\d{1,2})日$/);
+  const match = numeric ?? localized;
+  if (!match) return { body: input, dueDate: null, invalidDueDate: false };
+
+  const dueDate = normalizeDueDate(match[2], match[3], match[4]);
+  return { body: match[1].trim(), dueDate, invalidDueDate: dueDate === null };
+}
+
 export function parseBalanceLine(line: string, prefix: 'asset' | 'liability', index: number): AccountBalance | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
 
-  const match = trimmed.match(/^(.+?)[,，\s:：]+(-?\d+(?:\.\d+)?)$/);
+  let body = trimmed;
+  let dueDate: string | undefined;
+  if (prefix === 'liability') {
+    const split = splitTrailingDueDate(trimmed);
+    if (split.invalidDueDate) return null;
+    body = split.body;
+    dueDate = split.dueDate ?? undefined;
+  }
+
+  const match = body.match(/^(.+?)[,，\s:：]+(-?\d+(?:\.\d+)?)$/);
   if (!match) return null;
 
   const account = match[1].trim();
   const amount = Number(match[2]);
   if (!account || !Number.isFinite(amount)) return null;
 
-  return {
+  const balance: AccountBalance = {
     account,
     account_id: `${prefix}_${slugifyAccountName(account) || index + 1}`,
     amount,
     currency: 'CNY',
   };
+  if (dueDate) balance.due_date = dueDate;
+  return balance;
 }
 
 export function parseBalanceLines(value: string, prefix: 'asset' | 'liability'): AccountBalance[] {
@@ -54,8 +98,16 @@ export function hasInvalidBalanceLines(value: string, prefix: 'asset' | 'liabili
     .some((line, index) => line.trim() && !parseBalanceLine(line, prefix, index));
 }
 
+export function hasInvalidDueDateLines(value: string): boolean {
+  return value
+    .split('\n')
+    .some((line) => line.trim() && splitTrailingDueDate(line.trim()).invalidDueDate);
+}
+
 export function serializeBalanceLines(balances: AccountBalance[]): string {
-  return balances.map((balance) => `${balance.account} ${balance.amount}`).join('\n');
+  return balances
+    .map((balance) => `${balance.account} ${balance.amount}${balance.due_date ? ` ${balance.due_date}` : ''}`)
+    .join('\n');
 }
 
 export function sumBalances(balances: AccountBalance[]): number {

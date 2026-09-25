@@ -3,6 +3,7 @@ import type { AccountSnapshot, HomeMetrics, WYQDObject } from '@/domain/types';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
 
 import { HomeOwnSection } from './HomeOwnSection';
+import { HomeRepaymentSection } from './HomeRepaymentSection';
 import { HomeCostSection } from './HomeCostSection';
 import { HomeReviewSection } from './HomeReviewSection';
 import { HomeDataScaleSection } from './HomeDataScaleSection';
@@ -43,12 +44,14 @@ export function HomeDashboard({
   snapshots,
   onOpenObjects,
   onOpenTrip,
+  onOpenAccounts,
 }: {
   metrics: HomeMetrics;
   objects: WYQDObject[];
   snapshots: AccountSnapshot[];
   onOpenObjects: (focus: Omit<ObjectListFocus, 'token'>) => void;
   onOpenTrip?: (tripId: string) => void;
+  onOpenAccounts?: () => void;
 }) {
   const [dismissed, setDismissed] = useState(false);
   const showOnboarding = !dismissed && shouldShowCaptureOnboarding(objects.length === 0);
@@ -74,6 +77,11 @@ export function HomeDashboard({
         metrics={metrics}
         snapshots={snapshots}
         itemVariants={itemVariants}
+      />
+      <HomeRepaymentSection
+        snapshots={snapshots}
+        itemVariants={itemVariants}
+        onOpenAccounts={onOpenAccounts}
       />
       <HomeCostSection
         metrics={metrics}

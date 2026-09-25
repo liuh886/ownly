@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Liability repayment reminders:** liability account lines can carry an optional due date (e.g. `Credit Card 4200 2027-10-01`; `/`, `.` and `年/月/日` forms normalize to `YYYY-MM-DD`). The Accounts page shows liability ratio, net worth vs the previous snapshot, liabilities sorted by due date, coverage of the next six months, and overdue totals; the Home dashboard surfaces every repayment due within six months. Due dates live on the snapshot's liability balance, so reusing the previous account list carries them forward, and existing data stays valid without a schema bump. The Agent CLI now preserves account detail when a snapshot update leaves totals unchanged.
+
 - **PRO fixed share links:** each trip can publish a permanent link named after the trip that serves the self-contained itinerary HTML. One-tap enable from a mobile-first sheet, with native share and copy fallback; auto-republishes ~30s after itinerary edits and auto-suffixes on name collisions. Expenses are never included, the page is `noindex`, and writes require a device-local write token (the public name is not the authorization secret). Because Supabase rewrites HTML responses from Edge Functions to `text/plain`, the link renders through a static `/s/` viewer on the Ownly web host. Requires the `ownly_trip_shares` migrations and the `trip-share` Edge Function.
 
 ### Changed
