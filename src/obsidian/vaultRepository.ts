@@ -238,6 +238,10 @@ export class ObsidianVaultRepository implements WYQDRepositoryAdapter {
     return this.restoreEntity(ENTITY_CONFIG.review, archiveFileName);
   }
 
+  async saveObjectLog(log: ObjectLogEntry, body = ''): Promise<string> {
+    return this.saveEntity(OBJECT_LOG_CONFIG, log, body);
+  }
+
   async restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<string> {
     const config = ENTITY_CONFIG[archiveType] as EntityConfig<BaseEntity>;
     return this.restoreEntity(config, archiveFileName);

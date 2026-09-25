@@ -1,6 +1,6 @@
+import { isValidISODate } from './date';
 import type { AccountSnapshot } from './types';
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export const LIABILITY_DUE_WINDOW_DAYS = 180;
@@ -29,15 +29,9 @@ export interface LiabilityDueSummary {
 }
 
 function parseLocalISODate(iso: string): number {
+  if (!isValidISODate(iso)) return Number.NaN;
   const [year, month, day] = iso.split('-').map(Number);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return Number.NaN;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return Number.NaN;
-
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-    return Number.NaN;
-  }
-  return date.getTime();
+  return new Date(year, month - 1, day).getTime();
 }
 
 function daysBetween(fromISO: string, toISO: string): number {
@@ -55,7 +49,7 @@ export function collectLiabilityDues(
   const dues: LiabilityDue[] = [];
 
   for (const balance of balances) {
-    if (!balance.due_date || !ISO_DATE_PATTERN.test(balance.due_date)) continue;
+    if (!isValidISODate(balance.due_date)) continue;
     if (!Number.isFinite(balance.amount) || balance.amount <= 0) continue;
 
     const daysUntil = daysBetween(today, balance.due_date);

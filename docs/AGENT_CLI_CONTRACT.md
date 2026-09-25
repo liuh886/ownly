@@ -212,6 +212,7 @@ npm run --silent wyqd -- --vault <path> object log add \
 Allowed event types:
 
 - `usage`
+- `usage_state`
 - `issue`
 - `maintenance`
 - `regret`

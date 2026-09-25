@@ -190,6 +190,7 @@ export function TabRenderer({
           logs={storedLogs?.map((stored) => stored.entity) ?? []}
           membership={membership}
           language={language}
+          onToggleUsageState={isConnected ? actions.toggleObjectUsageState : undefined}
         />
         <ObjectComposer
           disabled={!isConnected}

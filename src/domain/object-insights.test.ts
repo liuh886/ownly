@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   annualizeSubscription,
   buildNetWorthTrend,
+  buildUsageStateRows,
   getSubscriptionRanking,
   getUnusedObjects,
+  getUsageReminderRows,
 } from './object-insights';
 import type {
   AccountSnapshot,
@@ -155,5 +157,70 @@ describe('getUnusedObjects (WS-4)', () => {
       },
     ];
     expect(getUnusedObjects(objects, logs, NOW, 1)).toEqual([]);
+  });
+});
+
+describe('usage state rows (WS-4)', () => {
+  const NOW = new Date('2026-09-08T00:00:00.000Z');
+
+  function physical(overrides: Partial<Extract<WYQDObject, { object_type: 'physical' }>> = {}) {
+    return {
+      schema_version: '0.1' as const,
+      id: 'obj-1',
+      type: 'object' as const,
+      object_type: 'physical' as const,
+      status: 'using' as const,
+      title: 'Old Camera',
+      purchased_at: '2020-01-01',
+      created_at: '2020-01-01',
+      ...overrides,
+    };
+  }
+
+  it('lets a manual in-use mark override stale purchase evidence', () => {
+    const objects = [physical({ in_use_since: '2026-09-01' })];
+
+    expect(buildUsageStateRows(objects, [], NOW, 90)).toEqual([
+      { id: 'obj-1', title: 'Old Camera', state: 'in_use', since: '2026-09-01', days: 7, marked: true },
+    ]);
+    expect(getUnusedObjects(objects, [], NOW, 90)).toEqual([]);
+  });
+
+  it('flags a manual unused mark regardless of age and keeps it visible for toggling', () => {
+    const objects = [physical({ purchased_at: '2026-09-01', unused_since: '2026-09-07' })];
+
+    expect(getUsageReminderRows(objects, [], NOW, 90)).toEqual([
+      { id: 'obj-1', title: 'Old Camera', state: 'unused', since: '2026-09-07', days: 1, marked: true },
+    ]);
+  });
+
+  it('keeps a manually marked in-use row in the reminder list so it can be switched back', () => {
+    const objects = [physical({ in_use_since: '2026-09-01' })];
+
+    expect(getUsageReminderRows(objects, [], NOW, 90).map((row) => row.id)).toEqual(['obj-1']);
+  });
+
+  it('reads the most recent mark when both manual dates exist', () => {
+    const objects = [
+      physical({ id: 'unused-wins', unused_since: '2026-09-05', in_use_since: '2026-09-01' }),
+      physical({ id: 'in-use-wins', unused_since: '2026-09-01', in_use_since: '2026-09-05' }),
+    ];
+    const rows = buildUsageStateRows(objects, [], NOW, 90);
+
+    expect(rows.find((row) => row.id === 'unused-wins')).toMatchObject({
+      state: 'unused',
+      since: '2026-09-05',
+    });
+    expect(rows.find((row) => row.id === 'in-use-wins')).toMatchObject({
+      state: 'in_use',
+      since: '2026-09-05',
+    });
+  });
+
+  it('ignores malformed manual dates and falls back to the evidence chain', () => {
+    const objects = [physical({ purchased_at: '2026-08-01', unused_since: '2026-13-01' })];
+    const rows = buildUsageStateRows(objects, [], NOW, 90);
+
+    expect(rows[0]).toMatchObject({ state: 'in_use', marked: false, since: '2026-08-01' });
   });
 });

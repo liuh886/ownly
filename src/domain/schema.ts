@@ -19,7 +19,7 @@ import type { PlannerTripVisit } from './planner-visits';
 import { CURRENT_SCHEMA_VERSION } from './schema/common';
 
 export const VALID_OBJECT_LOG_EVENT_TYPES: readonly ObjectLogEventType[] = [
-  'usage', 'issue', 'maintenance', 'regret', 'lesson', 'comparison', 'exit_note',
+  'usage', 'usage_state', 'issue', 'maintenance', 'regret', 'lesson', 'comparison', 'exit_note',
 ];
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;

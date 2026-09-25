@@ -14,6 +14,12 @@ function getEventBadge(eventType: ObjectLogEventType, t: TranslateFn) {
         className: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
         dotClass: 'bg-emerald-500',
       };
+    case 'usage_state':
+      return {
+        label: t('logEventUsageState'),
+        className: 'bg-teal-50 text-teal-700 border-teal-200/80',
+        dotClass: 'bg-teal-500',
+      };
     case 'maintenance':
       return {
         label: t('logEventMaintenance'),

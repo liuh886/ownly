@@ -1,7 +1,13 @@
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { useI18n } from '@/core/i18n-context';
 import { checkWYQDCapacity } from '@/core/membership';
-import type { WYQDObject, AccountSnapshot, ReviewEntry } from '@/domain/types';
+import type {
+  WYQDObject,
+  AccountSnapshot,
+  ObjectLogEntry,
+  PhysicalObject,
+  ReviewEntry,
+} from '@/domain/types';
 import type { WYQDStoredEntity, WYQDArchiveEntityType } from '@/core/repository';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 
@@ -148,6 +154,46 @@ export function useOwnlyActions(
     }
   }
 
+  async function toggleObjectUsageState(objectId: string, nextState: 'in_use' | 'unused') {
+    const stored = storedObjects.find((item) => item.entity.id === objectId);
+    if (!stored || stored.entity.object_type !== 'physical') return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const summary = nextState === 'unused' ? t('usageStateMarkedUnused') : t('usageStateMarkedInUse');
+    const updated: PhysicalObject = { ...stored.entity, updated_at: today };
+
+    if (nextState === 'unused') {
+      updated.unused_since = today;
+      delete updated.in_use_since;
+    } else {
+      updated.in_use_since = today;
+      delete updated.unused_since;
+    }
+
+    try {
+      await repository.updateObject(stored.fileName, updated, stored.body);
+      const log: ObjectLogEntry = {
+        schema_version: WYQD_SCHEMA_VERSION,
+        id: `log_${today.replaceAll('-', '')}_${Date.now()}`,
+        type: 'object_log',
+        title: `${stored.entity.title} · ${summary}`,
+        target_id: stored.entity.id,
+        event_type: 'usage_state',
+        occurred_at: today,
+        summary,
+        source: 'web',
+        created_at: today,
+        updated_at: today,
+      };
+      await repository.saveObjectLog(log, `## ${t('logEventUsageState')}\n\n${summary}\n`);
+      await loadVaultData();
+      showNotice(t('objectUpdated'));
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : t('objectUpdateFailed'));
+      throw error;
+    }
+  }
+
   async function deleteSnapshot(fileName: string) {
     try {
       await repository.archiveSnapshot(fileName);
@@ -235,6 +281,7 @@ export function useOwnlyActions(
     updateObject,
     archiveObject,
     createObjectReview,
+    toggleObjectUsageState,
     createSnapshot,
     updateSnapshot,
     deleteSnapshot,

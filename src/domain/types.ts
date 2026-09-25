@@ -52,6 +52,8 @@ export interface PhysicalObject extends BaseWYQDObject {
   status: PhysicalStatus;
   brand?: string;
   model?: string;
+  in_use_since?: string;
+  unused_since?: string;
   seeded_at?: string;
   observed_at?: string;
   purchased_at?: string;
@@ -196,7 +198,7 @@ export interface ReviewEntry extends BaseEntity {
   year?: number;
 }
 
-export type ObjectLogEventType = 'usage' | 'issue' | 'maintenance' | 'regret' | 'lesson' | 'comparison' | 'exit_note';
+export type ObjectLogEventType = 'usage' | 'usage_state' | 'issue' | 'maintenance' | 'regret' | 'lesson' | 'comparison' | 'exit_note';
 
 export interface ObjectLogEntry extends BaseEntity {
   type: 'object_log';

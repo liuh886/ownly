@@ -328,6 +328,30 @@ describe('MarkdownEntityRepository persisted mutation contract', () => {
     );
   });
 
+  it('persists a usage_state log through the normal list path', async () => {
+    const { repository } = await setup();
+    const log: ObjectLogEntry = {
+      schema_version: '0.1',
+      id: 'log-usage-state-1',
+      type: 'object_log',
+      title: 'Travel Camera · Marked unused',
+      target_id: 'object-physical-1',
+      event_type: 'usage_state',
+      occurred_at: '2026-09-26',
+      summary: 'Marked unused',
+      source: 'web',
+      created_at: '2026-09-26',
+    };
+
+    const fileName = await repository.saveObjectLog(log, '## Usage state\n');
+    const logs = await repository.listObjectLogs();
+
+    expect(fileName).toMatch(/^log--2026-09-26--log-usage-state-1--/);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].entity.event_type).toBe('usage_state');
+    expect(logs[0].body).toContain('Usage state');
+  });
+
   it('keeps the active source when writing the archive copy fails', async () => {
     const { store, repository } = await setup();
     const fileName = await repository.saveObject(physical(), 'Source must survive');

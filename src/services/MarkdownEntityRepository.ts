@@ -337,6 +337,16 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
     );
   }
 
+  async saveObjectLog(log: ObjectLogEntry, body = ''): Promise<string> {
+    const date = log.occurred_at || log.created_at || this.now().toISOString().split('T')[0];
+    const preferredFileName = `log--${date}--${log.id}--${slugify(log.title.slice(0, 40))}.md`;
+    const fileName = await this.getAvailableFileName(this.dirs.objectLogs, preferredFileName);
+    const content = serializeMarkdownEntity(log, body);
+
+    await this.store.writeMarkdownFile(this.dirs.objectLogs, fileName, content);
+    return fileName;
+  }
+
   async restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<string> {
     if (archiveType === 'object') return this.restoreObject(archiveFileName);
     if (archiveType === 'snapshot') return this.restoreSnapshot(archiveFileName);

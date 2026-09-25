@@ -1,7 +1,9 @@
+import { isValidISODate } from './date';
 import type {
   AccountSnapshot,
   BillingCycle,
   ObjectLogEntry,
+  PhysicalObject,
   RecurringCostObject,
   WYQDObject,
 } from './types';
@@ -112,19 +114,53 @@ export interface UnusedObjectRow {
   lastEvidence: string;
 }
 
+export type UsageState = 'in_use' | 'unused';
+
+export interface UsageStateRow {
+  id: string;
+  title: string;
+  state: UsageState;
+  since: string;
+  days: number;
+  marked: boolean;
+}
+
 const DAY_MS = 86_400_000;
 
+function daysSince(anchor: string, now: Date): number | null {
+  const anchorTime = new Date(anchor).getTime();
+  if (!Number.isFinite(anchorTime)) return null;
+  return Math.max(0, Math.floor((now.getTime() - anchorTime) / DAY_MS));
+}
+
+function resolveManualUsageState(
+  object: PhysicalObject,
+): { state: UsageState; since: string } | null {
+  const unused = isValidISODate(object.unused_since) ? object.unused_since : null;
+  const inUse = isValidISODate(object.in_use_since) ? object.in_use_since : null;
+
+  if (unused && inUse) {
+    return unused >= inUse
+      ? { state: 'unused', since: unused }
+      : { state: 'in_use', since: inUse };
+  }
+  if (unused) return { state: 'unused', since: unused };
+  if (inUse) return { state: 'in_use', since: inUse };
+  return null;
+}
+
 /**
- * "Own less" outlet: physical objects whose last evidence of use is older
- * than the threshold. Evidence chain: latest 'usage' log → first_used_at →
- * purchased_at → created_at (always present, so every object is decidable).
+ * "Own less" outlet: physical objects with a usage state. A manual mark
+ * (`unused_since` / `in_use_since`) always wins; without one the state comes
+ * from the evidence chain: latest 'usage' log → first_used_at → purchased_at
+ * → created_at (always present, so every object is decidable).
  */
-export function getUnusedObjects(
+export function buildUsageStateRows(
   objects: WYQDObject[],
   logs: ObjectLogEntry[],
   now = new Date(),
   thresholdDays = 90,
-): UnusedObjectRow[] {
+): UsageStateRow[] {
   const lastUsageByTarget = new Map<string, string>();
   for (const log of logs) {
     if (log.event_type !== 'usage' || !log.occurred_at) continue;
@@ -134,23 +170,77 @@ export function getUnusedObjects(
     }
   }
 
-  const rows: UnusedObjectRow[] = [];
+  const rows: UsageStateRow[] = [];
   for (const object of objects) {
     if (object.object_type !== 'physical') continue;
     if (object.status !== 'purchased' && object.status !== 'using' && object.status !== 'idle') {
       continue;
     }
+
+    const manual = resolveManualUsageState(object);
+    if (manual) {
+      const days = daysSince(manual.since, now);
+      if (days === null) continue;
+      rows.push({
+        id: object.id,
+        title: object.title,
+        state: manual.state,
+        since: manual.since,
+        days,
+        marked: true,
+      });
+      continue;
+    }
+
     const anchor =
       lastUsageByTarget.get(object.id) ??
       object.first_used_at ??
       object.purchased_at ??
       object.created_at;
-    const anchorTime = new Date(anchor).getTime();
-    if (!Number.isFinite(anchorTime)) continue;
-    const daysUnused = Math.floor((now.getTime() - anchorTime) / DAY_MS);
-    if (daysUnused >= thresholdDays) {
-      rows.push({ id: object.id, title: object.title, daysUnused, lastEvidence: anchor });
-    }
+    const days = daysSince(anchor, now);
+    if (days === null) continue;
+    rows.push({
+      id: object.id,
+      title: object.title,
+      state: days >= thresholdDays ? 'unused' : 'in_use',
+      since: anchor,
+      days,
+      marked: false,
+    });
   }
-  return rows.sort((a, b) => b.daysUnused - a.daysUnused);
+
+  return rows;
+}
+
+/** Rows shown by the idle panel: manual marks plus auto-flagged idle items. */
+export function getUsageReminderRows(
+  objects: WYQDObject[],
+  logs: ObjectLogEntry[],
+  now = new Date(),
+  thresholdDays = 90,
+): UsageStateRow[] {
+  return buildUsageStateRows(objects, logs, now, thresholdDays)
+    .filter((row) => row.marked || (row.state === 'unused' && row.days >= thresholdDays))
+    .sort((a, b) => {
+      if (a.marked !== b.marked) return a.marked ? -1 : 1;
+      if (a.state !== b.state) return a.state === 'unused' ? -1 : 1;
+      return b.days - a.days;
+    });
+}
+
+export function getUnusedObjects(
+  objects: WYQDObject[],
+  logs: ObjectLogEntry[],
+  now = new Date(),
+  thresholdDays = 90,
+): UnusedObjectRow[] {
+  return buildUsageStateRows(objects, logs, now, thresholdDays)
+    .filter((row) => row.state === 'unused' && (row.marked || row.days >= thresholdDays))
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      daysUnused: row.days,
+      lastEvidence: row.since,
+    }))
+    .sort((a, b) => b.daysUnused - a.daysUnused);
 }

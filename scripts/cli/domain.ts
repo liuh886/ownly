@@ -253,7 +253,7 @@ export function stripUndefined<T extends object>(value: T): T {
 }
 
 export function isObjectLogEventType(value: string): value is ObjectLogEventType {
-  return ['usage', 'issue', 'maintenance', 'regret', 'lesson', 'comparison', 'exit_note']
+  return ['usage', 'usage_state', 'issue', 'maintenance', 'regret', 'lesson', 'comparison', 'exit_note']
     .includes(value);
 }
 

@@ -71,7 +71,7 @@ Do not use **Delete** for a recoverable archive action. Do not use **Archive** f
 | one-time experience | 一次性体验 | Trips, dining, events, plans; `object_type: one_time_experience` |
 | snapshot | 快照 | A point-in-time account/net-worth record |
 | review | 复盘 | Structured post-use or post-exit reflection |
-| object experience log | 对象体验记录 | Append-only usage, issue, maintenance, regret, lesson, comparison, or exit event |
+| object experience log | 对象体验记录 | Append-only usage, usage-state, issue, maintenance, regret, lesson, comparison, or exit event |
 | Doctor | 数据检查 / Doctor | Deterministic Ownly data-health diagnostics, not a cloud-provider or AI feature |
 
 Stable frontmatter fields, JSON keys, directory names, and object-type identifiers are domain contracts rather than product copy.

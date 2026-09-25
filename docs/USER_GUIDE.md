@@ -190,6 +190,7 @@ The purpose is to preserve structured facts and reflections that can inform late
 Object experience logs are append-only records of meaningful events:
 
 - usage;
+- usage state (manual in-use / unused switches from the Object insights panel);
 - issue;
 - maintenance;
 - regret;

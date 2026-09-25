@@ -210,7 +210,7 @@ npm run --silent wyqd -- --vault /mnt/zhihaol object log add \
   --lesson "Battery life matters for travel cameras"
 ```
 
-Event types: `usage`, `issue`, `maintenance`, `regret`, `lesson`, `comparison`, `exit_note`.
+Event types: `usage`, `usage_state`, `issue`, `maintenance`, `regret`, `lesson`, `comparison`, `exit_note`.
 
 List experience logs for an object:
 

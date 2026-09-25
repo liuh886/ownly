@@ -1,13 +1,14 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { AccountSnapshot, ObjectLogEntry, WYQDObject } from '@/domain/types';
 import type { WYQDMembershipState } from '@/core/membership';
 import { canUseWYQDProFeature } from '@/core/membership';
 import {
   buildNetWorthTrend,
   getSubscriptionRanking,
-  getUnusedObjects,
+  getUsageReminderRows,
+  type UsageState,
 } from '@/domain/object-insights';
 import { Panel } from '../common/ui-primitives';
 
@@ -15,7 +16,7 @@ const COPY = {
   en: {
     title: 'Object insights',
     lockedTitle: 'Object insights is a PRO feature',
-    lockedDesc: 'Subscription rankings, net worth trends, and unused-item alerts — computed locally, nothing leaves your vault.',
+    lockedDesc: 'Subscription rankings, net worth trends, and usage-state tracking — computed locally, nothing leaves your vault.',
     unlock: 'Unlock PRO',
     subscriptions: 'Annual subscription cost',
     perYear: '/yr',
@@ -25,10 +26,15 @@ const COPY = {
     latest: 'Latest',
     previous: 'Previous',
     change: 'Change',
-    unused: 'Idle items',
-    unusedDesc: 'No recorded use in the last {days} days.',
+    usageState: 'Usage status',
+    usageStateDesc: 'Unmarked items are flagged after {days} days without recorded use; manual marks stay until you switch them.',
     daysUnused: '{n} days unused',
-    noUnused: 'No idle items — everything is in use.',
+    noUsageRows: 'Nothing needs attention.',
+    manualMark: 'manual',
+    inUse: 'In use',
+    markInUse: 'Mark in use',
+    markUnused: 'Mark unused',
+    saving: 'Saving…',
     moreItems: '… {n} more',
     noSnapshots: 'Record snapshots in the Accounts tab to start the trend.',
     empty: 'Add objects to unlock insights about what you own.',
@@ -36,7 +42,7 @@ const COPY = {
   zh: {
     title: '对象洞察',
     lockedTitle: '对象洞察是 PRO 功能',
-    lockedDesc: '订阅排行、净值趋势、闲置提醒——全部本地计算，不离开你的 vault。',
+    lockedDesc: '订阅排行、净值趋势、使用状态标记——全部本地计算，不离开你的 vault。',
     unlock: '解锁 PRO',
     subscriptions: '订阅年度成本',
     perYear: '/年',
@@ -46,10 +52,15 @@ const COPY = {
     latest: '最新',
     previous: '上期',
     change: '变化',
-    unused: '闲置提醒',
-    unusedDesc: '最近 {days} 天没有使用记录。',
+    usageState: '使用状态',
+    usageStateDesc: '未手动标记的物品在 {days} 天没有使用记录后提醒；手动标记会保留到你再次切换。',
     daysUnused: '已 {n} 天未使用',
-    noUnused: '没有闲置物品，都在使用中。',
+    noUsageRows: '没有需要关注的物品。',
+    manualMark: '手动',
+    inUse: '使用中',
+    markInUse: '标记为使用',
+    markUnused: '标记为未使用',
+    saving: '保存中…',
     moreItems: '… 还有 {n} 项',
     noSnapshots: '去「账户」页记录快照后开始趋势统计。',
     empty: '添加对象后开始洞察你的持有。',
@@ -69,22 +80,35 @@ export function ObjectInsightsPanel({
   logs = [],
   membership,
   language,
+  onToggleUsageState,
 }: {
   objects: WYQDObject[];
   snapshots: AccountSnapshot[];
   logs?: ObjectLogEntry[];
   membership: WYQDMembershipState;
   language: 'zh' | 'en';
+  onToggleUsageState?: (objectId: string, next: UsageState) => Promise<void>;
 }) {
   const copy = COPY[language];
   const isPro = canUseWYQDProFeature(membership);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const groups = useMemo(() => getSubscriptionRanking(objects), [objects]);
   const trend = useMemo(() => buildNetWorthTrend(snapshots), [snapshots]);
-  const unused = useMemo(
-    () => getUnusedObjects(objects, logs, new Date(), UNUSED_THRESHOLD_DAYS),
+  const usageRows = useMemo(
+    () => getUsageReminderRows(objects, logs, new Date(), UNUSED_THRESHOLD_DAYS),
     [objects, logs],
   );
+
+  async function handleToggle(objectId: string, next: UsageState) {
+    if (!onToggleUsageState) return;
+    setBusyId(objectId);
+    try {
+      await onToggleUsageState(objectId, next);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   if (!isPro) {
     return (
@@ -224,26 +248,53 @@ export function ObjectInsightsPanel({
 
       <div className="mt-4 border-t border-stone-100 pt-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-sm font-semibold text-stone-900">{copy.unused}</h3>
+          <h3 className="text-sm font-semibold text-stone-900">{copy.usageState}</h3>
           <span className="text-[11px] text-stone-500">
-            {copy.unusedDesc.replace('{days}', String(UNUSED_THRESHOLD_DAYS))}
+            {copy.usageStateDesc.replace('{days}', String(UNUSED_THRESHOLD_DAYS))}
           </span>
         </div>
-        {unused.length === 0 ? (
-          <p className="mt-1 text-xs text-stone-500">{copy.noUnused}</p>
+        {usageRows.length === 0 ? (
+          <p className="mt-1 text-xs text-stone-500">{copy.noUsageRows}</p>
         ) : (
           <ul className="mt-2 space-y-1">
-            {unused.slice(0, MAX_ROWS).map((row) => (
-              <li key={row.id} className="flex items-baseline justify-between gap-2 text-xs">
-                <span className="min-w-0 flex-1 truncate text-stone-700">{row.title}</span>
-                <span className="shrink-0 text-stone-500">
-                  {copy.daysUnused.replace('{n}', String(row.daysUnused))}
+            {usageRows.slice(0, MAX_ROWS).map((row) => (
+              <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate text-stone-700">
+                  {row.title}
+                  {row.marked ? (
+                    <span className="ml-1.5 rounded bg-stone-100 px-1 py-0.5 text-[10px] text-stone-500">
+                      {copy.manualMark}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className={row.state === 'unused' ? 'text-rose-600' : 'text-emerald-700'}>
+                    {row.state === 'unused'
+                      ? copy.daysUnused.replace('{n}', String(row.days))
+                      : copy.inUse}
+                  </span>
+                  {onToggleUsageState ? (
+                    <button
+                      type="button"
+                      disabled={busyId === row.id}
+                      onClick={() =>
+                        void handleToggle(row.id, row.state === 'unused' ? 'in_use' : 'unused')
+                      }
+                      className="rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-700 transition hover:border-stone-900 disabled:cursor-not-allowed disabled:text-stone-300"
+                    >
+                      {busyId === row.id
+                        ? copy.saving
+                        : row.state === 'unused'
+                          ? copy.markInUse
+                          : copy.markUnused}
+                    </button>
+                  ) : null}
                 </span>
               </li>
             ))}
-            {unused.length > MAX_ROWS ? (
+            {usageRows.length > MAX_ROWS ? (
               <li className="text-xs text-stone-500">
-                {copy.moreItems.replace('{n}', String(unused.length - MAX_ROWS))}
+                {copy.moreItems.replace('{n}', String(usageRows.length - MAX_ROWS))}
               </li>
             ) : null}
           </ul>

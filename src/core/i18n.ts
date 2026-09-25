@@ -686,6 +686,9 @@ const translations = {
     logEventLesson: 'Lesson',
     logEventExitNote: 'Exit note',
     logEventComparison: 'Comparison',
+    logEventUsageState: 'Usage state',
+    usageStateMarkedInUse: 'Marked in use',
+    usageStateMarkedUnused: 'Marked unused',
     logOccurredAt: 'Occurred on',
     logLessonTitle: 'Key lesson',
 
@@ -1408,6 +1411,9 @@ const translations = {
     logEventLesson: '心得体会',
     logEventExitNote: '弃用转让',
     logEventComparison: '对比体验',
+    logEventUsageState: '使用状态',
+    usageStateMarkedInUse: '标记为使用',
+    usageStateMarkedUnused: '标记为未使用',
     logOccurredAt: '记录日期',
     logLessonTitle: '经验心得',
 
