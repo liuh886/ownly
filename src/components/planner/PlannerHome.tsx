@@ -95,6 +95,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const mapViewRef = useRef<{ center: { lat: number; lng: number }; zoom: number } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   useEscapeKey(exportMenuOpen, () => setExportMenuOpen(false));
+  const [itineraryMenuOpen, setItineraryMenuOpen] = useState(false);
+  useEscapeKey(itineraryMenuOpen, () => setItineraryMenuOpen(false));
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -251,7 +253,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const bigMapEscActive = isMapExpanded && !timingModalPlace && !isSwapDaysModalOpen &&
     !isCreateTripOpen && !guideOpen && !isHotelModalOpen && !isImportModalOpen &&
     !isCalendarModalOpen && !isShareModalOpen && !isSuspectedModalOpen && !isReviewModalOpen &&
-    !poolView && !optimizeComputation && !confirmRequest && !exportMenuOpen;
+    !poolView && !optimizeComputation && !confirmRequest && !exportMenuOpen && !itineraryMenuOpen;
   useEffect(() => {
     if (!bigMapEscActive) return;
     const handler = (e: KeyboardEvent) => {
@@ -1037,22 +1039,6 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                         >
                           📋 {zh ? '复制文本' : 'Copy text'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => { setExportMenuOpen(false); downloadTripItineraryHtml(false); }}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                          title={zh ? '导出自包含单文件 HTML 行程（不含费用），传到手机直接点开、离线可读' : 'Export a self-contained single-file HTML itinerary (no expenses); open it on your phone offline'}
-                        >
-                          📱 {zh ? '分享行程 (HTML)' : 'Itinerary (HTML)'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setExportMenuOpen(false); downloadTripItineraryHtml(true); }}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                          title={zh ? '导出含费用的单文件 HTML 行程——费用将随文件流转，请确认知晓' : 'Export single-file HTML itinerary WITH expenses — expenses travel with the file, confirm you understand'}
-                        >
-                          📱 {zh ? '分享行程（含费用）' : 'Itinerary + costs'}
-                        </button>
                       </div>
                     </>
                   ) : null}
@@ -1065,13 +1051,47 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                 >
                   📅 {zh ? '日历' : 'Calendar'}
                 </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setItineraryMenuOpen((prev) => !prev)}
+                    className="rounded-md border border-stone-200 px-2 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50"
+                    title={zh ? '导出单文件 HTML 行程单，手机可离线打开' : 'Export a single-file HTML itinerary (offline on your phone)'}
+                    aria-expanded={itineraryMenuOpen}
+                  >
+                    📄 {zh ? '行程单' : 'Itinerary'} ▾
+                  </button>
+                  {itineraryMenuOpen ? (
+                    <>
+                      <div className="fixed inset-0 z-40 cursor-default" onClick={() => setItineraryMenuOpen(false)} />
+                      <div className="absolute right-0 z-50 mt-1 w-48 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-xl">
+                        <button
+                          type="button"
+                          onClick={() => { setItineraryMenuOpen(false); downloadTripItineraryHtml(false); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '下载单文件 HTML 行程单（不含费用），传到手机直接点开、离线可读' : 'Download a single-file HTML itinerary (no expenses); open it on your phone offline'}
+                        >
+                          📄 {zh ? '下载行程单（不含费用）' : 'Download (no expenses)'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setItineraryMenuOpen(false); downloadTripItineraryHtml(true); }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                          title={zh ? '下载含费用的行程单——费用将随文件流转，请确认知晓' : 'Download WITH expenses — expenses travel with the file, confirm you understand'}
+                        >
+                          📄 {zh ? '下载行程单（含费用）' : 'Download (with expenses)'}
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   onClick={() => setIsShareModalOpen(true)}
                   className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
-                  title={zh ? '生成固定分享链接 (PRO)' : 'Permanent share link (PRO)'}
+                  title={zh ? '用行程名生成固定分享链接 (PRO)' : 'Permanent share link named after the trip (PRO)'}
                 >
-                  🔗 {zh ? '分享链接' : 'Share link'}
+                  🔗 {zh ? '分享行程' : 'Share trip'}
                 </button>
                 <button
                   type="button"
