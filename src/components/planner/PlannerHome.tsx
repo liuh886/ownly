@@ -95,8 +95,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const mapViewRef = useRef<{ center: { lat: number; lng: number }; zoom: number } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   useEscapeKey(exportMenuOpen, () => setExportMenuOpen(false));
-  const [itineraryMenuOpen, setItineraryMenuOpen] = useState(false);
-  useEscapeKey(itineraryMenuOpen, () => setItineraryMenuOpen(false));
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  useEscapeKey(shareMenuOpen, () => setShareMenuOpen(false));
   const [isHotelModalOpen, setIsHotelModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -253,7 +253,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const bigMapEscActive = isMapExpanded && !timingModalPlace && !isSwapDaysModalOpen &&
     !isCreateTripOpen && !guideOpen && !isHotelModalOpen && !isImportModalOpen &&
     !isCalendarModalOpen && !isShareModalOpen && !isSuspectedModalOpen && !isReviewModalOpen &&
-    !poolView && !optimizeComputation && !confirmRequest && !exportMenuOpen && !itineraryMenuOpen;
+    !poolView && !optimizeComputation && !confirmRequest && !exportMenuOpen && !shareMenuOpen;
   useEffect(() => {
     if (!bigMapEscActive) return;
     const handler = (e: KeyboardEvent) => {
@@ -853,30 +853,51 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           <div className="relative">
             <button
               type="button"
-              onClick={() => setItineraryMenuOpen((prev) => !prev)}
-              className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-900 active:scale-98"
-              title={zh ? '行程单：复制 Markdown 或下载单文件 HTML（手机可离线打开）' : 'Itinerary: copy Markdown or download single-file HTML (offline on your phone)'}
-              aria-expanded={itineraryMenuOpen}
+              onClick={() => setShareMenuOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs font-bold text-amber-900 shadow-2xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-98"
+              title={zh ? '分享：行程链接 (PRO) 或行程单文件' : 'Share: trip link (PRO) or itinerary file'}
+              aria-expanded={shareMenuOpen}
             >
-              <span>📄</span>
-              <span>{zh ? '行程单' : 'Itinerary'}</span>
-              <span className="text-stone-400" aria-hidden="true">▾</span>
+              <span>🔗</span>
+              <span>{zh ? '分享' : 'Share'}</span>
+              <span className="text-amber-700/70" aria-hidden="true">▾</span>
+              {tripShareMeta?.enabled ? (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              ) : null}
             </button>
-            {itineraryMenuOpen ? (
+            {shareMenuOpen ? (
               <>
-                <div className="fixed inset-0 z-40 cursor-default" onClick={() => setItineraryMenuOpen(false)} />
-                <div className="absolute right-0 z-50 mt-1 w-52 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-xl">
+                <div className="fixed inset-0 z-40 cursor-default" onClick={() => setShareMenuOpen(false)} />
+                <div className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-xl">
                   <button
                     type="button"
-                    onClick={() => { setItineraryMenuOpen(false); void copyMarkdownItinerary(); }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
-                    title={zh ? '一键复制 Markdown 完整行程单至剪贴板' : 'Copy complete Markdown itinerary to clipboard'}
+                    onClick={() => { setShareMenuOpen(false); setIsShareModalOpen(true); }}
+                    className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition hover:bg-stone-100"
+                    title={zh ? '用行程名生成固定链接，手机打开即读' : 'Permanent link named after the trip'}
                   >
-                    📋 {zh ? '复制 Markdown 行程单' : 'Copy Markdown'}
+                    <span className="pt-0.5">🔗</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-800">
+                        {zh ? '行程链接分享' : 'Trip link'}
+                        <span className="rounded bg-amber-500 px-1 py-0.5 text-[9px] font-black text-white">PRO</span>
+                        {tripShareMeta?.enabled ? (
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] leading-4 text-stone-500">
+                        {tripShareMeta?.enabled
+                          ? (zh ? '已开启 · 编辑后自动同步' : 'Live · auto-syncs edits')
+                          : (zh ? '生成固定链接，手机打开即读' : 'Generate a permanent link')}
+                      </span>
+                    </span>
                   </button>
+                  <div className="my-1 border-t border-stone-100" />
+                  <div className="px-3 py-1 text-[10px] font-semibold tracking-wide text-stone-400">
+                    {zh ? '行程单分享' : 'Itinerary file'}
+                  </div>
                   <button
                     type="button"
-                    onClick={() => { setItineraryMenuOpen(false); downloadTripItineraryHtml(false); }}
+                    onClick={() => { setShareMenuOpen(false); downloadTripItineraryHtml(false); }}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
                     title={zh ? '下载单文件 HTML 行程单（不含费用），传到手机直接点开、离线可读' : 'Download a single-file HTML itinerary (no expenses); open it on your phone offline'}
                   >
@@ -884,29 +905,24 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setItineraryMenuOpen(false); downloadTripItineraryHtml(true); }}
+                    onClick={() => { setShareMenuOpen(false); downloadTripItineraryHtml(true); }}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
                     title={zh ? '下载含费用的 HTML 行程单——费用将随文件流转，请确认知晓' : 'Download HTML WITH expenses — expenses travel with the file, confirm you understand'}
                   >
                     📄 {zh ? '下载 HTML 行程单（含费用）' : 'Download HTML (with expenses)'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShareMenuOpen(false); void copyMarkdownItinerary(); }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:bg-stone-100"
+                    title={zh ? '一键复制 Markdown 完整行程单至剪贴板' : 'Copy complete Markdown itinerary to clipboard'}
+                  >
+                    📋 {zh ? '复制 Markdown 行程单' : 'Copy Markdown'}
+                  </button>
                 </div>
               </>
             ) : null}
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsShareModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs font-bold text-amber-900 shadow-2xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-98"
-            title={zh ? '用行程名生成固定分享链接 (PRO)' : 'Permanent share link named after the trip (PRO)'}
-          >
-            <span>🔗</span>
-            <span>{zh ? '分享行程' : 'Share'}</span>
-            {tripShareMeta?.enabled ? (
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            ) : null}
-          </button>
           {reviewable ? (
             <button
               type="button"
