@@ -102,7 +102,9 @@ Deno.serve(async (req: Request) => {
     'Referrer-Policy': 'no-referrer',
     'X-Published-By': 'Ownly Trip Share Service',
     ...CORS,
-    ETag: `W/"${alias}-${record.updated_at}"`,
+    // Header values must be Latin-1; aliases are trip names (often CJK), so
+    // percent-encode before embedding or `new Response` throws.
+    ETag: `W/"${encodeURIComponent(alias)}-${record.updated_at}"`,
   };
 
   if (req.method === 'HEAD') {
