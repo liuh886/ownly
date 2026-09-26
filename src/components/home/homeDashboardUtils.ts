@@ -42,6 +42,32 @@ export function buildDualLinePoints(values: number[], max: number, offsetX = 0, 
     .join(' ');
 }
 
+export function calculateDailyCostAt(objects: WYQDObject[], date: string): number {
+  const at = new Date(`${date}T23:59:59`);
+  if (!Number.isFinite(at.getTime())) return 0;
+
+  return objects.reduce((sum, object) => {
+    if (object.object_type !== 'physical') return sum;
+    if (object.status !== 'purchased' && object.status !== 'using') return sum;
+    if (!object.purchased_at) return sum;
+
+    const purchasedTime = new Date(object.purchased_at).getTime();
+    if (!Number.isFinite(purchasedTime) || purchasedTime > at.getTime()) return sum;
+
+    if (object.ended_at) {
+      const endedTime = new Date(object.ended_at).getTime();
+      if (Number.isFinite(endedTime) && endedTime < at.getTime()) return sum;
+    }
+
+    const cost = calculatePhysicalDailyCost(object, at);
+    return cost !== null && cost > 0 ? sum + cost : sum;
+  }, 0);
+}
+
+export function buildDailyCostTrend(objects: WYQDObject[], dates: string[]): number[] {
+  return dates.map((date) => calculateDailyCostAt(objects, date));
+}
+
 export function getUpcomingRecurringCosts(objects: WYQDObject[]) {
   const today = new Date().toISOString().split('T')[0];
   return objects

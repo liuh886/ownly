@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Flip-to-chart Home cost cards:** the daily usage cost and monthly subscription cost cards in the Home cost section flip in 3D to a snapshot trend chart when tapped — no visual affordance by design, and a second tap flips back. The subscription line uses recorded `monthly_fixed_cost` values; the daily cost line is backcast from current holdings and labelled as such. Rendered with the same animated sparkline style as the asset chart, with an accessible button label for keyboard users.
+
 - **Idle reminder becomes a usage-state control:** every physical object row in the Object insights panel now shows whether it is in use or unused and offers a one-click switch. Marking an item unused stamps `unused_since` and writes a `usage_state` object log; marking it in use clears the unused date and stamps `in_use_since`. Manual marks win over log evidence and stay until switched, so actively used items no longer sit in the idle list. Adds the `usage_state` event type to the Web, CLI, and Obsidian log paths.
 
 - **Liability repayment reminders:** liability account lines can carry an optional due date (e.g. `Credit Card 4200 2027-10-01`; `/`, `.` and `年/月/日` forms normalize to `YYYY-MM-DD`). The Accounts page shows liability ratio, net worth vs the previous snapshot, liabilities sorted by due date, coverage of the next six months, and overdue totals; the Home dashboard surfaces every repayment due within six months. Due dates live on the snapshot's liability balance, so reusing the previous account list carries them forward, and existing data stays valid without a schema bump. The Agent CLI now preserves account detail when a snapshot update leaves totals unchanged.

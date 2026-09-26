@@ -86,6 +86,7 @@ export function HomeDashboard({
       <HomeCostSection
         metrics={metrics}
         objects={objects}
+        snapshots={snapshots}
         itemVariants={itemVariants}
         onOpenObjects={onOpenObjects}
       />
