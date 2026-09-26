@@ -4,7 +4,6 @@ import {
   buildNetWorthTrend,
   buildUsageStateRows,
   getSubscriptionRanking,
-  getUnusedObjects,
   getUsageReminderRows,
 } from './object-insights';
 import type {
@@ -93,7 +92,7 @@ describe('buildNetWorthTrend (WS-4)', () => {
   });
 });
 
-describe('getUnusedObjects (WS-4)', () => {
+describe('usage state detection (WS-4)', () => {
   const NOW = new Date('2026-09-08T00:00:00.000Z');
 
   function physical(overrides: Partial<Extract<WYQDObject, { object_type: 'physical' }>> = {}) {
@@ -115,9 +114,10 @@ describe('getUnusedObjects (WS-4)', () => {
       physical({ id: 'old', purchased_at: '2024-01-01' }),
       physical({ id: 'new', purchased_at: '2026-08-01' }),
     ];
-    const rows = getUnusedObjects(objects, [], NOW, 90);
+    const rows = getUsageReminderRows(objects, [], NOW, 90);
     expect(rows.map((row) => row.id)).toEqual(['old']);
-    expect(rows[0].daysUnused).toBeGreaterThan(500);
+    expect(rows[0].state).toBe('unused');
+    expect(rows[0].days).toBeGreaterThan(500);
   });
 
   it('prefers the latest usage log over purchase dates', () => {
@@ -135,10 +135,16 @@ describe('getUnusedObjects (WS-4)', () => {
         created_at: '2026-08-20',
       },
     ];
-    expect(getUnusedObjects(objects, logs, NOW, 90)).toEqual([]);
-    expect(getUnusedObjects(objects, logs, NOW, 10)).toEqual([
-      { id: 'cam', title: 'Old Camera', daysUnused: 19, lastEvidence: '2026-08-20' },
-    ]);
+    expect(buildUsageStateRows(objects, logs, NOW, 90)[0]).toMatchObject({
+      state: 'in_use',
+      days: 19,
+      since: '2026-08-20',
+    });
+    expect(buildUsageStateRows(objects, logs, NOW, 10)[0]).toMatchObject({
+      state: 'unused',
+      days: 19,
+      since: '2026-08-20',
+    });
   });
 
   it('ignores non-held statuses and non-usage log events', () => {
@@ -156,7 +162,7 @@ describe('getUnusedObjects (WS-4)', () => {
         created_at: '2026-09-01',
       },
     ];
-    expect(getUnusedObjects(objects, logs, NOW, 1)).toEqual([]);
+    expect(buildUsageStateRows(objects, logs, NOW, 1)).toEqual([]);
   });
 });
 
@@ -183,7 +189,7 @@ describe('usage state rows (WS-4)', () => {
     expect(buildUsageStateRows(objects, [], NOW, 90)).toEqual([
       { id: 'obj-1', title: 'Old Camera', state: 'in_use', since: '2026-09-01', days: 7, marked: true },
     ]);
-    expect(getUnusedObjects(objects, [], NOW, 90)).toEqual([]);
+    expect(getUsageReminderRows(objects, [], NOW, 90).map((row) => row.state)).toEqual(['in_use']);
   });
 
   it('flags a manual unused mark regardless of age and keeps it visible for toggling', () => {

@@ -1,11 +1,12 @@
 import type {
   AccountSnapshot,
   HomeMetrics,
+  OneTimeExperienceObject,
   PhysicalObject,
   RecurringCostObject,
   WYQDObject,
 } from './types';
-import { calculateInclusiveDays } from './date';
+import { calculateInclusiveDays, parseLocalDate } from './date';
 
 export function sumAmounts(items: { amount?: number }[]): number {
   return items.reduce((total, item) => total + (item.amount || 0), 0);
@@ -60,6 +61,10 @@ export function calculatePhysicalAcquisitionCost(object: PhysicalObject): number
   return object.total_acquisition_cost || object.purchase_price || 0;
 }
 
+export function calculateExperienceCost(object: OneTimeExperienceObject): number {
+  return object.actual_total || object.budget_total || 0;
+}
+
 export function calculatePhysicalDailyCost(object: PhysicalObject, today = new Date()): number | null {
   const holdingDays = calculateHoldingDays(object, today);
   if (!holdingDays) return null;
@@ -100,10 +105,6 @@ export function calculateRecurringMonthlyCost(object: RecurringCostObject): numb
   }
 }
 
-function clampDay(year: number, monthIndex: number, day: number): number {
-  return Math.min(day, new Date(year, monthIndex + 1, 0).getDate());
-}
-
 function formatDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -111,17 +112,9 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function parseLocalDate(value?: string): Date | null {
-  if (!value) return null;
-  const [year, month, day] = value.split('-').map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day);
-}
-
-function addMonths(date: Date, months: number): Date {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
+function billingDateForMonth(year: number, monthIndex: number, day: number): Date {
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+  return new Date(year, monthIndex, Math.min(day, lastDay));
 }
 
 export function calculateNextBillingDate(
@@ -133,6 +126,10 @@ export function calculateNextBillingDate(
 
   const start = parseLocalDate(object.started_at || object.created_at) || today;
   const normalizedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const billingDay =
+    object.billing_day && object.billing_day >= 1 && object.billing_day <= 31
+      ? object.billing_day
+      : start.getDate();
 
   if (object.billing_cycle === 'weekly') {
     const next = new Date(start);
@@ -142,34 +139,24 @@ export function calculateNextBillingDate(
     return formatDate(next);
   }
 
-  const day = object.billing_day || start.getDate();
-
   if (object.billing_cycle === 'annual') {
     const monthIndex = start.getMonth();
-    let next = new Date(
-      normalizedToday.getFullYear(),
-      monthIndex,
-      clampDay(normalizedToday.getFullYear(), monthIndex, day),
-    );
+    let next = billingDateForMonth(normalizedToday.getFullYear(), monthIndex, billingDay);
     if (next < normalizedToday) {
-      next = new Date(
-        normalizedToday.getFullYear() + 1,
-        monthIndex,
-        clampDay(normalizedToday.getFullYear() + 1, monthIndex, day),
-      );
+      next = billingDateForMonth(normalizedToday.getFullYear() + 1, monthIndex, billingDay);
     }
     return formatDate(next);
   }
 
   const interval = object.billing_cycle === 'quarterly' ? 3 : 1;
-  let next = new Date(start.getFullYear(), start.getMonth(), clampDay(start.getFullYear(), start.getMonth(), day));
+  let year = start.getFullYear();
+  let monthIndex = start.getMonth();
+  let next = billingDateForMonth(year, monthIndex, billingDay);
   while (next < normalizedToday) {
-    const advanced = addMonths(next, interval);
-    next = new Date(
-      advanced.getFullYear(),
-      advanced.getMonth(),
-      clampDay(advanced.getFullYear(), advanced.getMonth(), day),
-    );
+    monthIndex += interval;
+    year += Math.floor(monthIndex / 12);
+    monthIndex %= 12;
+    next = billingDateForMonth(year, monthIndex, billingDay);
   }
 
   return formatDate(next);

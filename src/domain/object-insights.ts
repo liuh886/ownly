@@ -1,4 +1,4 @@
-import { isValidISODate } from './date';
+import { calendarDaysSince, isValidISODate } from './date';
 import type {
   AccountSnapshot,
   BillingCycle,
@@ -107,13 +107,6 @@ export function buildNetWorthTrend(snapshots: AccountSnapshot[]): NetWorthPoint[
     }));
 }
 
-export interface UnusedObjectRow {
-  id: string;
-  title: string;
-  daysUnused: number;
-  lastEvidence: string;
-}
-
 export type UsageState = 'in_use' | 'unused';
 
 export interface UsageStateRow {
@@ -125,12 +118,10 @@ export interface UsageStateRow {
   marked: boolean;
 }
 
-const DAY_MS = 86_400_000;
-
 function daysSince(anchor: string, now: Date): number | null {
-  const anchorTime = new Date(anchor).getTime();
-  if (!Number.isFinite(anchorTime)) return null;
-  return Math.max(0, Math.floor((now.getTime() - anchorTime) / DAY_MS));
+  const days = calendarDaysSince(anchor, now);
+  if (days === null) return null;
+  return Math.max(0, days);
 }
 
 function resolveManualUsageState(
@@ -220,27 +211,10 @@ export function getUsageReminderRows(
   thresholdDays = 90,
 ): UsageStateRow[] {
   return buildUsageStateRows(objects, logs, now, thresholdDays)
-    .filter((row) => row.marked || (row.state === 'unused' && row.days >= thresholdDays))
+    .filter((row) => row.marked || row.state === 'unused')
     .sort((a, b) => {
       if (a.marked !== b.marked) return a.marked ? -1 : 1;
       if (a.state !== b.state) return a.state === 'unused' ? -1 : 1;
       return b.days - a.days;
     });
-}
-
-export function getUnusedObjects(
-  objects: WYQDObject[],
-  logs: ObjectLogEntry[],
-  now = new Date(),
-  thresholdDays = 90,
-): UnusedObjectRow[] {
-  return buildUsageStateRows(objects, logs, now, thresholdDays)
-    .filter((row) => row.state === 'unused' && (row.marked || row.days >= thresholdDays))
-    .map((row) => ({
-      id: row.id,
-      title: row.title,
-      daysUnused: row.days,
-      lastEvidence: row.since,
-    }))
-    .sort((a, b) => b.daysUnused - a.daysUnused);
 }

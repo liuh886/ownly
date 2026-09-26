@@ -98,6 +98,37 @@ export function hasInvalidBalanceLines(value: string, prefix: 'asset' | 'liabili
     .some((line, index) => line.trim() && !parseBalanceLine(line, prefix, index));
 }
 
+export interface BalanceLineParse {
+  balances: AccountBalance[];
+  hasInvalidLines: boolean;
+  hasInvalidDueDate: boolean;
+}
+
+export function parseBalanceLinesWithIssues(
+  value: string,
+  prefix: 'asset' | 'liability',
+): BalanceLineParse {
+  const balances: AccountBalance[] = [];
+  let hasInvalidLines = false;
+  let hasInvalidDueDate = false;
+
+  value.split('\n').forEach((line, index) => {
+    if (!line.trim()) return;
+
+    const invalidDueDate = prefix === 'liability' && splitTrailingDueDate(line.trim()).invalidDueDate;
+    const balance = parseBalanceLine(line, prefix, index);
+    if (balance) {
+      balances.push(balance);
+      return;
+    }
+
+    hasInvalidLines = true;
+    if (invalidDueDate) hasInvalidDueDate = true;
+  });
+
+  return { balances, hasInvalidLines, hasInvalidDueDate };
+}
+
 export function hasInvalidDueDateLines(value: string): boolean {
   return value
     .split('\n')

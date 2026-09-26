@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Flip-to-chart Home cost cards:** the daily usage cost and monthly subscription cost cards in the Home cost section flip in 3D to a snapshot trend chart when tapped — no visual affordance by design, and a second tap flips back. The subscription line uses recorded `monthly_fixed_cost` values; the daily cost line is backcast from current holdings and labelled as such. Rendered with the same animated sparkline style as the asset chart, with an accessible button label for keyboard users.
+- **Flip-to-chart Home cost cards:** the daily usage cost and monthly subscription cost cards in the Home cost section flip in 3D to a full-bleed snapshot trend chart when tapped — no visual affordance and no chart text by design, and a second tap flips back. The subscription line uses recorded `monthly_fixed_cost` values; each daily cost point reconstructs the items held in that period (including items sold since) over their days held to date, with hover tooltips and an accessible button label for keyboard users.
 
 - **Idle reminder becomes a usage-state control:** every physical object row in the Object insights panel now shows whether it is in use or unused and offers a one-click switch. Marking an item unused stamps `unused_since` and writes a `usage_state` object log; marking it in use clears the unused date and stamps `in_use_since`. Manual marks win over log evidence and stay until switched, so actively used items no longer sit in the idle list. Adds the `usage_state` event type to the Web, CLI, and Obsidian log paths.
 
@@ -14,7 +14,15 @@
 
 ### Changed
 
+- Home data scale now pairs each category with its own total (physical → total acquisition cost, subscriptions → total subscription cost, experiences → total experience cost) and no longer displays the subscription-coverage months figure.
+
 - Replaced the JSON trip snapshot (`.ownly-trip-snapshot.json`) and the `/trip` read-only viewer with a **single-file HTML itinerary export** (`Export → Itinerary HTML`). The HTML is self-contained (inline CSS, no scripts, no external assets), opens offline on any phone, keeps the same privacy line (expenses opt-in; members/calendar feed/review backlink stripped), and never writes back. Removed the `/trip` route and its bundle-size budget.
+
+### Fixed
+
+- Corrected core date and cost math: month-end billing days no longer skip short months (a Jan 31 billing day resolves to Feb 28 when viewed on Feb 15), day counts are DST-safe, and every "today" uses the local calendar date instead of UTC (which could be a day behind in UTC+8 before 08:00). The Agent CLI and MCP now share the same domain implementations instead of a drifting copy, so the fixes apply everywhere.
+- Home data scale totals now match the object pages: physical totals include `total_acquisition_cost`, and experience totals prefer `actual_total` over `budget_total`.
+- The subscription flip chart only plots snapshots that recorded `monthly_fixed_cost` instead of backfilling missing history with the current value.
 
 ## 1.2.3 (2026-09-22)
 

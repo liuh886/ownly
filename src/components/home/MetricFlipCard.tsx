@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { buildDualLinePoints } from './homeDashboardUtils';
 
 export function MetricFlipCard({
   ariaLabel,
@@ -54,59 +53,74 @@ export function MetricTrendChart({
   formatValue: (value: number) => string;
   emptyLabel: string;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const update = () => setSize({ width: node.clientWidth, height: node.clientHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   if (values.length < 2) {
-    return <p className="text-[11px] text-stone-500">{emptyLabel}</p>;
+    return (
+      <div className="flex h-full w-full items-center justify-center px-4">
+        <p className="text-center text-[11px] text-stone-500">{emptyLabel}</p>
+      </div>
+    );
   }
 
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const points = min === max
-    ? values
-        .map((_, index) => `${(10 + (index / (values.length - 1)) * 100).toFixed(2)},24`)
-        .join(' ')
-    : buildDualLinePoints(values, max, 10, min);
-  const coordinates = points.split(' ');
+  const range = max - min;
+  const pad = 8;
+  const usableWidth = Math.max(0, size.width - pad * 2);
+  const usableHeight = Math.max(0, size.height - pad * 2);
+  const points = values.map((value, index) => ({
+    x: pad + (index / (values.length - 1)) * usableWidth,
+    y: pad + (1 - (range === 0 ? 0.5 : (value - min) / range)) * usableHeight,
+    value,
+    date: dates[index],
+  }));
 
   return (
-    <svg viewBox="-2 0 124 52" className="h-full min-h-12 w-full overflow-visible" role="img">
-      <text x="7" y="8" textAnchor="end" fontSize="5" fill="#a8a29e" fontFamily="ui-monospace, monospace">
-        {formatValue(max)}
-      </text>
-      <text x="7" y="47" textAnchor="end" fontSize="5" fill="#a8a29e" fontFamily="ui-monospace, monospace">
-        {formatValue(min)}
-      </text>
-      <line x1="10" y1="24" x2="110" y2="24" stroke="#e7e5e4" strokeWidth="0.3" />
-      <motion.polyline
-        initial={false}
-        animate={{ pathLength: active ? 1 : 0, opacity: active ? 1 : 0 }}
-        transition={{ duration: 0.9, ease: 'easeInOut', delay: active ? 0.15 : 0 }}
-        fill="none"
-        points={points}
-        stroke={stroke}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2.5"
-      />
-      {values.map((value, index) => {
-        const [cx, cy] = coordinates[index].split(',').map(Number);
-        return (
-          <motion.circle
-            key={`${dates[index] ?? index}-${index}`}
-            cx={cx}
-            cy={cy}
-            r="2.5"
-            fill="white"
-            stroke={stroke}
-            strokeWidth="1.5"
-            className="cursor-pointer"
+    <div ref={containerRef} className="h-full w-full">
+      {size.width > 0 && size.height > 0 ? (
+        <svg width={size.width} height={size.height} className="block overflow-visible" role="img">
+          <motion.polyline
             initial={false}
-            animate={{ scale: active ? 1 : 0 }}
-            transition={{ delay: active ? 0.5 + index * 0.05 : 0 }}
-          >
-            <title>{`${dates[index] ?? ''} · ${formatValue(value)}`}</title>
-          </motion.circle>
-        );
-      })}
-    </svg>
+            animate={{ pathLength: active ? 1 : 0, opacity: active ? 1 : 0 }}
+            transition={{ duration: 0.9, ease: 'easeInOut', delay: active ? 0.15 : 0 }}
+            fill="none"
+            points={points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')}
+            stroke={stroke}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+          {points.map((point, index) => (
+            <motion.circle
+              key={`${point.date ?? index}-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r="3"
+              fill="white"
+              stroke={stroke}
+              strokeWidth="1.5"
+              initial={false}
+              animate={{ scale: active ? 1 : 0 }}
+              transition={{ delay: active ? 0.5 + index * 0.05 : 0 }}
+            >
+              <title>{`${point.date ?? ''} · ${formatValue(point.value)}`}</title>
+            </motion.circle>
+          ))}
+        </svg>
+      ) : null}
+    </div>
   );
 }

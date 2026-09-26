@@ -27,12 +27,17 @@ describe('calculateDailyCostAt', () => {
     expect(calculateDailyCostAt([physical(), second], '2026-01-11')).toBeCloseTo(1100 / 11 + 550 / 11);
   });
 
-  it('excludes items purchased later and items no longer held', () => {
+  it('includes items held in that period even if they are no longer held today', () => {
+    const sold = physical({ id: 'sold', status: 'transferred', ended_at: '2026-03-01' });
+    expect(calculateDailyCostAt([sold], '2026-01-11')).toBeCloseTo(1100 / 11);
+  });
+
+  it('excludes items purchased later or already ended by that date', () => {
     const later = physical({ id: 'later', created_at: '2026-02-01', purchased_at: '2026-02-01' });
-    const transferred = physical({ id: 'gone', status: 'transferred', ended_at: '2026-01-05' });
+    const ended = physical({ id: 'ended', status: 'discarded', ended_at: '2026-01-05' });
 
     expect(calculateDailyCostAt([later], '2026-01-11')).toBe(0);
-    expect(calculateDailyCostAt([transferred], '2026-01-11')).toBe(0);
+    expect(calculateDailyCostAt([ended], '2026-01-11')).toBe(0);
   });
 
   it('ignores items without a purchase date, matching the headline figure', () => {

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { AccountSnapshot } from '@/domain/types';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { CARD_CLASS } from '@/lib/ui-constants';
@@ -23,10 +24,13 @@ export function LiabilityDuePanel({
   t,
   formatMoney,
 }: LiabilityDuePanelProps) {
-  const dues = collectLiabilityDues(latest, todayISO());
-  const buckets = bucketLiabilityDues(dues);
-  const summary = summarizeLiabilityDues(buckets);
-  const upcoming = [...buckets.overdue, ...buckets.withinWindow];
+  const dues = useMemo(() => collectLiabilityDues(latest, todayISO()), [latest]);
+  const buckets = useMemo(() => bucketLiabilityDues(dues), [dues]);
+  const summary = useMemo(() => summarizeLiabilityDues(buckets), [buckets]);
+  const upcoming = useMemo(
+    () => [...buckets.overdue, ...buckets.withinWindow],
+    [buckets],
+  );
   const coverage =
     latest && latest.total_assets && latest.total_assets > 0 && summary.withinWindowTotal > 0
       ? Math.round((summary.withinWindowTotal / latest.total_assets) * 100)

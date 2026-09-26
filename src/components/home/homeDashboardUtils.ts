@@ -1,9 +1,11 @@
 import {
+  calculatePhysicalAcquisitionCost,
   calculatePhysicalDailyCost,
   calculateRecurringMonthlyCost,
   isActiveRecurringCost,
   calculateNextBillingDate,
 } from '@/domain/calculations';
+import { calendarDaysBetween, isValidISODate, todayLocalISO } from '@/domain/date';
 import type { WYQDObject } from '@/domain/types';
 
 export function getHighestDailyCostObject(objects: WYQDObject[]) {
@@ -43,24 +45,22 @@ export function buildDualLinePoints(values: number[], max: number, offsetX = 0, 
 }
 
 export function calculateDailyCostAt(objects: WYQDObject[], date: string): number {
-  const at = new Date(`${date}T23:59:59`);
-  if (!Number.isFinite(at.getTime())) return 0;
+  if (!isValidISODate(date)) return 0;
 
   return objects.reduce((sum, object) => {
     if (object.object_type !== 'physical') return sum;
-    if (object.status !== 'purchased' && object.status !== 'using') return sum;
     if (!object.purchased_at) return sum;
 
-    const purchasedTime = new Date(object.purchased_at).getTime();
-    if (!Number.isFinite(purchasedTime) || purchasedTime > at.getTime()) return sum;
+    const heldDays = calendarDaysBetween(object.purchased_at, date);
+    if (heldDays === null || heldDays < 0) return sum;
 
     if (object.ended_at) {
-      const endedTime = new Date(object.ended_at).getTime();
-      if (Number.isFinite(endedTime) && endedTime < at.getTime()) return sum;
+      const endedDays = calendarDaysBetween(object.ended_at, date);
+      if (endedDays !== null && endedDays > 0) return sum;
     }
 
-    const cost = calculatePhysicalDailyCost(object, at);
-    return cost !== null && cost > 0 ? sum + cost : sum;
+    const cost = calculatePhysicalAcquisitionCost(object) / (heldDays + 1);
+    return cost > 0 ? sum + cost : sum;
   }, 0);
 }
 
@@ -69,7 +69,7 @@ export function buildDailyCostTrend(objects: WYQDObject[], dates: string[]): num
 }
 
 export function getUpcomingRecurringCosts(objects: WYQDObject[]) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayLocalISO();
   return objects
     .filter(isActiveRecurringCost)
     .map((object) => ({

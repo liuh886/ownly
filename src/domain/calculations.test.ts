@@ -171,6 +171,42 @@ describe('calculateNextBillingDate', () => {
     ).toBe('2026-03-31');
   });
 
+  it('bills the current short month before advancing for month-end billing days', () => {
+    expect(
+      calculateNextBillingDate(
+        recurring({ billing_cycle: 'monthly', billing_amount: 10, started_at: '2026-01-31', billing_day: 31 }),
+        new Date(2026, 1, 15),
+      ),
+    ).toBe('2026-02-28');
+  });
+
+  it('keeps today when the clamped billing day is today', () => {
+    expect(
+      calculateNextBillingDate(
+        recurring({ billing_cycle: 'monthly', billing_amount: 10, started_at: '2026-01-31', billing_day: 31 }),
+        new Date(2026, 1, 28),
+      ),
+    ).toBe('2026-02-28');
+  });
+
+  it('uses the leap day when the clamped month has 29 days', () => {
+    expect(
+      calculateNextBillingDate(
+        recurring({ billing_cycle: 'monthly', billing_amount: 10, started_at: '2028-01-31', billing_day: 31 }),
+        new Date(2028, 1, 1),
+      ),
+    ).toBe('2028-02-29');
+  });
+
+  it('clamps quarterly cycles per month instead of drifting', () => {
+    expect(
+      calculateNextBillingDate(
+        recurring({ billing_cycle: 'quarterly', billing_amount: 10, started_at: '2026-01-31', billing_day: 31 }),
+        new Date(2026, 3, 15),
+      ),
+    ).toBe('2026-04-30');
+  });
+
   it('advances weekly cycles to the next due date, inclusive of today', () => {
     expect(
       calculateNextBillingDate(

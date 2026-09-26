@@ -1,4 +1,5 @@
 import type { WYQDTranslationKey } from '@/core/i18n';
+import { calendarDaysBetween, todayLocalISO } from '@/domain/date';
 
 type TranslateFn = (key: WYQDTranslationKey) => string;
 
@@ -151,10 +152,7 @@ export function migrateReviewEntry(review: Record<string, unknown>): Record<stri
 }
 
 export function daysUntil(date: string): number {
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const end = new Date(`${date}T00:00:00`).getTime();
-  return Math.round((end - start) / 86400000);
+  return calendarDaysBetween(todayLocalISO(), date) ?? Number.NaN;
 }
 
 export function formatDueLabel(date: string, t: TranslateFn): string {
@@ -166,7 +164,7 @@ export function formatDueLabel(date: string, t: TranslateFn): string {
 }
 
 export function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  return todayLocalISO();
 }
 
 export function buildSparklinePoints(values: number[]): string {

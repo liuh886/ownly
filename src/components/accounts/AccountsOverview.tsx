@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type {
@@ -15,9 +15,7 @@ import type { WYQDStoredEntity } from '@/core/repository';
 import { buildSparklinePoints, todayISO } from '@/lib/format';
 import { useFormatMoney } from '@/lib/use-format';
 import {
-  parseBalanceLines,
-  hasInvalidBalanceLines,
-  hasInvalidDueDateLines,
+  parseBalanceLinesWithIssues,
   serializeBalanceLines,
   groupRecurringCostsByAccount,
   createSnapshotDraft,
@@ -46,12 +44,17 @@ export function AccountsOverview({
   const { t } = useI18n();
   const { formatMoney, formatCompactMoney } = useFormatMoney();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const calculatedSnapshots = snapshots.map((stored) => ({
-    ...stored,
-    entity: calculateNetWorth(stored.entity),
-  }));
-  const snapshotEntities = calculatedSnapshots.map((stored) => stored.entity);
-  const latest = findLatestSnapshot(snapshotEntities);
+  const calculatedSnapshots = useMemo(
+    () => snapshots.map((stored) => ({
+      ...stored,
+      entity: calculateNetWorth(stored.entity),
+    })),
+    [snapshots],
+  );
+  const latest = useMemo(
+    () => findLatestSnapshot(calculatedSnapshots.map((stored) => stored.entity)),
+    [calculatedSnapshots],
+  );
   const latestAssetBalancesText = latest ? serializeBalanceLines(latest.asset_balances) : '';
   const latestLiabilityBalancesText = latest ? serializeBalanceLines(latest.liability_balances) : '';
   const recurringAccountGroups = groupRecurringCostsByAccount(objects, t('noData'), t);
@@ -63,8 +66,11 @@ export function AccountsOverview({
     ? latest.asset_balances.length + latest.liability_balances.length
     : 0;
   const annualFixedCost = totalMonthlyFixedCost * 12;
-  const sorted = [...calculatedSnapshots].sort((a, b) =>
-    b.entity.snapshot_at.localeCompare(a.entity.snapshot_at),
+  const sorted = useMemo(
+    () => [...calculatedSnapshots].sort((a, b) =>
+      b.entity.snapshot_at.localeCompare(a.entity.snapshot_at),
+    ),
+    [calculatedSnapshots],
   );
   const previousNetWorthDelta =
     sorted.length > 1
@@ -86,15 +92,20 @@ export function AccountsOverview({
   const displayedLiabilityBalancesText = isUsingLatestSnapshotPrefill
     ? latestLiabilityBalancesText
     : liabilityBalancesText;
-  const parsedAssetBalances = parseBalanceLines(displayedAssetBalancesText, 'asset');
-  const parsedLiabilityBalances = parseBalanceLines(displayedLiabilityBalancesText, 'liability');
-  const hasInvalidAssetLines = hasInvalidBalanceLines(displayedAssetBalancesText, 'asset');
-  const hasInvalidLiabilityLines = hasInvalidBalanceLines(displayedLiabilityBalancesText, 'liability');
-  const hasInvalidLiabilityDate = hasInvalidDueDateLines(displayedLiabilityBalancesText);
-  const trendSnapshots = [...calculatedSnapshots]
-    .sort((a, b) => a.entity.snapshot_at.localeCompare(b.entity.snapshot_at))
-    .slice(-12)
-    .map((stored) => stored.entity);
+  const assetLineParse = parseBalanceLinesWithIssues(displayedAssetBalancesText, 'asset');
+  const liabilityLineParse = parseBalanceLinesWithIssues(displayedLiabilityBalancesText, 'liability');
+  const parsedAssetBalances = assetLineParse.balances;
+  const parsedLiabilityBalances = liabilityLineParse.balances;
+  const hasInvalidAssetLines = assetLineParse.hasInvalidLines;
+  const hasInvalidLiabilityLines = liabilityLineParse.hasInvalidLines;
+  const hasInvalidLiabilityDate = liabilityLineParse.hasInvalidDueDate;
+  const trendSnapshots = useMemo(
+    () => [...calculatedSnapshots]
+      .sort((a, b) => a.entity.snapshot_at.localeCompare(b.entity.snapshot_at))
+      .slice(-12)
+      .map((stored) => stored.entity),
+    [calculatedSnapshots],
+  );
   const trendValues = trendSnapshots.map((snapshot) => snapshot.net_worth || 0);
   const trendPoints = buildSparklinePoints(trendValues);
 

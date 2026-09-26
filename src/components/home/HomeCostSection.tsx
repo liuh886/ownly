@@ -55,10 +55,13 @@ export function HomeCostSection({
     [snapshots],
   );
   const trendDates = trendSnapshots.map((snapshot) => snapshot.snapshot_at);
-  const subscriptionTrendValues = trendSnapshots.map((snapshot, index) =>
-    index === trendSnapshots.length - 1
-      ? metrics.monthlyFixedCost
-      : snapshot.monthly_fixed_cost ?? metrics.monthlyFixedCost,
+  const subscriptionTrend = useMemo(
+    () => trendSnapshots
+      .map((snapshot) => ({ date: snapshot.snapshot_at, value: snapshot.monthly_fixed_cost }))
+      .filter((point): point is { date: string; value: number } =>
+        typeof point.value === 'number' && Number.isFinite(point.value),
+      ),
+    [trendSnapshots],
   );
   const dailyCostTrendValues = useMemo(() => {
     const values = buildDailyCostTrend(objects, trendSnapshots.map((snapshot) => snapshot.snapshot_at));
@@ -82,21 +85,15 @@ export function HomeCostSection({
             </div>
           }
           back={(active) => (
-            <div className={`${CARD_CLASS} flex h-full flex-col`}>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-xs font-medium text-stone-500">{t('dailyCostAvg')}</span>
-                <span className="text-[10px] text-stone-400">{t('backcastFromCurrentItems')}</span>
-              </div>
-              <div className="mt-1 min-h-0 flex-1">
-                <MetricTrendChart
-                  active={active}
-                  values={dailyCostTrendValues}
-                  dates={trendDates}
-                  stroke="#1c1917"
-                  formatValue={(value) => formatCompactMoney(value)}
-                  emptyLabel={t('trendNeedsMoreSnapshots')}
-                />
-              </div>
+            <div className="h-full w-full overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
+              <MetricTrendChart
+                active={active}
+                values={dailyCostTrendValues}
+                dates={trendDates}
+                stroke="#1c1917"
+                formatValue={(value) => formatCompactMoney(value)}
+                emptyLabel={t('trendNeedsMoreSnapshots')}
+              />
             </div>
           )}
         />
@@ -110,20 +107,15 @@ export function HomeCostSection({
             </div>
           }
           back={(active) => (
-            <div className={`${CARD_CLASS} flex h-full flex-col`}>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-xs font-medium text-stone-500">{t('monthlyFixedCostAvg')}</span>
-              </div>
-              <div className="mt-1 min-h-0 flex-1">
-                <MetricTrendChart
-                  active={active}
-                  values={subscriptionTrendValues}
-                  dates={trendDates}
-                  stroke="#f59e0b"
-                  formatValue={(value) => formatCompactMoney(value)}
-                  emptyLabel={t('trendNeedsMoreSnapshots')}
-                />
-              </div>
+            <div className="h-full w-full overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
+              <MetricTrendChart
+                active={active}
+                values={subscriptionTrend.map((point) => point.value)}
+                dates={subscriptionTrend.map((point) => point.date)}
+                stroke="#f59e0b"
+                formatValue={(value) => formatCompactMoney(value)}
+                emptyLabel={t('trendNeedsMoreSnapshots')}
+              />
             </div>
           )}
         />

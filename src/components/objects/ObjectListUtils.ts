@@ -1,6 +1,11 @@
 import type { WYQDObject, PhysicalObject, RecurringCostObject, OneTimeExperienceObject, PhysicalStatus } from '@/domain/types';
 import type { ObjectStatusGroupFilter, ObjectTypeFilter } from './useObjectFilterSort';
-import { calculatePhysicalAcquisitionCost, calculatePhysicalDailyCost, calculateRecurringMonthlyCost } from '@/domain/calculations';
+import {
+  calculateExperienceCost,
+  calculatePhysicalAcquisitionCost,
+  calculatePhysicalDailyCost,
+  calculateRecurringMonthlyCost,
+} from '@/domain/calculations';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { formatMoney, formatOptional, todayISO } from '@/lib/format';
 
@@ -104,7 +109,7 @@ export function getPrimaryAmount(object: WYQDObject): number {
   if (object.object_type === 'recurring_cost') {
     return object.billing_amount || 0;
   }
-  return object.budget_total || object.actual_total || 0;
+  return calculateExperienceCost(object);
 }
 
 export function getDailyCost(object: WYQDObject): number | null {

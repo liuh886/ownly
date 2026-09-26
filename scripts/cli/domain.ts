@@ -2,10 +2,14 @@ import type {
   BillingCycle,
   ObjectLogEventType,
   PhysicalStatus,
-  RecurringCostObject,
   ReviewEntry,
   WYQDObject,
 } from '../../src/domain/types';
+import {
+  calculateNextBillingDate,
+  calculateRecurringMonthlyCost,
+} from '../../src/domain/calculations';
+import { calendarDaysBetween, todayLocalISO } from '../../src/domain/date';
 import { CliError, type AgentObjectRow, type ObjectEntry, type ReviewEntryFile } from './types';
 
 const PHYSICAL_STATUS_ALIASES: Record<string, PhysicalStatus> = {
@@ -28,12 +32,10 @@ const PHYSICAL_STATUS_ALIASES: Record<string, PhysicalStatus> = {
   '已丢弃': 'discarded',
 };
 
-export function todayISO(now = new Date()): string {
-  return now.toISOString().split('T')[0];
-}
+export const todayISO = todayLocalISO;
 
 export function nowId(now = new Date()): string {
-  return `${todayISO(now).replaceAll('-', '')}_${now.getTime()}`;
+  return `${todayLocalISO(now).replaceAll('-', '')}_${now.getTime()}`;
 }
 
 export function slugify(input: string): string {
@@ -77,97 +79,12 @@ export function calculateAnnualizedCost(amount: number, cycle: BillingCycle): nu
   return amount * 12;
 }
 
-export function calculateMonthlyCost(recurring: RecurringCostObject): number {
-  const amount = recurring.billing_amount ?? 0;
-  if (recurring.billing_cycle === 'weekly') return (amount * 52) / 12;
-  if (recurring.billing_cycle === 'quarterly') return amount / 3;
-  if (recurring.billing_cycle === 'annual') return amount / 12;
-  if (recurring.billing_cycle === 'custom') return (recurring.annualized_cost ?? 0) / 12;
-  return amount;
-}
+export const calculateMonthlyCost = calculateRecurringMonthlyCost;
 
-function parseLocalDate(value: string | undefined): Date | undefined {
-  if (!value) return undefined;
-  const [year, month, day] = value.split('-').map(Number);
-  if (!year || !month || !day) return undefined;
-  return new Date(year, month - 1, day);
-}
+export { calculateNextBillingDate };
 
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function clampDay(year: number, monthIndex: number, day: number): number {
-  return Math.min(day, new Date(year, monthIndex + 1, 0).getDate());
-}
-
-function addMonths(date: Date, months: number): Date {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-}
-
-export function calculateNextBillingDate(
-  recurring: RecurringCostObject,
-  today = new Date(),
-): string | undefined {
-  if (recurring.status !== 'active' || recurring.billing_cycle === 'custom') return undefined;
-
-  const start = parseLocalDate(recurring.started_at ?? recurring.created_at) ?? today;
-  const normalizedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-  if (recurring.billing_cycle === 'weekly') {
-    const next = new Date(start);
-    while (next < normalizedToday) next.setDate(next.getDate() + 7);
-    return formatDate(next);
-  }
-
-  const day = recurring.billing_day ?? start.getDate();
-  if (recurring.billing_cycle === 'annual') {
-    const monthIndex = start.getMonth();
-    let next = new Date(
-      normalizedToday.getFullYear(),
-      monthIndex,
-      clampDay(normalizedToday.getFullYear(), monthIndex, day),
-    );
-    if (next < normalizedToday) {
-      next = new Date(
-        normalizedToday.getFullYear() + 1,
-        monthIndex,
-        clampDay(normalizedToday.getFullYear() + 1, monthIndex, day),
-      );
-    }
-    return formatDate(next);
-  }
-
-  const interval = recurring.billing_cycle === 'quarterly' ? 3 : 1;
-  let next = new Date(
-    start.getFullYear(),
-    start.getMonth(),
-    clampDay(start.getFullYear(), start.getMonth(), day),
-  );
-  while (next < normalizedToday) {
-    const advanced = addMonths(next, interval);
-    next = new Date(
-      advanced.getFullYear(),
-      advanced.getMonth(),
-      clampDay(advanced.getFullYear(), advanced.getMonth(), day),
-    );
-  }
-  return formatDate(next);
-}
-
-export function daysBetween(fromDate: Date, toDate: string): number {
-  const start = new Date(
-    fromDate.getFullYear(),
-    fromDate.getMonth(),
-    fromDate.getDate(),
-  ).getTime();
-  const end = new Date(`${toDate}T00:00:00`).getTime();
-  return Math.round((end - start) / 86_400_000);
+export function daysBetween(fromDate: Date, toDate: string): number | null {
+  return calendarDaysBetween(todayLocalISO(fromDate), toDate);
 }
 
 export function formatAgentRow(

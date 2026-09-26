@@ -6,7 +6,6 @@ const zhSubscriptionKeys = [
   'monthlyFixedCost',
   'monthlyFixedCostAvg',
   'largestMonthlyFixedCost',
-  'fixedCostCoverage',
   'fixedCostHistory',
   'filterRecurringCost',
   'typeRecurringCost',

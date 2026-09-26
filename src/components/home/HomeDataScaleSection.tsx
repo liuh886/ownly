@@ -4,6 +4,7 @@ import { useI18n } from '@/core/i18n-context';
 import { useFormatMoney } from '@/lib/use-format';
 import { SECTION_TITLE_CLASS, MUTED_TEXT_CLASS } from '@/lib/ui-constants';
 import type { HomeMetrics, WYQDObject, AccountSnapshot, PhysicalObject, OneTimeExperienceObject } from '@/domain/types';
+import { calculateExperienceCost, calculatePhysicalAcquisitionCost } from '@/domain/calculations';
 
 export function HomeDataScaleSection({
   metrics,
@@ -26,20 +27,14 @@ export function HomeDataScaleSection({
   const totalAcquisitionCost = useMemo(
     () => objects
       .filter((o): o is PhysicalObject => o.object_type === 'physical')
-      .reduce((sum, o) => sum + (o.purchase_price || 0), 0),
+      .reduce((sum, o) => sum + calculatePhysicalAcquisitionCost(o), 0),
     [objects],
   );
   const totalExperienceCost = useMemo(
     () => objects
       .filter((o): o is OneTimeExperienceObject => o.object_type === 'one_time_experience')
-      .reduce((sum, o) => sum + (o.actual_total || o.budget_total || 0), 0),
+      .reduce((sum, o) => sum + calculateExperienceCost(o), 0),
     [objects],
-  );
-  const fixedCostCoverage = useMemo(
-    () => metrics.netWorth && metrics.monthlyFixedCost > 0
-      ? Math.floor(metrics.netWorth / metrics.monthlyFixedCost)
-      : null,
-    [metrics.netWorth, metrics.monthlyFixedCost],
   );
 
   return (
@@ -51,39 +46,35 @@ export function HomeDataScaleSection({
         </span>
       </div>
       <div className="rounded-xl bg-stone-50/50 p-6">
-        <div className="grid grid-cols-2 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
           <div>
             <div className="text-xs font-medium text-stone-500">{t('physical')}</div>
             <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{physicalCount}</div>
+            <div className="mt-2 border-t border-stone-200/70 pt-2">
+              <div className="text-[11px] text-stone-500">{t('totalAcquisitionCost')}</div>
+              <div className="font-mono text-sm font-medium text-stone-900">{formatCompactMoney(totalAcquisitionCost)}</div>
+            </div>
           </div>
           <div>
             <div className="text-xs font-medium text-stone-500">{t('fixedCost')}</div>
             <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{recurringCount}</div>
+            <div className="mt-2 border-t border-stone-200/70 pt-2">
+              <div className="text-[11px] text-stone-500">{t('totalSubscriptionCost')}</div>
+              <div className="font-mono text-sm font-medium text-stone-900">{formatCompactMoney(metrics.monthlyFixedCost)}</div>
+            </div>
           </div>
           <div>
             <div className="text-xs font-medium text-stone-500">{t('experience')}</div>
             <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{experienceCount}</div>
+            <div className="mt-2 border-t border-stone-200/70 pt-2">
+              <div className="text-[11px] text-stone-500">{t('totalExperienceCost')}</div>
+              <div className="font-mono text-sm font-medium text-stone-900">{formatCompactMoney(totalExperienceCost)}</div>
+            </div>
           </div>
           <div>
             <div className="text-xs font-medium text-stone-500">{t('accountSnapshot')}</div>
             <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{snapshots.length}</div>
           </div>
-          <div>
-            <div className="text-xs font-medium text-stone-500">{t('totalAcquisitionCost')}</div>
-            <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{formatCompactMoney(totalAcquisitionCost)}</div>
-          </div>
-          <div>
-            <div className="text-xs font-medium text-stone-500">{t('totalExperienceCost')}</div>
-            <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">{formatCompactMoney(totalExperienceCost)}</div>
-          </div>
-          {fixedCostCoverage !== null ? (
-            <div>
-              <div className="text-xs font-medium text-stone-500">{t('fixedCostCoverage')}</div>
-              <div className="mt-1 font-mono text-xl tracking-tight text-stone-900">
-                {fixedCostCoverage} <span className="text-xs font-medium text-stone-500">{t('monthsUnit')}</span>
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
     </motion.section>
