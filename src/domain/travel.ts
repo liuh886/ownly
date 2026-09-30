@@ -233,6 +233,39 @@ export const COUNTRY_NAMES: Record<string, string> = {
   ZM: 'Zambia', ZW: 'Zimbabwe', HK: 'Hong Kong', MO: 'Macau', PS: 'Palestine', XK: 'Kosovo',
 };
 
+const HAN_REGEX = /[一-鿿㐀-䶿]/;
+const KANA_REGEX = /[぀-ゟ゠-ヿ]/;
+const HANGUL_REGEX = /[가-힯ᄀ-ᇿ]/;
+
+type CjkScript = 'han' | 'kana' | 'hangul' | 'none';
+
+export function cjkScript(value: string): CjkScript {
+  if (HAN_REGEX.test(value)) return 'han';
+  if (KANA_REGEX.test(value)) return 'kana';
+  if (HANGUL_REGEX.test(value)) return 'hangul';
+  return 'none';
+}
+
+/**
+ * The bundled `cities.json` stores one CJK name per city, taken from GeoNames
+ * alternate names. Where a city has a Japanese reading but no Chinese one, that
+ * stored name is Japanese. Showing it to someone searching in Chinese is worse
+ * than showing nothing, so a CJK name is only displayed when it is written in
+ * the same script as the query.
+ *
+ * Matching is unaffected — a Han query still matches a Han `cn`.
+ */
+export function cityDisplayName(
+  entry: { n: string; c: string; cn?: string },
+  query: string,
+): string {
+  const queryScript = cjkScript(query);
+  if (queryScript !== 'none' && entry.cn && cjkScript(entry.cn) === queryScript) {
+    return `${entry.cn} (${entry.n}), ${entry.c}`;
+  }
+  return `${entry.n}, ${entry.c}`;
+}
+
 export async function searchCities(query: string, limit = 10): Promise<CitySearchResult[]> {
   if (!query.trim()) return [];
   const q = query.trim().toLowerCase();
@@ -260,21 +293,12 @@ export async function searchCities(query: string, limit = 10): Promise<CitySearc
 
   matches.sort((a, b) => b.score - a.score || cityDatabase.indexOf(a.entry) - cityDatabase.indexOf(b.entry));
 
-  const hasCJKQuery = /[一-鿿぀-ゟ゠-ヿ가-힯]/.test(query);
-
-  return matches.slice(0, limit).map(({ entry }) => {
-    const country = COUNTRY_NAMES[entry.c] || entry.c;
-    const displayName = hasCJKQuery && entry.cn
-      ? `${entry.cn} (${entry.n}), ${entry.c}`
-      : `${entry.n}, ${entry.c}`;
-
-    return {
-      name: entry.n,
-      country,
-      countryCode: entry.c,
-      latitude: entry.la,
-      longitude: entry.lo,
-      displayName,
-    };
-  });
+  return matches.slice(0, limit).map(({ entry }) => ({
+    name: entry.n,
+    country: COUNTRY_NAMES[entry.c] || entry.c,
+    countryCode: entry.c,
+    latitude: entry.la,
+    longitude: entry.lo,
+    displayName: cityDisplayName(entry, query),
+  }));
 }

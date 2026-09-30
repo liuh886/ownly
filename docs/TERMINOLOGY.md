@@ -55,11 +55,17 @@ When documenting personal cloud folders, recommend keeping the selected folder a
 | Change data folder | 更换数据目录 | Replace the currently selected browser directory |
 | Data folder connected | 数据目录已连接 | Web/PWA has read/write access to the selected location |
 | Demo mode | 演示模式 | No real Ownly data folder is connected; demo content is not the source of truth |
+| Sample Trip | 示例行程 | A complete itinerary shipped with Ownly that the user may load explicitly; once loaded it is an ordinary, editable, deletable trip. See `docs/SAMPLE_TRIPS.md` |
 | Archive | 归档 | Recoverable removal from active records |
 | Restore | 恢复 | Return an archived record to active storage |
 | Permanently delete | 永久删除 | Irreversible deletion of an archived record |
 
 Do not use **Delete** for a recoverable archive action. Do not use **Archive** for irreversible deletion.
+
+Do not describe a Sample Trip as demo data, a demo trip, or a sample record. It is
+an ordinary trip that the user chose to start from. Reserve "demo" for Demo mode
+and for illustrative figures inside a Sample Trip, which must be described as
+published standard prices rather than live observations.
 
 ## Domain terms
 

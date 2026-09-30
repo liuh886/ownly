@@ -1,5 +1,33 @@
 # Ownly — Task Progress & Review
 
+## Completed: 降低上手难度 — 示例行程 + 统一首启引导 (2026-09-30)
+
+**起因**：新用户选了存储位置之后，屏幕上没有任何真实内容 —— Planner 空状态只有一个标题和一个按钮，费用/地图/时间线全是空面板；同时首启路径上有 3 个互相竞争的弹窗（存储 / Capture 讲解 / 第一个对象），两个争抢同一个空状态。
+
+- [x] **三份示例行程**（`src/data/sample-trips/`）：泰国 6 日（曼谷·清迈·昆明，13 地点）、中国 8 日（北京·西安·重庆·成都，18 地点）、日本关西 6 日（大阪·京都·奈良，12 地点）。每天 ≤3 个点，每份带 3 个研究池候选。
+  - 日历约束是算出来的：泰国 D2 落周日才能排恰图恰（清迈周日夜市因此留在研究池，因示例在清迈是周二）；陕历博排周日而非周一（12-07 是周一，馆周一闭馆）；USJ 留研究池标 `reservation_status: 'needed'`。
+  - 泰国 D5/D6 设 `day_timezones: Asia/Shanghai`（昆明 UTC+8 vs 曼谷 UTC+7），演示按天时区覆盖。
+  - 费用账本：每份 10-11 笔，多币种 + AA 分摊。`ownly.trip.bundle` 按设计排除 expenses/members（防分享者账本泄漏），`loadSampleTrip` 导入后补回 —— **测试抓到过一次顺序错误**：最初在 `instantiateTripBundle` 之前补 members，而它会再剥一次。
+  - 不编造 `source_place_id`（假 Place ID 会变成强身份证据，日后可能自动合并两个场馆）；`source_url` 用可解析的 Google Maps 搜索链接。
+- [x] **数据质量门**（`sample-trips.test.ts` 52 项）：每天必须 `status === 'feasible'`（0 时间重叠/0 交通冲突/0 营业时间告警/负荷不 heavy/午晚餐 ≥45min 空档）、Doctor 0 error 0 warning、连续两站必须有 leg、地点全部解析到行程目的地。
+- [x] **懒加载**：registry 只存元数据，三份行程各为独立 dynamic chunk。已验证 `/app/index.html` 引用的 chunk 不含任何行程数据。
+- [x] **Planner 空状态**：三张卡片 + 三步导览（地图 → 排期 → 费用），并写明「点选前不写入任何内容」；`CreateTripModal`「暂无行程」接同一入口；导入后带 🧪 标记。
+- [x] **首启路径合并**：`src/core/first-run.ts` 成为唯一权威，返回**单个** step；`CaptureOnboarding.tsx` 删除，两个弹窗合成一个两步行走。已看过讲解的用户直达下一步；载入示例行程即视为 setup 完成。
+- [x] **Planner 埋点**：`sample_trip_loaded`（key 用 `SAMPLE_TRIP_IDS` 枚举，非用户数据）、`first_trip_created`、`first_day_scheduled`。
+- [x] **表单降噪**：新建行程的时区设置折叠为可选区块（只影响日历导出），按天时区覆盖收进其内。
+- [x] **顺带修的真 bug**：
+  - `inferPlaceCity` 补 18 个中国/日本城市（原来北京、西安、大阪、奈良全落 `未分类城市`）。
+  - `validate-analytics.mjs` 重复维护 allowlist（必然漂移）→ 改为解析 `src/lib/analytics.ts`；且原本把 `trackFirstEver` 的**第一个参数**（localStorage flag）当事件名校验。已做反向验证（注入假事件名仍会 fail）。
+  - `build-cities.mjs` 的 CJK 正则含日文假名 → `cn` 优先取日文名（曼谷显示成 `バンコク`）。
+- [x] **治理与文档**：`PRODUCT_GOVERNANCE.md` 增 Sample Trip 专章（显式点击、载入即普通行程、同一导入路径、仅聚合埋点）；`TERMINOLOGY.md` 增术语「示例行程」并禁止称其为 demo data；`docs/SAMPLE_TRIPS.md` 新建；`USER_GUIDE.md` / `PHASE1_ONBOARDING_SPEC.md` / `RELEASE_CHECKLIST.md` / `ANALYTICS_EVENTS.md` 同步；`validate-terminology.mjs` 门禁覆盖新增 copy 文件（19 个文件）。
+- [x] **验证**：`tsc` / `lint` / `validate:terminology` / `validate:analytics` / `validate:runtime-parity` / `validate:membership` 全绿；`npm test` **1084 用例通过**（原 1045）；`npm run build` + `validate:pages` + bundle 预算通过；`check:obsidian` / obsidian lint / extension manifest 通过。
+  - `/app/` 打包 358.4 KB（超原预算 2 KB）→ 上调至 372 KB 并在 `bundle-budgets.json` 记 `note` 理由，校验器会打印。
+
+**未竟事项**：
+- [ ] `cities.json` 的**中文搜索召回**仍受限（搜「曼谷」搜不到）。生成脚本已修、错误文种不再显示，但需拿 GeoNames 原始文件重新生成才能根治。
+- [ ] 示例行程日期固定，最晚 2027-01 后全部成为历史行程。`npm run check:sample-dates` 是**报告不是门禁**（故意不挂 `validate`，否则过日期 CI 会突然红），已写进 `RELEASE_CHECKLIST.md`。
+- [ ] 可用性测试：3 名真实新用户能否复述「收集→整理→规划」并说清示例行程是什么。
+
 ## Completed: Frontend taste / detail / efficiency pass — Phases 0-4 (2026-09-18)
 
 - [x] **Phase 0 基线**：WIP（Sheet + 移动端输入下限）门禁全绿后落为分支 `feat/frontend-polish-efficiency` 首提交。

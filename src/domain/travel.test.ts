@@ -3,6 +3,8 @@ import {
   buildTravelMapPoints,
   buildTravelSummary,
   calculateDaysBetween,
+  cityDisplayName,
+  cjkScript,
   countryCodeToFlag,
   getTravelExperiences,
   getTravelReviewStats,
@@ -156,5 +158,55 @@ describe('buildTravelSummary', () => {
     expect(summary.totalTrips).toBe(3);
     expect(summary.totalSpend).toBe(300);
     expect(summary.countries.sort()).toEqual(['Japan', 'Thailand']);
+  });
+});
+
+describe('cjkScript', () => {
+  it('classifies each CJK writing system', () => {
+    expect(cjkScript('北京')).toBe('han');
+    expect(cjkScript('バンコク')).toBe('kana');
+    expect(cjkScript('서울')).toBe('hangul');
+    expect(cjkScript('Tokyo')).toBe('none');
+    expect(cjkScript('')).toBe('none');
+  });
+
+  it('treats a Han-plus-kana name as Han, which is what the query language means', () => {
+    expect(cjkScript('東京')).toBe('han');
+  });
+});
+
+describe('cityDisplayName', () => {
+  // Fixtures are the real rows in src/data/cities.json.
+  //
+  // The file stores one CJK name per city, taken from GeoNames alternate names
+  // in arbitrary order, so a city can end up holding a Japanese reading. Where
+  // that reading is written in kana (Bangkok → バンコク) the script guard below
+  // catches it. A Japanese reading written in kanji (東京 vs 东京) is
+  // indistinguishable from the Chinese one by script alone — that case is fixed
+  // at the source, in scripts/build-cities.mjs, and needs a data regeneration.
+  const bangkok = { n: 'Bangkok', c: 'TH', cn: 'バンコク' };
+  const beijing = { n: 'Beijing', c: 'CN', cn: '北京' };
+  const tokyo = { n: 'Tokyo', c: 'JP', cn: '东京' };
+
+  it('shows the CJK name when it is written in the query script', () => {
+    expect(cityDisplayName(beijing, '北京')).toBe('北京 (Beijing), CN');
+    expect(cityDisplayName(tokyo, '东京')).toBe('东京 (Tokyo), JP');
+  });
+
+  it('falls back to the ASCII name rather than showing a kana name to a Han query', () => {
+    expect(cityDisplayName(bangkok, '曼谷')).toBe('Bangkok, TH');
+  });
+
+  it('shows a kana name to a kana query', () => {
+    expect(cityDisplayName(bangkok, 'バンコク')).toBe('バンコク (Bangkok), TH');
+  });
+
+  it('always uses the ASCII name for a non-CJK query', () => {
+    expect(cityDisplayName(beijing, 'Beijing')).toBe('Beijing, CN');
+    expect(cityDisplayName(bangkok, 'bangkok')).toBe('Bangkok, TH');
+  });
+
+  it('uses the ASCII name when no CJK name was stored', () => {
+    expect(cityDisplayName({ n: 'Lisbon', c: 'PT' }, '里斯本')).toBe('Lisbon, PT');
   });
 });

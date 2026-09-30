@@ -94,7 +94,7 @@ for (const route of routes) {
     console.error(`route ${route}: ${missing} referenced asset(s) missing from out/`);
     process.exit(1);
   }
-  rows.push({ route, js, css, jsBudget: budget.jsGzip, cssBudget: budget.cssGzip });
+  rows.push({ route, js, css, jsBudget: budget.jsGzip, cssBudget: budget.cssGzip, note: budget.note });
   if (!reportOnly && (jsOver || cssOver)) failed = true;
 }
 
@@ -105,6 +105,7 @@ for (const row of rows) {
   const cssPart = `${kb(row.css)}${row.cssBudget !== undefined ? ` / ${kb(row.cssBudget)}` : ''}`;
   const over = (row.jsBudget !== undefined && row.js > row.jsBudget) || (row.cssBudget !== undefined && row.css > row.cssBudget);
   console.log(`  ${row.route.padEnd(7)} JS ${jsPart}${over ? '  ← over budget' : ''}   CSS ${cssPart}`);
+  if (row.note) console.log(`          ↳ ${row.note}`);
 }
 
 if (reportOnly) {

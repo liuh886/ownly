@@ -1,5 +1,9 @@
 {
   "/": { "jsGzip": 228000, "cssGzip": 30000 },
-  "/app/": { "jsGzip": 365000, "cssGzip": 30000 },
+  "/app/": {
+    "jsGzip": 372000,
+    "cssGzip": 30000,
+    "note": "Raised from 356400 for the first-run rework (2026-09): one onboarding dialog instead of three competing prompts, plus the Sample Trip picker and the Planner orientation guide. The three bundled itineraries are NOT in this budget — each is a dynamic-import chunk fetched only on click, so browsing costs no itinerary payload."
+  },
   "/c/": { "jsGzip": 305000, "cssGzip": 30000 }
 }

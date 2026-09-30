@@ -10,9 +10,12 @@ const files = [
   'docs/WEB_RUNTIME.md',
   'docs/USER_GUIDE.md',
   'docs/RELEASE_CHECKLIST.md',
+  'docs/SAMPLE_TRIPS.md',
   'src/app/page.tsx',
   'src/core/terminology.ts',
   'src/core/first-object-copy.ts',
+  'src/core/first-run-copy.ts',
+  'src/core/sample-trip-copy.ts',
   'src/core/local-data-copy.ts',
   'src/components/data-safety/DataSafetyButton.tsx',
   'src/components/marketing/MarketingHome.tsx',
@@ -97,6 +100,13 @@ const requiredByFile = {
     'personal cloud-synced local folder',
     'One Ownly data folder, one sync provider',
     'Ownly-managed cloud synchronization',
+    'without silently writing demo data',
+  ],
+  'docs/SAMPLE_TRIPS.md': [
+    'Sample Trip',
+    '示例行程',
+    'no silent demo writes',
+    'ownly.trip.bundle',
   ],
   'docs/WEB_RUNTIME.md': [
     'On this device',
@@ -129,6 +139,18 @@ const requiredByFile = {
   'src/core/first-object-copy.ts': [
     "title: 'Subscription'",
     "title: '订阅'",
+  ],
+  // The first-run guide owns the one-sentence product model and the promise
+  // that a first record is not demo data.
+  'src/core/first-run-copy.ts': [
+    "modelTitle: 'Collect → Curate → Plan'",
+    "modelTitle: '收集 → 整理 → 规划'",
+    '而不是演示数据',
+  ],
+  'src/core/sample-trip-copy.ts': [
+    "badge: 'Sample Trip'",
+    "badge: '示例行程'",
+    '示例行程就是普通行程',
   ],
   'src/core/local-data-copy.ts': [
     "title: 'Choose where your Ownly files live'",

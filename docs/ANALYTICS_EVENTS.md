@@ -18,6 +18,13 @@ Enforcement: `src/lib/analytics.ts` (runtime allowlist) +
 | `backup_validated` | — | An imported backup validates. First-ever only |
 | `pwa_installed` | — | `appinstalled` fires |
 | `app_return` | `gap: 1d \| 7d \| 30d \| 90d+` | Returning visit; gap bucket computed locally from last-visit date |
+| `sample_trip_loaded` | `id: sample-thailand-6d \| sample-china-8d \| sample-kansai-6d` | User clicks a Sample Trip card and the import succeeds |
+| `first_trip_created` | `source: manual \| sample \| share` | A trip appears for the first time. First-ever only |
+| `first_day_scheduled` | — | First visit is added to a day. First-ever only |
+
+`sample_trip_loaded.id` is a fixed enum from `SAMPLE_TRIP_IDS`
+(`src/data/sample-trips/registry.ts`) — a shipped identifier, never anything
+derived from the user's own data.
 
 First-ever semantics are enforced with a `localStorage` flag (`ownly_ev_*`)
 that never leaves the device.
@@ -45,5 +52,9 @@ tool results.
    `onboarding_opened` → `local_data_connected` → `first_object_saved` →
    `backup_exported` → `app_return`.
 3. Secondary path: `demo_started` → `local_data_connected`.
-4. Breakdowns: `action` (create vs connect), `gap` (return recency),
-   `surface`. No user-scoped dimensions — analysis stays aggregate.
+4. Planner path: `onboarding_opened` → `local_data_connected` →
+   `sample_trip_loaded` → `first_trip_created` → `first_day_scheduled`.
+   Break down by `id` to see which Sample Trip leads onward, and by `source`
+   to compare sample-led against manual activation.
+5. Breakdowns: `action` (create vs connect), `gap` (return recency),
+   `surface`, `source`. No user-scoped dimensions — analysis stays aggregate.

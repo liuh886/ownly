@@ -10,8 +10,12 @@ import type { FirstObjectChoice } from '@/core/first-object-copy';
 import {
   FIRST_OBJECT_COMPLETED_KEY,
   FIRST_OBJECT_DISMISSED_KEY,
-  shouldPromptForFirstObject,
-} from '@/core/first-object-onboarding';
+  LEGACY_CAPTURE_ONBOARDING_KEY,
+  hasSeenCaptureExplainer,
+  resolveFirstRunStep,
+  type FirstRunStep,
+} from '@/core/first-run';
+import { SAMPLE_TRIP_LOADED_KEY } from '@/core/sample-trip';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 
@@ -20,10 +24,8 @@ import { useOwnlyActions } from './useOwnlyActions';
 import { AppHeader } from './AppHeader';
 import { StatusBanner } from './StatusBanner';
 import { TabRenderer, type FirstObjectRequest } from './TabRenderer';
-import {
-  EmptyOwnlyDataBanner,
-  FirstObjectOnboarding,
-} from '@/components/onboarding/FirstObjectOnboarding';
+import { EmptyOwnlyDataBanner } from '@/components/onboarding/FirstObjectOnboarding';
+import { FirstRunGuide } from '@/components/onboarding/FirstRunGuide';
 import { AgentMcpGuide } from '@/components/agent/AgentMcpGuide';
 
 function subscribeOnlineStatus(notify: () => void): () => void {
@@ -66,7 +68,7 @@ export function AppShell() {
   const [objectListFocus, setObjectListFocus] = useState<ObjectListFocus | null>(null);
   const [autoFocusComposer, setAutoFocusComposer] = useState(false);
   const [firstObjectForcedOpen, setFirstObjectForcedOpen] = useState(false);
-  const [firstObjectPromptHandled, setFirstObjectPromptHandled] = useState(false);
+  const [firstRunHandled, setFirstRunHandled] = useState(false);
   const [firstObjectRequest, setFirstObjectRequest] = useState<FirstObjectRequest | undefined>();
   const [agentGuideOpen, setAgentGuideOpen] = useState(false);
 
@@ -76,7 +78,7 @@ export function AppShell() {
     storageSet(FIRST_OBJECT_COMPLETED_KEY, 'true');
     storageSet(FIRST_OBJECT_DISMISSED_KEY, 'false');
     setFirstObjectForcedOpen(false);
-    setFirstObjectPromptHandled(true);
+    setFirstRunHandled(true);
     setFirstObjectRequest(undefined);
   }, [storageSet]);
 
@@ -90,16 +92,24 @@ export function AppShell() {
     },
   );
 
-  const automaticFirstObjectPrompt = runtimeCapabilities.firstObjectOnboarding
-    && shouldPromptForFirstObject({
-      isConnected,
-      dataLoaded: data.dataLoaded,
-      objectCount: data.storedObjects.length,
-      completed: storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true',
-      dismissed: storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true',
-      promptHandled: firstObjectPromptHandled,
-    });
-  const firstObjectOpen = firstObjectForcedOpen || automaticFirstObjectPrompt;
+  // One dialog, one decision point. `resolveFirstRunStep` owns the ordering so
+  // the explainer and the first-record prompt can no longer both fire.
+  const automaticFirstRunStep: FirstRunStep | null =
+    runtimeCapabilities.firstObjectOnboarding
+      ? resolveFirstRunStep({
+          isConnected,
+          dataLoaded: data.dataLoaded,
+          objectCount: data.storedObjects.length,
+          completed: storageGet(FIRST_OBJECT_COMPLETED_KEY) === 'true',
+          dismissed: storageGet(FIRST_OBJECT_DISMISSED_KEY) === 'true',
+          captureExplainerSeen: hasSeenCaptureExplainer(storageGet(LEGACY_CAPTURE_ONBOARDING_KEY)),
+          sampleTripLoaded: storageGet(SAMPLE_TRIP_LOADED_KEY) === 'true',
+        })
+      : null;
+  const firstRunStep = firstObjectForcedOpen
+    ? (firstObjectRequest ? null : ('first-record' as const))
+    : (firstRunHandled ? null : automaticFirstRunStep);
+  const firstRunOpen = firstRunStep !== null;
 
   async function connectVault() {
     clearError();
@@ -109,7 +119,7 @@ export function AppShell() {
   const chooseFirstObject = useCallback((choice: FirstObjectChoice) => {
     const token = Date.now();
     setFirstObjectForcedOpen(false);
-    setFirstObjectPromptHandled(true);
+    setFirstRunHandled(true);
     setFirstObjectRequest({ token, choice });
     setObjectListFocus({ token });
     setAutoFocusComposer(true);
@@ -119,8 +129,19 @@ export function AppShell() {
   const dismissFirstObject = useCallback(() => {
     storageSet(FIRST_OBJECT_DISMISSED_KEY, 'true');
     setFirstObjectForcedOpen(false);
-    setFirstObjectPromptHandled(true);
+    setFirstRunHandled(true);
   }, [storageSet]);
+
+  // A Sample Trip is real content in the user's own folder, so the first-run
+  // guide is satisfied — and the legacy explainer flag is retired.
+  const completeFirstRunViaSample = useCallback(() => {
+    storageSet(SAMPLE_TRIP_LOADED_KEY, 'true');
+    storageSet(FIRST_OBJECT_COMPLETED_KEY, 'true');
+    storageSet(LEGACY_CAPTURE_ONBOARDING_KEY, '1');
+    setFirstObjectForcedOpen(false);
+    setFirstRunHandled(true);
+    void data.loadVaultData();
+  }, [data, storageSet]);
 
   // Bottom-tab switches always restart at the top — otherwise a long list's
   // scroll position leaks into the newly selected tab.
@@ -242,9 +263,11 @@ export function AppShell() {
 
       <BottomNav activeTab={activeTab} onChange={handleTabChange} />
 
-      <FirstObjectOnboarding
-        open={firstObjectOpen}
+      <FirstRunGuide
+        open={firstRunOpen}
+        step={firstRunStep}
         onChoose={chooseFirstObject}
+        onSampleLoaded={completeFirstRunViaSample}
         onDismiss={dismissFirstObject}
       />
       <AgentMcpGuide open={agentGuideOpen} onClose={() => setAgentGuideOpen(false)} />

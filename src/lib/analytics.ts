@@ -32,6 +32,11 @@ export const OWNLY_ANALYTICS_ALLOWLIST: Record<string, readonly string[]> = {
   backup_validated: [],
   pwa_installed: [],
   app_return: ['gap'],
+  // Planner activation. `id` is a fixed enum from SAMPLE_TRIP_IDS, never a
+  // user-derived value, so it stays inside the aggregate-only contract.
+  sample_trip_loaded: ['id'],
+  first_trip_created: ['source'],
+  first_day_scheduled: [],
 };
 
 const KILL_SWITCH_KEY = 'ownly_analytics_disabled';

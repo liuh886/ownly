@@ -7,7 +7,6 @@ import { applyTripFormPatch, listTripDates, resolveTripDestinations, splitTripLi
 import {
   createShareableTripBundle,
   parseTripBundle,
-  instantiateTripBundle,
   tripBundleFileName,
   type OwnlyTripBundle,
 } from '../../domain/trip-bundle';
@@ -18,6 +17,10 @@ import {
   parseTripShareHash,
 } from '../../domain/trip-share-link';
 import { plannerRepository } from '../../services/PlannerRepository';
+import { importTripBundle } from '../../services/importTripBundle';
+import { isSampleTrip } from '@/core/sample-trip';
+import { allSampleTrips } from '@/data/sample-trips/registry';
+import { SampleTripPicker } from './SampleTripPicker';
 import { COMMON_TIMEZONES } from '../../domain/calendar-feed';
 
 /**
@@ -302,14 +305,14 @@ export function CreateTripModal({
     }
     setBusy(true);
     try {
-      const copy = instantiateTripBundle(bundle);
-      const report = await plannerRepository.importBundle(copy);
-      if (report.failed.length > 0) {
-        const failSummary = report.failed.map((f) => f.title).join(', ');
+      const result = await importTripBundle(bundle);
+      const copy = { trip: result.trip };
+      if (result.failedTitles.length > 0) {
+        const failSummary = result.failedTitles.join(', ');
         setImportNotice(
           zh
-            ? `⚠ 已导入「${copy.trip.title}」；${report.failed.length} 项失败：${failSummary}`
-            : `⚠ Imported "${copy.trip.title}"; ${report.failed.length} failed: ${failSummary}`,
+            ? `⚠ 已导入「${copy.trip.title}」；${result.failedTitles.length} 项失败：${failSummary}`
+            : `⚠ Imported "${copy.trip.title}"; ${result.failedTitles.length} failed: ${failSummary}`,
         );
       } else {
         onImported?.(copy.trip.id);
@@ -434,15 +437,33 @@ export function CreateTripModal({
           {tab === 'manage' ? (
             <div className="space-y-3">
               {trips.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-6 text-center text-sm text-stone-500">
-                  {zh ? '暂无行程，去新建一个吧' : 'No trips yet — create one'}
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-6 text-center text-sm text-stone-500">
+                    {zh ? '暂无行程，去新建一个吧' : 'No trips yet — create one'}
+                  </div>
+                  <SampleTripPicker
+                    summaries={allSampleTrips()}
+                    variant="compact"
+                    onLoaded={(tripId) => {
+                      setImportNotice(zh ? '✓ 示例行程已载入。' : '✓ Sample Trip loaded.');
+                      onImported?.(tripId);
+                    }}
+                    onDismiss={() => setImportNotice('')}
+                  />
                 </div>
               ) : (
                 <ul className="max-h-80 space-y-2 overflow-auto pr-1">
                   {trips.map((trip) => (
                     <li key={trip.id} className="flex items-center justify-between gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2.5">
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-stone-900">{trip.title}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-semibold text-stone-900">{trip.title}</span>
+                          {isSampleTrip(trip) ? (
+                            <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                              🧪 {zh ? '示例' : 'Sample'}
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="text-[11px] text-stone-500">{trip.start_date} → {trip.end_date} · {trip.destinations.join(', ')}</div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
@@ -577,62 +598,72 @@ export function CreateTripModal({
                 </div>
               </div>
 
-              {/* Tags */}
-              <div>
-                <label className="block text-xs font-bold text-stone-700">
-                  {zh ? '目的地时区 (日历导出用)' : 'Destination Timezone (for calendar export)'}
-                </label>
-                <select
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
-                >
-                  <option value="">{zh ? '不设置（机票逻辑：时刻即当地时间）' : 'Unset (ticket logic: times are local)'}</option>
-                  {COMMON_TIMEZONES.map((tz) => (
-                    <option key={tz} value={tz}>{tz}</option>
-                  ))}
-                </select>
-                <div className="mt-1 text-[11px] text-stone-500">
+              {/* Advanced — timezone only matters for calendar export, so it
+                  never competes with the four fields a first trip actually needs. */}
+              <details className="rounded-lg border border-stone-200 bg-stone-50/60 px-3 py-2">
+                <summary className="cursor-pointer text-xs font-bold text-stone-700">
                   {zh
-                    ? '就像机票：起飞写北京 08:00、落地写曼谷 12:00，各用各的当地时间。手机切到哪个时区，就按哪个时区读这个数字。设了时区则按 UTC 绝对时刻发射。'
-                    : 'Like a flight ticket: 08:00 departure in Beijing, 12:00 arrival in Bangkok — each in its local time. Set a zone to export absolute UTC instants instead.'}
-                </div>
-              </div>
+                    ? `🌍 时区设置（可选，仅影响日历导出）${timezone || Object.keys(dayTimezones).length > 0 ? ' ·' : ''}`
+                    : `🌍 Timezone settings (optional, calendar export only)${timezone || Object.keys(dayTimezones).length > 0 ? ' ·' : ''}`}
+                </summary>
+                <div className="mt-3 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700">
+                      {zh ? '目的地时区' : 'Destination Timezone'}
+                    </label>
+                    <select
+                      value={timezone}
+                      onChange={(e) => setTimezone(e.target.value)}
+                      className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
+                    >
+                      <option value="">{zh ? '不设置（机票逻辑：时刻即当地时间）' : 'Unset (ticket logic: times are local)'}</option>
+                      {COMMON_TIMEZONES.map((tz) => (
+                        <option key={tz} value={tz}>{tz}</option>
+                      ))}
+                    </select>
+                    <div className="mt-1 text-[11px] text-stone-500">
+                      {zh
+                        ? '就像机票：起飞写北京 08:00、落地写曼谷 12:00，各用各的当地时间。手机切到哪个时区，就按哪个时区读这个数字。设了时区则按 UTC 绝对时刻发射。'
+                        : 'Like a flight ticket: 08:00 departure in Beijing, 12:00 arrival in Bangkok — each in its local time. Set a zone to export absolute UTC instants instead.'}
+                    </div>
+                  </div>
 
-              {startDate && endDate && startDate <= endDate ? (
-                <details className="rounded-lg border border-stone-200 bg-stone-50/60 px-3 py-2">
-                  <summary className="cursor-pointer text-xs font-bold text-stone-700">
-                    {zh ? '🌍 按天时区覆盖（跨国行程）' : '🌍 Per-day timezone overrides'}
-                  </summary>
-                  <div className="mt-1 text-[11px] text-stone-500">
-                    {zh
-                      ? '哪天换城市就改哪天，不改的天跟随上面的行程时区。'
-                      : 'Override only the days you change cities; the rest follow the trip zone.'}
-                  </div>
-                  <div className="mt-2 max-h-48 space-y-1.5 overflow-auto pr-1">
-                    {listTripDates(startDate, endDate).map((d) => (
-                      <div key={d} className="flex items-center gap-2">
-                        <span className="w-24 shrink-0 text-[11px] font-semibold text-stone-600">{d}</span>
-                        <select
-                          value={dayTimezones[d] ?? ''}
-                          onChange={(e) => setDayTimezones((prev) => {
-                            const next = { ...prev };
-                            if (e.target.value) next[d] = e.target.value;
-                            else delete next[d];
-                            return next;
-                          })}
-                          className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
-                        >
-                          <option value="">{zh ? '跟随行程时区' : 'Follow trip zone'}</option>
-                          {COMMON_TIMEZONES.map((tz) => (
-                            <option key={tz} value={tz}>{tz}</option>
-                          ))}
-                        </select>
+                  {startDate && endDate && startDate <= endDate ? (
+                    <details className="rounded-lg border border-stone-200 bg-white px-3 py-2">
+                      <summary className="cursor-pointer text-xs font-bold text-stone-700">
+                        {zh ? '🌍 按天时区覆盖（跨国行程）' : '🌍 Per-day timezone overrides'}
+                      </summary>
+                      <div className="mt-1 text-[11px] text-stone-500">
+                        {zh
+                          ? '哪天换城市就改哪天，不改的天跟随上面的行程时区。'
+                          : 'Override only the days you change cities; the rest follow the trip zone.'}
                       </div>
-                    ))}
-                  </div>
-                </details>
-              ) : null}
+                      <div className="mt-2 max-h-48 space-y-1.5 overflow-auto pr-1">
+                        {listTripDates(startDate, endDate).map((d) => (
+                          <div key={d} className="flex items-center gap-2">
+                            <span className="w-24 shrink-0 text-[11px] font-semibold text-stone-600">{d}</span>
+                            <select
+                              value={dayTimezones[d] ?? ''}
+                              onChange={(e) => setDayTimezones((prev) => {
+                                const next = { ...prev };
+                                if (e.target.value) next[d] = e.target.value;
+                                else delete next[d];
+                                return next;
+                              })}
+                              className="min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
+                            >
+                              <option value="">{zh ? '跟随行程时区' : 'Follow trip zone'}</option>
+                              {COMMON_TIMEZONES.map((tz) => (
+                                <option key={tz} value={tz}>{tz}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                </div>
+              </details>
 
               {/* Tags */}
               <div>

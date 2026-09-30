@@ -35,9 +35,33 @@ The maintained contract includes:
 - read-only local MCP access over the same canonical evidence store;
 - versioned backup, validation, restore preflight, rollback, and migration;
 - first-real-object onboarding without silently writing demo data;
+- bundled Sample Trips that a user may load explicitly, and which are ordinary deletable trips once loaded;
 - terminology and runtime-parity gates;
 - installable offline PWA application shell;
 - local data contents excluded from GitHub Pages and Ownly analytics.
+
+### Sample Trips are opt-in, and ordinary once loaded
+
+A **Sample Trip** (`docs/SAMPLE_TRIPS.md`) is a complete itinerary shipped with
+the app so a new user can see a finished Planner before building one. The
+boundary is:
+
+- **Never silent.** Loading requires an explicit click. There is no auto-seed
+  path, and none may be added. The "no silent demo writes" rule above is
+  unchanged; this clause only permits the opt-in case it already implied.
+- **Nothing is written before the click.** The picker's cards render from static
+  metadata only, so browsing costs no writes.
+- **A loaded Sample Trip is a real trip.** Plain Markdown in the user's own data
+  folder, editable in every runtime, badged in Trip management, and deletable in
+  one tap with its places, visits, legs and expenses.
+- **Same import path as a shared trip.** It arrives through
+  `importTripBundle`, so a Sample Trip cannot drift from the contract a real
+  share depends on.
+- **Illustrative data only.** Prices and ratings are published standard rates
+  recorded as a static baseline, not live observations. No `source_place_id` is
+  fabricated, because a fake Place ID becomes strong identity evidence.
+- **Analytics stay aggregate.** Only the shipped `SAMPLE_TRIP_IDS` enum is
+  reported (`docs/ANALYTICS_EVENTS.md`); nothing derived from user data is.
 
 ## Storage boundary
 

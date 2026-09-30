@@ -23,6 +23,13 @@ import { useEscapeKey } from './use-escape-key';
 import { extractTripSharePayload } from '@/domain/trip-share-link';
 import { isTripReviewable, type TripReviewDraft } from '@/domain/trip-review';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+import {
+  SAMPLE_TRIP_DISMISSED_KEY,
+  SAMPLE_TRIP_LOADED_KEY,
+  resolveSampleTripPrompt,
+} from '@/core/sample-trip';
+import { allSampleTrips } from '@/data/sample-trips/registry';
+import { SampleTripPicker } from './SampleTripPicker';
 import { DayRiskSummary } from './PlannerDayStatsPanel';
 import { usePlannerController } from './usePlannerController';
 
@@ -268,7 +275,16 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
 
   // WS-1 trip retrospective: draft lives in TripReviewModal (preview-only);
   // confirm persists via the standard object path, then backlinks review_id.
-  const { repository, runtimeTarget } = useOwnlyWorkspace();
+  const { repository, runtimeTarget, storageGet, storageSet } = useOwnlyWorkspace();
+  const [sampleDismissed, setSampleDismissed] = useState(() => storageGet(SAMPLE_TRIP_DISMISSED_KEY) === 'true');
+  const samplePrompt = resolveSampleTripPrompt({
+    isConnected: !disabled,
+    // Reaching the empty state means the read model already resolved.
+    dataLoaded: true,
+    tripCount: trips.length,
+    loaded: storageGet(SAMPLE_TRIP_LOADED_KEY) === 'true',
+    dismissed: sampleDismissed,
+  });
   const reviewable = selectedTrip ? isTripReviewable(selectedTrip) : false;
   const tripStatusLabel = !selectedTrip
     ? ''
@@ -735,30 +751,88 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
 
   if (!selectedTrip) {
     return (
-      <section className="rounded-xl border border-stone-200 bg-white p-8 shadow-sm">
-        <div className="max-w-xl">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">✈️</span>
-            <h2 className="text-xl font-bold tracking-tight text-stone-950">
-              {zh ? '规划你的旅行行程' : 'Plan Your Travel Itinerary'}
-            </h2>
+      <div className="space-y-3.5">
+        {samplePrompt.showPicker ? (
+          <SampleTripPicker
+            summaries={allSampleTrips()}
+            onLoaded={(tripId) => {
+              storageSet(SAMPLE_TRIP_LOADED_KEY, 'true');
+              storageSet(SAMPLE_TRIP_DISMISSED_KEY, 'false');
+              setSampleDismissed(false);
+              void load();
+              setSelectedTripId(tripId);
+              setNotice(zh ? '示例行程已载入。它就是一条普通行程，随时可以在「行程管理」里删除。' : 'Sample Trip loaded. It is an ordinary trip — delete it from Trip management at any time.');
+            }}
+            onDismiss={() => {
+              storageSet(SAMPLE_TRIP_DISMISSED_KEY, 'true');
+              setSampleDismissed(true);
+            }}
+          />
+        ) : (
+          <section className="rounded-xl border border-stone-200 bg-white p-8 shadow-sm">
+            <div className="max-w-xl">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">✈️</span>
+                <h2 className="text-xl font-bold tracking-tight text-stone-950">
+                  {zh ? '规划你的旅行行程' : 'Plan Your Travel Itinerary'}
+                </h2>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-stone-500">
+                {zh
+                  ? '在本地安全创建行程，设置目的地与出行日期。选定行程后，可在地图采集候选地点并由 Planner 统一排期与推演。'
+                  : 'Create a local trip with destinations and dates. Your selected trip acts as the authority for place research and timeline optimization.'}
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateTripOpen(true)}
+                  className="rounded-lg bg-stone-950 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-stone-800"
+                >
+                  {zh ? '行程管理' : 'Manage Trips'}
+                </button>
+                {samplePrompt.showCompactLink ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      storageSet(SAMPLE_TRIP_DISMISSED_KEY, 'false');
+                      setSampleDismissed(false);
+                    }}
+                    className="rounded-lg border border-dashed border-stone-300 px-4 py-2.5 text-xs font-semibold text-stone-600 transition hover:border-stone-900 hover:text-stone-950"
+                  >
+                    🧭 {zh ? '改为载入一份示例行程' : 'Load a Sample Trip instead'}
+                  </button>
+                ) : null}
+              </div>
+              {notice ? <p className="mt-3 text-xs text-stone-500">{notice}</p> : null}
+            </div>
+          </section>
+        )}
+
+        <section className="rounded-xl border border-stone-200 bg-white p-8 shadow-sm">
+          <div className="max-w-xl">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">✈️</span>
+              <h2 className="text-xl font-bold tracking-tight text-stone-950">
+                {zh ? '行程管理' : 'Manage Trips'}
+              </h2>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-stone-500">
+              {zh
+                ? '新建、导入或删除行程。已载入的示例行程就在这里，随时可以删掉。'
+                : 'Create, import or delete trips — including any Sample Trip you loaded, which you can delete at any time.'}
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsCreateTripOpen(true)}
+                className="rounded-lg border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-800 transition hover:border-stone-900"
+              >
+                {zh ? '打开行程管理' : 'Open Trip management'}
+              </button>
+            </div>
           </div>
-          <p className="mt-2 text-sm leading-6 text-stone-500">
-            {zh
-              ? '在本地安全创建行程，设置目的地与出行日期。选定行程后，可在地图采集候选地点并由 Planner 统一排期与推演。'
-              : 'Create a local trip with destinations and dates. Your selected trip acts as the authority for place research and timeline optimization.'}
-          </p>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsCreateTripOpen(true)}
-              className="rounded-lg bg-stone-950 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-stone-800"
-            >
-              {zh ? '行程管理' : 'Manage Trips'}
-            </button>
-          </div>
-          {notice ? <p className="mt-3 text-xs text-stone-500">{notice}</p> : null}
-        </div>
+        </section>
+
         <CreateTripModal
           key={isCreateTripOpen ? 'open' : 'closed'}
           open={isCreateTripOpen}
@@ -775,7 +849,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           incomingShareHash={shareHash}
           onDismissShare={() => setShareHash(null)}
         />
-      </section>
+      </div>
     );
   }
 

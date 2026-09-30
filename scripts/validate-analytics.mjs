@@ -1,8 +1,11 @@
 /**
  * Static privacy guard for activation analytics (issue #48).
  * - No raw gtag( calls outside src/lib/analytics.ts
- * - Every trackOwnlyEvent/trackFirstEver literal name must be allowlisted
+ * - Every trackOwnlyEvent/trackFirstEver event name must be allowlisted
  * - No prohibited param keys (titles, paths, ids, amounts, content, ...)
+ *
+ * The allowlist is read from src/lib/analytics.ts rather than duplicated here,
+ * so the runtime guard and this static guard cannot drift apart.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -10,19 +13,21 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SRC = join(ROOT, 'src');
+const ANALYTICS_LIB = join(SRC, 'lib', 'analytics.ts');
 
-const ALLOWLIST = new Set([
-  'onboarding_opened',
-  'local_data_connected',
-  'demo_started',
-  'first_object_saved',
-  'object_archived',
-  'object_restored',
-  'backup_exported',
-  'backup_validated',
-  'pwa_installed',
-  'app_return',
-]);
+const analyticsLib = readFileSync(ANALYTICS_LIB, 'utf8');
+const allowlistBlock = /OWNLY_ANALYTICS_ALLOWLIST[^=]*=\s*\{([\s\S]*?)\n\};/.exec(analyticsLib);
+if (!allowlistBlock) {
+  console.error(`Could not parse OWNLY_ANALYTICS_ALLOWLIST from ${ANALYTICS_LIB}`);
+  process.exit(1);
+}
+const ALLOWLIST = new Set(
+  [...allowlistBlock[1].matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gm)].map((m) => m[1]),
+);
+if (ALLOWLIST.size === 0) {
+  console.error('OWNLY_ANALYTICS_ALLOWLIST parsed as empty — refusing to pass silently.');
+  process.exit(1);
+}
 
 const DENIED_KEY_FRAGMENTS = [
   'title', 'markdown', 'filename', 'filepath', 'path', 'url', 'href',
@@ -55,7 +60,16 @@ for (const file of walk(SRC)) {
     errors.push(`${rel}: raw gtag('event') call outside src/lib/analytics.ts`);
   }
 
-  for (const m of text.matchAll(/track(?:FirstEver|OwnlyEvent)\(\s*['"`]([^'"`]+)['"`]/g)) {
+  // `trackOwnlyEvent(name, ...)` puts the event first; `trackFirstEver(flag,
+  // name, ...)` puts a localStorage flag first and the event second. Reading
+  // the wrong argument used to check the flag against the allowlist.
+  for (const m of text.matchAll(/trackOwnlyEvent\(\s*['"`]([^'"`]+)['"`]/g)) {
+    if (isTest) continue;
+    if (!ALLOWLIST.has(m[1])) {
+      errors.push(`${rel}: non-allowlisted analytics event "${m[1]}"`);
+    }
+  }
+  for (const m of text.matchAll(/trackFirstEver\(\s*['"`][^'"`]+['"`]\s*,\s*['"`]([^'"`]+)['"`]/g)) {
     if (isTest) continue;
     if (!ALLOWLIST.has(m[1])) {
       errors.push(`${rel}: non-allowlisted analytics event "${m[1]}"`);

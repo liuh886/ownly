@@ -58,7 +58,25 @@ The hosted site does not receive the personal Markdown merely because you select
 
 ## 3. Create your first real object
 
-When Ownly connects to a readable data folder containing no objects, it offers a short first-object chooser:
+When Ownly connects to a readable data folder containing no objects, it walks you
+through two steps in one dialog.
+
+**First, the mental model.** One sentence covers the whole product:
+
+> **Collect → Curate → Plan**
+> （收集 → 整理 → 规划）
+
+| Step | What it does |
+|---|---|
+| **Capture** | Save a place you see in Google Maps with one click |
+| **Collection** | Curate, tag and dedupe the places worth keeping |
+| **Planner** | Import into a trip and schedule each stop onto a day |
+
+All three read and write the same plain Markdown in one Ownly data folder. If you
+have already seen this, Ownly skips straight to the next step.
+
+**Then, your first record** — or a Sample Trip, if you would rather see a
+finished itinerary first:
 
 - **Physical item** — a possession you are considering, using, or preparing to exit;
 - **Recurring cost** — a subscription or other repeating obligation;
@@ -71,11 +89,43 @@ Important behavior:
 - Ownly does **not** automatically write sample objects, snapshots, or reviews into a real user data folder.
 - No onboarding-specific frontmatter fields are added.
 - Onboarding is marked complete only after the normal Markdown save succeeds.
-- The chooser can be dismissed without changing the dataset.
-- When the dataset remains empty, a small banner allows the chooser to be reopened later.
-- Existing datasets are not interrupted by the first-object prompt.
+- The guide can be dismissed without changing the dataset.
+- When the dataset remains empty, a small banner allows it to be reopened later.
+- Existing datasets are not interrupted, and a loaded Sample Trip counts as content, so setup is considered satisfied.
 
 Demo mode remains available before a real data folder is connected, but demo records are not silently copied into real data.
+
+### Load a Sample Trip
+
+A **Sample Trip** is a complete itinerary that ships with Ownly. It is the fastest
+way to see what the Planner is for before building anything.
+
+| Sample Trip | Route | Days |
+|---|---|---|
+| 泰国 6 日 | 曼谷 · 清迈 · 昆明 | 6 |
+| 中国 8 日 | 北京 · 西安 · 重庆 · 成都 | 8 |
+| 日本关西 6 日 | 大阪 · 京都 · 奈良 | 6 |
+
+You will find them on the Planner's empty state, and as a shortcut inside the
+first-run guide and the trip management sheet.
+
+Each one arrives with places on the map, a day-by-day timeline, travel legs
+between stops, a research pool of unscheduled candidates, and a cost ledger with
+an AA split.
+
+A Sample Trip is an **ordinary trip**:
+
+- it is plain Markdown in your own data folder, editable in Web, PWA, Obsidian, and the Agent CLI;
+- it is badged 🧪 in trip management;
+- you delete it in one tap, which also removes its places, visits, legs and expenses;
+- loading the same Sample Trip twice gives you two independent trips, so you can
+  compare or experiment.
+
+Nothing is written to your data folder until you click a card.
+
+Prices inside a Sample Trip are published standard admission rates recorded as a
+static baseline, not live quotes, and will drift with the venue. Reference details
+are in [SAMPLE_TRIPS.md](SAMPLE_TRIPS.md).
 
 ## 4. Home dashboard
 

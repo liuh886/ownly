@@ -54,6 +54,31 @@ Run:
 npm run validate:terminology
 ```
 
+## 4a. Sample Trip calendar
+
+Sample Trips use fixed dates so the shipped data stays byte-stable. Confirm none
+of them has aged into the past — otherwise calendar export lands before today
+and the "upcoming trip" framing stops making sense.
+
+Run:
+
+```bash
+npm run check:sample-dates
+npm run test:samples
+```
+
+If a trip is reported as stale, re-author its dates in
+`src/data/sample-trips/*.ts` and re-run `npm run test:samples`. This is
+deliberately **not** wired into `npm run validate`, so a content refresh can
+never turn into a CI outage.
+
+Also confirm, per [SAMPLE_TRIPS.md](SAMPLE_TRIPS.md):
+
+- a **Sample Trip** is never described as demo data, and always as deletable;
+- no auto-seed path has been introduced — loading stays an explicit click;
+- prices are described as published standard rates, not live observations;
+- no fabricated `source_place_id` has been added.
+
 ## 5. Runtime parity
 
 Review the typed capability contract in `src/core/runtime-capabilities.ts` and the committed [runtime compatibility matrix](RUNTIME_COMPATIBILITY.md).

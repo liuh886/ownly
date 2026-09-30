@@ -19,17 +19,25 @@ const inputFile = process.argv[2] || '/tmp/geonames/cities15000.txt';
 const outputFile = resolve(__dirname, '../src/data/cities.json');
 const MIN_POPULATION = 100_000;
 
-const CJK_REGEX = /[一-鿿぀-ゟ゠-ヿ가-힯]/;
+const HAN_REGEX = /[一-鿿㐀-䶿]/;
+const KANA_REGEX = /[぀-ゟ゠-ヿ]/;
+const HANGUL_REGEX = /[가-힯ᄀ-ᇿ]/;
+const CJK_REGEX = new RegExp(`${HAN_REGEX.source}|${KANA_REGEX.source}|${HANGUL_REGEX.source}`);
 
-function extractCJKName(alternateNames) {
+/**
+ * Pick the best CJK display name for a city.
+ *
+ * GeoNames lists alternate names in arbitrary order, so taking the first CJK
+ * match used to return the Japanese reading for every city that has one —
+ * Bangkok became `バンコク` and a Chinese-language search for `曼谷` could not
+ * match it at all. Prefer a Han-only name, and only fall back to a
+ * kana/hangul name when the city genuinely has no Han name recorded.
+ */
+export function extractCJKName(alternateNames) {
   if (!alternateNames) return undefined;
-  const names = alternateNames.split(',');
-  for (const name of names) {
-    if (CJK_REGEX.test(name.trim())) {
-      return name.trim();
-    }
-  }
-  return undefined;
+  const names = alternateNames.split(',').map((entry) => entry.trim()).filter(Boolean);
+  const cjk = names.filter((name) => CJK_REGEX.test(name));
+  return cjk.find((name) => HAN_REGEX.test(name) && !KANA_REGEX.test(name)) ?? cjk[0];
 }
 
 const raw = readFileSync(inputFile, 'utf-8');
