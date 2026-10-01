@@ -1,0 +1,1010 @@
+{
+  "objects": [
+    {
+      "schema_version": "0.1",
+      "id": "sample_camera_20260312",
+      "type": "object",
+      "object_type": "physical",
+      "title": "索尼 A7C 微单",
+      "status": "using",
+      "category": "摄影器材",
+      "brand": "Sony",
+      "model": "A7C",
+      "purchased_at": "2026-03-12",
+      "in_use_since": "2026-03-14",
+      "purchase_price": 12500,
+      "purchase_tax": 0,
+      "total_acquisition_cost": 12500,
+      "include_in_net_worth": false,
+      "default_depreciates_to_zero": true,
+      "condition": "良好",
+      "location": "家里书桌",
+      "currency": "CNY",
+      "created_at": "2026-03-12",
+      "updated_at": "2026-08-02",
+      "tags": [
+        "ownly",
+        "sample",
+        "physical",
+        "旅行"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_laptop_20251108",
+      "type": "object",
+      "object_type": "physical",
+      "title": "MacBook Air M2",
+      "status": "using",
+      "category": "电脑",
+      "brand": "Apple",
+      "model": "MacBook Air M2 13\"",
+      "purchased_at": "2025-11-08",
+      "in_use_since": "2025-11-08",
+      "purchase_price": 9488,
+      "total_acquisition_cost": 9488,
+      "amortization_mode": "fixed_term",
+      "amortization_days": 1460,
+      "include_in_net_worth": false,
+      "default_depreciates_to_zero": true,
+      "condition": "良好",
+      "location": "家里书桌",
+      "currency": "CNY",
+      "created_at": "2025-11-08",
+      "updated_at": "2026-08-02",
+      "tags": [
+        "ownly",
+        "sample",
+        "physical",
+        "主力设备"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_ebike_20260420",
+      "type": "object",
+      "object_type": "physical",
+      "title": "捷安特 Escape 城市车",
+      "status": "using",
+      "category": "出行",
+      "brand": "Giant",
+      "model": "Escape 2",
+      "purchased_at": "2026-04-20",
+      "in_use_since": "2026-04-25",
+      "purchase_price": 3298,
+      "total_acquisition_cost": 3298,
+      "include_in_net_worth": false,
+      "default_depreciates_to_zero": true,
+      "condition": "良好",
+      "location": "小区车棚",
+      "currency": "CNY",
+      "created_at": "2026-04-20",
+      "updated_at": "2026-08-02",
+      "tags": [
+        "ownly",
+        "sample",
+        "physical",
+        "出行"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_monitor_20260115",
+      "type": "object",
+      "object_type": "physical",
+      "title": "Dell 27\" 4K 显示器",
+      "status": "idle",
+      "category": "电脑",
+      "brand": "Dell",
+      "model": "U2723QE",
+      "purchased_at": "2026-01-15",
+      "ended_at": "2026-06-18",
+      "in_use_since": "2026-01-20",
+      "unused_since": "2026-06-18",
+      "purchase_price": 4180,
+      "total_acquisition_cost": 4180,
+      "residual_value": 900,
+      "include_in_net_worth": false,
+      "default_depreciates_to_zero": true,
+      "condition": "良好",
+      "currency": "CNY",
+      "created_at": "2026-01-15",
+      "updated_at": "2026-06-18",
+      "tags": [
+        "ownly",
+        "sample",
+        "physical",
+        "闲置"
+      ],
+      "review_ref": "sample_review_monitor_exit_20260618"
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_headphone_20250702",
+      "type": "object",
+      "object_type": "physical",
+      "title": "Sony WH-1000XM5",
+      "status": "seeded",
+      "category": "音频",
+      "brand": "Sony",
+      "model": "WH-1000XM5",
+      "purchase_price": 2299,
+      "total_acquisition_cost": 2299,
+      "include_in_net_worth": false,
+      "default_depreciates_to_zero": true,
+      "currency": "CNY",
+      "created_at": "2026-08-02",
+      "updated_at": "2026-08-02",
+      "tags": [
+        "ownly",
+        "sample",
+        "physical",
+        "观望"
+      ],
+      "notes": "降噪刚需，但在犹豫要不要为了旅行再买一副。"
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_sub_cloud_20240901",
+      "type": "object",
+      "object_type": "recurring_cost",
+      "title": "云盘 2TB 订阅",
+      "status": "active",
+      "category": "存储",
+      "provider": "示例云服务",
+      "plan": "2TB 个人版",
+      "started_at": "2024-09-01",
+      "billing_cycle": "monthly",
+      "billing_amount": 35,
+      "billing_currency": "CNY",
+      "billing_day": 1,
+      "annualized_cost": 420,
+      "payment_account": "招行储蓄卡",
+      "is_essential": true,
+      "currency": "CNY",
+      "created_at": "2024-09-01",
+      "updated_at": "2026-08-02",
+      "tags": [
+        "ownly",
+        "sample",
+        "recurring",
+        "必需"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_sub_ai_20260115",
+      "type": "object",
+      "object_type": "recurring_cost",
+      "title": "AI 编程助手年费",
+      "status": "active",
+      "category": "软件",
+      "provider": "示例 AI 服务",
+      "plan": "Pro 年付",
+      "started_at": "2026-01-15",
+      "billing_cycle": "annual",
+      "billing_amount": 1100,
+      "billing_currency": "CNY",
+      "billing_day": 15,
+      "annualized_cost": 1100,
+      "payment_account": "招行储蓄卡",
+      "is_essential": false,
+      "replacement": null,
+      "cancel_reason": null,
+      "currency": "CNY",
+      "created_at": "2026-01-15",
+      "updated_at": "2026-08-02",
+      "tags": [
+        "ownly",
+        "sample",
+        "recurring",
+        "可优化"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_sub_gym_20260301",
+      "type": "object",
+      "object_type": "recurring_cost",
+      "title": "健身房月卡",
+      "status": "active",
+      "category": "健康",
+      "provider": "示例健身",
+      "plan": "月卡",
+      "started_at": "2026-03-01",
+      "billing_cycle": "monthly",
+      "billing_amount": 299,
+      "billing_currency": "CNY",
+      "billing_day": 1,
+      "annualized_cost": 3588,
+      "payment_account": "微信",
+      "is_essential": false,
+      "currency": "CNY",
+      "created_at": "2026-03-01",
+      "updated_at": "2026-08-02",
+      "tags": [
+        "ownly",
+        "sample",
+        "recurring",
+        "高频小额"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_sub_streaming_20241001",
+      "type": "object",
+      "object_type": "recurring_cost",
+      "title": "流媒体会员",
+      "status": "cancelled",
+      "category": "娱乐",
+      "provider": "示例视频平台",
+      "plan": "标准会员",
+      "started_at": "2024-10-01",
+      "cancelled_at": "2026-05-20",
+      "billing_cycle": "monthly",
+      "billing_amount": 25,
+      "billing_currency": "CNY",
+      "billing_day": 10,
+      "annualized_cost": 300,
+      "payment_account": "微信",
+      "cancel_reason": "一年只看了四次，已退订。",
+      "currency": "CNY",
+      "created_at": "2024-10-01",
+      "updated_at": "2026-05-20",
+      "tags": [
+        "ownly",
+        "sample",
+        "recurring",
+        "已退订"
+      ],
+      "review_ref": "sample_review_streaming_exit_20260520"
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_trip_china_20260215",
+      "type": "object",
+      "object_type": "one_time_experience",
+      "title": "中国 8 日 · 北京 · 西安 · 重庆 · 成都",
+      "status": "reviewed",
+      "category": "旅行",
+      "experience_subtype": "travel_worldview",
+      "started_at": "2026-02-15",
+      "ended_at": "2026-02-22",
+      "reviewed_at": "2026-03-01",
+      "location": {
+        "country": "中国",
+        "city": "北京"
+      },
+      "locations": [
+        {
+          "country": "中国",
+          "city": "北京"
+        },
+        {
+          "country": "中国",
+          "city": "西安"
+        },
+        {
+          "country": "中国",
+          "city": "重庆"
+        },
+        {
+          "country": "中国",
+          "city": "成都"
+        }
+      ],
+      "budget_total": 16000,
+      "actual_total": 14260,
+      "expense_items": [
+        {
+          "name": "机票与高铁（4 段）",
+          "amount": 3460,
+          "currency": "CNY",
+          "category": "transit"
+        },
+        {
+          "name": "住宿（7 晚）",
+          "amount": 5320,
+          "currency": "CNY",
+          "category": "stay"
+        },
+        {
+          "name": "门票与大交通",
+          "amount": 1180,
+          "currency": "CNY",
+          "category": "ticket"
+        },
+        {
+          "name": "餐饮（8 天）",
+          "amount": 4300,
+          "currency": "CNY",
+          "category": "food"
+        }
+      ],
+      "worldview_tags": [
+        "古都",
+        "山城",
+        "熊猫",
+        "美食"
+      ],
+      "currency": "CNY",
+      "created_at": "2026-03-01",
+      "updated_at": "2026-03-01",
+      "tags": [
+        "ownly",
+        "sample",
+        "experience",
+        "travel",
+        "trip-review"
+      ],
+      "review_ref": "sample_review_trip_china_20260301"
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_trip_kansai_20260501",
+      "type": "object",
+      "object_type": "one_time_experience",
+      "title": "日本关西 6 日 · 大阪 · 京都 · 奈良",
+      "status": "reviewed",
+      "category": "旅行",
+      "experience_subtype": "travel_worldview",
+      "started_at": "2026-05-01",
+      "ended_at": "2026-05-06",
+      "reviewed_at": "2026-05-10",
+      "location": {
+        "country": "日本",
+        "city": "大阪",
+        "country_code": "JP"
+      },
+      "locations": [
+        {
+          "country": "日本",
+          "city": "大阪",
+          "country_code": "JP"
+        },
+        {
+          "country": "日本",
+          "city": "京都",
+          "country_code": "JP"
+        },
+        {
+          "country": "日本",
+          "city": "奈良",
+          "country_code": "JP"
+        }
+      ],
+      "budget_total": 22000,
+      "actual_total": 21340,
+      "expense_items": [
+        {
+          "name": "往返机票（2 人）",
+          "amount": 5400,
+          "currency": "CNY",
+          "category": "transit"
+        },
+        {
+          "name": "住宿（5 晚）",
+          "amount": 6600,
+          "currency": "CNY",
+          "category": "stay"
+        },
+        {
+          "name": "大阪周游卡与环球影城",
+          "amount": 2340,
+          "currency": "CNY",
+          "category": "ticket"
+        },
+        {
+          "name": "餐饮",
+          "amount": 7000,
+          "currency": "CNY",
+          "category": "food"
+        }
+      ],
+      "worldview_tags": [
+        "古寺",
+        "红叶",
+        "铁道",
+        "美食"
+      ],
+      "currency": "CNY",
+      "created_at": "2026-05-10",
+      "updated_at": "2026-05-10",
+      "tags": [
+        "ownly",
+        "sample",
+        "experience",
+        "travel",
+        "trip-review"
+      ],
+      "review_ref": "sample_review_trip_kansai_20260510"
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_trip_thailand_20260808",
+      "type": "object",
+      "object_type": "one_time_experience",
+      "title": "泰国 6 日 · 曼谷 · 清迈 · 昆明",
+      "status": "completed",
+      "category": "旅行",
+      "experience_subtype": "travel_worldview",
+      "started_at": "2026-08-08",
+      "ended_at": "2026-08-13",
+      "location": {
+        "country": "泰国",
+        "city": "曼谷",
+        "country_code": "TH"
+      },
+      "locations": [
+        {
+          "country": "泰国",
+          "city": "曼谷",
+          "country_code": "TH"
+        },
+        {
+          "country": "泰国",
+          "city": "清迈",
+          "country_code": "TH"
+        },
+        {
+          "country": "中国",
+          "city": "昆明"
+        }
+      ],
+      "budget_total": 12000,
+      "actual_total": 10180,
+      "expense_items": [
+        {
+          "name": "曼谷↔清迈机票",
+          "amount": 1500,
+          "currency": "CNY",
+          "category": "transit"
+        },
+        {
+          "name": "清迈↔昆明机票",
+          "amount": 1960,
+          "currency": "CNY",
+          "category": "transit"
+        },
+        {
+          "name": "门票（2 人）",
+          "amount": 680,
+          "currency": "CNY",
+          "category": "ticket"
+        },
+        {
+          "name": "餐饮与夜市",
+          "amount": 6040,
+          "currency": "CNY",
+          "category": "food"
+        }
+      ],
+      "worldview_tags": [
+        "寺庙",
+        "夜市",
+        "市集"
+      ],
+      "currency": "CNY",
+      "created_at": "2026-08-20",
+      "updated_at": "2026-08-20",
+      "tags": [
+        "ownly",
+        "sample",
+        "experience",
+        "travel",
+        "trip-review"
+      ]
+    }
+  ],
+  "snapshots": [
+    {
+      "schema_version": "0.1",
+      "id": "sample_snapshot_20260331",
+      "type": "snapshot",
+      "title": "2026-03 净值",
+      "snapshot_type": "net_worth",
+      "snapshot_at": "2026-03-31",
+      "is_month_end": true,
+      "asset_balances": [
+        {
+          "account": "招行储蓄卡",
+          "account_id": "sample_cmb_savings",
+          "amount": 86000,
+          "currency": "CNY"
+        },
+        {
+          "account": "沪深 300 指数基金",
+          "account_id": "sample_fund_index",
+          "amount": 42000,
+          "currency": "CNY"
+        },
+        {
+          "account": "公积金账户",
+          "account_id": "sample_housing_fund",
+          "amount": 31500,
+          "currency": "CNY"
+        }
+      ],
+      "liability_balances": [
+        {
+          "account": "招行信用卡",
+          "account_id": "sample_cmb_credit",
+          "amount": 6400,
+          "currency": "CNY",
+          "due_date": "2026-04-08"
+        }
+      ],
+      "total_assets": 159500,
+      "total_liabilities": 6400,
+      "net_worth": 153100,
+      "monthly_fixed_cost": 364,
+      "owned_physical_count": 3,
+      "physical_residual_value": 0,
+      "active_subscription_count": 2,
+      "observing_desire_amount": 0,
+      "currency": "CNY",
+      "created_at": "2026-03-31",
+      "updated_at": "2026-03-31",
+      "tags": [
+        "ownly",
+        "sample"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_snapshot_20260430",
+      "type": "snapshot",
+      "title": "2026-04 净值",
+      "snapshot_type": "net_worth",
+      "snapshot_at": "2026-04-30",
+      "is_month_end": true,
+      "asset_balances": [
+        {
+          "account": "招行储蓄卡",
+          "account_id": "sample_cmb_savings",
+          "amount": 82500,
+          "currency": "CNY"
+        },
+        {
+          "account": "沪深 300 指数基金",
+          "account_id": "sample_fund_index",
+          "amount": 44800,
+          "currency": "CNY"
+        },
+        {
+          "account": "公积金账户",
+          "account_id": "sample_housing_fund",
+          "amount": 33200,
+          "currency": "CNY"
+        }
+      ],
+      "liability_balances": [
+        {
+          "account": "招行信用卡",
+          "account_id": "sample_cmb_credit",
+          "amount": 9800,
+          "currency": "CNY",
+          "due_date": "2026-05-08"
+        }
+      ],
+      "total_assets": 160500,
+      "total_liabilities": 9800,
+      "net_worth": 150700,
+      "monthly_fixed_cost": 663,
+      "owned_physical_count": 4,
+      "physical_residual_value": 0,
+      "active_subscription_count": 3,
+      "observing_desire_amount": 0,
+      "currency": "CNY",
+      "created_at": "2026-04-30",
+      "updated_at": "2026-04-30",
+      "tags": [
+        "ownly",
+        "sample"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_snapshot_20260531",
+      "type": "snapshot",
+      "title": "2026-05 净值",
+      "snapshot_type": "net_worth",
+      "snapshot_at": "2026-05-31",
+      "is_month_end": true,
+      "asset_balances": [
+        {
+          "account": "招行储蓄卡",
+          "account_id": "sample_cmb_savings",
+          "amount": 91800,
+          "currency": "CNY"
+        },
+        {
+          "account": "沪深 300 指数基金",
+          "account_id": "sample_fund_index",
+          "amount": 47300,
+          "currency": "CNY"
+        },
+        {
+          "account": "公积金账户",
+          "account_id": "sample_housing_fund",
+          "amount": 34900,
+          "currency": "CNY"
+        },
+        {
+          "account": "支付宝余额",
+          "account_id": "sample_alipay",
+          "amount": 5400,
+          "currency": "CNY"
+        }
+      ],
+      "liability_balances": [
+        {
+          "account": "招行信用卡",
+          "account_id": "sample_cmb_credit",
+          "amount": 3200,
+          "currency": "CNY",
+          "due_date": "2026-06-08"
+        }
+      ],
+      "total_assets": 179400,
+      "total_liabilities": 3200,
+      "net_worth": 176200,
+      "monthly_fixed_cost": 1371,
+      "owned_physical_count": 4,
+      "physical_residual_value": 0,
+      "active_subscription_count": 3,
+      "observing_desire_amount": 0,
+      "currency": "CNY",
+      "created_at": "2026-05-31",
+      "updated_at": "2026-05-31",
+      "tags": [
+        "ownly",
+        "sample"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_snapshot_20260630",
+      "type": "snapshot",
+      "title": "2026-06 净值",
+      "snapshot_type": "net_worth",
+      "snapshot_at": "2026-06-30",
+      "is_month_end": true,
+      "asset_balances": [
+        {
+          "account": "招行储蓄卡",
+          "account_id": "sample_cmb_savings",
+          "amount": 94200,
+          "currency": "CNY"
+        },
+        {
+          "account": "沪深 300 指数基金",
+          "account_id": "sample_fund_index",
+          "amount": 49800,
+          "currency": "CNY"
+        },
+        {
+          "account": "公积金账户",
+          "account_id": "sample_housing_fund",
+          "amount": 36600,
+          "currency": "CNY"
+        },
+        {
+          "account": "支付宝余额",
+          "account_id": "sample_alipay",
+          "amount": 6200,
+          "currency": "CNY"
+        }
+      ],
+      "liability_balances": [
+        {
+          "account": "招行信用卡",
+          "account_id": "sample_cmb_credit",
+          "amount": 4100,
+          "currency": "CNY",
+          "due_date": "2026-07-08"
+        },
+        {
+          "account": "花呗",
+          "account_id": "sample_huabei",
+          "amount": 1800,
+          "currency": "CNY",
+          "due_date": "2026-07-09"
+        }
+      ],
+      "total_assets": 186800,
+      "total_liabilities": 5900,
+      "net_worth": 180900,
+      "monthly_fixed_cost": 1371,
+      "owned_physical_count": 3,
+      "physical_residual_value": 0,
+      "active_subscription_count": 3,
+      "observing_desire_amount": 0,
+      "currency": "CNY",
+      "created_at": "2026-06-30",
+      "updated_at": "2026-06-30",
+      "tags": [
+        "ownly",
+        "sample"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_snapshot_20260731",
+      "type": "snapshot",
+      "title": "2026-07 净值",
+      "snapshot_type": "net_worth",
+      "snapshot_at": "2026-07-31",
+      "is_month_end": true,
+      "asset_balances": [
+        {
+          "account": "招行储蓄卡",
+          "account_id": "sample_cmb_savings",
+          "amount": 98600,
+          "currency": "CNY"
+        },
+        {
+          "account": "沪深 300 指数基金",
+          "account_id": "sample_fund_index",
+          "amount": 51200,
+          "currency": "CNY"
+        },
+        {
+          "account": "公积金账户",
+          "account_id": "sample_housing_fund",
+          "amount": 38400,
+          "currency": "CNY"
+        },
+        {
+          "account": "支付宝余额",
+          "account_id": "sample_alipay",
+          "amount": 7100,
+          "currency": "CNY"
+        }
+      ],
+      "liability_balances": [
+        {
+          "account": "招行信用卡",
+          "account_id": "sample_cmb_credit",
+          "amount": 5200,
+          "currency": "CNY",
+          "due_date": "2026-08-08"
+        },
+        {
+          "account": "花呗",
+          "account_id": "sample_huabei",
+          "amount": 1100,
+          "currency": "CNY",
+          "due_date": "2026-08-09"
+        }
+      ],
+      "total_assets": 195300,
+      "total_liabilities": 6300,
+      "net_worth": 189000,
+      "monthly_fixed_cost": 1371,
+      "owned_physical_count": 3,
+      "physical_residual_value": 0,
+      "active_subscription_count": 3,
+      "observing_desire_amount": 0,
+      "currency": "CNY",
+      "created_at": "2026-07-31",
+      "updated_at": "2026-07-31",
+      "tags": [
+        "ownly",
+        "sample"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_snapshot_20260831",
+      "type": "snapshot",
+      "title": "2026-08 净值",
+      "snapshot_type": "net_worth",
+      "snapshot_at": "2026-08-31",
+      "asset_balances": [
+        {
+          "account": "招行储蓄卡",
+          "account_id": "sample_cmb_savings",
+          "amount": 102400,
+          "currency": "CNY"
+        },
+        {
+          "account": "沪深 300 指数基金",
+          "account_id": "sample_fund_index",
+          "amount": 53600,
+          "currency": "CNY"
+        },
+        {
+          "account": "公积金账户",
+          "account_id": "sample_housing_fund",
+          "amount": 40100,
+          "currency": "CNY"
+        },
+        {
+          "account": "支付宝余额",
+          "account_id": "sample_alipay",
+          "amount": 8300,
+          "currency": "CNY"
+        }
+      ],
+      "liability_balances": [
+        {
+          "account": "招行信用卡",
+          "account_id": "sample_cmb_credit",
+          "amount": 2400,
+          "currency": "CNY",
+          "due_date": "2026-09-08"
+        },
+        {
+          "account": "花呗",
+          "account_id": "sample_huabei",
+          "amount": 600,
+          "currency": "CNY",
+          "due_date": "2026-09-09"
+        }
+      ],
+      "total_assets": 204400,
+      "total_liabilities": 3000,
+      "net_worth": 201400,
+      "monthly_fixed_cost": 1346,
+      "owned_physical_count": 3,
+      "physical_residual_value": 0,
+      "active_subscription_count": 3,
+      "observing_desire_amount": 0,
+      "currency": "CNY",
+      "created_at": "2026-08-31",
+      "updated_at": "2026-08-31",
+      "tags": [
+        "ownly",
+        "sample"
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "schema_version": "0.1",
+      "id": "sample_review_trip_china_20260301",
+      "type": "review",
+      "title": "复盘 · 中国 8 日",
+      "review_type": "object_review",
+      "target": "中国 8 日 · 北京 · 西安 · 重庆 · 成都",
+      "target_id": "sample_trip_china_20260215",
+      "target_type": "one_time_experience",
+      "reviewed_at": "2026-03-01",
+      "exited_at": "2026-02-22",
+      "exit_type": "completed",
+      "realized_experience_cost": 14260,
+      "food_score": 88,
+      "scenery_score": 76,
+      "experience_score": 91,
+      "regret_score": 12,
+      "period": "2026-03",
+      "year": 2026,
+      "summary": "四城跑下来最累的是重庆，但也是最值的一天。西安的博物馆比我预期值得看，下次要留够时间；成都是唯一想再去的。",
+      "currency": "CNY",
+      "created_at": "2026-03-01",
+      "updated_at": "2026-03-01",
+      "tags": [
+        "ownly",
+        "sample",
+        "review",
+        "travel",
+        "china"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_review_trip_kansai_20260510",
+      "type": "review",
+      "title": "复盘 · 日本关西 6 日",
+      "review_type": "object_review",
+      "target": "日本关西 6 日 · 大阪 · 京都 · 奈良",
+      "target_id": "sample_trip_kansai_20260501",
+      "target_type": "one_time_experience",
+      "reviewed_at": "2026-05-10",
+      "exited_at": "2026-05-06",
+      "exit_type": "completed",
+      "realized_experience_cost": 21340,
+      "food_score": 92,
+      "scenery_score": 84,
+      "experience_score": 79,
+      "regret_score": 8,
+      "period": "2026-05",
+      "year": 2026,
+      "summary": "大阪吃、京都走、奈良喂鹿，节奏刚好。伏见稻荷八点到真的值得，那两个小时的安静是整趟最记得住的画面。",
+      "currency": "CNY",
+      "created_at": "2026-05-10",
+      "updated_at": "2026-05-10",
+      "tags": [
+        "ownly",
+        "sample",
+        "review",
+        "travel",
+        "japan"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_review_monitor_exit_20260618",
+      "type": "review",
+      "title": "退出 · Dell 27\" 显示器",
+      "review_type": "exit_record",
+      "target": "Dell 27\" 4K 显示器",
+      "target_id": "sample_monitor_20260115",
+      "target_type": "physical",
+      "reviewed_at": "2026-06-18",
+      "exited_at": "2026-06-18",
+      "exit_type": "idle",
+      "sale_price": 1600,
+      "transfer_fee": 60,
+      "realized_experience_cost": 2640,
+      "summary": "换了双屏之后这台就闲置了。二手卖了 1600，扣掉运费净回 1540，不算亏，但当初买的时候没想到会这么快淘汰。",
+      "currency": "CNY",
+      "created_at": "2026-06-18",
+      "updated_at": "2026-06-18",
+      "tags": [
+        "ownly",
+        "sample",
+        "review",
+        "exit",
+        "physical"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_review_streaming_exit_20260520",
+      "type": "review",
+      "title": "退订 · 流媒体会员",
+      "review_type": "exit_record",
+      "target": "流媒体会员",
+      "target_id": "sample_sub_streaming_20241001",
+      "target_type": "recurring_cost",
+      "reviewed_at": "2026-05-20",
+      "exited_at": "2026-05-20",
+      "exit_type": "cancelled",
+      "summary": "一年四次都不到，退订省下 300。真正的问题不是这 25 块，是忘了自己在订阅什么。",
+      "currency": "CNY",
+      "created_at": "2026-05-20",
+      "updated_at": "2026-05-20",
+      "tags": [
+        "ownly",
+        "sample",
+        "review",
+        "exit",
+        "recurring"
+      ]
+    },
+    {
+      "schema_version": "0.1",
+      "id": "sample_review_monthly_202608",
+      "type": "review",
+      "title": "复盘 2026-08",
+      "review_type": "monthly",
+      "reviewed_at": "2026-08-31",
+      "period": "2026-08",
+      "year": 2026,
+      "summary": "这个月只做了一件事：把订阅摊开看了一遍，退掉一个、旅行花了 10180。净值第一次上 20 万，主要还是基金涨的，不是攒下来的。",
+      "currency": "CNY",
+      "created_at": "2026-08-31",
+      "updated_at": "2026-08-31",
+      "tags": [
+        "ownly",
+        "sample",
+        "review",
+        "monthly"
+      ]
+    }
+  ],
+  "bodies": {
+    "sample_camera_20260312": "## 为什么买\n\n出门旅行拍东西，A7C 比原来那台轻一半，续航也够用一周。\n",
+    "sample_laptop_20251108": "## 为什么买\n\n主力设备，四年折旧周期，到期再评估。\n",
+    "sample_ebike_20260420": "## 为什么买\n\n通勤三公里，比打车便宜也比骑车轻松。\n",
+    "sample_monitor_20260115": "## 退出原因\n\n换了双屏之后完全闲置，二手出掉比挂着占地方划算。\n",
+    "sample_headphone_20250702": "## 还在犹豫\n\n降噪确实是刚需，但已经有一副耳机在用，等真的坏了再说。\n",
+    "sample_review_trip_china_20260301": "## 复盘\n\n四城里重庆最累也最值，成都是唯一想再去的。\n",
+    "sample_review_trip_kansai_20260510": "## 复盘\n\n大阪吃、京都走、奈良喂鹿，节奏刚好。\n",
+    "sample_review_monitor_exit_20260618": "## 退出记录\n\n净回 1540，不算亏。\n",
+    "sample_review_streaming_exit_20260520": "## 退订记录\n\n一年不到四次，问题不是这 25 块。\n",
+    "sample_review_monthly_202608": "## 月度复盘\n\n把订阅摊开看了一遍，退掉一个。\n"
+  }
+}

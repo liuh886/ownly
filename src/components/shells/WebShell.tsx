@@ -6,6 +6,8 @@ import { type WYQDMembershipState } from '@/core/membership';
 import { getOwnlyLocalDataCopy, isMobileDevice } from '@/core/local-data-copy';
 import { markdownEntityRepository } from '@/services/MarkdownEntityRepository';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
+import { seedDemoMode } from '@/services/seedDemoMode';
+import { setStoreFolderConnected } from '@/services/ownlyStoreRouter';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
 import { WebDataOnboarding } from '@/components/onboarding/WebDataOnboarding';
@@ -38,6 +40,8 @@ export function WebShell() {
     upgradeMessage: t('webAlwaysProDesc'),
   }), [t]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [dataRevision, setDataRevision] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -68,6 +72,10 @@ export function WebShell() {
     return false;
   }, [localDataCopy]);
 
+  const refreshData = useCallback(() => {
+    setDataRevision((revision) => revision + 1);
+  }, []);
+
   const connectLocalData = useCallback(async (action: LocalDataAction): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
@@ -82,9 +90,12 @@ export function WebShell() {
         : await obsidianService.openLocalData();
       if (!connected) return false;
 
+      setStoreFolderConnected(true);
       await markdownEntityRepository.initialize();
       requestStoragePersistence();
       setIsConnected(true);
+      setIsDemoMode(false);
+      refreshData();
       setOnboardingOpen(false);
       window.localStorage.removeItem(ONBOARDING_DISMISSED_KEY);
       showNotice(action === 'create' ? localDataCopy.createdNotice : localDataCopy.openedNotice);
@@ -96,14 +107,33 @@ export function WebShell() {
     } finally {
       setIsLoading(false);
     }
-  }, [localDataCopy, showNotice]);
+  }, [localDataCopy, showNotice, refreshData]);
 
-  const continueInDemo = useCallback(() => {
-    window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, 'true');
+  /**
+   * Demo mode: no folder, so the repository resolves to the in-memory store.
+   * Seeding it is what makes Home / Objects / Accounts / Reviews / Planner show
+   * a populated, read-only app. Nothing is written to disk — connecting a
+   * folder discards this rather than migrating it.
+   */
+  const continueInDemo = useCallback(async () => {
+    setIsLoading(true);
     setError(null);
-    setOnboardingOpen(false);
-    trackOwnlyEvent('demo_started', { surface: 'web' });
-  }, []);
+    setStoreFolderConnected(false);
+    try {
+      await seedDemoMode();
+      setIsDemoMode(true);
+      // The store was empty when the app first read it; nudge consumers to
+      // re-read or the tabs would keep showing zero records.
+      refreshData();
+      trackOwnlyEvent('demo_started', { surface: 'web' });
+    } catch (seedError) {
+      setError(seedError instanceof Error ? seedError.message : localDataCopy.connectFailed);
+    } finally {
+      window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, 'true');
+      setOnboardingOpen(false);
+      setIsLoading(false);
+    }
+  }, [localDataCopy, refreshData]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('demo') === '1') {
@@ -134,10 +164,14 @@ export function WebShell() {
         const connected = await obsidianService.initAutoConnect();
         if (!isMounted) return;
         if (connected) {
+          setStoreFolderConnected(true);
           await markdownEntityRepository.initialize();
           requestStoragePersistence();
           setRecoveryState('CONNECTED');
         } else {
+          // No folder: route the repositories at the in-memory store so Demo
+          // mode has something to render. Reads work, writes stay gated.
+          setStoreFolderConnected(false);
           // Check recovery state for detailed UX (permission / missing)
           try {
             const { get } = await import('idb-keyval');
@@ -153,6 +187,15 @@ export function WebShell() {
             && window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
           setOnboardingOpen(shouldPrompt);
           if (shouldPrompt) trackOwnlyEvent('onboarding_opened');
+          // A returning demo user has no folder, and the memory store dies with
+          // the tab, so re-seed it. This is memory-only by construction — the
+          // store router still points at the filesystem the moment a folder
+          // connects, so nothing here can reach real data.
+          if (!connected && !shouldPrompt) {
+            await seedDemoMode();
+            setIsDemoMode(true);
+            refreshData();
+          }
         }
       } catch (error) {
         if (isMounted) {
@@ -169,12 +212,15 @@ export function WebShell() {
 
     void init();
     return () => { isMounted = false; };
-  }, [localDataCopy]);
+  }, [localDataCopy, refreshData]);
 
   const contextValue = useMemo(() => ({
     repository: markdownEntityRepository,
     runtimeTarget: 'web' as const,
     isConnected,
+    isDemoMode,
+    dataRevision,
+    refreshData,
     isLoading,
     connect,
     error,
@@ -193,7 +239,7 @@ export function WebShell() {
     storageSet: (key: string, value: string) => {
       if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
     },
-  }), [isConnected, isLoading, connect, error, clearError, notice, showNotice, membership, activateLicenseKey, clearLicenseKey, openLicenseModal, closeLicenseModal, licenseModalOpen]);
+  }), [isConnected, isDemoMode, dataRevision, refreshData, isLoading, connect, error, clearError, notice, showNotice, membership, activateLicenseKey, clearLicenseKey, openLicenseModal, closeLicenseModal, licenseModalOpen]);
 
   return (
     <OwnlyWorkspaceProvider value={contextValue}>
@@ -204,7 +250,7 @@ export function WebShell() {
         error={error}
         onCreate={() => void connectLocalData('create')}
         onOpen={() => void connectLocalData('open')}
-        onContinueDemo={continueInDemo}
+        onContinueDemo={() => void continueInDemo()}
       />
       <LicenseKeyModal
         open={licenseModalOpen}
@@ -216,3 +262,4 @@ export function WebShell() {
     </OwnlyWorkspaceProvider>
   );
 }
+

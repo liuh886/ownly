@@ -104,7 +104,7 @@ export function TabRenderer({
   setActiveTab,
 }: TabRendererProps) {
   const { t, language } = useI18n();
-  const { membership } = useOwnlyWorkspace();
+  const { membership, isDemoMode } = useOwnlyWorkspace();
 
   const [quickEntryRequest, setQuickEntryRequest] = useState<{
     token: number;
@@ -246,9 +246,12 @@ export function TabRenderer({
   }
 
   if (activeTab === 'planner') {
+    // Demo mode has example trips in the in-memory store, so Planner must
+    // render rather than show the "connect a folder" dead end. Writes are still
+    // blocked upstream by the same `isConnected` gate the other tabs use.
     return (
       <div className="space-y-2">
-        <PlannerHome disabled={!isConnected} />
+        <PlannerHome disabled={!isConnected && !isDemoMode} />
       </div>
     );
   }

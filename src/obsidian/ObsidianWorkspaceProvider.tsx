@@ -25,6 +25,12 @@ export function ObsidianWorkspaceProvider({
   withSuppressedRefresh?: <T>(fn: () => Promise<T>) => Promise<T>;
   children?: ReactNode;
 }) {
+  // A Vault can change underneath us (external edits, sync). Bumping the
+  // revision makes `useOwnlyData` re-read, which is how the Web shell's demo
+  // seed forces a refresh too.
+  const [dataRevision, setDataRevision] = useState(0);
+  const refreshData = useCallback(() => setDataRevision((value) => value + 1), []);
+
   // Wrap repository write methods to suppress vault change listener during writes
   const wrappedRepository = useMemo(() => {
     if (!withSuppressedRefresh) return repository;
@@ -86,6 +92,10 @@ export function ObsidianWorkspaceProvider({
           repository: wrappedRepository,
           runtimeTarget: 'obsidian',
           isConnected: true,
+          // Obsidian always has a real Vault open; there is no demo runtime.
+          isDemoMode: false,
+          dataRevision,
+          refreshData,
           isLoading: false,
           connect: async () => true,
           error: null,

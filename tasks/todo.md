@@ -1,5 +1,43 @@
 # Ownly — Task Progress & Review
 
+## Completed: 演示模式补齐全套示例数据 + 统一示例系统 (2026-10-01)
+
+**起因**：用户反馈「演示模式下只有 Planner 有行程，首页/物欲/账户/复盘都没有示例数据」，并问是不是做了两套示例系统。
+
+**诊断结论（确认属实）**：
+- **系统 A（旧的）**：`src/data/sampleData.ts` + 载入时自动播种 → 2026-08-01 `e654715`(#36) **删除**，因为它把示例记录写进**真实数据目录**。
+- **系统 B（上一轮）**：Sample Trips，只覆盖 Planner。
+- 删除 A 的代价：演示模式变成**完全空白**，并留下三处已经不成立的表述：
+  - `i18n.ts` `demoDataSeeded` / `demoDataSeededDesc` —— 无人引用，且声称「已添加到 Vault 中」
+  - `TrustStatusSection` —— 写着「演示模式数据只在内存」，但演示模式当时**根本没有数据**
+  - `i18n.ts` `demoModeDesc` —— 用 "Vault" 而非术语契约里的「Ownly 数据目录」
+
+**修法不是加第三套，而是修 A 被删掉的那个真正缺陷 —— 写入机制，不是内容：**
+```
+同一份数据 → 两个投递方式
+  ├─ 演示模式（未连目录） → 内存 store，只读，随标签页消亡
+  └─ 已连空目录          → 显式点击才写盘，带 sample 标记，可逐条归档
+```
+
+- [x] **`MemoryOwnlyStore`**：内存版 `MarkdownFileStore`，随标签页消亡，永不落盘。
+- [x] **`ownlyStoreRouter`**：连了目录走文件系统，否则走内存。因为 `PlannerFileStore` 与 `MarkdownFileStore` **结构完全相同**，一个 router 同时服务两个 repository，两个 repository 的默认 store 一行就换掉了。
+- [x] **`useOwnlyData` 不再在未连接时跳过读取** —— 这正是五个页面全空的原因。现在总是读，由 router 决定读哪里。
+- [x] **`dataRevision`**：store 被播种/切换时递增，驱动重读。原先 `continueInDemo` 播种完没有任何东西触发重读（实测 `0 Objects · 0 Snapshots`）。
+- [x] **Planner 在演示模式下正常渲染**，不再显示「连接数据目录」死胡同。
+- [x] **示例数据集**（`src/data/sample-data/`）：5 实体物品 + 4 订阅 + 3 旅行体验 + 6 份跨月快照 + 5 份复盘。规模是按真实约束定的，不是随手填：早期快照标 `is_month_end`（否则没有 Δ）、最新快照带 `due_date` 负债（否则还款面板空）、故意留 1 段体验未复盘（否则复盘页无事可做）、数量压在免费额度内。
+- [x] **质量门 30 项断言**：`validateEntity` 0 error **且 0 warning**、`net_worth` 与 Doctor 重算的余额一致、`review_ref` ↔ `target_id` 双向对齐、体验的 `expense_items` 合计等于 `actual_total`、Home 各项指标非零。
+- [x] **载入路径 10 项断言**，含「不碰文件系统 store」和「每一天仍 `feasible`」。
+- [x] **修 Turbopack 动态 import 死锁**（本轮最花时间的一个坑）：`await import()` 某个无运行时依赖的模块时，promise **永不 settle、无 console error、无网络请求**。改为 `public/sample-data/ledger.json` + `fetch()`，顺带 28 KB 数据不进任何路由的 JS 包。
+- [x] **修 `globalThis.fetch` 脱 receiver**：存成变量再调用时无 receiver，Chromium 里静默不派发。改为调用时属性访问。
+- [x] **`tests/smoke/demo_mode_smoke.py`**：真实 Chromium 驱动构建产物，断言五个 Tab 都有真实内容且会话只读。附带发现 Python `http.server` 在 Chromium 并行加载 chunk 时会卡住，表现为假的 `status: 0`，故新增 `tests/smoke/static-server.mjs`。
+- [x] **已连目录的显式入口**：首启引导里「一次性载入整套示例数据」，写入真实目录但带 `sample` 标记、可逐条归档。
+- [x] **清理三处失效表述**：`demoDataSeeded*` 改为描述内存示例数据；`demoModeDesc` / `vaultConnected*` 改用「Ownly 数据目录」术语。
+- [x] **验证**：`tsc` / `lint` / `validate:terminology`(20 文件) / `validate:analytics` / `validate:runtime-parity` / `validate:membership` 全绿；`npm test` **1124 用例通过**；`npm run build` + bundle 预算通过；`npm run smoke:demo-mode` 五个 Tab 全通过。
+
+**未竟事项**：
+- [ ] 示例数据的**日期固定**（快照止于 2026-08），一年后 `Doctor.snapshot.stale` 会报 info。可接受（info 级），但值得列入年度复查。
+- [ ] 演示模式只读是靠 UI 层 `disabled={!isConnected}` 保证的；若将来有人在内存态新增写入口，需要重新评估。
+
 ## Completed: 降低上手难度 — 示例行程 + 统一首启引导 (2026-09-30)
 
 **起因**：新用户选了存储位置之后，屏幕上没有任何真实内容 —— Planner 空状态只有一个标题和一个按钮，费用/地图/时间线全是空面板；同时首启路径上有 3 个互相竞争的弹窗（存储 / Capture 讲解 / 第一个对象），两个争抢同一个空状态。

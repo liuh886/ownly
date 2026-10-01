@@ -14,7 +14,7 @@ import type {
   WYQDArchivedStoredEntity,
   WYQDArchiveEntityType,
 } from '@/core/repository';
-import { obsidianService } from './ObsidianFileSystemService';
+import { ownlyStoreRouter } from './ownlyStoreRouter';
 import { createWYQDDirectories } from '@/data/paths';
 
 export interface MarkdownFileStore {
@@ -30,7 +30,7 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   private dirs: ReturnType<typeof createWYQDDirectories> = WYQD_DIRECTORIES;
 
   constructor(
-    private readonly store: MarkdownFileStore = obsidianService,
+    private readonly store: MarkdownFileStore = ownlyStoreRouter,
     private readonly clock: RepositoryClock = () => new Date(),
   ) {}
 

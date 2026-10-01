@@ -127,6 +127,24 @@ Prices inside a Sample Trip are published standard admission rates recorded as a
 static baseline, not live quotes, and will drift with the venue. Reference details
 are in [SAMPLE_TRIPS.md](SAMPLE_TRIPS.md).
 
+### Demo mode
+
+Demo mode needs no data folder at all, so it opens with example content in
+**memory only**: twelve objects and subscriptions, three trips, six months of
+account snapshots, and reviews — enough for every tab to show real numbers.
+
+- Nothing is written to disk, and the data disappears when you close the tab.
+- It is **read-only**. Save, archive and create actions stay disabled because
+  there is nowhere to put them.
+- Connecting an Ownly data folder **discards** the demo content rather than
+  copying it into your own records.
+
+If you already have a data folder and want the same starting point, use
+**载入一整套示例数据** (load a full set of example data) in the first-run guide
+instead. Those records are written to your folder, tagged `sample`, and can be
+archived one by one like any other. Reference details are in
+[SAMPLE_DATA.md](SAMPLE_DATA.md).
+
 ## 4. Home dashboard
 
 The Home dashboard summarizes:

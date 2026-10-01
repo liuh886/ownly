@@ -4,6 +4,24 @@
 
 ### Added
 
+- **Demo mode finally has data:** entering Demo mode without a data folder now populates Home, Objects, Accounts, Reviews and Planner instead of five blank panels. Demo content lives in an in-memory store that never touches disk and dies with the tab, and the session stays read-only because every write action is still gated on a connected folder. Connecting a folder **discards** the demo data rather than copying it into real records — migrating it would be the exact mistake that forced the original demo system to be removed in `e654715`.
+
+- **Sample Data (示例数据):** twelve objects and subscriptions, three travel experiences, six months of account snapshots and five reviews, shipped with Ownly and reachable from the first-run guide. Deliberately one coherent set loaded in one click, because the Home dashboard aggregates all three record types and loading only some of them renders totals that do not add up. Sized against real constraints: the snapshots span months with the earlier ones flagged month-end (the only way a Δ-vs-last-month exists), the latest carries dated liabilities so repayment reminders appear, one experience is left unreviewed so the Reviews tab has a live action, and every count stays inside the free-tier limits.
+
+- **Demo-mode smoke test:** `npm run smoke:demo-mode` drives the built app in Chromium and asserts all five tabs render real content and the session stays read-only. It serves the export through a Node static server, because Python's `http.server` stalls under Chromium's parallel chunk loading and surfaces as phantom `status: 0` fetch failures.
+
+### Changed
+
+- **One bundled dataset, two destinations.** The Sample Trips and the new Sample Data share one governance story — never silent, never in a real folder without a click, tagged and deletable once loaded — instead of two independent sample systems drifting apart.
+
+- `useOwnlyData` no longer skips its read when no folder is connected. It reads whichever store the router resolves to, which is what makes Demo mode render at all; a new `dataRevision` in the workspace context forces a re-read when the store is repopulated underneath it. Planner now renders in Demo mode rather than showing its connect-a-folder dead end.
+
+- `demoDataSeeded` and the demo-mode status strings said the content had "been added to your Vault", which stopped being true in `e654715`. They now describe in-memory example data and use the canonical "Ownly data folder" term instead of "Vault".
+
+### Fixed
+
+- Sample Data ships as a static JSON file fetched on demand rather than a dynamic `import()`. Turbopack's runtime deadlocks on that boundary in a static export: the promise never settles, with no console error and no network request. The same fetch also keeps 28 KB of inert records out of every route's JS payload. A detached `globalThis.fetch` reference is never held for the same reason — called without a receiver it silently never dispatches.
+
 - **Sample Trips:** three complete itineraries ship with Ownly and load from the Planner's empty state, from the first-run guide, and from trip management — 泰国 6 日 (曼谷 · 清迈 · 昆明), 中国 8 日 (北京 · 西安 · 重庆 · 成都), and 日本关西 6 日 (大阪 · 京都 · 奈良). Each arrives with places on the map, a day-by-day timeline, travel legs between stops, an unscheduled research pool, and a multi-currency ledger with an AA split. Loading is always an explicit click and nothing is written before one; a loaded Sample Trip is an ordinary trip — plain Markdown in the user's own data folder, badged 🧪 in trip management, deletable in one tap, and safe to load twice because every id is regenerated. They arrive through the same `importTripBundle` path as a shared link, so a Sample Trip cannot drift from the contract a real share depends on; the ledger participants and expenses that `ownly.trip.bundle` deliberately excludes are re-applied afterwards. Prices are published standard admission rates recorded as a static baseline, and no `source_place_id` is fabricated because a fake Place ID becomes strong identity evidence that could auto-merge two different venues. Every day of every trip is held to `status === 'feasible'` by a data-quality gate, and Doctor must report 0 errors and 0 warnings. See `docs/SAMPLE_TRIPS.md`.
 
 - **One first-run guide instead of three competing prompts:** a new user used to meet a storage dialog, a "30 seconds" Capture → Collection → Planner explainer, and a "record your first real object" chooser — each gated by its own heuristic, two of them competing for the same empty dataset. `src/core/first-run.ts` is now the single authority and returns one step, so a single dialog walks through the mental model and then the first record. A user who already dismissed the explainer goes straight to the actionable step, a loaded Sample Trip satisfies setup so nobody is nagged, and the empty-folder banner remains the way back in.

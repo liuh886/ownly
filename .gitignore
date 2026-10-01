@@ -58,3 +58,6 @@ src/core/git-sha.ts
 .claude/
 .vscode/
 supabase/.temp/
+
+# smoke-test failure screenshots (tests/smoke/demo_mode_smoke.py)
+tmp-demo-*.png

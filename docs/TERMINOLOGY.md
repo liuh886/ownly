@@ -56,6 +56,7 @@ When documenting personal cloud folders, recommend keeping the selected folder a
 | Data folder connected | 数据目录已连接 | Web/PWA has read/write access to the selected location |
 | Demo mode | 演示模式 | No real Ownly data folder is connected; demo content is not the source of truth |
 | Sample Trip | 示例行程 | A complete itinerary shipped with Ownly that the user may load explicitly; once loaded it is an ordinary, editable, deletable trip. See `docs/SAMPLE_TRIPS.md` |
+| Sample Data | 示例数据 | Objects, subscriptions, travel experiences, account snapshots and reviews shipped with Ownly. Held in memory in Demo mode, or written on an explicit click to a connected data folder. See `docs/SAMPLE_DATA.md` |
 | Archive | 归档 | Recoverable removal from active records |
 | Restore | 恢复 | Return an archived record to active storage |
 | Permanently delete | 永久删除 | Irreversible deletion of an archived record |

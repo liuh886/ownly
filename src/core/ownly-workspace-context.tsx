@@ -9,6 +9,18 @@ export interface OwnlyWorkspaceContextValue {
   repository: WYQDRepositoryAdapter;
   runtimeTarget: WYQDRuntimeTarget;
   isConnected: boolean;
+  /**
+   * Demo mode: no folder is connected, but the in-memory store holds example
+   * records so every tab can render. Reads work; writes still require a folder.
+   */
+  isDemoMode: boolean;
+  /**
+   * Bumped whenever the backing store changes underneath the app (demo seeding,
+   * a folder being connected or detached). Consumers re-read so a seed is
+   * reflected without a page reload.
+   */
+  dataRevision: number;
+  refreshData: () => void;
   isLoading: boolean;
   connect: () => Promise<boolean>;
   error: string | null;

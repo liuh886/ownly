@@ -16,6 +16,7 @@ import {
   type FirstRunStep,
 } from '@/core/first-run';
 import { SAMPLE_TRIP_LOADED_KEY } from '@/core/sample-trip';
+import { SAMPLE_DATA_LOADED_KEY } from '@/services/loadSampleData';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 
@@ -135,6 +136,18 @@ export function AppShell() {
   // A Sample Trip is real content in the user's own folder, so the first-run
   // guide is satisfied — and the legacy explainer flag is retired.
   const completeFirstRunViaSample = useCallback(() => {
+    storageSet(SAMPLE_TRIP_LOADED_KEY, 'true');
+    storageSet(FIRST_OBJECT_COMPLETED_KEY, 'true');
+    storageSet(LEGACY_CAPTURE_ONBOARDING_KEY, '1');
+    setFirstObjectForcedOpen(false);
+    setFirstRunHandled(true);
+    void data.loadVaultData();
+  }, [data, storageSet]);
+
+  // The full example set lands as ordinary records in the real data folder, so
+  // it satisfies setup exactly the same way a Sample Trip does.
+  const completeFirstRunViaSampleData = useCallback(() => {
+    storageSet(SAMPLE_DATA_LOADED_KEY, 'true');
     storageSet(SAMPLE_TRIP_LOADED_KEY, 'true');
     storageSet(FIRST_OBJECT_COMPLETED_KEY, 'true');
     storageSet(LEGACY_CAPTURE_ONBOARDING_KEY, '1');
@@ -268,6 +281,7 @@ export function AppShell() {
         step={firstRunStep}
         onChoose={chooseFirstObject}
         onSampleLoaded={completeFirstRunViaSample}
+        onSampleDataLoaded={completeFirstRunViaSampleData}
         onDismiss={dismissFirstObject}
       />
       <AgentMcpGuide open={agentGuideOpen} onClose={() => setAgentGuideOpen(false)} />

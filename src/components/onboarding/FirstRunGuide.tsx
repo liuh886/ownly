@@ -21,6 +21,7 @@ import type { FirstRunStep } from '@/core/first-run';
 import { allSampleTrips, type SampleTripId } from '@/data/sample-trips/registry';
 import { trackFirstEver, trackOwnlyEvent } from '@/lib/analytics';
 import { loadSampleTrip } from '@/services/loadSampleTrip';
+import { loadSampleData, SAMPLE_DATA_LOADED_KEY } from '@/services/loadSampleData';
 
 export interface FirstRunGuideProps {
   open: boolean;
@@ -28,16 +29,25 @@ export interface FirstRunGuideProps {
   step: FirstRunStep | null;
   onChoose: (choice: 'physical' | 'recurring_cost' | 'experience') => void;
   onSampleLoaded: () => void;
+  onSampleDataLoaded: () => void;
   onDismiss: () => void;
 }
 
-export function FirstRunGuide({ open, step, onChoose, onSampleLoaded, onDismiss }: FirstRunGuideProps) {
+export function FirstRunGuide({
+  open,
+  step,
+  onChoose,
+  onSampleLoaded,
+  onSampleDataLoaded,
+  onDismiss,
+}: FirstRunGuideProps) {
   const { language } = useI18n();
   const copy = getFirstRunCopy(language);
   const panelRef = useRef<HTMLElement>(null);
 
   const [internalStep, setInternalStep] = useState<FirstRunStep>(step ?? 'model');
   const [busyId, setBusyId] = useState<SampleTripId | null>(null);
+  const [busyAll, setBusyAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useDialogA11y({ open, onClose: onDismiss, panelRef });
@@ -46,6 +56,8 @@ export function FirstRunGuide({ open, step, onChoose, onSampleLoaded, onDismiss 
   // The orchestrator owns the entry step. `model` always wins, so re-opening
   // for a user who never advanced replays the lesson rather than stranding them.
   const active: FirstRunStep = step === 'model' ? 'model' : internalStep;
+
+  const busy = busyId !== null || busyAll;
 
   const handleSample = async (id: SampleTripId) => {
     setBusyId(id);
@@ -59,6 +71,28 @@ export function FirstRunGuide({ open, step, onChoose, onSampleLoaded, onDismiss 
       setError(err instanceof Error ? err.message : copy.error);
     } finally {
       setBusyId(null);
+    }
+  };
+
+  /**
+   * The whole ownership side in one click: objects, subscriptions, experiences,
+   * six months of snapshots, and reviews. Loaded together on purpose — the Home
+   * dashboard aggregates all three, so loading only some of them would render
+   * totals that do not add up and read as broken.
+   */
+  const handleSampleData = async () => {
+    setBusyAll(true);
+    setError(null);
+    try {
+      await loadSampleData();
+      window.localStorage.setItem(SAMPLE_DATA_LOADED_KEY, 'true');
+      trackFirstEver('first_record', 'first_object_saved', { source: 'sample' });
+      trackFirstEver('first_trip', 'first_trip_created', { source: 'sample' });
+      onSampleDataLoaded();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : copy.dataError);
+    } finally {
+      setBusyAll(false);
     }
   };
 
@@ -134,7 +168,7 @@ export function FirstRunGuide({ open, step, onChoose, onSampleLoaded, onDismiss 
                   <button
                     key={summary.id}
                     type="button"
-                    disabled={busyId !== null}
+                    disabled={busy}
                     onClick={() => void handleSample(summary.id)}
                     className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:opacity-50"
                   >
@@ -143,7 +177,18 @@ export function FirstRunGuide({ open, step, onChoose, onSampleLoaded, onDismiss 
                   </button>
                 ))}
               </div>
-              {error ? <p role="alert" className="mt-2 text-[11px] text-rose-700">⚠️ {copy.error} {error}</p> : null}
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleSampleData()}
+                className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-stone-400 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:border-stone-900 hover:text-stone-950 disabled:opacity-50"
+              >
+                {busyAll ? copy.dataLoading : `📦 ${copy.dataCta}`}
+              </button>
+              <p className="mt-1.5 text-[10px] leading-4 text-stone-500">{copy.dataHint}</p>
+
+              {error ? <p role="alert" className="mt-2 text-[11px] text-rose-700">⚠️ {error}</p> : null}
             </div>
           </div>
         )}

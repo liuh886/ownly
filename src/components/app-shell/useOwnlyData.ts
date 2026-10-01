@@ -5,7 +5,7 @@ import { calculateHomeMetrics } from '@/domain/calculations';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 
 export function useOwnlyData() {
-  const { repository, isConnected } = useOwnlyWorkspace();
+  const { repository, dataRevision } = useOwnlyWorkspace();
 
   const [storedObjects, setStoredObjects] = useState<WYQDStoredEntity<WYQDObject>[]>([]);
   const [storedSnapshots, setStoredSnapshots] = useState<WYQDStoredEntity<AccountSnapshot>[]>([]);
@@ -18,6 +18,19 @@ export function useOwnlyData() {
   const snapshots = useMemo(() => storedSnapshots.map((item) => item.entity), [storedSnapshots]);
   const metrics = useMemo(() => calculateHomeMetrics(objects, snapshots), [objects, snapshots]);
 
+  /**
+   * Reads the whole data folder, whichever store is active.
+   *
+   * This used to bail out when no folder was connected, which is why Demo mode
+   * rendered five empty tabs. It now always reads: the repository resolves to
+   * the filesystem when a folder is connected and to the in-memory store
+   * otherwise, so Demo mode gets a populated, read-only view. Read safety is
+   * unchanged — every write action stays gated on `isConnected`.
+   *
+   * `dataRevision` is a dependency because the store can be repopulated
+   * underneath us: Demo mode seeds the memory store after this hook first ran,
+   * and nothing else would trigger a second read.
+   */
   const loadVaultData = useCallback(async () => {
     const [nextObjects, nextSnapshots, nextReviews, nextLogs, nextArchivedEntities] = await Promise.all([
       repository.listObjects(),
@@ -35,8 +48,6 @@ export function useOwnlyData() {
   }, [repository]);
 
   useEffect(() => {
-    if (!isConnected) return;
-
     let isMounted = true;
 
     async function refreshLocalData() {
@@ -74,7 +85,7 @@ export function useOwnlyData() {
     return () => {
       isMounted = false;
     };
-  }, [isConnected, repository]);
+  }, [repository, dataRevision]);
 
   return {
     storedObjects,

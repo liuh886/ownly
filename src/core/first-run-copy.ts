@@ -17,6 +17,11 @@ export interface FirstRunCopy {
   sampleBody: string;
   loading: string;
   error: string;
+  /** One-click load of the whole ownership side. */
+  dataCta: string;
+  dataHint: string;
+  dataLoading: string;
+  dataError: string;
   dismiss: string;
 }
 
@@ -60,6 +65,11 @@ const COPY: Record<WYQDLanguage, FirstRunCopy> = {
       'A Sample Trip is an ordinary trip with places, a daily timeline, travel legs and a ledger already filled in. Open one, change anything, delete it whenever you like.',
     loading: 'Loading…',
     error: 'Could not load the Sample Trip.',
+    dataCta: 'Or load a full set of example data',
+    dataHint:
+      'Objects, subscriptions, three trips, six months of account snapshots and reviews — one click, so every page has something to show. Every record is tagged and can be archived individually.',
+    dataLoading: 'Loading example data…',
+    dataError: 'Could not load the example data.',
     dismiss: 'Skip for now',
   },
   zh: {
@@ -101,6 +111,11 @@ const COPY: Record<WYQDLanguage, FirstRunCopy> = {
       '示例行程就是一条普通行程：地点、日程时间线、交通段和费用账本都已经填好。打开看看，随便改，任何时候都能删掉。',
     loading: '载入中…',
     error: '示例行程载入失败。',
+    dataCta: '或者一次性载入整套示例数据',
+    dataHint:
+      '实体物品、订阅、三段旅行、六个月的账户快照和复盘 —— 一次载入，五个页面立刻都有内容。每条记录都带标记，可以单独归档删除。',
+    dataLoading: '正在载入示例数据…',
+    dataError: '示例数据载入失败。',
     dismiss: '暂时跳过',
   },
 };

@@ -63,6 +63,27 @@ boundary is:
 - **Analytics stay aggregate.** Only the shipped `SAMPLE_TRIP_IDS` enum is
   reported (`docs/ANALYTICS_EVENTS.md`); nothing derived from user data is.
 
+### Demo mode holds example data in memory
+
+Demo mode has no Ownly data folder, so there is nowhere to write. Rather than
+leave every tab blank — which is what happened when the old demo system was
+removed — it is populated from an **in-memory store** that dies with the tab.
+`docs/SAMPLE_DATA.md` has the full description; the boundary is:
+
+- **Never touches disk.** The store router points at the filesystem the moment a
+  folder is connected; in-memory writes only happen during the explicit seed.
+- **Read-only.** Every write action stays gated on a connected folder, so demo
+  mode cannot be edited, archived or added to.
+- **Connecting a folder discards it**, never migrates it. A demo record is not a
+  real record.
+- **Distinct from Demo mode content that is written.** Demo-mode data is
+  example content, not part of the user's ledger, and is never exported, shared
+  or backed up.
+
+The same bundled Sample Data is also offered, on an explicit click, for someone
+who has already connected a folder. That path does write, so it is covered by the
+Sample Trip rules above: tagged `sample`, removable record by record.
+
 ## Storage boundary
 
 Supported now:

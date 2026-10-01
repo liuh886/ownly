@@ -31,7 +31,7 @@ import type { PlannerTripCalendarFeed } from '@/domain/planner';
 import { validatePlannerTiming } from '@/domain/planner-schedule';
 import { validateEntity } from '@/domain/schema';
 import { CURRENT_SCHEMA_VERSION } from '@/domain/schema/common';
-import { obsidianService } from './ObsidianFileSystemService';
+import { ownlyStoreRouter } from './ownlyStoreRouter';
 
 export { CURRENT_SCHEMA_VERSION };
 
@@ -210,7 +210,7 @@ export class PlannerRepository {
   private root = '';
   private mutationChain: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly store: PlannerFileStore = obsidianService) {}
+  constructor(private readonly store: PlannerFileStore = ownlyStoreRouter) {}
 
   async initialize(): Promise<void> {
     this.root = await this.store.getDataFolder();

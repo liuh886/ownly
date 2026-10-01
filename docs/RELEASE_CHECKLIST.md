@@ -79,6 +79,25 @@ Also confirm, per [SAMPLE_TRIPS.md](SAMPLE_TRIPS.md):
 - prices are described as published standard rates, not live observations;
 - no fabricated `source_place_id` has been added.
 
+## 4b. Demo mode content
+
+Demo mode shows example content held **in memory only**. Confirm:
+
+- entering Demo mode populates Home, Objects, Accounts, Reviews and Planner;
+- nothing is written to disk, and the session stays read-only;
+- connecting a data folder **discards** demo content rather than migrating it.
+
+Run:
+
+```bash
+npm run test:samples
+npm run smoke:demo-mode
+```
+
+Per [SAMPLE_DATA.md](SAMPLE_DATA.md), the bundled dataset must keep passing: zero
+schema errors and warnings, `net_worth` matching its balances, `review_ref` and
+`target_id` agreeing in both directions, and every Home metric non-zero.
+
 ## 5. Runtime parity
 
 Review the typed capability contract in `src/core/runtime-capabilities.ts` and the committed [runtime compatibility matrix](RUNTIME_COMPATIBILITY.md).

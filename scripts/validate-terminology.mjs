@@ -11,6 +11,7 @@ const files = [
   'docs/USER_GUIDE.md',
   'docs/RELEASE_CHECKLIST.md',
   'docs/SAMPLE_TRIPS.md',
+  'docs/SAMPLE_DATA.md',
   'src/app/page.tsx',
   'src/core/terminology.ts',
   'src/core/first-object-copy.ts',
@@ -107,6 +108,12 @@ const requiredByFile = {
     '示例行程',
     'no silent demo writes',
     'ownly.trip.bundle',
+  ],
+  'docs/SAMPLE_DATA.md': [
+    'Sample Data',
+    '示例数据',
+    'in-memory store',
+    'Demo mode',
   ],
   'docs/WEB_RUNTIME.md': [
     'On this device',
