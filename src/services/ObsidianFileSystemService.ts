@@ -1,5 +1,6 @@
 import { get, set } from 'idb-keyval';
 import {
+  OWNLY_DATA_ROOT_MARKER,
   OWNLY_DATA_ROOT_NAME,
   OWNLY_REQUIRED_DIRECTORIES,
   shouldUseSelectedDirectoryAsDataRoot,
@@ -92,9 +93,11 @@ export class ObsidianFileSystemService {
 
       const selectedDirectory = await picker({ mode: 'readwrite' });
       const hasObsidianConfig = await this.hasDirectory(selectedDirectory, OBSIDIAN_CONFIG_DIR);
+      const hasDataRootMarker = await this.hasDirectory(selectedDirectory, OWNLY_DATA_ROOT_MARKER);
       const useSelectedAsRoot = shouldUseSelectedDirectoryAsDataRoot(
         selectedDirectory.name,
         hasObsidianConfig,
+        hasDataRootMarker,
       );
       const dataRoot = useSelectedAsRoot
         ? selectedDirectory
