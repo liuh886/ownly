@@ -32,20 +32,32 @@ export function AppHeader({
 }) {
   const { t, language, setLanguage, currency, setCurrency } = useI18n();
   const [overflowOpen, setOverflowOpen] = useState(false);
-  const { runtimeTarget, isConnected, isLoading, membership, openLicenseModal } = useOwnlyWorkspace();
+  const { runtimeTarget, mode, isLoading, membership, openLicenseModal } = useOwnlyWorkspace();
   const runtimeCapabilities = getWYQDRuntimeCapabilities(runtimeTarget);
   const usesBrowserLocalData = runtimeCapabilities.dataRuntime === 'browser';
   const localDataCopy = getOwnlyLocalDataCopy(language);
+  // The header pill is the always-visible half of the mode answer, so it must
+  // say which of the three states it is in rather than collapsing the two
+  // folderless states into one "demo" label.
   const connectionLabel = isLoading
     ? language === 'zh' ? '正在连接…' : 'Connecting…'
-    : isConnected
+    : mode === 'connected'
       ? usesBrowserLocalData ? localDataCopy.connected : t('vaultConnected')
-      : usesBrowserLocalData ? localDataCopy.createOrOpen : t('demoMode');
-  const connectionTitle = isConnected && !isLoading
+      : mode === 'demo'
+        ? t('demoMode')
+        : usesBrowserLocalData ? localDataCopy.disconnected : t('demoMode');
+  const connectionTitle = mode === 'connected' && !isLoading
     ? language === 'zh'
       ? '已连接。点击可更换数据目录。'
       : 'Connected. Click to change the data folder.'
-    : undefined;
+    : mode === 'demo'
+      ? language === 'zh'
+        ? '演示模式：正在浏览仅存在于内存中的示例数据，不会保存任何内容。'
+        : 'Demo mode: browsing example data held in memory. Nothing is saved.'
+      : language === 'zh'
+        ? '尚未连接数据目录。'
+        : 'No data folder connected yet.';
+  const isSettled = mode === 'connected' && !isLoading;
   const heading = activeTab === 'planner'
     ? {
         title: 'Planner',
@@ -203,27 +215,25 @@ export function AppHeader({
               disabled={isLoading}
               title={connectionTitle}
               className={`ownly-hit-expand inline-flex touch-manipulation items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition duration-150 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-muted disabled:cursor-wait ${
-                isConnected && !isLoading
+                isSettled
                   ? 'bg-surface-muted text-ink-secondary ring-1 ring-line hover:bg-surface-sunken hover:text-ink'
-                  : 'bg-primary text-on-primary shadow-sm hover:bg-primary-hover disabled:hover:bg-primary'
+                  : mode === 'demo'
+                    ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200'
+                    : 'bg-primary text-on-primary shadow-sm hover:bg-primary-hover disabled:hover:bg-primary'
               }`}
             >
-              {isConnected && !isLoading ? (
+              {isSettled ? (
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" aria-hidden="true" />
+              ) : mode === 'demo' ? (
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
               ) : null}
               {connectionLabel}
-              {isConnected && !isLoading ? <span aria-hidden="true">▾</span> : null}
+              {isSettled ? <span aria-hidden="true">▾</span> : null}
             </button>
           ) : (
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
-                isConnected
-                  ? 'bg-surface-muted text-ink-muted ring-1 ring-line'
-                  : 'bg-surface-muted text-ink-muted ring-1 ring-line'
-              }`}
-            >
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1.5 text-xs font-medium text-ink-muted ring-1 ring-line">
               <span
-                className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-300' : 'bg-stone-400'}`}
+                className={`h-1.5 w-1.5 rounded-full ${mode === 'connected' ? 'bg-emerald-300' : 'bg-stone-400'}`}
                 aria-hidden="true"
               />
               {connectionLabel}

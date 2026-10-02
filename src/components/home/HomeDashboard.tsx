@@ -10,6 +10,7 @@ import { HomeDataScaleSection } from './HomeDataScaleSection';
 import { HomeDoctorSection } from './HomeDoctorSection';
 import { PlannerDoctorSection } from '@/components/planner/PlannerDoctorSection';
 import { TrustStatusSection } from '@/components/data-safety/TrustStatusSection';
+import { SampleDataSection } from '@/components/data-safety/SampleDataSection';
 
 const springTransition = {
   type: 'spring' as const,
@@ -88,6 +89,7 @@ export function HomeDashboard({
       <HomeDoctorSection itemVariants={itemVariants} />
       <PlannerDoctorSection itemVariants={itemVariants} onOpenTrip={onOpenTrip} />
       <TrustStatusSection itemVariants={itemVariants} />
+      <SampleDataSection itemVariants={itemVariants} />
     </motion.section>
   );
 }

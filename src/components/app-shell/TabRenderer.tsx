@@ -104,7 +104,7 @@ export function TabRenderer({
   setActiveTab,
 }: TabRendererProps) {
   const { t, language } = useI18n();
-  const { membership, isDemoMode } = useOwnlyWorkspace();
+  const { membership } = useOwnlyWorkspace();
 
   const [quickEntryRequest, setQuickEntryRequest] = useState<{
     token: number;
@@ -247,11 +247,14 @@ export function TabRenderer({
 
   if (activeTab === 'planner') {
     // Demo mode has example trips in the in-memory store, so Planner must
-    // render rather than show the "connect a folder" dead end. Writes are still
-    // blocked upstream by the same `isConnected` gate the other tabs use.
+    // render rather than show the "connect a folder" dead end. It stays
+    // **read-only**, like every other tab: the demo store dies with the tab, so
+    // an enabled write control there would collect real edits into memory and
+    // drop them on close. This used to be `!isConnected && !isDemoMode`, which
+    // contradicted the read-only contract the demo smoke test asserts.
     return (
       <div className="space-y-2">
-        <PlannerHome disabled={!isConnected && !isDemoMode} />
+        <PlannerHome disabled={!isConnected} />
       </div>
     );
   }

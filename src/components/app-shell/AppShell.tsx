@@ -51,8 +51,10 @@ export function AppShell() {
   const {
     runtimeTarget,
     isConnected,
+    mode,
     isLoading,
     connect,
+    disconnectFolder,
     error,
     clearError,
     notice,
@@ -208,15 +210,17 @@ export function AppShell() {
           onOpenAgentGuide={() => setAgentGuideOpen(true)}
         />
 
-        {!isConnected || error ? (
-          <StatusBanner
-            isConnected={isConnected}
-            isLoading={isLoading}
-            error={error}
-            onConnect={() => void connectVault()}
-            isWebRuntime={runtimeCapabilities.dataRuntime === 'browser'}
-          />
-        ) : null}
+        {/* All three modes render. The banner is how a user answers "am I
+            looking at my own records or a demo?" — hiding it whenever things
+            are fine is what made that unanswerable. */}
+        <StatusBanner
+          mode={mode}
+          isLoading={isLoading}
+          error={error}
+          onConnect={() => void connectVault()}
+          onDisconnect={() => void disconnectFolder()}
+          isWebRuntime={runtimeCapabilities.dataRuntime === 'browser'}
+        />
 
         {showEmptyDataBanner ? (
           <EmptyOwnlyDataBanner onCreate={reopenFirstObject} />

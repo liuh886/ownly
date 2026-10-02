@@ -1,34 +1,56 @@
 'use client';
 
-import { useRef, useState } from 'react';
+/**
+ * The folder panel.
+ *
+ * Three things this dialog has to get right, all of them learned the hard way:
+ *
+ *  1. **Escape must not choose for you.** It used to be wired to the demo
+ *     handler, so the fastest way out silently entered demo mode and marked
+ *     onboarding handled — a state change the user never asked for, with no
+ *     second prompt. It now calls a neutral `onDismiss`.
+ *  2. **Demo mode is a choice, not an escape hatch.** It was a `text-xs`
+ *     underline below a warning box, which reads as "back out" rather than
+ *     "start here". It is now a peer card with the same weight as create/open.
+ *  3. **No control that does not do something.** The storage-location radiogroup
+ *     only toggled a helper paragraph, while looking fully interactive. It is
+ *     now static guidance, because there is no meaningful way to act on it
+ *     before the OS folder picker opens.
+ *
+ * Both folder cards state that connecting ends the demo session. That is a real,
+ * unrecoverable loss of anything typed in demo, and it was previously mentioned
+ * only in a code comment.
+ */
+import { useRef } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
 import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
-
-type StorageIntent = 'local' | 'cloud';
 
 export function WebDataOnboarding({
   open,
   isLoading,
   error,
+  hasSeenDemo,
   onCreate,
   onOpen,
   onContinueDemo,
+  onDismiss,
 }: {
   open: boolean;
   isLoading: boolean;
   error: string | null;
+  /** True when re-opened from demo mode, so the loss warning is worth showing. */
+  hasSeenDemo: boolean;
   onCreate: () => void;
   onOpen: () => void;
   onContinueDemo: () => void;
+  onDismiss: () => void;
 }) {
   const { language } = useI18n();
   const copy = getOwnlyLocalDataCopy(language);
-  const [storageIntent, setStorageIntent] = useState<StorageIntent>('local');
-
   const panelRef = useRef<HTMLElement>(null);
 
-  useDialogA11y({ open, onClose: onContinueDemo, panelRef, dismissible: !isLoading });
+  useDialogA11y({ open, onClose: onDismiss, panelRef, dismissible: !isLoading });
 
   if (!open) return null;
 
@@ -52,61 +74,41 @@ export function WebDataOnboarding({
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
             {copy.onboarding.description}
           </p>
-          <div className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs leading-5 text-stone-700 ring-1 ring-emerald-200">
-            {language === 'zh' ? 'Ownly 不上传你的数据，你的数据保存在你选择的文件夹中。' : 'Ownly never uploads your data — it stays in the folder you choose.'}
-          </div>
         </div>
 
         <div className="px-6 pt-6 sm:px-8 sm:pt-8">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
             {copy.onboarding.storageQuestion}
           </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={copy.onboarding.storageQuestion}>
+          {/* Guidance, not a control: picking a storage location is the OS
+              folder dialog's job, and this used to be a radiogroup that only
+              toggled the note below it. */}
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {([
               ['local', copy.onboarding.localTitle, copy.onboarding.localDescription, '⌂'],
               ['cloud', copy.onboarding.cloudTitle, copy.onboarding.cloudDescription, '☁'],
-            ] as const).map(([value, title, description, icon]) => {
-              const selected = storageIntent === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setStorageIntent(value)}
-                  disabled={isLoading}
-                  className={`min-h-32 rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                    selected
-                      ? 'border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200'
-                      : 'border-stone-200 bg-stone-50 hover:border-stone-300 hover:bg-white'
-                  }`}
+            ] as const).map(([key, title, description, icon]) => (
+              <div key={key} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+                <span
+                  aria-hidden="true"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-base text-stone-600 ring-1 ring-stone-200"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className={`flex h-9 w-9 items-center justify-center rounded-lg text-base ${selected ? 'bg-emerald-600 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200'}`}>
-                      {icon}
-                    </span>
-                    {selected ? (
-                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-800">
-                        {copy.onboarding.selected}
-                      </span>
-                    ) : null}
+                  {icon}
+                </span>
+                <h3 className="mt-3 text-sm font-semibold text-stone-950">{title}</h3>
+                <p className="mt-1.5 text-xs leading-5 text-stone-600">{description}</p>
+                {key === 'cloud' ? (
+                  <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-5 text-sky-900">
+                    <p>{copy.onboarding.cloudNote}</p>
+                    <p className="mt-1 font-semibold">{copy.onboarding.cloudRule}</p>
                   </div>
-                  <h3 className="mt-3 text-sm font-semibold text-stone-950">{title}</h3>
-                  <p className="mt-1.5 text-xs leading-5 text-stone-600">{description}</p>
-                </button>
-              );
-            })}
+                ) : null}
+              </div>
+            ))}
           </div>
-
-          {storageIntent === 'cloud' ? (
-            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">
-              <p>{copy.onboarding.cloudNote}</p>
-              <p className="mt-1 font-semibold">{copy.onboarding.cloudRule}</p>
-            </div>
-          ) : null}
         </div>
 
-        <div className="grid gap-4 p-6 sm:grid-cols-2 sm:p-8">
+        <div className="grid gap-4 p-6 sm:grid-cols-3 sm:p-8">
           <article className="flex flex-col rounded-xl border border-emerald-200 bg-emerald-50/50 p-5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-lg font-bold text-white">+</div>
             <h3 className="mt-4 text-base font-semibold text-stone-950">{copy.onboarding.createTitle}</h3>
@@ -138,11 +140,33 @@ export function WebDataOnboarding({
               {isLoading ? copy.connecting : copy.onboarding.openButton}
             </button>
           </article>
+
+          <article className="flex flex-col rounded-xl border border-amber-200 bg-amber-50/50 p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-lg font-bold text-white">◐</div>
+            <h3 className="mt-4 text-base font-semibold text-stone-950">{copy.onboarding.demoTitle}</h3>
+            <p className="mt-2 flex-1 text-sm leading-6 text-stone-600">
+              {copy.onboarding.demoDescription}
+            </p>
+            <button
+              type="button"
+              onClick={onContinueDemo}
+              disabled={isLoading}
+              className="mt-5 min-h-11 rounded-lg border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-900 transition hover:border-amber-500 hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
+            >
+              {isLoading ? copy.connecting : copy.onboarding.demoButton}
+            </button>
+          </article>
         </div>
 
-        <div className="mx-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:mx-8">
-          <p className="text-xs font-semibold text-amber-900">{copy.onboarding.recommendationTitle}</p>
-          <p className="mt-1 text-xs leading-5 text-amber-800">{copy.onboarding.recommendation}</p>
+        {hasSeenDemo ? (
+          <div className="mx-6 mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:mx-8">
+            <p className="text-xs leading-5 text-amber-900">{copy.onboarding.connectDiscardsDemo}</p>
+          </div>
+        ) : null}
+
+        <div className="mx-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 sm:mx-8">
+          <p className="text-xs font-semibold text-stone-900">{copy.onboarding.recommendationTitle}</p>
+          <p className="mt-1 text-xs leading-5 text-stone-600">{copy.onboarding.recommendation}</p>
         </div>
 
         {error ? (
@@ -154,11 +178,11 @@ export function WebDataOnboarding({
         <div className="flex justify-center px-6 py-5 sm:px-8">
           <button
             type="button"
-            onClick={onContinueDemo}
+            onClick={onDismiss}
             disabled={isLoading}
             className="text-xs font-medium text-stone-500 underline decoration-stone-300 underline-offset-4 transition hover:text-stone-900 disabled:cursor-not-allowed disabled:text-stone-300"
           >
-            {copy.onboarding.demo}
+            {copy.onboarding.dismiss}
           </button>
         </div>
       </section>

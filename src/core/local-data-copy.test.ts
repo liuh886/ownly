@@ -45,4 +45,51 @@ describe('Ownly Web/PWA storage copy', () => {
     expect(isMobileDevice('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe(false);
     expect(isMobileDevice('')).toBe(false);
   });
+
+  it('distinguishes "no folder" from demo mode in both languages', () => {
+    const en = getOwnlyLocalDataCopy('en');
+    const zh = getOwnlyLocalDataCopy('zh');
+
+    // These were the same string, which is why a user could not tell a
+    // deliberate demo session from a failed connection.
+    expect(en.disconnected).not.toBe(en.connected);
+    expect(zh.disconnected).toBe('未连接数据目录');
+    expect(zh.connected).toBe('数据目录已连接');
+    expect(en.disconnectedDescription).toContain('demo mode');
+    expect(zh.disconnectedDescription).toContain('演示模式');
+  });
+
+  it('states plainly that demo mode saves nothing', () => {
+    const en = getOwnlyLocalDataCopy('en');
+    const zh = getOwnlyLocalDataCopy('zh');
+
+    expect(en.demoNote).toContain('never writes a file');
+    expect(zh.demoNote).toContain('不会写入任何文件');
+    expect(zh.demoNote).toContain('不会被保留');
+  });
+
+  it('warns that connecting discards the demo session', () => {
+    const en = getOwnlyLocalDataCopy('en');
+    const zh = getOwnlyLocalDataCopy('zh');
+
+    expect(en.onboarding.connectDiscardsDemo).toContain('discarded');
+    expect(zh.onboarding.connectDiscardsDemo).toContain('丢弃');
+  });
+
+  it('offers demo mode as a labelled peer choice with a neutral escape', () => {
+    const en = getOwnlyLocalDataCopy('en');
+    const zh = getOwnlyLocalDataCopy('zh');
+
+    expect(en.onboarding.demoTitle).toBeTruthy();
+    expect(en.onboarding.demoButton).toBeTruthy();
+    expect(en.onboarding.dismiss).toBe('Decide later');
+    expect(zh.onboarding.dismiss).toBe('以后再说');
+    expect(en.onboarding.demoDescription).toContain('read-only');
+    expect(zh.onboarding.demoDescription).toContain('只读');
+  });
+
+  it('offers a way back out of a connected folder', () => {
+    expect(getOwnlyLocalDataCopy('en').disconnect).toBe('Disconnect');
+    expect(getOwnlyLocalDataCopy('zh').disconnect).toBe('断开连接');
+  });
 });

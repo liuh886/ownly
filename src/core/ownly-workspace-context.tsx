@@ -4,6 +4,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { WYQDRepositoryAdapter } from './repository';
 import type { WYQDRuntimeTarget } from './runtime';
 import type { WYQDMembershipState } from './membership';
+import type { LocalDataMode } from './local-data-mode';
 
 export interface OwnlyWorkspaceContextValue {
   repository: WYQDRepositoryAdapter;
@@ -15,6 +16,13 @@ export interface OwnlyWorkspaceContextValue {
    */
   isDemoMode: boolean;
   /**
+   * Where the records on screen actually live. Prefer this over the two booleans
+   * above wherever the answer is user-facing: `isConnected === false` alone
+   * cannot tell "deliberately browsing the demo" from "never managed to
+   * connect", and those need different wording and different exits.
+   */
+  mode: LocalDataMode;
+  /**
    * Bumped whenever the backing store changes underneath the app (demo seeding,
    * a folder being connected or detached). Consumers re-read so a seed is
    * reflected without a page reload.
@@ -23,6 +31,11 @@ export interface OwnlyWorkspaceContextValue {
   refreshData: () => void;
   isLoading: boolean;
   connect: () => Promise<boolean>;
+  /**
+   * Detach the current folder *and* forget it, so a later reload does not
+   * silently re-attach it. Leaves the app in `disconnected`.
+   */
+  disconnectFolder: () => Promise<boolean>;
   error: string | null;
   clearError: () => void;
   notice: string | null;

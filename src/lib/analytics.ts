@@ -24,6 +24,7 @@ declare global {
 export const OWNLY_ANALYTICS_ALLOWLIST: Record<string, readonly string[]> = {
   onboarding_opened: [],
   local_data_connected: ['action'],
+  local_data_disconnected: [],
   demo_started: ['surface'],
   first_object_saved: ['source'],
   object_archived: [],
@@ -37,6 +38,9 @@ export const OWNLY_ANALYTICS_ALLOWLIST: Record<string, readonly string[]> = {
   sample_trip_loaded: ['id'],
   first_trip_created: ['source'],
   first_day_scheduled: [],
+  // Removal counts only. They describe how much example content was cleared, so
+  // they stay aggregate — no titles, ids or paths.
+  sample_data_cleared: ['objects', 'snapshots', 'reviews', 'trips'],
 };
 
 const KILL_SWITCH_KEY = 'ownly_analytics_disabled';

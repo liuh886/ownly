@@ -94,10 +94,13 @@ export function ObsidianWorkspaceProvider({
           isConnected: true,
           // Obsidian always has a real Vault open; there is no demo runtime.
           isDemoMode: false,
+          mode: 'connected',
           dataRevision,
           refreshData,
           isLoading: false,
           connect: async () => true,
+          // Obsidian has no folder handle to detach — the Vault is the app.
+          disconnectFolder: async () => false,
           error: null,
           clearError,
           notice,

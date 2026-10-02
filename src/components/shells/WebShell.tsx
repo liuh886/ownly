@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { OwnlyWorkspaceProvider } from '@/core/ownly-workspace-context';
 import { type WYQDMembershipState } from '@/core/membership';
 import { getOwnlyLocalDataCopy, isMobileDevice } from '@/core/local-data-copy';
+import { resolveLocalDataMode } from '@/core/local-data-mode';
 import { markdownEntityRepository } from '@/services/MarkdownEntityRepository';
 import { obsidianService } from '@/services/ObsidianFileSystemService';
 import { seedDemoMode } from '@/services/seedDemoMode';
@@ -76,6 +77,27 @@ export function WebShell() {
     setDataRevision((revision) => revision + 1);
   }, []);
 
+  /**
+   * Neutral close for the folder panel — Escape, the backdrop, "decide later".
+   *
+   * It deliberately does *not* pick a data source. This used to be wired to the
+   * demo handler, which meant the fastest way out of the panel silently seeded
+   * example data, marked onboarding handled so it never asked again, and left
+   * the user in a mode they had not chosen. Closing a question dialog must not
+   * answer the question.
+   *
+   * The app lands in `disconnected`, which is honest and has a real affordance:
+   * the status banner offers both "choose a folder" and demo mode.
+   */
+  const dismissOnboarding = useCallback(() => {
+    window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, 'true');
+    setStoreFolderConnected(false);
+    setIsDemoMode(false);
+    setIsConnected(false);
+    setOnboardingOpen(false);
+    refreshData();
+  }, [refreshData]);
+
   const connectLocalData = useCallback(async (action: LocalDataAction): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
@@ -108,6 +130,35 @@ export function WebShell() {
       setIsLoading(false);
     }
   }, [localDataCopy, showNotice, refreshData]);
+
+  /**
+   * Detach the folder and forget it.
+   *
+   * `disconnect()` clears the persisted handle, which is the part that was
+   * missing: without it, returning to demo left a live handle in IndexedDB and
+   * the next `initAutoConnect` silently re-attached the real folder, so the app
+   * showed demo data while a reload flipped it back to the user's own records.
+   */
+  const disconnectFolder = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      await obsidianService.disconnect();
+      setStoreFolderConnected(false);
+      setIsConnected(false);
+      setIsDemoMode(false);
+      setError(null);
+      refreshData();
+      trackOwnlyEvent('local_data_disconnected');
+      return true;
+    } catch (disconnectError) {
+      setError(
+        disconnectError instanceof Error ? disconnectError.message : localDataCopy.connectFailed,
+      );
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [localDataCopy, refreshData]);
 
   /**
    * Demo mode: no folder, so the repository resolves to the in-memory store.
@@ -214,15 +265,19 @@ export function WebShell() {
     return () => { isMounted = false; };
   }, [localDataCopy, refreshData]);
 
+  const mode = resolveLocalDataMode(isConnected, isDemoMode);
+
   const contextValue = useMemo(() => ({
     repository: markdownEntityRepository,
     runtimeTarget: 'web' as const,
     isConnected,
     isDemoMode,
+    mode,
     dataRevision,
     refreshData,
     isLoading,
     connect,
+    disconnectFolder,
     error,
     clearError,
     notice,
@@ -239,7 +294,7 @@ export function WebShell() {
     storageSet: (key: string, value: string) => {
       if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
     },
-  }), [isConnected, isDemoMode, dataRevision, refreshData, isLoading, connect, error, clearError, notice, showNotice, membership, activateLicenseKey, clearLicenseKey, openLicenseModal, closeLicenseModal, licenseModalOpen]);
+  }), [isConnected, isDemoMode, mode, dataRevision, refreshData, isLoading, connect, disconnectFolder, error, clearError, notice, showNotice, membership, activateLicenseKey, clearLicenseKey, openLicenseModal, closeLicenseModal, licenseModalOpen]);
 
   return (
     <OwnlyWorkspaceProvider value={contextValue}>
@@ -248,9 +303,11 @@ export function WebShell() {
         open={onboardingOpen}
         isLoading={isLoading}
         error={error}
+        hasSeenDemo={isDemoMode}
         onCreate={() => void connectLocalData('create')}
         onOpen={() => void connectLocalData('open')}
         onContinueDemo={() => void continueInDemo()}
+        onDismiss={dismissOnboarding}
       />
       <LicenseKeyModal
         open={licenseModalOpen}
