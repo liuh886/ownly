@@ -238,3 +238,63 @@ it('same-name CNY and USD balances round-trip separate IDs/currencies/metadata a
   expect.objectContaining({ account_id: 'bank-cny', currency: 'CNY', amount: 1200, imported_note: 'yuan' }),
  ] });
 });
+
+
+it('preselects matching review or pending experience based on initialTargetId', async () => {
+  const tripExp = {
+    schema_version: '0.1',
+    id: 'obj_trip_review_t1',
+    title: 'Trip to Kyoto',
+    type: 'object',
+    object_type: 'one_time_experience',
+    status: 'completed',
+    created_at: '2026-10-01',
+  } as WYQDObject;
+
+  const tripReview = {
+    entity: {
+      schema_version: '0.1',
+      id: 'review_trip_t2',
+      title: 'Review Trip to Osaka',
+      type: 'review',
+      review_type: 'object_review',
+      target: 'Trip to Osaka',
+      target_id: 'obj_trip_review_t2',
+      summary: 'Osaka food tour',
+      food_score: 95,
+      created_at: '2026-10-02',
+    } as ReviewEntry,
+    fileName: 'review_trip_t2.md',
+    body: '## Review',
+  } as WYQDStoredEntity<ReviewEntry>;
+
+  // 1. Scored retrospective: initialTargetId matches target_id
+  await render(
+    <ReviewHome
+      objects={[tripExp]}
+      reviews={[tripReview]}
+      membership={{} as never}
+      initialTargetId="obj_trip_review_t2"
+      onCreateReview={vi.fn()}
+      onUpdateReview={vi.fn()}
+      onDeleteReview={vi.fn()}
+    />,
+  );
+  expect(host.textContent).toContain('Review Trip to Osaka');
+  expect(host.textContent).toContain('Osaka food tour');
+
+  // 2. Unscored retrospective: initialTargetId matches pending experience id
+  await render(
+    <ReviewHome
+      objects={[tripExp]}
+      reviews={[tripReview]}
+      membership={{} as never}
+      initialTargetId="obj_trip_review_t1"
+      onCreateReview={vi.fn()}
+      onUpdateReview={vi.fn()}
+      onDeleteReview={vi.fn()}
+    />,
+  );
+  expect(host.querySelector('form')).not.toBeNull();
+  expect(host.querySelector('textarea')?.value).toBe('reviewAbout');
+});

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { saveTripReviewDraft, TripReviewConflictError, TripReviewSaveError } from './save-trip-review';
 import { buildTripReviewDraft, buildTripReviewStats } from '@/domain/trip-review';
+import type { ReviewEntry } from '@/domain/types';
 import type { PlannerTrip } from '@/domain/planner';
 import { MarkdownEntityRepository, type MarkdownFileStore } from '@/services/MarkdownEntityRepository';
 const trip: PlannerTrip = { schema_version: '0.1', type: 'trip', id: 't1', title: 'Trip', status: 'completed',
@@ -106,6 +107,58 @@ describe('retrospective recovery', () => {
     expect(repository.saveObject).toHaveBeenCalledOnce();
     expect(repository.updateObject).toHaveBeenCalledOnce();
     expect(link.mock.calls[0]).toEqual(link.mock.calls[1]);
+  });
+  it('creates a linked ReviewEntry with ratings when scores are provided in draft', async () => {
+    const objects: Array<{ fileName: string; entity: typeof draft.object; body: string }> = [];
+    const reviews: Array<{ fileName: string; entity: ReviewEntry; body: string }> = [];
+    const repository = {
+      listObjects: async () => objects,
+      saveObject: vi.fn(async (entity: typeof draft.object, body = '') => {
+        objects.push({ fileName: 'exp.md', entity, body });
+        return 'exp.md';
+      }),
+      updateObject: vi.fn(async (_file: string, entity: typeof draft.object, body = '') => {
+        objects[0] = { ...objects[0], entity, body };
+      }),
+      listReviews: async () => reviews,
+      saveReview: vi.fn(async (entity: ReviewEntry, body = '') => {
+        reviews.push({ fileName: 'review_trip_t1.md', entity, body });
+        return 'review_trip_t1.md';
+      }),
+      updateReview: vi.fn(async (_file: string, entity: ReviewEntry, body = '') => {
+        reviews[0] = { ...reviews[0], entity, body };
+      }),
+    };
+    const link = vi.fn().mockResolvedValue(undefined);
+    const scoredDraft = {
+      ...draft,
+      scores: {
+        foodScore: 85,
+        sceneryScore: 92,
+        experienceScore: 90,
+        summary: 'Amazing Tokyo food and temples',
+      },
+    };
+    await saveTripReviewDraft(repository, trip.id, scoredDraft, link, () => {}, new Map());
+    expect(repository.saveObject).toHaveBeenCalledOnce();
+    expect(repository.saveReview).toHaveBeenCalledOnce();
+    expect(link).toHaveBeenCalledWith('t1', 'obj_trip_review_t1');
+
+    // Experience object is marked 'reviewed' with review_ref
+    expect(objects[0].entity.status).toBe('reviewed');
+    expect(objects[0].entity.review_ref).toBe('review_trip_t1');
+
+    // ReviewEntry has structured scores and target linkage
+    expect(reviews[0].entity).toMatchObject({
+      type: 'review',
+      review_type: 'object_review',
+      target_id: 'obj_trip_review_t1',
+      food_score: 85,
+      scenery_score: 92,
+      experience_score: 90,
+      summary: 'Amazing Tokyo food and temples',
+    });
+    expect(reviews[0].body).toContain('美食评分：85分');
   });
 
 });

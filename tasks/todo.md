@@ -1,5 +1,36 @@
 # Ownly — Task Progress & Review
 
+## 行程标记可逆与 Review 评估联动 (2026-10-23)
+
+- [x] 方案与交互设计对齐：
+  - [x] 1. 完结状态可逆：点击 `✅ 已完结` 弹出确认对话框「取消行程完结？」，确认后恢复为未完结（根据日期自适应为 `active` 或 `planning`），并在 Toast 提示。
+  - [x] 2. 完结后即时留评：标记完结后通过 Toast Action 提供 `[📝 立即复盘]` 快速入口，直接唤起复盘弹窗。
+  - [x] 3. `TripReviewModal` 支持直接输入评分：在弹窗中增加可选的美食/风景/体验评分（0-100），保存时一并生成/关联 `ReviewEntry`，实现直接留下评估。
+  - [x] 4. Planner 头部复盘按钮解除禁用并打通跳转：当 `review_id` 存在时，按钮变为 `✅ 查看复盘`，点击直接切换至 `reviews` Tab 并定位对应复盘项。
+  - [x] 5. Reviewer 状态回显：当关联复盘已在 Reviewer 打分后，Planner 头部联动显示评分徽章（如 `★ 95`）。
+- [x] 领域与数据逻辑调整 (`src/domain/trip-review.ts` & `src/components/planner/save-trip-review.ts`)：
+  - [x] 扩展 `TripReviewDraft` 支持评分数据 (`foodScore`, `sceneryScore`, `experienceScore`, `summary`)。
+  - [x] 拓展 `isTripReviewable` 支持已带有 `review_id` 的行程无论状态均可查看。
+  - [x] `saveTripReviewDraft` 支持在提供评分时原子写入/更新 `ReviewEntry`，并将经历对象状态更新为 `reviewed` 与关联 `review_ref`。
+- [x] 界面与交互实现：
+  - [x] 修改 `src/components/planner/PlannerHome.tsx`：实现 `markTripIncomplete`、完结后导流 Toast、`onNavigateToReview` 触发与头部评分徽章回显。
+  - [x] 修改 `src/components/planner/TripReviewModal.tsx`：增加评分输入栏、范围校验与中英文国际化文本。
+  - [x] 修改 `src/components/app-shell/TabRenderer.tsx` & `src/components/reviews/ReviewHome.tsx`：支持从 Planner 传导目标经验/复盘 ID 并高亮选中（严格遵循 Lesson 12 在渲染时同步调整状态，规避 set-state-in-effect）。
+- [x] 自动化测试与验证：
+  - [x] 编写行程完结与取消完结的状态自适应切换单元测试 (`planner-completion-review.test.ts`)。
+  - [x] 编写 `TripReviewModal` 评分输入与校验单元测试 (`TripReviewModal.test.tsx`)。
+  - [x] 编写带评分复盘草稿创建与 Reviewer 联动的单元测试 (`save-trip-review.test.ts`)。
+  - [x] 编写 `ReviewHome` 接收 `initialTargetId` 自动打开复盘表单/详情的单元测试 (`account-review-flow.test.tsx`)。
+  - [x] 执行全套自动化测试及类型检查门禁：138 文件 / 1326 项测试全部通过，`validate:fast` 门禁零错误零警告。
+
+### Review (2026-10-23)
+- **完结状态可逆**：已完结行程点击状态按钮时，弹出二次确认弹窗「取消行程完结？」，确认后根据行程起止日期与当前本地日期自动恢复为 `active`（进行中）或 `planning`（规划中），非破坏性保留已有地点与草稿数据。
+- **即时复盘留评与联动**：
+  1. 行程完结时，底部 Toast 提供 `[📝 立即复盘]` 快速唤起复盘弹窗；
+  2. 复盘弹窗内可直接录入美食/风景/体验评分（0-100）；若录入评分，确认时同步生成/更新 `ReviewEntry` 评分实体与 Markdown 记录，并将经历对象标记为 `reviewed`；
+  3. 保存后 Toast 分别提供 `[🔍 查看复盘]` 或 `[⭐ 前往复盘评分]` 一键直达 Reviewer 页面；
+  4. Planner 顶栏复盘按钮解除旧有的禁用限制，若已有复盘则展示 `✅ 查看复盘`，若已评分则实时回显评分徽章（如 `★ 90`），点击直达复盘页对应项目。
+
 ## Selection FX 货币提取与无空格连写修复 (2026-10-23)
 
 - [x] 根因确认：`extractExplicitToken` 与 `extractPriceCurrency` 中 `\b(ISO)\b` 单词边界在面对 `EUR375.0` 等字母与数字紧密相邻的格式时匹配失败，导致回退到页面/环境币种（如 SGD）。

@@ -4,10 +4,13 @@ import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { type PlannerScheduledPlace } from '@/domain/planner-visits';
+import type { WYQDStoredEntity } from '@/core/repository';
+import type { ReviewEntry } from '@/domain/types';
 import {
   buildGoogleMapsRouteUrl,
   effectiveFxRate,
   formatPlacePriceInTripCurrency,
+  type PlannerTripStatus,
 } from '@/domain/planner';
 import type { PlannerTimelineStopItem } from '@/domain/planner-schedule';
 import type { PlannerDayOptimizationComputation } from '@/domain/planner-optimization';
@@ -76,12 +79,13 @@ const OptimizeOrderModal = dynamic(
   { loading: modalLoading },
 );
 
-interface PlannerHomeProps {
+export interface PlannerHomeProps {
   disabled: boolean;
+  storedReviews?: WYQDStoredEntity<ReviewEntry>[];
+  onNavigateToReview?: (targetId?: string) => void;
 }
 
-
-export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = usePlannerController({ disabled });
+export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: PlannerHomeProps) {  const ctrl = usePlannerController({ disabled });
 
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
@@ -317,12 +321,66 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         : `"${selectedTrip.title}" will be marked complete, unlocking the retrospective draft.`,
       confirmLabel: zh ? '标记完结' : 'Mark complete',
       run: () => {
-        void handleUpsertTrip({ ...selectedTrip, status: 'completed' }).catch(() => {
-          setNotice(zh ? '行程完结操作失败，请重新打开行程检查状态后重试。' : 'Completing the trip failed. Reopen it to check its status and retry.');
-        });
+        void handleUpsertTrip({ ...selectedTrip, status: 'completed' })
+          .then(() => {
+            const noticeMsg = zh ? '行程已标记完结。' : 'Trip marked as completed.';
+            setNotice(noticeMsg);
+            setNoticeAction({
+              text: noticeMsg,
+              label: zh ? '📝 立即复盘' : '📝 Review now',
+              run: () => {
+                setReviewError(null);
+                setIsReviewModalOpen(true);
+              },
+            });
+          })
+          .catch(() => {
+            setNotice(zh ? '行程完结操作失败，请重新打开行程检查状态后重试。' : 'Completing the trip failed. Reopen it to check its status and retry.');
+          });
+      },
+    });
+  }, [selectedTrip, handleUpsertTrip, setConfirmRequest, setNotice, setNoticeAction, zh]);
+
+  const markTripIncomplete = useCallback(() => {
+    if (!selectedTrip) return;
+    const today = new Date().toISOString().split('T')[0];
+    const restoredStatus: PlannerTripStatus =
+      selectedTrip.start_date <= today && today <= selectedTrip.end_date
+        ? 'active'
+        : 'planning';
+    setConfirmRequest({
+      title: zh ? '取消行程完结？' : 'Reopen trip?',
+      message: zh
+        ? `「${selectedTrip.title}」将恢复为未完结状态。`
+        : `"${selectedTrip.title}" will be restored to incomplete status.`,
+      confirmLabel: zh ? '恢复未完结' : 'Reopen trip',
+      run: () => {
+        void handleUpsertTrip({ ...selectedTrip, status: restoredStatus })
+          .then(() => {
+            setNotice(zh ? '行程已恢复为未完结状态。' : 'Trip restored to incomplete status.');
+          })
+          .catch(() => {
+            setNotice(zh ? '取消完结操作失败，请重试。' : 'Failed to reopen trip, please retry.');
+          });
       },
     });
   }, [selectedTrip, handleUpsertTrip, setConfirmRequest, setNotice, zh]);
+
+  const selectedTripReviewId = selectedTrip?.review_id;
+  const linkedReview = useMemo(() => {
+    if (!selectedTripReviewId || !storedReviews) return null;
+    return storedReviews.find(
+      (r) => r.entity.target_id === selectedTripReviewId || r.entity.id === selectedTripReviewId,
+    )?.entity ?? null;
+  }, [selectedTripReviewId, storedReviews]);
+
+  const linkedReviewScore = useMemo(() => {
+    if (!linkedReview) return null;
+    const scores = [linkedReview.experience_score, linkedReview.food_score, linkedReview.scenery_score]
+      .filter((s): s is number => typeof s === 'number');
+    if (scores.length === 0) return null;
+    return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  }, [linkedReview]);
 
   const reviewSaveRef = useRef(false);
   const reviewRecoveries = useRef(new Map<string, Map<string, TripReviewRecovery>>());
@@ -350,7 +408,26 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
       if (repository.withWriteSession) await repository.withWriteSession(save);
       else await save(repository);
       setIsReviewModalOpen(false);
-      setNotice(zh ? '复盘草稿已生成，可在「复盘」页补评分。' : 'Retrospective draft saved; add scores in the Reviews tab.');
+      const reviewTargetId = `obj_trip_review_${encodeURIComponent(selectedTrip.id)}`;
+      const hasScores = Boolean(
+        draft.scores &&
+          (draft.scores.foodScore != null ||
+            draft.scores.sceneryScore != null ||
+            draft.scores.experienceScore != null),
+      );
+      const noticeMsg = hasScores
+        ? (zh ? '行程复盘与评分已保存，已联动至复盘页。' : 'Trip retrospective & scores saved to Reviews.')
+        : (zh ? '复盘草稿已生成，可在「复盘」页补评分。' : 'Retrospective draft saved; add scores in the Reviews tab.');
+      setNotice(noticeMsg);
+      setNoticeAction({
+        text: noticeMsg,
+        label: hasScores
+          ? (zh ? '🔍 查看复盘' : '🔍 View in Reviews')
+          : (zh ? '⭐ 前往复盘评分' : '⭐ Go to Reviews'),
+        run: () => {
+          onNavigateToReview?.(reviewTargetId);
+        },
+      });
       try { await load(); } catch { setNotice(zh ? '复盘已保存，列表刷新失败，请重新打开行程。' : 'Retrospective saved; refresh failed. Reopen the trip.'); }
     } catch (error) {
       const message = error instanceof TripReviewConflictError
@@ -364,7 +441,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
       reviewSaveRef.current = false;
       setReviewBusy(false);
     }
-  }, [renderedReviewWorkspace, selectedTrip, disabled, repository, load, setNotice, zh]);
+  }, [renderedReviewWorkspace, selectedTrip, disabled, repository, load, setNotice, setNoticeAction, onNavigateToReview, zh]);
 
   // Capture bridge is Web/PWA-only: never fail silently under Obsidian.
   const syncCaptureWithBoundary = useCallback(() => {
@@ -917,14 +994,20 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             </button>
             <button
               type="button"
-              onClick={() => { if (selectedTrip.status !== 'completed') markTripComplete(); }}
+              onClick={() => {
+                if (selectedTrip.status === 'completed') {
+                  markTripIncomplete();
+                } else {
+                  markTripComplete();
+                }
+              }}
               disabled={disabled}
               title={selectedTrip.status === 'completed'
-                ? (zh ? '行程已完结' : 'Trip completed')
+                ? (zh ? '点击取消行程完结（恢复为未完结）' : 'Click to reopen trip (mark as incomplete)')
                 : (zh ? '点击标记行程完结' : 'Click to mark the trip complete')}
-              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium ${
+              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
                 selectedTrip.status === 'completed'
-                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100/80'
                   : 'bg-stone-100/80 text-stone-500 hover:bg-stone-200/80 hover:text-stone-800'
               }`}
             >
@@ -1036,15 +1119,34 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           {reviewable ? (
             <button
               type="button"
-              onClick={() => { if (!selectedTrip.review_id) { setReviewError(null); setIsReviewModalOpen(true); } }}
-              disabled={disabled || Boolean(selectedTrip.review_id)}
-              className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-900 active:scale-98 disabled:cursor-default disabled:opacity-60"
+              onClick={() => {
+                if (selectedTrip.review_id) {
+                  onNavigateToReview?.(selectedTrip.review_id);
+                } else {
+                  setReviewError(null);
+                  setIsReviewModalOpen(true);
+                }
+              }}
+              disabled={disabled}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold shadow-2xs transition active:scale-98 ${
+                selectedTrip.review_id
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 hover:text-emerald-950'
+                  : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 hover:text-stone-900'
+              }`}
               title={selectedTrip.review_id
-                ? (zh ? '已生成复盘，可在对象页查看' : 'Retrospective already created; see Objects')
+                ? (linkedReviewScore !== null
+                    ? (zh ? `已生成复盘（评分 ${linkedReviewScore} 分），点击在复盘页查看` : `Retrospective created (Score: ${linkedReviewScore}), click to view in Reviews`)
+                    : (zh ? '已生成复盘，点击前往复盘页查看与评分' : 'Retrospective created; click to view in Reviews'))
                 : (zh ? '行程结束，一键生成复盘草稿' : 'Generate a retrospective draft')}
             >
               <span>{selectedTrip.review_id ? '✅' : '📝'}</span>
-              <span>{zh ? '复盘' : 'Review'}</span>
+              <span>
+                {selectedTrip.review_id
+                  ? (linkedReviewScore !== null
+                      ? `★ ${linkedReviewScore}`
+                      : (zh ? '查看复盘' : 'View Review'))
+                  : (zh ? '复盘' : 'Review')}
+              </span>
             </button>
           ) : null}
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getScrollBehavior } from '@/lib/scroll-behavior';
 import dynamic from 'next/dynamic';
 import { useI18n } from '@/core/i18n-context';
@@ -284,6 +284,7 @@ export function ReviewHome({
   objects,
   reviews,
   membership,
+  initialTargetId,
   onCreateReview,
   onUpdateReview,
   onDeleteReview,
@@ -292,6 +293,7 @@ export function ReviewHome({
   objects: WYQDObject[];
   reviews: WYQDStoredEntity<ReviewEntry>[];
   membership: WYQDMembershipState;
+  initialTargetId?: string | null;
   onCreateReview: (review: ReviewEntry, body: string) => Promise<void>;
   onUpdateReview: (fileName: string, review: ReviewEntry, body: string) => Promise<void>;
   onDeleteReview: (fileName: string) => Promise<void>;
@@ -314,9 +316,52 @@ export function ReviewHome({
     'all',
   );
   const [reviewingExperienceId, setReviewingExperienceId] = useState<string | null>(null);
+
+  // Synchronous render-time target adjustment (Lesson 12)
+  const [prevInitialTargetId, setPrevInitialTargetId] = useState<string | null>(initialTargetId ?? null);
+  if (initialTargetId && initialTargetId !== prevInitialTargetId) {
+    setPrevInitialTargetId(initialTargetId);
+    const matchingReview = reviews.find(
+      (r) => r.entity.target_id === initialTargetId || r.entity.id === initialTargetId,
+    );
+    if (matchingReview) {
+      setSelectedReviewFileName(matchingReview.fileName);
+      if (statusFilter === 'pending') setStatusFilter('all');
+      setReviewTypeFilter('all');
+      setReviewingExperienceId(null);
+      setEditingFileName(null);
+    } else {
+      const matchingExp = objects.find((o) => o.id === initialTargetId);
+      if (matchingExp) {
+        setReviewingExperienceId(matchingExp.id);
+        setSummary(t('reviewAbout').replace('{title}', matchingExp.title));
+        if (statusFilter === 'reviewed') setStatusFilter('all');
+        setReviewTypeFilter('all');
+        setEditingFileName(null);
+      }
+    }
+  } else if (!initialTargetId && prevInitialTargetId !== null) {
+    setPrevInitialTargetId(null);
+  }
+
   const reviewFormRef = useRef<HTMLFormElement>(null);
   const reviewDetailRef = useRef<HTMLElement>(null);
   const reviewListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!initialTargetId) return;
+    const isPending = !reviews.some(
+      (r) => r.entity.target_id === initialTargetId || r.entity.id === initialTargetId,
+    );
+    const timer = window.setTimeout(() => {
+      if (isPending) {
+        reviewFormRef.current?.scrollIntoView({ behavior: getScrollBehavior(), block: 'center' });
+      } else {
+        reviewDetailRef.current?.scrollIntoView({ behavior: getScrollBehavior(), block: 'nearest' });
+      }
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [initialTargetId, reviews]);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const fieldClass = FIELD_CLASS;
   const experiences = useMemo(
