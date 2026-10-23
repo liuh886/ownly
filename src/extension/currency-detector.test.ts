@@ -39,6 +39,34 @@ describe('Unified Currency Detector & Cross-Validation Engine', () => {
       expect(extractExplicitToken('400–1,000')).toBeNull();
       expect(extractExplicitToken('Tokyo Tower')).toBeNull();
     });
+
+    it('extracts ISO codes directly adjacent to numbers (e.g. EUR375.0, 375EUR, USD100, RM50)', () => {
+      expect(extractExplicitToken('EUR375.0')).toBe('EUR');
+      expect(extractExplicitToken('EUR373.50')).toBe('EUR');
+      expect(extractExplicitToken('375EUR')).toBe('EUR');
+      expect(extractExplicitToken('EUR 375.0')).toBe('EUR');
+      expect(extractExplicitToken('USD100')).toBe('USD');
+      expect(extractExplicitToken('100USD')).toBe('USD');
+      expect(extractExplicitToken('SGD50')).toBe('SGD');
+      expect(extractExplicitToken('50SGD')).toBe('SGD');
+      expect(extractExplicitToken('RM50')).toBe('MYR');
+      expect(extractExplicitToken('50RM')).toBe('MYR');
+      expect(extractExplicitToken('RP50000')).toBe('IDR');
+      expect(extractExplicitToken('ZL50')).toBe('PLN');
+      expect(extractExplicitToken('50zł')).toBe('PLN');
+      expect(extractExplicitToken('THB500')).toBe('THB');
+      expect(extractExplicitToken('JPY1000')).toBe('JPY');
+      expect(extractExplicitToken('HKD200')).toBe('HKD');
+    });
+
+    it('rejects words that contain ISO codes as substrings', () => {
+      expect(extractExplicitToken('EUROPE')).toBeNull();
+      expect(extractExplicitToken('RETURN')).toBeNull();
+      expect(extractExplicitToken('ORDER')).toBeNull();
+      expect(extractExplicitToken('WARM')).toBeNull();
+      expect(extractExplicitToken('CARPET')).toBeNull();
+      expect(extractExplicitToken('PURPLE')).toBeNull();
+    });
   });
 
   describe('detectPageCurrency cross-validation', () => {
@@ -253,6 +281,28 @@ describe('Unified Currency Detector & Cross-Validation Engine', () => {
       });
       expect(result.currency).toBe('SGD');
       expect(result.isAmbiguousResolved).toBe(true);
+    });
+
+    it('prefers explicit adjacent ISO code EUR375.0 over Singapore environmental signals', () => {
+      const mockDoc = {
+        querySelectorAll: () => [],
+        querySelector: () => null,
+        documentElement: { getAttribute: () => null },
+        body: { textContent: 'Singapore Orchard Road 9% GST statutory structure' },
+        title: 'Singapore Hotel Booking',
+      } as unknown as Document;
+
+      const result = detectPageCurrency({
+        url: 'https://example.com/hotel/@1.3000,103.8000',
+        priceText: 'EUR375.0',
+        phoneText: '+65 6789 0123',
+        hintCurrency: 'SGD',
+        doc: mockDoc,
+      });
+
+      expect(result.currency).toBe('EUR');
+      expect(result.confidence).toBe(100);
+      expect(result.signals.some((s) => s.source === 'explicit_token' && s.currency === 'EUR')).toBe(true);
     });
   });
 });

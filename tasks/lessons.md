@@ -34,3 +34,8 @@
 13. **Isolated Package Subprocess Tests vs Monorepo Test Matrix**:
    - In a multi-runtime monorepo where sub-packages (e.g. `packages/mcp`) maintain isolated dependencies (`package.json`) installed in scoped CI steps, root-level `vitest run` / `npm test` in `validate:shared` runs before those scoped dependencies are installed or binaries built.
    - Process tests targeting sub-package compiled binaries must be guarded (`describe.skipIf(!hasDeps)`), auto-build on demand when dependencies are present, and run in the package's dedicated CI verification step (`Build and validate MCP package`).
+14. **Currency Token Boundary Assertions Over Word Boundary `\b`**:
+   - Currency tokens frequently concatenate directly with numeric amounts without spaces (e.g. `EUR375.0`, `375EUR`, `RM50`, `USD100`).
+   - Because `\b` matches boundaries between `\w` (`[a-zA-Z0-9_]`) and `\W`, there is NO word boundary between letters and digits (`\b` fails on `EUR375.0` and `375EUR`).
+   - Always use lookarounds `(?<![A-Za-z])(?:CODE)(?![A-Za-z])` to allow digit adjacency while properly rejecting embedded substrings in longer words (`EUROPE`, `RETURN`).
+   - Explicit token detection from selected/price text must always take 100% precedence before falling back to page or environmental heuristics (IP/VPN/proxy signals, coordinates, or locale-derived currencies).

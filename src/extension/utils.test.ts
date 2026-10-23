@@ -334,6 +334,9 @@ describe('extractCleanPriceText', () => {
     // Genuine forms stay intact.
     expect(extractCleanPriceText('THB 400')).toBe('THB 400');
     expect(extractCleanPriceText('JPY1000')).toBe('JPY1000');
+    expect(extractCleanPriceText('EUR375.0')).toBe('EUR375.0');
+    expect(extractCleanPriceText('375EUR')).toBe('375EUR');
+    expect(extractCleanPriceText('375EUR / night')).toBe('375EUR / night');
     expect(extractCleanPriceText('thb 400')).toBe('thb 400');
   });
 
@@ -413,6 +416,10 @@ describe('isZeroOrPlaceholderPrice', () => {
   });
 
   it('preserves valid prices', () => {
+    expect(isZeroOrPlaceholderPrice('EUR375.0')).toBe(false);
+    expect(isZeroOrPlaceholderPrice('EUR373.50')).toBe(false);
+    expect(isZeroOrPlaceholderPrice('375EUR')).toBe(false);
+    expect(isZeroOrPlaceholderPrice('USD100')).toBe(false);
     expect(isZeroOrPlaceholderPrice('฿200–400')).toBe(false);
     expect(isZeroOrPlaceholderPrice('299 บาท')).toBe(false);
     expect(isZeroOrPlaceholderPrice('บุฟเฟ่ต์ 299.-')).toBe(false);

@@ -1,5 +1,23 @@
 # Ownly — Task Progress & Review
 
+## Selection FX 货币提取与无空格连写修复 (2026-10-23)
+
+- [x] 根因确认：`extractExplicitToken` 与 `extractPriceCurrency` 中 `\b(ISO)\b` 单词边界在面对 `EUR375.0` 等字母与数字紧密相邻的格式时匹配失败，导致回退到页面/环境币种（如 SGD）。
+- [x] 修复 `src/extension/currency-detector.ts`：将 `\b` 边界改为前后否定字符断言 `(?<![A-Za-z])(...)` 与 `(?![A-Za-z])`，同时支持 `RM50`、`RP50000`、`ZL100` 等紧挨数字的符号/代码；并在 `UNAMBIGUOUS_SYMBOLS` 中补全所有 29 种支持货币的 3 字母 ISO 键，修复页面 meta 和 site switcher 识别遗漏。
+- [x] 修复 `src/domain/planner.ts`：
+  - [x] 同步更新 `extractPriceCurrency` 的边界断言与 `\bRM\b` 等。
+  - [x] 补齐 `SYMBOL_TO_CODE` 中的中文币种名称（如 `欧元` -> `EUR`, `英镑` -> `GBP` 等）。
+  - [x] 调整 `parseDetailedPrice`：识别紧跟在数字后面的币种后缀（如 `375EUR`），避免被 `^\d+[a-zA-Z]+-?$` 误判拦截。
+- [x] 检查并增强 `src/extension/utils.ts`：完善 `isValidExtractedPriceCandidate` 及相关价格过滤对合规后缀/前缀币种的支持；在 `SUFFIX_PRICE_REGEX` 中补全常用币种；防止 `isZeroOrPlaceholderPrice` 将 `375EUR` 误判为 0 或占位符。
+- [x] 测试用例与端到端验证：
+  - [x] 在 `currency-detector.test.ts` 中增加 `EUR375.0`, `EUR373.50`, `375EUR`, `RM50`, `SGD50` 等用例，并确保 `EUROPE`, `RETURN` 等不误伤。
+  - [x] 在 `planner.test.ts` 中增加 `convertPriceRange('EUR375.0', 'CNY', ...)` 确保不再受 fallbackSourceCurrency ('SGD') 污染。
+  - [x] 执行全套自动化测试及类型检查门禁：136 文件 / 1317 测试全部通过，`validate:fast` 与 `build:extension` 门禁全部通过。
+
+### Review (2026-10-23)
+- **修复效果**：无论选中文本是 `EUR375.0`、`EUR373.50`、`375EUR` 还是带空格的 `EUR 375`，Selection FX 均能在第一时间以 100% 置信度精准提取出 `EUR`，不再受网络 IP（如代理所在的新加坡 SGD）、网页全局属性或地理坐标的干扰而发生错误回退。
+- **关联扩展**：同步修复了 `RM50`、`RP50000`、`ZL100` 等无空格货币前缀，以及 `375EUR` 等合法后缀在价格提取和预算解析中的被拦截缺陷。
+
 ## 操作与业务流程审计修复 (2026-10-04)
 
 - [x] 沿 UI → 动作 → Markdown → 云端状态审查成功、失败、重试、目录切换和撤销路径。
