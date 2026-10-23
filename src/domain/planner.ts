@@ -1971,6 +1971,10 @@ const SYMBOL_TO_CODE: Record<string, string> = {
   '$': 'USD', '€': 'EUR', '£': 'GBP', '฿': 'THB', '铢': 'THB', '泰铢': 'THB', 'บาท': 'THB', '.-': 'THB', '.–': 'THB', '₩': 'KRW', '원': 'KRW', '韩元': 'KRW',
   'S$': 'SGD', 'SG$': 'SGD', 'HK$': 'HKD', 'NT$': 'TWD', 'US$': 'USD', 'A$': 'AUD', 'AU$': 'AUD', 'C$': 'CAD', 'CA$': 'CAD', 'NZ$': 'NZD',
   '₫': 'VND', '₹': 'INR', 'RM': 'MYR', 'CHF': 'CHF', 'MOP$': 'MOP', 'R$': 'BRL', 'RP': 'IDR', 'ZL': 'PLN', 'zł': 'PLN',
+  '欧元': 'EUR', '英镑': 'GBP', '新币': 'SGD', '新加坡元': 'SGD', '港币': 'HKD', '港元': 'HKD', '新台币': 'TWD',
+  '美元': 'USD', '美金': 'USD', '澳币': 'AUD', '澳元': 'AUD', '加币': 'CAD', '加元': 'CAD', '纽币': 'NZD',
+  '令吉': 'MYR', '马币': 'MYR', '越盾': 'VND', '卢比': 'INR', '比索': 'PHP', '₱': 'PHP', '印尼盾': 'IDR', 'Rp': 'IDR',
+  '迪拉姆': 'AED', '里拉': 'TRY', '₺': 'TRY', '克朗': 'SEK', '雷亚尔': 'BRL', '里亚尔': 'SAR', '澳门币': 'MOP', '葡币': 'MOP',
 };
 
 /**
@@ -2026,18 +2030,18 @@ export function effectiveFxRate(
 /** Extracts a normalized ISO-ish currency marker from a free-text price string. */
 export function extractPriceCurrency(raw?: string | null): string | null {
   if (!raw) return null;
-  const symbolMatch = /(?:JP[¥￥]|CN[¥￥]|S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|\bZL\b|\bRM\b|\bRP\b|新台币|人民币|日元|日币|泰铢|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔|\.-|\.–)/i.exec(raw);
+  const symbolMatch = /(?:JP[¥￥]|CN[¥￥]|S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|(?<![A-Za-z])(?:ZL|RM|RP)(?![A-Za-z])|新台币|人民币|日元|日币|泰铢|บาท|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔|\.-|\.–)/i.exec(raw);
   if (symbolMatch) {
     const marker = symbolMatch[0].toUpperCase();
     return SYMBOL_TO_CODE[marker] ?? SYMBOL_TO_CODE[symbolMatch[0]] ?? marker.replace(/\$$/, '');
   }
 
-  const isoMatch = /\b(SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|PHP|IDR|AED|TRY|SEK|NOK|DKK|PLN|BRL|SAR|MOP)\b/i.exec(raw);
+  const isoMatch = /(?<![A-Za-z])(SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|PHP|IDR|AED|TRY|SEK|NOK|DKK|PLN|BRL|SAR|MOP)(?![A-Za-z])/i.exec(raw);
   if (isoMatch) {
     return isoMatch[1].toUpperCase();
   }
 
-  const singleMatch = /(?:[¥￥฿$€£₩₫₹円铢元块원])/i.exec(raw);
+  const singleMatch = /(?:[¥￥฿$€£₩₫₹円铢元块원₱₺])/i.exec(raw);
   if (singleMatch) {
     const marker = singleMatch[0];
     return SYMBOL_TO_CODE[marker] ?? null;
@@ -2437,12 +2441,13 @@ export function parseDetailedPrice(raw?: string | null): ParsedPriceDetail | nul
   const text = raw.trim();
   if (!text) return null;
 
-  // Disallow invalid alphanumeric fragments like "2b-", "3x", "4a"
-  if (/^\d+[a-zA-Z]+-?$/i.test(text)) return null;
+  const currency = extractPriceCurrency(text);
+
+  // Disallow invalid alphanumeric fragments like "2b-", "3x", "4a",
+  // but permit valid suffix currency codes like "375EUR", "50SGD"
+  if (/^\d+[a-zA-Z]+-?$/i.test(text) && !currency) return null;
   // Disallow trailing unescaped hyphens like "12-"
   if (/(?<!\.)[-–—〜~]$/.test(text)) return null;
-
-  const currency = extractPriceCurrency(text);
   
   // Range check: e.g. "฿400–1,000", "¥1000 - 2000", "400 ~ 1000", "400 to 1000"
   const rangeMatch = /(\d[\d,]*(?:\.\d+)?)\s*[-–—〜~至到|/]\s*(\d[\d,]*(?:\.\d+)?)/.exec(text);

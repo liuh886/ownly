@@ -224,7 +224,7 @@ const PRICE_TOKEN_REGEX = new RegExp(
   'i',
 );
 const SUFFIX_PRICE_REGEX = new RegExp(
-  String.raw`(?:(?:人均|per person|每人|每晚|per night|from|约|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?${NUM_FRAG}(?:\s*[-–—〜~至到]\s*${NUM_FRAG})?\s*(?:บาท|泰铢|元|円|THB|SGD|HKD|USD|TWD|JPY|CNY|\.-|\.–)(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?`,
+  String.raw`(?:(?:人均|per person|每人|每晚|per night|from|约|คนละ|ท่านละ|ราคา)\s*[:：]?\s*)?${NUM_FRAG}(?:\s*[-–—〜~至到]\s*${NUM_FRAG})?\s*(?:บาท|泰铢|元|円|THB|SGD|HKD|USD|TWD|JPY|CNY|EUR|GBP|AUD|CAD|NZD|KRW|MYR|VND|INR|AED|CHF|\.-|\.–)(?:\s*(?:[/·]|per|\/)?\s*(?:night|晚|person|人|pp|per night|per person|nightly|day))?`,
   'i',
 );
 const NO_CURR_PRICE_REGEX = new RegExp(
@@ -248,8 +248,12 @@ export function isValidExtractedPriceCandidate(candidate: string): boolean {
   if (PRICE_LEVEL_ONLY.test(candidate)) return true;
   // Disallow strings ending with stray hyphen/dash without dot (e.g. "2b-", "abc-", "12-")
   if (/(?<!\.)[-–—〜~]$/.test(candidate)) return false;
-  // Disallow internal letter-number hybrid fragments like "2b-", "3x", "4a"
-  if (/^\d+[a-zA-Z]+-?$/i.test(candidate)) return false;
+  // Disallow internal letter-number hybrid fragments like "2b-", "3x", "4a",
+  // but permit recognized currency suffixes like "375EUR", "50SGD"
+  const suffixFragment = /^\d+(?:\.\d+)?([a-zA-Z]+)-?$/i.exec(candidate);
+  if (suffixFragment && !PRICE_CODE_TOKENS.has(suffixFragment[1].toUpperCase())) {
+    return false;
+  }
   // Disallow obfuscated-script fragments misread as currency codes: Google
   // renders ISO codes ALL-UPPERCASE ("THB 400"), so a mixed-case code token
   // glued to a digit ("krW4", "JpY10") is minified-JS/class-name debris, not
@@ -324,7 +328,10 @@ export function isZeroOrPlaceholderPrice(raw?: string | null): boolean {
   if (/^(?:人均|per person|每人|每晚|per night|from|约)\s*[:：]?\s*(?:SGD|S\$|THB|USD|HKD|NT\$|¥|฿|\$)?\s*0+(?:\.0+)?$/i.test(t)) return true;
   if (/^(?:[A-Z]{3}|S\$|HK\$|US\$|NT\$|AU\$|CA\$|NZ\$|\$|¥|฿|€|£|₩)\s*0+(?:\.0+)?$/i.test(t)) return true;
   if (/^0+(?:\.0+)?\s*(?:[A-Z]{3}|S\$|HK\$|US\$|NT\$|AU\$|CA\$|NZ\$|\$|¥|฿|€|£|₩|บาท|泰铢|元|円)$/i.test(t)) return true;
-  if (/^\d+[a-zA-Z]+-?$/i.test(t)) return true;
+  const placeholderSuffix = /^\d+(?:\.\d+)?([a-zA-Z]+)-?$/i.exec(t);
+  if (placeholderSuffix && !PRICE_CODE_TOKENS.has(placeholderSuffix[1].toUpperCase())) {
+    return true;
+  }
   return false;
 }
 

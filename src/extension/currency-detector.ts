@@ -32,21 +32,28 @@ export interface CurrencyDetectionResult {
 
 const UNAMBIGUOUS_SYMBOLS: Record<string, string> = {
   '฿': 'THB',
+  'THB': 'THB',
   '铢': 'THB',
   '泰铢': 'THB',
   'บาท': 'THB',
   '€': 'EUR',
+  'EUR': 'EUR',
   '欧元': 'EUR',
   '£': 'GBP',
+  'GBP': 'GBP',
   '英镑': 'GBP',
   '₩': 'KRW',
+  'KRW': 'KRW',
   '원': 'KRW',
   '韩元': 'KRW',
   '₫': 'VND',
+  'VND': 'VND',
   '越盾': 'VND',
   '₹': 'INR',
+  'INR': 'INR',
   '卢比': 'INR',
   'RM': 'MYR',
+  'MYR': 'MYR',
   '令吉': 'MYR',
   '马币': 'MYR',
   'S$': 'SGD',
@@ -125,7 +132,7 @@ const DOLLAR_CURRENCIES = ['SGD', 'HKD', 'AUD', 'CAD', 'NZD', 'USD', 'TWD'];
 export function extractExplicitToken(raw?: string | null): string | null {
   if (!raw || typeof raw !== 'string') return null;
 
-  const symbolMatch = /(?:JP[¥￥]|CN[¥￥]|S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|\bZL\b|\bRM\b|\bRP\b|新台币|人民币|日元|日币|泰铢|บาท|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔)/i.exec(raw);
+  const symbolMatch = /(?:JP[¥￥]|CN[¥￥]|S\$|SG\$|HK\$|NT\$|US\$|AU\$|A\$|CA\$|C\$|NZ\$|MOP\$|R\$|zł|(?<![A-Za-z])(?:ZL|RM|RP)(?![A-Za-z])|新台币|人民币|日元|日币|泰铢|บาท|韩元|新币|新加坡元|港币|港元|澳币|澳元|加币|加元|纽币|欧元|英镑|比索|印尼盾|迪拉姆|里拉|克朗|澳门币|葡币|雷亚尔)/i.exec(raw);
   if (symbolMatch) {
     const rawKey = symbolMatch[0];
     const key = rawKey.toUpperCase();
@@ -134,7 +141,7 @@ export function extractExplicitToken(raw?: string | null): string | null {
     return key.replace(/\$$/, '');
   }
 
-  const isoMatch = /\b(SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|PHP|IDR|AED|TRY|SEK|NOK|DKK|PLN|BRL|SAR|MOP)\b/i.exec(raw);
+  const isoMatch = /(?<![A-Za-z])(SGD|HKD|TWD|USD|THB|JPY|EUR|GBP|CNY|RMB|AUD|CAD|NZD|KRW|MYR|VND|CHF|INR|PHP|IDR|AED|TRY|SEK|NOK|DKK|PLN|BRL|SAR|MOP)(?![A-Za-z])/i.exec(raw);
   if (isoMatch) {
     const key = isoMatch[1].toUpperCase();
     return UNAMBIGUOUS_SYMBOLS[key] || key;

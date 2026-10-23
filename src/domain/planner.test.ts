@@ -278,7 +278,20 @@ describe('Ownly Planner domain', () => {
     expect(extractPriceCurrency('JP¥8,473')).toBe('JPY');
     expect(extractPriceCurrency('CN¥500')).toBe('CNY');
     expect(extractPriceCurrency('¥18,000')).toBe('CNY');
+    expect(extractPriceCurrency('EUR375.0')).toBe('EUR');
+    expect(extractPriceCurrency('EUR373.50')).toBe('EUR');
+    expect(extractPriceCurrency('375EUR')).toBe('EUR');
+    expect(extractPriceCurrency('RM50')).toBe('MYR');
+    expect(extractPriceCurrency('50RM')).toBe('MYR');
+    expect(extractPriceCurrency('SGD50')).toBe('SGD');
+    expect(extractPriceCurrency('USD100')).toBe('USD');
+    expect(extractPriceCurrency('100USD')).toBe('USD');
+    expect(extractPriceCurrency('欧元375')).toBe('EUR');
+    expect(extractPriceCurrency('英镑50')).toBe('GBP');
+    expect(extractPriceCurrency('新币80')).toBe('SGD');
     expect(extractPriceCurrency('free entry')).toBeNull();
+    expect(extractPriceCurrency('EUROPE')).toBeNull();
+    expect(extractPriceCurrency('RETURN')).toBeNull();
   });
 
   it('normalizes captured price text into comparable source facts', () => {
@@ -1003,6 +1016,16 @@ describe('Ownly Planner domain', () => {
     const convertedEur = convertPriceRange('€50', 'CNY', { EUR: 7.80 }, 'THB');
     expect(convertedEur?.sourceCurrency).toBe('EUR');
     expect(convertedEur?.convertedMin).toBe(390);
+
+    // Contiguous EUR375.0 / EUR373.50 must never fall back to page currency (e.g. SGD)
+    const convertedEurContiguous = convertPriceRange('EUR373.50', 'CNY', { USD: 1, CNY: 0.14, SGD: 0.74, EUR: 1.09 }, 'SGD');
+    expect(convertedEurContiguous?.sourceCurrency).toBe('EUR');
+    expect(convertedEurContiguous?.rateDescription).toBe('1 EUR ≈ 7.79 CNY');
+    expect(convertedEurContiguous?.convertedMin).toBe(2907.96);
+
+    const convertedEurSuffix = convertPriceRange('375EUR', 'CNY', { EUR: 7.80 }, 'SGD');
+    expect(convertedEurSuffix?.sourceCurrency).toBe('EUR');
+    expect(convertedEurSuffix?.convertedMin).toBe(2925);
 
     // GBP should be GBP
     const convertedGbp = convertPriceRange('£20', 'CNY', { GBP: 9.10 });
