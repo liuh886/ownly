@@ -122,9 +122,17 @@ export function buildTripReviewStats(
   };
 }
 
+export interface TripReviewScores {
+  foodScore?: number | null;
+  sceneryScore?: number | null;
+  experienceScore?: number | null;
+  summary?: string;
+}
+
 export interface TripReviewDraft {
   object: OneTimeExperienceObject;
   body: string;
+  scores?: TripReviewScores;
 }
 
 export function buildTripReviewDraft(
@@ -246,5 +254,5 @@ export function buildTripReviewDraft(
 
 /** A trip is reviewable once it ended or was manually marked complete. */
 export function isTripReviewable(trip: PlannerTrip, today = new Date().toISOString().split('T')[0]): boolean {
-  return trip.status === 'completed' || trip.end_date < today;
+  return trip.status === 'completed' || trip.end_date < today || Boolean(trip.review_id);
 }

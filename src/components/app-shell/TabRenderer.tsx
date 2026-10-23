@@ -114,6 +114,12 @@ export function TabRenderer({
   } | null>(null);
 
   const [composerFocusTarget, setComposerFocusTarget] = useState<'quickLine' | 'title' | undefined>(undefined);
+  const [targetReviewId, setTargetReviewId] = useState<string | null>(null);
+
+  const handleNavigateToReview = useCallback((targetId?: string) => {
+    setTargetReviewId(targetId ?? null);
+    setActiveTab('reviews');
+  }, [setActiveTab]);
 
   const quickLineTemplates = useMemo(
     () => getQuickLineTemplates(t, language),
@@ -247,7 +253,11 @@ export function TabRenderer({
     // contradicted the read-only contract the demo smoke test asserts.
     return (
       <div className="space-y-2">
-        <PlannerHome disabled={!isConnected} />
+        <PlannerHome
+          disabled={!isConnected}
+          storedReviews={storedReviews}
+          onNavigateToReview={handleNavigateToReview}
+        />
       </div>
     );
   }
@@ -260,6 +270,7 @@ export function TabRenderer({
           objects={objects}
           reviews={storedReviews}
           membership={membership}
+          initialTargetId={targetReviewId}
           onCreateReview={actions.createReview}
           onUpdateReview={actions.updateReview}
           onDeleteReview={actions.deleteReview}

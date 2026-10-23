@@ -188,5 +188,6 @@ describe('isTripReviewable (WS-1)', () => {
     expect(isTripReviewable(trip({ status: 'completed', end_date: '2026-12-31' }), '2026-09-08')).toBe(true);
     expect(isTripReviewable(trip({ status: 'active', end_date: '2026-12-31' }), '2026-09-08')).toBe(false);
     expect(isTripReviewable(trip({ status: 'planning', end_date: '2026-12-31' }), '2026-09-08')).toBe(false);
+    expect(isTripReviewable(trip({ status: 'planning', end_date: '2026-12-31', review_id: 'obj_trip_review_1' }), '2026-09-08')).toBe(true);
   });
 });
