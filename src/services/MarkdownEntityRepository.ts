@@ -22,17 +22,92 @@ export interface MarkdownFileStore {
   readMarkdownFiles(directory: string): Promise<{ fileName: string; content: string }[]>;
   writeMarkdownFile(directory: string, fileName: string, content: string): Promise<void>;
   deleteMarkdownFile(directory: string, fileName: string): Promise<void>;
+  writeExistingMarkdownFile?(directory: string, fileName: string, content: string): Promise<void>;
+  captureSession?(): Promise<MarkdownFileStore>;
 }
 
 export type RepositoryClock = () => Date;
 
 export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
+  private static mutationQueue: Promise<void> = Promise.resolve();
   private dirs: ReturnType<typeof createWYQDDirectories> = WYQD_DIRECTORIES;
+  private sessionLockHeld = false;
 
   constructor(
     private readonly store: MarkdownFileStore = ownlyStoreRouter,
     private readonly clock: RepositoryClock = () => new Date(),
+    private readonly bound = false,
   ) {}
+
+  /** Bind a group of writes to one filesystem handle and data root. */
+  async withWriteSession<T>(action: (repository: WYQDRepositoryAdapter) => Promise<T>): Promise<T> {
+    return this.withBoundRepository(action);
+  }
+
+  private async withBoundRepository<T>(action: (repository: MarkdownEntityRepository) => Promise<T>): Promise<T> {
+    if (this.bound) return action(this);
+    const store = await (this.store.captureSession?.() ?? this.store);
+    const repository = new MarkdownEntityRepository(store, this.clock, true);
+    await repository.initialize();
+    return repository.withMutationLock(async () => {
+      repository.sessionLockHeld = true;
+      try { return await action(repository); }
+      finally { repository.sessionLockHeld = false; }
+    });
+  }
+
+  private async withMutationLock<T>(action: () => Promise<T>): Promise<T> {
+    if (this.sessionLockHeld) return action();
+    const previous = MarkdownEntityRepository.mutationQueue;
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    MarkdownEntityRepository.mutationQueue = previous.then(() => current, () => current);
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release();
+    }
+  }
+
+  private async updateExisting(directory: string, fileName: string, id: string, content: string): Promise<void> {
+    const target = (await this.store.readMarkdownFiles(directory)).find((file) => file.fileName === fileName);
+    if (!target) throw new Error(`Markdown file not found: ${fileName}`);
+    const existingId = parseMarkdownEntity<Record<string, unknown>>(target.content).frontmatter.id;
+    if (existingId !== id) throw new Error(`Markdown entity identity changed: ${fileName}`);
+    if (this.store.writeExistingMarkdownFile) {
+      await this.store.writeExistingMarkdownFile(directory, fileName, content);
+    } else {
+      await this.store.writeMarkdownFile(directory, fileName, content);
+    }
+  }
+
+  private async removeCopyAfterFailedMove(
+    sourceDirectory: string, sourceFileName: string,
+    copyDirectory: string, copyFileName: string, sourceError: unknown,
+  ): Promise<never> {
+    try {
+      const sourceStillExists = (await this.store.readMarkdownFiles(sourceDirectory))
+        .some((file) => file.fileName === sourceFileName);
+      if (!sourceStillExists) {
+        throw new Error(`Source disappeared after delete failure: ${sourceDirectory}/${sourceFileName}`);
+      }
+    } catch (verificationError) {
+      throw new AggregateError(
+        [sourceError, verificationError],
+        `Move partially completed: new copy was kept because source could not be verified (${copyDirectory}/${copyFileName}).`,
+      );
+    }
+    try {
+      await this.store.deleteMarkdownFile(copyDirectory, copyFileName);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [sourceError, cleanupError],
+        `Move partially completed: both source and new copy remain (${copyDirectory}/${copyFileName}).`,
+      );
+    }
+    throw sourceError;
+  }
 
   async initialize(): Promise<void> {
     const dataFolder = await this.store.getDataFolder();
@@ -116,7 +191,11 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
 
     // Write the recoverable archive copy before removing the active source.
     await this.store.writeMarkdownFile(archiveDirectory, archiveFileName, content);
-    await this.store.deleteMarkdownFile(sourceDirectory, fileName);
+    try {
+      await this.store.deleteMarkdownFile(sourceDirectory, fileName);
+    } catch (error) {
+      return this.removeCopyAfterFailedMove(sourceDirectory, fileName, archiveDirectory, archiveFileName, error);
+    }
     return archiveFileName;
   }
 
@@ -161,7 +240,11 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
         parsed.body,
       ),
     );
-    await this.store.deleteMarkdownFile(archiveDirectory, archiveFileName);
+    try {
+      await this.store.deleteMarkdownFile(archiveDirectory, archiveFileName);
+    } catch (error) {
+      return this.removeCopyAfterFailedMove(archiveDirectory, archiveFileName, targetDirectory, fileName, error);
+    }
     return fileName;
   }
 
@@ -234,6 +317,8 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   }
 
   async saveObject(object: WYQDObject, body = ''): Promise<string> {
+    if (!this.bound) return this.withBoundRepository((repository) => repository.saveObject(object, body));
+    return this.withMutationLock(async () => {
     const date = object.created_at || this.now().toISOString().split('T')[0];
     const preferredFileName = createEntityFileName(date, slugify(object.title));
     const fileName = await this.getAvailableFileName(this.dirs.objects, preferredFileName);
@@ -241,23 +326,29 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
 
     await this.store.writeMarkdownFile(this.dirs.objects, fileName, content);
     return fileName;
+    });
   }
 
   async updateObject(fileName: string, object: WYQDObject, body = ''): Promise<void> {
+    if (!this.bound) return this.withBoundRepository((repository) => repository.updateObject(fileName, object, body));
+    return this.withMutationLock(async () => {
     const content = serializeMarkdownEntity(object, body);
-    await this.store.writeMarkdownFile(this.dirs.objects, fileName, content);
+    await this.updateExisting(this.dirs.objects, fileName, object.id, content);
+    });
   }
 
   async archiveObject(fileName: string): Promise<string> {
-    return this.archiveEntity(this.dirs.objects, this.dirs.objectArchive, fileName);
+    if (!this.bound) return this.withBoundRepository((repository) => repository.archiveObject(fileName));
+    return this.withMutationLock(() => this.archiveEntity(this.dirs.objects, this.dirs.objectArchive, fileName));
   }
 
   async restoreObject(archiveFileName: string): Promise<string> {
-    return this.restoreEntity(
+    if (!this.bound) return this.withBoundRepository((repository) => repository.restoreObject(archiveFileName));
+    return this.withMutationLock(() => this.restoreEntity(
       this.dirs.objectArchive,
       this.dirs.objects,
       archiveFileName,
-    );
+    ));
   }
 
   async saveAccount(): Promise<string> {
@@ -277,6 +368,8 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   }
 
   async saveSnapshot(snapshot: AccountSnapshot, body = ''): Promise<string> {
+    if (!this.bound) return this.withBoundRepository((repository) => repository.saveSnapshot(snapshot, body));
+    return this.withMutationLock(async () => {
     const date = snapshot.snapshot_at || snapshot.created_at || this.now().toISOString().split('T')[0];
     const time = snapshot.created_at?.includes('T')
       ? snapshot.created_at.slice(11, 19).replaceAll(':', '')
@@ -287,30 +380,38 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
 
     await this.store.writeMarkdownFile(this.dirs.snapshots, fileName, content);
     return fileName;
+    });
   }
 
   async updateSnapshot(fileName: string, snapshot: AccountSnapshot, body = ''): Promise<void> {
+    if (!this.bound) return this.withBoundRepository((repository) => repository.updateSnapshot(fileName, snapshot, body));
+    return this.withMutationLock(async () => {
     const content = serializeMarkdownEntity(snapshot, body);
-    await this.store.writeMarkdownFile(this.dirs.snapshots, fileName, content);
+    await this.updateExisting(this.dirs.snapshots, fileName, snapshot.id, content);
+    });
   }
 
   async archiveSnapshot(fileName: string): Promise<string> {
-    return this.archiveEntity(
+    if (!this.bound) return this.withBoundRepository((repository) => repository.archiveSnapshot(fileName));
+    return this.withMutationLock(() => this.archiveEntity(
       this.dirs.snapshots,
       this.dirs.snapshotArchive,
       fileName,
-    );
+    ));
   }
 
   async restoreSnapshot(archiveFileName: string): Promise<string> {
-    return this.restoreEntity(
+    if (!this.bound) return this.withBoundRepository((repository) => repository.restoreSnapshot(archiveFileName));
+    return this.withMutationLock(() => this.restoreEntity(
       this.dirs.snapshotArchive,
       this.dirs.snapshots,
       archiveFileName,
-    );
+    ));
   }
 
   async saveReview(review: ReviewEntry, body = ''): Promise<string> {
+    if (!this.bound) return this.withBoundRepository((repository) => repository.saveReview(review, body));
+    return this.withMutationLock(async () => {
     const date = review.reviewed_at || review.exited_at || review.created_at || this.now().toISOString().split('T')[0];
     const preferredFileName = createReviewFileName(date, slugify(review.title));
     const fileName = await this.getAvailableFileName(this.dirs.reviews, preferredFileName);
@@ -318,26 +419,34 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
 
     await this.store.writeMarkdownFile(this.dirs.reviews, fileName, content);
     return fileName;
+    });
   }
 
   async updateReview(fileName: string, review: ReviewEntry, body = ''): Promise<void> {
+    if (!this.bound) return this.withBoundRepository((repository) => repository.updateReview(fileName, review, body));
+    return this.withMutationLock(async () => {
     const content = serializeMarkdownEntity(review, body);
-    await this.store.writeMarkdownFile(this.dirs.reviews, fileName, content);
+    await this.updateExisting(this.dirs.reviews, fileName, review.id, content);
+    });
   }
 
   async archiveReview(fileName: string): Promise<string> {
-    return this.archiveEntity(this.dirs.reviews, this.dirs.reviewArchive, fileName);
+    if (!this.bound) return this.withBoundRepository((repository) => repository.archiveReview(fileName));
+    return this.withMutationLock(() => this.archiveEntity(this.dirs.reviews, this.dirs.reviewArchive, fileName));
   }
 
   async restoreReview(archiveFileName: string): Promise<string> {
-    return this.restoreEntity(
+    if (!this.bound) return this.withBoundRepository((repository) => repository.restoreReview(archiveFileName));
+    return this.withMutationLock(() => this.restoreEntity(
       this.dirs.reviewArchive,
       this.dirs.reviews,
       archiveFileName,
-    );
+    ));
   }
 
   async saveObjectLog(log: ObjectLogEntry, body = ''): Promise<string> {
+    if (!this.bound) return this.withBoundRepository((repository) => repository.saveObjectLog(log, body));
+    return this.withMutationLock(async () => {
     const date = log.occurred_at || log.created_at || this.now().toISOString().split('T')[0];
     const preferredFileName = `log--${date}--${log.id}--${slugify(log.title.slice(0, 40))}.md`;
     const fileName = await this.getAvailableFileName(this.dirs.objectLogs, preferredFileName);
@@ -345,6 +454,7 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
 
     await this.store.writeMarkdownFile(this.dirs.objectLogs, fileName, content);
     return fileName;
+    });
   }
 
   async restoreArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<string> {
@@ -355,6 +465,8 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
   }
 
   async permanentlyDeleteArchivedEntity(archiveType: WYQDArchiveEntityType, archiveFileName: string): Promise<void> {
+    if (!this.bound) return this.withBoundRepository((repository) => repository.permanentlyDeleteArchivedEntity(archiveType, archiveFileName));
+    return this.withMutationLock(async () => {
     const dirMap: Record<WYQDArchiveEntityType, string> = {
       object: this.dirs.objectArchive,
       account: this.dirs.accountArchive,
@@ -363,6 +475,7 @@ export class MarkdownEntityRepository implements WYQDRepositoryAdapter {
       object_log: this.dirs.objectLogArchive,
     };
     await this.store.deleteMarkdownFile(dirMap[archiveType], archiveFileName);
+    });
   }
 }
 

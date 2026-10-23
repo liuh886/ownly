@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildPublicShareResponse,
   MemoryTripShareStore,
   TripShareService,
 } from './TripShareService';
 import { hashFeedToken } from '../domain/calendar-feed';
+import { SupabaseTripShareStore } from './SupabaseTripShareStore';
 import type { PlannerTrip, PlannerTripPlace } from '../domain/planner';
 import type { PlannerTripVisit } from '../domain/planner-visits';
 
@@ -190,13 +191,13 @@ describe('TripShareService', () => {
       alias: '清迈 5 日',
     });
 
-    await service.disableShare({
+    await expect(service.disableShare({
       tripId: 'trip-1',
       membership: { isPro: true },
       userId: 'ownly_user',
       alias: '清迈 5 日',
       writeToken: 'wrong-token',
-    });
+    })).rejects.toThrow('Could not confirm');
     expect(store.getShareByAlias('清迈 5 日')?.enabled).toBe(true);
 
     const disabled = await service.disableShare({
@@ -208,6 +209,45 @@ describe('TripShareService', () => {
     });
     expect(disabled.enabled).toBe(false);
     expect(store.getShareByAlias('清迈 5 日')?.enabled).toBe(false);
+  });
+
+  it('does not let a stale automatic refresh re-enable a disabled share', async () => {
+    const store = new MemoryTripShareStore();
+    const service = new TripShareService(store);
+    const input = { trip: trip(), places: PLACES, visits: VISITS, membership: { isPro: true }, userId: 'owner', alias: '清迈 5 日' };
+    const published = await service.publishShare(input);
+    await service.disableShare({ tripId: trip().id, membership: { isPro: true }, userId: 'owner', alias: input.alias, writeToken: published.write_token });
+    await expect(service.publishShare({ ...input, writeToken: published.write_token, refreshOnly: true })).rejects.toThrow('disabled');
+    expect(store.getShareByAlias(input.alias)?.enabled).toBe(false);
+    await service.publishShare({ ...input, writeToken: published.write_token });
+    expect(store.getShareByAlias(input.alias)?.enabled).toBe(true);
+  });
+
+  it('uses a conditional PATCH for automatic refresh and treats zero rows as stale', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    const store = new SupabaseTripShareStore({ supabaseUrl: 'https://test.supabase.co', supabasePublishableKey: 'test-key', fetchFn: mockFetch as unknown as typeof fetch });
+    const refreshed = await store.refreshEnabledShare({ user_id: 'owner', trip_id: 'trip-1', alias: 'alias', write_token_hash: 'hash', html_content: '<html/>', enabled: true });
+    expect(refreshed).toBe(false);
+    const [url, request] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const query = new URL(url).searchParams;
+    expect(request.method).toBe('PATCH');
+    expect(query.get('alias')).toBe('eq.alias');
+    expect(query.get('trip_id')).toBe('eq.trip-1');
+    expect(query.get('write_token_hash')).toBe('eq.hash');
+    expect(query.get('enabled')).toBe('eq.true');
+    expect(request.headers).toEqual(expect.objectContaining({ Prefer: 'return=representation', 'x-ownly-share-write-hash': 'hash' }));
+    expect(JSON.parse(request.body as string)).not.toHaveProperty('enabled');
+  });
+  it('requires a returned row before reporting a share revoked', async () => {
+    const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'share-1' }] });
+    const store = new SupabaseTripShareStore({ supabaseUrl: 'https://test.supabase.co', supabasePublishableKey: 'test-key', fetchFn: mockFetch as unknown as typeof fetch });
+    await expect(store.disableShare('alias', 'hash')).rejects.toThrow('Could not confirm');
+    await expect(store.disableShare('alias', 'hash')).resolves.toBeUndefined();
+    const [url, request] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(new URL(url).searchParams.get('write_token_hash')).toBe('eq.hash');
+    expect(new URL(url).searchParams.get('select')).toBe('id');
+    expect(request.headers).toEqual(expect.objectContaining({ Prefer: 'return=representation' }));
   });
 });
 

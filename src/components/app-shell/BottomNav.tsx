@@ -34,10 +34,11 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
   useEffect(() => {
     lastY.current = Math.max(0, window.scrollY);
     let ticking = false;
+    let frame = 0;
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
-      window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => {
         ticking = false;
         const y = Math.max(0, window.scrollY);
         const dy = y - lastY.current;
@@ -52,12 +53,19 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
       });
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') setHidden(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('keydown', onKeyDown);
+      window.cancelAnimationFrame(frame);
+    };
   }, []);
 
-  // Never hide (or inert) while keyboard focus is inside the nav — otherwise
-  // keyboard users scrolling with PageDown/Space would lock themselves out of
-  // the only tab-switching entry point (WCAG 2.1.1).
+  // Keep navigation in the tab order even when collapsed. Focus and Tab reveal
+  // it before paint; making this slot inert would prevent keyboard re-entry.
   const effectivelyHidden = hidden && !focused;
 
   return (
@@ -73,11 +81,9 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
           }
         }}
         className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none focus-within:grid-rows-[1fr] focus-within:opacity-100 ${effectivelyHidden ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}
-        aria-hidden={effectivelyHidden || undefined}
-        inert={effectivelyHidden || undefined}
       >
         <div className="overflow-hidden">
-    <nav className="ownly-bottom-nav border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl min-[400px]:px-4">
+    <nav aria-label={language === 'zh' ? '主导航' : 'Main navigation'} className="ownly-bottom-nav border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-4px_24px_rgba(28,25,23,0.04)] backdrop-blur-xl min-[400px]:px-4">
       <div className="relative mx-auto grid max-w-3xl grid-cols-5 gap-0.5 rounded-xl bg-surface-subtle p-1 ring-1 ring-line min-[400px]:gap-1">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;

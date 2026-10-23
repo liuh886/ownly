@@ -142,11 +142,74 @@ describe('Sheet', () => {
     await act(async () => {
       keydown('Tab');
     });
-    // Wraps to the first focusable element (drag handle button).
+    // The decorative drag handle has tabIndex=-1 and stays out of the Tab order.
     const dialog = container.querySelector('[role="dialog"]') as HTMLElement;
-    const first = dialog.querySelectorAll<HTMLElement>(
-      'button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])',
-    )[0];
+    const first = Array.from(dialog.querySelectorAll<HTMLElement>('button')).find((item) => item.tabIndex >= 0);
     expect(document.activeElement).toBe(first);
+  });
+
+  it('only closes the topmost dialog on Escape', async () => {
+    const outer = vi.fn();
+    const inner = vi.fn();
+    await renderNode(<>
+      <Sheet open title="Outer" onClose={outer} />
+      <Sheet open title="Inner" onClose={inner} />
+    </>);
+    await act(async () => keydown('Escape'));
+    expect(inner).toHaveBeenCalledOnce();
+    expect(outer).not.toHaveBeenCalled();
+    expect(document.body.classList.contains('ownly-scroll-locked')).toBe(true);
+  });
+
+  it('wraps Shift+Tab from the panel to the last enabled control', async () => {
+    await renderSheet({ children: <button>Action</button>, footer: <button>Save</button> });
+    (container.querySelector('[role="dialog"]') as HTMLElement).focus();
+    await act(async () => keydown('Tab', { shiftKey: true }));
+    expect(document.activeElement?.textContent).toBe('Save');
+  });
+
+  it('skips hidden and inherited-disabled fields for initial focus', async () => {
+    await renderSheet({ children: <>
+      <input type="hidden" />
+      <fieldset disabled><input aria-label="Disabled" /></fieldset>
+      <div hidden><input aria-label="Hidden" /></div>
+      <input aria-label="Editable" />
+    </> });
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Editable');
+  });
+
+  it('keeps focus in place when saving makes a dialog non-dismissible', async () => {
+    const content = <><input aria-label="First" /><input aria-label="Second" /></>;
+    await renderSheet({ children: content });
+    (container.querySelector('[aria-label="Second"]') as HTMLElement).focus();
+    await renderSheet({ children: content, dismissible: false });
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Second');
+  });
+
+  it('keeps Tab on the panel when there are no tabbable controls', async () => {
+    await renderSheet();
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(container.querySelector('[role="dialog"]'));
+  });
+
+  it('restores focus to the underlying dialog without unlocking scroll', async () => {
+    const outer = <Sheet open title="Outer" onClose={() => {}}><input aria-label="Outer field" /></Sheet>;
+    await renderNode(outer);
+    const outerField = container.querySelector('input');
+    await renderNode(<>{outer}<Sheet open title="Inner" onClose={() => {}}><input aria-label="Inner field" /></Sheet></>);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Inner field');
+    await renderNode(<>{outer}</>);
+    expect(document.activeElement).toBe(outerField);
+    expect(document.body.classList.contains('ownly-scroll-locked')).toBe(true);
+  });
+
+  it('includes disclosure summaries but skips controls inside closed disclosures', async () => {
+    await renderSheet({ children: <details><summary>Storage help</summary><input aria-label="Hidden details" /></details> });
+    const summary = container.querySelector('summary') as HTMLElement;
+    summary.focus();
+    await act(async () => keydown('Tab'));
+    expect(document.activeElement).toBe(summary);
   });
 });

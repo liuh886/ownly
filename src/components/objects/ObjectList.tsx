@@ -214,7 +214,7 @@ export function ObjectList({
     return (
       <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-center">
         <h2 className="text-base font-semibold text-stone-950">{t('noObjectsYet')}</h2>
-        <p className="mt-2 text-sm text-stone-500">{t('connectVaultFirst')}</p>
+        <p className="mt-2 text-sm text-stone-500">{t(disabled ? 'connectVaultFirst' : 'noObjects')}</p>
       </div>
     );
   }

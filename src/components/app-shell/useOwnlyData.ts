@@ -1,18 +1,30 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import type { WYQDStoredEntity, WYQDArchivedStoredEntity } from '@/core/repository';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import type { WYQDStoredEntity, WYQDArchivedStoredEntity, WYQDRepositoryAdapter } from '@/core/repository';
 import type { WYQDObject, AccountSnapshot, ReviewEntry, ObjectLogEntry } from '@/domain/types';
 import { calculateHomeMetrics } from '@/domain/calculations';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 
+async function readVaultData(repository: WYQDRepositoryAdapter) {
+  return Promise.all([
+    repository.listObjects(),
+    repository.listSnapshots(),
+    repository.listReviews(),
+    repository.listObjectLogs(),
+    repository.listArchivedEntities(),
+  ]);
+}
+
 export function useOwnlyData() {
-  const { repository, dataRevision } = useOwnlyWorkspace();
+  const { repository, dataRevision, isLoading } = useOwnlyWorkspace();
 
   const [storedObjects, setStoredObjects] = useState<WYQDStoredEntity<WYQDObject>[]>([]);
   const [storedSnapshots, setStoredSnapshots] = useState<WYQDStoredEntity<AccountSnapshot>[]>([]);
   const [storedReviews, setStoredReviews] = useState<WYQDStoredEntity<ReviewEntry>[]>([]);
   const [storedLogs, setStoredLogs] = useState<WYQDStoredEntity<ObjectLogEntry>[]>([]);
   const [archivedEntities, setArchivedEntities] = useState<WYQDArchivedStoredEntity[]>([]);
-  const [dataLoaded, setDataLoaded] = useState(false);
+  const [loadedWorkspace, setLoadedWorkspace] = useState<{ repository: typeof repository; revision: number } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const readRevision = useRef(0);
 
   const objects = useMemo(() => storedObjects.map((item) => item.entity), [storedObjects]);
   const snapshots = useMemo(() => storedSnapshots.map((item) => item.entity), [storedSnapshots]);
@@ -30,62 +42,51 @@ export function useOwnlyData() {
    * `dataRevision` is a dependency because the store can be repopulated
    * underneath us: Demo mode seeds the memory store after this hook first ran,
    * and nothing else would trigger a second read.
+   *
+   * `isLoading` is a dependency for the opposite reason, and it is the one that
+   * matters. A refresh used to run this read exactly once, on mount — before the
+   * shell had restored the folder handle from IndexedDB and pointed the
+   * repository at the right data root. Every list came back empty, `dataLoaded`
+   * latched true, and nothing ever re-read: the app showed "data folder empty"
+   * over a folder full of records, while Planner (which re-resolves its root on
+   * every read, and mounts after boot) kept working. Waiting for the shell to
+   * finish deciding means the first read is the one that counts.
    */
-  const loadVaultData = useCallback(async () => {
-    const [nextObjects, nextSnapshots, nextReviews, nextLogs, nextArchivedEntities] = await Promise.all([
-      repository.listObjects(),
-      repository.listSnapshots(),
-      repository.listReviews(),
-      repository.listObjectLogs(),
-      repository.listArchivedEntities(),
-    ]);
-    setStoredObjects([...nextObjects]);
-    setStoredSnapshots([...nextSnapshots]);
-    setStoredReviews([...nextReviews]);
-    setStoredLogs([...nextLogs]);
-    setArchivedEntities([...nextArchivedEntities]);
-    setDataLoaded(true);
-  }, [repository]);
+  const loadVaultData = useCallback((): Promise<void> => {
+    if (isLoading) return Promise.resolve();
+    const revision = ++readRevision.current;
+    return readVaultData(repository).then(([nextObjects, nextSnapshots, nextReviews, nextLogs, nextArchivedEntities]) => {
+      // Manual reloads and workspace changes share the same ordering guard.
+      if (revision !== readRevision.current) return;
+      setStoredObjects([...nextObjects]);
+      setStoredSnapshots([...nextSnapshots]);
+      setStoredReviews([...nextReviews]);
+      setStoredLogs([...nextLogs]);
+      setArchivedEntities([...nextArchivedEntities]);
+      setLoadError(null);
+      setLoadedWorkspace({ repository, revision: dataRevision });
+    }).catch((error: unknown) => {
+      if (revision !== readRevision.current) return;
+      setLoadError(error instanceof Error ? error.message : String(error));
+      // Keep the last successful snapshot. A read failure does not mean the
+      // records disappeared; the workspace/revision key prevents cross-root use.
+      throw error;
+    });
+  }, [repository, isLoading, dataRevision]);
 
   useEffect(() => {
-    let isMounted = true;
+    // The store is not knowable until the shell is done deciding: the folder
+    // handle is still in IndexedDB and the repository still points at its
+    // construction-time paths. Reading now returns empty and marks the data
+    // loaded, which is how a real folder came to look like an empty one.
+    if (isLoading) return;
 
-    async function refreshLocalData() {
-      try {
-        const [nextObjects, nextSnapshots, nextReviews, nextLogs, nextArchivedEntities] = await Promise.all([
-          repository.listObjects(),
-          repository.listSnapshots(),
-          repository.listReviews(),
-          repository.listObjectLogs(),
-          repository.listArchivedEntities(),
-        ]);
-
-        if (!isMounted) return;
-        setStoredObjects([...nextObjects]);
-        setStoredSnapshots([...nextSnapshots]);
-        setStoredReviews([...nextReviews]);
-        setStoredLogs([...nextLogs]);
-        setArchivedEntities([...nextArchivedEntities]);
-        setDataLoaded(true);
-      } catch (error) {
-        console.warn('Ownly: Failed to load local data:', error);
-        if (isMounted) {
-          setStoredObjects([]);
-          setStoredSnapshots([]);
-          setStoredReviews([]);
-          setStoredLogs([]);
-          setArchivedEntities([]);
-          setDataLoaded(true);
-        }
-      }
-    }
-
-    void refreshLocalData();
+    void loadVaultData().catch((error: unknown) => console.warn('Ownly: Failed to load local data:', error));
 
     return () => {
-      isMounted = false;
+      readRevision.current += 1;
     };
-  }, [repository, dataRevision]);
+  }, [loadVaultData, isLoading]);
 
   return {
     storedObjects,
@@ -96,7 +97,8 @@ export function useOwnlyData() {
     objects,
     snapshots,
     metrics,
-    dataLoaded,
+    dataLoaded: loadedWorkspace?.repository === repository && loadedWorkspace.revision === dataRevision && !isLoading,
+    loadError,
     loadVaultData,
   };
 }

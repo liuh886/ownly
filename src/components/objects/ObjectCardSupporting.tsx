@@ -1,5 +1,8 @@
+import { useActionMenu } from './useActionMenu';
+import { useRef } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { useFormatMoney } from '@/lib/use-format';
+import { recordCurrency } from '@/domain/currency';
 import { IconButton } from '@/components/common/ui-primitives';
 import { ObjectComposer } from './ObjectComposer';
 import { ObjectDetailPanel } from './ObjectDetailPanel';
@@ -14,17 +17,20 @@ function MoreActionsButton({
   menuId,
   open,
   onToggle,
+  disabled,
   t,
 }: {
   objectTitle: string;
   menuId: string;
   open: boolean;
   onToggle: () => void;
+  disabled?: boolean;
   t: TranslateFn;
 }) {
   return (
     <IconButton
       onClick={onToggle}
+      disabled={disabled}
       aria-label={`${t('moreActions')} - ${objectTitle}`}
       aria-haspopup="menu"
       aria-expanded={open}
@@ -111,9 +117,14 @@ export function ObjectCardSupporting({
   prompt: (options: { title: string; message: string; inputLabel: string; confirmLabel?: string; cancelLabel?: string; destructive?: boolean; defaultValue?: string }) => Promise<string | null>;
   menuItemClass: string;
 }) {
-  const { t } = useI18n();
-  const { formatMoney } = useFormatMoney();
+  const { t, language } = useI18n();
+  const reviewSaving = useRef(false);
+  const { formatMoney } = useFormatMoney(recordCurrency(stored.entity));
+  const { rootRef: actionMenuRoot, toggle: toggleActionMenu, close: closeActionMenu, onKeyDown: actionMenuKeys, onPointerDown: actionMenuPointer, onMouseDown: actionMenuMouse } = useActionMenu(openActionMenuFileName === stored.fileName, (open) => setOpenActionMenuFileName(open ? stored.fileName : null));
   const object = stored.entity;
+  const invalidScore = [reviewFoodScore, reviewSceneryScore, reviewExperienceScore].some((value) =>
+    value.trim() !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100));
+  const optionalScore = (value: string) => value.trim() === '' ? null : parseScore(value);
   
   if (object.object_type === 'physical') {
     return null;
@@ -190,9 +201,8 @@ export function ObjectCardSupporting({
               setSelectedFileName(stored.fileName);
             }
           }}
-          tabIndex={disabled ? -1 : 0}
+          tabIndex={0}
           role="button"
-          aria-disabled={disabled}
         >
           <div className="flex items-center justify-between">
             <div className="flex min-w-0 flex-col gap-1.5">
@@ -242,9 +252,9 @@ export function ObjectCardSupporting({
                           );
                           if (existingReview) {
                             setReviewSummary(existingReview.entity.summary || '');
-                            setReviewFoodScore(existingReview.entity.food_score ? String(existingReview.entity.food_score) : '');
-                            setReviewSceneryScore(existingReview.entity.scenery_score ? String(existingReview.entity.scenery_score) : '');
-                            setReviewExperienceScore(existingReview.entity.experience_score ? String(existingReview.entity.experience_score) : '');
+                            setReviewFoodScore(existingReview.entity.food_score != null ? String(existingReview.entity.food_score) : '');
+                            setReviewSceneryScore(existingReview.entity.scenery_score != null ? String(existingReview.entity.scenery_score) : '');
+                            setReviewExperienceScore(existingReview.entity.experience_score != null ? String(existingReview.entity.experience_score) : '');
                           } else {
                             setReviewSummary('');
                             setReviewFoodScore('');
@@ -266,7 +276,7 @@ export function ObjectCardSupporting({
                         } finally {
                           setExitingFileName(null);
                         }
-                      })();
+                      })().catch(() => { /* Action reports failure. */ });
                     }}
                     aria-label={`${supportingActionLabel} - ${object.title}`}
                     title={supportingActionLabel}
@@ -284,27 +294,29 @@ export function ObjectCardSupporting({
               
               {canCancelRecurringCost(object) ? (
                 <div 
+                  ref={actionMenuRoot}
+                  onPointerDown={actionMenuPointer}
+                  onMouseDown={actionMenuMouse}
                   className="relative z-10 ml-2"
                   onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
+                  onKeyDown={actionMenuKeys}
                 >
                   <MoreActionsButton
                     objectTitle={object.title}
                     menuId={`object-actions-${stored.fileName}`}
                     open={openActionMenuFileName === stored.fileName}
-                    onToggle={() =>
-                      setOpenActionMenuFileName((current) =>
-                        current === stored.fileName ? null : stored.fileName,
-                      )
-                    }
+                    disabled={disabled || exitingFileName === stored.fileName || deletingFileName === stored.fileName}
+                    onToggle={toggleActionMenu}
                     t={t}
                   />
                   {openActionMenuFileName === stored.fileName ? (
-                    <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+                    <div id={`object-actions-${stored.fileName}`} role="menu" aria-label={`${t('moreActions')} - ${object.title}`} className="absolute right-0 top-11 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
                       <button
                         type="button"
                         role="menuitem"
+                        tabIndex={-1}
                         onClick={() => void (async () => {
+                          closeActionMenu();
                           const reason = await prompt({
                             title: t('cancelSubscription'),
                             message: t('cancelReasonPrompt').replace('{title}', object.title),
@@ -320,14 +332,13 @@ export function ObjectCardSupporting({
                             cancel_reason: reason.trim() || t('notRecorded'),
                             updated_at: todayISO(),
                           };
-                          setOpenActionMenuFileName(null);
                           setExitingFileName(stored.fileName);
                           try {
                             await onUpdate(stored.fileName, next, stored.body);
                           } finally {
                             setExitingFileName(null);
                           }
-                        })()}
+                        })().catch(() => { /* Action reports failure. */ })}
                         className={`${menuItemClass} text-red-600 hover:bg-red-50`}
                         disabled={disabled || exitingFileName === stored.fileName}
                       >
@@ -349,11 +360,14 @@ export function ObjectCardSupporting({
 
           {isReviewing ? (
             <form
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
               className="mt-4 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3"
               onSubmit={(event) => void (async () => {
                 event.preventDefault();
                 const summary = reviewSummary.trim();
-                if (!summary) return;
+                if (!summary || disabled || invalidScore || reviewSaving.current || exitingFileName === stored.fileName) return;
+                reviewSaving.current = true;
 
                 setExitingFileName(stored.fileName);
                 try {
@@ -362,14 +376,15 @@ export function ObjectCardSupporting({
                     object,
                     summary,
                     {
-                      foodScore: parseScore(reviewFoodScore),
-                      sceneryScore: parseScore(reviewSceneryScore),
-                      experienceScore: parseScore(reviewExperienceScore),
+                      foodScore: optionalScore(reviewFoodScore),
+                      sceneryScore: optionalScore(reviewSceneryScore),
+                      experienceScore: optionalScore(reviewExperienceScore),
                     },
                     stored.body,
                   );
                   cancelObjectReview();
                 } finally {
+                  reviewSaving.current = false;
                   setExitingFileName(null);
                 }
               })().catch(() => { /* failure notice already shown by the action */ })}
@@ -428,6 +443,7 @@ export function ObjectCardSupporting({
                   />
                 </div>
               </div>
+              {invalidScore ? <p role="alert" className="text-xs text-red-600">{language === 'zh' ? '评分必须在 0 到 100 之间。' : 'Scores must be between 0 and 100.'}</p> : null}
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -443,6 +459,7 @@ export function ObjectCardSupporting({
                   disabled={
                     disabled ||
                     exitingFileName === stored.fileName ||
+                    invalidScore ||
                     reviewSummary.trim().length === 0
                   }
                 >

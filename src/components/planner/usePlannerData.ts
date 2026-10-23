@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getScrollBehavior } from '@/lib/scroll-behavior';
 import { useI18n } from '@/core/i18n-context';
 import type {
   PlannerPlaceKind,
@@ -202,8 +203,12 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
   let isPro = true;
   let openLicenseModal: (() => void) | undefined;
   let currentUserId = 'ownly_user';
+  let canRead = !disabled;
+  let dataRevision = 0;
   try {
     const workspace = useOwnlyWorkspace();
+    canRead = (!disabled || workspace.isDemoMode) && !workspace.isLoading;
+    dataRevision = workspace.dataRevision;
     isPro = workspace.membership?.isPro ?? true;
     openLicenseModal = workspace.openLicenseModal;
     if (workspace.membership?.licenseKeyLast4) {
@@ -226,7 +231,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
   }, []);
 
   const load = useCallback(async () => {
-    if (disabled) return;
+    if (!canRead) return;
     const epoch = ++loadEpochRef.current;
     await plannerRepository.initialize();
     const [nextTrips, nextPlaces, nextVisits, nextLegs] = await Promise.all([
@@ -247,12 +252,12 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     } catch (error) {
       console.warn('[Planner] ledger hydration failed', error);
     }
-  }, [disabled, hydrateLedgerFromVault]);
+  }, [canRead, hydrateLedgerFromVault]);
 
   useEffect(() => {
     let active = true;
     async function init() {
-      if (disabled) return;
+      if (!canRead) return;
       const epoch = ++loadEpochRef.current;
       await plannerRepository.initialize();
       const [nextTrips, nextPlaces, nextVisits, nextLegs, state] = await Promise.all([
@@ -261,7 +266,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
         plannerRepository.listVisits(),
         plannerRepository.listLegs(),
         // Boot pull fails fast: a cold worker wake would otherwise stall first paint.
-        pullCaptureState({ retries: 0 }),
+        disabled ? Promise.resolve(null) : pullCaptureState({ retries: 0 }),
       ]);
       if (!active || epoch !== loadEpochRef.current) return;
       nextTrips.sort((left, right) => right.start_date.localeCompare(left.start_date));
@@ -281,7 +286,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     return () => {
       active = false;
     };
-  }, [disabled, hydrateLedgerFromVault]);
+  }, [canRead, disabled, dataRevision, hydrateLedgerFromVault]);
 
   const selectedTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
@@ -289,11 +294,12 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
   );
 
   useEffect(() => {
+    if (disabled) return;
     const context = selectedTrip
       ? { tripId: selectedTrip.id, title: selectedTrip.title, currency: selectedTrip.currency, tags: selectedTrip.tags }
       : null;
     void setCaptureContext(context);
-  }, [selectedTrip]);
+  }, [selectedTrip, disabled]);
 
   const tripDates = useMemo(
     () => (selectedTrip ? listTripDates(selectedTrip.start_date, selectedTrip.end_date) : []),
@@ -313,7 +319,7 @@ export function usePlannerData({ disabled }: UsePlannerDataProps) {
     if (!dateNavRef.current || !activeDate) return;
     const activeButton = dateNavRef.current.querySelector(`[data-date="${activeDate}"]`);
     if (activeButton) {
-      activeButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      activeButton.scrollIntoView({ behavior: getScrollBehavior(), block: 'nearest', inline: 'center' });
     }
   }, [activeDate]);
 

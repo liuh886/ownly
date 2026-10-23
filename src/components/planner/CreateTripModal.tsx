@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Sheet } from '@/components/common/Sheet';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { createDetachedElement } from '@/lib/dom';
@@ -66,6 +66,7 @@ export function CreateTripModal({
   initialEditTripId = null,
 }: CreateTripModalProps) {
   const zh = language === 'zh';
+  const fieldId = useId();
   // Deep-link entry: open directly in the edit form for one trip.
   // The modal remounts on every open (see parent `key`), so lazy useState
   // initializers below consume the entry exactly once per open — no effect
@@ -286,7 +287,7 @@ export function CreateTripModal({
     setSharedBundle(null);
     setSharedError('');
     decodedShareHashRef.current = null;
-    clearTripShareHash();
+    if (incomingShareHash) clearTripShareHash(incomingShareHash);
     onDismissShare?.();
   };
 
@@ -391,9 +392,10 @@ export function CreateTripModal({
       )}
     >
         {/* Tab Navigation */}
-        <div className="grid grid-cols-3 rounded-lg border-b border-stone-100 bg-stone-50/70 p-1.5" role="tablist">
+        <div className="grid grid-cols-3 rounded-lg border-b border-stone-100 bg-stone-50/70 p-1.5" role="group" aria-label={zh ? '行程管理视图' : 'Trip management views'}>
           <button
             type="button"
+            aria-pressed={tab === 'manage'}
             onClick={() => { setTab('manage'); setError(null); setImportNotice(''); }}
             className={`min-h-11 touch-manipulation rounded-lg px-3 py-2 text-xs font-bold transition duration-150 active:scale-[0.97] ${
               tab === 'manage' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
@@ -403,6 +405,7 @@ export function CreateTripModal({
           </button>
           <button
             type="button"
+            aria-pressed={tab === 'create'}
             onClick={() => { setTab('create'); setError(null); setImportNotice(''); }}
             className={`min-h-11 touch-manipulation rounded-lg px-3 py-2 text-xs font-bold transition duration-150 active:scale-[0.97] ${
               tab === 'create' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
@@ -412,6 +415,7 @@ export function CreateTripModal({
           </button>
           <button
             type="button"
+            aria-pressed={tab === 'import'}
             onClick={() => { setTab('import'); setError(null); setImportNotice(''); }}
             className={`min-h-11 touch-manipulation rounded-lg px-3 py-2 text-xs font-bold transition duration-150 active:scale-[0.97] ${
               tab === 'import' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-700'
@@ -505,10 +509,11 @@ export function CreateTripModal({
             <form id="ownly-trip-form" onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
               {/* Title */}
               <div>
-                <label className="block text-xs font-bold text-stone-700">
+                <label htmlFor={`${fieldId}-title`} className="block text-xs font-bold text-stone-700">
                   {zh ? '行程名称 *' : 'Trip Title *'}
                 </label>
                 <input
+                  id={`${fieldId}-title`}
                   type="text"
                   required
                   value={title}
@@ -521,10 +526,11 @@ export function CreateTripModal({
               {/* Dates */}
               <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700">
+                  <label htmlFor={`${fieldId}-start`} className="block text-xs font-bold text-stone-700">
                     {zh ? '出发日期 *' : 'Start Date *'}
                   </label>
                   <input
+                    id={`${fieldId}-start`}
                     type="date"
                     required
                     value={startDate}
@@ -536,10 +542,11 @@ export function CreateTripModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-stone-700">
+                  <label htmlFor={`${fieldId}-end`} className="block text-xs font-bold text-stone-700">
                     {zh ? '结束日期 *' : 'End Date *'}
                   </label>
                   <input
+                    id={`${fieldId}-end`}
                     type="date"
                     required
                     min={startDate}
@@ -552,10 +559,11 @@ export function CreateTripModal({
 
               {/* Destinations */}
               <div>
-                <label className="block text-xs font-bold text-stone-700">
+                <label htmlFor={`${fieldId}-destinations`} className="block text-xs font-bold text-stone-700">
                   {zh ? '目的地城市 (逗号分隔)' : 'Destinations (comma-separated)'}
                 </label>
                 <input
+                  id={`${fieldId}-destinations`}
                   type="text"
                   value={destinations}
                   onChange={(e) => setDestinations(e.target.value)}
@@ -567,10 +575,11 @@ export function CreateTripModal({
               {/* Currency & Transport Mode */}
               <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700">
+                  <label htmlFor={`${fieldId}-currency`} className="block text-xs font-bold text-stone-700">
                     {zh ? '行程本币 (Currency)' : 'Base Currency'}
                   </label>
                   <select
+                    id={`${fieldId}-currency`}
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value)}
                     className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
@@ -581,10 +590,11 @@ export function CreateTripModal({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-stone-700">
+                  <label htmlFor={`${fieldId}-transport`} className="block text-xs font-bold text-stone-700">
                     {zh ? '主要出行方式' : 'Transport Mode'}
                   </label>
                   <select
+                    id={`${fieldId}-transport`}
                     value={transportMode}
                     onChange={(e) => setTransportMode(e.target.value as PlannerTravelMode)}
                     className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
@@ -608,10 +618,11 @@ export function CreateTripModal({
                 </summary>
                 <div className="mt-3 space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-stone-700">
+                    <label htmlFor={`${fieldId}-timezone`} className="block text-xs font-bold text-stone-700">
                       {zh ? '目的地时区' : 'Destination Timezone'}
                     </label>
                     <select
+                      id={`${fieldId}-timezone`}
                       value={timezone}
                       onChange={(e) => setTimezone(e.target.value)}
                       className="mt-1 min-h-11 w-full touch-manipulation rounded-lg border border-stone-200 bg-white px-3 py-2 text-base text-stone-900 focus:border-stone-950 focus:outline-hidden sm:text-sm"
@@ -643,6 +654,7 @@ export function CreateTripModal({
                           <div key={d} className="flex items-center gap-2">
                             <span className="w-24 shrink-0 text-[11px] font-semibold text-stone-600">{d}</span>
                             <select
+                              aria-label={`${zh ? '时区' : 'Timezone'} ${d}`}
                               value={dayTimezones[d] ?? ''}
                               onChange={(e) => setDayTimezones((prev) => {
                                 const next = { ...prev };
@@ -667,10 +679,11 @@ export function CreateTripModal({
 
               {/* Tags */}
               <div>
-                <label className="block text-xs font-bold text-stone-700">
+                <label htmlFor={`${fieldId}-tags`} className="block text-xs font-bold text-stone-700">
                   {zh ? '标签 (可选，逗号分隔)' : 'Tags (optional)'}
                 </label>
                 <input
+                  id={`${fieldId}-tags`}
                   type="text"
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
@@ -694,6 +707,7 @@ export function CreateTripModal({
 
               {/* Textarea */}
               <textarea
+                aria-label={zh ? 'Trip Bundle JSON 数据' : 'Trip Bundle JSON'}
                 value={rawImport}
                 onChange={(e) => setRawImport(e.target.value)}
                 placeholder={'{\n  "kind": "ownly.trip.bundle", ...\n}'}

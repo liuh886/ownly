@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
-import { extractTripSharePayload } from '@/domain/trip-share-link';
 import { useI18n } from '@/core/i18n-context';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import { focusPlannerTrip } from '@/core/planner-focus';
@@ -16,15 +15,18 @@ import type { HomeMetrics } from '@/domain/types';
 import type { useOwnlyActions } from './useOwnlyActions';
 
 /** Deferred tabs keep the initial /app bundle to the active screen only. */
-const tabLoading = () => (
-  <div className="py-10" role="status">
+function TabLoading() {
+  const { t } = useI18n();
+  return <div className="py-10" role="status" aria-busy="true">
+    <span className="sr-only">{t('loading')}</span>
     <div className="grid gap-2 sm:grid-cols-3">
       <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
       <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
       <div className="ownly-skeleton hidden h-24 rounded-xl sm:block" aria-hidden="true" />
     </div>
-  </div>
-);
+  </div>;
+}
+const tabLoading = () => <TabLoading />;
 
 const HomeDashboard = dynamic(
   () => import('@/components/home/HomeDashboard').then((mod) => mod.HomeDashboard),
@@ -112,15 +114,6 @@ export function TabRenderer({
   } | null>(null);
 
   const [composerFocusTarget, setComposerFocusTarget] = useState<'quickLine' | 'title' | undefined>(undefined);
-
-  useEffect(() => {
-    const routeSharedTrip = () => {
-      if (extractTripSharePayload(window.location.hash)) setActiveTab('planner');
-    };
-    routeSharedTrip();
-    window.addEventListener('hashchange', routeSharedTrip);
-    return () => window.removeEventListener('hashchange', routeSharedTrip);
-  }, [setActiveTab]);
 
   const quickLineTemplates = useMemo(
     () => getQuickLineTemplates(t, language),

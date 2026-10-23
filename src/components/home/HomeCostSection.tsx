@@ -1,3 +1,4 @@
+import { matchesCurrency } from '@/domain/currency';
 import { useMemo } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
@@ -9,6 +10,7 @@ import { InsightCard } from './InsightCard';
 import { MetricFlipCard, MetricTrendChart } from './MetricFlipCard';
 import {
   calculatePhysicalDailyCost,
+  compareSnapshots,
 } from '@/domain/calculations';
 
 import {
@@ -33,17 +35,18 @@ export function HomeCostSection({
     focusTarget?: 'quickLine' | 'title';
   }) => void;
 }) {
-  const { t } = useI18n();
+  const { t, currency } = useI18n();
+  const financialObjects = useMemo(() => objects.filter((object) => matchesCurrency(object, currency)), [objects, currency]);
   const { formatMoney, formatDailyMoney, formatCompactMoney } = useFormatMoney();
 
-  const highestDailyCost = useMemo(() => getHighestDailyCostObject(objects), [objects]);
-  const largestRecurringCost = useMemo(() => getLargestActiveRecurringCost(objects), [objects]);
+  const highestDailyCost = useMemo(() => getHighestDailyCostObject(financialObjects), [financialObjects]);
+  const largestRecurringCost = useMemo(() => getLargestActiveRecurringCost(financialObjects), [financialObjects]);
 
   const avgDailyCost = useMemo(() => {
-    const ownedPhysicals = objects.filter((o): o is PhysicalObject => o.object_type === 'physical' && (o.status === 'purchased' || o.status === 'using'));
+    const ownedPhysicals = financialObjects.filter((o): o is PhysicalObject => o.object_type === 'physical' && (o.status === 'purchased' || o.status === 'using'));
     const costs = ownedPhysicals.map((o) => calculatePhysicalDailyCost(o)).filter((c): c is number => c !== null && c > 0);
     return costs.length > 0 ? costs.reduce((s, c) => s + c, 0) : 0;
-  }, [objects]);
+  }, [financialObjects]);
 
   const pendingDecisionCount = useMemo(
     () => objects.filter((o) => ['seeded', 'observing', 'planned'].includes(o.status)).length,
@@ -51,7 +54,7 @@ export function HomeCostSection({
   );
 
   const trendSnapshots = useMemo(
-    () => [...snapshots].sort((a, b) => a.snapshot_at.localeCompare(b.snapshot_at)).slice(-12),
+    () => [...snapshots].sort(compareSnapshots).slice(-12),
     [snapshots],
   );
   const trendDates = trendSnapshots.map((snapshot) => snapshot.snapshot_at);
@@ -64,10 +67,10 @@ export function HomeCostSection({
     [trendSnapshots],
   );
   const dailyCostTrendValues = useMemo(() => {
-    const values = buildDailyCostTrend(objects, trendSnapshots.map((snapshot) => snapshot.snapshot_at));
+    const values = buildDailyCostTrend(financialObjects, trendSnapshots.map((snapshot) => snapshot.snapshot_at));
     if (values.length > 0) values[values.length - 1] = avgDailyCost;
     return values;
-  }, [objects, trendSnapshots, avgDailyCost]);
+  }, [financialObjects, trendSnapshots, avgDailyCost]);
 
   return (
     <motion.section variants={itemVariants}>

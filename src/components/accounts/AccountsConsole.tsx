@@ -1,3 +1,4 @@
+import { recordCurrency } from '@/domain/currency';
 import type { AccountSnapshot } from '@/domain/types';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
@@ -16,7 +17,7 @@ export interface AccountsConsoleProps {
   annualFixedCost: number;
   previousNetWorthDelta: number | null;
   t: (key: WYQDTranslationKey) => string;
-  formatMoney: (val: number | null | undefined, fallback?: string) => string;
+  formatMoney: (val: number | null | undefined, fallback?: string, sourceCurrency?: string) => string;
 }
 
 export function AccountsConsole({
@@ -118,7 +119,7 @@ export function AccountsConsole({
                       {balance.account}
                     </div>
                     <div className="shrink-0 text-sm font-semibold text-stone-950">
-                      {formatMoney(balance.amount)}
+                      {formatMoney(balance.amount, undefined, balance.currency || (latest ? recordCurrency(latest) : undefined))}
                     </div>
                   </div>
                 ))}
@@ -160,7 +161,7 @@ export function AccountsConsole({
                           ) : null}
                         </div>
                         <div className="shrink-0 text-sm font-semibold text-red-900">
-                          {formatMoney(balance.amount)}
+                          {formatMoney(balance.amount, undefined, balance.currency || (latest ? recordCurrency(latest) : undefined))}
                         </div>
                       </div>
                     );

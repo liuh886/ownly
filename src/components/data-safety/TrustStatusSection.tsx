@@ -315,11 +315,11 @@ export function TrustStatusSection({ itemVariants }: { itemVariants: Variants })
           </button>
         );
       case 'export-backup':
-        return <span className="shrink-0 text-[11px] text-stone-500">{copy.hintExport}</span>;
+        return <span className="min-w-0 basis-full break-words pl-3.5 text-[11px] text-stone-500 sm:max-w-[45%] sm:basis-auto sm:pl-0">{copy.hintExport}</span>;
       case 'validate-backup':
-        return <span className="shrink-0 text-[11px] text-stone-500">{copy.hintValidate}</span>;
+        return <span className="min-w-0 basis-full break-words pl-3.5 text-[11px] text-stone-500 sm:max-w-[45%] sm:basis-auto sm:pl-0">{copy.hintValidate}</span>;
       case 'install-pwa':
-        return <span className="shrink-0 text-[11px] text-stone-500">{copy.hintInstallPwa}</span>;
+        return <span className="min-w-0 basis-full break-words pl-3.5 text-[11px] text-stone-500 sm:max-w-[45%] sm:basis-auto sm:pl-0">{copy.hintInstallPwa}</span>;
       default:
         return null;
     }
@@ -331,9 +331,9 @@ export function TrustStatusSection({ itemVariants }: { itemVariants: Variants })
 
   return (
     <motion.section variants={itemVariants}>
-      <div className="mb-3 flex items-center justify-between px-1">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
         <h3 className={SECTION_TITLE_CLASS}>{copy.title}</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <DataSafetyButton disabled={!isConnected} />
           <button
             type="button"
@@ -358,7 +358,7 @@ export function TrustStatusSection({ itemVariants }: { itemVariants: Variants })
         <div className={CARD_CLASS}>
           <div className="space-y-1.5">
             {rows.map((row) => (
-              <div key={row.id} className="flex items-start gap-2 text-xs">
+              <div key={row.id} className="flex flex-wrap items-start gap-2 text-xs">
                 <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${levelDot(row.level)}`} />
                 <div className="min-w-0 flex-1">
                   <span className="font-medium text-stone-800">{copy.rows[row.id] ?? row.id}</span>

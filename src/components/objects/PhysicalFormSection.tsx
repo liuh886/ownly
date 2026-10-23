@@ -106,6 +106,8 @@ export function PhysicalFormSection({
               value={salePrice}
               onChange={(event) => setSalePrice(event.target.value)}
               type="number"
+              min="0"
+              step="any"
               inputMode="decimal"
               placeholder="0"
               className={fieldClass}

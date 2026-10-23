@@ -7,6 +7,7 @@ import {
   calculateRecurringMonthlyCost,
 } from '@/domain/calculations';
 import type { WYQDTranslationKey } from '@/core/i18n';
+import { recordCurrency } from '@/domain/currency';
 import { formatMoney, formatOptional, todayISO } from '@/lib/format';
 
 
@@ -322,18 +323,19 @@ export function transitionSupportingObject(object: WYQDObject): WYQDObject {
   return object;
 }
 
-export function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label: string; value: string }> {
+export function getDetailRows(object: WYQDObject, t: TranslateFn, moneyFormatter?: (value: number) => string): Array<{ label: string; value: string }> {
+  const money = (value: number) => moneyFormatter ? moneyFormatter(value) : formatMoney(value, undefined, 'zh', recordCurrency(object), 2);
   if (object.object_type === 'physical') {
     const dailyCost = calculatePhysicalDailyCost(object);
     return [
       { label: t('type'), value: getTypeLabels(t)[object.object_type] },
       { label: t('status'), value: getStatusLabel(object, t) },
       { label: t('categoryLabel'), value: object.category ? translateCategory(object.category, t) : formatOptional(object.category, t) },
-      { label: t('totalAcquisitionCost'), value: formatMoney(calculatePhysicalAcquisitionCost(object)) },
-      { label: t('dailyExperienceCost'), value: dailyCost ? `${formatMoney(dailyCost)}${t('perDay')}` : t('noFormed') },
+      { label: t('totalAcquisitionCost'), value: money(calculatePhysicalAcquisitionCost(object)) },
+      { label: t('dailyExperienceCost'), value: dailyCost != null ? `${money(dailyCost)}${t('perDay')}` : t('noFormed') },
       { label: t('purchaseDate'), value: formatOptional(object.purchased_at, t) },
       { label: t('endDate'), value: formatOptional(object.ended_at, t) },
-      { label: t('salePrice'), value: formatMoney(object.sale_price || 0) },
+      { label: t('salePrice'), value: object.sale_price != null ? money(object.sale_price) : t('notRecorded') },
     ];
   }
   if (object.object_type === 'recurring_cost') {
@@ -343,9 +345,9 @@ export function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label
       { label: t('status'), value: getStatusLabel(object, t) },
       { label: t('categoryLabel'), value: object.category ? translateCategory(object.category, t) : formatOptional(object.category, t) },
       { label: t('billingCycle'), value: getBillingCycleLabels(t)[object.billing_cycle || 'monthly'] || t('billingCycleMonthly') },
-      { label: t('billingAmount'), value: formatMoney(object.billing_amount || 0) },
-      { label: t('monthlyEquivalent'), value: formatMoney(monthlyCost) },
-      { label: t('annualCost'), value: formatMoney(object.annualized_cost || monthlyCost * 12) },
+      { label: t('billingAmount'), value: money(object.billing_amount || 0) },
+      { label: t('monthlyEquivalent'), value: money(monthlyCost) },
+      { label: t('annualCost'), value: money(object.annualized_cost ?? monthlyCost * 12) },
       { label: t('startDate'), value: formatOptional(object.started_at, t) },
       { label: t('billingDay'), value: object.billing_day ? `${object.billing_day}` : t('notRecorded') },
       { label: t('paymentAccount'), value: formatOptional(object.payment_account, t) },
@@ -357,8 +359,8 @@ export function getDetailRows(object: WYQDObject, t: TranslateFn): Array<{ label
     { label: t('type'), value: getTypeLabels(t)[object.object_type] },
     { label: t('status'), value: getStatusLabel(object, t) },
     { label: t('categoryLabel'), value: object.category ? translateCategory(object.category, t) : formatOptional(object.category, t) },
-    { label: t('budget'), value: formatMoney(object.budget_total || 0) },
-    { label: t('actualAmount'), value: object.actual_total ? formatMoney(object.actual_total) : t('notRecorded') },
+    { label: t('budget'), value: money(object.budget_total || 0) },
+    { label: t('actualAmount'), value: object.actual_total != null ? money(object.actual_total) : t('notRecorded') },
     { label: t('plannedDate'), value: formatOptional(object.planned_at, t) },
     { label: t('startDate'), value: formatOptional(object.started_at, t) },
     { label: t('endDate'), value: formatOptional(object.ended_at, t) },

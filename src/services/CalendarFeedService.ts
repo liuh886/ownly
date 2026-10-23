@@ -30,6 +30,8 @@ export interface PublishCalendarFeedInput {
   membership: Pick<WYQDMembershipState, 'isPro'>;
   userId: string;
   feedToken?: string;
+  /** Automatic refresh may update only an existing enabled row. */
+  refreshOnly?: boolean;
   apiBaseUrl?: string;
   options?: CalendarExportOptions;
   /** Day travel legs for arrival inference of untimed visits. */
@@ -62,6 +64,8 @@ export interface PublishAccountFeedInput {
   membership: Pick<WYQDMembershipState, 'isPro'>;
   userId: string;
   feedToken?: string;
+  /** Automatic refresh may update only an existing enabled row. */
+  refreshOnly?: boolean;
   options?: CalendarExportOptions;
   /** Day travel legs for arrival inference of untimed visits. */
   legs?: PlannerTripLeg[];
@@ -98,6 +102,7 @@ export interface CalendarFeedResponse {
 
 export interface CalendarFeedStore {
   upsertFeed(record: CalendarFeedRecord): Promise<void>;
+  refreshEnabledFeed?(record: CalendarFeedRecord): Promise<boolean>;
   getFeedByTokenHash(tokenHash: string): Promise<CalendarFeedRecord | null>;
   disableFeed(tripId: string, userId?: string, tokenHash?: string): Promise<void>;
 }
@@ -123,7 +128,19 @@ export class MemoryCalendarFeedStore implements CalendarFeedStore {
     return record;
   }
 
+  async refreshEnabledFeed(record: CalendarFeedRecord): Promise<boolean> {
+    const existing = this.records.get(record.token_hash);
+    if (!existing || !existing.enabled || existing.trip_id !== record.trip_id) return false;
+    this.records.set(record.token_hash, {
+      ...existing,
+      ics_content: record.ics_content,
+      updated_at: record.updated_at || new Date().toISOString(),
+    });
+    return true;
+  }
+
   async disableFeed(tripId: string, userId?: string, tokenHash?: string): Promise<void> {
+    let matched = false;
     for (const [hash, record] of this.records.entries()) {
       // With a bearer capability, trip + hash alone authorize (mirrors the
       // Supabase RLS equality); user_id must not gate revocation, otherwise an
@@ -134,7 +151,9 @@ export class MemoryCalendarFeedStore implements CalendarFeedStore {
         continue;
       }
       this.records.set(hash, { ...record, enabled: false, updated_at: new Date().toISOString() });
+      matched = true;
     }
+    if (!matched) throw new Error('Could not confirm calendar feed revocation; the link may still be active.');
   }
 }
 
@@ -162,6 +181,9 @@ export class CalendarFeedService {
     }
 
     const { trip, places, visits, userId } = input;
+    if (input.refreshOnly && !input.feedToken?.trim()) {
+      throw new Error('An existing calendar feed token is required for automatic refresh.');
+    }
     const token = input.feedToken || trip.calendar_feed?.feed_token || generateCalendarFeedToken();
     const tokenHash = await hashFeedToken(token);
     const ics = buildTripCalendarIcs(trip, places, visits, { ...input.options, legs: input.legs });
@@ -176,7 +198,14 @@ export class CalendarFeedService {
       updated_at: now,
     };
 
-    await this.store.upsertFeed(record);
+    if (input.refreshOnly) {
+      if (!this.store.refreshEnabledFeed) throw new Error('This feed store cannot safely refresh an enabled feed.');
+      if (!await this.store.refreshEnabledFeed(record)) {
+        throw new Error('The calendar feed was disabled or its token changed; automatic refresh was skipped.');
+      }
+    } else {
+      await this.store.upsertFeed(record);
+    }
 
     const feed: PlannerTripCalendarFeed = {
       feed_token: token,
@@ -285,19 +314,30 @@ export class CalendarFeedService {
     }
 
     const { trips, places, visits, userId } = input;
+    if (input.refreshOnly && !input.feedToken?.trim()) {
+      throw new Error('An existing account feed token is required for automatic refresh.');
+    }
     const token = input.feedToken?.trim() || generateCalendarFeedToken();
     const tokenHash = await hashFeedToken(token);
     const { ics, tripCount, eventCount } = buildAccountCalendarIcs(trips, places, visits, { ...input.options, legs: input.legs });
     const now = new Date().toISOString();
 
-    await this.store.upsertFeed({
+    const record: CalendarFeedRecord = {
       user_id: userId,
       trip_id: ACCOUNT_FEED_TRIP_ID,
       token_hash: tokenHash,
       ics_content: ics,
       enabled: true,
       updated_at: now,
-    });
+    };
+    if (input.refreshOnly) {
+      if (!this.store.refreshEnabledFeed) throw new Error('This feed store cannot safely refresh an enabled feed.');
+      if (!await this.store.refreshEnabledFeed(record)) {
+        throw new Error('The account calendar feed was disabled or its token changed; automatic refresh was skipped.');
+      }
+    } else {
+      await this.store.upsertFeed(record);
+    }
 
     return {
       feed: {

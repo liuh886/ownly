@@ -1,3 +1,6 @@
+import { useI18n } from '@/core/i18n-context';
+import { matchesCurrency } from '@/domain/currency';
+import { calculateHomeMetrics } from '@/domain/calculations';
 import { motion, type Variants } from 'framer-motion';
 import type { AccountSnapshot, HomeMetrics, WYQDObject } from '@/domain/types';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
@@ -38,7 +41,6 @@ export const itemVariants: Variants = {
 };
 
 export function HomeDashboard({
-  metrics,
   objects,
   snapshots,
   onOpenObjects,
@@ -52,6 +54,10 @@ export function HomeDashboard({
   onOpenTrip?: (tripId: string) => void;
   onOpenAccounts?: () => void;
 }) {
+  const { t, currency } = useI18n();
+  const financialObjects = objects.filter((object) => matchesCurrency(object, currency));
+  const financialSnapshots = snapshots.filter((snapshot) => matchesCurrency(snapshot, currency));
+  const scopedMetrics = { ...calculateHomeMetrics(financialObjects, financialSnapshots, currency), ownedPhysicalCount: objects.filter((object) => object.object_type === 'physical' && ['purchased', 'using'].includes(object.status)).length, activeSubscriptionCount: objects.filter((object) => object.object_type === 'recurring_cost' && object.status === 'active').length };
   return (
     <motion.section
       variants={containerVariants}
@@ -59,20 +65,21 @@ export function HomeDashboard({
       animate="visible"
       className="space-y-5"
     >
+      <p className="text-xs text-stone-500">{t('financialCurrencyScope').replace('{currency}', currency)}</p>
       <HomeOwnSection
-        metrics={metrics}
-        snapshots={snapshots}
+        metrics={scopedMetrics}
+        snapshots={financialSnapshots}
         itemVariants={itemVariants}
       />
       <HomeRepaymentSection
-        snapshots={snapshots}
+        snapshots={financialSnapshots}
         itemVariants={itemVariants}
         onOpenAccounts={onOpenAccounts}
       />
       <HomeCostSection
-        metrics={metrics}
+        metrics={scopedMetrics}
         objects={objects}
-        snapshots={snapshots}
+        snapshots={financialSnapshots}
         itemVariants={itemVariants}
         onOpenObjects={onOpenObjects}
       />
@@ -81,7 +88,7 @@ export function HomeDashboard({
         itemVariants={itemVariants}
       />
       <HomeDataScaleSection
-        metrics={metrics}
+        metrics={scopedMetrics}
         objects={objects}
         snapshots={snapshots}
         itemVariants={itemVariants}

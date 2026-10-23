@@ -41,8 +41,8 @@ function localeToCurrency(locale: WYQDCurrencyLocale): WYQDCurrency {
   return locale === 'zh' ? 'CNY' : 'USD';
 }
 
-function getConfig(currency: WYQDCurrency): CurrencyConfig {
-  return CURRENCY_CONFIG[currency] || CURRENCY_CONFIG.USD;
+function getConfig(currency: string): CurrencyConfig {
+  return (CURRENCY_CONFIG as Record<string, CurrencyConfig>)[currency] || { symbol: `${currency} `, locale: 'en-US' };
 }
 
 // ===== Exported format functions =====
@@ -51,19 +51,20 @@ export function formatMoney(
   value: number | null | undefined,
   fallback?: string,
   locale: WYQDCurrencyLocale = 'zh',
-  currency?: WYQDCurrency,
+  currency?: string,
+  fractionDigits = 0,
 ): string {
   if (value === null || value === undefined) return fallback ?? '—';
   const cur = currency || localeToCurrency(locale);
   const cfg = getConfig(cur);
-  return `${cfg.symbol}${Math.round(value).toLocaleString(cfg.locale)}`;
+  return `${cfg.symbol}${value.toLocaleString(cfg.locale, { minimumFractionDigits: 0, maximumFractionDigits: fractionDigits })}`;
 }
 
 export function formatDailyMoney(
   value: number,
   locale: WYQDCurrencyLocale = 'zh',
   t?: TranslateFn,
-  currency?: WYQDCurrency,
+  currency?: string,
 ): string {
   const cur = currency || localeToCurrency(locale);
   const cfg = getConfig(cur);
@@ -77,7 +78,7 @@ export function formatCompactMoney(
   value: number,
   locale: WYQDCurrencyLocale = 'zh',
   t?: TranslateFn,
-  currency?: WYQDCurrency,
+  currency?: string,
 ): string {
   const cur = currency || localeToCurrency(locale);
   const cfg = getConfig(cur);
@@ -102,7 +103,7 @@ export function formatDelta(
   value: number | null,
   t: TranslateFn,
   locale: WYQDCurrencyLocale = 'zh',
-  currency?: WYQDCurrency,
+  currency?: string,
 ): string {
   if (value === null) return t('noNetWorthComparison');
   const cur = currency || localeToCurrency(locale);

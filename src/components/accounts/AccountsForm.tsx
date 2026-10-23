@@ -1,3 +1,4 @@
+import { matchesCurrency } from '@/domain/currency';
 import { FIELD_CLASS, CARD_CLASS } from '@/lib/ui-constants';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { AccountBalance, AccountSnapshot } from '@/domain/types';
@@ -7,7 +8,9 @@ export interface AccountsFormProps {
   disabled?: boolean;
   isSaving: boolean;
   editingFileName: string | null;
+  currency?: string;
   snapshotAt: string;
+  snapshotDateError?: string;
   setSnapshotAt: (value: string) => void;
   displayedAssetBalancesText: string;
   setAssetBalancesText: (value: string) => void;
@@ -35,7 +38,9 @@ export function AccountsForm({
   disabled,
   isSaving,
   editingFileName,
+  currency,
   snapshotAt,
+  snapshotDateError,
   setSnapshotAt,
   displayedAssetBalancesText,
   setAssetBalancesText,
@@ -72,11 +77,11 @@ export function AccountsForm({
             {editingFileName ? t('editSnapshot') : t('recordSnapshot')}
           </h2>
           <p className="mt-1 text-xs leading-5 text-stone-500">
-            {t('snapshotFormatHint')}
+            {t('snapshotFormatHint')} {t('snapshotCurrencyTokenHint')}
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-          {t('currency')}
+          {currency ?? t('currency')}
         </span>
       </div>
 
@@ -85,11 +90,15 @@ export function AccountsForm({
           <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('date')}</span>
           <input
             type="date"
+            required
+            aria-invalid={Boolean(snapshotDateError)}
+            aria-describedby={snapshotDateError ? "snapshot-date-error" : undefined}
             value={snapshotAt}
             onChange={(event) => setSnapshotAt(event.target.value)}
             className={fieldClass}
             disabled={disabled || isSaving}
           />
+          {snapshotDateError ? <span id="snapshot-date-error" role="alert" className="mt-1 block text-xs text-red-600">{snapshotDateError}</span> : null}
         </label>
 
         <label className="block">
@@ -107,7 +116,7 @@ export function AccountsForm({
           />
           {parsedAssetBalances.length > 0 && !hasInvalidAssetLines ? (
             <p className="mt-1 text-xs text-stone-500">
-              {t('snapshotParsedPreview').replace('{count}', String(parsedAssetBalances.length)).replace('{total}', formatMoney(sumBalances(parsedAssetBalances)) ?? '')}
+              {t('snapshotParsedPreview').replace('{count}', String(parsedAssetBalances.length)).replace('{total}', formatMoney(sumBalances(parsedAssetBalances.filter((balance) => !currency || !balance.currency || matchesCurrency(balance, currency)))) ?? '')}
             </p>
           ) : null}
           {hasInvalidAssetLines ? (
@@ -133,7 +142,7 @@ export function AccountsForm({
           <p className="mt-1 text-xs text-stone-400">{t('liabilityDueHint')}</p>
           {parsedLiabilityBalances.length > 0 && !hasInvalidLiabilityLines ? (
             <p className="mt-1 text-xs text-stone-500">
-              {t('snapshotParsedPreview').replace('{count}', String(parsedLiabilityBalances.length)).replace('{total}', formatMoney(sumBalances(parsedLiabilityBalances)) ?? '')}
+              {t('snapshotParsedPreview').replace('{count}', String(parsedLiabilityBalances.length)).replace('{total}', formatMoney(sumBalances(parsedLiabilityBalances.filter((balance) => !currency || !balance.currency || matchesCurrency(balance, currency)))) ?? '')}
               {liabilityWithDueDateCount > 0 ? ` · ${t('dueDateCount').replace('{count}', String(liabilityWithDueDateCount))}` : ''}
             </p>
           ) : null}

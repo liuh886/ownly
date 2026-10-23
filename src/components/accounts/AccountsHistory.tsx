@@ -1,3 +1,4 @@
+import { recordCurrency } from '@/domain/currency';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { AccountSnapshot } from '@/domain/types';
 import type { WYQDTranslationKey } from '@/core/i18n';
@@ -18,7 +19,7 @@ export interface AccountsHistoryProps {
   cancelEditing: () => void;
   confirm: (options: { title: string; message: string; destructive?: boolean }) => Promise<boolean>;
   t: (key: WYQDTranslationKey) => string;
-  formatMoney: (val: number | null | undefined, fallback?: string) => string;
+  formatMoney: (val: number | null | undefined, fallback?: string, sourceCurrency?: string) => string;
 }
 
 export function AccountsHistory({
@@ -71,7 +72,7 @@ export function AccountsHistory({
                     </p>
                   </div>
                   <p className="mt-1 font-mono text-xs font-medium text-stone-500">
-                    {formatMoney(stored.entity.net_worth)}
+                    {formatMoney(stored.entity.net_worth, undefined, recordCurrency(stored.entity))}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1.5">
@@ -85,7 +86,7 @@ export function AccountsHistory({
                   </button>
                   <button
                     type="button"
-                    disabled={disabled || deletingFileName === stored.fileName}
+                    disabled={disabled || isSaving || deletingFileName === stored.fileName}
                     onClick={() => void (async () => {
                       const confirmed = await confirm({
                         title: t('delete'),
@@ -100,7 +101,7 @@ export function AccountsHistory({
                       } finally {
                         setDeletingFileName(null);
                       }
-                    })()}
+                    })().catch(() => { /* The action reports failure; leave the current editor open. */ })}
                     className="min-h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {deletingFileName === stored.fileName ? '…' : t('delete')}

@@ -1,3 +1,5 @@
+import { useI18n } from '@/core/i18n-context';
+import { matchesCurrency } from '@/domain/currency';
 import { useMemo } from 'react';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { ReviewEntry, WYQDObject, PhysicalObject } from '@/domain/types';
@@ -12,6 +14,7 @@ export function useObjectListStats(
   typeFilter: string,
   statusGroupFilter: ObjectStatusGroupFilter,
 ) {
+  const { currency } = useI18n();
   const reviewedObjectIds = useMemo(() => {
     const ids = new Set<string>();
     for (const r of reviews) {
@@ -30,7 +33,7 @@ export function useObjectListStats(
     { attention: 0, active: 0, review: 0, closed: 0 },
   ), [objects, reviewedObjectIds]);
 
-  const totalCost = useMemo(() => allPhysicalObjects.reduce((sum, stored) => sum + getPrimaryAmount(stored.entity), 0), [allPhysicalObjects]);
+  const totalCost = useMemo(() => allPhysicalObjects.filter((stored) => matchesCurrency(stored.entity, currency)).reduce((sum, stored) => sum + getPrimaryAmount(stored.entity), 0), [allPhysicalObjects, currency]);
 
   const ownedPhysicalObjects = useMemo(
     () => allPhysicalObjects.filter((stored) => stored.entity.status === 'purchased' || stored.entity.status === 'using'),
@@ -38,16 +41,17 @@ export function useObjectListStats(
   );
 
   const totalResidualValue = useMemo(
-    () => ownedPhysicalObjects.reduce((sum, stored) => sum + calculateResidualValue(stored.entity as PhysicalObject), 0),
-    [ownedPhysicalObjects],
+    () => ownedPhysicalObjects.filter((stored) => matchesCurrency(stored.entity, currency)).reduce((sum, stored) => sum + calculateResidualValue(stored.entity as PhysicalObject), 0),
+    [ownedPhysicalObjects, currency],
   );
 
   const averageDailyCost = useMemo(() => {
     const dailyCosts = ownedPhysicalObjects
+      .filter((stored) => matchesCurrency(stored.entity, currency))
       .map((stored) => getDailyCost(stored.entity))
       .filter((value): value is number => value !== null);
     return dailyCosts.length > 0 ? dailyCosts.reduce((sum, value) => sum + value, 0) : 0;
-  }, [ownedPhysicalObjects]);
+  }, [ownedPhysicalObjects, currency]);
 
   const observingObjects = useMemo(
     () => objects.filter((stored) => {
@@ -58,8 +62,8 @@ export function useObjectListStats(
   );
 
   const observingAmount = useMemo(
-    () => observingObjects.reduce((sum, stored) => sum + calculateDesireAmount(stored.entity), 0),
-    [observingObjects],
+    () => observingObjects.filter((stored) => matchesCurrency(stored.entity, currency)).reduce((sum, stored) => sum + calculateDesireAmount(stored.entity), 0),
+    [observingObjects, currency],
   );
 
   const getObjectTypeFilterCount = (type: string) => {

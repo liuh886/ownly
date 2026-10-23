@@ -21,12 +21,21 @@ import { SAMPLE_TRIP_TIMESTAMP } from '@/data/sample-trips/build';
 import { loadSampleTripBundle } from '@/data/sample-trips/load';
 import { SAMPLE_TRIP_IDS, type SampleTripId } from '@/data/sample-trips/registry';
 import { importTripBundle, seedTripExpenses } from './importTripBundle';
+import { MarkdownEntityRepository } from './MarkdownEntityRepository';
+import { PlannerRepository } from './PlannerRepository';
 import {
   attachMemoryStore,
   hasSeededMemoryStore,
   markMemoryStoreSeeded,
   resetMemoryStore,
+  memoryOwnlyStore,
+  isStoreFolderConnected,
 } from './ownlyStoreRouter';
+
+// Bind the seed to memory for its entire lifetime. The global router can switch
+// to a real folder while an asynchronous fetch/import is still pending.
+const demoEntityRepository = new MarkdownEntityRepository(memoryOwnlyStore);
+const demoPlannerRepository = new PlannerRepository(memoryOwnlyStore);
 
 export interface DemoSeedResult extends SeedSampleDataResult {
   trips: number;
@@ -38,20 +47,13 @@ async function seedSampleDataIntoMemory(
 ): Promise<SeedSampleDataResult> {
   const SAMPLE_DATA = await fetchSampleData(sampleDataOptions);
 
-  // The memory store is the active store in Demo mode, so the ordinary
-  // repository methods land in it rather than on disk. Every write still goes
-  // through the public API, which keeps filenames and Doctor findings identical
-  // to a real authored record.
-  const { markdownEntityRepository } = await import('./MarkdownEntityRepository');
-  const { plannerRepository } = await import('./PlannerRepository');
-
-  await markdownEntityRepository.initialize();
-  await plannerRepository.initialize();
+  await demoEntityRepository.initialize();
+  await demoPlannerRepository.initialize();
 
   return seedSampleData(SAMPLE_DATA, {
-    saveObject: (object, body) => markdownEntityRepository.saveObject(object, body),
-    saveSnapshot: (snapshot, body) => markdownEntityRepository.saveSnapshot(snapshot, body),
-    saveReview: (review, body) => markdownEntityRepository.saveReview(review, body),
+    saveObject: (object, body) => demoEntityRepository.saveObject(object, body),
+    saveSnapshot: (snapshot, body) => demoEntityRepository.saveSnapshot(snapshot, body),
+    saveReview: (review, body) => demoEntityRepository.saveReview(review, body),
   });
 }
 
@@ -60,14 +62,14 @@ async function seedSampleTripsIntoMemory(tripIds: readonly SampleTripId[] = SAMP
   let expenses = 0;
   for (const id of tripIds) {
     const { bundle, expenses: tripExpenses, members } = await loadSampleTripBundle(id);
-    const result = await importTripBundle(bundle, { members });
+    const result = await importTripBundle(bundle, { members, repository: demoPlannerRepository });
     if (result.failedTitles.length > 0) {
       throw new Error(`Demo Trip "${id}" failed to import: ${result.failedTitles.join(', ')}`);
     }
     // Expenses are excluded from the bundle schema by design; a demo needs the
     // budget panel and AA settlement lit, so they are written through the same
     // public path a loaded Sample Trip uses.
-    expenses += await seedTripExpenses(result.trip.id, tripExpenses, SAMPLE_TRIP_TIMESTAMP);
+    expenses += await seedTripExpenses(result.trip.id, tripExpenses, SAMPLE_TRIP_TIMESTAMP, demoPlannerRepository);
     trips += 1;
   }
   return { trips, expenses };
@@ -80,12 +82,14 @@ async function seedSampleTripsIntoMemory(tripIds: readonly SampleTripId[] = SAMP
 export async function seedDemoMode(
   sampleDataOptions?: Parameters<typeof fetchSampleData>[0],
 ): Promise<DemoSeedResult> {
+  if (isStoreFolderConnected()) throw new Error('Cannot seed demo while a folder is connected');
   // Start from empty so seeding twice in a session cannot duplicate records.
   resetMemoryStore();
   attachMemoryStore();
 
   const ledger = await seedSampleDataIntoMemory(sampleDataOptions);
   const trips = await seedSampleTripsIntoMemory();
+  if (isStoreFolderConnected()) throw new Error('Demo session was replaced by a connected folder');
   markMemoryStoreSeeded();
 
   return { ...ledger, ...trips };

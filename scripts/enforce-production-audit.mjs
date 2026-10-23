@@ -9,7 +9,13 @@ if (!fs.existsSync(reportPath)) {
 }
 
 const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-const counts = report.metadata?.vulnerabilities ?? {};
+const counts = report.metadata?.vulnerabilities;
+const severities = ['info', 'low', 'moderate', 'high', 'critical', 'total'];
+if (report.error || !counts || severities.some((key) =>
+  !Number.isInteger(counts[key]) || counts[key] < 0)) {
+  console.error(`[security audit] Invalid ${reportLabel.toLowerCase()} report; the registry audit did not complete.`);
+  process.exit(1);
+}
 const critical = Number(counts.critical ?? 0);
 const high = Number(counts.high ?? 0);
 

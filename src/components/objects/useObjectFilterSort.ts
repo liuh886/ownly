@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ObjectListFocus } from './ObjectList';
 import type { WYQDObject } from '@/domain/types';
+import { calculateExperienceCost, calculatePhysicalAcquisitionCost } from '@/domain/calculations';
 
 export type PhysicalFilter = 'all' | 'active' | 'retired' | 'sold';
 export type ObjectTypeFilter = 'all' | WYQDObject['object_type'];
@@ -28,12 +29,12 @@ function getSortDate(object: WYQDObject): number {
 
 function getPrimaryAmount(object: WYQDObject): number {
   if (object.object_type === 'physical') {
-    return object.purchase_price || 0; // Using simplified version here, or pass calculatePhysicalAcquisitionCost
+    return calculatePhysicalAcquisitionCost(object);
   }
   if (object.object_type === 'recurring_cost') {
     return object.billing_amount || 0;
   }
-  return object.budget_total || object.actual_total || 0;
+  return calculateExperienceCost(object);
 }
 
 export function compareObjects(a: WYQDObject, b: WYQDObject, sort: SortOption): number {

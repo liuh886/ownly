@@ -1,3 +1,4 @@
+import { matchesCurrency, recordCurrency } from '@/domain/currency';
 import { useMemo } from 'react';
 import type { AccountSnapshot } from '@/domain/types';
 import type { WYQDTranslationKey } from '@/core/i18n';
@@ -24,7 +25,7 @@ export function LiabilityDuePanel({
   t,
   formatMoney,
 }: LiabilityDuePanelProps) {
-  const dues = useMemo(() => collectLiabilityDues(latest, todayISO()), [latest]);
+  const dues = useMemo(() => collectLiabilityDues(latest ? { ...latest, liability_balances: latest.liability_balances.filter((balance) => !balance.currency || matchesCurrency(balance, recordCurrency(latest))) } : null, todayISO()), [latest]);
   const buckets = useMemo(() => bucketLiabilityDues(dues), [dues]);
   const summary = useMemo(() => summarizeLiabilityDues(buckets), [buckets]);
   const upcoming = useMemo(

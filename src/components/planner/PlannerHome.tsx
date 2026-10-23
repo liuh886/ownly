@@ -20,8 +20,12 @@ import { PlannerDayTimeline } from './PlannerDayTimeline';
 import { PlannerRightPanel } from './PlannerRightPanel';
 import { ResearchPoolSection } from './ResearchPoolSection';
 import { useEscapeKey } from './use-escape-key';
-import { extractTripSharePayload } from '@/domain/trip-share-link';
+import { observeIncomingTripShare } from './incoming-trip-share';
 import { isTripReviewable, type TripReviewDraft } from '@/domain/trip-review';
+import { plannerRepository } from '@/services/PlannerRepository';
+import { captureWorkspaceIdentity } from '@/services/ownlyStoreRouter';
+import { assertPublicationWorkspace } from './publication-queue';
+import { saveTripReviewDraft, TripReviewConflictError, TripReviewSaveError, type TripReviewRecovery } from './save-trip-review';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import {
   SAMPLE_TRIP_DISMISSED_KEY,
@@ -115,6 +119,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   const [isSwapDaysModalOpen, setIsSwapDaysModalOpen] = useState(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const [swapTargetDate, setSwapTargetDate] = useState<string>('');
   const [budgetInitialPlaceId, setBudgetInitialPlaceId] = useState<string | null>(null);
   const [optimizeBusy, setOptimizeBusy] = useState(false);
@@ -123,20 +128,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   // Incoming trip share link: offer it once per hash value by opening the
   // manage-trips modal on its import tab (the modal decodes + imports).
   const [shareHash, setShareHash] = useState<string | null>(null);
-  const offeredShareHashRef = useRef<string | null>(null);
   useEffect(() => {
-    const syncShareHash = () => {
-      if (typeof window === 'undefined') return;
-      const payload = extractTripSharePayload(window.location.hash);
-      if (payload && offeredShareHashRef.current !== payload) {
-        offeredShareHashRef.current = payload;
-        setShareHash(payload);
-        setIsCreateTripOpen(true);
-      }
-    };
-    syncShareHash();
-    window.addEventListener('hashchange', syncShareHash);
-    return () => window.removeEventListener('hashchange', syncShareHash);
+    return observeIncomingTripShare((payload) => {
+      setShareHash(payload);
+      setIsCreateTripOpen(true);
+    });
   }, []);
 
   const {
@@ -243,9 +239,17 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     copyIcsContent,
     accountFeed,
     handleCreateOrUpdateAccountFeed,
+    handleDisableFeed,
     handleRotateAccountFeed,
     handleDisableAccountFeed,
+    legacyAccountOwners,
+    recoverLegacyAccount,
+    canRecoverTripFeed,
+    recoverTripFeed,
+    managedTripFeed,
     tripShareMeta,
+    canRecoverLegacyShare,
+    recoverLegacyShare,
     handlePublishTripShare,
     handleDisableTripShare,
     copyItineraryText,
@@ -275,7 +279,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
 
   // WS-1 trip retrospective: draft lives in TripReviewModal (preview-only);
   // confirm persists via the standard object path, then backlinks review_id.
-  const { repository, runtimeTarget, storageGet, storageSet } = useOwnlyWorkspace();
+  const { repository, runtimeTarget, storageGet, storageSet, isDemoMode } = useOwnlyWorkspace();
   const [sampleDismissed, setSampleDismissed] = useState(() => storageGet(SAMPLE_TRIP_DISMISSED_KEY) === 'true');
   const samplePrompt = resolveSampleTripPrompt({
     isConnected: !disabled,
@@ -313,27 +317,54 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
         : `"${selectedTrip.title}" will be marked complete, unlocking the retrospective draft.`,
       confirmLabel: zh ? '标记完结' : 'Mark complete',
       run: () => {
-        void handleUpsertTrip({ ...selectedTrip, status: 'completed' });
+        void handleUpsertTrip({ ...selectedTrip, status: 'completed' }).catch(() => {
+          setNotice(zh ? '行程完结操作失败，请重新打开行程检查状态后重试。' : 'Completing the trip failed. Reopen it to check its status and retry.');
+        });
       },
     });
-  }, [selectedTrip, handleUpsertTrip, setConfirmRequest, zh]);
+  }, [selectedTrip, handleUpsertTrip, setConfirmRequest, setNotice, zh]);
 
+  const reviewSaveRef = useRef(false);
+  const reviewRecoveries = useRef(new Map<string, Map<string, TripReviewRecovery>>());
+  const renderedReviewWorkspace = captureWorkspaceIdentity();
   const confirmTripReview = useCallback(async (draft: TripReviewDraft) => {
-    if (!selectedTrip) return;
+    if (!selectedTrip || disabled || reviewSaveRef.current) return;
+    reviewSaveRef.current = true;
     setReviewBusy(true);
+    setReviewError(null);
+    const identity = renderedReviewWorkspace;
     try {
-      await repository.saveObject(draft.object, draft.body);
-      await handleUpsertTrip({ ...selectedTrip, review_id: draft.object.id });
+      const assertWorkspace = () => assertPublicationWorkspace(identity);
+      assertWorkspace();
+      const recoveryKey = `${identity}:${selectedTrip.id}`;
+      let recovery = reviewRecoveries.current.get(recoveryKey);
+      if (!recovery) { recovery = new Map(); reviewRecoveries.current.set(recoveryKey, recovery); }
+      const save = async (bound: typeof repository) => {
+        assertWorkspace();
+        await saveTripReviewDraft(bound, selectedTrip.id, draft,
+          (tripId, reviewId) => plannerRepository.withWriteSession(async (planner) => {
+            assertWorkspace();
+            await planner.patchTripReviewId(tripId, reviewId);
+          }), assertWorkspace, recovery);
+      };
+      if (repository.withWriteSession) await repository.withWriteSession(save);
+      else await save(repository);
       setIsReviewModalOpen(false);
-      setNotice(zh
-        ? `复盘草稿已生成，可在「复盘」页补评分。`
-        : `Retrospective draft saved; add scores in the Reviews tab.`);
-    } catch {
-      setNotice(zh ? '复盘草稿保存失败，未写入任何数据。' : 'Failed to save the draft; nothing was written.');
+      setNotice(zh ? '复盘草稿已生成，可在「复盘」页补评分。' : 'Retrospective draft saved; add scores in the Reviews tab.');
+      try { await load(); } catch { setNotice(zh ? '复盘已保存，列表刷新失败，请重新打开行程。' : 'Retrospective saved; refresh failed. Reopen the trip.'); }
+    } catch (error) {
+      const message = error instanceof TripReviewConflictError
+        ? (zh ? '保存的复盘已有修改，无法覆盖。你的新输入仍保留，请在复盘页核对已保存内容后再试。' : 'The saved retrospective changed; it was not overwritten. Your new input is kept. Check the saved object in Reviews before retrying.')
+        : error instanceof TripReviewSaveError && error.objectSaved
+        ? (zh ? '复盘草稿已保存，但行程关联失败。输入已保留，请再次确认以重试关联。' : 'The draft was saved, but linking failed. Your input is kept; confirm again to retry linking.')
+        : (zh ? '复盘草稿保存失败，输入已保留，请重试。' : 'Draft save failed. Your input is kept; please retry.');
+      setReviewError(message);
+      setNotice(message);
     } finally {
+      reviewSaveRef.current = false;
       setReviewBusy(false);
     }
-  }, [selectedTrip, repository, handleUpsertTrip, setNotice, zh]);
+  }, [renderedReviewWorkspace, selectedTrip, disabled, repository, load, setNotice, zh]);
 
   // Capture bridge is Web/PWA-only: never fail silently under Obsidian.
   const syncCaptureWithBoundary = useCallback(() => {
@@ -404,6 +435,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
   ), [effectiveDayLegs]);
 
   const rightPanelProps = {
+    readOnly: disabled,
     zh,
     language,
     rightTab,
@@ -741,7 +773,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
     onLocatePlace: handleLocatePlace,
   };
 
-  if (disabled) {
+  if (disabled && !isDemoMode) {
     return (
       <section className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-500 shadow-sm">
         {zh ? '连接 Ownly 本地数据目录后即可使用 Planner。' : 'Connect your Ownly data folder to use Planner.'}
@@ -858,7 +890,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
       <header className="flex flex-col gap-3 rounded-2xl border border-stone-200/90 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative">
+            <div className="relative min-w-0 max-w-full">
               <select
                 value={selectedTripId}
                 onChange={(event) => {
@@ -868,7 +900,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
                   setIsMultiSelectMode(false);
                   setPoolSearch('');
                 }}
-                className="max-w-full rounded-xl border border-stone-300 bg-stone-50/80 px-3.5 py-2 text-sm font-bold text-stone-900 shadow-2xs outline-none transition focus:border-stone-900 focus:bg-white cursor-pointer"
+                className="w-full max-w-full rounded-xl border border-stone-300 bg-stone-50/80 px-3.5 py-2 text-sm font-bold text-stone-900 shadow-2xs outline-none transition focus:border-stone-900 focus:bg-white cursor-pointer sm:w-auto"
                 aria-label={zh ? '选择行程' : 'Select trip'}
               >
                 {trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}
@@ -877,6 +909,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             <button
               type="button"
               onClick={() => setIsCreateTripOpen(true)}
+              disabled={disabled}
               className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-950 active:scale-98"
               title={zh ? '管理行程（新建/删除）' : 'Manage trips'}
             >
@@ -885,6 +918,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             <button
               type="button"
               onClick={() => { if (selectedTrip.status !== 'completed') markTripComplete(); }}
+              disabled={disabled}
               title={selectedTrip.status === 'completed'
                 ? (zh ? '行程已完结' : 'Trip completed')
                 : (zh ? '点击标记行程完结' : 'Click to mark the trip complete')}
@@ -914,6 +948,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           <button
             type="button"
             onClick={() => setIsCalendarModalOpen(true)}
+            disabled={disabled}
             className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs font-bold text-amber-900 shadow-2xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-98"
             title={zh ? '导出 .ics 日历文件或设置 Google/Apple Calendar 持续订阅源' : 'Export .ics or setup Google/Apple Calendar Feed'}
           >
@@ -928,6 +963,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
             <button
               type="button"
               onClick={() => setShareMenuOpen((prev) => !prev)}
+              disabled={disabled}
               className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs font-bold text-amber-900 shadow-2xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-98"
               title={zh ? '分享：行程链接 (PRO) 或行程单文件' : 'Share: trip link (PRO) or itinerary file'}
               aria-expanded={shareMenuOpen}
@@ -1000,8 +1036,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           {reviewable ? (
             <button
               type="button"
-              onClick={() => { if (!selectedTrip.review_id) setIsReviewModalOpen(true); }}
-              disabled={Boolean(selectedTrip.review_id)}
+              onClick={() => { if (!selectedTrip.review_id) { setReviewError(null); setIsReviewModalOpen(true); } }}
+              disabled={disabled || Boolean(selectedTrip.review_id)}
               className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 hover:text-stone-900 active:scale-98 disabled:cursor-default disabled:opacity-60"
               title={selectedTrip.review_id
                 ? (zh ? '已生成复盘，可在对象页查看' : 'Retrospective already created; see Objects')
@@ -1407,6 +1443,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           trips={trips.map((trip) => ({ id: trip.id, title: trip.title, timezone: trip.timezone }))}
           onEditTripTimezone={openTripTimezoneEditor}
           accountFeed={accountFeed}
+          tripFeed={managedTripFeed}
           activeDate={activeDate}
           onDownloadFullIcs={downloadFullIcs}
           onDownloadDayIcs={downloadDayIcs}
@@ -1414,6 +1451,11 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           onCreateOrUpdateFeed={handleCreateOrUpdateAccountFeed}
           onRotateFeed={handleRotateAccountFeed}
           onDisableFeed={handleDisableAccountFeed}
+          onDisableTripFeed={handleDisableFeed}
+          legacyAccountOwners={legacyAccountOwners}
+          onRecoverLegacyAccount={recoverLegacyAccount}
+          canRecoverTripFeed={canRecoverTripFeed}
+          onRecoverTripFeed={recoverTripFeed}
           isPro={isPro}
           onUpgradePro={openLicenseModal}
           language={language}
@@ -1431,6 +1473,8 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           language={language}
           onPublish={handlePublishTripShare}
           onDisable={handleDisableTripShare}
+          canRecoverLegacy={canRecoverLegacyShare}
+          onRecoverLegacy={recoverLegacyShare}
         />
       ) : null}
 
@@ -1443,6 +1487,7 @@ export function PlannerHome({ disabled }: PlannerHomeProps) {  const ctrl = useP
           legs={legs}
           expenses={currentExpenses}
           language={language}
+          error={reviewError}
           busy={reviewBusy}
           onClose={() => { if (!reviewBusy) setIsReviewModalOpen(false); }}
           onConfirm={(draft) => void confirmTripReview(draft)}

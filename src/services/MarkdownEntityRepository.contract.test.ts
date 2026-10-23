@@ -16,6 +16,7 @@ import {
 class InMemoryMarkdownStore implements MarkdownFileStore {
   private readonly directories = new Map<string, Map<string, string>>();
   private failWrite = false;
+  private deletesToFail = 0;
 
   constructor(private readonly dataFolder = '') {}
 
@@ -42,6 +43,10 @@ class InMemoryMarkdownStore implements MarkdownFileStore {
   }
 
   async deleteMarkdownFile(directory: string, fileName: string): Promise<void> {
+    if (this.deletesToFail > 0) {
+      this.deletesToFail--;
+      throw new Error(`Simulated delete failure: ${directory}/${fileName}`);
+    }
     const files = this.directories.get(directory);
     if (!files?.delete(fileName)) {
       throw new Error(`Missing Markdown file: ${directory}/${fileName}`);
@@ -64,6 +69,10 @@ class InMemoryMarkdownStore implements MarkdownFileStore {
 
   failNextWrite(): void {
     this.failWrite = true;
+  }
+
+  failNextDeletes(count: number): void {
+    this.deletesToFail = count;
   }
 }
 
@@ -360,6 +369,97 @@ describe('MarkdownEntityRepository persisted mutation contract', () => {
     await expect(repository.archiveObject(fileName)).rejects.toThrow('Simulated write failure');
     expect(store.has('Objects', fileName)).toBe(true);
     expect(await repository.listArchivedEntities()).toHaveLength(0);
+  });
+
+  it('serializes concurrent same-name creates so neither record is overwritten', async () => {
+    const { repository } = await setup();
+    const names = await Promise.all([
+      repository.saveObject(physical({ id: 'first' })),
+      repository.saveObject(physical({ id: 'second' })),
+    ]);
+    expect(new Set(names).size).toBe(2);
+    expect((await repository.listObjects()).map((entry) => entry.entity.id).sort()).toEqual(['first', 'second']);
+  });
+
+  it('refuses updates when the file is missing or belongs to another entity', async () => {
+    const { store, repository } = await setup();
+    const name = await repository.saveObject(physical());
+    await expect(repository.updateObject('missing.md', physical())).rejects.toThrow('not found');
+    await expect(repository.updateObject(name, physical({ id: 'other' }))).rejects.toThrow('identity changed');
+    expect(parseMarkdownEntity<Record<string, unknown>>(store.read('Objects', name)!).frontmatter.id).toBe('object-physical-1');
+    expect(store.has('Objects', 'missing.md')).toBe(false);
+  });
+
+  it('removes an archive copy if deleting its source fails', async () => {
+    const { store, repository } = await setup();
+    const name = await repository.saveObject(physical());
+    store.failNextDeletes(1);
+    await expect(repository.archiveObject(name)).rejects.toThrow('Simulated delete failure');
+    expect(store.has('Objects', name)).toBe(true);
+    expect(await repository.listArchivedEntities()).toHaveLength(0);
+  });
+
+  it('reports partial completion if source deletion and copy cleanup both fail', async () => {
+    const { store, repository } = await setup();
+    const name = await repository.saveObject(physical());
+    store.failNextDeletes(2);
+    await expect(repository.archiveObject(name)).rejects.toThrow('Move partially completed');
+    expect(store.has('Objects', name)).toBe(true);
+    expect(await repository.listArchivedEntities()).toHaveLength(1);
+  });
+
+  it('removes a restored copy if deleting the archive fails', async () => {
+    const { store, repository } = await setup();
+    const name = await repository.saveObject(physical());
+    const archive = await repository.archiveObject(name);
+    store.failNextDeletes(1);
+    await expect(repository.restoreObject(archive)).rejects.toThrow('Simulated delete failure');
+    expect(store.has('Objects', name)).toBe(false);
+    expect(store.has('Archive/Objects', archive)).toBe(true);
+  });
+
+  it('keeps a multi-file write session on its original store after a workspace switch', async () => {
+    const first = new InMemoryMarkdownStore();
+    const second = new InMemoryMarkdownStore();
+    let active = first;
+    const routed: MarkdownFileStore = {
+      getDataFolder: () => active.getDataFolder(),
+      readMarkdownFiles: (directory) => active.readMarkdownFiles(directory),
+      writeMarkdownFile: (directory, name, content) => active.writeMarkdownFile(directory, name, content),
+      deleteMarkdownFile: (directory, name) => active.deleteMarkdownFile(directory, name),
+      captureSession: async () => active,
+    };
+    const repository = new MarkdownEntityRepository(routed, clock);
+    await repository.initialize();
+    await repository.withWriteSession(async (bound) => {
+      await bound.saveObject(physical({ id: 'first' }));
+      active = second;
+      await bound.saveObject(physical({ id: 'second' }));
+    });
+    expect((await first.readMarkdownFiles('Objects')).map((item) => item.fileName)).toHaveLength(2);
+    expect(await second.readMarkdownFiles('Objects')).toHaveLength(0);
+  });
+
+  it('holds the write lock through a multi-file session so another save cannot interleave', async () => {
+    const { repository } = await setup();
+    let release!: () => void;
+    let reached!: () => void;
+    const paused = new Promise<void>((resolve) => { release = resolve; });
+    const atPause = new Promise<void>((resolve) => { reached = resolve; });
+    const grouped = repository.withWriteSession(async (bound) => {
+      await bound.saveObject(physical({ id: 'first' }));
+      reached();
+      await paused;
+      await bound.saveObject(physical({ id: 'second' }));
+    });
+    await atPause;
+    let outsiderFinished = false;
+    const outsider = repository.saveObject(physical({ id: 'outsider' })).then(() => { outsiderFinished = true; });
+    await Promise.resolve();
+    expect(outsiderFinished).toBe(false);
+    release();
+    await Promise.all([grouped, outsider]);
+    expect((await repository.listObjects()).map((item) => item.entity.id)).toHaveLength(3);
   });
 
   it('supports an Ownly child folder as the configured data root', async () => {

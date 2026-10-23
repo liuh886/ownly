@@ -72,12 +72,13 @@ export function ObjectConsole({
   objectControlLabels,
   hasPhysicalObjects,
 }: ObjectConsoleProps) {
-  const { t } = useI18n();
+  const { t, currency } = useI18n();
   const { formatMoney } = useFormatMoney();
 
   return (
     <>
       <div className={CARD_CLASS}>
+      <p className="mb-3 text-xs text-stone-500">{t('financialCurrencyScope').replace('{currency}', currency)}</p>
         <h2 className={SECTION_TITLE_CLASS}>{t('physicalAssets')}</h2>
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
@@ -158,6 +159,7 @@ export function ObjectConsole({
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
         <div className="flex gap-2">
           <label className="min-w-0 flex-1">
+            <span className="sr-only">{t('searchByNameCategoryStatus')}</span>
             <input
               value={query}
               onChange={(event) => {

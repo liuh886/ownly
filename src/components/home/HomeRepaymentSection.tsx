@@ -1,3 +1,4 @@
+import { matchesCurrency } from '@/domain/currency';
 import { useMemo } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
@@ -23,11 +24,14 @@ export function HomeRepaymentSection({
   itemVariants: Variants;
   onOpenAccounts?: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, currency } = useI18n();
   const { formatMoney } = useFormatMoney();
   const dues = useMemo(
-    () => collectLiabilityDues(findLatestSnapshot(snapshots), todayISO()),
-    [snapshots],
+    () => {
+      const latest = findLatestSnapshot(snapshots.filter((snapshot) => matchesCurrency(snapshot, currency)));
+      return collectLiabilityDues(latest ? { ...latest, liability_balances: latest.liability_balances.filter((balance) => !balance.currency || matchesCurrency(balance, currency)) } : null, todayISO());
+    },
+    [snapshots, currency],
   );
   const buckets = useMemo(() => bucketLiabilityDues(dues), [dues]);
   const summary = useMemo(() => summarizeLiabilityDues(buckets), [buckets]);

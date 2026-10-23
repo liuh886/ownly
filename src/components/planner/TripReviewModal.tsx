@@ -51,6 +51,7 @@ export function TripReviewModal({
   expenses,
   language,
   busy,
+  error,
   onClose,
   onConfirm,
 }: {
@@ -61,6 +62,7 @@ export function TripReviewModal({
   expenses: TripExpenseItem[];
   language: 'zh' | 'en';
   busy: boolean;
+  error?: string | null;
   onClose: () => void;
   onConfirm: (draft: TripReviewDraft) => void;
 }) {
@@ -79,6 +81,7 @@ export function TripReviewModal({
       <section ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={copy.title} className="max-h-[calc(100vh-4rem)] w-full max-w-xl overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl sm:p-8">
         <h2 className="text-xl font-semibold tracking-tight text-stone-950">{copy.title} — {trip.title}</h2>
         <p className="mt-2 text-sm leading-6 text-stone-600">{copy.intro}</p>
+        {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
 
         <dl className="mt-4 space-y-1 text-xs text-stone-600">
           <div className="flex gap-2">

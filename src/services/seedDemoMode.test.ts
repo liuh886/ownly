@@ -70,6 +70,36 @@ describe('Demo mode seeding', () => {
     expect(memoryOwnlyStore.snapshot().length).toBeGreaterThan(0);
   });
 
+  it('cannot write demo records to a connected folder', async () => {
+    setStoreFolderConnected(true);
+    await expect(seedDemoMode({ fetcher: readLedger })).rejects.toThrow('folder is connected');
+    expect(disk.writes).toEqual([]);
+    expect(disk.read).toEqual([]);
+  });
+  it('rejects user writes through the demo router after the seed completes', async () => {
+    await seedDemoMode({ fetcher: readLedger });
+    const before = memoryOwnlyStore.snapshot();
+    await expect(ownlyStoreRouter.writeMarkdownFile('Ownly/Objects', 'new.md', 'new')).rejects.toThrow('read-only');
+    await expect(ownlyStoreRouter.deleteMarkdownFile(before[0].directory, before[0].fileName)).rejects.toThrow('read-only');
+    expect(memoryOwnlyStore.snapshot()).toEqual(before);
+  });
+
+  it('cannot write to disk if a folder connects while the ledger fetch is pending', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const seeding = seedDemoMode({ fetcher: async () => {
+      await pending;
+      return readLedger();
+    } });
+    setStoreFolderConnected(true);
+    release();
+    // Switching folders may cancel the detached memory session, but it must
+    // never redirect the rest of the seed into personal files.
+    await seeding.catch(() => {});
+    expect(disk.writes).toEqual([]);
+    expect(disk.read).toEqual([]);
+  });
+
   it('routes reads to memory while no folder is connected', async () => {
     setStoreFolderConnected(false);
     expect(await ownlyStoreRouter.getDataFolder()).toBe('Ownly');

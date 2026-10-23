@@ -45,19 +45,21 @@ import {
 import {
   buildTripCalendarIcs,
   buildDayCalendarIcs,
-  loadAccountFeedMeta,
-  saveAccountFeedMeta,
   type AccountCalendarFeedMeta,
 } from '@/domain/calendar-feed';
 import { useAutoCalendarSync } from './useAutoCalendarSync';
 import { trackFirstEver } from '@/lib/analytics';
 import { createDetachedElement } from '@/lib/dom';
 import { buildTripItineraryHtml, tripItineraryHtmlFileName } from '@/domain/trip-itinerary-html';
-import { loadTripShareMeta, saveTripShareMeta, type TripShareMeta } from '@/domain/trip-share';
+import { type TripShareMeta } from '@/domain/trip-share';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { calendarFeedService } from '@/services/CalendarFeedService';
 import { tripShareService } from '@/services/TripShareService';
+import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
+import { usePublicationCredentials } from './usePublicationCredentials';
+import { captureWorkspaceIdentity } from '@/services/ownlyStoreRouter';
 import { useAutoTripShareSync } from './useAutoTripShareSync';
+import { assertPublicationWorkspace, invalidatePublication, publicationKey, queuePublication, resumePublication, suspendPublication } from './publication-queue';
 import {
   applyCaptureImportReport,
   pullCaptureState,
@@ -94,32 +96,22 @@ function snapshotPlace(
   };
 }
 
-async function restorePlaceSnapshot(snapshot: PlaceSnapshot): Promise<void> {
-  if (snapshot.place) await plannerRepository.upsertPlace(snapshot.place);
+async function restorePlaceSnapshot(snapshot: PlaceSnapshot, repository: typeof plannerRepository, assertWorkspace: () => void): Promise<void> {
+  assertWorkspace();
+  if (snapshot.place) await repository.upsertPlace(snapshot.place);
   for (const visit of snapshot.visits) {
-    await plannerRepository.upsertVisit(visit);
+    assertWorkspace();
+    await repository.upsertVisit(visit);
   }
   for (const leg of snapshot.legs) {
-    await plannerRepository.upsertLeg(leg);
+    assertWorkspace();
+    await repository.upsertLeg(leg);
   }
 }
 
 export interface UsePlannerActionsProps {
   data: PlannerDataReturn;
   disabled: boolean;
-}
-
-/**
- * Loads the account feed token, adopting the pre-upgrade identity's token
- * (ownly_user → user_pro_*) so upgrades neither orphan the old servable row
- * nor mint a duplicate subscription.
- */
-function loadAccountFeedWithLegacyAdoption(userId: string): AccountCalendarFeedMeta | null {
-  const direct = loadAccountFeedMeta(userId);
-  if (direct || userId === 'ownly_user') return direct;
-  const legacy = loadAccountFeedMeta('ownly_user');
-  if (legacy) saveAccountFeedMeta(userId, legacy);
-  return legacy;
 }
 
 /**
@@ -206,38 +198,87 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setCapturePending,
   } = data;
 
+  const plannerWorkspaceIdentity = captureWorkspaceIdentity();
+  const publicationContext = useRef({ disabled, currentUserId, isPro, selectedTripId });
+  useEffect(() => { publicationContext.current = { disabled, currentUserId, isPro, selectedTripId }; }, [disabled, currentUserId, isPro, selectedTripId]);
+
   const showPersistError = useCallback((error: unknown, context: string) => {
     console.warn(`[Planner] Failed to ${context}`, error);
     setNotice(zh ? '保存失败，界面已还原，请重试。' : 'Save failed; the change was reverted. Please try again.');
   }, [setNotice, zh]);
 
-  // Account-level calendar feed: one subscription per account across all trips.
-  // The raw bearer token lives in window.localStorage; only its SHA-256 reaches the server.
-  // currentUserId resolves after workspace load, so re-derive when it changes
-  // (render-time adjustment, no effect needed).
-  const [accountFeedOwner, setAccountFeedOwner] = useState(currentUserId);
-  const [accountFeed, setAccountFeed] = useState<AccountCalendarFeedMeta | null>(() =>
-    loadAccountFeedWithLegacyAdoption(currentUserId),
-  );
-  if (accountFeedOwner !== currentUserId) {
-    setAccountFeedOwner(currentUserId);
-    setAccountFeed(loadAccountFeedWithLegacyAdoption(currentUserId));
-  }
+  const workspace = useOwnlyWorkspace();
+  const { scope, getScope } = usePublicationCredentials(workspace, plannerWorkspaceIdentity, disabled);
+  const accountOwner = `${scope?.namespace ?? ''}:${plannerWorkspaceIdentity}:${currentUserId}`;
+  const shareOwner = `${scope?.namespace ?? ''}:${plannerWorkspaceIdentity}:${selectedTripId}`;
+  const [accountReceipt, setAccountReceipt] = useState<{ owner: string; meta: AccountCalendarFeedMeta | null }>({ owner: '', meta: null });
+  const [shareReceipt, setShareReceipt] = useState<{ owner: string; meta: TripShareMeta | null }>({ owner: '', meta: null });
+  const accountFeed = accountReceipt.owner === accountOwner ? accountReceipt.meta : null;
+  const tripShareMeta = shareReceipt.owner === shareOwner ? shareReceipt.meta : null;
+  const setAccountFeed = useCallback((meta: AccountCalendarFeedMeta) => setAccountReceipt({ owner: accountOwner, meta }), [accountOwner]);
+  const canRecoverLegacyShare = Boolean(selectedTripId && scope?.canRecoverLegacyShare(selectedTripId));
+  const legacyAccountOwners = scope?.recoverableLegacyAccountOwners(currentUserId) ?? [];
+  const canRecoverTripFeed = Boolean(selectedTrip && scope?.canRecoverTripFeed(selectedTrip.id, selectedTrip.calendar_feed));
+  const managedTripFeed = selectedTrip ? scope?.loadTripFeed(selectedTrip.id) ?? null : null;
+  const recoverLegacyShare = useCallback(async () => {
+    if (!selectedTripId) throw new Error('Select a trip first.');
+    const identity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    assertPublicationWorkspace(identity);
+    const meta = credentials.recoverLegacyShare(selectedTripId);
+    setShareReceipt({ owner: `${credentials.namespace}:${identity}:${selectedTripId}`, meta });
+  }, [selectedTripId, plannerWorkspaceIdentity, getScope]);
+  const recoverLegacyAccount = useCallback(async (oldUserId: string) => {
+    const identity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    assertPublicationWorkspace(identity);
+    if (credentials.loadAccount(currentUserId)) {
+      const old = credentials.legacyAccountForRevocation(oldUserId);
+      await calendarFeedService.disableAccountFeed({
+        membership: { isPro }, userId: oldUserId, feedToken: old.feed_token,
+      });
+      assertPublicationWorkspace(identity);
+      credentials.markLegacyAccountRevoked(oldUserId);
+      setAccountReceipt((receipt) => ({ ...receipt }));
+      return;
+    }
+    const meta = credentials.recoverLegacyAccount(currentUserId, oldUserId);
+    setAccountReceipt({ owner: `${credentials.namespace}:${identity}:${currentUserId}`, meta });
+  }, [currentUserId, plannerWorkspaceIdentity, getScope, isPro]);
+  const recoverTripFeed = useCallback(async () => {
+    if (!selectedTrip) throw new Error('Select a trip first.');
+    const identity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    assertPublicationWorkspace(identity);
+    const storedTrip = (await plannerRepository.listTrips({ strict: true })).find((trip) => trip.id === selectedTrip.id);
+    assertPublicationWorkspace(identity);
+    if (!storedTrip?.calendar_feed) throw new Error('This trip has no older calendar token to recover.');
+    credentials.recoverTripFeed(selectedTrip.id, storedTrip.calendar_feed, currentUserId);
+    await load();
+  }, [selectedTrip, plannerWorkspaceIdentity, getScope, currentUserId, load]);
+  const pendingTripShareReceipts = useRef(new Map<string, TripShareMeta>());
+  const pendingTripFeedReceipts = useRef(new Map<string, PlannerTripCalendarFeed>());
+  const pendingAccountFeedReceipts = useRef(new Map<string, AccountCalendarFeedMeta>());
+  useEffect(() => {
+    let active = true;
+    if (scope) void Promise.resolve().then(() => {
+      if (!active) return;
+      setAccountReceipt({ owner: accountOwner, meta: pendingAccountFeedReceipts.current.get(`${plannerWorkspaceIdentity}:${currentUserId}`) ?? scope.loadAccount(currentUserId) });
+      setShareReceipt({ owner: shareOwner, meta: selectedTripId ? pendingTripShareReceipts.current.get(`${scope.namespace}:${plannerWorkspaceIdentity}:${selectedTripId}`) ?? scope.loadShare(selectedTripId) : null });
+    });
+    return () => { active = false; };
+  }, [scope, plannerWorkspaceIdentity, accountOwner, shareOwner, currentUserId, selectedTripId]);
 
-  const [tripShareOwner, setTripShareOwner] = useState(selectedTripId);
-  const [tripShareMeta, setTripShareMeta] = useState<TripShareMeta | null>(() =>
-    selectedTripId ? loadTripShareMeta(selectedTripId) : null,
-  );
-  if (tripShareOwner !== selectedTripId) {
-    setTripShareOwner(selectedTripId);
-    setTripShareMeta(selectedTripId ? loadTripShareMeta(selectedTripId) : null);
-  }
+
 
   // Persists one trip's refreshed feed meta without reloading; the auto-sync
   // trigger reloads once after all trips are done.
   const saveTripFeedMeta = useCallback(async (trip: PlannerTrip, feed: PlannerTripCalendarFeed) => {
-    await plannerRepository.upsertTrip({ ...trip, calendar_feed: feed });
-  }, []);
+    return plannerRepository.withWriteSession(async (bound) => {
+      assertPublicationWorkspace(plannerWorkspaceIdentity);
+      return bound.patchTripCalendarFeed(trip.id, feed, trip.calendar_feed?.feed_token);
+    });
+  }, [plannerWorkspaceIdentity]);
   const reloadPlanner = useCallback(async () => {
     await load();
   }, [load]);
@@ -256,6 +297,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     setAccountFeed,
     saveTripFeedMeta,
     reloadPlanner,
+    enabled: !disabled,
+    credentials: scope,
+    onError: (error) => setNotice((zh ? '日历自动同步失败，请在订阅窗口重试。' : 'Calendar auto-sync failed; retry in the subscription dialog.') + (error instanceof Error ? ` ${error.message}` : '')),
   });
 
   useAutoTripShareSync({
@@ -266,25 +310,36 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     isPro,
     currentUserId,
     language,
+    enabled: !disabled,
+    credentials: scope,
+    onError: (error) => setNotice((zh ? '分享自动同步失败，请在分享窗口重试。' : 'Share auto-sync failed; retry in the share dialog.') + (error instanceof Error ? ` ${error.message}` : '')),
   });
 
-  const showUndoNotice = useCallback((text: string, restore: () => Promise<void>) => {
+  const showUndoNotice = useCallback((text: string, restore: (repository: typeof plannerRepository, assertWorkspace: () => void) => Promise<void>) => {
+    const identity = plannerWorkspaceIdentity;
     setNoticeAction({
-      label: zh ? '撤销' : 'Undo',
-      text,
+      label: zh ? '撤销' : 'Undo', text,
       run: () => {
         void (async () => {
           try {
-            await restore();
+            assertPublicationWorkspace(identity);
+            await plannerRepository.withWriteSession(async (bound) => {
+              const assertWorkspace = () => assertPublicationWorkspace(identity);
+              assertWorkspace();
+              await restore(bound, assertWorkspace);
+              assertWorkspace();
+            });
+            await load();
+            setNotice(zh ? '已撤销。' : 'Change undone.');
           } catch (error) {
+            setNotice(zh ? '撤销失败：工作区可能已切换或无法保存。请返回原目录检查后重试。' : 'Undo failed: the workspace changed or saving failed. Return to the original folder, check the record and retry.');
             console.warn('[Planner] Undo restore failed', error);
           }
-          await load();
         })();
       },
     });
     setNotice(text);
-  }, [load, setNotice, setNoticeAction, zh]);
+  }, [plannerWorkspaceIdentity, load, setNotice, setNoticeAction, zh]);
 
   const handleUpsertTrip = useCallback(
     async (newTrip: PlannerTrip) => {
@@ -325,7 +380,8 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         setExpensesByTrip((prev) => ({ ...prev, [selectedTripId]: [newExp, ...(prev[selectedTripId] ?? [])] }));
       } catch (error) {
         console.warn('[Planner] Failed to persist expense', error);
-        setNotice(zh ? '费用保存失败，界面未写入未持久化数据。' : 'Expense save failed; the UI was not updated with unsaved data.');
+        setNotice(zh ? '费用保存失败，请重试。输入已保留。' : 'Expense save failed. Your input was kept; retry saving.');
+        throw error;
       }
     },
     [selectedTripId, setExpensesByTrip, setNotice, zh],
@@ -343,6 +399,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       } catch (error) {
         console.warn('[Planner] Failed to update expense', error);
         setNotice(zh ? '费用更新失败，原记录仍保留。' : 'Expense update failed; the original record is still present.');
+        throw error;
       }
     },
     [selectedTripId, setExpensesByTrip, setNotice, zh],
@@ -459,8 +516,7 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       setLegs((prev) => mergeLegs(prev, [clearedLeg]));
       const previousLeg = legs.find(
         (item) => item.trip_id === selectedTrip.id
-          && item.from_place_id === fromPlaceId && item.to_place_id === toPlaceId
-          && item.id !== clearedLeg.id,
+          && item.from_place_id === fromPlaceId && item.to_place_id === toPlaceId,
       );
       try {
         await plannerRepository.upsertLeg(clearedLeg);
@@ -471,8 +527,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       }
       await load();
       if (previousLeg && previousLeg.duration_minutes > 0) {
-        showUndoNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.', async () => {
-          await plannerRepository.upsertLeg(previousLeg);
+        showUndoNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.', async (bound, assertWorkspace) => {
+          assertWorkspace();
+          await bound.upsertLeg(previousLeg);
         });
       } else {
         setNotice(zh ? '已清除该段交通时间预估。' : 'Commute estimate cleared for this leg.');
@@ -551,16 +608,18 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   );
 
   const handleUpdateFxRates = useCallback(
-    (rates: Record<string, number>) => {
-      if (!selectedTripId) return;
-      setTrips((prev) => prev.map((t) => (t.id === selectedTripId ? { ...t, fx_rates: rates } : t)));
+    async (rates: Record<string, number>) => {
       const trip = trips.find((item) => item.id === selectedTripId);
-      if (!trip) return;
-      void plannerRepository
-        .upsertTrip({ ...trip, fx_rates: rates, updated_at: new Date().toISOString() })
-        .catch((error) => console.warn('[Planner] Failed to persist fx_rates', error));
+      if (!trip) throw new Error(zh ? '请先选择行程。' : 'Select a trip first.');
+      try {
+        await plannerRepository.upsertTrip({ ...trip, fx_rates: rates, updated_at: new Date().toISOString() });
+        setTrips((prev) => prev.map((item) => item.id === trip.id ? { ...item, fx_rates: rates } : item));
+      } catch (error) {
+        setNotice(zh ? '汇率保存失败，原汇率仍保留，请重试。' : 'Rate save failed; original rates were kept. Please retry.');
+        throw error;
+      }
     },
-    [selectedTripId, trips, setTrips],
+    [selectedTripId, trips, setTrips, setNotice, zh],
   );
 
   const handleDropPlace = useCallback(
@@ -570,8 +629,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
         await plannerRepository.dropPlace(placeId);
         await load();
         trackFirstEver('object_archived', 'object_archived');
-        showUndoNotice(zh ? '已将地点设为暂不考虑' : 'Place shelved', async () => {
-          await plannerRepository.restorePlace(placeId);
+        showUndoNotice(zh ? '已将地点设为暂不考虑' : 'Place shelved', async (bound, assertWorkspace) => {
+          assertWorkspace();
+          await bound.restorePlace(placeId);
         });
       } catch {
         setNotice(zh ? '该地点仍在行程中，请先从日程中移除已排访问。' : 'This place is still scheduled. Remove its visits first.');
@@ -610,8 +670,8 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
           try {
             await plannerRepository.deletePlace(placeId);
             await load();
-            showUndoNotice(zh ? '已彻底删除地点' : 'Place permanently deleted', async () => {
-              await restorePlaceSnapshot(snapshot);
+            showUndoNotice(zh ? '已彻底删除地点' : 'Place permanently deleted', async (bound, assertWorkspace) => {
+              await restorePlaceSnapshot(snapshot, bound, assertWorkspace);
             });
           } catch (err) {
             setNotice(err instanceof Error ? err.message : zh ? '删除失败，若已排入日程请先移除日程' : 'Delete failed');
@@ -721,9 +781,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
           });
           if (failedIds.length === 0) {
             setIsMultiSelectMode(false);
-            showUndoNotice(zh ? `已彻底删除 ${succeededIds.length} 个地点` : `Deleted ${succeededIds.length} places`, async () => {
+            showUndoNotice(zh ? `已彻底删除 ${succeededIds.length} 个地点` : `Deleted ${succeededIds.length} places`, async (bound, assertWorkspace) => {
               for (const snapshot of snapshots) {
-                await restorePlaceSnapshot(snapshot);
+                await restorePlaceSnapshot(snapshot, bound, assertWorkspace);
               }
             });
           } else {
@@ -969,8 +1029,9 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
       }
       await load();
       if (snapshot) {
-        showUndoNotice(zh ? `已将「${place.title}」移出当天` : `Removed "${place.title}" from the day`, async () => {
-          await plannerRepository.upsertVisit(snapshot);
+        showUndoNotice(zh ? `已将「${place.title}」移出当天` : `Removed "${place.title}" from the day`, async (bound, assertWorkspace) => {
+          assertWorkspace();
+          await bound.upsertVisit(snapshot);
         });
       }
     },
@@ -1130,42 +1191,79 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   }, [selectedTrip, places, visits, currentExpenses, language, zh, setNotice]);
 
   const handlePublishTripShare = useCallback(async () => {
+    if (disabled) throw new Error(zh ? '演示模式只读。' : 'Demo mode is read-only.');
     if (!selectedTrip) throw new Error(zh ? '请先选择行程。' : 'Select a trip first.');
-    const alias = tripShareMeta?.alias?.trim() || selectedTrip.title;
-    const response = await tripShareService.publishShare({
-      trip: selectedTrip,
-      places,
-      visits,
-      membership: { isPro },
-      userId: currentUserId,
-      alias,
-      writeToken: tripShareMeta?.write_token,
-      language,
+    const workspaceIdentity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    const key = publicationKey(`${credentials.namespace}:${workspaceIdentity}`, 'share', selectedTrip.id);
+    return queuePublication(key, async () => {
+      assertPublicationWorkspace(workspaceIdentity);
+      if (publicationContext.current.disabled || !publicationContext.current.isPro || publicationContext.current.currentUserId !== currentUserId) {
+        throw new Error('Publication is unavailable: the workspace is read-only or membership changed.');
+      }
+      if (disabled) throw new Error(zh ? '演示模式只读。' : 'Demo mode is read-only.');
+      if (!selectedTrip) throw new Error(zh ? '请先选择行程。' : 'Select a trip first.');
+      const liveMeta = pendingTripShareReceipts.current.get(`${credentials.namespace}:${workspaceIdentity}:${selectedTrip.id}`) ?? credentials.loadShare(selectedTrip.id) ?? tripShareMeta;
+      const alias = liveMeta?.alias?.trim() || selectedTrip.title;
+      const response = await tripShareService.publishShare({
+        trip: selectedTrip,
+        places,
+        visits,
+        membership: { isPro },
+        userId: `${currentUserId}:${credentials.namespace}`,
+        alias,
+        writeToken: liveMeta?.write_token,
+        language,
+      });
+      assertPublicationWorkspace(workspaceIdentity);
+      const meta: TripShareMeta = {
+        alias: response.share.alias,
+        write_token: response.write_token,
+        updated_at: response.share.updated_at,
+        enabled: true,
+      };
+      pendingTripShareReceipts.current.set(`${credentials.namespace}:${workspaceIdentity}:${selectedTrip.id}`, meta);
+      if (publicationContext.current.selectedTripId === selectedTrip.id) setShareReceipt({ owner: `${credentials.namespace}:${workspaceIdentity}:${selectedTrip.id}`, meta });
+      credentials.saveShare(selectedTrip.id, meta);
+      if (credentials.loadShare(selectedTrip.id)?.write_token !== meta.write_token) {
+        throw new Error(zh ? '云端分享已开启，但本地凭据保存失败。请勿刷新，留在此窗口重试或停用。' : 'The cloud share is enabled, but its local credentials could not be saved. Stay in this window to retry or disable it.');
+      }
+      pendingTripShareReceipts.current.delete(`${credentials.namespace}:${workspaceIdentity}:${selectedTrip.id}`);
+      resumePublication(key);
+      return response;
     });
-    const meta: TripShareMeta = {
-      alias: response.share.alias,
-      write_token: response.write_token,
-      updated_at: response.share.updated_at,
-      enabled: true,
-    };
-    saveTripShareMeta(selectedTrip.id, meta);
-    setTripShareMeta(meta);
-    return response;
-  }, [selectedTrip, places, visits, isPro, currentUserId, tripShareMeta, language, zh]);
+  }, [plannerWorkspaceIdentity, getScope, selectedTrip, places, visits, isPro, currentUserId, tripShareMeta, language, zh, disabled]);
 
   const handleDisableTripShare = useCallback(async () => {
-    if (!selectedTrip || !tripShareMeta) return;
-    await tripShareService.disableShare({
-      tripId: selectedTrip.id,
-      membership: { isPro },
-      userId: currentUserId,
-      alias: tripShareMeta.alias,
-      writeToken: tripShareMeta.write_token,
+    if (!selectedTrip) return;
+    const workspaceIdentity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    const key = publicationKey(`${credentials.namespace}:${workspaceIdentity}`, 'share', selectedTrip.id);
+    suspendPublication(key);
+    return queuePublication(key, async () => {
+      assertPublicationWorkspace(workspaceIdentity);
+      if (publicationContext.current.disabled || !publicationContext.current.isPro || publicationContext.current.currentUserId !== currentUserId) {
+        throw new Error('Publication is unavailable: the workspace is read-only or membership changed.');
+      }
+      const liveMeta = pendingTripShareReceipts.current.get(`${credentials.namespace}:${workspaceIdentity}:${selectedTrip.id}`) ?? credentials.loadShare(selectedTrip.id) ?? tripShareMeta;
+      if (!liveMeta) return;
+      await tripShareService.disableShare({
+        tripId: selectedTrip.id,
+        membership: { isPro },
+        userId: `${currentUserId}:${credentials.namespace}`,
+        alias: liveMeta.alias,
+        writeToken: liveMeta.write_token,
+      });
+      assertPublicationWorkspace(workspaceIdentity);
+      const meta: TripShareMeta = { ...liveMeta, enabled: false };
+      pendingTripShareReceipts.current.set(`${credentials.namespace}:${workspaceIdentity}:${selectedTrip.id}`, meta);
+      if (publicationContext.current.selectedTripId === selectedTrip.id) setShareReceipt({ owner: `${credentials.namespace}:${workspaceIdentity}:${selectedTrip.id}`, meta });
+      credentials.saveShare(selectedTrip.id, meta);
+      if (credentials.loadShare(selectedTrip.id)?.enabled !== false) {
+        throw new Error(zh ? '云端分享已停用，但本地状态保存失败。请重试停用。' : 'The cloud share is disabled, but its local status could not be saved. Retry disabling it.');
+      }
     });
-    const meta: TripShareMeta = { ...tripShareMeta, enabled: false };
-    saveTripShareMeta(selectedTrip.id, meta);
-    setTripShareMeta(meta);
-  }, [selectedTrip, tripShareMeta, isPro, currentUserId]);
+  }, [plannerWorkspaceIdentity, getScope, selectedTrip, tripShareMeta, isPro, currentUserId, zh]);
 
   const downloadCSV = useCallback(() => {
     if (!selectedTrip || scheduled.length === 0) return;
@@ -1225,108 +1323,225 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
 
   const handleCreateOrUpdateFeed = useCallback(async () => {
     if (!selectedTrip) return;
-    const response = await calendarFeedService.publishFeed({
-      trip: selectedTrip,
-      places,
-      visits,
-      membership: { isPro },
-      userId: currentUserId,
-      legs,
+    const workspaceIdentity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    const key = publicationKey(`${credentials.namespace}:${workspaceIdentity}`, 'calendar', selectedTrip.id);
+    return queuePublication(key, async () => {
+      assertPublicationWorkspace(workspaceIdentity);
+      if (publicationContext.current.disabled || !publicationContext.current.isPro || publicationContext.current.currentUserId !== currentUserId) {
+        throw new Error('Publication is unavailable: the workspace is read-only or membership changed.');
+      }
+      const storedTrip = (await plannerRepository.listTrips({ strict: true })).find((trip) => trip.id === selectedTrip.id);
+      if (!storedTrip) throw new Error('Trip no longer exists.');
+      const currentTrip = { ...storedTrip, calendar_feed: pendingTripFeedReceipts.current.get(`${workspaceIdentity}:${selectedTrip.id}`) ?? credentials.loadTripFeed(selectedTrip.id) ?? undefined };
+      const response = await calendarFeedService.publishFeed({
+        trip: currentTrip,
+        places,
+        visits,
+        membership: { isPro },
+        userId: credentials.remoteUserId('calendar', selectedTrip.id, currentUserId),
+        options: { language },
+        legs,
+      });
+      pendingTripFeedReceipts.current.set(`${workspaceIdentity}:${selectedTrip.id}`, response.feed);
+      assertPublicationWorkspace(workspaceIdentity);
+      try {
+        credentials.saveTripFeed(selectedTrip.id, response.feed);
+        await plannerRepository.withWriteSession(async (bound) => {
+          assertPublicationWorkspace(workspaceIdentity);
+          await bound.patchTripCalendarFeed(selectedTrip.id, response.feed);
+        });
+      }
+      catch { suspendPublication(key); throw new Error('The cloud calendar was updated, but its local record could not be saved. Retry publishing before closing this window.'); }
+      resumePublication(key);
+      pendingTripFeedReceipts.current.delete(`${workspaceIdentity}:${selectedTrip.id}`);
+      try { await load(); } catch { setNotice('Cloud calendar and local status were saved, but refreshing failed. Reopen the trip.'); }
     });
-    await plannerRepository.upsertTrip({
-      ...selectedTrip,
-      calendar_feed: response.feed,
-    });
-    await load();
-  }, [selectedTrip, places, visits, legs, isPro, currentUserId, load]);
+  }, [plannerWorkspaceIdentity, getScope, selectedTrip, places, visits, legs, isPro, currentUserId, language, load, setNotice]);
 
   const handleRotateFeed = useCallback(async () => {
     if (!selectedTrip) return;
-    const response = await calendarFeedService.rotateFeed({
-      trip: selectedTrip,
-      places,
-      visits,
-      membership: { isPro },
-      userId: currentUserId,
-      legs,
+    const workspaceIdentity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    const key = publicationKey(`${credentials.namespace}:${workspaceIdentity}`, 'calendar', selectedTrip.id);
+    invalidatePublication(key);
+    return queuePublication(key, async () => {
+      assertPublicationWorkspace(workspaceIdentity);
+      if (publicationContext.current.disabled || !publicationContext.current.isPro || publicationContext.current.currentUserId !== currentUserId) {
+        throw new Error('Publication is unavailable: the workspace is read-only or membership changed.');
+      }
+      const storedTrip = (await plannerRepository.listTrips({ strict: true })).find((trip) => trip.id === selectedTrip.id);
+      if (!storedTrip) throw new Error('Trip no longer exists.');
+      const currentTrip = { ...storedTrip, calendar_feed: pendingTripFeedReceipts.current.get(`${workspaceIdentity}:${selectedTrip.id}`) ?? credentials.loadTripFeed(selectedTrip.id) ?? undefined };
+      if (!currentTrip.calendar_feed) throw new Error('This workspace has no calendar publication credentials. Publish its own link first.');
+      const response = await calendarFeedService.rotateFeed({
+        trip: currentTrip,
+        places,
+        visits,
+        membership: { isPro },
+        userId: credentials.remoteUserId('calendar', selectedTrip.id, currentUserId),
+        options: { language },
+        legs,
+      });
+      pendingTripFeedReceipts.current.set(`${workspaceIdentity}:${selectedTrip.id}`, response.feed);
+      assertPublicationWorkspace(workspaceIdentity);
+      try {
+        credentials.saveTripFeed(selectedTrip.id, response.feed);
+        await plannerRepository.withWriteSession(async (bound) => {
+          assertPublicationWorkspace(workspaceIdentity);
+          await bound.patchTripCalendarFeed(selectedTrip.id, response.feed);
+        });
+      }
+      catch { suspendPublication(key); throw new Error('The cloud calendar was updated, but its local record could not be saved. Retry publishing before closing this window.'); }
+      resumePublication(key);
+      pendingTripFeedReceipts.current.delete(`${workspaceIdentity}:${selectedTrip.id}`);
+      try { await load(); } catch { setNotice('Cloud calendar and local status were saved, but refreshing failed. Reopen the trip.'); }
     });
-    await plannerRepository.upsertTrip({
-      ...selectedTrip,
-      calendar_feed: response.feed,
-    });
-    await load();
-  }, [selectedTrip, places, visits, legs, isPro, currentUserId, load]);
+  }, [plannerWorkspaceIdentity, getScope, selectedTrip, places, visits, legs, isPro, currentUserId, language, load, setNotice]);
 
   const handleDisableFeed = useCallback(async () => {
     if (!selectedTrip) return;
-    const updatedFeed = await calendarFeedService.disableFeed({
-      trip: selectedTrip,
-      membership: { isPro },
-      userId: currentUserId,
+    const workspaceIdentity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    const key = publicationKey(`${credentials.namespace}:${workspaceIdentity}`, 'calendar', selectedTrip.id);
+    suspendPublication(key);
+    return queuePublication(key, async () => {
+      assertPublicationWorkspace(workspaceIdentity);
+      if (publicationContext.current.disabled || !publicationContext.current.isPro || publicationContext.current.currentUserId !== currentUserId) {
+        throw new Error('Publication is unavailable: the workspace is read-only or membership changed.');
+      }
+      const storedTrip = (await plannerRepository.listTrips({ strict: true })).find((trip) => trip.id === selectedTrip.id);
+      if (!storedTrip) throw new Error('Trip no longer exists.');
+      const currentTrip = { ...storedTrip, calendar_feed: pendingTripFeedReceipts.current.get(`${workspaceIdentity}:${selectedTrip.id}`) ?? credentials.loadTripFeed(selectedTrip.id) ?? undefined };
+      if (!currentTrip.calendar_feed) throw new Error('This workspace has no calendar publication credentials. Imported links are not adopted automatically.');
+      const updatedFeed = await calendarFeedService.disableFeed({
+        trip: currentTrip,
+        membership: { isPro },
+        userId: credentials.remoteUserId('calendar', selectedTrip.id, currentUserId),
+      });
+      pendingTripFeedReceipts.current.set(`${workspaceIdentity}:${selectedTrip.id}`, updatedFeed);
+      assertPublicationWorkspace(workspaceIdentity);
+      try {
+        credentials.saveTripFeed(selectedTrip.id, updatedFeed);
+        await plannerRepository.withWriteSession(async (bound) => {
+          assertPublicationWorkspace(workspaceIdentity);
+          await bound.patchTripCalendarFeed(selectedTrip.id, updatedFeed);
+        });
+      }
+      catch { throw new Error('The cloud calendar is disabled, but its local status could not be saved. Automatic updates are paused; retry disabling it.'); }
+      pendingTripFeedReceipts.current.delete(`${workspaceIdentity}:${selectedTrip.id}`);
+      try { await load(); } catch { setNotice('Cloud calendar and local status were saved, but refreshing failed. Reopen the trip.'); }
     });
-    await plannerRepository.upsertTrip({
-      ...selectedTrip,
-      calendar_feed: updatedFeed,
-    });
-    await load();
-  }, [selectedTrip, isPro, currentUserId, load]);
+  }, [plannerWorkspaceIdentity, getScope, selectedTrip, isPro, currentUserId, load, setNotice]);
 
   const handleCreateOrUpdateAccountFeed = useCallback(async () => {
-    const response = await calendarFeedService.publishAccountFeed({
-      trips,
-      places,
-      visits,
-      membership: { isPro },
-      userId: currentUserId,
-      // Reuse the stored token even when locally disabled: re-enabling then
-      // resurrects the same URL instead of minting an orphan row per cycle.
-      feedToken: accountFeed?.feed_token,
-      options: { language },
-      legs,
+    const workspaceIdentity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    const key = publicationKey(`${credentials.namespace}:${workspaceIdentity}`, 'account', currentUserId);
+    return queuePublication(key, async () => {
+      assertPublicationWorkspace(workspaceIdentity);
+      if (publicationContext.current.disabled || !publicationContext.current.isPro || publicationContext.current.currentUserId !== currentUserId) {
+        throw new Error('Publication is unavailable: the workspace is read-only or membership changed.');
+      }
+      if (disabled) throw new Error(zh ? '演示模式只读。' : 'Demo mode is read-only.');
+      const response = await calendarFeedService.publishAccountFeed({
+        trips,
+        places,
+        visits,
+        membership: { isPro },
+        userId: credentials.remoteUserId('account', currentUserId, currentUserId),
+        // Reuse the stored token even when locally disabled: re-enabling then
+        // resurrects the same URL instead of minting an orphan row per cycle.
+        feedToken: (pendingAccountFeedReceipts.current.get(`${workspaceIdentity}:${currentUserId}`) ?? credentials.loadAccount(currentUserId))?.feed_token,
+        options: { language },
+        legs,
+      });
+      assertPublicationWorkspace(workspaceIdentity);
+      const meta: AccountCalendarFeedMeta = {
+        feed_token: response.feed.feed_token,
+        updated_at: response.feed.updated_at,
+        enabled: true,
+      };
+      pendingAccountFeedReceipts.current.set(`${workspaceIdentity}:${currentUserId}`, meta);
+      if (publicationContext.current.currentUserId === currentUserId) setAccountReceipt({ owner: `${credentials.namespace}:${workspaceIdentity}:${currentUserId}`, meta });
+      credentials.saveAccount(currentUserId, meta);
+      if (credentials.loadAccount(currentUserId)?.feed_token !== meta.feed_token) {
+        throw new Error(zh ? '云端日历已更新，但本地凭据保存失败。请勿刷新，在此窗口重试或停用。' : 'The cloud calendar was updated, but local credentials could not be saved. Stay in this window to retry or disable it.');
+      }
+      pendingAccountFeedReceipts.current.delete(`${workspaceIdentity}:${currentUserId}`);
+      resumePublication(key);
+      return response;
     });
-    const meta: AccountCalendarFeedMeta = {
-      feed_token: response.feed.feed_token,
-      updated_at: response.feed.updated_at,
-      enabled: true,
-    };
-    saveAccountFeedMeta(currentUserId, meta);
-    setAccountFeed(meta);
-    return response;
-  }, [trips, places, visits, legs, isPro, currentUserId, accountFeed, language]);
+  }, [plannerWorkspaceIdentity, getScope, trips, places, visits, legs, isPro, currentUserId, language, disabled, zh]);
 
   const handleRotateAccountFeed = useCallback(async () => {
-    const response = await calendarFeedService.rotateAccountFeed({
-      trips,
-      places,
-      visits,
-      membership: { isPro },
-      userId: currentUserId,
-      currentFeedToken: accountFeed?.feed_token,
-      options: { language },
-      legs,
+    const workspaceIdentity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    const key = publicationKey(`${credentials.namespace}:${workspaceIdentity}`, 'account', currentUserId);
+    invalidatePublication(key);
+    return queuePublication(key, async () => {
+      assertPublicationWorkspace(workspaceIdentity);
+      if (publicationContext.current.disabled || !publicationContext.current.isPro || publicationContext.current.currentUserId !== currentUserId) {
+        throw new Error('Publication is unavailable: the workspace is read-only or membership changed.');
+      }
+      if (disabled) throw new Error(zh ? '演示模式只读。' : 'Demo mode is read-only.');
+      const response = await calendarFeedService.rotateAccountFeed({
+        trips,
+        places,
+        visits,
+        membership: { isPro },
+        userId: credentials.remoteUserId('account', currentUserId, currentUserId),
+        currentFeedToken: (pendingAccountFeedReceipts.current.get(`${workspaceIdentity}:${currentUserId}`) ?? credentials.loadAccount(currentUserId))?.feed_token,
+        options: { language },
+        legs,
+      });
+      assertPublicationWorkspace(workspaceIdentity);
+      const meta: AccountCalendarFeedMeta = {
+        feed_token: response.feed.feed_token,
+        updated_at: response.feed.updated_at,
+        enabled: true,
+      };
+      pendingAccountFeedReceipts.current.set(`${workspaceIdentity}:${currentUserId}`, meta);
+      if (publicationContext.current.currentUserId === currentUserId) setAccountReceipt({ owner: `${credentials.namespace}:${workspaceIdentity}:${currentUserId}`, meta });
+      credentials.saveAccount(currentUserId, meta);
+      if (credentials.loadAccount(currentUserId)?.feed_token !== meta.feed_token) {
+        throw new Error(zh ? '云端日历已更新，但本地凭据保存失败。请勿刷新，在此窗口重试或停用。' : 'The cloud calendar was updated, but local credentials could not be saved. Stay in this window to retry or disable it.');
+      }
+      pendingAccountFeedReceipts.current.delete(`${workspaceIdentity}:${currentUserId}`);
+      resumePublication(key);
+      return response;
     });
-    const meta: AccountCalendarFeedMeta = {
-      feed_token: response.feed.feed_token,
-      updated_at: response.feed.updated_at,
-      enabled: true,
-    };
-    saveAccountFeedMeta(currentUserId, meta);
-    setAccountFeed(meta);
-    return response;
-  }, [trips, places, visits, legs, isPro, currentUserId, accountFeed, language]);
+  }, [plannerWorkspaceIdentity, getScope, trips, places, visits, legs, isPro, currentUserId, language, disabled, zh]);
 
   const handleDisableAccountFeed = useCallback(async () => {
-    if (!accountFeed?.feed_token) return;
-    await calendarFeedService.disableAccountFeed({
-      membership: { isPro },
-      userId: currentUserId,
-      feedToken: accountFeed.feed_token,
+    const workspaceIdentity = plannerWorkspaceIdentity;
+    const credentials = await getScope();
+    const key = publicationKey(`${credentials.namespace}:${workspaceIdentity}`, 'account', currentUserId);
+    suspendPublication(key);
+    return queuePublication(key, async () => {
+      assertPublicationWorkspace(workspaceIdentity);
+      if (publicationContext.current.disabled || !publicationContext.current.isPro || publicationContext.current.currentUserId !== currentUserId) {
+        throw new Error('Publication is unavailable: the workspace is read-only or membership changed.');
+      }
+      const liveMeta = pendingAccountFeedReceipts.current.get(`${workspaceIdentity}:${currentUserId}`) ?? credentials.loadAccount(currentUserId) ?? accountFeed;
+      if (!liveMeta?.feed_token) return;
+      await calendarFeedService.disableAccountFeed({
+        membership: { isPro },
+        userId: credentials.remoteUserId('account', currentUserId, currentUserId),
+        feedToken: liveMeta.feed_token,
+      });
+      // Keep the token locally (enabled:false) so re-enabling resurrects the same URL.
+      assertPublicationWorkspace(workspaceIdentity);
+      const meta: AccountCalendarFeedMeta = { ...liveMeta, enabled: false, updated_at: new Date().toISOString() };
+      pendingAccountFeedReceipts.current.set(`${workspaceIdentity}:${currentUserId}`, meta);
+      if (publicationContext.current.currentUserId === currentUserId) setAccountReceipt({ owner: `${credentials.namespace}:${workspaceIdentity}:${currentUserId}`, meta });
+      credentials.saveAccount(currentUserId, meta);
+      if (credentials.loadAccount(currentUserId)?.enabled !== false) {
+        throw new Error(zh ? '云端日历已停用，但本地状态保存失败。请重试停用。' : 'The cloud calendar is disabled, but its local status could not be saved. Retry disabling it.');
+      }
+      pendingAccountFeedReceipts.current.delete(`${workspaceIdentity}:${currentUserId}`);
     });
-    // Keep the token locally (enabled:false) so re-enabling resurrects the same URL.
-    const meta: AccountCalendarFeedMeta = { ...accountFeed, enabled: false, updated_at: new Date().toISOString() };
-    saveAccountFeedMeta(currentUserId, meta);
-    setAccountFeed(meta);
-  }, [accountFeed, isPro, currentUserId]);
+  }, [plannerWorkspaceIdentity, getScope, accountFeed, isPro, currentUserId, zh]);
 
   const copyItineraryText = useCallback(async () => {
     if (!selectedTrip || scheduled.length === 0) return;
@@ -1594,41 +1809,51 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     };
   }, [selectedTrip, disabled, busy, activeDate, scheduledAll, legs, refreshTravelTimes]);
 
+  // Read-only previews still need navigation and calculations. Block mutations
+  // centrally so a newly exposed control cannot turn a preview into an editor.
+  function writable<Args extends unknown[]>(action: (...args: Args) => Promise<void>): (...args: Args) => Promise<void>;
+  function writable<Args extends unknown[]>(action: (...args: Args) => void): (...args: Args) => void;
+  function writable<Args extends unknown[]>(action: (...args: Args) => void | Promise<void>) {
+    return disabled ? async () => {
+      setNotice(zh ? '演示模式只读，请连接数据目录后编辑。' : 'Demo mode is read-only. Connect a data folder to edit.');
+    } : (...args: Args) => action(...args);
+  }
+
   return {
-    handleUpsertTrip,
-    handleDeleteTrip,
-    handleToggleVisitLock,
-    handleAddExpense,
-    handleUpdateExpense,
-    handleDeleteExpense,
-    handleUpdateMembers,
-    handleSwitchTravelMode,
-    handleClearTravelEstimate,
-    handleRecalculateTravelEstimate,
-    refreshTravelTimes,
-    handleSelectHotelForStaySpan,
-    handleUpdateFxRates,
-    handleDropPlace,
-    handleRestorePlace,
-    handleDeletePlace,
-    handleDeduplicatePlaces,
-    handleMergePair,
-    handleIgnoreSuspectedPair,
+    handleUpsertTrip: writable(handleUpsertTrip),
+    handleDeleteTrip: writable(handleDeleteTrip),
+    handleToggleVisitLock: writable(handleToggleVisitLock),
+    handleAddExpense: writable(handleAddExpense),
+    handleUpdateExpense: writable(handleUpdateExpense),
+    handleDeleteExpense: writable(handleDeleteExpense),
+    handleUpdateMembers: writable(handleUpdateMembers),
+    handleSwitchTravelMode: writable(handleSwitchTravelMode),
+    handleClearTravelEstimate: writable(handleClearTravelEstimate),
+    handleRecalculateTravelEstimate: writable(handleRecalculateTravelEstimate),
+    refreshTravelTimes: writable(refreshTravelTimes),
+    handleSelectHotelForStaySpan: writable(handleSelectHotelForStaySpan),
+    handleUpdateFxRates: writable(handleUpdateFxRates),
+    handleDropPlace: writable(handleDropPlace),
+    handleRestorePlace: writable(handleRestorePlace),
+    handleDeletePlace: writable(handleDeletePlace),
+    handleDeduplicatePlaces: writable(handleDeduplicatePlaces),
+    handleMergePair: writable(handleMergePair),
+    handleIgnoreSuspectedPair: writable(handleIgnoreSuspectedPair),
     toggleSelectCandidate,
     handleSelectAllCandidates,
     handleDeselectAllCandidates,
-    handleBatchDeleteCandidates,
-    handleBatchShelveCandidates,
-    handleBatchScheduleCandidates,
-    handleBatchMergeCandidates,
-    handleSavePlaceTiming,
-    handleChangePlaceKind,
-    handleUpdatePlaceFields,
-    schedulePlace,
-    removeVisit,
-    moveScheduled,
-    syncCapture,
-    handleSwapDays,
+    handleBatchDeleteCandidates: writable(handleBatchDeleteCandidates),
+    handleBatchShelveCandidates: writable(handleBatchShelveCandidates),
+    handleBatchScheduleCandidates: writable(handleBatchScheduleCandidates),
+    handleBatchMergeCandidates: writable(handleBatchMergeCandidates),
+    handleSavePlaceTiming: writable(handleSavePlaceTiming),
+    handleChangePlaceKind: writable(handleChangePlaceKind),
+    handleUpdatePlaceFields: writable(handleUpdatePlaceFields),
+    schedulePlace: writable(schedulePlace),
+    removeVisit: writable(removeVisit),
+    moveScheduled: writable(moveScheduled),
+    syncCapture: writable(syncCapture),
+    handleSwapDays: writable(handleSwapDays),
     downloadKML,
     downloadCSV,
     downloadTripItineraryHtml,
@@ -1643,11 +1868,18 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
     handleCreateOrUpdateAccountFeed,
     handleRotateAccountFeed,
     handleDisableAccountFeed,
+    legacyAccountOwners,
+    recoverLegacyAccount,
+    canRecoverTripFeed,
+    recoverTripFeed,
+    managedTripFeed,
     tripShareMeta,
+    canRecoverLegacyShare,
+    recoverLegacyShare,
     handlePublishTripShare,
     handleDisableTripShare,
     copyItineraryText,
     optimizeDayOrder,
-    applyDayOptimization,
+    applyDayOptimization: writable(applyDayOptimization),
   };
 }
