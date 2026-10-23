@@ -17,7 +17,7 @@ import { useRef, useState } from 'react';
 import { useDialogA11y } from '@/components/common/useDialogA11y';
 import { useI18n } from '@/core/i18n-context';
 import { getFirstRunCopy } from '@/core/first-run-copy';
-import type { FirstRunStep } from '@/core/first-run';
+import { LEGACY_CAPTURE_ONBOARDING_KEY, type FirstRunStep } from '@/core/first-run';
 import { allSampleTrips, type SampleTripId } from '@/data/sample-trips/registry';
 import { trackFirstEver, trackOwnlyEvent } from '@/lib/analytics';
 import { loadSampleTrip } from '@/services/loadSampleTrip';
@@ -45,19 +45,22 @@ export function FirstRunGuide({
   const copy = getFirstRunCopy(language);
   const panelRef = useRef<HTMLElement>(null);
 
+  const [entry, setEntry] = useState({ open, step });
   const [internalStep, setInternalStep] = useState<FirstRunStep>(step ?? 'model');
+  if (entry.open !== open || entry.step !== step) {
+    setEntry({ open, step });
+    if (open && step) setInternalStep(step);
+  }
   const [busyId, setBusyId] = useState<SampleTripId | null>(null);
   const [busyAll, setBusyAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useDialogA11y({ open, onClose: onDismiss, panelRef });
+  const busy = busyId !== null || busyAll;
+  useDialogA11y({ open, onClose: onDismiss, panelRef, dismissible: !busy });
 
   if (!open || !step) return null;
-  // The orchestrator owns the entry step. `model` always wins, so re-opening
-  // for a user who never advanced replays the lesson rather than stranding them.
-  const active: FirstRunStep = step === 'model' ? 'model' : internalStep;
-
-  const busy = busyId !== null || busyAll;
+  // The orchestrator selects each opening; internal navigation owns this session.
+  const active = internalStep;
 
   const handleSample = async (id: SampleTripId) => {
     setBusyId(id);
@@ -146,6 +149,7 @@ export function FirstRunGuide({
                   <button
                     key={choice}
                     type="button"
+                    disabled={busy}
                     onClick={() => onChoose(choice)}
                     className="group flex min-h-44 flex-col rounded-xl border border-stone-200 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/40 hover:shadow-md"
                   >
@@ -196,6 +200,7 @@ export function FirstRunGuide({
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 pb-5 sm:px-8">
           <button
             type="button"
+            disabled={busy}
             onClick={onDismiss}
             className="text-xs font-medium text-stone-500 underline decoration-stone-300 underline-offset-4 transition hover:text-stone-900"
           >
@@ -204,7 +209,10 @@ export function FirstRunGuide({
           {active === 'model' ? (
             <button
               type="button"
-              onClick={() => setInternalStep('first-record')}
+              onClick={() => {
+                try { window.localStorage.setItem(LEGACY_CAPTURE_ONBOARDING_KEY, '1'); } catch { /* Progress remains available without localStorage. */ }
+                setInternalStep('first-record');
+              }}
               className="min-h-11 rounded-lg bg-stone-950 px-5 py-2 text-sm font-semibold text-white transition hover:bg-stone-800"
             >
               {copy.modelNext}

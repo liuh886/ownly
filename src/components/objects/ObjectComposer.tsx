@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useId, useMemo } from 'react';
+import { getScrollBehavior } from '@/lib/scroll-behavior';
 import { useI18n } from '@/core/i18n-context';
 import { FIELD_CLASS, CARD_CLASS } from '@/lib/ui-constants';
 import type { WYQDObject, WYQDObjectType } from '@/domain/types';
@@ -10,6 +11,7 @@ import { useComposerFormState } from './useComposerFormState';
 import { PhysicalFormSection } from './PhysicalFormSection';
 import { RecurringFormSection } from './RecurringFormSection';
 import { ExperienceFormSection } from './ExperienceFormSection';
+import { recordCurrency } from '@/domain/currency';
 
 export interface ObjectComposerProps {
   disabled?: boolean;
@@ -34,15 +36,17 @@ export function ObjectComposer({
   focusTarget,
   quickEntryRequest,
 }: ObjectComposerProps) {
-  const { t, language } = useI18n();
+  const { t, language, currency } = useI18n();
+  const formCurrency = initialObject ? recordCurrency(initialObject) : currency;
   const nameInputRef = useRef<HTMLInputElement>(null);
   const quickLineInputRef = useRef<HTMLInputElement>(null);
+  const quickLineId = useId();
 
   useEffect(() => {
     if (!autoFocus) return;
     const targetRef = focusTarget === 'quickLine' ? quickLineInputRef : nameInputRef;
     const timer = window.setTimeout(() => {
-      targetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetRef.current?.scrollIntoView({ behavior: getScrollBehavior(), block: 'center' });
       targetRef.current?.focus();
       onAutoFocusHandled?.();
     }, 300);
@@ -67,6 +71,7 @@ export function ObjectComposer({
     experienceStatus, setExperienceStatus,
     actualAmount, setActualAmount,
     salePrice, setSalePrice,
+    annualizedCost, setAnnualizedCost,
     quickLine, setQuickLine,
     isSaving,
     errors, setErrors,
@@ -86,6 +91,7 @@ export function ObjectComposer({
     initialObject,
     t,
     disabled,
+    currency: formCurrency,
     onSubmit,
     onCancel,
   });
@@ -107,18 +113,18 @@ export function ObjectComposer({
     if (!parseResult?.ok || !parseResult.objectType) return null;
     const f = parseResult.fields;
     if (parseResult.objectType === 'physical') {
-      return `${f.title || '?'} · ¥${f.amount || '?'} · ${f.physicalStatus || ''}`;
+      return `${f.title || '?'} · ${formCurrency} ${f.amount ?? '?'} · ${f.physicalStatus || ''}`;
     }
     if (parseResult.objectType === 'recurring_cost') {
-      return `${f.title || '?'} · ¥${f.amount || '?'}/${f.cycle || '?'} · ${f.account || ''}`;
+      return `${f.title || '?'} · ${formCurrency} ${f.amount ?? '?'}/${f.cycle || '?'} · ${f.account || ''}`;
     }
     if (parseResult.objectType === 'one_time_experience') {
       const loc = f.countryCode ? `${f.countryCode}${f.city ? '/' + f.city : ''}` : '';
-      const cost = f.actual || f.budget || '?';
-      return `${f.title || '?'}${loc ? ' · ' + loc : ''} · ¥${cost}`;
+      const cost = f.actual ?? f.budget ?? '?';
+      return `${f.title || '?'}${loc ? ' · ' + loc : ''} · ${formCurrency} ${cost}`;
     }
     return null;
-  }, [parseResult]);
+  }, [parseResult, formCurrency]);
 
   const fieldClass = FIELD_CLASS;
 
@@ -145,17 +151,18 @@ export function ObjectComposer({
       <div className="space-y-4">
         {!initialObject ? (
           <div className="space-y-2">
-            <label className="block">
-              <div className="flex items-center gap-1.5">
-                <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('pasteLine')}</span>
-                <span className="relative group mb-1.5">
-                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-stone-200 text-stone-500 text-[10px] cursor-help">?</span>
-                  <span className="invisible group-hover:visible absolute left-6 top-0 z-50 w-64 p-3 bg-stone-900 text-white text-xs rounded-lg shadow-lg leading-relaxed">
+            <div>
+              <div className="relative flex items-center gap-1.5">
+                <label htmlFor={quickLineId} className="block text-xs font-medium text-stone-500">{t('pasteLine')}</label>
+                <details>
+                  <summary aria-label={language === 'zh' ? '录入格式帮助' : 'Entry format help'} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-lg text-xs text-stone-500 hover:bg-stone-100">?</summary>
+                  <div className="absolute left-0 top-full z-50 w-full rounded-lg bg-stone-900 p-3 text-xs leading-relaxed text-white shadow-lg">
                     {t('pasteLineFormatHelp')}
-                  </span>
-                </span>
+                  </div>
+                </details>
               </div>
               <input
+                id={quickLineId}
                 ref={quickLineInputRef}
                 value={quickLine}
                 onChange={(event) => {
@@ -192,7 +199,7 @@ export function ObjectComposer({
               ) : (
                 <p className="text-[11px] text-stone-500 mt-1">{t('quickEntryNoParse')}</p>
               )}
-            </label>
+            </div>
             <div className="flex gap-2 overflow-x-auto pb-0.5">
               {quickLineTemplates.map((template) => (
                 <button
@@ -241,12 +248,13 @@ export function ObjectComposer({
           </label>
 
           <label className="block min-w-0">
-            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('amount')}</span>
+            <span className="mb-1.5 block text-xs font-medium text-stone-500">{objectType === 'physical' ? t('totalAcquisitionCost') : t('amount')} ({formCurrency})</span>
             <input
               value={amount}
               onChange={(event) => { setAmount(event.target.value); if (errors.amount) setErrors(prev => ({ ...prev, amount: '' })) }}
               type="number"
               min="0"
+              step="any"
               inputMode="decimal"
               placeholder="5843"
               className={fieldClass}
@@ -274,6 +282,11 @@ export function ObjectComposer({
         ) : null}
 
         {objectType === 'recurring_cost' ? (
+          <>
+          {billingCycle === 'custom' ? <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t('annualCost')}</span>
+            <input type="number" min="0" step="any" value={annualizedCost} onChange={(event) => setAnnualizedCost(event.target.value)} disabled={disabled || isSaving} className={fieldClass} />
+          </label> : null}
           <RecurringFormSection
             disabled={disabled}
             isSaving={isSaving}
@@ -290,6 +303,7 @@ export function ObjectComposer({
             errors={errors}
             setErrors={setErrors}
           />
+          </>
         ) : null}
 
         {objectType === 'one_time_experience' ? (
@@ -321,6 +335,7 @@ export function ObjectComposer({
           />
         ) : null}
 
+        {Object.entries(errors).filter(([key, message]) => message && !['name', 'amount', 'billingDay'].includes(key)).map(([key, message]) => <p key={key} role="alert" className="text-xs text-red-600">{message}</p>)}
         <div className="flex gap-2 pt-1">
           {onCancel ? (
             <button

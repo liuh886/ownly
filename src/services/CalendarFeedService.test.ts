@@ -203,6 +203,39 @@ describe('CalendarFeedService (PRO)', () => {
     expect(res.status).toBe(404);
   });
 
+  it('does not let stale automatic refresh re-enable a disabled trip feed', async () => {
+    const published = await service.publishFeed({ trip, places: [palace], visits: [visit1], membership: { isPro: true }, userId: 'owner' });
+    const staleTrip = { ...trip, calendar_feed: published.feed };
+    await service.disableFeed({ trip: staleTrip, membership: { isPro: true }, userId: 'owner' });
+    await expect(service.publishFeed({ trip: staleTrip, places: [palace], visits: [visit1], membership: { isPro: true }, userId: 'owner', feedToken: published.feed.feed_token, refreshOnly: true })).rejects.toThrow('disabled');
+    expect((await service.handlePublicFeedRequest(published.feed.feed_token)).status).toBe(404);
+  });
+  it('aborts rotation if the old link cannot be confirmed revoked', async () => {
+    const staleTrip = { ...trip, calendar_feed: { feed_token: 'unknown-old-token', trip_id: trip.id, created_at: '2026-01-01', updated_at: '2026-01-01', enabled: true } };
+    await expect(service.rotateFeed({ trip: staleTrip, places: [palace], visits: [visit1], membership: { isPro: true }, userId: 'owner' }))
+      .rejects.toThrow('Could not confirm');
+  });
+  it('aborts account rotation before publishing when the old capability is stale', async () => {
+    const upsertFeed = vi.fn();
+    const failedRevocation = new CalendarFeedService({
+      upsertFeed,
+      getFeedByTokenHash: vi.fn().mockResolvedValue(null),
+      disableFeed: vi.fn().mockRejectedValue(new Error('Could not confirm calendar feed revocation')),
+    });
+    await expect(failedRevocation.rotateAccountFeed({
+      trips: [trip], places: [palace], visits: [visit1], membership: { isPro: true }, userId: 'owner', currentFeedToken: 'stale',
+    })).rejects.toThrow('Could not confirm');
+    expect(upsertFeed).not.toHaveBeenCalled();
+  });
+
+  it('does not let stale automatic refresh re-enable a disabled account feed', async () => {
+    const input = { trips: [trip], places: [palace], visits: [visit1], membership: { isPro: true }, userId: 'owner' };
+    const published = await service.publishAccountFeed(input);
+    await service.disableAccountFeed({ membership: { isPro: true }, userId: 'owner', feedToken: published.feed.feed_token });
+    await expect(service.publishAccountFeed({ ...input, feedToken: published.feed.feed_token, refreshOnly: true })).rejects.toThrow('disabled');
+    expect((await service.handlePublicFeedRequest(published.feed.feed_token)).status).toBe(404);
+  });
+
   it('revokes across account-id changes: capability, not user_id, authorizes disable', async () => {
     const published = await service.publishFeed({
       trip,
@@ -352,6 +385,30 @@ describe('CalendarFeedService (PRO)', () => {
 });
 
 describe('SupabaseCalendarFeedStore (Production Adapter)', () => {
+  it('uses a capability-scoped conditional PATCH and treats zero affected rows as stale', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    const store = new SupabaseCalendarFeedStore({ supabaseUrl: 'https://test.supabase.co', supabasePublishableKey: 'test-key', fetchFn: mockFetch as unknown as typeof fetch });
+    expect(await store.refreshEnabledFeed({ user_id: 'owner', trip_id: 'trip-1', token_hash: 'hash', ics_content: 'ICS', enabled: true })).toBe(false);
+    const [url, request] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const query = new URL(url).searchParams;
+    expect(request.method).toBe('PATCH');
+    expect(query.get('trip_id')).toBe('eq.trip-1');
+    expect(query.get('token_hash')).toBe('eq.hash');
+    expect(query.get('enabled')).toBe('eq.true');
+    expect(request.headers).toEqual(expect.objectContaining({ Prefer: 'return=representation', 'x-ownly-feed-hash': 'hash' }));
+    expect(JSON.parse(request.body as string)).not.toHaveProperty('enabled');
+  });
+  it('requires a returned row before reporting a feed revoked', async () => {
+    const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'feed-1' }] });
+    const store = new SupabaseCalendarFeedStore({ supabaseUrl: 'https://test.supabase.co', supabasePublishableKey: 'test-key', fetchFn: mockFetch as unknown as typeof fetch });
+    await expect(store.disableFeed('trip-1', 'owner', 'hash')).rejects.toThrow('Could not confirm');
+    await expect(store.disableFeed('trip-1', 'owner', 'hash')).resolves.toBeUndefined();
+    const [url, request] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(new URL(url).searchParams.get('select')).toBe('id');
+    expect(new URL(url).searchParams.get('token_hash')).toBe('eq.hash');
+    expect(request.headers).toEqual(expect.objectContaining({ Prefer: 'return=representation' }));
+  });
   it('upserts feed records using token_hash as the explicit conflict target and RLS capability', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,

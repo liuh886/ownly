@@ -7,14 +7,17 @@ import type {
   WYQDObject,
 } from './types';
 import { calculateInclusiveDays, parseLocalDate } from './date';
+import { matchesCurrency, recordCurrency } from './currency';
 
 export function sumAmounts(items: { amount?: number }[]): number {
   return items.reduce((total, item) => total + (item.amount || 0), 0);
 }
 
 export function calculateNetWorth(snapshot: AccountSnapshot): AccountSnapshot {
-  const total_assets = sumAmounts(snapshot.asset_balances);
-  const total_liabilities = sumAmounts(snapshot.liability_balances);
+  const currency = recordCurrency(snapshot);
+  const inCurrency = (balance: { currency?: string }) => (balance.currency || currency).toUpperCase() === currency;
+  const total_assets = sumAmounts(snapshot.asset_balances.filter(inCurrency));
+  const total_liabilities = sumAmounts(snapshot.liability_balances.filter(inCurrency));
 
   return {
     ...snapshot,
@@ -24,8 +27,20 @@ export function calculateNetWorth(snapshot: AccountSnapshot): AccountSnapshot {
   };
 }
 
+/** Oldest first: snapshot date, then original creation time, then stable ID.
+ * Editing a historical record must not reorder same-day observations.
+ */
+export function compareSnapshots(a: AccountSnapshot, b: AccountSnapshot): number {
+  const day = a.snapshot_at.localeCompare(b.snapshot_at);
+  if (day) return day;
+  const aTime = Date.parse(a.created_at);
+  const bTime = Date.parse(b.created_at);
+  if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime;
+  return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+}
+
 export function findLatestSnapshot(snapshots: AccountSnapshot[]): AccountSnapshot | null {
-  return [...snapshots].sort((a, b) => b.snapshot_at.localeCompare(a.snapshot_at))[0] || null;
+  return [...snapshots].sort((a, b) => compareSnapshots(b, a))[0] || null;
 }
 
 export function findPreviousMonthEndSnapshot(
@@ -38,7 +53,7 @@ export function findPreviousMonthEndSnapshot(
   return (
     [...snapshots]
       .filter((snapshot) => snapshot.is_month_end && snapshot.snapshot_at.slice(0, 7) < latestMonth)
-      .sort((a, b) => b.snapshot_at.localeCompare(a.snapshot_at))[0] || null
+      .sort((a, b) => compareSnapshots(b, a))[0] || null
   );
 }
 
@@ -47,7 +62,7 @@ export function calculateHoldingDays(object: PhysicalObject, today = new Date())
 }
 
 export function calculatePhysicalExperienceCost(object: PhysicalObject): number {
-  const total = object.total_acquisition_cost || object.purchase_price || 0;
+  const total = calculatePhysicalAcquisitionCost(object);
 
   if (object.status === 'transferred') {
     const saleProceeds = object.sale_price ?? 0;
@@ -58,11 +73,11 @@ export function calculatePhysicalExperienceCost(object: PhysicalObject): number 
 }
 
 export function calculatePhysicalAcquisitionCost(object: PhysicalObject): number {
-  return object.total_acquisition_cost || object.purchase_price || 0;
+  return object.total_acquisition_cost ?? object.purchase_price ?? 0;
 }
 
 export function calculateExperienceCost(object: OneTimeExperienceObject): number {
-  return object.actual_total || object.budget_total || 0;
+  return object.actual_total ?? object.budget_total ?? 0;
 }
 
 export function calculatePhysicalDailyCost(object: PhysicalObject, today = new Date()): number | null {
@@ -76,7 +91,7 @@ export function calculatePhysicalDailyCost(object: PhysicalObject, today = new D
 // This models default depreciation to zero — only items with an explicit
 // end/disposal date have a non-zero residual value.
 export function calculateResidualValue(object: PhysicalObject, today = new Date()): number {
-  const price = object.total_acquisition_cost || object.purchase_price || 0;
+  const price = calculatePhysicalAcquisitionCost(object);
   if (!object.ended_at || !object.purchased_at) return 0;
 
   const totalDays = calculateInclusiveDays(object.purchased_at, object.ended_at, today);
@@ -195,26 +210,29 @@ export function calculateDesireAmount(object: WYQDObject): number {
 export function calculateHomeMetrics(
   objects: WYQDObject[],
   snapshots: AccountSnapshot[],
+  currency?: string,
 ): HomeMetrics {
-  const calculatedSnapshots = snapshots.map(calculateNetWorth);
+  const moneyCurrency = currency ?? recordCurrency(findLatestSnapshot(snapshots) ?? objects[0] ?? {});
+  const moneyObjects = objects.filter((object) => matchesCurrency(object, moneyCurrency));
+  const calculatedSnapshots = snapshots.filter((snapshot) => matchesCurrency(snapshot, moneyCurrency)).map(calculateNetWorth);
   const latestSnapshot = findLatestSnapshot(calculatedSnapshots);
   const previousMonthEnd = findPreviousMonthEndSnapshot(calculatedSnapshots, latestSnapshot);
 
-  const activeRecurringCosts = objects.filter(isActiveRecurringCost);
+  const activeRecurringCosts = moneyObjects.filter(isActiveRecurringCost);
 
   const monthlyFixedCost = activeRecurringCosts.reduce(
     (total, object) => total + calculateRecurringMonthlyCost(object),
     0,
   );
 
-  const ownedPhysicalObjects = objects.filter(isOwnedPhysicalObject);
+  const ownedPhysicalObjects = moneyObjects.filter(isOwnedPhysicalObject);
   const ownedPhysicalCount = ownedPhysicalObjects.length;
   const physicalResidualValue = ownedPhysicalObjects.reduce(
     (total, object) => total + calculateResidualValue(object),
     0,
   );
 
-  const observingDesireAmount = objects
+  const observingDesireAmount = moneyObjects
     .filter((object) => object.status === 'seeded' || object.status === 'observing' || object.status === 'planned')
     .reduce((total, object) => total + calculateDesireAmount(object), 0);
 

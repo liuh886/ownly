@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { isValidISODate } from '@/domain/date';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type {
   BillingCycle,
@@ -15,12 +16,14 @@ export function useComposerFormState({
   initialObject,
   t,
   disabled,
+  currency = 'CNY',
   onSubmit,
   onCancel,
 }: {
   initialObject?: WYQDObject;
   t: (key: WYQDTranslationKey) => string;
   disabled?: boolean;
+  currency?: string;
   onSubmit: (object: WYQDObject, body: string) => Promise<void>;
   onCancel?: () => void;
 }) {
@@ -64,17 +67,21 @@ export function useComposerFormState({
     initialObject?.object_type === 'one_time_experience' ? initialObject.status : 'planned',
   );
   const [actualAmount, setActualAmount] = useState(
-    initialObject?.object_type === 'one_time_experience' && initialObject.actual_total !== undefined
+    initialObject?.object_type === 'one_time_experience' && initialObject.actual_total != null
       ? String(initialObject.actual_total)
       : '',
   );
   const [salePrice, setSalePrice] = useState(
-    initialObject?.object_type === 'physical' && initialObject.sale_price !== undefined
+    initialObject?.object_type === 'physical' && initialObject.sale_price != null
       ? String(initialObject.sale_price)
       : '',
   );
   const [quickLine, setQuickLine] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [annualizedCost, setAnnualizedCost] = useState(
+    initialObject?.object_type === 'recurring_cost' && initialObject.annualized_cost != null ? String(initialObject.annualized_cost) : '',
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [experienceSubtype, setExperienceSubtype] = useState(
     initialObject?.object_type === 'one_time_experience' ? initialObject.experience_subtype || '' : '',
@@ -118,15 +125,27 @@ export function useComposerFormState({
     objectType !== 'recurring_cost' ||
     !billingDay.trim() ||
     (Number.isInteger(parsedBillingDay) && parsedBillingDay >= 1 && parsedBillingDay <= 31);
+  const isNonnegativeAmount = (value: string) => Boolean(value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0;
   const canSubmit =
-    !disabled && title.trim() && amount.trim() && Number(amount) >= 0 && isBillingDayValid && !isSaving;
+    !disabled && Boolean(title.trim()) && isNonnegativeAmount(amount) && isBillingDayValid && !isSaving;
 
   const validate = (): Record<string, string> => {
     const e: Record<string, string> = {}
     if (!title.trim()) e.name = t('validationTitleRequired')
-    if (amount !== undefined && amount.trim() && Number(amount) < 0) e.amount = t('validationAmountPositive')
-    if (objectType === 'recurring_cost' && billingDay !== undefined && billingDay !== null && billingDay.trim() !== '' && (Number(billingDay) < 1 || Number(billingDay) > 31)) {
+    if (!isNonnegativeAmount(amount)) e.amount = t('validationAmountPositive')
+    for (const [name, value] of Object.entries({ actualAmount: objectType === 'one_time_experience' ? actualAmount : '', salePrice: objectType === 'physical' ? salePrice : '' })) {
+      if (value.trim() && !isNonnegativeAmount(value)) e[name] = t('validationAmountPositive');
+    }
+    if (objectType === 'recurring_cost' && !isBillingDayValid) {
       e.billingDay = t('validationBillingDayRange')
+    }
+    if (objectType === 'recurring_cost' && billingCycle === 'custom' && !isNonnegativeAmount(annualizedCost)) e.annualizedCost = t('validationAnnualCost');
+    const startDate = objectType === 'physical' ? purchasedAt : objectType === 'recurring_cost' ? recurringStartedAt : '';
+    const endDate = objectType === 'recurring_cost' ? '' : endedAt;
+    if ((startDate && !isValidISODate(startDate)) || (endDate && !isValidISODate(endDate)) || (startDate && endDate && endDate < startDate)) e.dates = t('validationDateOrder');
+    if (objectType === 'one_time_experience' && experienceSubtype === 'travel_worldview') {
+      const validCoordinate = (value: string, limit: number) => !value.trim() || (Number.isFinite(Number(value)) && Math.abs(Number(value)) <= limit);
+      if (!validCoordinate(locationLatitude, 90) || !validCoordinate(locationLongitude, 180) || extraLocations.some((loc) => !validCoordinate(loc.lat, 90) || !validCoordinate(loc.lng, 180))) e.coordinates = t('validationCoordinates');
     }
     return e
   }
@@ -157,7 +176,7 @@ export function useComposerFormState({
   }, []);
 
   function handleKeyDown(event: React.KeyboardEvent) {
-    if (event.key === 'Escape' && onCancel) {
+    if (event.key === 'Escape' && onCancel && !savingRef.current) {
       event.preventDefault();
       onCancel();
     }
@@ -171,6 +190,7 @@ export function useComposerFormState({
 
   async function handleSubmit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (savingRef.current || disabled) return;
     const v = validate();
     if (Object.keys(v).length > 0) {
       setErrors(v);
@@ -180,6 +200,7 @@ export function useComposerFormState({
     if (!canSubmit) return;
 
     setIsSaving(true);
+    savingRef.current = true;
     try {
       const isTravel = objectType === 'one_time_experience' && experienceSubtype === 'travel_worldview';
       const travelLocation = isTravel && (locationCountry || locationRegion || locationCity || locationCountryCode || locationLatitude || locationLongitude)
@@ -205,6 +226,7 @@ export function useComposerFormState({
         : [];
 
       const values = {
+        currency,
         title: title.trim(),
         objectType,
         amount: Number(amount),
@@ -220,9 +242,12 @@ export function useComposerFormState({
         experienceStatus,
         actualAmount: actualAmount.trim() ? Number(actualAmount) : undefined,
         salePrice: salePrice.trim() ? Number(salePrice) : undefined,
+        annualizedCost: billingCycle === 'custom' ? Number(annualizedCost) : undefined,
         experienceSubtype: experienceSubtype || undefined,
-        location: travelLocation,
-        locations: parsedExtraLocations.length > 0 ? parsedExtraLocations : undefined,
+        location: isTravel || initialObject?.object_type !== 'one_time_experience' || initialObject.experience_subtype === 'travel_worldview'
+          ? travelLocation : initialObject.location,
+        locations: isTravel || initialObject?.object_type !== 'one_time_experience' || initialObject.experience_subtype === 'travel_worldview'
+          ? parsedExtraLocations.length > 0 ? parsedExtraLocations : undefined : initialObject.locations,
       };
 
       const object = initialObject
@@ -258,8 +283,12 @@ export function useComposerFormState({
         setQuickLine('');
         setExtraLocations([]);
         setSalePrice('');
+        setAnnualizedCost('');
       }
+    } catch (error) {
+      setErrors({ submit: error instanceof Error ? error.message : String(error) });
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }
@@ -280,6 +309,7 @@ export function useComposerFormState({
     experienceStatus, setExperienceStatus,
     actualAmount, setActualAmount,
     salePrice, setSalePrice,
+    annualizedCost, setAnnualizedCost,
     quickLine, setQuickLine,
     isSaving, setIsSaving,
     errors, setErrors,

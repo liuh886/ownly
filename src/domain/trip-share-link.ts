@@ -94,8 +94,19 @@ export async function parseTripShareHash(hash: string): Promise<OwnlyTripBundle 
   return payload ? decodeTripSharePayload(payload) : null;
 }
 
-export function clearTripShareHash(): void {
+/** Consume only the observed share fragment; keep unrelated hash data and router state. */
+export function consumeTripShareHash(expectedPayload: string): boolean {
+  if (typeof window === 'undefined') return false;
+  const raw = window.location.hash.replace(/^#/, '');
+  if (extractTripSharePayload(raw) !== expectedPayload) return false;
+  const remaining = raw.split('&').filter((part) => new URLSearchParams(part).get(OWNLY_TRIP_SHARE_HASH_KEY) !== expectedPayload);
+  const next = `${window.location.pathname}${window.location.search}${remaining.length ? `#${remaining.join('&')}` : ''}`;
+  window.history.replaceState(window.history.state, '', next);
+  return true;
+}
+
+export function clearTripShareHash(expectedPayload?: string): void {
   if (typeof window === 'undefined') return;
-  const url = `${window.location.pathname}${window.location.search}`;
-  window.history.replaceState(null, '', url);
+  const payload = expectedPayload ?? extractTripSharePayload(window.location.hash);
+  if (payload !== null) consumeTripShareHash(payload);
 }

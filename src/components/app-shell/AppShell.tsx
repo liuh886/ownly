@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import dynamic from 'next/dynamic';
 import { BottomNav, type AppTab } from './BottomNav';
 import type { ObjectListFocus } from '@/components/objects/ObjectList';
 import { createWYQDRuntimeInfo } from '@/core/runtime';
@@ -17,7 +18,7 @@ import {
 } from '@/core/first-run';
 import { SAMPLE_TRIP_LOADED_KEY } from '@/core/sample-trip';
 import { SAMPLE_DATA_LOADED_KEY } from '@/services/loadSampleData';
-import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
+import { MotionConfig } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
 
 import { useOwnlyData } from './useOwnlyData';
@@ -26,8 +27,9 @@ import { AppHeader } from './AppHeader';
 import { StatusBanner } from './StatusBanner';
 import { TabRenderer, type FirstObjectRequest } from './TabRenderer';
 import { EmptyOwnlyDataBanner } from '@/components/onboarding/FirstObjectOnboarding';
-import { FirstRunGuide } from '@/components/onboarding/FirstRunGuide';
-import { AgentMcpGuide } from '@/components/agent/AgentMcpGuide';
+import { useAppNavigation } from './useAppNavigation';
+const FirstRunGuide = dynamic(() => import('@/components/onboarding/FirstRunGuide').then((mod) => mod.FirstRunGuide));
+const AgentMcpGuide = dynamic(() => import('@/components/agent/AgentMcpGuide').then((mod) => mod.AgentMcpGuide));
 
 function subscribeOnlineStatus(notify: () => void): () => void {
   window.addEventListener('online', notify);
@@ -67,7 +69,20 @@ export function AppShell() {
     [runtimeTarget],
   );
 
-  const [activeTab, setActiveTab] = useState<AppTab>('home');
+  const isBrowserRuntime = runtimeCapabilities.dataRuntime === 'browser';
+  const [activeTab, setActiveTab] = useAppNavigation(isBrowserRuntime);
+  const previousTab = useRef(activeTab);
+  useEffect(() => {
+    const changed = previousTab.current !== activeTab;
+    previousTab.current = activeTab;
+    // Run after the locale provider's generic document-title effect.
+    const timer = window.setTimeout(() => {
+      const heading = document.getElementById('ownly-view-title');
+      if (heading && isBrowserRuntime) document.title = `${heading.textContent} · Ownly`;
+      if (changed && !document.querySelector('[aria-modal="true"]')) heading?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, language, isBrowserRuntime]);
   const [objectListFocus, setObjectListFocus] = useState<ObjectListFocus | null>(null);
   const [autoFocusComposer, setAutoFocusComposer] = useState(false);
   const [firstObjectForcedOpen, setFirstObjectForcedOpen] = useState(false);
@@ -89,10 +104,6 @@ export function AppShell() {
     data.loadVaultData,
     data.storedObjects,
     completeFirstObjectOnboarding,
-    {
-      snapshots: data.storedSnapshots.length,
-      reviews: data.storedReviews.length,
-    },
   );
 
   // One dialog, one decision point. `resolveFirstRunStep` owns the ordering so
@@ -127,7 +138,7 @@ export function AppShell() {
     setObjectListFocus({ token });
     setAutoFocusComposer(true);
     setActiveTab('objects');
-  }, []);
+  }, [setActiveTab]);
 
   const dismissFirstObject = useCallback(() => {
     storageSet(FIRST_OBJECT_DISMISSED_KEY, 'true');
@@ -163,7 +174,7 @@ export function AppShell() {
   const handleTabChange = useCallback((tab: AppTab) => {
     setActiveTab(tab);
     window.scrollTo(0, 0);
-  }, []);
+  }, [setActiveTab]);
 
   const reopenFirstObject = useCallback(() => {
     storageSet(FIRST_OBJECT_DISMISSED_KEY, 'false');
@@ -176,7 +187,7 @@ export function AppShell() {
     && data.storedObjects.length === 0;
 
   return (
-    <>
+    <MotionConfig reducedMotion="user">
       <a
         href="#ownly-main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-[calc(1rem+env(safe-area-inset-top))] focus:z-[80] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-on-primary focus:shadow-lg"
@@ -185,6 +196,7 @@ export function AppShell() {
       </a>
       <main
         id="ownly-main-content"
+        tabIndex={-1}
         className="wyqd-web-shell min-h-screen bg-surface-subtle px-5 pb-10 pt-8 text-ink sm:px-6 sm:pt-10"
       >
       <div aria-live="polite" aria-atomic="true" className="pointer-events-none fixed inset-x-4 top-[calc(1rem+env(safe-area-inset-top))] z-30 mx-auto max-w-2xl">
@@ -207,26 +219,26 @@ export function AppShell() {
           objectCount={data.storedObjects.length}
           snapshotCount={data.storedSnapshots.length}
           onConnectVault={() => void connectVault()}
+          onDisconnectFolder={() => void disconnectFolder()}
           onOpenAgentGuide={() => setAgentGuideOpen(true)}
         />
 
-        {/* All three modes render. The banner is how a user answers "am I
-            looking at my own records or a demo?" — hiding it whenever things
-            are fine is what made that unanswerable. */}
+        {/* Only the two states the header pill cannot state quietly. Connected
+            lives entirely in the pill and its menu. */}
         <StatusBanner
           mode={mode}
           isLoading={isLoading}
-          error={error}
+          error={error ?? data.loadError}
           onConnect={() => void connectVault()}
-          onDisconnect={() => void disconnectFolder()}
           isWebRuntime={runtimeCapabilities.dataRuntime === 'browser'}
+          onRetry={!error && data.loadError ? () => void data.loadVaultData().catch(() => {}) : undefined}
         />
 
         {showEmptyDataBanner ? (
           <EmptyOwnlyDataBanner onCreate={reopenFirstObject} />
         ) : null}
 
-        {isConnected && !data.dataLoaded ? (
+        {isConnected && !data.dataLoaded && !data.loadError ? (
           <div className="py-10" role="status" aria-label={t('loading')}>
             <div className="grid gap-2 sm:grid-cols-3">
               <div className="ownly-skeleton h-24 rounded-xl" aria-hidden="true" />
@@ -238,15 +250,7 @@ export function AppShell() {
         ) : null}
 
         {isConnected && !data.dataLoaded ? null : (
-          <MotionConfig reducedMotion="user">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-              >
+          <div>
               <TabRenderer
                 activeTab={activeTab}
                 isConnected={isConnected}
@@ -266,9 +270,7 @@ export function AppShell() {
                 setAutoFocusComposer={setAutoFocusComposer}
                 setActiveTab={setActiveTab}
               />
-            </motion.div>
-            </AnimatePresence>
-          </MotionConfig>
+          </div>
         )}
 
         <footer className="mt-6 pb-2 text-center">
@@ -280,16 +282,16 @@ export function AppShell() {
 
       <BottomNav activeTab={activeTab} onChange={handleTabChange} />
 
-      <FirstRunGuide
+      {firstRunOpen && <FirstRunGuide
         open={firstRunOpen}
         step={firstRunStep}
         onChoose={chooseFirstObject}
         onSampleLoaded={completeFirstRunViaSample}
         onSampleDataLoaded={completeFirstRunViaSampleData}
         onDismiss={dismissFirstObject}
-      />
-      <AgentMcpGuide open={agentGuideOpen} onClose={() => setAgentGuideOpen(false)} />
+      />}
+      {agentGuideOpen && <AgentMcpGuide open={agentGuideOpen} onClose={() => setAgentGuideOpen(false)} />}
       </main>
-    </>
+    </MotionConfig>
   );
 }

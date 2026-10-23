@@ -1,5 +1,7 @@
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
+import { todayLocalISO } from '@/domain/date';
+import { recordCurrency } from '@/domain/currency';
 import type {
   BillingCycle,
   OneTimeExperienceStatus,
@@ -61,7 +63,7 @@ export function getExperienceStatusOptions(t: (key: WYQDTranslationKey) => strin
 }
 
 export function todayISO() {
-  return new Date().toISOString().split('T')[0];
+  return todayLocalISO();
 }
 
 export function createObjectDraft({
@@ -80,9 +82,11 @@ export function createObjectDraft({
   experienceStatus,
   actualAmount,
   salePrice,
+  annualizedCost: customAnnualizedCost,
   experienceSubtype,
   location,
   locations,
+  currency = 'CNY',
 }: {
   title: string;
   objectType: WYQDObjectType;
@@ -99,18 +103,20 @@ export function createObjectDraft({
   experienceStatus?: OneTimeExperienceStatus;
   actualAmount?: number;
   salePrice?: number;
+  annualizedCost?: number;
+  currency?: string;
   experienceSubtype?: string;
   location?: { country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number };
   locations?: Array<{ country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number }>;
 }): WYQDObject {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayLocalISO();
   const id = `obj_${today.replaceAll('-', '')}_${Date.now()}`;
   const base = {
     schema_version: WYQD_SCHEMA_VERSION,
     id,
     type: 'object' as const,
     title,
-    currency: 'CNY' as const,
+    currency,
     tags: ['ownly'],
     created_at: today,
     updated_at: today,
@@ -126,7 +132,7 @@ export function createObjectDraft({
       ended_at: endedAt || null,
       purchase_price: amount,
       total_acquisition_cost: amount,
-      sale_price: salePrice || undefined,
+      sale_price: salePrice,
       amortization_mode: 'none',
       include_in_net_worth: false,
       default_depreciates_to_zero: true,
@@ -143,7 +149,7 @@ export function createObjectDraft({
           : cycle === 'annual'
             ? amount
             : cycle === 'custom'
-              ? amount
+              ? customAnnualizedCost ?? amount
               : amount * 12;
 
     return {
@@ -152,7 +158,7 @@ export function createObjectDraft({
       status: recurringStatus || 'active',
       billing_cycle: cycle,
       billing_amount: amount,
-      billing_currency: 'CNY',
+      billing_currency: currency,
       billing_day: billingDay,
       payment_account: paymentAccount || null,
       started_at: recurringStartedAt || today,
@@ -183,12 +189,12 @@ export function createObjectDraft({
 export function getInitialAmount(object?: WYQDObject): string {
   if (!object) return '';
   if (object.object_type === 'physical') {
-    return String(object.total_acquisition_cost || object.purchase_price || '');
+    return String(object.total_acquisition_cost ?? object.purchase_price ?? '');
   }
   if (object.object_type === 'recurring_cost') {
-    return String(object.billing_amount || '');
+    return String(object.billing_amount ?? '');
   }
-  return String(object.budget_total || object.actual_total || '');
+  return String(object.budget_total ?? object.actual_total ?? '');
 }
 
 export function updateObjectDraft(
@@ -209,6 +215,7 @@ export function updateObjectDraft(
     experienceStatus?: OneTimeExperienceStatus;
     actualAmount?: number;
     salePrice?: number;
+    annualizedCost?: number;
     experienceSubtype?: string;
     location?: { country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number };
     locations?: Array<{ country?: string; region?: string; city?: string; country_code?: string; latitude?: number; longitude?: number }>;
@@ -217,7 +224,18 @@ export function updateObjectDraft(
   const updatedAt = todayISO();
 
   if (values.objectType !== existing.object_type) {
-    return createObjectDraft(values);
+    const draft = createObjectDraft({ ...values, currency: recordCurrency(existing) });
+    const fields = {
+      physical: ['brand', 'model', 'in_use_since', 'unused_since', 'seeded_at', 'observed_at', 'purchased_at', 'first_used_at', 'ended_at', 'purchase_price', 'purchase_tax', 'shipping_fee', 'accessory_cost', 'total_acquisition_cost', 'sale_price', 'transfer_fee', 'realized_experience_cost', 'amortization_mode', 'amortization_days', 'residual_value', 'include_in_net_worth', 'default_depreciates_to_zero', 'condition', 'location'],
+      recurring_cost: ['provider', 'plan', 'started_at', 'paused_at', 'cancelled_at', 'billing_cycle', 'billing_amount', 'billing_currency', 'billing_day', 'annualized_cost', 'payment_account', 'is_essential', 'replacement', 'cancel_reason'],
+      one_time_experience: ['experience_subtype', 'planned_at', 'started_at', 'ended_at', 'reviewed_at', 'location', 'locations', 'budget_total', 'actual_total', 'expense_items', 'worldview_tags'],
+    };
+    const converted = { ...existing, ...draft } as unknown as Record<string, unknown>;
+    for (const field of fields[existing.object_type]) {
+      if (!fields[values.objectType].includes(field)) delete converted[field];
+    }
+    // Editing changes classification, not the identity or source metadata.
+    return { ...converted, id: existing.id, created_at: existing.created_at, currency: recordCurrency(existing), tags: existing.tags ?? draft.tags } as unknown as WYQDObject;
   }
 
   if (existing.object_type === 'physical') {
@@ -229,30 +247,33 @@ export function updateObjectDraft(
       status: values.status || existing.status,
       purchased_at: values.purchasedAt || undefined,
       ended_at: values.endedAt || null,
-      purchase_price: values.amount,
+      purchase_price: existing.purchase_price,
       total_acquisition_cost: values.amount,
-      sale_price: values.salePrice || existing.sale_price,
+      sale_price: values.salePrice,
     } satisfies PhysicalObject;
   }
 
   if (existing.object_type === 'recurring_cost') {
+    const cycle = values.billingCycle || existing.billing_cycle || 'monthly';
     return {
       ...existing,
       title: values.title,
       updated_at: updatedAt,
       category: values.category || undefined,
       status: values.recurringStatus || existing.status,
-      billing_cycle: values.billingCycle || existing.billing_cycle || 'monthly',
+      billing_cycle: cycle,
       billing_amount: values.amount,
       billing_day: values.billingDay,
       payment_account: values.paymentAccount || null,
-      started_at: values.recurringStartedAt || existing.started_at,
+      started_at: values.recurringStartedAt || undefined,
       annualized_cost:
-        values.billingCycle === 'weekly'
+        cycle === 'weekly'
           ? values.amount * 52
-          : values.billingCycle === 'quarterly'
+          : cycle === 'quarterly'
             ? values.amount * 4
-            : values.billingCycle === 'annual' || values.billingCycle === 'custom'
+            : cycle === 'custom'
+              ? values.annualizedCost ?? existing.annualized_cost ?? values.amount
+            : cycle === 'annual'
               ? values.amount
               : values.amount * 12,
     };
@@ -267,7 +288,7 @@ export function updateObjectDraft(
     experience_subtype: values.experienceSubtype || undefined,
     budget_total: values.amount,
     actual_total: values.actualAmount,
-    ended_at: values.endedAt || existing.ended_at,
+    ended_at: values.endedAt || undefined,
     location: values.location,
     locations: values.locations,
   };

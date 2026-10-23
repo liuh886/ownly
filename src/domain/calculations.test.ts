@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateHomeMetrics,
+  calculateExperienceCost,
+  calculatePhysicalAcquisitionCost,
   calculateNetWorth,
   calculateNextBillingDate,
   calculatePhysicalDailyCost,
@@ -8,6 +10,7 @@ import {
   calculateRecurringMonthlyCost,
   calculateResidualValue,
   findLatestSnapshot,
+  compareSnapshots,
   findPreviousMonthEndSnapshot,
   isActiveRecurringCost,
   isOwnedPhysicalObject,
@@ -18,6 +21,7 @@ import type {
   PhysicalObject,
   RecurringCostObject,
   WYQDObject,
+  OneTimeExperienceObject,
 } from './types';
 
 function snapshot(overrides: Partial<AccountSnapshot> = {}): AccountSnapshot {
@@ -107,6 +111,22 @@ describe('snapshot selection', () => {
 
 describe('physical object costs', () => {
   const today = new Date(2026, 0, 11); // 10 inclusive days after 2026-01-01
+
+  it('preserves an explicitly recorded zero acquisition cost', () => {
+    const object = physical({ total_acquisition_cost: 0, purchase_price: 1000, purchased_at: '2026-01-01' });
+    expect(calculatePhysicalAcquisitionCost(object)).toBe(0);
+    expect(calculatePhysicalExperienceCost(object)).toBe(0);
+    expect(calculatePhysicalDailyCost(object, today)).toBe(0);
+  });
+
+  it('preserves zero actual experience spending instead of substituting the budget', () => {
+    const experience: OneTimeExperienceObject = {
+      schema_version: '0.1', id: 'free-trip', type: 'object',
+      object_type: 'one_time_experience', title: 'Free trip', status: 'completed',
+      created_at: '2026-01-01', actual_total: 0, budget_total: 1000,
+    };
+    expect(calculateExperienceCost(experience)).toBe(0);
+  });
 
   it('computes experience cost, netting sale proceeds for transferred items', () => {
     expect(calculatePhysicalExperienceCost(physical({ purchase_price: 1000 }))).toBe(1000);
@@ -255,5 +275,23 @@ describe('calculateHomeMetrics', () => {
     const metrics = calculateHomeMetrics([], []);
     expect(metrics.netWorth).toBeNull();
     expect(metrics.netWorthDeltaFromPreviousMonth).toBeNull();
+  });
+});
+
+describe('same-day snapshot chronology', () => {
+  it('selects later creation in either input order and ignores a later edit to the older record', () => {
+    const old = snapshot({ id: 'old', snapshot_at: '2026-10-04', created_at: '2026-10-04T01:00:00.000Z', updated_at: '2026-10-05T12:00:00.000Z', net_worth: 800 });
+    const next = snapshot({ id: 'next', snapshot_at: '2026-10-04', created_at: '2026-10-04T02:00:00.000Z', net_worth: 900 });
+    expect(findLatestSnapshot([old, next])).toBe(next);
+    expect(findLatestSnapshot([next, old])).toBe(next);
+    expect([next, old].sort(compareSnapshots)).toEqual([old, next]);
+    const laterDay = snapshot({ id: 'later-day', snapshot_at: '2026-10-05', created_at: '2026-01-01' });
+    expect(findLatestSnapshot([next, laterDay, old])).toBe(laterDay);
+  });
+  it('breaks exact creation-time ties deterministically without filesystem input order', () => {
+    const a = snapshot({ id: 'a' });
+    const b = snapshot({ id: 'b' });
+    expect(findLatestSnapshot([a, b])).toBe(b);
+    expect(findLatestSnapshot([b, a])).toBe(b);
   });
 });

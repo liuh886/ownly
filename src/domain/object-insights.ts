@@ -1,3 +1,4 @@
+import { compareSnapshots } from './calculations';
 import { calendarDaysSince, isValidISODate } from './date';
 import type {
   AccountSnapshot,
@@ -97,7 +98,7 @@ export interface NetWorthPoint {
 /** Snapshots ordered oldest → newest for trend display. */
 export function buildNetWorthTrend(snapshots: AccountSnapshot[]): NetWorthPoint[] {
   return [...snapshots]
-    .sort((a, b) => a.snapshot_at.localeCompare(b.snapshot_at))
+    .sort(compareSnapshots)
     .map((snapshot) => ({
       date: snapshot.snapshot_at,
       netWorth:

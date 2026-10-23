@@ -117,7 +117,7 @@ export function ExperienceFormSection({
         <input
           value={actualAmount}
           onChange={(event) => setActualAmount(event.target.value)}
-          type="number" min="0" inputMode="decimal"
+          type="number" min="0" step="any" inputMode="decimal"
           placeholder={t('optional')} className={fieldClass}
           disabled={disabled || isSaving}
         />

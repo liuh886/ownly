@@ -2,12 +2,14 @@
  * The mode indicator.
  *
  * "Am I looking at my own data or at a demo?" is the one question a user of a
- * local-first app has to be able to answer at a glance, so this renders in all
- * three states rather than only when something is wrong. The weight is
- * deliberately inverted: a connected folder is a quiet one-line strip, while
- * demo mode is a persistent amber banner that says out loud that nothing is
- * being saved. Silence in the connected state is the goal — a user who has to
- * re-read a status line every morning will stop trusting it.
+ * local-first app has to be able to answer at a glance, so this renders whenever
+ * the answer is *not* the quiet one rather than only when something is wrong.
+ *
+ * Connected is deliberately absent. The header pill already carries that state,
+ * and repeating it as a strip underneath repeated the same words twice — the
+ * banner's job is the states the header cannot afford to shout about. The two
+ * folder actions (change / disconnect) live in the pill's menu for the same
+ * reason: one place to look, not three.
  */
 import { useI18n } from '@/core/i18n-context';
 import { getOwnlyLocalDataCopy } from '@/core/local-data-copy';
@@ -18,51 +20,20 @@ export function StatusBanner({
   isLoading,
   error,
   onConnect,
-  onDisconnect,
   isWebRuntime,
+  onRetry,
 }: {
   mode: LocalDataMode;
   isLoading: boolean;
   error: string | null;
   onConnect: () => void;
-  onDisconnect: () => void;
   isWebRuntime: boolean;
+  onRetry?: () => void;
 }) {
   const { t, language } = useI18n();
   const localDataCopy = getOwnlyLocalDataCopy(language);
 
-  if (mode === 'connected' && !error) {
-    return (
-      <section className="mb-3 flex items-center gap-1.5 rounded-md bg-stone-100/50 px-2.5 py-1 text-[11px] text-stone-500">
-        <span className="h-1 w-1 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate">
-          {isWebRuntime ? localDataCopy.connected : t('vaultConnected')}
-        </span>
-        <button
-          type="button"
-          onClick={onConnect}
-          disabled={isLoading}
-          className="shrink-0 touch-manipulation rounded px-1 py-0.5 text-[11px] font-medium text-stone-500 transition hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isLoading
-            ? isWebRuntime ? localDataCopy.connecting : t('connecting')
-            : isWebRuntime ? localDataCopy.changeFolder : t('reconnectVault')}
-        </button>
-        {/* Obsidian always has the Vault open — there is nothing to detach, so
-            offering "Disconnect" there would just duplicate the button above. */}
-        {isWebRuntime ? (
-          <button
-            type="button"
-            onClick={onDisconnect}
-            disabled={isLoading}
-            className="shrink-0 touch-manipulation rounded px-1 py-0.5 text-[11px] font-medium text-stone-500 transition hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {localDataCopy.disconnect}
-          </button>
-        ) : null}
-      </section>
-    );
-  }
+  if (mode === 'connected' && !error) return null;
 
   // Demo mode: never a collapsed strip. A user who cannot tell a sample record
   // from their own will type real data into a store that discards it on close.
@@ -103,10 +74,17 @@ export function StatusBanner({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-semibold text-stone-950">
             <span className="h-2 w-2 shrink-0 rounded-full bg-stone-300" aria-hidden="true" />
-            {isWebRuntime ? localDataCopy.disconnected : t('demoMode')}
+            {mode === 'connected'
+              ? isWebRuntime ? localDataCopy.connected : t('vaultConnected')
+              : mode === 'demo' ? t('demoMode')
+                : isWebRuntime ? localDataCopy.disconnected : t('demoMode')}
           </div>
           <p className="mt-1 text-xs leading-relaxed text-stone-500">
-            {isWebRuntime ? localDataCopy.disconnectedDescription : t('demoModeDesc')}
+            {mode === 'connected'
+              ? language === 'zh' ? '数据目录操作失败，请重试。' : 'The data folder operation failed. Please retry.'
+              : mode === 'demo'
+                ? isWebRuntime ? localDataCopy.demoNote : t('demoModeDesc')
+                : isWebRuntime ? localDataCopy.disconnectedDescription : t('demoModeDesc')}
           </p>
         </div>
         <button
@@ -139,7 +117,7 @@ export function StatusBanner({
           <span className="min-w-0 flex-1">{error}</span>
           <button
             type="button"
-            onClick={onConnect}
+            onClick={onRetry ?? onConnect}
             disabled={isLoading}
             className="min-h-11 shrink-0 touch-manipulation rounded-md border border-red-200 bg-white px-3 py-1.5 font-semibold text-red-700 transition duration-150 active:scale-[0.97] hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
           >

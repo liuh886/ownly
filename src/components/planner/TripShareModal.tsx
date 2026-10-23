@@ -18,6 +18,8 @@ interface TripShareModalProps {
   language: 'zh' | 'en';
   onPublish: () => Promise<{ url: string; share: { alias: string } }>;
   onDisable: () => Promise<void>;
+  canRecoverLegacy?: boolean;
+  onRecoverLegacy?: () => Promise<void>;
 }
 
 export function TripShareModal({
@@ -30,6 +32,8 @@ export function TripShareModal({
   language,
   onPublish,
   onDisable,
+  canRecoverLegacy = false,
+  onRecoverLegacy,
 }: TripShareModalProps) {
   const zh = language === 'zh';
   const [busy, setBusy] = useState(false);
@@ -106,6 +110,16 @@ export function TripShareModal({
       setBusy(false);
     }
   };
+  const handleRecover = async () => {
+    if (!onRecoverLegacy || !(await confirm({
+      title: zh ? '认领旧链接' : 'Recover older link',
+      message: zh ? '确认这是当前数据目录原有的分享链接？认领后其他目录不能再认领此设备上的旧凭据。' : 'Confirm this link belongs to the current data folder? Other folders cannot claim this older credential afterward.',
+    }))) return;
+    setBusy(true);
+    try { await onRecoverLegacy(); setNotice(zh ? '旧链接已关联到当前目录，可在此停用。' : 'Older link attached to this folder; you can disable it here.'); }
+    catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
 
   const updatedLabel = meta?.updated_at
     ? new Date(meta.updated_at).toLocaleString(zh ? 'zh-CN' : 'en-US', {
@@ -139,6 +153,12 @@ export function TripShareModal({
             <div className="rounded-xl bg-emerald-50 p-3 text-xs font-semibold break-all text-emerald-800 ring-1 ring-emerald-200">
               {notice}
             </div>
+          ) : null}
+          {canRecoverLegacy && onRecoverLegacy ? (
+            <button type="button" disabled={busy} onClick={() => void handleRecover()}
+              className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50">
+              {zh ? '恢复此设备上的旧分享链接管理' : 'Recover older share link on this device'}
+            </button>
           ) : null}
 
           {!isPro ? (

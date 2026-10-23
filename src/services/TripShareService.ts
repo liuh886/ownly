@@ -26,6 +26,7 @@ export interface TripShareRecord {
 
 export interface TripShareStore {
   upsertShare(record: TripShareRecord): Promise<void>;
+  refreshEnabledShare?(record: TripShareRecord): Promise<boolean>;
   disableShare(alias: string, writeTokenHash: string): Promise<void>;
 }
 
@@ -50,8 +51,23 @@ export class MemoryTripShareStore implements TripShareStore {
   async disableShare(alias: string, writeTokenHash: string): Promise<void> {
     const key = normalizeTripShareAlias(alias);
     const record = this.records.get(key);
-    if (!record || record.write_token_hash !== writeTokenHash) return;
+    if (!record || record.write_token_hash !== writeTokenHash) {
+      throw new Error('Could not confirm trip share revocation; the link may still be active.');
+    }
     this.records.set(key, { ...record, enabled: false, updated_at: new Date().toISOString() });
+  }
+
+  async refreshEnabledShare(record: TripShareRecord): Promise<boolean> {
+    const alias = normalizeTripShareAlias(record.alias);
+    const existing = this.records.get(alias);
+    if (!existing || !existing.enabled || existing.write_token_hash !== record.write_token_hash
+      || existing.trip_id !== record.trip_id) return false;
+    this.records.set(alias, {
+      ...existing,
+      html_content: record.html_content,
+      updated_at: record.updated_at || new Date().toISOString(),
+    });
+    return true;
   }
 
   getShareByAlias(alias: string): TripShareRecord | null {
@@ -71,6 +87,8 @@ export interface PublishTripShareInput {
   alias: string;
   /** Reuse an existing owner write token to update the same row in place. */
   writeToken?: string;
+  /** Automatic refresh may update only the still-enabled row with this capability. */
+  refreshOnly?: boolean;
   language?: 'zh' | 'en';
   now?: string;
 }
@@ -131,6 +149,9 @@ export class TripShareService {
     this.assertPro(input.membership);
     this.assertUser(input.userId);
     const baseAlias = requireValidAlias(input.alias);
+    if (input.refreshOnly && !input.writeToken?.trim()) {
+      throw new Error('An existing share write token is required for automatic refresh.');
+    }
     const writeToken = input.writeToken?.trim() || generateCalendarFeedToken();
     const writeTokenHash = await hashFeedToken(writeToken);
     const now = input.now ?? new Date().toISOString();
@@ -143,6 +164,19 @@ export class TripShareService {
       includeExpenses: false,
       generatedAt: now,
     });
+
+    if (input.refreshOnly) {
+      if (!this.store.refreshEnabledShare) throw new Error('This share store cannot safely refresh an enabled link.');
+      const refreshed = await this.store.refreshEnabledShare({
+        user_id: input.userId, trip_id: input.trip.id, alias: baseAlias,
+        write_token_hash: writeTokenHash, html_content: html, enabled: true, updated_at: now,
+      });
+      if (!refreshed) throw new Error('The share was disabled or its write token changed; automatic refresh was skipped.');
+      return {
+        share: { alias: baseAlias, trip_id: input.trip.id, enabled: true, updated_at: now },
+        url: getTripShareUrl(baseAlias), write_token: writeToken, html,
+      };
+    }
 
     let lastError: unknown = null;
     for (const alias of aliasCandidates(baseAlias)) {

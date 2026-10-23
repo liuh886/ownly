@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type { WYQDArchivedStoredEntity, WYQDArchiveEntityType } from '@/core/repository';
@@ -37,6 +37,16 @@ export function ArchivePanel({
   const { t } = useI18n();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [restoringKey, setRestoringKey] = useState<string | null>(null);
+  const pending = useRef(false);
+
+  async function handleRestore(item: WYQDArchivedStoredEntity) {
+    if (disabled || pending.current) return;
+    pending.current = true;
+    setRestoringKey(`${item.archiveType}:${item.fileName}`);
+    try { await onRestore(item.archiveType, item.fileName); }
+    finally { pending.current = false; setRestoringKey(null); }
+  }
 
   const filtered = filterType
     ? archivedEntities.filter((e) => {
@@ -48,6 +58,9 @@ export function ArchivePanel({
     : archivedEntities;
 
   async function handleDelete(item: WYQDArchivedStoredEntity) {
+    if (disabled || pending.current) return;
+    pending.current = true;
+    try {
     const title = item.entity.title || item.fileName;
     const confirmed = await confirm({
       title: t('permanentlyDelete'),
@@ -62,6 +75,7 @@ export function ArchivePanel({
     } finally {
       setDeletingKey(null);
     }
+    } finally { pending.current = false; }
   }
 
   return (
@@ -108,16 +122,16 @@ export function ArchivePanel({
                   <div className="flex shrink-0 gap-1.5">
                     <button
                       type="button"
-                      disabled={disabled}
-                      onClick={() => void onRestore(item.archiveType, item.fileName)}
+                      disabled={disabled || restoringKey !== null || deletingKey !== null}
+                      onClick={() => void handleRestore(item).catch(() => { /* Action reports failure. */ })}
                       className="min-h-10 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
                     >
-                      {t('restore')}
+                      {restoringKey === key ? '…' : t('restore')}
                     </button>
                     <button
                       type="button"
-                      disabled={disabled || deletingKey === key}
-                      onClick={() => void handleDelete(item)}
+                      disabled={disabled || restoringKey !== null || deletingKey !== null}
+                      onClick={() => void handleDelete(item).catch(() => { /* Action reports failure. */ })}
                       className="min-h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {deletingKey === key ? '…' : t('permanentlyDelete')}

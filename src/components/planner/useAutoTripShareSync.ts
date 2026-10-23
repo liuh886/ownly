@@ -1,9 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { captureWorkspaceIdentity } from '@/services/ownlyStoreRouter';
+import { usePublicationSync } from './usePublicationSync';
+import { assertPublicationWorkspace, isPublicationSuspended, publicationGeneration, publicationKey, queuePublication } from './publication-queue';
 import type { PlannerTrip, PlannerTripLeg, PlannerTripPlace } from '@/domain/planner';
 import type { PlannerTripVisit } from '@/domain/planner-visits';
-import { loadTripShareMeta, saveTripShareMeta } from '@/domain/trip-share';
+import type { PublicationCredentials } from './publication-credentials';
 import { tripShareService } from '@/services/TripShareService';
 import {
   AUTO_CALENDAR_SYNC_DEBOUNCE_MS,
@@ -18,7 +21,9 @@ export interface AutoTripShareSyncInput {
   isPro: boolean;
   currentUserId: string;
   language: 'zh' | 'en';
+  credentials: PublicationCredentials | null;
   enabled?: boolean;
+  onError?: (error: unknown) => void;
 }
 
 export interface TripShareSyncTarget {
@@ -32,10 +37,10 @@ export interface TripShareSyncTarget {
  * share are republished. Creation stays an explicit act in the share modal, so
  * this hook never mints or resurrects a link.
  */
-export function collectTripShareSyncTargets(trips: PlannerTrip[]): TripShareSyncTarget[] {
+export function collectTripShareSyncTargets(trips: PlannerTrip[], credentials?: PublicationCredentials | null): TripShareSyncTarget[] {
   const targets: TripShareSyncTarget[] = [];
   for (const trip of trips) {
-    const meta = loadTripShareMeta(trip.id);
+    const meta = credentials?.loadShare(trip.id);
     if (!meta || !meta.enabled) continue;
     const alias = meta.alias?.trim();
     const writeToken = meta.write_token?.trim();
@@ -53,107 +58,40 @@ export function collectTripShareSyncTargets(trips: PlannerTrip[]): TripShareSync
  * fallback).
  */
 export function useAutoTripShareSync(input: AutoTripShareSyncInput): void {
-  const latestRef = useRef(input);
-  const syncedFingerprintRef = useRef<string | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const syncingRef = useRef(false);
-
-  useEffect(() => {
-    latestRef.current = input;
+  const latest = useRef(input);
+  useEffect(() => { latest.current = input; });
+  const workspaceIdentity = captureWorkspaceIdentity();
+  const fingerprint = `${workspaceIdentity}:${input.language}:${buildFeedSyncFingerprint(input.trips, input.places, input.visits, input.legs)}`;
+  usePublicationSync({
+    state: { ...input, workspaceIdentity }, fingerprint, delay: AUTO_CALENDAR_SYNC_DEBOUNCE_MS,
+    active: input.enabled !== false && input.isPro && Boolean(input.currentUserId) && collectTripShareSyncTargets(input.trips, input.credentials).length > 0,
+    onError: input.onError,
+    sync: async (state) => {
+      const identity = state.workspaceIdentity;
+      for (const { trip, alias, writeToken } of collectTripShareSyncTargets(state.trips, state.credentials)) {
+        if (!state.credentials) return;
+        const credentials = state.credentials;
+        const key = publicationKey(`${credentials.namespace}:${identity}`, 'share', trip.id);
+        const generation = publicationGeneration(key);
+        await queuePublication(key, async () => {
+          assertPublicationWorkspace(identity);
+          const live = latest.current;
+          const meta = credentials.loadShare(trip.id);
+          if (live.enabled === false || !live.isPro || live.currentUserId !== state.currentUserId
+            || !live.trips.some((item) => item.id === trip.id)
+            || isPublicationSuspended(key) || generation !== publicationGeneration(key) || !meta?.enabled || meta.write_token !== writeToken) return;
+          const response = await tripShareService.publishShare({
+            trip, places: state.places, visits: state.visits,
+            membership: { isPro: state.isPro }, userId: `${state.currentUserId}:${credentials.namespace}`,
+            alias, writeToken, language: state.language, refreshOnly: true,
+          });
+          // Revocation is queued behind this entire remote write + receipt.
+          assertPublicationWorkspace(identity);
+          credentials.saveShare(trip.id, { alias: response.share.alias, write_token: response.write_token,
+            updated_at: response.share.updated_at, enabled: true });
+          if (credentials.loadShare(trip.id)?.write_token !== response.write_token) throw new Error('Cloud share updated, but local credentials could not be saved. Retry in the share dialog.');
+        });
+      }
+    },
   });
-
-  const fingerprint = buildFeedSyncFingerprint(input.trips, input.places, input.visits, input.legs);
-  const targets = collectTripShareSyncTargets(input.trips);
-  const hasTargets = targets.length > 0;
-  const enabled = input.enabled ?? true;
-
-  const runSyncRef = useRef<() => void>(() => {});
-  const runSync = useCallback(async () => {
-    const state = latestRef.current;
-    if (syncingRef.current) return;
-    if (!state.isPro || !state.currentUserId?.trim()) return;
-    const live = collectTripShareSyncTargets(state.trips);
-    if (live.length === 0) return;
-    const current = buildFeedSyncFingerprint(state.trips, state.places, state.visits, state.legs);
-    if (syncedFingerprintRef.current === current) return;
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      if (typeof window !== 'undefined') {
-        window.addEventListener('online', () => runSyncRef.current(), { once: true });
-      }
-      return;
-    }
-    syncingRef.current = true;
-    try {
-      const { isPro, currentUserId, language } = state;
-      for (const { trip, alias, writeToken } of live) {
-        const response = await tripShareService.publishShare({
-          trip,
-          places: state.places,
-          visits: state.visits,
-          membership: { isPro },
-          userId: currentUserId,
-          alias,
-          writeToken,
-          language,
-        });
-        saveTripShareMeta(trip.id, {
-          alias: response.share.alias,
-          write_token: response.write_token,
-          updated_at: response.share.updated_at,
-          enabled: true,
-        });
-      }
-      syncedFingerprintRef.current = buildFeedSyncFingerprint(
-        latestRef.current.trips,
-        latestRef.current.places,
-        latestRef.current.visits,
-        latestRef.current.legs,
-      );
-    } catch (error) {
-      console.warn('[Planner] auto trip share sync failed', error);
-    } finally {
-      syncingRef.current = false;
-    }
-  }, []);
-  useEffect(() => {
-    runSyncRef.current = () => void runSync();
-  }, [runSync]);
-
-  useEffect(() => {
-    if (!enabled || !input.isPro || !input.currentUserId || !hasTargets) {
-      syncedFingerprintRef.current = fingerprint;
-      return;
-    }
-    if (syncedFingerprintRef.current === null) {
-      syncedFingerprintRef.current = fingerprint;
-      return;
-    }
-    if (syncedFingerprintRef.current === fingerprint) return;
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => {
-      timerRef.current = null;
-      void runSync();
-    }, AUTO_CALENDAR_SYNC_DEBOUNCE_MS);
-    return () => {
-      if (timerRef.current) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [fingerprint, hasTargets, enabled, input.isPro, input.currentUserId, runSync]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const onVisibility = (): void => {
-      if (document.visibilityState === 'hidden') {
-        if (timerRef.current) {
-          window.clearTimeout(timerRef.current);
-          timerRef.current = null;
-        }
-        void runSync();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [runSync]);
 }

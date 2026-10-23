@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
+import { useFormatMoney } from '@/lib/use-format';
+import { recordCurrency } from '@/domain/currency';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { ObjectLogEntry, ObjectLogEventType, WYQDObject } from '@/domain/types';
 import { ObjectComposer } from './ObjectComposer';
@@ -85,8 +87,10 @@ export function ObjectDetailPanel({
   const { t } = useI18n();
   const [isEditing, setIsEditing] = useState(false);
   const [bodyDraft, setBodyDraft] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const object = stored.entity;
-  const detailRows = getDetailRows(object, t);
+  const { formatMoney } = useFormatMoney(recordCurrency(object));
+  const detailRows = getDetailRows(object, t, formatMoney);
   const timelineRows = getTimelineRows(object, t).filter((row) => row.value);
   const body = stored.body.trim();
 
@@ -115,8 +119,11 @@ export function ObjectDetailPanel({
 
   const handleComposerSubmit = async (updatedObject: WYQDObject) => {
     if (!onSave) return;
-    await onSave(updatedObject, bodyDraft);
-    setIsEditing(false);
+    setIsSaving(true);
+    try {
+      await onSave(updatedObject, bodyDraft);
+      setIsEditing(false);
+    } finally { setIsSaving(false); }
   };
 
   if (isEditing && onSave) {
@@ -142,7 +149,7 @@ export function ObjectDetailPanel({
             onChange={(e) => setBodyDraft(e.target.value)}
             rows={6}
             className="mt-2 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2.5 font-mono text-xs leading-5 text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50"
-            disabled={disabled}
+            disabled={disabled || isSaving}
           />
           <p className="mt-1 text-[11px] text-stone-500">{t('markdownBodyLabel')}</p>
         </div>
@@ -178,7 +185,7 @@ export function ObjectDetailPanel({
           {onDelete ? (
             <button
               type="button"
-              onClick={() => void onDelete()}
+              onClick={() => void onDelete().catch(() => { /* Action reports failure. */ })}
               className="h-10 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={disabled || deleting}
             >

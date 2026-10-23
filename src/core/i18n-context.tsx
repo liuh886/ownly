@@ -70,13 +70,14 @@ export function I18nProvider({
   const [languageOverride, setLanguageOverride] = useState<WYQDLanguage | null>(null);
   const language = languageOverride ?? detectedLanguage;
 
-  const [currency, setCurrency] = useState<WYQDCurrency>(() => {
+  const [currencyOverride, setCurrency] = useState<WYQDCurrency | null>(() => {
     const storedCurrency = get('ownly_currency') as WYQDCurrency | null;
     if (storedCurrency && ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW'].includes(storedCurrency)) {
       return storedCurrency;
     }
-    return defaultCurrency(initialLanguage ?? 'en');
+    return null;
   });
+  const currency = currencyOverride ?? defaultCurrency(language);
 
   useEffect(() => {
     if (typeof window.document === 'undefined') return;
@@ -108,7 +109,7 @@ export function I18nProvider({
         }
         const stored = get('ownly_currency');
         if (!stored) {
-          setCurrency(defaultCurrency(lang));
+          setCurrency(null);
         }
       },
       t: (key: WYQDTranslationKey) => {
@@ -133,4 +134,14 @@ export function useI18n() {
     throw new Error('useI18n must be used within an I18nProvider');
   }
   return context;
+}
+
+/** The example ledger uses CNY. Demo selections must not change real-record preferences. */
+export function DemoCurrencyScope({ active, children }: { active: boolean; children: ReactNode }) {
+  const context = useI18n();
+  const [demoCurrency, setDemoCurrency] = useState<WYQDCurrency>('CNY');
+  const value = useMemo(() => active
+    ? { ...context, currency: demoCurrency, setCurrency: setDemoCurrency }
+    : context, [active, context, demoCurrency]);
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

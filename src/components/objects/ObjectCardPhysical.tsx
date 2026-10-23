@@ -1,3 +1,4 @@
+import { useActionMenu } from './useActionMenu';
 import { useI18n } from '@/core/i18n-context';
 import { useFormatMoney } from '@/lib/use-format';
 import { IconButton } from '@/components/common/ui-primitives';
@@ -8,23 +9,27 @@ import { getPhysicalBucket } from './useObjectFilterSort';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { ObjectLogEntry, PhysicalObject, WYQDObject } from '@/domain/types';
 import { todayISO } from '@/lib/format';
+import { recordCurrency } from '@/domain/currency';
 
 function MoreActionsButton({
   objectTitle,
   menuId,
   open,
   onToggle,
+  disabled,
   t,
 }: {
   objectTitle: string;
   menuId: string;
   open: boolean;
   onToggle: () => void;
+  disabled?: boolean;
   t: TranslateFn;
 }) {
   return (
     <IconButton
       onClick={onToggle}
+      disabled={disabled}
       aria-label={`${t('moreActions')} - ${objectTitle}`}
       aria-haspopup="menu"
       aria-expanded={open}
@@ -74,7 +79,8 @@ export function ObjectCardPhysical({
   menuItemClass: string;
 }) {
   const { t } = useI18n();
-  const { formatMoney } = useFormatMoney();
+  const { formatMoney } = useFormatMoney(recordCurrency(stored.entity));
+  const { rootRef: actionMenuRoot, toggle: toggleActionMenu, close: closeActionMenu, onKeyDown: actionMenuKeys, onPointerDown: actionMenuPointer, onMouseDown: actionMenuMouse } = useActionMenu(openActionMenuFileName === stored.fileName, (open) => setOpenActionMenuFileName(open ? stored.fileName : null));
   const object = stored.entity as PhysicalObject;
 
   const dailyCost = getDailyCost(object);
@@ -138,9 +144,8 @@ export function ObjectCardPhysical({
               setSelectedFileName(stored.fileName);
             }
           }}
-          tabIndex={disabled ? -1 : 0}
+          tabIndex={0}
           role="button"
-          aria-disabled={disabled}
         >
           <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex items-center gap-2">
@@ -160,53 +165,58 @@ export function ObjectCardPhysical({
             <div className="hidden sm:block">
               <div className="text-[10px] uppercase tracking-wider text-stone-500">{t('totalAcquisitionCost')}</div>
               <div className="mt-0.5 font-mono text-[13px] font-medium text-stone-900">
-                {object.purchase_price ? formatMoney(object.purchase_price) : '—'}
+                {(object.total_acquisition_cost ?? object.purchase_price) != null ? formatMoney(object.total_acquisition_cost ?? object.purchase_price) : '—'}
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-stone-500">{t('dailyCostAvg')}</div>
               <div className="mt-0.5 font-mono text-[13px] font-medium text-stone-900">
-                {dailyCost ? formatMoney(dailyCost) : '—'}
+                {dailyCost != null ? formatMoney(dailyCost) : '—'}
               </div>
             </div>
             <div className="flex items-center gap-2">
               {canRetire ? (
                 <div
+                  ref={actionMenuRoot}
+                  onPointerDown={actionMenuPointer}
+                  onMouseDown={actionMenuMouse}
                   className="relative z-10"
                   onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
+                  onKeyDown={actionMenuKeys}
                 >
                   <MoreActionsButton
                     objectTitle={object.title}
                     menuId={`object-actions-${stored.fileName}`}
                     open={openActionMenuFileName === stored.fileName}
-                    onToggle={() =>
-                      setOpenActionMenuFileName((current: string | null) =>
-                        current === stored.fileName ? null : stored.fileName,
-                      )
-                    }
+                    disabled={disabled || exitingFileName === stored.fileName || deletingFileName === stored.fileName}
+                    onToggle={toggleActionMenu}
                     t={t}
                   />
                   {openActionMenuFileName === stored.fileName ? (
-                    <div id={`object-actions-${stored.fileName}`} role="menu" className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+                    <div id={`object-actions-${stored.fileName}`} role="menu" aria-label={`${t('moreActions')} - ${object.title}`} className="absolute right-0 top-11 z-20 w-36 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
                       <button
                         type="button"
                         role="menuitem"
-                        onClick={() => void (async () => {
+                        tabIndex={-1}
+                        onClick={(event) => {
+                          const cardEntry = event.currentTarget.closest<HTMLElement>('[role="button"]');
+                          void (async () => {
                           const next: PhysicalObject = {
                             ...object,
                             status: 'idle',
                             ended_at: object.ended_at || todayISO(),
                             updated_at: todayISO(),
                           };
-                          setOpenActionMenuFileName(null);
+                          closeActionMenu();
+                          cardEntry?.focus();
                           setExitingFileName(stored.fileName);
                           try {
                             await onUpdate(stored.fileName, next, stored.body);
                           } finally {
                             setExitingFileName(null);
                           }
-                        })()}
+                        })().catch(() => { /* Action reports failure. */ });
+                        }}
                         className={menuItemClass}
                         disabled={disabled || exitingFileName === stored.fileName}
                       >

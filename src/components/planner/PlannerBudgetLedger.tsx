@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { createDetachedElement } from '@/lib/dom';
 import type {
   PlannerScheduledPlace,
@@ -22,6 +22,7 @@ import {
 } from '@/domain/expense-payments';
 
 interface PlannerBudgetLedgerProps {
+  readOnly?: boolean;
   trip: PlannerTrip;
   scheduledPlaces: PlannerScheduledPlace[];
   allPlaces?: PlannerTripPlace[];
@@ -85,6 +86,7 @@ function inferExpenseCategoryFromPlace(place: PlannerTripPlace | PlannerSchedule
 }
 
 export function PlannerBudgetLedger({
+  readOnly = false,
   trip,
   scheduledPlaces,
   allPlaces,
@@ -144,6 +146,11 @@ export function PlannerBudgetLedger({
   const [isAddingInlinePayer, setIsAddingInlinePayer] = useState(false);
   const [inlinePayerName, setInlinePayerName] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [savingExpense, setSavingExpense] = useState(false);
+  const [savingRates, setSavingRates] = useState(false);
+  const expenseSaveRef = useRef(false);
+  const rateSaveRef = useRef(false);
 
   const filteredSelectablePlaces = useMemo(() => {
     if (!filterPlacesByCategory) return selectablePlaces;
@@ -357,62 +364,94 @@ export function PlannerBudgetLedger({
     setPaymentDraft(next);
   };
 
-  const handleSubmitExpense = (e: React.SyntheticEvent) => {
+  const handleSubmitExpense = async (e: React.SyntheticEvent) => {
     e.preventDefault();
-    if (!title.trim() || parsedExpenseAmount <= 0 || !paymentDraftValid) return;
-
-    if (editingExpenseId) {
-      const existing = expenses.find((item) => item.id === editingExpenseId);
-      const updatedItem: TripExpenseWithPayments = {
-        id: editingExpenseId,
-        trip_id: trip.id,
-        place_id: selectedPlaceId ? selectedPlaceId : undefined,
-        title: title.trim(),
-        category,
-        amount: parsedExpenseAmount,
-        currency,
-        date: expenseDate.trim() || activeDate || undefined,
-        paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
-        split_members: selectedSplits.length > 0 ? selectedSplits : members,
-        notes: notes.trim() || undefined,
-        payments: explicitPayments,
-        created_at: existing?.created_at || new Date().toISOString(),
-      };
-      if (onUpdateExpense) {
-        void onUpdateExpense(updatedItem);
+    if (expenseSaveRef.current || !title.trim() || parsedExpenseAmount <= 0 || !paymentDraftValid) return;
+    expenseSaveRef.current = true;
+    setSavingExpense(true);
+    setSaveError('');
+    try {
+      if (editingExpenseId) {
+        const existing = expenses.find((item) => item.id === editingExpenseId);
+        const updatedItem: TripExpenseWithPayments = {
+          id: editingExpenseId,
+          trip_id: trip.id,
+          place_id: selectedPlaceId ? selectedPlaceId : undefined,
+          title: title.trim(),
+          category,
+          amount: parsedExpenseAmount,
+          currency,
+          date: expenseDate.trim() || activeDate || undefined,
+          paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
+          split_members: selectedSplits.length > 0 ? selectedSplits : members,
+          notes: notes.trim() || undefined,
+          payments: explicitPayments,
+          created_at: existing?.created_at || new Date().toISOString(),
+        };
+        if (onUpdateExpense) {
+          await onUpdateExpense(updatedItem);
+        } else {
+          await onAddExpense(updatedItem);
+        }
       } else {
-        void onAddExpense(updatedItem);
+        const item: Omit<TripExpenseWithPayments, 'id' | 'created_at'> = {
+          trip_id: trip.id,
+          place_id: selectedPlaceId ? selectedPlaceId : undefined,
+          title: title.trim(),
+          category,
+          amount: parsedExpenseAmount,
+          currency,
+          date: expenseDate.trim() || activeDate || undefined,
+          paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
+          split_members: selectedSplits.length > 0 ? selectedSplits : members,
+          notes: notes.trim() || undefined,
+          payments: explicitPayments,
+        };
+        await onAddExpense(item);
       }
-    } else {
-      const item: Omit<TripExpenseWithPayments, 'id' | 'created_at'> = {
-        trip_id: trip.id,
-        place_id: selectedPlaceId ? selectedPlaceId : undefined,
-        title: title.trim(),
-        category,
-        amount: parsedExpenseAmount,
-        currency,
-        date: expenseDate.trim() || activeDate || undefined,
-        paid_by: paidBy || members[0] || (zh ? '我' : 'Me'),
-        split_members: selectedSplits.length > 0 ? selectedSplits : members,
-        notes: notes.trim() || undefined,
-        payments: explicitPayments,
-      };
-      void onAddExpense(item);
-    }
 
-    setEditingExpenseId(null);
-    setTitle('');
-    setAmountStr('');
-    setNotes('');
-    setSelectedPlaceId('');
-    setExpenseDate(activeDate ?? '');
-    setPaidByOverride(null);
-    setSplitOverride(null);
-    setPaymentDraft(null);
-    setIsAddingInlinePayer(false);
-    setInlinePayerName('');
-    setIsAddingExpense(false);
-    onClearInitialPlaceId?.();
+      setEditingExpenseId(null);
+      setTitle('');
+      setAmountStr('');
+      setNotes('');
+      setSelectedPlaceId('');
+      setExpenseDate(activeDate ?? '');
+      setPaidByOverride(null);
+      setSplitOverride(null);
+      setPaymentDraft(null);
+      setIsAddingInlinePayer(false);
+      setInlinePayerName('');
+      setIsAddingExpense(false);
+      onClearInitialPlaceId?.();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : (zh ? '保存失败，输入已保留，请重试。' : 'Save failed. Your input was kept; retry saving.'));
+    } finally {
+      expenseSaveRef.current = false;
+      setSavingExpense(false);
+    }
+  };
+
+  const handleSaveRates = async () => {
+    if (rateSaveRef.current || !onUpdateFxRates) return;
+    rateSaveRef.current = true;
+    setSavingRates(true);
+    setSaveError('');
+    try {
+      const next: Record<string, number> = { ...(trip.fx_rates ?? {}) };
+      for (const [code, raw] of Object.entries(fxDraft)) {
+        const num = Number(raw);
+        if (!Number.isFinite(num) || num <= 0) throw new Error(zh ? '汇率必须为正数。' : 'Rates must be positive numbers.');
+        next[code] = num;
+      }
+      await onUpdateFxRates(next);
+      setShowFxEditor(false);
+      setFxDraft({});
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : (zh ? '汇率保存失败，请重试。' : 'Rate save failed; retry saving.'));
+    } finally {
+      rateSaveRef.current = false;
+      setSavingRates(false);
+    }
   };
 
   const copySettlementText = async () => {
@@ -534,7 +573,8 @@ export function PlannerBudgetLedger({
   };
 
   return (
-    <div className="flex flex-col gap-4 overflow-y-auto p-3 text-stone-900">
+    <fieldset disabled={readOnly || savingExpense || savingRates} className="m-0 flex min-w-0 flex-col gap-4 border-0 overflow-y-auto p-3 text-stone-900">
+      {saveError ? <p role="alert" className="text-xs text-red-700">{saveError}</p> : null}
       <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-2xs">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
@@ -694,6 +734,7 @@ export function PlannerBudgetLedger({
               <div className="flex justify-end gap-1.5 pt-1">
                 <button
                   type="button"
+                  disabled={savingRates}
                   onClick={() => { setFxDraft({}); setShowFxEditor(false); }}
                   className="rounded-md border border-stone-200 px-2 py-1 text-[10px] font-semibold text-stone-600 hover:bg-white"
                 >
@@ -701,16 +742,8 @@ export function PlannerBudgetLedger({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    const next: Record<string, number> = { ...(trip.fx_rates ?? {}) };
-                    for (const [code, raw] of Object.entries(fxDraft)) {
-                      const num = parseFloat(raw);
-                      if (Number.isFinite(num) && num > 0) next[code] = num;
-                    }
-                    void onUpdateFxRates?.(next);
-                    setShowFxEditor(false);
-                    setFxDraft({});
-                  }}
+                  onClick={() => void handleSaveRates()}
+                  disabled={savingRates}
                   className="rounded-md bg-sky-700 px-3 py-1 text-[10px] font-bold text-white hover:bg-sky-800"
                 >
                   ✓ {zh ? '保存汇率' : 'Save rates'}
@@ -747,7 +780,7 @@ export function PlannerBudgetLedger({
         </div>
 
         {isAddingExpense ? (
-          <form onSubmit={handleSubmitExpense} className="mt-3 space-y-3 border-t border-stone-100 pt-3">
+          <form onSubmit={(event) => void handleSubmitExpense(event)} className="mt-3 space-y-3 border-t border-stone-100 pt-3">
             <div>
               <label className="block text-[11px] font-semibold text-stone-500">
                 {zh ? '消费类别' : 'Category'}
@@ -1086,7 +1119,7 @@ export function PlannerBudgetLedger({
 
             <button
               type="submit"
-              disabled={!paymentDraftValid}
+              disabled={savingExpense || !paymentDraftValid}
               className="w-full rounded-lg bg-emerald-700 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-stone-300"
             >
               {editingExpenseId ? (zh ? '✓ 保存修改' : '✓ Save Changes') : (zh ? '✓ 保存该笔花费' : '✓ Save Expense')}
@@ -1195,6 +1228,6 @@ export function PlannerBudgetLedger({
           </>
         )}
       </div>
-    </div>
+    </fieldset>
   );
 }

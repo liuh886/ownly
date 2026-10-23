@@ -7,6 +7,7 @@ import { PlannerBudgetLedger } from './PlannerBudgetLedger';
 import { PlannerMap } from './PlannerMap';
 
 export interface PlannerRightPanelProps {
+  readOnly?: boolean;
   zh: boolean;
   language: PlannerControllerReturn['language'];
   rightTab: 'map' | 'context' | 'budget';
@@ -132,6 +133,7 @@ export function PlannerRightPanel(props: PlannerRightPanelProps) {
             </div>
           ) : rightTab === 'budget' ? (
             <PlannerBudgetLedger
+              readOnly={props.readOnly}
               key={selectedTrip.id}
               trip={selectedTrip}
               scheduledPlaces={scheduled}

@@ -13,11 +13,16 @@ function toCurrencyLocale(language: string): WYQDCurrencyLocale {
   return language === 'en' ? 'en' : 'zh';
 }
 
-export function useFormatMoney() {
-  const { t, language, currency } = useI18n();
+export function useFormatMoney(overrideCurrency?: string) {
+  const { t, language, currency: defaultCurrency } = useI18n();
+  const currency = overrideCurrency ?? defaultCurrency;
   const locale = toCurrencyLocale(language);
   return {
-    formatMoney: (value: number | null | undefined, fallback?: string) => formatMoney(value, fallback, locale, currency),
+    formatMoney: (value: number | null | undefined, fallback?: string, sourceCurrency?: string) => {
+      const unit = sourceCurrency ?? currency;
+      const precise = sourceCurrency !== undefined || overrideCurrency !== undefined;
+      return formatMoney(value, fallback, locale, unit, precise && !['JPY', 'KRW'].includes(unit) ? 2 : 0);
+    },
     formatDailyMoney: (value: number) => formatDailyMoney(value, locale, t, currency),
     formatCompactMoney: (value: number) => formatCompactMoney(value, locale, t, currency),
     formatDelta: (value: number | null) => formatDelta(value, t, locale, currency),

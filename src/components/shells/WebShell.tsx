@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { OwnlyWorkspaceProvider } from '@/core/ownly-workspace-context';
 import { type WYQDMembershipState } from '@/core/membership';
 import { getOwnlyLocalDataCopy, isMobileDevice } from '@/core/local-data-copy';
@@ -12,11 +12,12 @@ import { setStoreFolderConnected } from '@/services/ownlyStoreRouter';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LicenseKeyModal } from '@/components/common/LicenseKeyModal';
 import { WebDataOnboarding } from '@/components/onboarding/WebDataOnboarding';
-import { useI18n } from '@/core/i18n-context';
+import { DemoCurrencyScope, useI18n } from '@/core/i18n-context';
 import { trackOwnlyEvent } from '@/lib/analytics';
 import { checkWorkspaceRecovery, type RecoveryState } from '@/core/workspace-recovery';
 
 const ONBOARDING_DISMISSED_KEY = 'ownly_web_onboarding_dismissed';
+const DEMO_SELECTED_KEY = 'ownly_web_demo_selected';
 const basePath = process.env.NEXT_PUBLIC_OWNLY_BASE_PATH ?? '';
 
 function requestStoragePersistence(): void {
@@ -66,7 +67,6 @@ export function WebShell() {
     setError(null);
     if (typeof window.showDirectoryPicker !== 'function') {
       setError(isMobileDevice() ? localDataCopy.mobileNotSupported : localDataCopy.browserNotSupported);
-      return false;
     }
     setOnboardingOpen(true);
     trackOwnlyEvent('onboarding_opened');
@@ -86,17 +86,12 @@ export function WebShell() {
    * the user in a mode they had not chosen. Closing a question dialog must not
    * answer the question.
    *
-   * The app lands in `disconnected`, which is honest and has a real affordance:
-   * the status banner offers both "choose a folder" and demo mode.
+   * Preserve the current data source, including an already connected folder.
    */
   const dismissOnboarding = useCallback(() => {
     window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, 'true');
-    setStoreFolderConnected(false);
-    setIsDemoMode(false);
-    setIsConnected(false);
     setOnboardingOpen(false);
-    refreshData();
-  }, [refreshData]);
+  }, []);
 
   const connectLocalData = useCallback(async (action: LocalDataAction): Promise<boolean> => {
     setIsLoading(true);
@@ -120,6 +115,7 @@ export function WebShell() {
       refreshData();
       setOnboardingOpen(false);
       window.localStorage.removeItem(ONBOARDING_DISMISSED_KEY);
+      window.localStorage.removeItem(DEMO_SELECTED_KEY);
       showNotice(action === 'create' ? localDataCopy.createdNotice : localDataCopy.openedNotice);
       trackOwnlyEvent('local_data_connected', { action });
       return true;
@@ -143,6 +139,7 @@ export function WebShell() {
     setIsLoading(true);
     try {
       await obsidianService.disconnect();
+      window.localStorage.removeItem(DEMO_SELECTED_KEY);
       setStoreFolderConnected(false);
       setIsConnected(false);
       setIsDemoMode(false);
@@ -169,10 +166,16 @@ export function WebShell() {
   const continueInDemo = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    setStoreFolderConnected(false);
     try {
+      await obsidianService.disconnect();
+      setStoreFolderConnected(false);
+      setIsConnected(false);
+      setIsDemoMode(false);
+      window.localStorage.removeItem(DEMO_SELECTED_KEY);
       await seedDemoMode();
+      await markdownEntityRepository.initialize();
       setIsDemoMode(true);
+      window.localStorage.setItem(DEMO_SELECTED_KEY, 'true');
       // The store was empty when the app first read it; nudge consumers to
       // re-read or the tabs would keep showing zero records.
       refreshData();
@@ -185,6 +188,10 @@ export function WebShell() {
       setIsLoading(false);
     }
   }, [localDataCopy, refreshData]);
+
+  const reportInitializationError = useEffectEvent((error: unknown) => {
+    setError(error instanceof Error ? error.message : localDataCopy.initializeFailed);
+  });
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('demo') === '1') {
@@ -227,9 +234,11 @@ export function WebShell() {
           try {
             const { get } = await import('idb-keyval');
             const handle = (await get('wyqd_obsidian_handle')) as FileSystemDirectoryHandle | null;
-            const rec = await checkWorkspaceRecovery(handle ?? null, navigator.onLine);
-            setRecoveryState(rec.state);
-            if (rec.state !== 'CONNECTED') setError(rec.message);
+            if (handle) {
+              const rec = await checkWorkspaceRecovery(handle, navigator.onLine);
+              setRecoveryState(rec.state);
+              if (rec.state !== 'CONNECTED') setError(rec.message);
+            }
           } catch {}
         }
         if (isMounted) {
@@ -239,18 +248,19 @@ export function WebShell() {
           setOnboardingOpen(shouldPrompt);
           if (shouldPrompt) trackOwnlyEvent('onboarding_opened');
           // A returning demo user has no folder, and the memory store dies with
-          // the tab, so re-seed it. This is memory-only by construction — the
-          // store router still points at the filesystem the moment a folder
-          // connects, so nothing here can reach real data.
-          if (!connected && !shouldPrompt) {
+          // the tab, so re-seed it. The seed repositories stay bound to memory
+          // even if the app's router changes while loading.
+          if (!connected && window.localStorage.getItem(DEMO_SELECTED_KEY) === 'true') {
             await seedDemoMode();
+            if (!isMounted) return;
+            await markdownEntityRepository.initialize();
             setIsDemoMode(true);
             refreshData();
           }
         }
       } catch (error) {
         if (isMounted) {
-          setError(error instanceof Error ? error.message : localDataCopy.initializeFailed);
+          reportInitializationError(error);
           setRecoveryState('RECONNECT_REQUIRED');
           const shouldPrompt = window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) !== 'true';
           setOnboardingOpen(shouldPrompt);
@@ -263,7 +273,7 @@ export function WebShell() {
 
     void init();
     return () => { isMounted = false; };
-  }, [localDataCopy, refreshData]);
+  }, [refreshData]);
 
   const mode = resolveLocalDataMode(isConnected, isDemoMode);
 
@@ -298,7 +308,7 @@ export function WebShell() {
 
   return (
     <OwnlyWorkspaceProvider value={contextValue}>
-      <AppShell />
+      <DemoCurrencyScope active={isDemoMode}><AppShell /></DemoCurrencyScope>
       <WebDataOnboarding
         open={onboardingOpen}
         isLoading={isLoading}

@@ -2,6 +2,35 @@
 
 **Current Version:** 1.2.3
 
+## Business workflow audit (2026-10-04)
+
+[WORKFLOW_AUDIT_2026-10-04.md](WORKFLOW_AUDIT_2026-10-04.md) records the subsequent
+operation-by-operation audit and fixes for bound writes, failure compensation,
+review links, historical snapshots, same-day chronology, source currencies,
+Planner persistence, publication refresh/revocation and legacy credential recovery.
+Native browser-local filesystem walkthroughs now cover composer, snapshots,
+archive/restore and handle reload; actual OS permission/picker behavior remains
+a separate manual check. See that report for this run's validation evidence.
+
+## UX follow-up (2026-10-04)
+
+[UX_REVIEW_2026-10-04.md](UX_REVIEW_2026-10-04.md) records the subsequent fixes
+for unsupported-browser demo re-entry, stacked-dialog keyboard behavior,
+stale reload results, zero amount editing/display/sorting, and local dates in
+object actions. It adds 19 behavior cases and retains the previous audit's
+native-device and dependency-tooling limitations.
+
+## Latest audit (2026-10-03)
+
+The dated review in [AUDIT_2026-10-03.md](AUDIT_2026-10-03.md) supersedes older
+claims below about current risk and coverage. It fixes demo storage isolation,
+workspace mode transitions, read-failure onboarding, zero recorded costs, and
+incomplete dependency audit reports. Next.js / eslint-config-next are now
+16.3.8. Production dependency audit is clean; the development dependency tree
+still reports 5 high and 5 moderate package entries and needs a separate tooling
+migration. Native permission interactions and iPhone share viewing remain
+unverified in this audit. See the dated report for final validation evidence.
+
 ## Validation and test results
 
 - **Overall validation (`npm run validate`):** ✅ Passed
@@ -92,7 +121,7 @@ The first-object journey is implemented in the shared AppShell and reuses the no
 | Recurring cost choice | ✅ | Maps to existing recurring-cost template |
 | Experience choice | ✅ | Maps to existing travel/experience template |
 | Bilingual real-data copy | ✅ | English and Chinese explicitly distinguish real records from demo data |
-| Completion after successful save | ✅ | Callback occurs only after repository save and reload succeed |
+| Completion after successful save | ✅ | Committed writes complete onboarding even if reread fails; workspace switches suppress the old completion callback |
 | Automatic demo writes to real data | ✅ Removed | Empty real folders are loaded as empty and remain untouched until user saves |
 | Reopen after dismissal | ✅ | Empty-data banner exposes the chooser without blocking the user |
 | SSR/static export storage boundary | ✅ | Web storage adapter is safe during static prerender |
@@ -104,8 +133,8 @@ The first-object journey is implemented in the shared AppShell and reuses the no
 | First-use local-data chooser | ⚠️ Partial | Static/build and directory policy coverage exist; native permission interaction is not behavior-tested |
 | Create/open local directory | ⚠️ Partial | Directory-layout rules are unit-tested; native picker permission flow remains |
 | First real object policy and routing | ✅ | Trigger, dismissal, templates, copy, and successful-save completion are protected |
-| Full composer-to-filesystem browser interaction | ❌ | Repository and onboarding policy are covered; browser UI automation remains |
-| Archive/restore through browser UI | ❌ | Repository behavior is covered; UI interaction remains |
+| Full composer-to-filesystem browser interaction | ✅ Isolated native handles | Chromium OPFS walkthrough checks UI, actual Markdown and IndexedDB; OS picker/permissions remain manual |
+| Archive/restore through browser UI | ✅ Isolated native handles | UI archive/restore checks native Markdown and preserved identity |
 | Obsidian mutation contract | ✅ | `src/obsidian/vaultRepository.contract.test.ts` runs the create/update/archive/restore/delete lifecycle against a fake Vault; filename collision scheme aligned with Web (`--n`) |
 | Language switching | ✅ | Existing smoke coverage |
 | Currency switching | ❌ | Not yet behavior-tested |

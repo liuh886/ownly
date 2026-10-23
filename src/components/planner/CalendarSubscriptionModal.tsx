@@ -8,6 +8,7 @@ import {
   type AccountCalendarFeedMeta,
 } from '../../domain/calendar-feed';
 import type { AccountFeedResponse } from '../../services/CalendarFeedService';
+import type { PlannerTripCalendarFeed } from '@/domain/planner';
 import { dialogBackdropProps } from '@/components/common/use-dialog-dismiss';
 
 interface CalendarSubscriptionModalProps {
@@ -19,6 +20,7 @@ interface CalendarSubscriptionModalProps {
   /** Jump to trip management with the edit form opened for this trip. */
   onEditTripTimezone: (tripId: string) => void;
   accountFeed: AccountCalendarFeedMeta | null;
+  tripFeed?: PlannerTripCalendarFeed | null;
   activeDate: string;
   onDownloadFullIcs: () => void;
   onDownloadDayIcs: (date: string) => void;
@@ -26,6 +28,11 @@ interface CalendarSubscriptionModalProps {
   onCreateOrUpdateFeed: () => Promise<AccountFeedResponse>;
   onRotateFeed: () => Promise<AccountFeedResponse>;
   onDisableFeed: () => Promise<void>;
+  onDisableTripFeed?: () => Promise<void>;
+  legacyAccountOwners?: string[];
+  onRecoverLegacyAccount?: (oldUserId: string) => Promise<void>;
+  canRecoverTripFeed?: boolean;
+  onRecoverTripFeed?: () => Promise<void>;
   isPro?: boolean;
   onUpgradePro?: () => void;
   language?: 'zh' | 'en';
@@ -38,6 +45,7 @@ export function CalendarSubscriptionModal({
   trips,
   onEditTripTimezone,
   accountFeed,
+  tripFeed,
   activeDate,
   onDownloadFullIcs,
   onDownloadDayIcs,
@@ -45,6 +53,11 @@ export function CalendarSubscriptionModal({
   onCreateOrUpdateFeed,
   onRotateFeed,
   onDisableFeed,
+  onDisableTripFeed,
+  legacyAccountOwners = [],
+  onRecoverLegacyAccount,
+  canRecoverTripFeed = false,
+  onRecoverTripFeed,
   isPro = true,
   onUpgradePro,
   language = 'zh',
@@ -139,6 +152,30 @@ export function CalendarSubscriptionModal({
       setBusy(false);
     }
   };
+  const recover = async (action: () => Promise<void>, revoke = false) => {
+    if (!(await confirm({
+      title: revoke ? (zh ? '停用旧订阅链接' : 'Disable older feed') : (zh ? '认领旧订阅链接' : 'Recover older feed'),
+      message: revoke
+        ? (zh ? '确认停用此设备上的旧订阅？旧 URL 将失效，当前订阅保持不变。' : 'Disable this older feed URL? The current feed stays active.')
+        : (zh ? '确认旧订阅属于当前数据目录？认领后其他目录不能再认领此设备上的旧凭据。' : 'Confirm the older feed belongs to this data folder? Other folders cannot claim this credential afterward.'),
+      destructive: revoke,
+    }))) return;
+    setBusy(true);
+    try { await action(); setNotice(revoke ? (zh ? '旧订阅已停用。' : 'Older feed disabled.') : (zh ? '旧订阅已关联当前目录，可在此管理。' : 'Older feed attached to this folder.')); }
+    catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+  const disableTripFeed = async () => {
+    if (!onDisableTripFeed || !(await confirm({
+      title: zh ? '停用行程订阅' : 'Disable trip feed',
+      message: zh ? '停用后，使用此行程旧订阅链接的日历将无法再更新。' : 'Calendars using this trip feed URL will stop updating.',
+      destructive: true,
+    }))) return;
+    setBusy(true);
+    try { await onDisableTripFeed(); setNotice(zh ? '行程订阅已停用。' : 'Trip feed disabled.'); }
+    catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
 
   return (
     <>
@@ -170,6 +207,32 @@ export function CalendarSubscriptionModal({
           {notice ? (
             <div className="rounded-lg bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
               {notice}
+            </div>
+          ) : null}
+          {onRecoverLegacyAccount ? legacyAccountOwners.map((oldUserId) => (
+            <button key={oldUserId} type="button" disabled={busy} onClick={() => void recover(() => onRecoverLegacyAccount(oldUserId), Boolean(accountFeed))}
+              className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50">
+              {accountFeed ? (zh ? `停用其他旧订阅（${oldUserId}）` : `Disable another older feed (${oldUserId})`)
+                : (zh ? `恢复旧总日历订阅（${oldUserId}）` : `Recover older account feed (${oldUserId})`)}
+            </button>
+          )) : null}
+          {canRecoverTripFeed && onRecoverTripFeed ? (
+            <button type="button" disabled={busy} onClick={() => void recover(onRecoverTripFeed)}
+              className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50">
+              {zh ? '认领当前行程文件中的旧订阅链接' : 'Claim older feed in this trip file'}
+            </button>
+          ) : null}
+          {tripFeed?.feed_token ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+              <p className="font-semibold">{zh ? '当前行程的独立订阅' : 'Current trip feed'}</p>
+              <p className="mt-1 break-all font-mono">{getCalendarFeedUrl(tripFeed.feed_token)}</p>
+              <p className="mt-1">{tripFeed.enabled ? (zh ? '已启用' : 'Enabled') : (zh ? '已停用' : 'Disabled')}</p>
+              {tripFeed.enabled && onDisableTripFeed ? (
+                <button type="button" disabled={busy} onClick={() => void disableTripFeed()}
+                  className="mt-2 rounded-lg border border-rose-200 bg-white px-3 py-1.5 font-semibold text-rose-700 disabled:opacity-50">
+                  {zh ? '停用此行程订阅' : 'Disable this trip feed'}
+                </button>
+              ) : null}
             </div>
           ) : null}
 

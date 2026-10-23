@@ -1,3 +1,4 @@
+import { matchesCurrency } from '@/domain/currency';
 import { useMemo } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useI18n } from '@/core/i18n-context';
@@ -17,7 +18,7 @@ export function HomeDataScaleSection({
   snapshots: AccountSnapshot[];
   itemVariants: Variants;
 }) {
-  const { t } = useI18n();
+  const { t, currency } = useI18n();
   const { formatCompactMoney } = useFormatMoney();
 
   const physicalCount = useMemo(() => objects.filter((object) => object.object_type === 'physical').length, [objects]);
@@ -26,15 +27,15 @@ export function HomeDataScaleSection({
 
   const totalAcquisitionCost = useMemo(
     () => objects
-      .filter((o): o is PhysicalObject => o.object_type === 'physical')
+      .filter((o): o is PhysicalObject => o.object_type === 'physical' && matchesCurrency(o, currency))
       .reduce((sum, o) => sum + calculatePhysicalAcquisitionCost(o), 0),
-    [objects],
+    [objects, currency],
   );
   const totalExperienceCost = useMemo(
     () => objects
-      .filter((o): o is OneTimeExperienceObject => o.object_type === 'one_time_experience')
+      .filter((o): o is OneTimeExperienceObject => o.object_type === 'one_time_experience' && matchesCurrency(o, currency))
       .reduce((sum, o) => sum + calculateExperienceCost(o), 0),
-    [objects],
+    [objects, currency],
   );
 
   return (

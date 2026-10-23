@@ -1,6 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { captureWorkspaceIdentity } from '@/services/ownlyStoreRouter';
+import { usePublicationSync } from './usePublicationSync';
+import { assertPublicationWorkspace, isPublicationSuspended, publicationGeneration, publicationKey, queuePublication } from './publication-queue';
+import type { PublicationCredentials } from './publication-credentials';
+import { plannerRepository } from '@/services/PlannerRepository';
 import type {
   PlannerTrip,
   PlannerTripCalendarFeed,
@@ -9,7 +14,6 @@ import type {
 } from '@/domain/planner';
 import type { PlannerTripVisit } from '@/domain/planner-visits';
 import {
-  saveAccountFeedMeta,
   type AccountCalendarFeedMeta,
 } from '@/domain/calendar-feed';
 import { calendarFeedService } from '@/services/CalendarFeedService';
@@ -92,10 +96,12 @@ export interface AutoCalendarSyncInput {
   accountFeed: AccountCalendarFeedMeta | null;
   setAccountFeed: (meta: AccountCalendarFeedMeta) => void;
   /** Persists one trip's refreshed feed meta (no reload; the hook reloads once). */
-  saveTripFeedMeta: (trip: PlannerTrip, feed: PlannerTripCalendarFeed) => Promise<void>;
+  saveTripFeedMeta: (trip: PlannerTrip, feed: PlannerTripCalendarFeed) => Promise<boolean>;
   /** Reloads planner state after trip metas were persisted. */
   reloadPlanner: () => Promise<void>;
+  credentials: PublicationCredentials | null;
   enabled?: boolean;
+  onError?: (error: unknown) => void;
 }
 
 /**
@@ -106,132 +112,68 @@ export interface AutoCalendarSyncInput {
  * (the modal's manual sync remains the explicit fallback).
  */
 export function useAutoCalendarSync(input: AutoCalendarSyncInput): void {
-  const latestRef = useRef(input);
-  const syncedFingerprintRef = useRef<string | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const syncingRef = useRef(false);
-
-  // Mirror latest props for async callbacks (effect context, never render).
-  useEffect(() => {
-    latestRef.current = input;
+  const latest = useRef(input);
+  useEffect(() => { latest.current = input; });
+  const workspaceIdentity = captureWorkspaceIdentity();
+  const fingerprint = `${workspaceIdentity}:${input.language}:${buildFeedSyncFingerprint(input.trips, input.places, input.visits, input.legs)}`;
+  const scopedTrips = input.trips.filter((trip) => {
+    const receipt = input.credentials?.loadTripFeed(trip.id);
+    return receipt?.enabled !== false && Boolean(receipt?.feed_token) && receipt?.feed_token === trip.calendar_feed?.feed_token;
   });
-
-  const fingerprint = buildFeedSyncFingerprint(input.trips, input.places, input.visits, input.legs);
-  const targets = collectFeedSyncTargets(input.trips, input.accountFeed);
-  const hasTargets = Boolean(targets.accountToken) || targets.tripFeeds.length > 0;
-  const enabled = input.enabled ?? true;
-
-  const runSyncRef = useRef<() => void>(() => {});
-  const runSync = useCallback(async () => {
-    const state = latestRef.current;
-    if (syncingRef.current) return;
-    if (!state.isPro || !state.currentUserId?.trim()) return;
-    const live = collectFeedSyncTargets(state.trips, state.accountFeed);
-    if (!live.accountToken && live.tripFeeds.length === 0) return;
-    const current = buildFeedSyncFingerprint(state.trips, state.places, state.visits, state.legs);
-    if (syncedFingerprintRef.current === current) return;
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      // Park until connectivity returns instead of burning the debounce.
-      if (typeof window !== 'undefined') {
-        window.addEventListener('online', () => runSyncRef.current(), { once: true });
-      }
-      return;
-    }
-    syncingRef.current = true;
-    try {
-      const { isPro, currentUserId } = state;
-      if (live.accountToken) {
-        const response = await calendarFeedService.publishAccountFeed({
-          trips: state.trips,
-          places: state.places,
-          visits: state.visits,
-          membership: { isPro },
-          userId: currentUserId,
-          feedToken: live.accountToken,
-          options: { language: state.language },
-          legs: state.legs,
+  const targets = collectFeedSyncTargets(scopedTrips, input.accountFeed);
+  usePublicationSync({
+    state: { ...input, workspaceIdentity }, fingerprint, delay: AUTO_CALENDAR_SYNC_DEBOUNCE_MS,
+    active: input.enabled !== false && input.isPro && Boolean(input.currentUserId)
+      && Boolean(targets.accountToken || targets.tripFeeds.length),
+    onError: input.onError,
+    sync: async (state) => {
+      const identity = state.workspaceIdentity;
+      if (!state.credentials) return;
+      const credentials = state.credentials;
+      const liveTargets = collectFeedSyncTargets(state.trips.filter((trip) => {
+        const receipt = credentials.loadTripFeed(trip.id);
+        return receipt?.enabled !== false && Boolean(receipt?.feed_token) && receipt?.feed_token === trip.calendar_feed?.feed_token;
+      }), state.accountFeed);
+      const allowed = () => latest.current.enabled !== false && latest.current.isPro && latest.current.currentUserId === state.currentUserId;
+      if (liveTargets.accountToken) {
+        const key = publicationKey(`${credentials.namespace}:${identity}`, 'account', state.currentUserId);
+        const generation = publicationGeneration(key);
+        await queuePublication(key, async () => {
+          assertPublicationWorkspace(identity);
+          const meta = credentials.loadAccount(state.currentUserId);
+          if (!allowed() || isPublicationSuspended(key) || generation !== publicationGeneration(key) || !meta?.enabled || meta.feed_token !== liveTargets.accountToken) return;
+          const response = await calendarFeedService.publishAccountFeed({
+            trips: state.trips, places: state.places, visits: state.visits,
+            membership: { isPro: state.isPro }, userId: credentials.remoteUserId('account', state.currentUserId, state.currentUserId), feedToken: meta.feed_token,
+            options: { language: state.language }, legs: state.legs, refreshOnly: true,
+          });
+          assertPublicationWorkspace(identity);
+          const receipt = { feed_token: response.feed.feed_token, updated_at: response.feed.updated_at, enabled: true };
+          credentials.saveAccount(state.currentUserId, receipt);
+          if (credentials.loadAccount(state.currentUserId)?.feed_token !== receipt.feed_token) throw new Error('Cloud calendar updated, but local credentials could not be saved. Retry in the subscription dialog.');
+          if (allowed()) latest.current.setAccountFeed(receipt);
         });
-        const meta: AccountCalendarFeedMeta = {
-          feed_token: response.feed.feed_token,
-          updated_at: response.feed.updated_at,
-          enabled: true,
-        };
-        saveAccountFeedMeta(currentUserId, meta);
-        state.setAccountFeed(meta);
       }
-      let touchedTrips = false;
-      for (const { trip, token } of live.tripFeeds) {
-        const response = await calendarFeedService.publishFeed({
-          trip,
-          places: state.places,
-          visits: state.visits,
-          membership: { isPro },
-          userId: currentUserId,
-          feedToken: token,
-          options: { language: state.language },
-          legs: state.legs,
+      let touched = false;
+      for (const { trip, token } of liveTargets.tripFeeds) {
+        const key = publicationKey(`${credentials.namespace}:${identity}`, 'calendar', trip.id);
+        const generation = publicationGeneration(key);
+        await queuePublication(key, async () => {
+          assertPublicationWorkspace(identity);
+          if (!allowed() || isPublicationSuspended(key) || generation !== publicationGeneration(key)) return;
+          const currentTrip = (await plannerRepository.listTrips({ strict: true })).find((item) => item.id === trip.id);
+          if (!currentTrip?.calendar_feed || currentTrip.calendar_feed.enabled === false || currentTrip.calendar_feed.feed_token !== token) return;
+          const response = await calendarFeedService.publishFeed({
+            trip, places: state.places, visits: state.visits,
+            membership: { isPro: state.isPro }, userId: credentials.remoteUserId('calendar', trip.id, state.currentUserId),
+            feedToken: token, options: { language: state.language }, legs: state.legs, refreshOnly: true,
+          });
+          assertPublicationWorkspace(identity);
+          credentials.saveTripFeed(trip.id, response.feed);
+          touched = await state.saveTripFeedMeta(trip, response.feed) || touched;
         });
-        await state.saveTripFeedMeta(trip, response.feed);
-        touchedTrips = true;
       }
-      if (touchedTrips) await state.reloadPlanner();
-      // Mark whatever is current now: edits made mid-flight differ and reschedule.
-      syncedFingerprintRef.current = buildFeedSyncFingerprint(
-        latestRef.current.trips,
-        latestRef.current.places,
-        latestRef.current.visits,
-        latestRef.current.legs,
-      );
-    } catch (error) {
-      console.warn('[Planner] auto calendar sync failed', error);
-    } finally {
-      syncingRef.current = false;
-    }
-  }, []);
-  useEffect(() => {
-    runSyncRef.current = () => void runSync();
-  }, [runSync]);
-
-  // Debounced trigger: baseline on mount / while inactive / without targets
-  // (a manual publish just rebuilt everything, so there is nothing to catch
-  // up on), schedule only on genuine content drift.
-  useEffect(() => {
-    if (!enabled || !input.isPro || !input.currentUserId || !hasTargets) {
-      syncedFingerprintRef.current = fingerprint;
-      return;
-    }
-    if (syncedFingerprintRef.current === null) {
-      syncedFingerprintRef.current = fingerprint;
-      return;
-    }
-    if (syncedFingerprintRef.current === fingerprint) return;
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => {
-      timerRef.current = null;
-      void runSync();
-    }, AUTO_CALENDAR_SYNC_DEBOUNCE_MS);
-    return () => {
-      if (timerRef.current) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [fingerprint, hasTargets, enabled, input.isPro, input.currentUserId, runSync]);
-
-  // Flush pending edits when the tab goes to background (covers tab-close
-  // better than pagehide for an async upsert; best-effort either way).
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const onVisibility = (): void => {
-      if (document.visibilityState === 'hidden') {
-        if (timerRef.current) {
-          window.clearTimeout(timerRef.current);
-          timerRef.current = null;
-        }
-        void runSync();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [runSync]);
+      if (touched && allowed()) await latest.current.reloadPlanner();
+    },
+  });
 }

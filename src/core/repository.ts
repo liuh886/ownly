@@ -35,6 +35,8 @@ export interface WYQDReadonlyRepositoryAdapter {
 }
 
 export interface WYQDWritableRepositoryAdapter {
+  /** Keep a related group of writes on one backing store and data root. */
+  withWriteSession?<T>(action: (repository: WYQDRepositoryAdapter) => Promise<T>): Promise<T>;
   saveObject(object: WYQDObject, body?: string): Promise<string>;
   updateObject(fileName: string, object: WYQDObject, body?: string): Promise<void>;
   archiveObject(fileName: string): Promise<string | void>;

@@ -1,16 +1,19 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { getScrollBehavior } from '@/lib/scroll-behavior';
 import dynamic from 'next/dynamic';
 import { useI18n } from '@/core/i18n-context';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
+import { calculateExperienceCost } from '@/domain/calculations';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import type { ReviewEntry, WYQDObject, WYQDObjectType } from '@/domain/types';
 import type { WYQDStoredEntity } from '@/core/repository';
 import type { WYQDMembershipState } from '@/core/membership';
 import { parseScore, todayISO } from '@/lib/format';
 import { useFormatMoney } from '@/lib/use-format';
+import { matchesCurrency, recordCurrency } from '@/domain/currency';
 import { FIELD_CLASS, CARD_CLASS } from '@/lib/ui-constants';
 
 /** Travel insights (world map + d3/topojson) load only when the section opens. */
@@ -21,11 +24,11 @@ const TravelInsightsPanel = dynamic(
 
 function getExperienceAmount(object: WYQDObject): number {
   if (object.object_type !== 'one_time_experience') return 0;
-  return object.actual_total || object.budget_total || 0;
+  return calculateExperienceCost(object);
 }
 
 function hasScore(review: ReviewEntry): boolean {
-  return Boolean(review.food_score || review.scenery_score || review.experience_score);
+  return [review.food_score, review.scenery_score, review.experience_score].some((score) => score != null);
 }
 
 function createReviewDraft(
@@ -33,7 +36,7 @@ function createReviewDraft(
   foodScore: string,
   sceneryScore: string,
   experienceScore: string,
-  target?: { id: string; title: string; type?: WYQDObjectType },
+  target?: { id: string; title: string; type?: WYQDObjectType; currency?: string },
   t?: (key: WYQDTranslationKey) => string,
 ): ReviewEntry {
   const date = todayISO();
@@ -51,14 +54,14 @@ function createReviewDraft(
     target: target?.title,
     target_id: target?.id,
     target_type: target?.type,
-    food_score: parseScore(foodScore),
-    scenery_score: parseScore(sceneryScore),
-    experience_score: parseScore(experienceScore),
+    food_score: foodScore.trim() === '' ? null : parseScore(foodScore),
+    scenery_score: sceneryScore.trim() === '' ? null : parseScore(sceneryScore),
+    experience_score: experienceScore.trim() === '' ? null : parseScore(experienceScore),
     period: date.slice(0, 7),
     year: Number(date.slice(0, 4)),
     created_at: date,
     updated_at: date,
-    currency: 'CNY',
+    currency: target?.currency ?? 'CNY',
     tags: ['ownly', 'review'],
   };
 }
@@ -80,6 +83,7 @@ function ReviewDetailSidebar({
   editExperienceScore,
   onEditExperienceScoreChange,
   canSubmit,
+  scoreError,
   t,
   formatMoney,
   getReviewTypeLabel,
@@ -103,6 +107,7 @@ function ReviewDetailSidebar({
   editExperienceScore: string;
   onEditExperienceScoreChange: (v: string) => void;
   canSubmit: boolean;
+  scoreError: string | null;
   t: (key: WYQDTranslationKey) => string;
   formatMoney: (v: number) => string;
   getReviewTypeLabel: (type: ReviewEntry['review_type']) => string;
@@ -142,6 +147,7 @@ function ReviewDetailSidebar({
         <div>
           <label className="text-xs text-stone-500">{t('summary')}</label>
           <textarea
+            aria-label={t('summary')}
             value={editSummary}
             onChange={(e) => onEditSummaryChange(e.target.value)}
             placeholder={t('reviewSummaryPlaceholder')}
@@ -153,16 +159,19 @@ function ReviewDetailSidebar({
         <div>
           <label className="text-xs text-stone-500">{t('rankings')}</label>
           <div className="mt-1 grid grid-cols-3 gap-2">
-            <input value={editFoodScore} onChange={(e) => onEditFoodScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
-            <input value={editSceneryScore} onChange={(e) => onEditSceneryScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
-            <input value={editExperienceScore} onChange={(e) => onEditExperienceScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
+            <input aria-label={t('foodRank')} value={editFoodScore} onChange={(e) => onEditFoodScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
+            <input aria-label={t('sceneryRank')} value={editSceneryScore} onChange={(e) => onEditSceneryScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
+            <input aria-label={t('experienceRank')} value={editExperienceScore} onChange={(e) => onEditExperienceScoreChange(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className="rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-500 focus:border-stone-400 focus:ring-2 focus:ring-stone-200/50" disabled={disabled} />
           </div>
         </div>
+
+        {scoreError ? <p role="alert" className="text-xs text-red-600">{scoreError}</p> : null}
 
         {/* Markdown body */}
         <div className="border-t border-stone-200 pt-4">
           <label className="text-xs text-stone-500">{t('markdownBodyLabel')}</label>
           <textarea
+            aria-label={t('markdownBodyLabel')}
             value={bodyDraft}
             onChange={(e) => setBodyDraft(e.target.value)}
             rows={8}
@@ -174,7 +183,7 @@ function ReviewDetailSidebar({
         {/* Save / Cancel */}
         <div className="flex gap-2">
           <button type="button" onClick={onCancelEdit} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSavingAll}>{t('cancel')}</button>
-          <button type="button" onClick={() => void handleSaveAll()} disabled={!canSubmit || isSavingAll} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
+          <button type="button" onClick={() => void handleSaveAll().catch(() => { /* Action reports failure; keep draft. */ })} disabled={!canSubmit || isSavingAll} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
             {isSavingAll ? t('saving') : t('saveChanges')}
           </button>
         </div>
@@ -218,7 +227,7 @@ function ReviewDetailSidebar({
         <div>
           <div className="text-stone-500">{t('experienceCost')}</div>
           <div className="mt-1 font-medium text-stone-800">
-            {review.realized_experience_cost ? formatMoney(review.realized_experience_cost) : t('notRecorded')}
+            {review.realized_experience_cost != null ? formatMoney(review.realized_experience_cost) : t('notRecorded')}
           </div>
         </div>
       </div>
@@ -287,7 +296,7 @@ export function ReviewHome({
   onUpdateReview: (fileName: string, review: ReviewEntry, body: string) => Promise<void>;
   onDeleteReview: (fileName: string) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, language, currency } = useI18n();
   const { formatMoney } = useFormatMoney();
   const [travelInsightsOpen, setTravelInsightsOpen] = useState(false);
   const [summary, setSummary] = useState('');
@@ -295,6 +304,7 @@ export function ReviewHome({
   const [sceneryScore, setSceneryScore] = useState('');
   const [experienceScore, setExperienceScore] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
   const [editingFileName, setEditingFileName] = useState<string | null>(null);
   const [deletingFileName, setDeletingFileName] = useState<string | null>(null);
   const [selectedReviewFileName, setSelectedReviewFileName] = useState<string | null>(null);
@@ -313,7 +323,7 @@ export function ReviewHome({
     () => objects.filter((object) => object.object_type === 'one_time_experience'),
     [objects],
   );
-  const experienceTotal = experiences.reduce(
+  const experienceTotal = experiences.filter((object) => matchesCurrency(object, currency)).reduce(
     (total, object) => total + getExperienceAmount(object),
     0,
   );
@@ -444,9 +454,9 @@ export function ReviewHome({
 
   function getScoreItems(review: ReviewEntry): string[] {
     return [
-      review.food_score ? `${t('foodRank')} ${review.food_score}分` : null,
-      review.scenery_score ? `${t('sceneryRank')} ${review.scenery_score}分` : null,
-      review.experience_score ? `${t('experienceRank')} ${review.experience_score}分` : null,
+      review.food_score != null ? `${t('foodRank')} ${review.food_score}分` : null,
+      review.scenery_score != null ? `${t('sceneryRank')} ${review.scenery_score}分` : null,
+      review.experience_score != null ? `${t('experienceRank')} ${review.experience_score}分` : null,
     ].filter((item): item is string => Boolean(item));
   }
 
@@ -464,7 +474,7 @@ export function ReviewHome({
       scoreDimensions.map((dimension) => ({
         ...dimension,
         entries: reviews
-          .filter((stored) => stored.entity[dimension.key])
+          .filter((stored) => stored.entity[dimension.key] != null)
           .sort(
             (a, b) => (b.entity[dimension.key] || 0) - (a.entity[dimension.key] || 0),
           )
@@ -485,45 +495,33 @@ export function ReviewHome({
     null;
   const selectedReviewTarget =
     selectedReview?.entity.target_id ? objectById.get(selectedReview.entity.target_id) : null;
-  const canSubmit = !disabled && summary.trim().length > 0 && !isSaving;
+  const invalidScore = [foodScore, sceneryScore, experienceScore].some((value) =>
+    value.trim() !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100));
+  const scoreError = invalidScore ? (language === 'zh' ? '评分必须在 0 到 100 之间。' : 'Scores must be between 0 and 100.') : null;
+  const canSubmit = !disabled && summary.trim().length > 0 && !invalidScore && !isSaving;
+  const optionalScore = (value: string) => value.trim() === '' ? null : parseScore(value);
 
   async function handleSubmit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || savingRef.current || !reviewingExperienceId || editingFileName) return;
 
+    savingRef.current = true;
     setIsSaving(true);
     try {
-      const editing = editingFileName
-        ? reviews.find((stored) => stored.fileName === editingFileName)
-        : null;
       const reviewTarget = reviewingExperienceId
         ? (() => {
             const exp = objects.find((o) => o.id === reviewingExperienceId);
-            return exp ? { id: exp.id, title: exp.title, type: exp.object_type } : undefined;
+            return exp ? { id: exp.id, title: exp.title, type: exp.object_type, currency: recordCurrency(exp) } : undefined;
           })()
         : undefined;
-      const draft = createReviewDraft(summary.trim(), foodScore, sceneryScore, experienceScore, reviewTarget, t);
-      const review = editing
-        ? {
-            ...editing.entity,
-            summary: draft.summary,
-            food_score: draft.food_score,
-            scenery_score: draft.scenery_score,
-            experience_score: draft.experience_score,
-            updated_at: todayISO(),
-          }
-        : draft;
-
-      if (editing) {
-        await onUpdateReview(editing.fileName, review, editing.body);
-      } else {
-        const scoreLabel = (score: number | null | undefined) =>
-          score ? t('rankPosition').replace('{rank}', String(score)) : t('notRanked');
-        await onCreateReview(
-          review,
-          `## ${t('reviewAction')}\n\n${summary.trim()}\n\n## ${t('rankings')}\n\n- ${t('foodRank')}：${scoreLabel(review.food_score)}\n- ${t('sceneryRank')}：${scoreLabel(review.scenery_score)}\n- ${t('experienceRank')}：${scoreLabel(review.experience_score)}\n\n## ${t('nextSteps')}\n\n`,
-        );
-      }
+      if (!reviewTarget) return;
+      const review = createReviewDraft(summary.trim(), foodScore, sceneryScore, experienceScore, reviewTarget, t);
+      const scoreLabel = (score: number | null | undefined) =>
+        score != null ? t('rankPosition').replace('{rank}', String(score)) : t('notRanked');
+      await onCreateReview(
+        review,
+        `## ${t('reviewAction')}\n\n${summary.trim()}\n\n## ${t('rankings')}\n\n- ${t('foodRank')}：${scoreLabel(review.food_score)}\n- ${t('sceneryRank')}：${scoreLabel(review.scenery_score)}\n- ${t('experienceRank')}：${scoreLabel(review.experience_score)}\n\n## ${t('nextSteps')}\n\n`,
+      );
       setSummary('');
       setFoodScore('');
       setSceneryScore('');
@@ -531,43 +529,50 @@ export function ReviewHome({
       setEditingFileName(null);
       setReviewingExperienceId(null);
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }
 
   function startEditingReview(stored: WYQDStoredEntity<ReviewEntry>) {
+    if (savingRef.current) return;
+    setReviewingExperienceId(null);
     setSelectedReviewFileName(stored.fileName);
     setEditingFileName(stored.fileName);
     setSummary(stored.entity.summary || '');
-    setFoodScore(stored.entity.food_score ? String(stored.entity.food_score) : '');
-    setSceneryScore(stored.entity.scenery_score ? String(stored.entity.scenery_score) : '');
+    setFoodScore(stored.entity.food_score != null ? String(stored.entity.food_score) : '');
+    setSceneryScore(stored.entity.scenery_score != null ? String(stored.entity.scenery_score) : '');
     setExperienceScore(
-      stored.entity.experience_score ? String(stored.entity.experience_score) : '',
+      stored.entity.experience_score != null ? String(stored.entity.experience_score) : '',
     );
   }
 
   async function saveReviewEdit(stored: WYQDStoredEntity<ReviewEntry>, body: string) {
-    if (!canSubmit) return;
+    if (!canSubmit || savingRef.current || editingFileName !== stored.fileName || reviewingExperienceId) return;
 
     const nextReview: ReviewEntry = {
       ...stored.entity,
       summary: summary.trim(),
-      food_score: parseScore(foodScore),
-      scenery_score: parseScore(sceneryScore),
-      experience_score: parseScore(experienceScore),
+      food_score: optionalScore(foodScore),
+      scenery_score: optionalScore(sceneryScore),
+      experience_score: optionalScore(experienceScore),
       updated_at: todayISO(),
     };
 
+    savingRef.current = true;
     setIsSaving(true);
     try {
       await onUpdateReview(stored.fileName, nextReview, body);
+      savingRef.current = false;
       cancelEditing();
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }
 
   function cancelEditing() {
+    if (savingRef.current) return;
     setEditingFileName(null);
     setSummary('');
     setFoodScore('');
@@ -577,15 +582,18 @@ export function ReviewHome({
   }
 
   function startExperienceReview(experience: WYQDObject) {
+    if (savingRef.current) return;
     cancelEditing();
     setReviewingExperienceId(experience.id);
     setSummary(t('reviewAbout').replace('{title}', experience.title));
-    window.setTimeout(() => reviewFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    window.setTimeout(() => reviewFormRef.current?.scrollIntoView({ behavior: getScrollBehavior(), block: 'center' }), 50);
   }
 
   function selectReview(fileName: string) {
+    if (savingRef.current) return;
+    if (editingFileName && editingFileName !== fileName) cancelEditing();
     setSelectedReviewFileName(fileName);
-    window.setTimeout(() => reviewDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    window.setTimeout(() => reviewDetailRef.current?.scrollIntoView({ behavior: getScrollBehavior(), block: 'nearest' }), 50);
   }
 
   return (
@@ -613,6 +621,7 @@ export function ReviewHome({
             <div className="mt-1 text-xs text-stone-500">
               {t('oneTimeExperienceN').replace('{count}', String(experiences.length))}
             </div>
+            <p className="mt-1 text-[11px] text-stone-400">{t('financialCurrencyScope').replace('{currency}', currency)}</p>
           </div>
           <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
             <div className="text-xs font-medium text-stone-500">{t('pendingReview')}</div>
@@ -655,7 +664,7 @@ export function ReviewHome({
             type="button"
             onClick={() => {
               setStatusFilter('pending');
-              reviewListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              reviewListRef.current?.scrollIntoView({ behavior: getScrollBehavior(), block: 'start' });
             }}
             className="shrink-0 rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-amber-700"
           >
@@ -735,6 +744,7 @@ export function ReviewHome({
             <button
               key={sf}
               type="button"
+              disabled={isSaving}
               onClick={() => setStatusFilter(sf)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition ${
                 statusFilter === sf
@@ -750,6 +760,7 @@ export function ReviewHome({
         {/* Search + type filter */}
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
           <input
+            disabled={isSaving}
             value={reviewQuery}
             onChange={(event) => setReviewQuery(event.target.value)}
             placeholder={t('searchReviews')}
@@ -757,6 +768,7 @@ export function ReviewHome({
             className={fieldClass}
           />
           <select
+            disabled={isSaving}
             value={reviewTypeFilter}
             onChange={(event) =>
               setReviewTypeFilter(event.target.value as 'all' | ReviewEntry['review_type'])
@@ -773,8 +785,8 @@ export function ReviewHome({
         </div>
 
         {/* Unified list + detail sidebar */}
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-          <div className="space-y-2">
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+          <div className="min-w-0 space-y-2">
             {filteredUnifiedItems.length === 0 ? (
               <p className="text-sm text-stone-500">{t('noMatchingReviews')}</p>
             ) : null}
@@ -788,6 +800,7 @@ export function ReviewHome({
                     <button
                       type="button"
                       className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-stone-50 ${isReviewingThis ? 'bg-stone-50 ring-1 ring-stone-200' : ''}`}
+                      disabled={isSaving}
                       onClick={() => startExperienceReview(exp)}
                     >
                       <div className="min-w-0 flex-1">
@@ -798,7 +811,7 @@ export function ReviewHome({
                         <div className="mt-0.5 flex items-center gap-2 text-xs text-stone-500">
                           <span>{getStatusLabel(exp)}</span>
                           <span>·</span>
-                          <span>{formatMoney(item.amount)}</span>
+                          <span>{formatMoney(item.amount, undefined, recordCurrency(exp))}</span>
                         </div>
                       </div>
                       <span
@@ -811,10 +824,11 @@ export function ReviewHome({
                       <form ref={reviewFormRef} onSubmit={(e) => void handleSubmit(e).catch(() => { /* failure notice already shown by the action */ })} className="mx-3 mb-2 mt-1 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
                         <textarea value={summary} onChange={(event) => setSummary(event.target.value)} placeholder={t('reviewSummaryPlaceholder')} rows={3} aria-label={t('summary')} className={`${fieldClass} resize-none`} disabled={disabled || isSaving} />
                         <div className="grid gap-2 sm:grid-cols-3">
-                          <input value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
-                          <input value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
-                          <input value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
+                          <input aria-label={t('foodRank')} value={foodScore} onChange={(e) => setFoodScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('foodRank')} className={fieldClass} disabled={disabled || isSaving} />
+                          <input aria-label={t('sceneryRank')} value={sceneryScore} onChange={(e) => setSceneryScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('sceneryRank')} className={fieldClass} disabled={disabled || isSaving} />
+                          <input aria-label={t('experienceRank')} value={experienceScore} onChange={(e) => setExperienceScore(e.target.value)} type="number" min="0" max="100" inputMode="numeric" placeholder={t('experienceRank')} className={fieldClass} disabled={disabled || isSaving} />
                         </div>
+                        {scoreError ? <p role="alert" className="text-xs text-red-600">{scoreError}</p> : null}
                         <div className="flex gap-2">
                           <button type="button" onClick={cancelEditing} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 transition hover:border-stone-400" disabled={isSaving}>{t('cancel')}</button>
                           <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-stone-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">
@@ -836,7 +850,7 @@ export function ReviewHome({
                     selectedReview?.fileName === stored.fileName ? 'border-stone-300' : 'border-stone-100'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-stone-950">
                         {stored.entity.title}
@@ -848,7 +862,7 @@ export function ReviewHome({
                       </div>
                     </div>
                     {getScoreItems(stored.entity).length > 0 ? (
-                      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                      <div className="flex min-w-0 flex-wrap gap-1 sm:justify-end">
                         {getScoreItems(stored.entity).map((scoreItem) => (
                           <span key={scoreItem} className="rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-600">
                             {scoreItem}
@@ -883,9 +897,9 @@ export function ReviewHome({
                         } finally {
                           setDeletingFileName(null);
                         }
-                      })()}
+                      })().catch(() => { /* Action reports failure. */ })}
                       className="rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-300"
-                      disabled={disabled || deletingFileName === stored.fileName}
+                      disabled={disabled || isSaving || deletingFileName === stored.fileName}
                     >
                       {deletingFileName === stored.fileName ? t('saving') : t('delete')}
                     </button>
@@ -895,7 +909,7 @@ export function ReviewHome({
             })}
           </div>
 
-          <aside ref={reviewDetailRef} className="rounded-xl border border-stone-200 bg-stone-50/50 p-5">
+          <aside ref={reviewDetailRef} className="min-w-0 rounded-xl border border-stone-200 bg-stone-50/50 p-5">
             {selectedReview ? (
               <ReviewDetailSidebar
                 stored={selectedReview}
@@ -914,8 +928,9 @@ export function ReviewHome({
                 editExperienceScore={experienceScore}
                 onEditExperienceScoreChange={setExperienceScore}
                 canSubmit={canSubmit}
+                scoreError={scoreError}
                 t={t}
-                formatMoney={formatMoney}
+                formatMoney={(amount) => formatMoney(amount, undefined, recordCurrency(selectedReview.entity))}
                 getReviewTypeLabel={getReviewTypeLabel}
                 getExitTypeLabel={getExitTypeLabel}
                 getScoreItems={getScoreItems}

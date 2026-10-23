@@ -26,7 +26,7 @@ PORT = 47123
 BASE = f"http://127.0.0.1:{PORT}"
 SERVER = Path(__file__).with_name("static-server.mjs")
 
-DEMO_BUTTON = re.compile("Continue in demo mode|暂时使用演示模式")
+DEMO_BUTTON = re.compile("Try demo mode|Continue in demo mode|进入演示模式|暂时使用演示模式")
 
 # The shell follows the browser locale, so each needle accepts either language.
 # Counts are asserted literally: they prove the seeded set loaded in full rather
@@ -101,6 +101,44 @@ def enter_demo(page: Page) -> None:
     page.wait_for_timeout(1500)
 
 
+def check_mobile_demo_reentry(browser) -> list[str]:
+    """Exercise the unsupported-picker path at a mobile viewport in Chromium."""
+    context = browser.new_context(
+        viewport={"width": 390, "height": 844},
+        is_mobile=True,
+        has_touch=True,
+        user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+    )
+    context.add_init_script("Object.defineProperty(window, 'showDirectoryPicker', { configurable: true, value: undefined });")
+    page = context.new_page()
+    errors = open_app(page)
+    dialog = page.get_by_role("dialog").first
+    expect(dialog).to_be_visible(timeout=45_000)
+    dismiss = dialog.get_by_role("button", name=re.compile("Decide later|以后再说"))
+    expect(dismiss).to_be_enabled(timeout=45_000)
+    dialog.focus()
+    page.keyboard.press("Shift+Tab")
+    expect(dismiss).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+
+    page.get_by_role("button", name=re.compile("No data folder|未连接数据目录")).first.click()
+    expect(dialog).to_be_visible()
+    summary = dialog.locator("summary")
+    summary.focus()
+    page.keyboard.press("Tab")
+    expect(dismiss).to_be_focused()
+    page.keyboard.press("Shift+Tab")
+    expect(summary).to_be_focused()
+    enter_demo(page)
+    expect(page.get_by_role("button", name=re.compile("Demo mode|演示模式")).first).to_be_visible()
+    page.reload(wait_until="domcontentloaded")
+    expect(page.get_by_role("button", name=re.compile("Demo mode|演示模式")).first).to_be_visible(timeout=45_000)
+    context.close()
+    print("  ok  Mobile demo re-entry, keyboard focus, reload")
+    return errors
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -126,6 +164,11 @@ def main() -> int:
                 else:
                     print(f"  ok  {tab}")
 
+                if tab == "Planner" and not missing:
+                    expect(page.get_by_role("combobox", name=re.compile("Select trip|选择行程"))).to_be_enabled()
+                    for name in ("Manage Trips|行程管理", "Calendar|日历", "Share|分享"):
+                        expect(page.get_by_role("button", name=re.compile(name)).first).to_be_disabled()
+
             # Demo mode must stay read-only: no write control is enabled.
             page.get_by_role("button", name="Objects", exact=True).first.click(timeout=20_000)
             page.wait_for_timeout(800)
@@ -135,6 +178,7 @@ def main() -> int:
             if save_button.count() and save_button.is_enabled():
                 failures.append("Objects save button is enabled in Demo mode (should be read-only)")
 
+            errors.extend(check_mobile_demo_reentry(browser))
             browser.close()
 
     real_errors = [e for e in errors if "favicon" not in e.lower()]

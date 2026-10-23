@@ -5,7 +5,7 @@ import { useFormatMoney } from '@/lib/use-format';
 import { useI18n } from '@/core/i18n-context';
 import type { HomeMetrics, AccountSnapshot } from '@/domain/types';
 import { CARD_CLASS, SECTION_TITLE_CLASS } from '@/lib/ui-constants';
-import { calculateNetWorth } from '@/domain/calculations';
+import { calculateNetWorth, compareSnapshots } from '@/domain/calculations';
 
 import { buildDualLinePoints } from './homeDashboardUtils';
 
@@ -24,13 +24,13 @@ export function HomeOwnSection({
   const latestSnapshot = useMemo(() => {
     return [...snapshots]
       .map(calculateNetWorth)
-      .sort((a, b) => b.snapshot_at.localeCompare(a.snapshot_at))[0] || null;
+      .sort((a, b) => compareSnapshots(b, a))[0] || null;
   }, [snapshots]);
 
   const trendSnapshots = useMemo(() =>
     [...snapshots]
       .map(calculateNetWorth)
-      .sort((a, b) => a.snapshot_at.localeCompare(b.snapshot_at))
+      .sort((a, b) => compareSnapshots(a, b))
       .slice(-12),
     [snapshots],
   );

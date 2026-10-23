@@ -81,6 +81,28 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     }
   }
 
+  async refreshEnabledFeed(record: CalendarFeedRecord): Promise<boolean> {
+    const query = new URLSearchParams({
+      trip_id: `eq.${record.trip_id}`,
+      token_hash: `eq.${record.token_hash}`,
+      enabled: 'eq.true',
+      select: 'id',
+    });
+    const endpoint = `${this.config.url}/rest/v1/ownly_calendar_feeds?${query.toString()}`;
+    const res = await this.config.fetchFn(endpoint, {
+      method: 'PATCH',
+      headers: { ...this.headers(record.token_hash, true), Prefer: 'return=representation' },
+      body: JSON.stringify({ ics_content: record.ics_content, updated_at: record.updated_at || new Date().toISOString() }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Failed to refresh calendar feed in Supabase (${res.status}): ${errText}`);
+    }
+    const updated = await res.json();
+    if (!Array.isArray(updated)) throw new Error('Calendar feed refresh returned an invalid acknowledgement.');
+    return updated.length > 0;
+  }
+
   async getFeedByTokenHash(tokenHash: string): Promise<CalendarFeedRecord | null> {
     const query = new URLSearchParams({
       token_hash: `eq.${tokenHash}`,
@@ -119,13 +141,14 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     const query = new URLSearchParams({
       trip_id: `eq.${tripId}`,
       token_hash: `eq.${tokenHash}`,
+      select: 'id',
     });
 
     const endpoint = `${this.config.url}/rest/v1/ownly_calendar_feeds?${query.toString()}`;
 
     const res = await this.config.fetchFn(endpoint, {
       method: 'PATCH',
-      headers: this.headers(tokenHash, true),
+      headers: { ...this.headers(tokenHash, true), Prefer: 'return=representation' },
       body: JSON.stringify({
         enabled: false,
         updated_at: new Date().toISOString(),
@@ -135,6 +158,10 @@ export class SupabaseCalendarFeedStore implements CalendarFeedStore {
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
       throw new Error(`Failed to disable calendar feed in Supabase (${res.status}): ${errText}`);
+    }
+    const updated = await res.json();
+    if (!Array.isArray(updated) || updated.length === 0) {
+      throw new Error('Could not confirm calendar feed revocation; the link may still be active.');
     }
   }
 }

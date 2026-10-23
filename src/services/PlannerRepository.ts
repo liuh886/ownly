@@ -40,6 +40,7 @@ export interface PlannerFileStore {
   readMarkdownFiles(directory: string): Promise<{ fileName: string; content: string }[]>;
   writeMarkdownFile(directory: string, fileName: string, content: string): Promise<void>;
   deleteMarkdownFile(directory: string, fileName: string): Promise<void>;
+  captureSession?(): Promise<PlannerFileStore>;
 }
 
 export const PLANNER_DIRECTORIES = {
@@ -208,12 +209,34 @@ export class PlannerTransactionContext {
 
 export class PlannerRepository {
   private root = '';
-  private mutationChain: Promise<unknown> = Promise.resolve();
+  private activeStore: PlannerFileStore | null = null;
+  private sessionLockHeld = false;
 
-  constructor(private readonly store: PlannerFileStore = ownlyStoreRouter) {}
+  constructor(
+    private readonly store: PlannerFileStore = ownlyStoreRouter,
+    private readonly writeCoordinator: { tail: Promise<unknown> } = { tail: Promise.resolve() },
+  ) {}
+
+  private queueMutation<R>(run: () => Promise<R>): Promise<R> {
+    const next = this.writeCoordinator.tail.then(run, run);
+    this.writeCoordinator.tail = next.catch(() => {});
+    return next;
+  }
+
+  /** Keep related Planner reads and writes on one data root and one mutation lock. */
+  async withWriteSession<T>(callback: (repository: PlannerRepository) => Promise<T>): Promise<T> {
+    const sessionStore = await (this.store.captureSession?.() ?? this.store);
+    const repository = new PlannerRepository(sessionStore, this.writeCoordinator);
+    await repository.initialize();
+    return this.queueMutation(async () => {
+      repository.sessionLockHeld = true;
+      try { return await callback(repository); }
+      finally { repository.sessionLockHeld = false; }
+    });
+  }
 
   async initialize(): Promise<void> {
-    this.root = await this.store.getDataFolder();
+    this.root = await (this.activeStore ?? this.store).getDataFolder();
   }
 
   private directory(name: string): string {
@@ -221,9 +244,12 @@ export class PlannerRepository {
   }
 
   async executeTransaction<R>(fn: (tx: PlannerTransactionContext) => Promise<R>): Promise<R> {
-    await this.initialize();
+    // Capture before joining the queue: a folder change cannot redirect a pending write.
+    const sessionStore = await (this.store.captureSession?.() ?? this.store);
+    const sessionRoot = await sessionStore.getDataFolder();
     const run = async (): Promise<R> => {
-      const tx = new PlannerTransactionContext(this.store, (name) => this.directory(name));
+      this.activeStore = sessionStore;
+      const tx = new PlannerTransactionContext(sessionStore, (name) => sessionRoot ? `${sessionRoot}/${name}` : name);
       try {
         return await fn(tx);
       } catch (error) {
@@ -233,12 +259,12 @@ export class PlannerRepository {
           throw new Error(`Transaction failed (${cause}) and rollback had errors: ${rollbackResult.errors.join(' | ')}`);
         }
         throw new Error(`Transaction failed and was rolled back: ${cause}`);
+      } finally {
+        this.activeStore = null;
       }
     };
 
-    const nextPromise = this.mutationChain.then(run, run);
-    this.mutationChain = nextPromise.catch(() => {});
-    return nextPromise;
+    return this.sessionLockHeld ? run() : this.queueMutation(run);
   }
 
   private async list<T extends PlannerEntity>(
@@ -247,7 +273,7 @@ export class PlannerRepository {
     options?: { strict?: boolean },
   ): Promise<T[]> {
     await this.initialize();
-    const files = await this.store.readMarkdownFiles(this.directory(directory));
+    const files = await (this.activeStore ?? this.store).readMarkdownFiles(this.directory(directory));
     const result: T[] = [];
     for (const file of files) {
       try {
@@ -299,7 +325,7 @@ export class PlannerRepository {
 
   async listExpenses(options?: { strict?: boolean }): Promise<TripExpenseItem[]> {
     await this.initialize();
-    const files = await this.store.readMarkdownFiles(this.directory(PLANNER_DIRECTORIES.expenses));
+    const files = await (this.activeStore ?? this.store).readMarkdownFiles(this.directory(PLANNER_DIRECTORIES.expenses));
     const result: TripExpenseItem[] = [];
     for (const file of files) {
       try {
@@ -1193,6 +1219,36 @@ export class PlannerRepository {
       };
       await tx.stageUpsertEntity(updatedTrip);
       return feed;
+    });
+  }
+
+  /** Patch only the feed on the latest trip under the same queue as upsertTrip. */
+  async patchTripCalendarFeed(
+    tripId: string,
+    feed: PlannerTripCalendarFeed,
+    expectedToken?: string,
+  ): Promise<boolean> {
+    return this.executeTransaction(async (tx) => {
+      const trip = (await this.listTrips({ strict: true })).find((item) => item.id === tripId);
+      if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+      if (expectedToken !== undefined && (
+        !trip.calendar_feed ||
+        trip.calendar_feed.feed_token !== expectedToken ||
+        trip.calendar_feed.enabled === false
+      )) return false;
+      await tx.stageUpsertEntity({ ...trip, calendar_feed: feed, updated_at: new Date().toISOString() });
+      return true;
+    });
+  }
+
+  /** Attach one review without overwriting unrelated trip edits or a different review. */
+  async patchTripReviewId(tripId: string, reviewId: string): Promise<void> {
+    await this.executeTransaction(async (tx) => {
+      const trip = (await this.listTrips({ strict: true })).find((item) => item.id === tripId);
+      if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
+      if (trip.review_id === reviewId) return;
+      if (trip.review_id) throw new Error(`Planner trip already has a different review: ${tripId}`);
+      await tx.stageUpsertEntity({ ...trip, review_id: reviewId, updated_at: new Date().toISOString() });
     });
   }
 

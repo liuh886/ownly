@@ -3,7 +3,19 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
 const FOCUSABLE_SELECTOR =
-  'button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])';
+  'button, input, select, textarea, summary, [href], [tabindex]';
+
+const dialogStack: symbol[] = [];
+
+function isFocusable(item: HTMLElement): boolean {
+  if (item.tabIndex < 0 || item.matches(':disabled, input[type="hidden"]') || item.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+  for (let ancestor: HTMLElement | null = item; ancestor; ancestor = ancestor.parentElement) {
+    const style = window.getComputedStyle(ancestor);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+    if (ancestor instanceof HTMLDetailsElement && !ancestor.open && !ancestor.querySelector('summary')?.contains(item)) return false;
+  }
+  return true;
+}
 
 /** Shared across stacked dialogs so closing one never unlocks the page early. */
 let scrollLockCount = 0;
@@ -48,33 +60,45 @@ export function useDialogA11y({
   lockScroll = true,
 }: DialogA11yOptions) {
   const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
   useEffect(() => {
     onCloseRef.current = onClose;
+    dismissibleRef.current = dismissible;
   });
 
   useEffect(() => {
     if (!open) return;
     if (typeof window === 'undefined') return;
     const doc = window.document;
+    const token = Symbol('dialog');
+    dialogStack.push(token);
+    const isTopmost = () => dialogStack.at(-1) === token;
     const previousFocus =
       doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (!isTopmost() || event.defaultPrevented) return;
       if (event.key === 'Escape') {
-        if (dismissible) onCloseRef.current();
+        event.preventDefault();
+        if (dismissibleRef.current) onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
       const items = Array.from(
         panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
-      ).filter((item) => !item.hasAttribute('disabled'));
-      if (items.length === 0) return;
+      ).filter(isFocusable);
+      if (items.length === 0) {
+        event.preventDefault();
+        panelRef.current?.focus();
+        return;
+      }
       const first = items[0];
       const last = items[items.length - 1];
-      if (event.shiftKey && doc.activeElement === first) {
+      const outsideTabOrder = !items.includes(doc.activeElement as HTMLElement);
+      if (event.shiftKey && (doc.activeElement === first || outsideTabOrder)) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && doc.activeElement === last) {
+      } else if (!event.shiftKey && (doc.activeElement === last || outsideTabOrder)) {
         event.preventDefault();
         first.focus();
       }
@@ -83,8 +107,9 @@ export function useDialogA11y({
     doc.addEventListener('keydown', handleKeyDown);
     if (lockScroll) lockBodyScroll();
     const focusTimer = window.setTimeout(() => {
-      const firstField = panelRef.current?.querySelector<HTMLElement>(initialFocusSelector);
-      if (firstField && !firstField.hasAttribute('disabled')) {
+      if (!isTopmost()) return;
+      const firstField = Array.from(panelRef.current?.querySelectorAll<HTMLElement>(initialFocusSelector) ?? []).find(isFocusable);
+      if (firstField) {
         firstField.focus();
       } else {
         panelRef.current?.focus();
@@ -92,10 +117,12 @@ export function useDialogA11y({
     }, 0);
 
     return () => {
+      const restoreFocus = isTopmost();
+      dialogStack.splice(dialogStack.indexOf(token), 1);
       doc.removeEventListener('keydown', handleKeyDown);
       window.clearTimeout(focusTimer);
       if (lockScroll) unlockBodyScroll();
-      previousFocus?.focus();
+      if (restoreFocus && previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [dismissible, initialFocusSelector, lockScroll, open, panelRef]);
+  }, [initialFocusSelector, lockScroll, open, panelRef]);
 }

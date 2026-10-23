@@ -2,6 +2,7 @@
 
 import type { OwnlyCollectionExportV1 } from '@/domain/capture';
 import { capturePlaceToPlannerPlace } from '@/domain/capture';
+import { todayLocalISO } from '@/domain/date';
 import { plannerRepository } from '@/services/PlannerRepository';
 import { trackCollectionEvent } from '@/lib/collection-analytics';
 import { trackFirstEver } from '@/lib/analytics';
@@ -34,7 +35,7 @@ export function CollectionPreview({
       let tripId = trips[0]?.id;
       if (!tripId) {
         // Create a trip from collection title
-        const now = new Date().toISOString().slice(0, 10);
+        const now = todayLocalISO();
         const trip = {
           schema_version: '0.1' as const,
           type: 'trip' as const,

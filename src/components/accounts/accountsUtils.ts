@@ -1,3 +1,4 @@
+import { matchesCurrency } from '@/domain/currency';
 import type { WYQDTranslationKey } from '@/core/i18n';
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import type {
@@ -55,14 +56,20 @@ function splitTrailingDueDate(input: string): DueDateSplit {
   return { body: match[1].trim(), dueDate, invalidDueDate: dueDate === null };
 }
 
-export function parseBalanceLine(line: string, prefix: 'asset' | 'liability', index: number): AccountBalance | null {
+function splitTrailingCurrency(input: string, fallback = 'CNY') {
+  const match = input.match(/^(.*)\s+([A-Za-z]{3})$/);
+  return { body: match ? match[1].trim() : input, currency: (match?.[2] ?? fallback).toUpperCase() };
+}
+
+export function parseBalanceLine(line: string, prefix: 'asset' | 'liability', index: number, defaultCurrency = 'CNY'): AccountBalance | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
 
-  let body = trimmed;
+  const currencySplit = splitTrailingCurrency(trimmed, defaultCurrency);
+  let body = currencySplit.body;
   let dueDate: string | undefined;
   if (prefix === 'liability') {
-    const split = splitTrailingDueDate(trimmed);
+    const split = splitTrailingDueDate(body);
     if (split.invalidDueDate) return null;
     body = split.body;
     dueDate = split.dueDate ?? undefined;
@@ -77,9 +84,9 @@ export function parseBalanceLine(line: string, prefix: 'asset' | 'liability', in
 
   const balance: AccountBalance = {
     account,
-    account_id: `${prefix}_${slugifyAccountName(account) || index + 1}`,
+    account_id: `${prefix}_${slugifyAccountName(account) || index + 1}_${currencySplit.currency.toLowerCase()}`,
     amount,
-    currency: 'CNY',
+    currency: currencySplit.currency,
   };
   if (dueDate) balance.due_date = dueDate;
   return balance;
@@ -107,6 +114,7 @@ export interface BalanceLineParse {
 export function parseBalanceLinesWithIssues(
   value: string,
   prefix: 'asset' | 'liability',
+  defaultCurrency = 'CNY',
 ): BalanceLineParse {
   const balances: AccountBalance[] = [];
   let hasInvalidLines = false;
@@ -115,8 +123,8 @@ export function parseBalanceLinesWithIssues(
   value.split('\n').forEach((line, index) => {
     if (!line.trim()) return;
 
-    const invalidDueDate = prefix === 'liability' && splitTrailingDueDate(line.trim()).invalidDueDate;
-    const balance = parseBalanceLine(line, prefix, index);
+    const invalidDueDate = prefix === 'liability' && splitTrailingDueDate(splitTrailingCurrency(line.trim()).body).invalidDueDate;
+    const balance = parseBalanceLine(line, prefix, index, defaultCurrency);
     if (balance) {
       balances.push(balance);
       return;
@@ -132,13 +140,32 @@ export function parseBalanceLinesWithIssues(
 export function hasInvalidDueDateLines(value: string): boolean {
   return value
     .split('\n')
-    .some((line) => line.trim() && splitTrailingDueDate(line.trim()).invalidDueDate);
+    .some((line) => line.trim() && splitTrailingDueDate(splitTrailingCurrency(line.trim()).body).invalidDueDate);
 }
 
-export function serializeBalanceLines(balances: AccountBalance[]): string {
+export function serializeBalanceLines(balances: AccountBalance[], includeCurrency = false): string {
   return balances
-    .map((balance) => `${balance.account} ${balance.amount}${balance.due_date ? ` ${balance.due_date}` : ''}`)
+    .map((balance) => `${balance.account} ${balance.amount}${balance.due_date ? ` ${balance.due_date}` : ''}${includeCurrency && balance.currency ? ` ${balance.currency.toUpperCase()}` : ''}`)
     .join('\n');
+}
+
+/** Match each original once, keeping same-name currencies and duplicate rows distinct. */
+export function preserveBalanceMetadata(balances: AccountBalance[], originals: AccountBalance[] = [], baseCurrency = 'CNY'): AccountBalance[] {
+  const used = new Set<number>();
+  const reservedIds = new Set(originals.map((balance) => balance.account_id));
+  return balances.map((balance) => {
+    const index = originals.findIndex((item, index) => !used.has(index) && item.account === balance.account &&
+      (item.currency || baseCurrency).toUpperCase() === (balance.currency || baseCurrency).toUpperCase());
+    const original = index >= 0 ? originals[index] : undefined;
+    if (original) used.add(index);
+    let accountId = original?.account_id ?? balance.account_id;
+    if (!original) {
+      let suffix = 2;
+      while (reservedIds.has(accountId)) accountId = `${balance.account_id}_${suffix++}`;
+      reservedIds.add(accountId);
+    }
+    return { ...original, ...balance, account_id: accountId, currency: original?.currency ?? balance.currency ?? baseCurrency, due_date: balance.due_date };
+  });
 }
 
 export function sumBalances(balances: AccountBalance[]): number {
@@ -192,6 +219,7 @@ export function groupRecurringCostsByAccount(objects: WYQDObject[], fallback?: s
 
 export function createSnapshotDraft({
   snapshotAt,
+  currency = 'CNY',
   assetBalances,
   liabilityBalances,
   isMonthEnd,
@@ -199,6 +227,7 @@ export function createSnapshotDraft({
   t,
 }: {
   snapshotAt: string;
+  currency?: string;
   assetBalances: AccountBalance[];
   liabilityBalances: AccountBalance[];
   isMonthEnd: boolean;
@@ -206,17 +235,18 @@ export function createSnapshotDraft({
   t?: (key: WYQDTranslationKey) => string;
 }): AccountSnapshot {
   const now = new Date().toISOString();
-  const totalAssets = sumBalances(assetBalances);
-  const totalLiabilities = sumBalances(liabilityBalances);
-  const activeRecurringCosts = objects.filter((o) => o.object_type === 'recurring_cost' && o.status === 'active');
+  const totalAssets = sumBalances(assetBalances.filter((balance) => !balance.currency || matchesCurrency(balance, currency)));
+  const totalLiabilities = sumBalances(liabilityBalances.filter((balance) => !balance.currency || matchesCurrency(balance, currency)));
+  const currencyObjects = objects.filter((object) => matchesCurrency(object, currency));
+  const activeRecurringCosts = currencyObjects.filter((o) => o.object_type === 'recurring_cost' && o.status === 'active');
   const monthlyFixedCost = activeRecurringCosts.reduce(
     (sum, o) => sum + calculateRecurringMonthlyCost(o as RecurringCostObject), 0,
   );
-  const ownedPhysicalObjects = objects.filter((o) => o.object_type === 'physical' && (o.status === 'using' || o.status === 'purchased'));
+  const ownedPhysicalObjects = currencyObjects.filter((o) => o.object_type === 'physical' && (o.status === 'using' || o.status === 'purchased'));
   const physicalResidualValue = ownedPhysicalObjects.reduce(
     (sum, o) => sum + calculateResidualValue(o as PhysicalObject), 0,
   );
-  const observingDesireAmount = objects
+  const observingDesireAmount = currencyObjects
     .filter((o) => o.status === 'seeded' || o.status === 'observing' || o.status === 'planned')
     .reduce((sum, o) => sum + calculateDesireAmount(o), 0);
 
@@ -228,7 +258,7 @@ export function createSnapshotDraft({
     title: `${t ? t('snapshotTitlePrefix') : 'Account snapshot'} ${snapshotAt}`,
     snapshot_at: snapshotAt,
     is_month_end: isMonthEnd,
-    currency: 'CNY',
+    currency,
     asset_balances: assetBalances,
     liability_balances: liabilityBalances,
     total_assets: totalAssets,

@@ -15,7 +15,7 @@
 import type { ImportReport, PlannerTrip, TripExpenseItem } from '@/domain/planner';
 import type { OwnlyTripBundle } from '@/domain/trip-bundle';
 import { instantiateTripBundle } from '@/domain/trip-bundle';
-import { plannerRepository } from './PlannerRepository';
+import { plannerRepository, type PlannerRepository } from './PlannerRepository';
 
 export interface ImportedTripResult {
   trip: PlannerTrip;
@@ -25,6 +25,8 @@ export interface ImportedTripResult {
 }
 
 export interface ImportTripBundleOptions {
+  /** Explicit storage destination, used to keep demo writes in memory. */
+  repository?: Pick<PlannerRepository, 'importBundle'>;
   /**
    * AA ledger participants, applied *after* id regeneration.
    *
@@ -44,7 +46,7 @@ export async function importTripBundle(
   // independent trips rather than merging into one.
   const copy = instantiateTripBundle(bundle);
   if (options.members) copy.trip.members = [...options.members];
-  const report = await plannerRepository.importBundle(copy);
+  const report = await (options.repository ?? plannerRepository).importBundle(copy);
   return {
     trip: copy.trip,
     report,
@@ -75,9 +77,10 @@ export async function seedTripExpenses(
     notes?: string;
   }>,
   createdAt: string,
+  repository: Pick<PlannerRepository, 'upsertExpense'> = plannerRepository,
 ): Promise<number> {
   for (const expense of expenses) {
-    await plannerRepository.upsertExpense({
+    await repository.upsertExpense({
       id: `${tripId}-${expense.id}`,
       trip_id: tripId,
       place_id: expense.placeId,

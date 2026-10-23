@@ -1,6 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { matchesCurrency, recordCurrency } from '@/domain/currency';
+
+import { useMemo, useRef, useState } from 'react';
+import { isValidISODate } from '@/domain/date';
 import { useI18n } from '@/core/i18n-context';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import type {
@@ -10,6 +13,7 @@ import type {
 import {
   calculateNetWorth,
   findLatestSnapshot,
+  compareSnapshots,
 } from '@/domain/calculations';
 import type { WYQDStoredEntity } from '@/core/repository';
 import { buildSparklinePoints, todayISO } from '@/lib/format';
@@ -19,6 +23,7 @@ import {
   serializeBalanceLines,
   groupRecurringCostsByAccount,
   createSnapshotDraft,
+  preserveBalanceMetadata,
 } from './accountsUtils';
 import { AccountsConsole } from './AccountsConsole';
 import { AccountsTrend } from './AccountsTrend';
@@ -41,7 +46,7 @@ export function AccountsOverview({
   onUpdateSnapshot: (fileName: string, snapshot: AccountSnapshot, body: string) => Promise<void>;
   onDeleteSnapshot: (fileName: string) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, language, currency } = useI18n();
   const { formatMoney, formatCompactMoney } = useFormatMoney();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const calculatedSnapshots = useMemo(
@@ -52,12 +57,12 @@ export function AccountsOverview({
     [snapshots],
   );
   const latest = useMemo(
-    () => findLatestSnapshot(calculatedSnapshots.map((stored) => stored.entity)),
-    [calculatedSnapshots],
+    () => findLatestSnapshot(calculatedSnapshots.filter((stored) => matchesCurrency(stored.entity, currency)).map((stored) => stored.entity)),
+    [calculatedSnapshots, currency],
   );
-  const latestAssetBalancesText = latest ? serializeBalanceLines(latest.asset_balances) : '';
-  const latestLiabilityBalancesText = latest ? serializeBalanceLines(latest.liability_balances) : '';
-  const recurringAccountGroups = groupRecurringCostsByAccount(objects, t('noData'), t);
+  const latestAssetBalancesText = latest ? serializeBalanceLines(latest.asset_balances.filter((balance) => !balance.currency || matchesCurrency(balance, currency))) : '';
+  const latestLiabilityBalancesText = latest ? serializeBalanceLines(latest.liability_balances.filter((balance) => !balance.currency || matchesCurrency(balance, currency))) : '';
+  const recurringAccountGroups = groupRecurringCostsByAccount(objects.filter((object) => matchesCurrency(object, currency)), t('noData'), t);
   const totalMonthlyFixedCost = recurringAccountGroups.reduce(
     (sum, group) => sum + group.monthlyCost,
     0,
@@ -68,13 +73,14 @@ export function AccountsOverview({
   const annualFixedCost = totalMonthlyFixedCost * 12;
   const sorted = useMemo(
     () => [...calculatedSnapshots].sort((a, b) =>
-      b.entity.snapshot_at.localeCompare(a.entity.snapshot_at),
+      compareSnapshots(b.entity, a.entity),
     ),
     [calculatedSnapshots],
   );
+  const scopedSorted = sorted.filter((stored) => matchesCurrency(stored.entity, currency));
   const previousNetWorthDelta =
-    sorted.length > 1
-      ? (sorted[0].entity.net_worth ?? 0) - (sorted[1].entity.net_worth ?? 0)
+    scopedSorted.length > 1
+      ? (scopedSorted[0].entity.net_worth ?? 0) - (scopedSorted[1].entity.net_worth ?? 0)
       : null;
   const [snapshotAt, setSnapshotAt] = useState(todayISO());
   const [assetBalancesText, setAssetBalancesText] = useState('');
@@ -82,8 +88,12 @@ export function AccountsOverview({
   const [hasTouchedSnapshotForm, setHasTouchedSnapshotForm] = useState(false);
   const [isMonthEnd, setIsMonthEnd] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
   const [editingFileName, setEditingFileName] = useState<string | null>(null);
   const [deletingFileName, setDeletingFileName] = useState<string | null>(null);
+  const editingSnapshot = snapshots.find((stored) => stored.fileName === editingFileName);
+  const formCurrency = editingSnapshot ? recordCurrency(editingSnapshot.entity) : currency;
+  const { formatMoney: formatFormMoney } = useFormatMoney(formCurrency);
   const isUsingLatestSnapshotPrefill =
     Boolean(latest) && !editingFileName && !hasTouchedSnapshotForm;
   const displayedAssetBalancesText = isUsingLatestSnapshotPrefill
@@ -92,19 +102,19 @@ export function AccountsOverview({
   const displayedLiabilityBalancesText = isUsingLatestSnapshotPrefill
     ? latestLiabilityBalancesText
     : liabilityBalancesText;
-  const assetLineParse = parseBalanceLinesWithIssues(displayedAssetBalancesText, 'asset');
-  const liabilityLineParse = parseBalanceLinesWithIssues(displayedLiabilityBalancesText, 'liability');
-  const parsedAssetBalances = assetLineParse.balances;
-  const parsedLiabilityBalances = liabilityLineParse.balances;
+  const assetLineParse = parseBalanceLinesWithIssues(displayedAssetBalancesText, 'asset', formCurrency);
+  const liabilityLineParse = parseBalanceLinesWithIssues(displayedLiabilityBalancesText, 'liability', formCurrency);
+  const parsedAssetBalances = preserveBalanceMetadata(assetLineParse.balances, editingSnapshot?.entity.asset_balances, formCurrency);
+  const parsedLiabilityBalances = preserveBalanceMetadata(liabilityLineParse.balances, editingSnapshot?.entity.liability_balances, formCurrency);
   const hasInvalidAssetLines = assetLineParse.hasInvalidLines;
   const hasInvalidLiabilityLines = liabilityLineParse.hasInvalidLines;
   const hasInvalidLiabilityDate = liabilityLineParse.hasInvalidDueDate;
   const trendSnapshots = useMemo(
-    () => [...calculatedSnapshots]
-      .sort((a, b) => a.entity.snapshot_at.localeCompare(b.entity.snapshot_at))
+    () => calculatedSnapshots.filter((stored) => matchesCurrency(stored.entity, currency))
+      .sort((a, b) => compareSnapshots(a.entity, b.entity))
       .slice(-12)
       .map((stored) => stored.entity),
-    [calculatedSnapshots],
+    [calculatedSnapshots, currency],
   );
   const trendValues = trendSnapshots.map((snapshot) => snapshot.net_worth || 0);
   const trendPoints = buildSparklinePoints(trendValues);
@@ -114,8 +124,10 @@ export function AccountsOverview({
   );
   const fixedCostTrendPoints = buildSparklinePoints(fixedCostTrendValues);
   const latestFixedCost = fixedCostTrendValues[fixedCostTrendValues.length - 1] ?? totalMonthlyFixedCost;
+  const snapshotDateValid = isValidISODate(snapshotAt);
   const canSubmit =
     !disabled &&
+    snapshotDateValid &&
     parsedAssetBalances.length > 0 &&
     !hasInvalidAssetLines &&
     !hasInvalidLiabilityLines &&
@@ -123,8 +135,9 @@ export function AccountsOverview({
 
   async function handleSubmit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || savingRef.current) return;
 
+    savingRef.current = true;
     setIsSaving(true);
     try {
       const editing = editingFileName
@@ -134,6 +147,7 @@ export function AccountsOverview({
         snapshotAt,
         assetBalances: parsedAssetBalances,
         liabilityBalances: parsedLiabilityBalances,
+        currency: formCurrency,
         isMonthEnd,
         objects,
         t,
@@ -141,7 +155,13 @@ export function AccountsOverview({
       const snapshot = editing
         ? {
             ...editing.entity,
-            ...draft,
+            snapshot_at: draft.snapshot_at,
+            is_month_end: draft.is_month_end,
+            asset_balances: draft.asset_balances,
+            liability_balances: draft.liability_balances,
+            total_assets: draft.total_assets,
+            total_liabilities: draft.total_liabilities,
+            net_worth: draft.net_worth,
             id: editing.entity.id,
             title: editing.entity.title || draft.title,
             created_at: editing.entity.created_at,
@@ -164,21 +184,24 @@ export function AccountsOverview({
       setSnapshotAt(todayISO());
       setEditingFileName(null);
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }
 
   function startEditingSnapshot(stored: WYQDStoredEntity<AccountSnapshot>) {
+    if (savingRef.current) return;
     const calculated = calculateNetWorth(stored.entity);
     setEditingFileName(stored.fileName);
     setSnapshotAt(calculated.snapshot_at);
-    setAssetBalancesText(serializeBalanceLines(calculated.asset_balances));
-    setLiabilityBalancesText(serializeBalanceLines(calculated.liability_balances));
+    setAssetBalancesText(serializeBalanceLines(calculated.asset_balances, true));
+    setLiabilityBalancesText(serializeBalanceLines(calculated.liability_balances, true));
     setHasTouchedSnapshotForm(true);
     setIsMonthEnd(Boolean(calculated.is_month_end));
   }
 
   function cancelEditing() {
+    if (savingRef.current) return;
     setEditingFileName(null);
     setSnapshotAt(todayISO());
     setAssetBalancesText('');
@@ -187,8 +210,16 @@ export function AccountsOverview({
     setIsMonthEnd(false);
   }
 
+  function changeBalanceText(kind: 'asset' | 'liability', value: string) {
+    if (savingRef.current) return;
+    // Materialize both visible prefilled sides before leaving prefill mode.
+    setAssetBalancesText(kind === 'asset' ? value : displayedAssetBalancesText);
+    setLiabilityBalancesText(kind === 'liability' ? value : displayedLiabilityBalancesText);
+    setHasTouchedSnapshotForm(true);
+  }
+
   function refillFromLatestSnapshot() {
-    if (!latest) return;
+    if (!latest || savingRef.current) return;
     setAssetBalancesText(latestAssetBalancesText);
     setLiabilityBalancesText(latestLiabilityBalancesText);
     setHasTouchedSnapshotForm(true);
@@ -197,6 +228,7 @@ export function AccountsOverview({
   return (
     <>
     <section className="space-y-5">
+      <p className="text-xs text-stone-500">{t('financialCurrencyScope').replace('{currency}', currency)}</p>
       <AccountsConsole
         latest={latest ?? null}
         accountCount={accountCount}
@@ -209,7 +241,7 @@ export function AccountsOverview({
 
       <LiabilityDuePanel
         latest={latest ?? null}
-        onEditLatest={sorted.length > 0 ? () => startEditingSnapshot(sorted[0]) : undefined}
+        onEditLatest={scopedSorted.length > 0 ? () => startEditingSnapshot(scopedSorted[0]) : undefined}
         t={t}
         formatMoney={formatMoney}
       />
@@ -230,12 +262,14 @@ export function AccountsOverview({
         disabled={disabled}
         isSaving={isSaving}
         editingFileName={editingFileName}
+        currency={formCurrency}
         snapshotAt={snapshotAt}
+        snapshotDateError={snapshotDateValid ? undefined : language === 'zh' ? '请选择有效的快照日期。' : 'Choose a valid snapshot date.'}
         setSnapshotAt={setSnapshotAt}
         displayedAssetBalancesText={displayedAssetBalancesText}
-        setAssetBalancesText={setAssetBalancesText}
+        setAssetBalancesText={(value) => changeBalanceText('asset', value)}
         displayedLiabilityBalancesText={displayedLiabilityBalancesText}
-        setLiabilityBalancesText={setLiabilityBalancesText}
+        setLiabilityBalancesText={(value) => changeBalanceText('liability', value)}
         setHasTouchedSnapshotForm={setHasTouchedSnapshotForm}
         parsedAssetBalances={parsedAssetBalances}
         hasInvalidAssetLines={hasInvalidAssetLines}
@@ -249,13 +283,13 @@ export function AccountsOverview({
         setIsMonthEnd={setIsMonthEnd}
         cancelEditing={cancelEditing}
         canSubmit={canSubmit}
-        handleSubmit={(e) => void handleSubmit(e)}
+        handleSubmit={(e) => void handleSubmit(e).catch(() => { /* Action reports failure; keep draft. */ })}
         t={t}
-        formatMoney={formatMoney}
+        formatMoney={formatFormMoney}
       />
 
       <AccountsHistory
-        disabled={disabled}
+        disabled={disabled || isSaving}
         isSaving={isSaving}
         sorted={sorted}
         startEditingSnapshot={startEditingSnapshot}

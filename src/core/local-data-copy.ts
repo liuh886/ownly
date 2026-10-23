@@ -18,9 +18,9 @@ export interface OwnlyLocalDataCopy {
   createdNotice: string;
   openedNotice: string;
   onboarding: {
-    eyebrow: string;
     title: string;
     description: string;
+    /** Summary for the folded storage guidance; the OS picker picks the location. */
     storageQuestion: string;
     localTitle: string;
     localDescription: string;
@@ -65,7 +65,6 @@ const COPY: Record<WYQDLanguage, OwnlyLocalDataCopy> = {
     createdNotice: 'Ownly data folder created.',
     openedNotice: 'Ownly data folder connected.',
     onboarding: {
-      eyebrow: 'User-controlled storage · No account required',
       title: 'Choose where your Ownly files live',
       description: 'Ownly works directly with a folder you choose. It does not upload your records to an Ownly server.',
       storageQuestion: 'Storage location',
@@ -107,7 +106,6 @@ const COPY: Record<WYQDLanguage, OwnlyLocalDataCopy> = {
     createdNotice: 'Ownly 数据目录已创建。',
     openedNotice: 'Ownly 数据目录已连接。',
     onboarding: {
-      eyebrow: '用户控制存储 · 无需账户',
       title: '选择 Ownly 文件保存在哪里',
       description: 'Ownly 直接使用你选择的目录，不会把记录上传到 Ownly 服务器。',
       storageQuestion: '存储位置',
