@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { type PlannerScheduledPlace } from '@/domain/planner-visits';
 import type { WYQDStoredEntity } from '@/core/repository';
-import type { ReviewEntry } from '@/domain/types';
+import type { OneTimeExperienceObject, ReviewEntry, WYQDObject } from '@/domain/types';
+import { tripExperienceId } from '@/domain/trip-experience';
 import {
   buildGoogleMapsRouteUrl,
   effectiveFxRate,
@@ -29,6 +30,7 @@ import { plannerRepository } from '@/services/PlannerRepository';
 import { captureWorkspaceIdentity } from '@/services/ownlyStoreRouter';
 import { assertPublicationWorkspace } from './publication-queue';
 import { saveTripReviewDraft, TripReviewConflictError, TripReviewSaveError, type TripReviewRecovery } from './save-trip-review';
+import { saveUnifiedTripReview } from './save-unified-trip-review';
 import { useOwnlyWorkspace } from '@/core/ownly-workspace-context';
 import {
   SAMPLE_TRIP_DISMISSED_KEY,
@@ -80,12 +82,17 @@ const OptimizeOrderModal = dynamic(
 );
 
 export interface PlannerHomeProps {
+  onDataChanged?: () => Promise<void>;
+  storedObjects?: WYQDStoredEntity<WYQDObject>[];
+  initialExperienceId?: string | null;
+  onExperienceHandled?: () => void;
   disabled: boolean;
   storedReviews?: WYQDStoredEntity<ReviewEntry>[];
   onNavigateToReview?: (targetId?: string) => void;
 }
 
-export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: PlannerHomeProps) {  const ctrl = usePlannerController({ disabled });
+export function PlannerHome({ disabled, storedReviews, storedObjects = [], initialExperienceId, onExperienceHandled, onNavigateToReview, onDataChanged }: PlannerHomeProps) {
+  const ctrl = usePlannerController({ disabled, onDataChanged });
 
   const [guideOpen, setGuideOpen] = useState(false);
   const [draggingPlaceId, setDraggingPlaceId] = useState<string | null>(null);
@@ -96,7 +103,7 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
     typeof window !== 'undefined' && window.innerWidth < 1024 ? 'context' : 'map',
   );
   const [poolView, setPoolView] = useState(false);
-  const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
+  const [isCreateTripOpen, setIsCreateTripOpen] = useState(Boolean(initialExperienceId));
   const [activeModeSwitchPair, setActiveModeSwitchPair] = useState<string | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   // Timeline-to-map locate request (nonce-keyed; both map instances consume it).
@@ -283,7 +290,7 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
 
   // WS-1 trip retrospective: draft lives in TripReviewModal (preview-only);
   // confirm persists via the standard object path, then backlinks review_id.
-  const { repository, runtimeTarget, storageGet, storageSet, isDemoMode } = useOwnlyWorkspace();
+  const { repository, runtimeTarget, storageGet, storageSet, isDemoMode, refreshData } = useOwnlyWorkspace();
   const [sampleDismissed, setSampleDismissed] = useState(() => storageGet(SAMPLE_TRIP_DISMISSED_KEY) === 'true');
   const samplePrompt = resolveSampleTripPrompt({
     isConnected: !disabled,
@@ -366,13 +373,14 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
     });
   }, [selectedTrip, handleUpsertTrip, setConfirmRequest, setNotice, zh]);
 
-  const selectedTripReviewId = selectedTrip?.review_id;
-  const linkedReview = useMemo(() => {
-    if (!selectedTripReviewId || !storedReviews) return null;
-    return storedReviews.find(
-      (r) => r.entity.target_id === selectedTripReviewId || r.entity.id === selectedTripReviewId,
-    )?.entity ?? null;
-  }, [selectedTripReviewId, storedReviews]);
+  const selectedTripReviewId = selectedTrip ? tripExperienceId(selectedTrip) : undefined;
+  const linkedExperience = storedObjects.find((stored) => stored.entity.id === selectedTripReviewId && stored.entity.object_type === 'one_time_experience') as WYQDStoredEntity<OneTimeExperienceObject> | undefined;
+  const linkedStoredReview = storedReviews?.find((stored) => stored.entity.id === linkedExperience?.entity.review_ref)
+    ?? storedReviews?.find((stored) => stored.entity.target_id === selectedTripReviewId);
+  const travelExperiences = useMemo(() => storedObjects.map((stored) => stored.entity)
+    .filter((object): object is OneTimeExperienceObject => object.object_type === 'one_time_experience'
+      && (object.experience_subtype === 'travel_worldview' || trips.some((trip) => tripExperienceId(trip) === object.id))), [storedObjects, trips]);
+  const linkedReview = linkedStoredReview?.entity ?? null;
 
   const linkedReviewScore = useMemo(() => {
     if (!linkedReview) return null;
@@ -399,7 +407,9 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
       if (!recovery) { recovery = new Map(); reviewRecoveries.current.set(recoveryKey, recovery); }
       const save = async (bound: typeof repository) => {
         assertWorkspace();
-        await saveTripReviewDraft(bound, selectedTrip.id, draft,
+        const saveReview = draft.baseline ? saveUnifiedTripReview : saveTripReviewDraft;
+        if (selectedTripReviewId && !draft.baseline) throw new Error(zh ? '关联旅行尚未加载，请重新打开行程。' : 'Linked experience is missing; reopen the trip.');
+        await saveReview(bound, selectedTrip.id, draft,
           (tripId, reviewId) => plannerRepository.withWriteSession(async (planner) => {
             assertWorkspace();
             await planner.patchTripReviewId(tripId, reviewId);
@@ -407,15 +417,18 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
       };
       if (repository.withWriteSession) await repository.withWriteSession(save);
       else await save(repository);
+      assertWorkspace();
       setIsReviewModalOpen(false);
-      const reviewTargetId = `obj_trip_review_${encodeURIComponent(selectedTrip.id)}`;
+      const reviewTargetId = selectedTripReviewId ?? `obj_trip_review_${encodeURIComponent(selectedTrip.id)}`;
       const hasScores = Boolean(
         draft.scores &&
           (draft.scores.foodScore != null ||
             draft.scores.sceneryScore != null ||
             draft.scores.experienceScore != null),
       );
-      const noticeMsg = hasScores
+      const noticeMsg = draft.baseline
+        ? (zh ? '旅行复盘已保存，Planner 与复盘页共用此记录。' : 'Trip review saved and shared with Reviews.')
+        : hasScores
         ? (zh ? '行程复盘与评分已保存，已联动至复盘页。' : 'Trip retrospective & scores saved to Reviews.')
         : (zh ? '复盘草稿已生成，可在「复盘」页补评分。' : 'Retrospective draft saved; add scores in the Reviews tab.');
       setNotice(noticeMsg);
@@ -428,7 +441,11 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
           onNavigateToReview?.(reviewTargetId);
         },
       });
-      try { await load(); } catch { setNotice(zh ? '复盘已保存，列表刷新失败，请重新打开行程。' : 'Retrospective saved; refresh failed. Reopen the trip.'); }
+      try {
+        await load();
+        if (onDataChanged) await onDataChanged();
+        else refreshData();
+      } catch { setNotice(zh ? '复盘已保存，列表刷新失败，请重新打开行程。' : 'Retrospective saved; refresh failed. Reopen the trip.'); }
     } catch (error) {
       const message = error instanceof TripReviewConflictError
         ? (zh ? '保存的复盘已有修改，无法覆盖。你的新输入仍保留，请在复盘页核对已保存内容后再试。' : 'The saved retrospective changed; it was not overwritten. Your new input is kept. Check the saved object in Reviews before retrying.')
@@ -441,7 +458,7 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
       reviewSaveRef.current = false;
       setReviewBusy(false);
     }
-  }, [renderedReviewWorkspace, selectedTrip, disabled, repository, load, setNotice, setNoticeAction, onNavigateToReview, zh]);
+  }, [renderedReviewWorkspace, selectedTrip, selectedTripReviewId, disabled, repository, refreshData, onDataChanged, load, setNotice, setNoticeAction, onNavigateToReview, zh]);
 
   // Capture bridge is Web/PWA-only: never fail silently under Obsidian.
   const syncCaptureWithBoundary = useCallback(() => {
@@ -945,7 +962,9 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
         <CreateTripModal
           key={isCreateTripOpen ? 'open' : 'closed'}
           open={isCreateTripOpen}
-          onClose={() => setIsCreateTripOpen(false)}
+          onClose={() => { setIsCreateTripOpen(false); onExperienceHandled?.(); }}
+          experiences={travelExperiences}
+          initialExperienceId={initialExperienceId}
           trips={trips}
           onCreate={handleUpsertTrip}
           onImported={(tripId) => {
@@ -1120,8 +1139,10 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
             <button
               type="button"
               onClick={() => {
-                if (selectedTrip.review_id) {
-                  onNavigateToReview?.(selectedTrip.review_id);
+                if (linkedStoredReview) {
+                  onNavigateToReview?.(selectedTripReviewId);
+                } else if (selectedTripReviewId && !linkedExperience) {
+                  setNotice(zh ? '关联的旅行经历不存在或已归档，请先恢复记录。' : 'The linked experience is missing or archived; restore it first.');
                 } else {
                   setReviewError(null);
                   setIsReviewModalOpen(true);
@@ -1129,19 +1150,19 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
               }}
               disabled={disabled}
               className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold shadow-2xs transition active:scale-98 ${
-                selectedTrip.review_id
+                linkedStoredReview
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 hover:text-emerald-950'
                   : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 hover:text-stone-900'
               }`}
-              title={selectedTrip.review_id
+              title={linkedStoredReview
                 ? (linkedReviewScore !== null
                     ? (zh ? `已生成复盘（评分 ${linkedReviewScore} 分），点击在复盘页查看` : `Retrospective created (Score: ${linkedReviewScore}), click to view in Reviews`)
                     : (zh ? '已生成复盘，点击前往复盘页查看与评分' : 'Retrospective created; click to view in Reviews'))
                 : (zh ? '行程结束，一键生成复盘草稿' : 'Generate a retrospective draft')}
             >
-              <span>{selectedTrip.review_id ? '✅' : '📝'}</span>
+              <span>{linkedStoredReview ? '✅' : '📝'}</span>
               <span>
-                {selectedTrip.review_id
+                {linkedStoredReview
                   ? (linkedReviewScore !== null
                       ? `★ ${linkedReviewScore}`
                       : (zh ? '查看复盘' : 'View Review'))
@@ -1521,7 +1542,10 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
           onClose={() => {
             setIsCreateTripOpen(false);
             setTimezoneEditTripId(null);
+            onExperienceHandled?.();
           }}
+          experiences={travelExperiences}
+          initialExperienceId={initialExperienceId}
           trips={trips}
           onCreate={handleUpsertTrip}
           onImported={(tripId) => {
@@ -1582,6 +1606,8 @@ export function PlannerHome({ disabled, storedReviews, onNavigateToReview }: Pla
 
       {selectedTrip && isReviewModalOpen ? (
         <TripReviewModal
+          existingObject={linkedExperience}
+          existingReview={linkedStoredReview}
           key={`review-${selectedTrip.id}-${selectedTrip.review_id ?? 'none'}`}
           trip={selectedTrip}
           places={tripPlaces}

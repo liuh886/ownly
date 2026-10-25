@@ -1,5 +1,5 @@
 import { useActionMenu } from './useActionMenu';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useI18n } from '@/core/i18n-context';
 import { useFormatMoney } from '@/lib/use-format';
 import { recordCurrency } from '@/domain/currency';
@@ -60,6 +60,7 @@ export function ObjectCardSupporting({
   onUpdate,
   onDelete,
   onCreateObjectReview,
+  onPlanExperience,
   setEditingFileName,
   setSelectedFileName,
   setReviewingFileName,
@@ -76,6 +77,7 @@ export function ObjectCardSupporting({
   menuItemClass,
 }: {
   stored: WYQDStoredEntity<WYQDObject>;
+  onPlanExperience?: (objectId: string) => Promise<void>;
   reviews: WYQDStoredEntity<ReviewEntry>[];
   logs?: WYQDStoredEntity<ObjectLogEntry>[];
   isEditing: boolean;
@@ -119,6 +121,7 @@ export function ObjectCardSupporting({
 }) {
   const { t, language } = useI18n();
   const reviewSaving = useRef(false);
+  const [planning, setPlanning] = useState(false);
   const { formatMoney } = useFormatMoney(recordCurrency(stored.entity));
   const { rootRef: actionMenuRoot, toggle: toggleActionMenu, close: closeActionMenu, onKeyDown: actionMenuKeys, onPointerDown: actionMenuPointer, onMouseDown: actionMenuMouse } = useActionMenu(openActionMenuFileName === stored.fileName, (open) => setOpenActionMenuFileName(open ? stored.fileName : null));
   const object = stored.entity;
@@ -292,6 +295,16 @@ export function ObjectCardSupporting({
                 </div>
               ) : null}
               
+              {object.object_type === 'one_time_experience' && object.experience_subtype === 'travel_worldview' && onPlanExperience ? (
+                <button type="button" disabled={disabled || planning} className="z-10 ml-2 shrink-0 rounded-lg border border-stone-200 bg-white px-2 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPlanning(true);
+                    void onPlanExperience(object.id).finally(() => setPlanning(false));
+                  }}>
+                  {planning ? '…' : language === 'zh' ? '行程规划' : 'Plan trip'}
+                </button>
+              ) : null}
               {canCancelRecurringCost(object) ? (
                 <div 
                   ref={actionMenuRoot}

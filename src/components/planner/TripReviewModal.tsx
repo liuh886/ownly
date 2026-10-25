@@ -16,14 +16,16 @@ import type {
   TripExpenseItem,
 } from '@/domain/planner';
 import type { PlannerTripVisit } from '@/domain/planner-visits';
+import type { WYQDStoredEntity } from '@/core/repository';
+import type { OneTimeExperienceObject, ReviewEntry } from '@/domain/types';
 
 const COPY = {
   en: {
     title: 'Trip retrospective draft',
-    intro: 'This draft creates a travel experience object. Nothing is saved until you confirm.',
-    summaryLabel: 'Summary (editable)',
+    intro: 'Save this trip’s summary and ratings to Reviews. Nothing is saved until you confirm.',
+    summaryLabel: 'Review notes (editable)',
     scoresTitle: 'Trip ratings (optional)',
-    scoresDesc: 'Enter scores (0-100) to link directly to Reviews.',
+    scoresDesc: 'Optional scores (0–100), shared with Reviews.',
     foodScore: 'Food (0-100)',
     sceneryScore: 'Scenery (0-100)',
     experienceScore: 'Experience (0-100)',
@@ -38,10 +40,10 @@ const COPY = {
   },
   zh: {
     title: '行程复盘草稿',
-    intro: '该草稿将生成一条旅行经历对象。确认之前不会写入任何数据。',
-    summaryLabel: '摘要（可编辑）',
+    intro: '总结与评分将保存到这趟旅行的复盘，已有旅行笔记与预算会保留。',
+    summaryLabel: '复盘正文（可编辑）',
     scoresTitle: '行程评分评估（可选）',
-    scoresDesc: '填写评分（0-100）将直接同步生成 Reviewer 复盘评分。',
+    scoresDesc: '评分可选；总结与评分在 Planner 和复盘页共用。',
     foodScore: '美食评分 (0-100)',
     sceneryScore: '风景评分 (0-100)',
     experienceScore: '体验评分 (0-100)',
@@ -67,6 +69,8 @@ export function TripReviewModal({
   error,
   onClose,
   onConfirm,
+  existingObject,
+  existingReview,
 }: {
   trip: PlannerTrip;
   places: PlannerTripPlace[];
@@ -78,16 +82,22 @@ export function TripReviewModal({
   error?: string | null;
   onClose: () => void;
   onConfirm: (draft: TripReviewDraft) => void;
+  existingObject?: WYQDStoredEntity<OneTimeExperienceObject>;
+  existingReview?: WYQDStoredEntity<ReviewEntry>;
 }) {
   const copy = COPY[language];
+  const stats = useMemo(() => buildTripReviewStats(trip, places, visits, legs, expenses), [trip, places, visits, legs, expenses]);
   const draft = useMemo<TripReviewDraft>(
-    () => buildTripReviewDraft(trip, buildTripReviewStats(trip, places, visits, legs, expenses), { language }),
-    [trip, places, visits, legs, expenses, language],
+    () => buildTripReviewDraft(trip, stats, { language, budgetTotal: existingObject?.entity.budget_total }),
+    [trip, stats, language, existingObject?.entity.budget_total],
   );
-  const [body, setBody] = useState(draft.body);
-  const [foodScore, setFoodScore] = useState('');
-  const [sceneryScore, setSceneryScore] = useState('');
-  const [experienceScore, setExperienceScore] = useState('');
+  const [baseline] = useState(() => existingObject ? { object: existingObject, review: existingReview } : undefined);
+  const actualTotal = (stats.unconvertible.length ? undefined : draft.object.actual_total) ?? baseline?.object.entity.actual_total;
+  const [body, setBody] = useState(existingReview?.body ?? [existingObject?.body.trim(), draft.body].filter(Boolean).join('\n\n'));
+  const [summary, setSummary] = useState(existingReview?.entity.summary ?? '');
+  const [foodScore, setFoodScore] = useState(existingReview?.entity.food_score?.toString() ?? '');
+  const [sceneryScore, setSceneryScore] = useState(existingReview?.entity.scenery_score?.toString() ?? '');
+  const [experienceScore, setExperienceScore] = useState(existingReview?.entity.experience_score?.toString() ?? '');
   const panelRef = useRef<HTMLElement>(null);
 
   useDialogA11y({ open: true, onClose, panelRef });
@@ -106,13 +116,19 @@ export function TripReviewModal({
     const hasAnyScore = parsedFood != null || parsedScenery != null || parsedExperience != null;
 
     onConfirm({
-      object: draft.object,
+      language,
+      object: {
+        ...draft.object,
+        actual_total: stats.unconvertible.length ? undefined : draft.object.actual_total,
+      },
       body,
-      scores: hasAnyScore
+      baseline,
+      scores: hasAnyScore || baseline
         ? {
             foodScore: parsedFood,
             sceneryScore: parsedScenery,
             experienceScore: parsedExperience,
+            ...(baseline ? { summary } : {}),
           }
         : undefined,
     });
@@ -137,8 +153,8 @@ export function TripReviewModal({
           <div className="flex gap-2">
             <dt className="shrink-0 font-medium text-stone-800">{copy.actualTotal}</dt>
             <dd>
-              {draft.object.actual_total !== undefined
-                ? `${trip.currency || 'CNY'} ${draft.object.actual_total}`
+              {actualTotal !== undefined
+                ? `${trip.currency || 'CNY'} ${actualTotal}`
                 : copy.noSpend}
             </dd>
           </div>
@@ -199,6 +215,13 @@ export function TripReviewModal({
           {scoreError ? <p role="alert" className="mt-2 text-xs text-red-600">{scoreError}</p> : null}
         </div>
 
+        {baseline ? (
+          <div className="mt-4">
+            <label htmlFor="trip-review-summary" className="block text-xs font-medium text-stone-800">{language === 'zh' ? '一句话总结' : 'Summary'}</label>
+            <input id="trip-review-summary" value={summary} onChange={(event) => setSummary(event.target.value)} disabled={busy}
+              className="mt-1 min-h-10 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" />
+          </div>
+        ) : null}
         <label className="mt-4 block text-xs font-medium text-stone-800" htmlFor="trip-review-body">
           {copy.summaryLabel}
         </label>

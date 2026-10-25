@@ -1248,6 +1248,7 @@ export class PlannerRepository {
       if (!trip) throw new Error(`Planner trip was not found: ${tripId}`);
       if (trip.review_id === reviewId) return;
       if (trip.review_id) throw new Error(`Planner trip already has a different review: ${tripId}`);
+      if (trip.experience_id && trip.experience_id !== reviewId) throw new Error(`Planner trip has a different experience: ${tripId}`);
       await tx.stageUpsertEntity({ ...trip, review_id: reviewId, updated_at: new Date().toISOString() });
     });
   }

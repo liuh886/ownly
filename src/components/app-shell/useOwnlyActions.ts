@@ -9,6 +9,8 @@ import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
 import { todayLocalISO } from '@/domain/date';
 import { calculateExperienceCost } from '@/domain/calculations';
 import { captureWorkspaceIdentity, isWorkspaceIdentityCurrent } from '@/services/ownlyStoreRouter';
+import { plannerRepository } from '@/services/PlannerRepository';
+import { syncExperienceToTrip } from '@/services/TripExperienceService';
 
 interface ReviewRankings { foodScore: number | null; sceneryScore: number | null; experienceScore: number | null }
 type RegisterUndo = (undo: () => Promise<unknown>) => void;
@@ -113,12 +115,21 @@ export function useOwnlyActions(
   }
 
   async function updateObject(fileName: string, object: WYQDObject, body: string) {
+    const identity = captureWorkspaceIdentity();
     await commit(async (repo, undo) => {
       const stored = await liveObject(repo, fileName, object.id);
       const displayed = storedObjects.find((item) => item.fileName === fileName && item.entity.id === object.id);
       if (displayed && (JSON.stringify(displayed.entity) !== JSON.stringify(stored.entity) || displayed.body !== stored.body)) throw new Error(t('recordChanged'));
       await repo.updateObject(fileName, object, body);
       undo(() => repo.updateObject(fileName, stored.entity, stored.body));
+      if (object.object_type === 'one_time_experience' || stored.entity.object_type === 'one_time_experience') {
+        if (!isWorkspaceIdentityCurrent(identity)) throw new Error(t('workspaceChanged'));
+        await plannerRepository.withWriteSession(async (planner) => {
+          if (!isWorkspaceIdentityCurrent(identity)) throw new Error(t('workspaceChanged'));
+          const previous = await syncExperienceToTrip(planner, object);
+          if (previous) undo(() => planner.upsertTrip(previous));
+        });
+      }
       if (stored.entity.title !== object.title || stored.entity.object_type !== object.object_type) {
         for (const review of (await repo.listReviews()).filter((item) => item.entity.target_id === object.id)) {
           await repo.updateReview(review.fileName, { ...review.entity, target: object.title, target_type: object.object_type, updated_at: todayLocalISO() }, review.body);

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TripReviewModal } from './TripReviewModal';
 import type { PlannerTrip } from '@/domain/planner';
+import { experienceFromTrip } from '@/domain/trip-experience';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -45,6 +46,23 @@ async function changeInput(element: HTMLInputElement | HTMLTextAreaElement, valu
 }
 
 describe('TripReviewModal', () => {
+  it('loads the shared review body and ratings without replacing the experience notes', async () => {
+    const onConfirm = vi.fn();
+    const object = { fileName: 'experience.md', entity: experienceFromTrip(trip), body: 'Original intention' };
+    const review = { fileName: 'review.md', body: 'Edited in Reviews', entity: {
+      schema_version: '0.1', type: 'review', review_type: 'object_review', id: 'review-shared', title: 'Review',
+      target_id: object.entity.id, summary: 'A lovely trip', food_score: 97, scenery_score: 0,
+      created_at: '2026-10-06', updated_at: '2026-10-06',
+    } } as import('@/core/repository').WYQDStoredEntity<import('@/domain/types').ReviewEntry>;
+    await act(async () => root.render(<TripReviewModal trip={trip} places={[]} visits={[]} legs={[]} expenses={[]}
+      language="zh" busy={false} onClose={vi.fn()} onConfirm={onConfirm} existingObject={object} existingReview={review} />));
+    expect(host.querySelector<HTMLTextAreaElement>('#trip-review-body')?.value).toBe('Edited in Reviews');
+    expect(host.querySelector<HTMLInputElement>('#trip-food-score')?.value).toBe('97');
+    expect(host.querySelector<HTMLInputElement>('#trip-scenery-score')?.value).toBe('0');
+    const button = [...host.querySelectorAll('button')].find((b) => b.textContent === '确认并保存')!;
+    await act(async () => button.click());
+    expect(onConfirm.mock.calls[0][0]).toMatchObject({ body: 'Edited in Reviews', baseline: { object }, scores: { foodScore: 97, sceneryScore: 0, summary: 'A lovely trip' } });
+  });
   it('renders score inputs and passes parsed scores to onConfirm', async () => {
     const onConfirm = vi.fn();
     const onClose = vi.fn();

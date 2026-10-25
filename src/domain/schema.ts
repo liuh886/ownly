@@ -179,6 +179,14 @@ export function validateTrip(trip: PlannerTrip): ValidationResult {
   if (!Array.isArray(trip.destinations)) {
     issues.push({ field: 'destinations', message: 'Trip destinations must be an array', severity: 'error' });
   }
+  for (const field of ['experience_id', 'review_id'] as const) {
+    if (trip[field] !== undefined && (typeof trip[field] !== 'string' || !trip[field]?.trim())) {
+      issues.push({ field, message: 'Expected a non-empty experience object id', severity: 'error' });
+    }
+  }
+  if (trip.experience_id && trip.review_id && trip.experience_id !== trip.review_id) {
+    issues.push({ field: 'experience_id', message: 'Trip experience and retrospective must reference the same object', severity: 'error' });
+  }
   return createResult(issues);
 }
 
