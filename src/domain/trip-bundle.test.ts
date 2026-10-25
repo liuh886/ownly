@@ -7,6 +7,8 @@ const trip: PlannerTrip = {
   schema_version: '0.1',
   type: 'trip',
   id: 'trip-original',
+  experience_id: 'private-travel-object',
+  review_id: 'private-travel-object',
   title: 'Thailand 2026',
   status: 'active',
   start_date: '2026-10-04',
@@ -84,10 +86,14 @@ describe('Ownly Trip Bundle', () => {
     const bundle = createShareableTripBundle(trip, [place, secondPlace], [visit], [leg]);
     const injected = JSON.parse(JSON.stringify(bundle));
     injected.trip.members = ['Injected Person'];
+    injected.trip.experience_id = 'someone-elses-object';
+    injected.trip.review_id = 'someone-elses-object';
     injected.trip.calendar_feed = trip.calendar_feed;
     injected.expenses = [{ title: 'must never import' }];
     const parsed = parseTripBundle(JSON.stringify(injected));
     expect(parsed.trip.members).toBeUndefined();
+    expect(parsed.trip.experience_id).toBeUndefined();
+    expect(parsed.trip.review_id).toBeUndefined();
     expect(parsed.trip.calendar_feed).toBeUndefined();
     expect((parsed as unknown as { expenses?: unknown }).expenses).toBeUndefined();
   });
@@ -100,6 +106,9 @@ describe('Ownly Trip Bundle', () => {
     expect(copy.trip.id).toBe('trip-new');
     expect(copy.trip.status).toBe('planning');
     expect(copy.trip.members).toBeUndefined();
+    expect(bundle.trip.experience_id).toBeUndefined();
+    expect(copy.trip.experience_id).toBeUndefined();
+    expect(copy.trip.review_id).toBeUndefined();
     expect(copy.places.map((item) => item.id)).toEqual(['place-new-a', 'place-new-b']);
     expect(copy.places.every((item) => item.trip_id === 'trip-new')).toBe(true);
     expect(copy.visits[0].id).toBe('visit:visit-new');

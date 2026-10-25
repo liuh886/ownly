@@ -52,7 +52,9 @@ export interface PlannerTrip {
   calendar_feed?: PlannerTripCalendarFeed;
   /** User-reviewed duplicate pairs that must stay separate. Pair ids are canonical and order-independent. */
   ignored_duplicate_pair_ids?: string[];
-  /** Backlink to the experience object created by the trip retrospective (WS-1). Optional; no schema bump. */
+  /** The single travel experience shared with Objects and Reviews, from planning onward. */
+  experience_id?: string;
+  /** Legacy retrospective backlink. Points to an experience object, not a ReviewEntry. */
   review_id?: string;
   created_at: string;
   updated_at?: string;

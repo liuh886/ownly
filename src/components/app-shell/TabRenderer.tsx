@@ -10,6 +10,8 @@ import { getQuickLineTemplates } from '@/components/objects/composerQuickLine';
 import type { AppTab } from './BottomNav';
 import type { WYQDObject, AccountSnapshot, ReviewEntry, ObjectLogEntry } from '@/domain/types';
 import type { WYQDStoredEntity, WYQDArchivedStoredEntity } from '@/core/repository';
+import { tripExperienceId } from '@/domain/trip-experience';
+import { captureWorkspaceIdentity, isWorkspaceIdentityCurrent } from '@/services/ownlyStoreRouter';
 
 import type { HomeMetrics } from '@/domain/types';
 import type { useOwnlyActions } from './useOwnlyActions';
@@ -67,6 +69,7 @@ export interface FirstObjectRequest {
 }
 
 interface TabRendererProps {
+  onDataChanged?: () => Promise<void>;
   activeTab: AppTab;
   isConnected: boolean;
   metrics: HomeMetrics;
@@ -101,12 +104,14 @@ export function TabRenderer({
   autoFocusComposer,
   firstObjectRequest,
   actions,
+  onDataChanged,
   setObjectListFocus,
   setAutoFocusComposer,
   setActiveTab,
 }: TabRendererProps) {
   const { t, language } = useI18n();
-  const { membership } = useOwnlyWorkspace();
+  const { membership, showNotice } = useOwnlyWorkspace();
+  const [planningExperienceId, setPlanningExperienceId] = useState<string | null>(null);
 
   const [quickEntryRequest, setQuickEntryRequest] = useState<{
     token: number;
@@ -152,6 +157,21 @@ export function TabRenderer({
     focusPlannerTrip(tripId);
     setActiveTab('planner');
   }, [setActiveTab]);
+
+  const openExperiencePlanner = async (objectId: string) => {
+    const identity = captureWorkspaceIdentity();
+    try {
+      const { plannerRepository } = await import('@/services/PlannerRepository');
+      const linked = (await plannerRepository.listTrips({ strict: true })).filter((trip) => tripExperienceId(trip) === objectId);
+      if (!isWorkspaceIdentityCurrent(identity)) throw new Error(t('workspaceChanged'));
+      if (linked.length > 1) throw new Error(language === 'zh' ? '该旅行关联了多个行程，请检查数据。' : 'This experience is linked to multiple trips.');
+      setPlanningExperienceId(linked.length ? null : objectId);
+      if (linked[0]) focusPlannerTrip(linked[0].id);
+      setActiveTab('planner');
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   const firstObjectQuickEntryRequest = useMemo(() => {
     if (!firstObjectRequest) return undefined;
@@ -210,6 +230,7 @@ export function TabRenderer({
           onUpdate={actions.updateObject}
           onDelete={actions.archiveObject}
           onCreateObjectReview={actions.createObjectReview}
+          onPlanExperience={openExperiencePlanner}
         />
         <ArchivePanel
           disabled={!isConnected}
@@ -256,7 +277,11 @@ export function TabRenderer({
         <PlannerHome
           disabled={!isConnected}
           storedReviews={storedReviews}
+          storedObjects={storedObjects}
+          initialExperienceId={planningExperienceId}
+          onExperienceHandled={() => setPlanningExperienceId(null)}
           onNavigateToReview={handleNavigateToReview}
+          onDataChanged={onDataChanged}
         />
       </div>
     );
@@ -271,6 +296,7 @@ export function TabRenderer({
           reviews={storedReviews}
           membership={membership}
           initialTargetId={targetReviewId}
+          onPlanExperience={openExperiencePlanner}
           onCreateReview={actions.createReview}
           onUpdateReview={actions.updateReview}
           onDeleteReview={actions.deleteReview}

@@ -298,3 +298,26 @@ it('preselects matching review or pending experience based on initialTargetId', 
   expect(host.querySelector('form')).not.toBeNull();
   expect(host.querySelector('textarea')?.value).toBe('reviewAbout');
 });
+
+it('opens the pending trip form on the first mount and when newly saved data arrives later', async () => {
+  const object = { schema_version: '0.1', type: 'object', id: 'pending-trip', title: 'Newly saved trip',
+    object_type: 'one_time_experience', status: 'completed', created_at: '2026-10-01' } as WYQDObject;
+  const props = { reviews: [], membership: {} as never, initialTargetId: object.id,
+    onCreateReview: vi.fn(), onUpdateReview: vi.fn(), onDeleteReview: vi.fn() };
+  await render(<ReviewHome {...props} objects={[]} />);
+  expect(host.querySelector('form')).toBeNull();
+  await render(<ReviewHome {...props} objects={[object]} />);
+  expect(host.querySelector('form')).not.toBeNull();
+  await render(<ReviewHome key="fresh-mount" {...props} objects={[object]} />);
+  expect(host.querySelector('form')).not.toBeNull();
+});
+
+it('selects the requested review on first mount even when it is not the newest review', async () => {
+  const makeReview = (id: string, date: string) => ({ fileName: `${id}.md`, body: id, entity: {
+    schema_version: '0.1', type: 'review', id, review_type: 'object_review', title: id,
+    target_id: `object-${id}`, created_at: date, reviewed_at: date, summary: id,
+  } } as WYQDStoredEntity<ReviewEntry>);
+  await render(<ReviewHome objects={[]} reviews={[makeReview('newest', '2026-10-10'), makeReview('requested', '2026-10-01')]}
+    membership={{} as never} initialTargetId="object-requested" onCreateReview={vi.fn()} onUpdateReview={vi.fn()} onDeleteReview={vi.fn()} />);
+  expect(host.querySelector('aside h3')?.textContent).toBe('requested');
+});

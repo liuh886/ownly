@@ -266,6 +266,7 @@ export function AppShell() {
                 autoFocusComposer={autoFocusComposer}
                 firstObjectRequest={firstObjectRequest}
                 actions={actions}
+                onDataChanged={data.loadVaultData}
                 setObjectListFocus={setObjectListFocus}
                 setAutoFocusComposer={setAutoFocusComposer}
                 setActiveTab={setActiveTab}

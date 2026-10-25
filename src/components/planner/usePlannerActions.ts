@@ -48,6 +48,7 @@ import {
   type AccountCalendarFeedMeta,
 } from '@/domain/calendar-feed';
 import { useAutoCalendarSync } from './useAutoCalendarSync';
+import { saveUnifiedTrip } from '@/services/TripExperienceService';
 import { trackFirstEver } from '@/lib/analytics';
 import { createDetachedElement } from '@/lib/dom';
 import { buildTripItineraryHtml, tripItineraryHtmlFileName } from '@/domain/trip-itinerary-html';
@@ -110,6 +111,7 @@ async function restorePlaceSnapshot(snapshot: PlaceSnapshot, repository: typeof 
 }
 
 export interface UsePlannerActionsProps {
+  onDataChanged?: () => Promise<void>;
   data: PlannerDataReturn;
   disabled: boolean;
 }
@@ -158,7 +160,7 @@ async function fetchMotorcyclePairMatrix(
   return { order: matrixStops, facts: { durations_minutes, distances_meters } };
 }
 
-export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
+export function usePlannerActions({ data, disabled, onDataChanged }: UsePlannerActionsProps) {
   const {
     zh,
     language,
@@ -342,13 +344,32 @@ export function usePlannerActions({ data, disabled }: UsePlannerActionsProps) {
   }, [plannerWorkspaceIdentity, load, setNotice, setNoticeAction, zh]);
 
   const handleUpsertTrip = useCallback(
-    async (newTrip: PlannerTrip) => {
-      await plannerRepository.upsertTrip(newTrip);
-      await load();
+    async (newTrip: PlannerTrip, baseline?: PlannerTrip) => {
+      if (disabled) throw new Error(zh ? '请先连接数据目录。' : 'Connect a data folder first.');
+      const identity = plannerWorkspaceIdentity;
+      const assertWorkspace = () => assertPublicationWorkspace(identity);
+      const save = async (repo: typeof workspace.repository) => {
+        assertWorkspace();
+        await plannerRepository.withWriteSession(async (planner) => {
+          assertWorkspace();
+          await saveUnifiedTrip(repo, planner, newTrip, assertWorkspace, baseline ?? trips.find((trip) => trip.id === newTrip.id));
+        });
+      };
+      if (workspace.repository.withWriteSession) await workspace.repository.withWriteSession(save);
+      else await save(workspace.repository);
+      assertWorkspace();
       setSelectedTripId(newTrip.id);
+      try {
+        await load();
+        if (onDataChanged) await onDataChanged();
+        else workspace.refreshData();
+      } catch {
+        setNotice(zh ? '行程已保存，列表刷新失败，请重新打开。' : 'Trip saved; refresh failed. Reopen it to refresh.');
+        return;
+      }
       setNotice(zh ? `已保存行程「${newTrip.title}」` : `Saved trip "${newTrip.title}"`);
     },
-    [load, setSelectedTripId, setNotice, zh],
+    [load, setSelectedTripId, setNotice, zh, disabled, plannerWorkspaceIdentity, workspace, trips, onDataChanged],
   );
 
   const handleDeleteTrip = useCallback(

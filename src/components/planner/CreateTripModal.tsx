@@ -22,6 +22,8 @@ import { isSampleTrip } from '@/core/sample-trip';
 import { allSampleTrips } from '@/data/sample-trips/registry';
 import { SampleTripPicker } from './SampleTripPicker';
 import { COMMON_TIMEZONES } from '../../domain/calendar-feed';
+import type { OneTimeExperienceObject } from '@/domain/types';
+import { tripExperienceId, tripFromExperience } from '@/domain/trip-experience';
 
 /**
  * Chat apps truncate very long URLs. Above this length a share link is likely
@@ -32,9 +34,11 @@ export const TRIP_SHARE_URL_LENGTH_LIMIT = 8000;
 type TabMode = 'manage' | 'create' | 'import';
 
 interface CreateTripModalProps {
+  experiences?: OneTimeExperienceObject[];
+  initialExperienceId?: string | null;
   open: boolean;
   onClose: () => void;
-  onCreate: (trip: PlannerTrip) => Promise<void>;
+  onCreate: (trip: PlannerTrip, baseline?: PlannerTrip) => Promise<void>;
   onImported?: (tripId: string) => void;
   onDeleteTrip?: (tripId: string) => Promise<void>;
   trips?: PlannerTrip[];
@@ -64,6 +68,8 @@ export function CreateTripModal({
   incomingShareHash = null,
   onDismissShare,
   initialEditTripId = null,
+  experiences = [],
+  initialExperienceId = null,
 }: CreateTripModalProps) {
   const zh = language === 'zh';
   const fieldId = useId();
@@ -91,15 +97,18 @@ export function CreateTripModal({
       tags: (target.tags ?? []).join(', '),
     };
   });
-  const [tab, setTab] = useState<TabMode>(initialEditForm?.tab ?? 'manage');
+  const initialExperience = experiences.find((object) => object.id === initialExperienceId);
+  const initialExperienceTrip = initialExperience ? tripFromExperience(initialExperience, '', '') : null;
+  const [experienceId, setExperienceId] = useState(initialEditForm ? tripExperienceId(initialEditForm.trip) ?? '' : initialExperienceId ?? '');
+  const [tab, setTab] = useState<TabMode>(initialEditForm?.tab ?? (initialExperience ? 'create' : 'manage'));
   const [deleteBusy, setDeleteBusy] = useState<string | null>(null);
   const [editingTrip, setEditingTrip] = useState<PlannerTrip | null>(initialEditForm?.trip ?? null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const [title, setTitle] = useState(initialEditForm?.title ?? '');
-  const [startDate, setStartDate] = useState(initialEditForm?.startDate ?? '');
-  const [endDate, setEndDate] = useState(initialEditForm?.endDate ?? '');
-  const [destinations, setDestinations] = useState(initialEditForm?.destinations ?? '');
-  const [currency, setCurrency] = useState(initialEditForm?.currency ?? 'THB');
+  const [title, setTitle] = useState(initialEditForm?.title ?? initialExperienceTrip?.title ?? '');
+  const [startDate, setStartDate] = useState(initialEditForm?.startDate ?? initialExperienceTrip?.start_date ?? '');
+  const [endDate, setEndDate] = useState(initialEditForm?.endDate ?? initialExperienceTrip?.end_date ?? '');
+  const [destinations, setDestinations] = useState(initialEditForm?.destinations ?? initialExperienceTrip?.destinations.join(', ') ?? '');
+  const [currency, setCurrency] = useState(initialEditForm?.currency ?? initialExperienceTrip?.currency ?? 'THB');
   const [transportMode, setTransportMode] = useState<PlannerTravelMode>(initialEditForm?.transportMode ?? 'transit');
   const [timezone, setTimezone] = useState(initialEditForm?.timezone ?? '');
   const [dayTimezones, setDayTimezones] = useState<Record<string, string>>(initialEditForm?.dayTimezones ?? {});
@@ -148,6 +157,7 @@ export function CreateTripModal({
   }), [importPreview.bundle]);
 
   const startEdit = (trip: PlannerTrip) => {
+    setExperienceId(tripExperienceId(trip) ?? '');
     setEditingTrip(trip);
     setTitle(trip.title);
     setStartDate(trip.start_date);
@@ -164,6 +174,7 @@ export function CreateTripModal({
   if (!open) return null;
 
   const resetForm = () => {
+    setExperienceId('');
     setTitle('');
     setStartDate('');
     setEndDate('');
@@ -269,11 +280,16 @@ export function CreateTripModal({
       timezone: timezone.trim() || undefined,
       day_timezones: dayTimezones,
     }, now);
+    newTrip.experience_id = experienceId || undefined;
+    if (!editingTrip && experienceId) {
+      const selected = experiences.find((object) => object.id === experienceId);
+      if (selected) newTrip.status = tripFromExperience(selected, newTrip.id, now).status;
+    }
 
     setBusy(true);
     setError(null);
     try {
-      await onCreate(newTrip);
+      await onCreate(newTrip, editingTrip ?? undefined);
       setEditingTrip(null);
       handleClose();
     } catch (err) {
@@ -507,6 +523,37 @@ export function CreateTripModal({
             </div>
           ) : tab === 'create' ? (
             <form id="ownly-trip-form" onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+              <div>
+                <label htmlFor={`${fieldId}-experience`} className="block text-xs font-bold text-stone-700">
+                  {zh ? '关联物欲中的旅行' : 'Travel experience in Objects'}
+                </label>
+                <select id={`${fieldId}-experience`} value={experienceId}
+                  disabled={Boolean(editingTrip && tripExperienceId(editingTrip)) || busy || disabled}
+                  onChange={(event) => {
+                    const id = event.target.value;
+                    setExperienceId(id);
+                    if (editingTrip || !id) return;
+                    const selected = experiences.find((object) => object.id === id);
+                    if (!selected) return;
+                    const fields = tripFromExperience(selected, '', '');
+                    setTitle(fields.title); setStartDate(fields.start_date); setEndDate(fields.end_date);
+                    setDestinations(fields.destinations.join(', ')); setCurrency(fields.currency ?? 'CNY');
+                  }}
+                  className="mt-1 min-h-11 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 disabled:opacity-60">
+                  <option value="">{zh ? '新建旅行经历（与此行程关联）' : 'Create a linked travel experience'}</option>
+                  {experiences.map((object) => (
+                    <option key={object.id} value={object.id} disabled={trips.some((trip) => trip.id !== editingTrip?.id && tripExperienceId(trip) === object.id)}>
+                      {object.title}{object.started_at ? ` · ${object.started_at}` : ''}{object.location?.city ? ` · ${object.location.city}` : ''}
+                    </option>
+                  ))}
+                  {experienceId && !experiences.some((object) => object.id === experienceId) ? (
+                    <option value={experienceId}>{zh ? '关联记录缺失，请先恢复' : 'Linked experience missing; restore it first'}</option>
+                  ) : null}
+                </select>
+                <p className="mt-1 text-xs text-stone-500">{zh
+                  ? '名称、日期、目的地和状态会同步到旅行经历；已有预算、笔记与评分会保留。'
+                  : 'Title, dates, destinations and status stay in sync. Existing budget, notes and ratings are preserved.'}</p>
+              </div>
               {/* Title */}
               <div>
                 <label htmlFor={`${fieldId}-title`} className="block text-xs font-bold text-stone-700">

@@ -288,6 +288,7 @@ export function ReviewHome({
   onCreateReview,
   onUpdateReview,
   onDeleteReview,
+  onPlanExperience,
 }: {
   disabled?: boolean;
   objects: WYQDObject[];
@@ -297,6 +298,7 @@ export function ReviewHome({
   onCreateReview: (review: ReviewEntry, body: string) => Promise<void>;
   onUpdateReview: (fileName: string, review: ReviewEntry, body: string) => Promise<void>;
   onDeleteReview: (fileName: string) => Promise<void>;
+  onPlanExperience?: (objectId: string) => Promise<void>;
 }) {
   const { t, language, currency } = useI18n();
   const { formatMoney } = useFormatMoney();
@@ -318,8 +320,9 @@ export function ReviewHome({
   const [reviewingExperienceId, setReviewingExperienceId] = useState<string | null>(null);
 
   // Synchronous render-time target adjustment (Lesson 12)
-  const [prevInitialTargetId, setPrevInitialTargetId] = useState<string | null>(initialTargetId ?? null);
-  if (initialTargetId && initialTargetId !== prevInitialTargetId) {
+  const [prevInitialTargetId, setPrevInitialTargetId] = useState<string | null>(null);
+  if (initialTargetId && initialTargetId !== prevInitialTargetId
+    && (reviews.some((r) => r.entity.target_id === initialTargetId || r.entity.id === initialTargetId) || objects.some((o) => o.id === initialTargetId))) {
     setPrevInitialTargetId(initialTargetId);
     const matchingReview = reviews.find(
       (r) => r.entity.target_id === initialTargetId || r.entity.id === initialTargetId,
@@ -328,6 +331,7 @@ export function ReviewHome({
       setSelectedReviewFileName(matchingReview.fileName);
       if (statusFilter === 'pending') setStatusFilter('all');
       setReviewTypeFilter('all');
+      setReviewQuery('');
       setReviewingExperienceId(null);
       setEditingFileName(null);
     } else {
@@ -337,6 +341,7 @@ export function ReviewHome({
         setSummary(t('reviewAbout').replace('{title}', matchingExp.title));
         if (statusFilter === 'reviewed') setStatusFilter('all');
         setReviewTypeFilter('all');
+        setReviewQuery('');
         setEditingFileName(null);
       }
     }
@@ -955,6 +960,12 @@ export function ReviewHome({
           </div>
 
           <aside ref={reviewDetailRef} className="min-w-0 rounded-xl border border-stone-200 bg-stone-50/50 p-5">
+            {selectedReviewTarget?.object_type === 'one_time_experience' && selectedReviewTarget.experience_subtype === 'travel_worldview' && onPlanExperience ? (
+              <button type="button" disabled={disabled || isSaving} onClick={() => void onPlanExperience(selectedReviewTarget.id)}
+                className="mb-4 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50">
+                {language === 'zh' ? '打开旅行规划' : 'Open trip planner'}
+              </button>
+            ) : null}
             {selectedReview ? (
               <ReviewDetailSidebar
                 stored={selectedReview}

@@ -44,6 +44,7 @@ export interface ObjectListFocus {
 }
 
 interface ObjectListProps {
+  onPlanExperience?: (objectId: string) => Promise<void>;
   objects: WYQDStoredEntity<WYQDObject>[];
   reviews?: WYQDStoredEntity<ReviewEntry>[];
   logs?: WYQDStoredEntity<ObjectLogEntry>[];
@@ -73,6 +74,7 @@ export function ObjectList({
   onUpdate,
   onDelete,
   onCreateObjectReview,
+  onPlanExperience,
 }: ObjectListProps) {
   const { t } = useI18n();
   const [editingFileName, setEditingFileName] = useState<string | null>(null);
@@ -304,6 +306,7 @@ export function ObjectList({
               onUpdate={onUpdate}
               onDelete={onDelete}
               onCreateObjectReview={onCreateObjectReview}
+              onPlanExperience={onPlanExperience}
               setEditingFileName={setEditingFileName}
               setSelectedFileName={setSelectedFileName}
               setReviewingFileName={setReviewingFileName}

@@ -1,4 +1,5 @@
 import { WYQD_SCHEMA_VERSION } from '@/core/runtime';
+import type { WYQDStoredEntity } from '@/core/repository';
 import {
   effectiveFxRate,
   PLANNER_TRAVEL_MODE_CONFIG,
@@ -12,6 +13,7 @@ import type { PlannerTripVisit } from './planner-visits';
 import type {
   ExperienceExpenseItem,
   OneTimeExperienceObject,
+  ReviewEntry,
 } from './types';
 
 /**
@@ -130,9 +132,15 @@ export interface TripReviewScores {
 }
 
 export interface TripReviewDraft {
+  language?: 'zh' | 'en';
   object: OneTimeExperienceObject;
   body: string;
   scores?: TripReviewScores;
+  /** Snapshot shown in the editor, used to reject stale overwrites. */
+  baseline?: {
+    object: WYQDStoredEntity<OneTimeExperienceObject>;
+    review?: WYQDStoredEntity<ReviewEntry>;
+  };
 }
 
 export function buildTripReviewDraft(
@@ -142,6 +150,7 @@ export function buildTripReviewDraft(
     language?: 'zh' | 'en';
     now?: Date;
     idFactory?: () => string;
+    budgetTotal?: number;
   },
 ): TripReviewDraft {
   const language = options?.language ?? 'zh';
@@ -176,7 +185,7 @@ export function buildTripReviewDraft(
     ended_at: trip.end_date,
     location: hasDestination ? { city: destinations[0] } : undefined,
     locations: hasDestination ? destinations.map((city) => ({ city })) : undefined,
-    budget_total: undefined,
+    budget_total: options?.budgetTotal,
     actual_total: stats.expenseTotal ?? undefined,
     expense_items: expenseItems.length > 0 ? expenseItems : undefined,
     currency: (trip.currency) ?? undefined,
@@ -246,10 +255,12 @@ export function buildTripReviewDraft(
     zh
       ? `- 复游意愿 / 美食 / 风景 / 体验评分请走「复盘」页补录`
       : `- Add revisit intent and food / scenery / experience scores via the Reviews tab`,
-    zh ? `- 预算（budget_total）本行程未设定，如有请手动填写` : `- No trip budget was set; fill in budget_total manually if known`,
+    options?.budgetTotal != null
+      ? (zh ? `- 旅行预算：${trip.currency || 'CNY'} ${options.budgetTotal}` : `- Trip budget: ${trip.currency || 'CNY'} ${options.budgetTotal}`)
+      : (zh ? '- 未记录旅行预算，如有可在物欲中补充' : '- No trip budget recorded; add it in Objects if known'),
   );
 
-  return { object, body: `${lines.join('\n')}\n` };
+  return { object, body: `${lines.join('\n')}\n`, language };
 }
 
 /** A trip is reviewable once it ended or was manually marked complete. */
